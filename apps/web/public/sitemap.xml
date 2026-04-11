@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PLACEHOLDER: substituir domínio por URL real -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://zappiq.com.br/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://zappiq.com.br/cases</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://zappiq.com.br/blog</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://zappiq.com.br/demo</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://zappiq.com.br/comparativo</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://zappiq.com.br/recursos</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://zappiq.com.br/selo-zappiq</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://zappiq.com.br/segmentos/saude</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://zappiq.com.br/segmentos/varejo</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://zappiq.com.br/segmentos/servicos-b2b</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://zappiq.com.br/segmentos/educacao</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://zappiq.com.br/blog/como-recuperar-leads-perdidos-whatsapp</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://zappiq.com.br/blog/guia-automacao-whatsapp-clinicas-2026</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://zappiq.com.br/blog/whatsapp-business-api-vs-app</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://zappiq.com.br/blog/5-fluxos-automacao-loja-virtual</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://zappiq.com.br/blog/roi-chatbots-ia-como-calcular</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://zappiq.com.br/register</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://zappiq.com.br/login</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+</urlset>

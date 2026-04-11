@@ -1,0 +1,15 @@
+# PLACEHOLDER: substituir domínio por URL real
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /conversations
+Disallow: /contacts
+Disallow: /crm
+Disallow: /campaigns
+Disallow: /flows
+Disallow: /analytics
+Disallow: /knowledge-base
+Disallow: /settings
+Disallow: /billing
+
+Sitemap: https://zappiq.com.br/sitemap.xml

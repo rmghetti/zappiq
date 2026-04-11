@@ -1,0 +1,16 @@
+<svg viewBox="0 0 120 120" width="120" height="120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad_icon" x1="90" y1="15" x2="25" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#25D366"/>
+      <stop offset="1" stop-color="#4361EE"/>
+    </linearGradient>
+  </defs>
+  <!-- Speech bubble -->
+  <path d="M60 95C82.0914 95 100 77.0914 100 55C100 32.9086 82.0914 15 60 15C37.9086 15 20 32.9086 20 55C20 63.271 22.508 70.9554 26.8407 77.2646L20 95L38.9912 89.6133C45.242 93.1171 52.4096 95 60 95Z" fill="url(#grad_icon)"/>
+  <!-- Lightning bolt -->
+  <path d="M65 31L41 60H57L52 82L78 48H62L65 31Z" fill="white"/>
+  <!-- Sparkle large (4-pointed star) -->
+  <path d="M104,15 L105.5,20 L110.5,21.5 L105.5,23 L104,28 L102.5,23 L97.5,21.5 L102.5,20 Z" fill="#818CF8"/>
+  <!-- Sparkle small (4-pointed star) -->
+  <path d="M91,8 L92,11.5 L95.5,12.5 L92,13.5 L91,17 L90,13.5 L86.5,12.5 L90,11.5 Z" fill="#A5B4FC"/>
+</svg>

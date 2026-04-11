@@ -1,0 +1,389 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector, uuidOssp(map: "uuid-ossp")]
+}
+
+// ═══════════════════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════════════════
+
+enum PlanType {
+  STARTER
+  GROWTH
+  SCALE
+}
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  AGENT
+  AUDITOR
+}
+
+enum ConversationStatus {
+  OPEN
+  WAITING
+  ASSIGNED
+  CLOSED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  TEMPLATE
+  INTERACTIVE
+  LOCATION
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  UNQUALIFIED
+  CONVERTED
+}
+
+enum CampaignType {
+  BROADCAST
+  TRIGGER
+  SEQUENCE
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum FlowTriggerType {
+  KEYWORD
+  FIRST_CONTACT
+  SCHEDULE
+  MANUAL
+  EVENT
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}
+
+enum Urgency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// ═══════════════════════════════════════════════════════
+// MODELS
+// ═══════════════════════════════════════════════════════
+
+model Organization {
+  id                        String   @id @default(cuid())
+  name                      String
+  slug                      String   @unique
+  plan                      PlanType @default(STARTER)
+  whatsappPhoneNumberId     String?
+  whatsappBusinessAccountId String?
+  whatsappAccessToken       String?
+  settings                  Json     @default("{}")
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  users          User[]
+  contacts       Contact[]
+  conversations  Conversation[]
+  campaigns      Campaign[]
+  flows          Flow[]
+  knowledgeBases KnowledgeBase[]
+  templates      MessageTemplate[]
+
+  @@map("organizations")
+}
+
+model User {
+  id                    String   @id @default(cuid())
+  email                 String   @unique
+  name                  String
+  passwordHash          String
+  role                  UserRole @default(AGENT)
+  avatar                String?
+  isOnline              Boolean  @default(false)
+  maxConcurrentChats    Int      @default(5)
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedConversations Conversation[]
+  messages              Message[]
+  auditLogs             AuditLog[]
+  createdAt             DateTime @default(now())
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Contact {
+  id                 String     @id @default(cuid())
+  whatsappId         String
+  phone              String
+  name               String?
+  email              String?
+  company            String?
+  avatarUrl          String?
+  tags               String[]   @default([])
+  customFields       Json       @default("{}")
+  leadScore          Int        @default(0)
+  leadStatus         LeadStatus @default(NEW)
+  funnelStage        String     @default("new")
+  birthDate          DateTime?
+  lastInteractionAt  DateTime?
+  consentMarketing   Boolean    @default(false)
+  consentMarketingAt DateTime?
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversations      Conversation[]
+  deals              Deal[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([whatsappId, organizationId])
+  @@index([organizationId])
+  @@index([phone])
+  @@index([leadStatus])
+  @@map("contacts")
+}
+
+model Conversation {
+  id               String             @id @default(cuid())
+  status           ConversationStatus @default(OPEN)
+  channel          String             @default("whatsapp")
+  sentiment        Sentiment?
+  urgency          Urgency?
+  summary          String?
+  csatScore        Int?
+  assignedToId     String?
+  assignedTo       User?              @relation(fields: [assignedToId], references: [id])
+  contactId        String
+  contact          Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  organizationId   String
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messages         Message[]
+  internalNotes    InternalNote[]
+  currentFlowState Json?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  closedAt         DateTime?
+
+  @@index([organizationId])
+  @@index([contactId])
+  @@index([status])
+  @@index([assignedToId])
+  @@map("conversations")
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  whatsappMessageId String?          @unique
+  direction         MessageDirection
+  type              MessageType      @default(TEXT)
+  content           String
+  mediaUrl          String?
+  mediaType         String?
+  templateName      String?
+  status            MessageStatus    @default(SENT)
+  conversationId    String
+  conversation      Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId          String?
+  sender            User?            @relation(fields: [senderId], references: [id])
+  isFromBot         Boolean          @default(false)
+  aiConfidence      Float?
+  metadata          Json?
+  createdAt         DateTime         @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+model Campaign {
+  id             String         @id @default(cuid())
+  name           String
+  type           CampaignType
+  status         CampaignStatus @default(DRAFT)
+  templateId     String?
+  template       MessageTemplate? @relation(fields: [templateId], references: [id])
+  audienceFilter Json
+  scheduledAt    DateTime?
+  sentCount      Int            @default(0)
+  deliveredCount Int            @default(0)
+  readCount      Int            @default(0)
+  repliedCount   Int            @default(0)
+  failedCount    Int            @default(0)
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now())
+  completedAt    DateTime?
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("campaigns")
+}
+
+model Flow {
+  id             String          @id @default(cuid())
+  name           String
+  description    String?
+  nodes          Json
+  edges          Json
+  isActive       Boolean         @default(false)
+  version        Int             @default(1)
+  triggerType    FlowTriggerType
+  triggerConfig  Json?
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@map("flows")
+}
+
+model KnowledgeBase {
+  id             String       @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents      KBDocument[]
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@map("knowledge_bases")
+}
+
+model KBDocument {
+  id              String        @id @default(cuid())
+  title           String
+  sourceType      String
+  sourceUrl       String?
+  content         String
+  chunks          KBChunk[]
+  knowledgeBaseId String
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+
+  @@map("kb_documents")
+}
+
+model KBChunk {
+  id         String                          @id @default(cuid())
+  content    String
+  embedding  Unsupported("vector(1536)")?
+  metadata   Json?
+  documentId String
+  document   KBDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("kb_chunks")
+}
+
+model Deal {
+  id             String   @id @default(cuid())
+  title          String
+  value          Decimal?
+  stage          String   @default("new")
+  contactId      String
+  contact        Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  organizationId String
+  closedAt       DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([contactId])
+  @@map("deals")
+}
+
+model MessageTemplate {
+  id              String   @id @default(cuid())
+  name            String
+  category        String
+  language        String   @default("pt_BR")
+  headerType      String?
+  headerContent   String?
+  bodyText        String
+  footerText      String?
+  buttons         Json?
+  metaStatus      String   @default("PENDING")
+  metaTemplateId  String?
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaigns       Campaign[]
+  createdAt       DateTime @default(now())
+
+  @@index([organizationId])
+  @@map("message_templates")
+}
+
+model InternalNote {
+  id             String       @id @default(cuid())
+  content        String
+  authorId       String
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@map("internal_notes")
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  action         String
+  resource       String
+  details        Json?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  organizationId String
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+model Consent {
+  id        String    @id @default(cuid())
+  contactId String
+  type      String
+  status    String
+  grantedAt DateTime?
+  revokedAt DateTime?
+  channel   String?
+  createdAt DateTime  @default(now())
+
+  @@index([contactId])
+  @@map("consents")
+}

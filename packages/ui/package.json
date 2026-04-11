@@ -1,0 +1,24 @@
+{
+  "name": "@zappiq/ui",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "react": "^18.3.0",
+    "clsx": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "typescript": "^5.7.0",
+    "tailwindcss": "^3.4.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
+}

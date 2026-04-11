@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: zappiq_dev
+      POSTGRES_PASSWORD: zappiq_dev_2026
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+    command: npx nodemon --watch apps/api/src --ext ts --exec "npx tsx apps/api/src/server.ts"
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages:/app/packages
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:zappiq_dev_2026@postgres:5432/zappiq_dev
+
+  web:
+    command: npx next dev --port 3003
+    volumes:
+      - ./apps/web:/app/apps/web
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    environment:
+      NODE_ENV: development
