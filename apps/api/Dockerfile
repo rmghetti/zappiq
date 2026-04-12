@@ -44,33 +44,23 @@ FROM installer AS deployer
 WORKDIR /repo
 RUN pnpm --filter=@zappiq/api deploy --prod /deploy
 
-# Prisma: find and copy generated client + query engine into deploy tree
-# pnpm deploy --prod does NOT include the generated .prisma/ directory
+# Prisma: generate client INSIDE /deploy so all runtime paths resolve correctly.
+# pnpm deploy --prod does NOT include the generated .prisma/ directory,
+# and manually copying it breaks @prisma/client/runtime/library.js resolution.
+# Solution: run prisma generate from /deploy context using the CLI from /repo.
 RUN set -e && \
-    echo "=== Searching for generated .prisma/client ===" && \
-    FOUND="" && \
-    for candidate in \
-      "/repo/node_modules/.prisma/client" \
-      "/repo/packages/database/node_modules/.prisma/client" \
-    ; do \
-      if [ -d "$candidate" ] && [ -f "$candidate/index.js" ]; then \
-        FOUND="$candidate"; break; \
-      fi; \
-    done && \
-    if [ -z "$FOUND" ]; then \
-      FOUND=$(find /repo -path "*/.prisma/client/index.js" -not -path "*/deploy/*" 2>/dev/null | head -1 | sed 's|/index.js$||'); \
+    SCHEMA=$(find /deploy -name "schema.prisma" -path "*/prisma/*" | head -1) && \
+    if [ -z "$SCHEMA" ]; then \
+      echo "ERROR: schema.prisma not found in /deploy" && exit 1; \
     fi && \
-    if [ -z "$FOUND" ]; then \
-      echo "ERROR: Generated .prisma/client not found! Running prisma generate..." && \
-      SCHEMA=$(find /repo -name "schema.prisma" -path "*/prisma/*" | head -1) && \
-      cd /repo && npx prisma generate --schema="$SCHEMA" && \
-      FOUND=$(find /repo -path "*/.prisma/client/index.js" -not -path "*/deploy/*" 2>/dev/null | head -1 | sed 's|/index.js$||'); \
-    fi && \
-    echo "Using .prisma/client from: $FOUND" && \
-    mkdir -p /deploy/node_modules/.prisma && \
-    cp -r "$FOUND" /deploy/node_modules/.prisma/client && \
-    echo "=== Prisma client files copied ===" && \
-    ls /deploy/node_modules/.prisma/client/ | head -20
+    echo "=== Generating Prisma client in /deploy ===" && \
+    echo "Schema: $SCHEMA" && \
+    PRISMA_BIN=$(find /repo/node_modules -name "prisma" -path "*/.bin/prisma" | head -1) && \
+    echo "Prisma CLI: $PRISMA_BIN" && \
+    cd /deploy && \
+    "$PRISMA_BIN" generate --schema="$SCHEMA" && \
+    echo "=== Prisma client generated ===" && \
+    ls node_modules/.prisma/client/ | head -10
 
 # --- Stage 4: runner ---
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS runner
