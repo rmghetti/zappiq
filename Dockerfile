@@ -41,6 +41,9 @@ RUN pnpm install --frozen-lockfile
 # Source code
 COPY --from=pruner /repo/out/full/ ./
 
+# Root-level config not included by turbo prune --docker
+COPY --from=pruner /repo/tsconfig.base.json ./tsconfig.base.json
+
 # Build everything in topological order via Turbo:
 # packages/database (prisma generate + tsc)
 # packages/shared (tsc)
