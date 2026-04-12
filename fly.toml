@@ -1,43 +1,23 @@
-# ZappIQ API — Fly.io configuration
-app = "zappiq-api"
-primary_region = "gru"
+# fly.toml app configuration file generated for zappiq-api on 2026-04-12T21:27:29Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'zappiq-api'
+primary_region = 'iad'
 
 [build]
-  dockerfile = "apps/api/Dockerfile"
 
-  [env]
-    NODE_ENV = "production"
-      PORT = "3001"
-        APP_URL = "https://zappiq-api.fly.dev"
-          FRONTEND_URL = "https://zappiq.vercel.app"
-            CORS_ORIGINS = "https://zappiq.vercel.app,https://zappiq.com.br,https://www.zappiq.com.br"
-              ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
-                WHATSAPP_API_VERSION = "v21.0"
-                  JWT_EXPIRES_IN = "7d"
-                    JWT_REFRESH_EXPIRES_IN = "30d"
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
 
-                    [http_service]
-                      internal_port = 3001
-                        force_https = true
-                          auto_stop_machines = "stop"
-                            auto_start_machines = true
-                              min_machines_running = 0
-
-                                [http_service.concurrency]
-                                    type = "requests"
-                                        hard_limit = 250
-                                            soft_limit = 200
-
-                                            [checks]
-                                              [checks.health]
-                                                  port = 3001
-                                                      type = "http"
-                                                          interval = "30s"
-                                                              timeout = "5s"
-                                                                  grace_period = "20s"
-                                                                      method = "GET"
-                                                                          path = "/health"
-
-                                                                          [[vm]]
-                                                                            size = "shared-cpu-1x"
-                                                                              memory = "512mb"
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024
