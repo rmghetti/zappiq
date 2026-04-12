@@ -1,7 +1,56 @@
-node_modules
-.next
-dist
+# ── Git / VCS ────────────────────────────────────
 .git
-*.md
-.env
-.env.local
+.gitignore
+.gitattributes
+
+# ── Dependencies ─────────────────────────────────
+**/node_modules
+.pnpm-store
+
+# ── Build outputs ────────────────────────────────
+**/dist
+**/build
+**/.next
+**/.turbo
+**/*.tsbuildinfo
+**/next-env.d.ts
+
+# ── Secrets — NEVER ship to image ────────────────
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+
+# ── Logs ─────────────────────────────────────────
+**/*.log
+**/logs
+
+# ── OS / Editor ──────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+**/*.swp
+
+# ── Docs / metadata ──────────────────────────────
+README.md
+**/*.md
+docs/
+LICENSE
+
+# ── Tests / Coverage ─────────────────────────────
+**/coverage
+**/.nyc_output
+**/__tests__
+**/*.test.ts
+**/*.spec.ts
+
+# ── Cloud / Deploy ───────────────────────────────
+.vercel
+.fly
+fly.toml
+
+# ── Backup files ─────────────────────────────────
+**/*.bak
+**/*.backup
+**/*.orig

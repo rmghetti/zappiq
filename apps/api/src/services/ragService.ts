@@ -43,7 +43,9 @@ export async function search(organizationId: string, query: string, topK = 5): P
 export async function ingestDocument(organizationId: string, file: { filename: string; content: Buffer; mimeType: string }) {
   const formData = new FormData();
   formData.append('tenant_id', organizationId);
-  formData.append('file', new Blob([file.content], { type: file.mimeType }), file.filename);
+  // `Buffer` is no longer assignable to `BlobPart` under newer @types/node
+  // (SharedArrayBuffer / ArrayBuffer divergence). Wrap in Uint8Array, which is.
+  formData.append('file', new Blob([new Uint8Array(file.content)], { type: file.mimeType }), file.filename);
 
   const { data } = await ragClient.post('/ingest', formData);
   return data;

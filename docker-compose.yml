@@ -70,9 +70,10 @@ services:
     container_name: zappiq-web
     restart: unless-stopped
     ports:
-      - "3003:3003"
+      - "3003:3000"
     environment:
       NODE_ENV: production
+      PORT: 3000
       NEXT_PUBLIC_API_URL: http://api:3001
     depends_on:
       - api

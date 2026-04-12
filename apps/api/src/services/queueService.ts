@@ -103,8 +103,7 @@ export async function initQueues(): Promise<void> {
           where: { id: messageId },
           data: {
             status: 'SENT',
-            // externalId: whatsappMessageId,
-            sentAt: new Date(),
+            // whatsappMessageId: response.messages[0].id,
           },
         });
 
@@ -145,12 +144,12 @@ export async function initQueues(): Promise<void> {
           throw new Error(`Campaign ${campaignId} not found`);
         }
 
-        // Busca contatos da organização (filtro de audiência pode ser aplicado aqui)
+        // Busca contatos da organização (filtro de audiência pode ser aplicado aqui).
+        // Marketing campaigns require explicit LGPD consent (consentMarketing).
         const contacts = await prisma.contact.findMany({
           where: {
             organizationId,
-            optOut: false,
-            whatsappId: { not: null },
+            consentMarketing: true,
           },
           select: { id: true, whatsappId: true, name: true },
         });
@@ -169,7 +168,7 @@ export async function initQueues(): Promise<void> {
               campaignId,
               contactId: contact.id,
               to: contact.whatsappId,
-              content: campaign.template?.body || '',
+              content: campaign.template?.bodyText || '',
               organizationId,
             },
           }));
@@ -186,7 +185,7 @@ export async function initQueues(): Promise<void> {
           where: { id: campaignId },
           data: {
             sentCount: contacts.length,
-            status: 'SENT',
+            status: 'COMPLETED',
             completedAt: new Date(),
           },
         });
@@ -201,7 +200,7 @@ export async function initQueues(): Promise<void> {
           const { prisma } = await import('@zappiq/database');
           await prisma.campaign.update({
             where: { id: campaignId },
-            data: { status: 'FAILED' },
+            data: { status: 'CANCELLED' },
           });
         } catch (_) { /* melhor esforço */ }
 
@@ -235,13 +234,14 @@ export async function initQueues(): Promise<void> {
           sentiment: 'neutral',
         };
 
-        // Salva resposta da IA como mensagem
+        // Salva resposta da IA como mensagem.
+        // status defaults to SENT in schema; the message-send worker is the source
+        // of truth for delivery state once the WhatsApp API call succeeds.
         const message = await prisma.message.create({
           data: {
             direction: 'OUTBOUND',
             type: 'TEXT',
             content: aiResponse.content,
-            status: 'PENDING',
             conversationId,
             isFromBot: true,
           },

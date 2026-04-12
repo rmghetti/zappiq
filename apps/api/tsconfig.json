@@ -2,11 +2,13 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    // apps are leaves — no need to emit .d.ts files (eliminates TS2742 errors
+    // about inferred types not being nameable)
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": false
   },
-  "include": ["src"],
-  "references": [
-    { "path": "../../packages/database" },
-    { "path": "../../packages/shared" }
-  ]
+  "include": ["src"]
 }
