@@ -2,7 +2,10 @@ import jwt, { type SignOptions } from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import type { JwtPayload } from '../middleware/auth.js';
 
-export function signToken(user: { id: string; email: string; role: string }, organizationId: string): string {
+export function signToken(
+  user: { id: string; email: string; role: string },
+  organizationId: string,
+): string {
   const payload: JwtPayload = {
     userId: user.id,
     email: user.email,
@@ -20,7 +23,7 @@ export function signToken(user: { id: string; email: string; role: string }, org
 
 export function signRefreshToken(userId: string): string {
   return jwt.sign({ userId, type: 'refresh' }, env.JWT_SECRET, {
-    expiresIn: '30d',
+    expiresIn: env.REFRESH_TOKEN_EXPIRES_IN,
   } as SignOptions);
 }
 
