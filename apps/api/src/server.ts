@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { env } from './config/env.js';
@@ -34,7 +35,7 @@ const httpServer = createServer(app);
 // Trust first proxy (Fly.io) -- required for express-rate-limit behind reverse proxy
 app.set('trust proxy', 1);
 
-// -- Socket.io --
+// ── Socket.io ───────────────────────────────────
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: env.NEXT_PUBLIC_APP_URL,
@@ -44,29 +45,58 @@ const io = new SocketIOServer(httpServer, {
 
 app.set('io', io);
 
+// ── Socket.io JWT authentication middleware ──
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  if (!token || typeof token !== 'string') {
+    return next(new Error('Authentication required'));
+  }
+  try {
+    const decoded = jwt.verify(token, env.JWT_SECRET) as { userId: string; organizationId: string };
+    (socket as any).userId = decoded.userId;
+    (socket as any).organizationId = decoded.organizationId;
+    next();
+  } catch {
+    next(new Error('Invalid or expired token'));
+  }
+});
+
 io.on('connection', (socket) => {
-  logger.info(`[Socket] Client connected: ${socket.id}`);
-  socket.on('join_org', (orgId: string) => {
-    socket.join(`org:${orgId}`);
-    logger.debug(`[Socket] ${socket.id} joined org:${orgId}`);
+  const orgId = (socket as any).organizationId;
+  logger.info(`[Socket] Client connected: ${socket.id} (org: ${orgId})`);
+
+  // Auto-join the user's organization room
+  if (orgId) socket.join(`org:${orgId}`);
+
+  socket.on('join_org', (requestedOrgId: string) => {
+    // Only allow joining own org room
+    if (requestedOrgId !== orgId) {
+      logger.warn(`[Socket] ${socket.id} tried to join unauthorized org:${requestedOrgId}`);
+      return;
+    }
+    socket.join(`org:${requestedOrgId}`);
+    logger.debug(`[Socket] ${socket.id} joined org:${requestedOrgId}`);
   });
+
   socket.on('agent_typing', (data: { conversationId: string }) => {
-    socket.broadcast.emit('agent_typing', data);
+    // Broadcast only within the authenticated org room
+    socket.to(`org:${orgId}`).emit('agent_typing', data);
   });
+
   socket.on('disconnect', () => {
     logger.debug(`[Socket] Client disconnected: ${socket.id}`);
   });
 });
 
-// -- BullMQ Queues --
+// ── BullMQ Queues ──────────────────────────────
 initQueues().catch((err) => {
   logger.error('[Server] Failed to initialize queues:', err);
 });
 
-// -- Stripe Webhook (raw body, must be before express.json) --
+// ── Stripe Webhook (raw body, must be before express.json) ──
 app.use('/api/stripe-webhook', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
 
-// -- Global Middleware --
+// ── Global Middleware ────────────────────────────
 app.use(helmet());
 app.use(cors({ origin: env.NEXT_PUBLIC_APP_URL, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
@@ -90,7 +120,7 @@ const authLimiter = rateLimit({
   message: { error: 'Too many authentication attempts, please try again later' },
 });
 
-// -- Health Check --
+// ── Health Check ────────────────────────────────
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -101,12 +131,12 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// -- Public Routes --
+// ── Public Routes ───────────────────────────────
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 
-// -- Protected Routes --
+// ── Protected Routes ────────────────────────────
 app.use('/api/contacts', authMiddleware, contactsRoutes);
 app.use('/api/conversations', authMiddleware, conversationsRoutes);
 app.use('/api/conversations', authMiddleware, messagesRoutes);
@@ -119,10 +149,10 @@ app.use('/api/deals', authMiddleware, dealsRoutes);
 app.use('/api/billing', authMiddleware, billingRoutes);
 app.use('/api/settings', authMiddleware, settingsRoutes);
 
-// -- Error Handler (must be last) --
+// ── Error Handler (must be last) ────────────────
 app.use(errorHandler);
 
-// -- Start Server --
+// ── Start Server ────────────────────────────────
 httpServer.listen(env.PORT, () => {
   logger.info(`[Server] ZappIQ API v2 running on port ${env.PORT}`);
   logger.info(`[Server] Environment: ${env.NODE_ENV}`);
