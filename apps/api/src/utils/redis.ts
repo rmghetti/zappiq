@@ -25,7 +25,7 @@ export const redis = new Redis(env.REDIS_URL, {
   },
 
   // ── TLS para Upstash/Redis Cloud (rediss:// URLs) ──
-  ...(env.REDIS_URL.startsWith('rediss://') ? { tls: { rejectUnauthorized: false } } : {}),
+  ...(env.REDIS_URL.startsWith('rediss://') ? { tls: { rejectUnauthorized: true } } : {}),
 });
 
 redis.on('connect', () => logger.info('[Redis] Connected'));
