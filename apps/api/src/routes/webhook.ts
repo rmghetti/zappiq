@@ -1,9 +1,25 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 
 const router = Router();
+
+// ── WhatsApp payload signature verification (X-Hub-Signature-256) ──
+function verifyWhatsAppSignature(payload: string | Buffer, signature: string | undefined): boolean {
+  if (!signature) return false;
+  const appSecret = env.WHATSAPP_ACCESS_TOKEN;
+  if (!appSecret) {
+    logger.warn('[Webhook] WHATSAPP_ACCESS_TOKEN not set — cannot verify signatures');
+    return false;
+  }
+  const expectedSig = 'sha256=' + crypto
+    .createHmac('sha256', appSecret)
+    .update(typeof payload === 'string' ? payload : payload)
+    .digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig));
+}
 
 // ── GET /api/webhook/whatsapp — Meta verification ──
 router.get('/whatsapp', (req: Request, res: Response) => {
@@ -23,7 +39,17 @@ router.get('/whatsapp', (req: Request, res: Response) => {
 
 // ── POST /api/webhook/whatsapp — Incoming messages ──
 router.post('/whatsapp', async (req: Request, res: Response) => {
-  // Always respond 200 immediately
+  // Verify Meta signature before processing
+  const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+  const signature = req.headers['x-hub-signature-256'] as string | undefined;
+
+  if (env.NODE_ENV === 'production' && !verifyWhatsAppSignature(rawBody, signature)) {
+    logger.warn('[Webhook] Invalid WhatsApp signature — rejecting request');
+    res.status(403).json({ error: 'Invalid signature' });
+    return;
+  }
+
+  // Always respond 200 immediately (Meta expects fast response)
   res.status(200).json({ status: 'received' });
 
   try {
