@@ -157,10 +157,15 @@ router.get('/export', async (req: Request, res: Response, next: NextFunction) =>
       orderBy: { createdAt: 'desc' },
     });
 
-    // CSV export
+    // CSV export — sanitize values to prevent formula injection in Excel/Sheets
+    const sanitize = (val: string): string => {
+      if (/^[=+\-@\t\r]/.test(val)) return `'${val}`;
+      return val.replace(/"/g, '""');
+    };
+
     const header = 'name,phone,email,company,leadStatus,tags,leadScore,createdAt\n';
     const rows = contacts.map(c =>
-      `"${c.name || ''}","${c.phone}","${c.email || ''}","${c.company || ''}","${c.leadStatus}","${c.tags.join(';')}",${c.leadScore},"${c.createdAt.toISOString()}"`
+      `"${sanitize(c.name || '')}","${sanitize(c.phone)}","${sanitize(c.email || '')}","${sanitize(c.company || '')}","${c.leadStatus}","${sanitize(c.tags.join(';'))}",${c.leadScore},"${c.createdAt.toISOString()}"`
     ).join('\n');
 
     res.setHeader('Content-Type', 'text/csv');
