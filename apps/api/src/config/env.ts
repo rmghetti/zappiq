@@ -19,7 +19,8 @@ const envSchema = z.object({
 
   // Auth
   JWT_SECRET: z.string().min(32),
-  JWT_EXPIRES_IN: z.string().default('7d'),
+  JWT_EXPIRES_IN: z.string().default('15m'),
+  REFRESH_TOKEN_EXPIRES_IN: z.string().default('7d'),
 
   // Anthropic
   ANTHROPIC_API_KEY: z.string().optional(),
@@ -57,7 +58,7 @@ export type Env = z.infer<typeof envSchema>;
 function validateEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
-    console.error('❌ Invalid environment variables:');
+    console.error('\u274c Invalid environment variables:');
     console.error(parsed.error.flatten().fieldErrors);
     throw new Error('Invalid environment variables');
   }
