@@ -1,14 +1,22 @@
 # syntax=docker/dockerfile:1.7
-# ZappIQ API - multi-stage Dockerfile (pnpm workspaces + turbo prune)
+# ──────────────────────────────────────────────────────────────────
+# ZappIQ API — multi-stage Dockerfile (pnpm workspaces + turbo prune)
 #
 # Build context MUST be the monorepo root (zappiq/), not apps/api.
 #   docker build -f apps/api/Dockerfile -t zappiq-api .
+#
+# Stages:
+#   1) pruner    → turbo prune → minimal subtree for @zappiq/api
+#   2) installer → pnpm install + turbo build → JS in dist/
+#   3) deployer  → pnpm deploy → self-contained production tree
+#   4) runner    → minimal Alpine + tini + production tree
+# ──────────────────────────────────────────────────────────────────
 
 ARG NODE_VERSION=20.18.1
 ARG ALPINE_VERSION=3.20
 ARG PNPM_VERSION=9.15.0
 
-# --- Stage 1: pruner ---
+# ─── Stage 1: pruner ──────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS pruner
 RUN apk add --no-cache libc6-compat
 WORKDIR /repo
@@ -17,7 +25,7 @@ RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 COPY . .
 RUN pnpm dlx turbo@2.4.0 prune @zappiq/api --docker
 
-# --- Stage 2: installer ---
+# ─── Stage 2: installer ───────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS installer
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /repo
@@ -32,14 +40,18 @@ RUN pnpm install --frozen-lockfile
 # Source code
 COPY --from=pruner /repo/out/full/ ./
 
-# Root-level config not included by turbo prune --docker
-COPY --from=pruner /repo/tsconfig.base.json ./tsconfig.base.json
-
-# Build everything in topological order via Turbo
+# Build everything in topological order via Turbo:
+#   packages/database (prisma generate + tsc)
+#   packages/shared (tsc)
+#   apps/api (tsc)
 ENV PRISMA_SKIP_POSTINSTALL_GENERATE=1
 RUN pnpm dlx turbo@2.4.0 run build --filter=@zappiq/api
 
-# --- Stage 3: deployer ---
+# ─── Stage 3: deployer ────────────────────────────────────────────
+# `pnpm deploy` produces a self-contained tree under /deploy with:
+#   - dist/ from the api
+#   - production-only node_modules (no symlinks, hoisted)
+#   - workspace packages physically copied (not linked)
 FROM installer AS deployer
 WORKDIR /repo
 RUN pnpm --filter=@zappiq/api deploy --prod /deploy
@@ -62,7 +74,7 @@ RUN set -e && \
     echo "=== Prisma client generated ===" && \
     ls node_modules/.prisma/client/ | head -10
 
-# --- Stage 4: runner ---
+# ─── Stage 4: runner ──────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS runner
 RUN apk add --no-cache libc6-compat openssl tini wget \
  && addgroup --system --gid 1001 nodejs \
@@ -78,6 +90,7 @@ COPY --from=deployer --chown=appuser:nodejs /deploy ./
 USER appuser
 EXPOSE 3001
 
+# tini → proper PID 1 / signal handling for graceful shutdown
 ENTRYPOINT ["/sbin/tini", "--"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
