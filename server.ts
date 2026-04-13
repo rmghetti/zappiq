@@ -31,7 +31,10 @@ import stripeWebhookRoutes from './routes/stripeWebhook.js';
 const app = express();
 const httpServer = createServer(app);
 
-// ── Socket.io ───────────────────────────────────
+// Trust first proxy (Fly.io) -- required for express-rate-limit behind reverse proxy
+app.set('trust proxy', 1);
+
+// -- Socket.io --
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: env.NEXT_PUBLIC_APP_URL,
@@ -43,45 +46,51 @@ app.set('io', io);
 
 io.on('connection', (socket) => {
   logger.info(`[Socket] Client connected: ${socket.id}`);
-
   socket.on('join_org', (orgId: string) => {
     socket.join(`org:${orgId}`);
     logger.debug(`[Socket] ${socket.id} joined org:${orgId}`);
   });
-
   socket.on('agent_typing', (data: { conversationId: string }) => {
     socket.broadcast.emit('agent_typing', data);
   });
-
   socket.on('disconnect', () => {
     logger.debug(`[Socket] Client disconnected: ${socket.id}`);
   });
 });
 
-// ── BullMQ Queues ──────────────────────────────
+// -- BullMQ Queues --
 initQueues().catch((err) => {
   logger.error('[Server] Failed to initialize queues:', err);
 });
 
-// ── Stripe Webhook (raw body, must be before express.json) ──
+// -- Stripe Webhook (raw body, must be before express.json) --
 app.use('/api/stripe-webhook', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
 
-// ── Global Middleware ────────────────────────────
+// -- Global Middleware --
 app.use(helmet());
 app.use(cors({ origin: env.NEXT_PUBLIC_APP_URL, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('short', { stream: { write: (msg: string) => logger.info(msg.trim()) } }));
 
-// Rate limiting
-const limiter = rateLimit({
+// Global rate limiting (500 req / 15 min on all /api)
+const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use('/api', limiter);
+app.use('/api', globalLimiter);
 
-// ── Health Check ────────────────────────────────
+// Strict auth rate limiting (10 req / 15 min per IP on login/register)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts, please try again later' },
+});
+
+// -- Health Check --
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -92,12 +101,12 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// ── Public Routes ───────────────────────────────
-app.use('/api/auth', authRoutes);
+// -- Public Routes --
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 
-// ── Protected Routes ────────────────────────────
+// -- Protected Routes --
 app.use('/api/contacts', authMiddleware, contactsRoutes);
 app.use('/api/conversations', authMiddleware, conversationsRoutes);
 app.use('/api/conversations', authMiddleware, messagesRoutes);
@@ -110,10 +119,10 @@ app.use('/api/deals', authMiddleware, dealsRoutes);
 app.use('/api/billing', authMiddleware, billingRoutes);
 app.use('/api/settings', authMiddleware, settingsRoutes);
 
-// ── Error Handler (must be last) ────────────────
+// -- Error Handler (must be last) --
 app.use(errorHandler);
 
-// ── Start Server ────────────────────────────────
+// -- Start Server --
 httpServer.listen(env.PORT, () => {
   logger.info(`[Server] ZappIQ API v2 running on port ${env.PORT}`);
   logger.info(`[Server] Environment: ${env.NODE_ENV}`);
