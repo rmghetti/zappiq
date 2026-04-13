@@ -43,7 +43,7 @@ export async function search(organizationId: string, query: string, topK = 5): P
 export async function ingestDocument(organizationId: string, file: { filename: string; content: Buffer; mimeType: string }) {
   const formData = new FormData();
   formData.append('tenant_id', organizationId);
-  // `Buffer` is no longer assignable to `BlobPart` under newer @types/node
+  // \`Buffer\` is no longer assignable to \`BlobPart\` under newer @types/node
   // (SharedArrayBuffer / ArrayBuffer divergence). Wrap in Uint8Array, which is.
   formData.append('file', new Blob([new Uint8Array(file.content)], { type: file.mimeType }), file.filename);
 
@@ -51,7 +51,32 @@ export async function ingestDocument(organizationId: string, file: { filename: s
   return data;
 }
 
+// Block SSRF: reject internal/private network URLs
+function assertPublicUrl(url: string): void {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { throw new Error('Invalid URL'); }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only http/https URLs allowed');
+
+  const hostname = parsed.hostname.toLowerCase();
+  const blocked = [
+    'localhost', '127.0.0.1', '0.0.0.0', '[::1]',
+    '169.254.169.254',   // cloud metadata
+    'metadata.google.internal',
+  ];
+  if (blocked.includes(hostname)) throw new Error('Internal URLs are not allowed');
+
+  // Block RFC 1918 private ranges
+  const parts = hostname.split('.').map(Number);
+  if (parts.length === 4 && parts.every(p => !isNaN(p))) {
+    if (parts[0] === 10) throw new Error('Private IP not allowed');
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) throw new Error('Private IP not allowed');
+    if (parts[0] === 192 && parts[1] === 168) throw new Error('Private IP not allowed');
+  }
+}
+
 export async function ingestUrl(organizationId: string, url: string) {
+  assertPublicUrl(url);
   const { data } = await ragClient.post('/ingest-url', {
     tenant_id: organizationId,
     url,
