@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # npm (pnpm) dependencies — security updates only
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "security"
+    # Only open PRs for security advisories (not general updates)
+    # Remove this line if you want all version updates too
+    versioning-strategy: increase
+
+  # GitHub Actions — pin to SHA and get notified of updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "ci"
+      - "dependencies"
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "docker"
+      - "dependencies"
+
