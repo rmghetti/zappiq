@@ -282,6 +282,7 @@ git push origin main
 ### Pendências dessa sessão (curto prazo)
 
 - ~~**CNPJ ZappIQ**~~ — **Feito.** Controladora: ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA (CNPJ 46.788.145/0001-08). Atualizado em ROP, página /lgpd e Footer.
+- **Pendências jurídico-financeiras destravadas pelo CNPJ** — ver `docs/PENDENCIAS-JURIDICO-FINANCEIRAS.md` (e-CNPJ A1, carta de designação do DPO, conta Stripe Business BRL). Prazo sugerido: implementar antes do primeiro contrato Enterprise fechar.
 - **status.zappiq.com.br** — criar página pública (sugestão: Statuspage, Atlassian Statuspage Free, ou auto-hospedar com Cachet).
 - **DPA assinados com clientes Enterprise** — template necessário para fechar primeiros contratos.
 - **Página `/cases`** — Navbar referencia mas página não existe. Criar com 3 cases piloto quando houver.
