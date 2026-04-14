@@ -1,6 +1,14 @@
 app = "zappiq-api"
 primary_region = "gru"
 
+# Multi-region ready — atualmente single-region (gru) por decisão comercial.
+# Ver docs/MULTI-REGION-READY.md para triggers de ativação e custos.
+# Para adicionar região: fly machines clone <id> --region <gig|mia|iad|cdg>
+# Regiões configuradas em standby (não ativas):
+# [[regions]]  # Descomentar quando ativar DR geográfico
+# name = "gig"
+# capacity = 0  # standby, 0 machines
+
 [build]
 dockerfile = "apps/api/Dockerfile"
 

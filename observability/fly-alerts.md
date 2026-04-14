@@ -77,13 +77,53 @@ Alternativa: `fly_alert` resource do Terraform provider da Fly permite versionar
 
 ## Integração com escalation
 
-| Severidade | Canal primário          | Secundário (15min sem ACK) | Terciário (30min) |
-|------------|-------------------------|----------------------------|-------------------|
-| SEV1       | PagerDuty urgent         | SMS + ligar                | Acionar diretoria |
-| SEV2       | PagerDuty normal         | Slack `#zappiq-alerts`     | PagerDuty urgent  |
-| SEV3       | Slack `#zappiq-alerts`   | —                          | —                 |
+### Contato primário de oncall (abril/2026)
 
-Rotação PagerDuty `zappiq-oncall` definida no plantão. Documentada em `docs/RUNBOOK-INCIDENT.md` apêndice.
+- **Nome:** Rodrigo Ghetti
+- **Telefone/WhatsApp:** +55 (11) 97210-5451
+- **E-mail:** rmghetti@gmail.com
+- **Escopo:** todos os alertas SEV1 e SEV2 inicialmente. SEV3 somente via Slack.
+
+> Contato único até o time crescer. Quando houver 2+ plantonistas, migrar para PagerDuty schedule em rotação semanal. Até lá, os alertas chegam direto no número acima.
+
+### Matriz de escalation
+
+| Severidade | Canal primário                              | Secundário (15min sem ACK)           | Terciário (30min)              |
+|------------|---------------------------------------------|--------------------------------------|---------------------------------|
+| SEV1       | SMS + WhatsApp + ligar (+55 11 97210-5451)  | E-mail rmghetti@gmail.com + retry    | Reserve backup pessoa física    |
+| SEV2       | WhatsApp (+55 11 97210-5451) + e-mail       | SMS + ligar                          | SMS repetido a cada 10min       |
+| SEV3       | Slack `#zappiq-alerts` (quando houver)      | E-mail consolidado diário            | —                               |
+
+### Como configurar o número no Fly/PagerDuty
+
+**Opção A — Fly alerts direto (sem PagerDuty):**
+
+Fly alerts hoje não suportam SMS/ligação nativos — mas suportam webhook. Para rotear para o número:
+
+1. Configurar webhook endpoint que dispara SMS via Twilio/Zenvia/WhatsApp Business API
+2. Número `+55 11 97210-5451` como destino fixo até ter rotação
+3. Webhook roda no próprio ZappIQ (dogfooding do Spark Campaigns) ou em função serverless externa
+
+**Opção B — PagerDuty free tier:**
+
+1. Criar conta em pagerduty.com (free: até 5 users, rotações ilimitadas)
+2. Criar Service "ZappIQ Production" + Escalation Policy
+3. Adicionar Rodrigo Ghetti como User com:
+   - SMS: +55 11 97210-5451
+   - Phone (call): +55 11 97210-5451
+   - E-mail: rmghetti@gmail.com
+   - Push (app PagerDuty no celular)
+4. Configurar Fly webhook → PagerDuty Events API v2
+
+**Opção C — Provisório (Slack + e-mail):**
+
+Enquanto Twilio/PagerDuty não estão configurados, alertas saem por e-mail direto para rmghetti@gmail.com com alta prioridade + push notification configurada no celular.
+
+### Testes periódicos
+
+- **Mensal:** disparar teste proposital de SEV3 pra validar que o canal chega
+- **Trimestral:** chaos engineering — derrubar proposital uma máquina Fly em horário de menor tráfego e validar que SEV2 chega em <5min
+- **Anual:** fire drill de incidente SEV1 simulado com time todo
 
 ## Healthcheck — o que `/ready` cobre
 
