@@ -2,8 +2,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 
-// Singleton Anthropic client
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY || '' });
+// ── Singleton Anthropic client ─────────────────────────────────
+// maxRetries: SDK faz retry exponencial automatico em 408/409/429/5xx.
+// Padrao interno do SDK e 2; subimos para 3 para tolerar blips transientes
+// da API sem propagar falha para o worker BullMQ (que ja tem attempts=2).
+// timeout: 60s cobre respostas longas de Claude Sonnet com contexto grande.
+const anthropic = new Anthropic({
+  apiKey: env.ANTHROPIC_API_KEY || '',
+  maxRetries: 3,
+  timeout: 60_000,
+});
 
 export interface LLMMessage {
   role: 'user' | 'assistant';
