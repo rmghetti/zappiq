@@ -1,0 +1,254 @@
+{
+  "//": "ZappIQ API — Grafana dashboard para OTel traces + metricas.",
+  "//_": "Importar via Grafana > Dashboards > Import > Upload JSON.",
+  "//__": "Datasources esperados: 'Prometheus' (metricas) e 'Tempo' (traces).",
+  "//___": "Ajustar nomes se sua org usa outro naming.",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "enable": true,
+        "expr": "changes(process_start_time_seconds{service=\"zappiq-api\"}[1m]) > 0",
+        "iconColor": "orange",
+        "name": "Deploys",
+        "titleFormat": "Deploy detectado"
+      }
+    ]
+  },
+  "description": "Dashboard de observabilidade principal do ZappIQ API + RAG. Cobre latencia, erros, saturacao (golden signals) + recursos (CPU/mem/DB pool/queue depth).",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    { "title": "Runbook Incidentes", "url": "https://github.com/rmghetti/zappiq/blob/main/docs/RUNBOOK-INCIDENT.md", "icon": "external link", "tags": [], "targetBlank": true, "type": "link" }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "row",
+      "title": "Golden Signals — API",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "panels": []
+    },
+    {
+      "title": "Requests por segundo (RPS)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(http_server_duration_milliseconds_count{service=\"zappiq-api\"}[1m])) by (http_status_code)", "legendFormat": "{{http_status_code}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "lineWidth": 1, "fillOpacity": 10 }, "unit": "reqps" } },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } }
+    },
+    {
+      "title": "Latencia p50/p95/p99 (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(http_server_duration_milliseconds_bucket{service=\"zappiq-api\"}[5m])) by (le))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{service=\"zappiq-api\"}[5m])) by (le))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum(rate(http_server_duration_milliseconds_bucket{service=\"zappiq-api\"}[5m])) by (le))", "legendFormat": "p99", "refId": "C" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "unit": "ms",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 2000 } ] }
+        }
+      }
+    },
+    {
+      "title": "Error rate (5xx %)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "100 * sum(rate(http_server_duration_milliseconds_count{service=\"zappiq-api\",http_status_code=~\"5..\"}[5m])) / sum(rate(http_server_duration_milliseconds_count{service=\"zappiq-api\"}[5m]))", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 1 } ] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "textMode": "auto" }
+    },
+    {
+      "type": "row",
+      "title": "Recursos — API machines",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "panels": []
+    },
+    {
+      "title": "CPU (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "100 * rate(process_cpu_seconds_total{service=\"zappiq-api\"}[2m])", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 85 } ] }
+        }
+      }
+    },
+    {
+      "title": "Memory RSS (MB)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "process_resident_memory_bytes{service=\"zappiq-api\"} / 1024 / 1024", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 400 }, { "color": "red", "value": 470 } ] }
+        }
+      }
+    },
+    {
+      "title": "Event loop lag (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "nodejs_eventloop_lag_seconds{service=\"zappiq-api\"} * 1000", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 200 } ] }
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Postgres / Redis / BullMQ",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "panels": []
+    },
+    {
+      "title": "Postgres pool — in-use / idle / waiting",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "prisma_pool_connections_in_use{service=\"zappiq-api\"}", "legendFormat": "in-use", "refId": "A" },
+        { "expr": "prisma_pool_connections_idle{service=\"zappiq-api\"}", "legendFormat": "idle", "refId": "B" },
+        { "expr": "prisma_pool_connections_pending{service=\"zappiq-api\"}", "legendFormat": "pending", "refId": "C" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "title": "BullMQ — waiting / active / failed",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "bullmq_queue_waiting{service=\"zappiq-api\"}", "legendFormat": "waiting — {{queue}}", "refId": "A" },
+        { "expr": "bullmq_queue_active{service=\"zappiq-api\"}", "legendFormat": "active — {{queue}}", "refId": "B" },
+        { "expr": "bullmq_queue_failed{service=\"zappiq-api\"}", "legendFormat": "failed — {{queue}}", "refId": "C" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "title": "Redis mem / hit rate",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "redis_memory_used_bytes / 1024 / 1024", "legendFormat": "mem (MB)", "refId": "A" },
+        { "expr": "100 * rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))", "legendFormat": "hit rate %", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "type": "row",
+      "title": "LLM / RAG",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+      "panels": []
+    },
+    {
+      "title": "Anthropic tokens/s (in + out)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(llm_tokens_input_total{provider=\"anthropic\"}[1m]))", "legendFormat": "input", "refId": "A" },
+        { "expr": "sum(rate(llm_tokens_output_total{provider=\"anthropic\"}[1m]))", "legendFormat": "output", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "title": "LLM latency p95 (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket{provider=\"anthropic\"}[5m])) by (le, model))", "legendFormat": "{{model}} p95", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "title": "RAG query latency p95 (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(rag_query_duration_ms_bucket{service=\"zappiq-rag\"}[5m])) by (le))", "legendFormat": "p95", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 150 }, { "color": "red", "value": 300 } ] }
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Traces — top traces lentas (Tempo)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 33 },
+      "panels": []
+    },
+    {
+      "title": "Trace search — requisicoes >2s",
+      "type": "traces",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 34 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "queryType": "traceqlSearch", "query": "{ resource.service.name = \"zappiq-api\" && duration > 2s }", "refId": "A", "tableType": "traces" }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["zappiq", "otel", "api"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "ZappIQ — API + RAG Observability",
+  "uid": "zappiq-main",
+  "version": 1,
+  "weekStart": ""
+}
