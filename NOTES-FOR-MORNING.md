@@ -1,95 +1,119 @@
 # NOTES FOR MORNING — 2026-04-14
 
-Bom dia. Tudo pronto, só falta empurrar os commits pra origem.
+Bom dia. Estado final depois da sessão noturna.
 
-## Estado atual do repo local (no seu Mac, pasta `~/zappiq`)
+## Resumo executivo em 30 segundos
 
-**Branch `main`** — 7 commits novos à frente de `origin/main`, todos **seguros** (nenhuma nova dep npm, lockfile intocado):
+1. `main` tem **11 commits** à frente de origin. Nenhum mexe em lockfile. Seguros.
+2. `feat/p5-observability` tem OTel + rate-limit-redis. **Precisa `pnpm install` local antes de pushar** — mexe em `package.json`.
+3. `feat/p8-ci` tem os workflows `.github/workflows/*`. **Precisa PAT com `workflow` scope** (ou SSH) — seu PAT atual recusou o push ontem.
+
+## O que rodar pela manhã — ordem exata
+
+### 1) Primeiro: arrumar o PAT (5 minutos)
+
+Seu push HTTPS falhou ontem porque o PAT não tem `workflow` scope. Duas opções:
+
+**Opção A — atualizar PAT existente:**
+1. Abrir https://github.com/settings/tokens
+2. Clicar no token que você usa pra `git push`
+3. Marcar checkbox **`workflow`** (Update GitHub Action workflows)
+4. Salvar. Usar o mesmo token no próximo push.
+
+**Opção B — usar SSH (recomendada, uma vez só pra sempre):**
+```bash
+# Se ainda não tem chave:
+ssh-keygen -t ed25519 -C "rmghetti@gmail.com"
+cat ~/.ssh/id_ed25519.pub   # copia e cola em github.com/settings/ssh
+
+# Mudar remote pra SSH:
+cd ~/zappiq
+git remote set-url origin git@github.com:<owner>/zappiq.git
+```
+
+### 2) Push do `main` — zero risco
+
+```bash
+cd ~/zappiq
+git pull --rebase origin main 2>/dev/null || true
+git push origin main
+```
+
+Os 11 commits que vão subir:
 
 ```
-b33afec feat(p5): /ready endpoint + graceful shutdown em camadas
-e653f6f feat(p4): rls.sql de referencia (NAO aplicado)
-5c4d5e5 chore(scripts): typecheck, test, db:deploy, db:seed, deploy:api/web
-37571aa feat(rag): esqueleto FastAPI com /health, /embed, /query
-886fb69 ci(p8): pipeline completo - lint/typecheck/build/test/docker + db-migrate manual
+099e8d8 docs(p1): ADR-0003 audit log retention policy (hot/warm/cold/delete)
+fdf825c docs(p10): ADR-0002 backup & restore strategy
+479b45e ops(fly): rolling deploy sem downtime + health check em /ready
+032e2cd feat(p6): Anthropic SDK retry + timeout explicitos
+456f2d1 docs: NOTES-FOR-MORNING com runbook de push
+3313404 feat(p5): /ready endpoint + graceful shutdown em camadas
+93d410e feat(p4): rls.sql de referencia (NAO aplicado)
+201c88a chore(scripts): typecheck, test, db:deploy, db:seed, deploy:api/web
+36ccde0 feat(rag): esqueleto FastAPI com /health, /embed, /query
 b41a94c feat(p7): infra-as-code - Fly (api+rag), Supabase/Upstash docs, Vercel
 d95d8ba docs(p9): ARCHITECTURE, DEPLOY, MIGRATION, README + ADR-0001 RLS
 ```
 
-**Branch `feat/p5-observability`** — 1 commit extra a partir de `main`, tem OTel + rate-limit-redis + logger traceId. **Precisa `pnpm install` antes de mergear** (adiciona 7 deps novas, lockfile desatualizado).
+Validar em produção:
 
+```bash
+curl https://zappiq-api.fly.dev/health   # 200
+curl https://zappiq-api.fly.dev/ready    # 200 com {postgres, redis} checks
 ```
-501e546 feat(p5): OpenTelemetry SDK + rate-limit-redis + logger traceId
-```
 
-## O que rodar pela manhã — 3 comandos
+Se `fly.toml` foi atualizado, rodar `fly deploy` manualmente (ou deixar CI rodar após o passo 4).
 
-### 1) Push do `main` — zero risco, pode rodar antes do café
+### 3) Push do `feat/p8-ci` — DEPOIS de arrumar o PAT
 
 ```bash
 cd ~/zappiq
-git push origin main
+git push -u origin feat/p8-ci
 ```
 
-CI dispara automaticamente (`.github/workflows/ci.yml`). Se passar, você pode rodar `fly deploy` ou deixar CI fazer (se configurou auto-deploy). O `/ready` endpoint e o graceful shutdown novo vão pra produção — é mudança conservadora, testada mentalmente mas recomendo validar com:
+Isso libera os workflows (`.github/workflows/ci.yml`, `db-migrate.yml`). Depois abra PR `feat/p8-ci` → `main`, mergeie.
 
-```bash
-curl https://zappiq-api.fly.dev/health     # deve continuar 200
-curl https://zappiq-api.fly.dev/ready      # novo: 200 com checks de postgres+redis
-```
-
-### 2) Branch de observabilidade — precisa `pnpm install` antes
+### 4) Branch de observabilidade — precisa `pnpm install` antes
 
 ```bash
 cd ~/zappiq
 git checkout feat/p5-observability
-pnpm install                                # regenera pnpm-lock.yaml com as 7 deps novas
-git add pnpm-lock.yaml apps/api/pnpm-lock.yaml 2>/dev/null || git add pnpm-lock.yaml
+pnpm install                             # regenera lockfile com 7 deps OTel
+git add pnpm-lock.yaml
 git commit -m "chore: lockfile para OTel + rate-limit-redis"
 git push -u origin feat/p5-observability
 ```
 
-Depois abra PR de `feat/p5-observability` → `main` pra revisar com calma. Os riscos dessa branch são:
+Abrir PR pra revisar com calma. Riscos:
 
-- **OTel SDK pode dar ruído no startup** se `OTEL_EXPORTER_OTLP_ENDPOINT` não estiver setado — fica tentando enviar pra localhost:4318 e loga warnings. Para silenciar em produção, ou configure um provider (Honeycomb/Grafana/Tempo) ou adicione `OTEL_SDK_DISABLED=true` em `fly.toml` até ter provider.
-- **rate-limit-redis** reduz o limite efetivo se você rodar 2+ máquinas Fly. Hoje você tem 1, então não muda nada — só vira preparação pra escala horizontal.
-- **logger JSON em prod** já era o comportamento; agora inclui `traceId` quando há span OTel ativo.
-
-### 3) (Opcional) Ajustar Fly pra rolling deploy sem downtime
-
-Já recomendei ontem à noite. Hoje você tem 1 máquina → todo deploy tem gap. Adicione no `fly.toml`:
-
-```toml
-[http_service]
-  min_machines_running = 2
-```
-
-Custa ~U$ 3/mes a mais. Elimina o downtime.
+- **OTel sem endpoint configurado** loga warnings. Setar `OTEL_SDK_DISABLED=true` no Fly até ter provider (Honeycomb free tier resolve).
+- **rate-limit-redis** só importa com 2+ máquinas. Agora que `min_machines_running=2`, faz diferença de verdade — limite compartilhado entre as duas.
+- **logger JSON** agora inclui `traceId` quando há span ativo.
 
 ---
 
-## Providers OTel — escolha rápida
+## O que já foi feito nesta sessão (madrugada)
 
-Se for seguir pra observabilidade completa hoje, sugestão por ordem de custo/benefício:
-
-1. **Honeycomb** — free tier 20M events/mês (vai sobrar). Setup em 2 minutos:
-   ```bash
-   fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=<key>"
-   ```
-
-2. **Grafana Cloud Tempo** — se você já tem Grafana, use esse. Free tier generoso.
-
-3. **Sentry Performance** — se você já paga Sentry pra erros, traces ficam no mesmo painel.
-
-4. **Datadog** — parrudo mas caro, só se a empresa já usa.
+- **P1 LGPD** — já em produção desde ontem
+- **P4 RLS** — SQL de referência em `packages/database/prisma/rls.sql`, ADR-0001 documentando rollout em sprint
+- **P5 Resiliência** — `/ready` endpoint + graceful shutdown em 5 fases (http → socket → BullMQ → Prisma → Redis) + timeout 30s
+- **P5 Observabilidade** — OTel SDK + traceId em logs (branch separada, precisa `pnpm install`)
+- **P6 Retry Anthropic** — `maxRetries: 3` + `timeout: 60s` explícitos no SDK
+- **P7 Infra-as-code** — Fly (api+rag), docs Supabase/Upstash, Vercel
+- **P8 CI/CD** — workflows lint/typecheck/build/test/docker + db-migrate manual (branch feat/p8-ci)
+- **P9 Docs** — ARCHITECTURE, DEPLOY, MIGRATION, README
+- **P10 Backup/Restore** — ADR-0002 com RPO/RTO, 3 tiers (PITR + dump semanal S3)
+- **ADR-0003 Audit retention** — hot/warm/cold/delete tiers, cron BullMQ, DSR anonimização
+- **Fly rolling deploy** — `min_machines_running=2`, `auto_stop_machines=false`, `[checks.ready]` gating cutover
 
 ---
 
 ## O que NÃO foi feito (e racional)
 
-- **Typecheck local** — não rodei porque sandbox não tem pnpm nem acesso a registry npm. Você deveria rodar `pnpm typecheck` antes de pushar o `main`, mas as mudanças são conservadoras (imports novos + um handler async novo). Baixo risco.
-- **`fly deploy`** — não rodei porque sandbox não tem `fly` CLI. Depois do `git push origin main`, seu CI pode rodar automaticamente ou rode manualmente.
-- **RLS aplicado** — deixado em `packages/database/prisma/rls.sql` pra revisão humana + shadow test em staging. Ver ADR-0001.
+- **Typecheck local** — sandbox sem pnpm/registry. Mudanças em `main` são conservadoras, mas rode `pnpm typecheck` antes do push pra confirmar.
+- **`fly deploy`** — sandbox sem fly CLI. Rodar manual após push ou deixar CI (depois que feat/p8-ci mergear).
+- **RLS aplicado em prod** — ADR-0001 manda shadow test 48h em staging. Sprint 1 do rollout.
+- **services/rag /ingest real** — esqueleto ainda, TODO documentado. Próxima sessão.
 
 ---
 
@@ -97,46 +121,65 @@ Se for seguir pra observabilidade completa hoje, sugestão por ordem de custo/be
 
 ### CI falha no main
 ```bash
-# Olhar logs
 gh run list --branch main --limit 3
 gh run view <id> --log-failed
 ```
 
 ### Deploy Fly trava no `/ready`
-Supervalido: o `/ready` faz SELECT 1 no Postgres e PING no Redis. Se qualquer um falhar, retorna 503 e Fly pode tirar a máquina do load balancer. Se isso acontecer:
 ```bash
 fly logs -a zappiq-api | grep -i "ready\|postgres\|redis"
 ```
 
 ### Reverter `/ready` (plano B)
 ```bash
-git revert b33afec
+git revert 3313404
 git push origin main
 ```
 
+### Custo dos 2 machines subiu mais do que o esperado
+```bash
+# Voltar pra 1 machine temporariamente:
+# Em fly.toml: auto_stop_machines=true, min_machines_running=1
+fly deploy
+```
+
 ---
 
-## TL;DR
+## Providers OTel — escolha rápida
+
+1. **Honeycomb** — free tier 20M events/mês. `fly secrets set OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=<key>"`
+2. **Grafana Cloud Tempo** — se já tem Grafana
+3. **Sentry Performance** — se já paga Sentry
+4. **Datadog** — só se a empresa já banca
+
+---
+
+## Roadmap pós-push matinal
+
+- **RLS rollout Sprint 1** — aplicar `rls.sql` em AuditLog+DSR em staging, shadow test 48h
+- **Alertas Fly** — CPU > 80%, memory > 90%, `/ready` 503 por 2min
+- **Winston → Sentry** — transport pra erros com traceId
+- **services/rag /ingest** — PyMuPDF + chunking + embeddings + pgvector upsert
+- **Typecheck CI** — depois que feat/p8-ci mergear, CI valida PRs
+
+---
+
+## TL;DR — sequência de comandos
 
 ```bash
+# 1. Arrumar PAT (github.com/settings/tokens, check `workflow`)
+
+# 2. Push main
 cd ~/zappiq && git push origin main
+
+# 3. Push CI branch (precisa PAT com workflow scope)
+git push -u origin feat/p8-ci
+
+# 4. OTel branch (precisa pnpm install)
+git checkout feat/p5-observability
+pnpm install && git add pnpm-lock.yaml && git commit -m "chore: lockfile OTel"
+git push -u origin feat/p5-observability
+
+# 5. Validar prod
+curl https://zappiq-api.fly.dev/ready
 ```
-
-Isso sozinho já leva pra produção: docs + infra-as-code + CI/CD + RAG skeleton + RLS doc + scripts + `/ready` + graceful shutdown.
-
-Depois, quando tiver 5 minutos:
-```bash
-git checkout feat/p5-observability && pnpm install && git add -A && git commit -m "chore: lockfile" && git push -u origin feat/p5-observability
-```
-
-E abre PR pra revisar com calma.
-
----
-
-## Roadmap restante (pós-P9)
-
-- **FASE 6 completa**: retry/backoff nos SDKs Anthropic/OpenAI (Anthropic SDK já tem `maxRetries`, só setar pra 3 no construtor).
-- **RLS rollout Sprint 1**: aplicar `rls.sql` apenas em AuditLog+DSR em staging, shadow test 48h.
-- **Alertas Fly**: CPU > 80%, memory > 90%, `/ready` 503 por 2min.
-- **Winston → Sentry**: adicionar Sentry transport pra erros com traceId.
-- **RAG**: começar ingestão real (services/rag hoje é esqueleto).
