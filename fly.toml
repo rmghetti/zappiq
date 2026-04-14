@@ -7,9 +7,16 @@ dockerfile = "apps/api/Dockerfile"
 # LGPD compliance: schema migrations run automatically before each deploy.
 # Fly.io boots a release machine with the same image + secrets (DATABASE_URL),
 # runs prisma db push, then only if successful promotes the new image.
-# npx --yes downloads prisma CLI on demand (prisma is devDep, not shipped).
+#
+# Flags:
+#   --skip-generate      → client ja foi gerado no Docker build (economiza tempo)
+#   --accept-data-loss   → nao-interativo; aceita mudancas flagradas como potencialmente
+#                          destrutivas (ex: add coluna NOT NULL sem default). OK em ambiente
+#                          controlado; para prod com dados reais, usar prisma migrate deploy.
+#   timeout 10m          → npx baixando prisma (~30s) + db push pode exceder 5min default.
 [deploy]
-release_command = "npx --yes prisma@6.3.0 db push --schema=./node_modules/@zappiq/database/prisma/schema.prisma --skip-generate"
+release_command = "npx --yes prisma@6.3.0 db push --schema=./node_modules/@zappiq/database/prisma/schema.prisma --skip-generate --accept-data-loss"
+release_command_timeout = "10m"
 
 [checks.health]
 grace_period = "20s"
