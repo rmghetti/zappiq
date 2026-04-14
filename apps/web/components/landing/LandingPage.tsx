@@ -9,6 +9,7 @@ import { Segments } from './Segments';
 import { HowItWorks } from './HowItWorks';
 import { Testimonials } from './Testimonials';
 import { ROICalculator } from './ROICalculator';
+import { TrustAndCompliance } from './TrustAndCompliance';
 import { Pricing } from './Pricing';
 import { LeadMagnetBanner } from './LeadMagnetBanner';
 import { BlogPreview } from './BlogPreview';
@@ -30,6 +31,7 @@ export function LandingPage() {
       <HowItWorks />
       <Testimonials />
       <ROICalculator />
+      <TrustAndCompliance />
       <Pricing />
       <LeadMagnetBanner />
       <BlogPreview />
