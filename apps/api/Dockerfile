@@ -81,7 +81,9 @@ RUN set -e && \
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS runner
 RUN apk add --no-cache libc6-compat openssl tini wget \
  && addgroup --system --gid 1001 nodejs \
- && adduser --system --uid 1001 --ingroup nodejs appuser
+ && adduser --system --uid 1001 --ingroup nodejs appuser \
+ && npm install -g prisma@6.3.0 \
+ && npm cache clean --force
 
 WORKDIR /app
 ENV NODE_ENV=production \
