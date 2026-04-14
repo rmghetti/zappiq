@@ -1,6 +1,8 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
@@ -13,6 +15,8 @@ if (process.env.NODE_ENV !== 'production') {
 const serviceName = process.env.OTEL_SERVICE_NAME ?? 'zappiq-api';
 const deploymentEnv = process.env.NODE_ENV ?? 'development';
 
+const otlpBase = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '');
+
 const sdk = new NodeSDK({
   resource: new Resource({
     [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
@@ -23,10 +27,18 @@ const sdk = new NodeSDK({
   traceExporter: new OTLPTraceExporter({
     // OTEL_EXPORTER_OTLP_ENDPOINT eh usado automaticamente se presente,
     // mas forcamos o suffix /v1/traces para o exporter HTTP do Grafana Cloud.
-    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT
-      ? `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '')}/v1/traces`
-      : undefined,
+    url: otlpBase ? `${otlpBase}/v1/traces` : undefined,
   }),
+  // Logs via OTLP: reusa mesmo gateway e credencial dos traces.
+  // Grafana Cloud roteia /v1/logs direto pro Loki, com correlacao automatica
+  // por resource attributes (service.name) e trace_id/span_id injetados.
+  logRecordProcessors: [
+    new BatchLogRecordProcessor(
+      new OTLPLogExporter({
+        url: otlpBase ? `${otlpBase}/v1/logs` : undefined,
+      }),
+    ),
+  ],
   instrumentations: [
     getNodeAutoInstrumentations({
       // fs/dns geram ruido enorme sem valor de negocio
