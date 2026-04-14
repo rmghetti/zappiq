@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Logo } from '../Logo';
-import { Shield, Lock, Server } from 'lucide-react';
+import { Shield, Lock, Server, Activity, Radar } from 'lucide-react';
 
 const COLUMNS = [
   { title: 'Produto', links: [
@@ -8,9 +8,16 @@ const COLUMNS = [
     { label: 'Pulse AI', href: '#produtos' },
     { label: 'Spark Campaigns', href: '#produtos' },
     { label: 'Radar Insights', href: '#produtos' },
+    { label: 'Radar 360° (Observabilidade)', href: '/observabilidade' },
     { label: 'Nexus CRM', href: '#produtos' },
     { label: 'Forge Studio', href: '#produtos' },
     { label: 'Echo Copilot', href: '#produtos' },
+  ]},
+  { title: 'Planos', links: [
+    { label: 'Starter · Growth · Scale', href: '#precos' },
+    { label: 'Enterprise', href: '/enterprise' },
+    { label: 'Radar 360° add-on', href: '/observabilidade' },
+    { label: 'SLA contratual', href: '/sla' },
   ]},
   { title: 'Empresa', links: [
     { label: 'Sobre', href: '#' },
@@ -22,23 +29,26 @@ const COLUMNS = [
   { title: 'Recursos', links: [
     { label: 'Documentação', href: '#' },
     { label: 'API', href: '#' },
-    { label: 'Recursos Grátis', href: '/recursos' },
     { label: 'Comparativo', href: '/comparativo' },
     { label: 'Demo', href: '/demo' },
-    { label: 'Status', href: '#' },
+    { label: 'Status', href: 'https://status.zappiq.com.br' },
   ]},
-  { title: 'Legal', links: [
+  { title: 'Conformidade', links: [
+    { label: 'LGPD', href: '/lgpd' },
+    { label: 'SLA', href: '/sla' },
+    { label: 'Segurança', href: '/lgpd' },
+    { label: 'Contato DPO', href: 'mailto:dpo@zappiq.com' },
     { label: 'Termos de Uso', href: '#' },
     { label: 'Privacidade', href: '#' },
-    { label: 'LGPD', href: '#' },
-    { label: 'Segurança', href: '#' },
   ]},
 ];
 
 const SECURITY_BADGES = [
-  { icon: Shield, label: 'Dados protegidos por LGPD' },
-  { icon: Lock, label: 'Criptografia end-to-end' },
+  { icon: Shield, label: 'Conforme LGPD (Lei 13.709/18)' },
+  { icon: Lock, label: 'Criptografia AES-256 + TLS 1.3' },
   { icon: Server, label: 'Servidores no Brasil' },
+  { icon: Activity, label: 'SLA 99,9% contratual (Enterprise)' },
+  { icon: Radar, label: 'Observabilidade de negócio' },
 ];
 
 export function Footer() {
@@ -55,7 +65,7 @@ export function Footer() {
           ))}
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-8 mb-12">
           {/* Logo column */}
           <div className="col-span-2 md:col-span-1">
             <div className="mb-4">

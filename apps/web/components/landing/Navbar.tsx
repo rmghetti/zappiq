@@ -17,10 +17,11 @@ const PRODUCTS = [
 
 const NAV_ITEMS = [
   { label: 'Produtos', href: '#produtos', hasMegaMenu: true },
-  { label: 'Segmentos', href: '#segmentos', hasMegaMenu: false },
+  { label: 'Enterprise', href: '/enterprise', hasMegaMenu: false },
+  { label: 'Radar 360°', href: '/observabilidade', hasMegaMenu: false },
   { label: 'Cases', href: '/cases', hasMegaMenu: false },
   { label: 'Preços', href: '#precos', hasMegaMenu: false },
-  { label: 'FAQ', href: '#faq', hasMegaMenu: false },
+  { label: 'LGPD', href: '/lgpd', hasMegaMenu: false },
 ];
 
 export function Navbar() {
@@ -139,9 +140,15 @@ export function Navbar() {
                   )}
                 </div>
               ) : (
-                <a key={item.href} href={item.href} className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors">
-                  {item.label}
-                </a>
+                item.href.startsWith('/') ? (
+                  <Link key={item.href} href={item.href} className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors">
+                    {item.label}
+                  </Link>
+                ) : (
+                  <a key={item.href} href={item.href} className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors">
+                    {item.label}
+                  </a>
+                )
               )
             ))}
           </div>
@@ -190,7 +197,11 @@ export function Navbar() {
             )}
 
             {NAV_ITEMS.filter(i => !i.hasMegaMenu).map((item) => (
-              <a key={item.href} href={item.href} onClick={() => setMobileOpen(false)} className="block text-sm font-medium text-gray-700 py-3">{item.label}</a>
+              item.href.startsWith('/') ? (
+                <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} className="block text-sm font-medium text-gray-700 py-3">{item.label}</Link>
+              ) : (
+                <a key={item.href} href={item.href} onClick={() => setMobileOpen(false)} className="block text-sm font-medium text-gray-700 py-3">{item.label}</a>
+              )
             ))}
 
             <div className="border-t border-gray-100 pt-3 space-y-2">
