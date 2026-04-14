@@ -8,14 +8,17 @@ dockerfile = "apps/api/Dockerfile"
 # Fly.io boots a release machine com a mesma imagem + secrets (DATABASE_URL),
 # roda prisma db push, e so promove a imagem se tiver sucesso.
 #
-# Prisma CLI e pre-instalado globalmente no Dockerfile runner stage
-# (evita download via npx durante release, que causava SIGTERM em ~30s).
+# Prisma CLI e pre-instalado globalmente no Dockerfile runner stage.
+#
+# PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1: Supabase pooler (Supavisor) nao
+# suporta pg_advisory_lock, entao desabilitamos. Seguro em release machine
+# isolada (sem migrations concorrentes).
 #
 # Flags:
 #   --skip-generate      → client ja foi gerado no Docker build
 #   --accept-data-loss   → nao-interativo (release machine sem TTY)
 [deploy]
-release_command = "prisma db push --schema=./node_modules/@zappiq/database/prisma/schema.prisma --skip-generate --accept-data-loss"
+release_command = "sh -c 'PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1 prisma db push --schema=./node_modules/@zappiq/database/prisma/schema.prisma --skip-generate --accept-data-loss'"
 release_command_timeout = "10m"
 
 [checks.health]
