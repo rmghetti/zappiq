@@ -268,6 +268,16 @@ export default function LGPDPage() {
           </p>
         </div>
       </section>
+
+      {/* Identificação da controladora */}
+      <section className="py-10 bg-gray-100 border-t border-gray-200">
+        <div className="max-w-4xl mx-auto px-6 text-center text-sm text-gray-600 space-y-1">
+          <p className="font-semibold text-gray-800">Controladora</p>
+          <p>ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA — CNPJ 46.788.145/0001-08</p>
+          <p>Marca ZappIQ — São Paulo / SP / Brasil</p>
+          <p>Encarregado (DPO): Rodrigo Ghetti — <a href="mailto:dpo@zappiq.com" className="text-emerald-600 hover:underline">dpo@zappiq.com</a></p>
+        </div>
+      </section>
     </PublicLayout>
   );
 }

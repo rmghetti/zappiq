@@ -281,7 +281,7 @@ git push origin main
 
 ### Pendências dessa sessão (curto prazo)
 
-- **CNPJ ZappIQ** — DPO ROP cita "CNPJ a cadastrar". Atualizar quando empresa formalizada.
+- ~~**CNPJ ZappIQ**~~ — **Feito.** Controladora: ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA (CNPJ 46.788.145/0001-08). Atualizado em ROP, página /lgpd e Footer.
 - **status.zappiq.com.br** — criar página pública (sugestão: Statuspage, Atlassian Statuspage Free, ou auto-hospedar com Cachet).
 - **DPA assinados com clientes Enterprise** — template necessário para fechar primeiros contratos.
 - **Página `/cases`** — Navbar referencia mas página não existe. Criar com 3 cases piloto quando houver.

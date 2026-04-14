@@ -1,7 +1,7 @@
 # ROP — Registro de Operações de Tratamento de Dados Pessoais
 
-**Controlador:** ZappIQ Tecnologia Ltda. (CNPJ a cadastrar)
-**Encarregado (DPO):** Rodrigo Ghetti — dpo@zappiq.com
+**Controlador:** ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA (CNPJ 46.788.145/0001-08), detentora da marca ZappIQ
+**Encarregado (DPO):** Rodrigo Ghetti — dpo@zappiq.com — +55 (11) 97210-5451
 **Base legal da elaboração:** LGPD (Lei 13.709/2018), Art. 37
 **Versão:** 1.0 — abril/2026
 **Próxima revisão:** outubro/2026 (revisão semestral)

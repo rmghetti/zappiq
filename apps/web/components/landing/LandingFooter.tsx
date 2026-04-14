@@ -92,12 +92,19 @@ export function Footer() {
           ))}
         </div>
 
-        <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-xs text-gray-600">© 2026 ZappIQ. Todos os direitos reservados. Produto brasileiro 🇧🇷</p>
-          <div className="flex gap-4">
-            {['Instagram', 'LinkedIn', 'YouTube'].map((social) => (
-              <a key={social} href="#" className="text-xs text-gray-600 hover:text-gray-400 transition-colors">{social}</a>
-            ))}
+        <div className="border-t border-white/5 pt-6 space-y-4">
+          <div className="text-xs text-gray-600 leading-relaxed text-center sm:text-left">
+            <p className="font-semibold text-gray-500">ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA</p>
+            <p>CNPJ 46.788.145/0001-08 — detentora da marca ZappIQ</p>
+            <p>Encarregado de Dados (DPO): Rodrigo Ghetti — <a href="mailto:dpo@zappiq.com" className="text-gray-400 hover:text-gray-300">dpo@zappiq.com</a></p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-xs text-gray-600">© 2026 ZappIQ. Todos os direitos reservados. Produto brasileiro 🇧🇷</p>
+            <div className="flex gap-4">
+              {['Instagram', 'LinkedIn', 'YouTube'].map((social) => (
+                <a key={social} href="#" className="text-xs text-gray-600 hover:text-gray-400 transition-colors">{social}</a>
+              ))}
+            </div>
           </div>
         </div>
       </div>
