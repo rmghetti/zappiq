@@ -7,7 +7,7 @@
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { prisma } from '@zappiq/database';
+import { prisma, Prisma } from '@zappiq/database';
 import { requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { logAuditEvent } from '../services/auditService.js';
@@ -153,15 +153,21 @@ router.put('/:id', validate(updateSchema), async (req: Request, res: Response, n
       return;
     }
 
+    // Prisma JSON input types divergem dos output types (JsonValue vs InputJsonValue).
+    // Só escrevemos responseData quando o input traz — se vier vazio, mantemos o existente.
+    const updateData: Prisma.DataSubjectRequestUpdateInput = {
+      status: input.status,
+      rejectionReason: input.rejectionReason ?? null,
+      handledById: req.user!.userId,
+      completedAt: input.status === 'COMPLETED' || input.status === 'REJECTED' ? new Date() : null,
+    };
+    if (input.responseData !== undefined) {
+      updateData.responseData = input.responseData as Prisma.InputJsonValue;
+    }
+
     const updated = await prisma.dataSubjectRequest.update({
       where: { id: req.params.id },
-      data: {
-        status: input.status,
-        rejectionReason: input.rejectionReason ?? null,
-        responseData: input.responseData ?? existing.responseData ?? undefined,
-        handledById: req.user!.userId,
-        completedAt: input.status === 'COMPLETED' || input.status === 'REJECTED' ? new Date() : null,
-      },
+      data: updateData,
     });
 
     await logAuditEvent(req, {
