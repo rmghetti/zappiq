@@ -2,7 +2,9 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
+import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
@@ -39,6 +41,15 @@ const sdk = new NodeSDK({
       }),
     ),
   ],
+  // Metrics via OTLP: http/express instrumentation gera http_server_request_duration
+  // automaticamente. Export periodico a cada 30s para Prometheus via /v1/metrics.
+  metricReader: new PeriodicExportingMetricReader({
+    exporter: new OTLPMetricExporter({
+      url: otlpBase ? `${otlpBase}/v1/metrics` : undefined,
+    }),
+    exportIntervalMillis: 30_000,
+    exportTimeoutMillis: 10_000,
+  }),
   instrumentations: [
     getNodeAutoInstrumentations({
       // fs/dns geram ruido enorme sem valor de negocio
