@@ -6,9 +6,15 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "db:generate": "turbo db:generate",
     "db:push": "turbo db:push",
+    "db:deploy": "pnpm --filter @zappiq/database exec prisma migrate deploy",
+    "db:seed": "pnpm --filter @zappiq/database exec tsx prisma/seed.ts",
     "db:studio": "pnpm --filter @zappiq/database exec prisma studio",
+    "deploy:api": "fly deploy --config fly.toml",
+    "deploy:web": "pnpm --filter @zappiq/web exec vercel deploy --prod",
     "clean": "turbo clean && rm -rf node_modules"
   },
   "devDependencies": {
