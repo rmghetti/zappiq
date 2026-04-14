@@ -182,3 +182,116 @@ curl https://zappiq-api.fly.dev/ready
 - **Grafana Cloud** — importar dashboard, configurar OTLP endpoint
 - **Husky precommit** — amarrar `scripts/precommit.sh` ao hook
 - **Validate-restore mensal** — agendar `scripts/validate-restore.sh` em cron (ou Fly machine scheduled)
+
+---
+
+## SESSÃO ESTRATÉGICA (madrugada 2 — pós-decisões comerciais)
+
+Decisões tomadas pelo Rodrigo: (1) executar tudo de Nível 1 e Nível 2; (2) cadastrar **+55 (11) 97210-5451** como contato primário de alerta; (3) Nível 3 — SLA, plano Enterprise, multi-region preparado mas BR-only, sem on-premise, LGPD como diferencial na landing, observabilidade como produto (Radar 360°) — default no Enterprise, add-on monetizado nos demais.
+
+### Plano Enterprise — criado do zero
+
+- **Pricing:** R$ 2.997/mês base + R$ 9.997 setup fee (waivable em compromisso anual). Desconto 15% anual, 25% bi-anual.
+- **Posicionamento:** "competitive premium" — entre Octadesk (R$ 1,8k–3,5k) e Zendesk (R$ 3k+)/Hubspot (R$ 6k+).
+- **12 categorias de feature:** capacidade ilimitada, SLA 99,9% contratual, Radar 360° incluso, SOC/NOC 24/7, onboarding white-glove, GS dedicado, LGPD Enterprise (DSR 48h, ROP customizado), retenção customizada, infra isolada (opcional), suporte 24/7 multicanal, integrações custom (40h/mês), SSO.
+- **Detalhamento completo:** `docs/PRICING-STRATEGY.md` (ICP, benchmarks competitivos, KPI targets, jornada de venda).
+
+### Radar 360° — produto de observabilidade
+
+- **Default no Enterprise.** Add-on nos demais: R$ 197 (Starter/Growth) e R$ 397 (Scale).
+- **9 módulos:** dashboards executivos, alertas inteligentes, cohort analysis, funil de conversão, churn prediction, sentiment analysis das conversas WhatsApp, performance por agente, ROI de campanhas Spark, integrações com BI (Looker/Metabase).
+- **Justificativa do preço:** vs. analista de BI (R$ 8k–15k/mês) — payback claro.
+- **Página dedicada:** `apps/web/app/observabilidade/page.tsx`.
+
+### Landing page — atualizações
+
+- **Nova página `/enterprise`** — Hero dark gradient, 4 KPIs, 8 blocos de feature, ICP, tabela de pricing 6 linhas, CTA.
+- **Nova página `/observabilidade`** — Radar 360° com 9 features, 5 value points, tabela de pricing por plano com toggle.
+- **Nova página `/lgpd`** — 6 artigos LGPD comentados (Art. 6, 18, 37, 46, 48, 41), 6 medidas técnicas, portal DSR, responsabilidades do cliente, CTA do DPO.
+- **Nova página `/sla`** — Hero, "99,9% = 43 min/mês", tabela 4 planos, créditos por descumprimento, metodologia de mensuração, exclusões.
+- **Nova section TrustAndCompliance** — 3 pilares (LGPD, SLA, Radar 360°) + 6 selos de segurança em grid escuro. Inserida entre `ROICalculator` e `Pricing` no `LandingPage.tsx`.
+- **Pricing.tsx** — agora com 4 colunas (Starter, Growth, Scale, **Enterprise** com badge "Premium" e gradient escuro/âmbar). Toggle de Radar 360° por plano. Grid `md:grid-cols-2 lg:grid-cols-4`.
+- **Navbar** — adicionados links `/enterprise`, `/observabilidade` (Radar 360°), `/lgpd`. Cases mantido.
+- **Footer** — expandido para 6 colunas. Novas: Planos, Conformidade. 5 selos de segurança no rodapé.
+- **FAQ** — expandido de 8 para 12 perguntas (LGPD, Radar Insights vs Radar 360°, plano Enterprise, SLA, contato DPO, descontos Enterprise).
+
+### Multi-region — preparado, não ativado
+
+- **Decisão:** atendimento BR-only nesta fase. Infra preparada para ativar regiões internacionais quando expandirmos.
+- **`fly.toml`** — comentários documentando regiões standby (gig, mia, iad, cdg) e como ativar.
+- **`docs/MULTI-REGION-READY.md`** — triggers de ativação, 3 opções de custo, checklist de ativação, considerações LGPD para transferência internacional Art. 33, comportamento Supabase read replicas + Upstash Global + Vercel Edge.
+
+### LGPD — formalização
+
+- **`docs/LGPD-ROP.md`** — Registro de Operações de Tratamento (Art. 37). 8 seções:
+  - A) ZappIQ como Controladora — 4 operações (cadastro/auth, faturamento, comunicação comercial, logs técnicos)
+  - B) ZappIQ como Operadora — 4 operações (conversas WhatsApp, CRM Nexus, embeddings RAG, mídias)
+  - C) Transferências internacionais Art. 33 — Anthropic, OpenAI, Voyage, WhatsApp Cloud, Grafana
+  - D) 11 operadores sub-encarregados com DPA/contrato
+  - E) Controles de acesso interno (RLS, RBAC, audit log, MFA, segregation of duties)
+  - F) Tempos de resposta DSR (15d padrão, 48h Enterprise)
+  - G) Plano de resposta a incidentes (Art. 48, ANPD em 72h)
+  - H) Revisão semestral
+- **DPO formal:** Rodrigo Ghetti — dpo@zappiq.com — +55 (11) 97210-5451.
+
+### SLA — formalização
+
+- **`docs/SLA.md`** — 11 seções. Por plano: Starter/Growth best effort, Scale 99,5% alvo (sem créditos), **Enterprise 99,9% contratual (43 min/mês máx)**.
+- **Créditos por descumprimento:** 10% (<99,9%), 25% (<99,0%), 50% (<95,0%) — aplicados auto na fatura seguinte.
+- **RPO/RTO Enterprise:** 1h / 4h. Validação mensal via `scripts/validate-restore.sh`, trimestral via chaos engineering, anual via DR drill completo.
+- **Mensuração:** healthcheck `/ready` a cada 15s multi-região. Status page público.
+- **Severidades SEV1–SEV4** com tempos de primeira resposta e resolução por plano.
+
+### Operações — Secrets Rotation Policy
+
+- **`docs/SECRETS-ROTATION-POLICY.md`** — cadência por tipo (90/180/365 dias), 7 gatilhos de rotação emergencial, runbook bash por secret (Anthropic/OpenAI/Voyage/JWT/WhatsApp/DB/Redis), template `SECRETS-INVENTORY.md`, matriz de acesso por função, checklist de offboarding.
+
+### Alertas — contato primário cadastrado
+
+- **`observability/fly-alerts.md`** — adicionado bloco de escalation com Rodrigo Ghetti +55 (11) 97210-5451 / rmghetti@gmail.com.
+- **3 opções técnicas para entregar SMS/ligação:** (A) Fly webhook → Twilio/Zenvia, (B) PagerDuty free tier (5 users), (C) provisório Slack + e-mail com push notification no celular.
+- **Matriz de escalation por severidade:** SEV1 SMS+WhatsApp+ligar; SEV2 WhatsApp+e-mail; SEV3 Slack.
+
+### O que rodar pela manhã (sessão estratégica)
+
+```bash
+cd ~/zappiq
+
+# 1. Validar build local da landing
+cd apps/web && pnpm run build && cd ../..
+
+# 2. Push do que foi feito
+git pull --rebase origin main
+git push origin main
+
+# 3. Deploy frontend (Vercel auto-deploy via GitHub) — esperar build verde
+
+# 4. Configurar contato de oncall (escolher 1 das 3 opções):
+#    Opção C (provisório, 0 custo): configurar e-mail rmghetti@gmail.com
+#    como destino de alertas Fly + push notif no celular.
+#    Opção B (recomendado curto prazo): criar conta PagerDuty free tier
+#    com SMS+ligação para +55 11 97210-5451.
+
+# 5. Atualizar status.zappiq.com.br (criar se não existir) — alinhar
+#    com SLA publicado.
+
+# 6. Treinar time comercial no novo posicionamento Enterprise:
+#    R$ 2.997/mês + R$ 9.997 setup, ICP, jornada de venda.
+```
+
+### Pendências dessa sessão (curto prazo)
+
+- **CNPJ ZappIQ** — DPO ROP cita "CNPJ a cadastrar". Atualizar quando empresa formalizada.
+- **status.zappiq.com.br** — criar página pública (sugestão: Statuspage, Atlassian Statuspage Free, ou auto-hospedar com Cachet).
+- **DPA assinados com clientes Enterprise** — template necessário para fechar primeiros contratos.
+- **Página `/cases`** — Navbar referencia mas página não existe. Criar com 3 cases piloto quando houver.
+- **MFA obrigatório admins Enterprise** — meta Q3/2026 conforme ROP. Implementação pendente.
+- **CI/CD para frontend Vercel** — checar que branches `feat/*` viram preview deploy automático.
+
+### Por que essas decisões — racional executivo
+
+1. **Plano Enterprise existir desde o dia 1** — captura clientes corporativos no piloto. Quem paga Enterprise vira referência comercial. Sem tier premium, ficamos travados em SMB.
+2. **Radar 360° como add-on monetizado** — observabilidade é o produto que mais gera valor percebido em B2B (insight de negócio). Cobrar por ele evita comoditização e abre upsell óbvio dos planos médios.
+3. **Multi-region preparado, não ativado** — custo de ativar é alto (~+R$ 800/mês mínimo) mas custo de NÃO ter preparado quando primeiro cliente internacional aparecer é maior (refactor de DB, latência, LGPD/GDPR). Documentação + comentários no IaC = zero custo, alta opcionalidade.
+4. **LGPD na landing como diferencial** — concorrentes (Octadesk, Huggy) tratam LGPD como nota de rodapé. Tratar como pilar comercial diferencia em RFP corporativo onde compliance é requisito hard.
+5. **SLA público com créditos** — sinal de confiança. Quem oferece créditos automáticos demonstra que mede de verdade. Marketing assimétrico vs. concorrentes que vendem "alta disponibilidade" sem número.
