@@ -4,9 +4,10 @@ Bom dia. Estado final depois da sessão noturna.
 
 ## Resumo executivo em 30 segundos
 
-1. `main` tem **11 commits** à frente de origin. Nenhum mexe em lockfile. Seguros.
+1. `main` tem **13 commits** à frente de origin. Nenhum mexe em lockfile do Node. Seguros.
 2. `feat/p5-observability` tem OTel + rate-limit-redis. **Precisa `pnpm install` local antes de pushar** — mexe em `package.json`.
 3. `feat/p8-ci` tem os workflows `.github/workflows/*`. **Precisa PAT com `workflow` scope** (ou SSH) — seu PAT atual recusou o push ontem.
+4. RAG `/ingest` real foi adicionado — **requer `pip install -r services/rag/requirements.txt`** + aplicar `packages/database/prisma/rag_pgvector.sql` no Supabase antes de subir o servico RAG. Main compila sem isso (Python service e isolado do Node).
 
 ## O que rodar pela manhã — ordem exata
 
@@ -39,14 +40,16 @@ git pull --rebase origin main 2>/dev/null || true
 git push origin main
 ```
 
-Os 11 commits que vão subir:
+Os 13 commits que vão subir:
 
 ```
+9316675 feat(rag): /ingest + /query reais com PyMuPDF, Voyage/OpenAI, pgvector HNSW
+98df10f docs: NOTES-FOR-MORNING atualizado com PAT workflow scope + sequencia final
 099e8d8 docs(p1): ADR-0003 audit log retention policy (hot/warm/cold/delete)
 fdf825c docs(p10): ADR-0002 backup & restore strategy
 479b45e ops(fly): rolling deploy sem downtime + health check em /ready
 032e2cd feat(p6): Anthropic SDK retry + timeout explicitos
-456f2d1 docs: NOTES-FOR-MORNING com runbook de push
+456f2d1 docs: NOTES-FOR-MORNING com runbook de push (v1)
 3313404 feat(p5): /ready endpoint + graceful shutdown em camadas
 93d410e feat(p4): rls.sql de referencia (NAO aplicado)
 201c88a chore(scripts): typecheck, test, db:deploy, db:seed, deploy:api/web
@@ -113,7 +116,11 @@ Abrir PR pra revisar com calma. Riscos:
 - **Typecheck local** — sandbox sem pnpm/registry. Mudanças em `main` são conservadoras, mas rode `pnpm typecheck` antes do push pra confirmar.
 - **`fly deploy`** — sandbox sem fly CLI. Rodar manual após push ou deixar CI (depois que feat/p8-ci mergear).
 - **RLS aplicado em prod** — ADR-0001 manda shadow test 48h em staging. Sprint 1 do rollout.
-- **services/rag /ingest real** — esqueleto ainda, TODO documentado. Próxima sessão.
+- **services/rag /ingest real** — **FEITO**. PyMuPDF + chunk por tokens + Voyage/OpenAI + upsert pgvector. Pendencias no seu lado:
+  1. `pip install -r services/rag/requirements.txt` (voyageai, pymupdf, pgvector, asyncpg, tiktoken)
+  2. Aplicar SQL em `packages/database/prisma/rag_pgvector.sql` no Supabase (`CREATE EXTENSION vector` + tabela + HNSW index)
+  3. `fly secrets set VOYAGE_API_KEY=... -a zappiq-rag` (ou OPENAI_API_KEY + EMBEDDING_PROVIDER=openai)
+  4. Rodar `fly deploy --config services/rag/fly.toml` (se ja tem o config, senao usar infra-as-code de P7)
 
 ---
 
