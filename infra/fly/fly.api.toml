@@ -1,0 +1,69 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Fly.io Configuration para ZappIQ API
+#
+# Esta é a versão canônica da configuração Fly.io para o serviço API.
+# No futuro, o arquivo raiz fly.toml pode ser substituído por um symlink para
+# este arquivo ou removido completamente em favor de manter configurações
+# organizadas sob infra/fly/.
+#
+# Para realizar deploy: flyctl deploy -c infra/fly/fly.api.toml --remote-only
+# ─────────────────────────────────────────────────────────────────────────────
+
+app = "zappiq-api"
+primary_region = "gru"
+
+[build]
+dockerfile = "apps/api/Dockerfile"
+
+# LGPD compliance: schema migrations run automatically before each deploy.
+# Fly.io boots a release machine com a mesma imagem + secrets (DATABASE_URL),
+# roda prisma db push, e so promove a imagem se tiver sucesso.
+#
+# Prisma CLI é pre-instalado globalmente no Dockerfile runner stage.
+#
+# PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1: Supabase pooler (Supavisor) não
+# suporta pg_advisory_lock, então desabilitamos. Seguro em release machine
+# isolada (sem migrations concorrentes).
+#
+# Flags:
+#   --skip-generate      → client já foi gerado no Docker build
+#   --accept-data-loss   → não-interativo (release machine sem TTY)
+[deploy]
+release_command = "sh -c 'PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1 prisma db push --schema=./node_modules/@zappiq/database/prisma/schema.prisma --skip-generate --accept-data-loss'"
+release_command_timeout = "10m"
+
+[checks.health]
+grace_period = "20s"
+interval = "30s"
+method = "GET"
+path = "/health"
+port = 3001
+timeout = "5s"
+type = "http"
+
+[env]
+ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+APP_URL = "https://zappiq-api.fly.dev"
+CORS_ORIGINS = "https://zappiq.vercel.app,https://zappiq.com.br,https://www.zappiq.com.br"
+FRONTEND_URL = "https://zappiq.vercel.app"
+JWT_EXPIRES_IN = "15m"
+JWT_REFRESH_EXPIRES_IN = "7d"
+NODE_ENV = "production"
+PORT = "3001"
+WHATSAPP_API_VERSION = "v21.0"
+
+[http_service]
+auto_start_machines = true
+auto_stop_machines = true
+force_https = true
+internal_port = 3001
+min_machines_running = 1
+
+[http_service.concurrency]
+hard_limit = 250
+soft_limit = 200
+type = "requests"
+
+[[vm]]
+memory = "512mb"
+size = "shared-cpu-1x"

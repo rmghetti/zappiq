@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Fly.io Configuration para ZappIQ RAG Service (Python FastAPI)
+#
+# Deploy: flyctl deploy -c infra/fly/fly.rag.toml --remote-only
+# ─────────────────────────────────────────────────────────────────────────────
+
+app = "zappiq-rag"
+primary_region = "gru"
+
+[build]
+dockerfile = "services/rag/Dockerfile"
+
+[checks.health]
+grace_period = "20s"
+interval = "30s"
+method = "GET"
+path = "/health"
+port = 8001
+timeout = "5s"
+type = "http"
+
+[env]
+LOG_LEVEL = "info"
+NODE_ENV = "production"
+PORT = "8001"
+
+[http_service]
+auto_start_machines = true
+auto_stop_machines = true
+force_https = true
+internal_port = 8001
+min_machines_running = 1
+
+[http_service.concurrency]
+hard_limit = 100
+soft_limit = 80
+type = "requests"
+
+[[vm]]
+memory = "512mb"
+size = "shared-cpu-1x"
