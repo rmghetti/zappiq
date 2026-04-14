@@ -1,0 +1,90 @@
+# Stack de desenvolvimento local — apenas infra (Postgres pgvector + Redis + Mailhog)
+#
+# Por que separado do docker-compose.yml (que ja existe)?
+#   - docker-compose.yml sobe tudo (api, web, nginx) em modo "producao" e exige
+#     build das imagens. Demora e nao tem hot reload.
+#   - docker-compose.local.yml sobe SOMENTE infra, pra voce rodar `pnpm dev`
+#     localmente contra essa infra com hot reload nativo do Node/Next.
+#   - Alem disso, aqui troca postgres:15 pela imagem pgvector (pro RAG
+#     funcionar local) e adiciona Mailhog pra capturar emails de teste.
+#
+# Uso:
+#   docker compose -f docker-compose.local.yml up -d
+#   docker compose -f docker-compose.local.yml logs -f
+#   docker compose -f docker-compose.local.yml down
+#   docker compose -f docker-compose.local.yml down -v     # apaga dados
+#
+# Dev urls:
+#   - Postgres:  postgresql://zappiq:zappiq@localhost:5432/zappiq
+#   - Redis:     redis://localhost:6379
+#   - Mailhog:   SMTP localhost:1025, UI http://localhost:8025
+#
+# Pos up:
+#   1. pnpm --filter @zappiq/database db:push
+#   2. ./scripts/apply-rag-migration.sh           (opcional, pra RAG)
+#   3. pnpm --filter @zappiq/api dev              (hot reload na porta 3001)
+#   4. pnpm --filter @zappiq/web dev              (Next dev na porta 3000)
+#   5. cd services/rag && uvicorn main:app --reload --port 8001    (opcional)
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: zappiq-pg-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zappiq
+      POSTGRES_PASSWORD: zappiq
+      POSTGRES_DB: zappiq
+    ports:
+      - "5432:5432"
+    volumes:
+      - zappiq_pg_local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zappiq -d zappiq"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "work_mem=16MB"
+
+  redis:
+    image: redis:7-alpine
+    container_name: zappiq-redis-local
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - zappiq_redis_local:/data
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: zappiq-mailhog-local
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+
+volumes:
+  zappiq_pg_local:
+    name: zappiq_pg_local
+  zappiq_redis_local:
+    name: zappiq_redis_local
