@@ -8,9 +8,11 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
+import { redis } from './utils/redis.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
 import { initQueues, closeQueues } from './services/queueService.js';
+import { prisma } from '@zappiq/database';
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -124,6 +126,8 @@ const authLimiter = rateLimit({
 });
 
 // ── Health Check ────────────────────────────────
+// /health  — liveness: processo vivo, sem dependências externas
+// /ready   — readiness: Postgres + Redis OK, pronto para tráfego
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -131,6 +135,40 @@ app.get('/health', (_req, res) => {
     version: '2.0.0',
     uptime: Math.floor(process.uptime()),
     environment: env.NODE_ENV,
+  });
+});
+
+app.get('/ready', async (_req, res) => {
+  const checks: Record<string, { ok: boolean; latencyMs?: number; error?: string }> = {};
+  let allOk = true;
+
+  // Postgres (via Supabase pooler)
+  const pgStart = Date.now();
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    checks.postgres = { ok: true, latencyMs: Date.now() - pgStart };
+  } catch (err: any) {
+    allOk = false;
+    checks.postgres = { ok: false, latencyMs: Date.now() - pgStart, error: err?.message ?? 'unknown' };
+  }
+
+  // Redis (Upstash)
+  const rdStart = Date.now();
+  try {
+    const pong = await redis.ping();
+    checks.redis = { ok: pong === 'PONG', latencyMs: Date.now() - rdStart };
+    if (pong !== 'PONG') allOk = false;
+  } catch (err: any) {
+    allOk = false;
+    checks.redis = { ok: false, latencyMs: Date.now() - rdStart, error: err?.message ?? 'unknown' };
+  }
+
+  res.status(allOk ? 200 : 503).json({
+    status: allOk ? 'ready' : 'not_ready',
+    service: 'zappiq-api',
+    version: '2.0.0',
+    uptime: Math.floor(process.uptime()),
+    checks,
   });
 });
 
@@ -174,11 +212,60 @@ httpServer.listen(env.PORT, () => {
   logger.info(`[Server] Health check: http://localhost:${env.PORT}/health`);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('[Server] SIGTERM received. Shutting down...');
-  await closeQueues();
-  httpServer.close(() => process.exit(0));
-});
+// ── Graceful shutdown ───────────────────────────
+// Ordem: para de aceitar HTTP → fecha Socket.io → drena BullMQ → Prisma → Redis
+// Fallback: se algo trava, exit(1) em 30s para não segurar deploy da Fly.
+let shuttingDown = false;
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`[Server] ${signal} received. Draining...`);
+
+  const forceExit = setTimeout(() => {
+    logger.error('[Server] Shutdown timeout (30s). Forcing exit.');
+    process.exit(1);
+  }, 30_000);
+  forceExit.unref();
+
+  try {
+    // 1) Para de aceitar novas conexões HTTP
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    logger.info('[Server] HTTP server closed');
+
+    // 2) Desconecta Socket.io clients
+    io.close();
+    logger.info('[Server] Socket.io closed');
+
+    // 3) Drena workers/queues BullMQ
+    await closeQueues();
+
+    // 4) Fecha Prisma
+    try {
+      await prisma.$disconnect();
+      logger.info('[Server] Prisma disconnected');
+    } catch (err) {
+      logger.warn('[Server] Prisma disconnect error:', err);
+    }
+
+    // 5) Fecha ioredis
+    try {
+      await redis.quit();
+      logger.info('[Server] Redis quit');
+    } catch (err) {
+      logger.warn('[Server] Redis quit error:', err);
+    }
+
+    clearTimeout(forceExit);
+    logger.info('[Server] Shutdown complete');
+    process.exit(0);
+  } catch (err) {
+    logger.error('[Server] Error during shutdown:', err);
+    clearTimeout(forceExit);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
 
 export { app, io, httpServer };
