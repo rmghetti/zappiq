@@ -30,6 +30,17 @@ port = 3001
 timeout = "5s"
 type = "http"
 
+# /ready gates rolling deploys: Fly so marca machine "healthy" apos Postgres
+# e Redis responderem. Evita cutover para machine que nao consegue servir.
+[checks.ready]
+grace_period = "45s"
+interval = "15s"
+method = "GET"
+path = "/ready"
+port = 3001
+timeout = "8s"
+type = "http"
+
 [env]
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 APP_URL = "https://zappiq-api.fly.dev"
@@ -41,12 +52,15 @@ NODE_ENV = "production"
 PORT = "3001"
 WHATSAPP_API_VERSION = "v21.0"
 
+# min_machines_running=2 + auto_stop_machines=false garante rolling deploy
+# sem downtime: Fly sobe nova machine, espera /ready passar, dreno SIGTERM
+# na velha. Custo adicional: ~$2/mes por machine extra shared-cpu-1x 512mb.
 [http_service]
 auto_start_machines = true
-auto_stop_machines = true
+auto_stop_machines = false
 force_https = true
 internal_port = 3001
-min_machines_running = 1
+min_machines_running = 2
 
 [http_service.concurrency]
 hard_limit = 250
