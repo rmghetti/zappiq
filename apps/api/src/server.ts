@@ -1,3 +1,7 @@
+// OTel SDK precisa ser carregado PRIMEIRO — antes de express/http/pg/etc.
+// Auto-instrumentations so patcham modulos carregados depois de sdk.start().
+import './config/tracing.js';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
