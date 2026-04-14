@@ -28,6 +28,9 @@ import billingRoutes from './routes/billing.js';
 import settingsRoutes from './routes/settings.js';
 import onboardingRoutes from './routes/onboarding.js';
 import stripeWebhookRoutes from './routes/stripeWebhook.js';
+import auditLogsRoutes from './routes/auditLogs.js';
+import dsrRoutes from './routes/dataSubjectRequests.js';
+import { initRetentionJob } from './services/retentionService.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -148,6 +151,18 @@ app.use('/api/templates', authMiddleware, templatesRoutes);
 app.use('/api/deals', authMiddleware, dealsRoutes);
 app.use('/api/billing', authMiddleware, billingRoutes);
 app.use('/api/settings', authMiddleware, settingsRoutes);
+app.use('/api/audit-logs', authMiddleware, auditLogsRoutes);
+
+// DSR — POST público (titular não é usuário); demais exigem auth interna
+app.use('/api/dsr', (req, res, next) => {
+  if (req.method === 'POST' && req.path === '/') return next();
+  return authMiddleware(req, res, next);
+}, dsrRoutes);
+
+// ── LGPD retention job ──────────────────────────
+initRetentionJob().catch((err) => {
+  logger.error('[Server] Failed to initialize retention job:', err);
+});
 
 // ── Error Handler (must be last) ────────────────
 app.use(errorHandler);

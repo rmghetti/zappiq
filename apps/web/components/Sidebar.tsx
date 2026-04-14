@@ -6,6 +6,7 @@ import { Logo } from './Logo';
 import {
   LayoutDashboard, MessageSquare, Users, Megaphone, BarChart3,
   GitBranch, BookOpen, Settings, CreditCard, Target, LogOut, ChevronLeft, ChevronRight,
+  ShieldCheck, FileLock,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
@@ -19,6 +20,12 @@ const navItems = [
   { href: '/flows', label: 'Fluxos', icon: GitBranch },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/knowledge-base', label: 'Base de Conhecimento', icon: BookOpen },
+];
+
+// Itens restritos a ADMIN / AUDITOR — compliance e governança LGPD
+const complianceItems = [
+  { href: '/audit-logs', label: 'Auditoria', icon: ShieldCheck, roles: ['ADMIN', 'AUDITOR'] },
+  { href: '/dsr', label: 'Requisições LGPD', icon: FileLock, roles: ['ADMIN', 'AUDITOR'] },
 ];
 
 const bottomItems = [
@@ -67,6 +74,32 @@ export function Sidebar() {
             {!sidebarCollapsed && <span>{label}</span>}
           </Link>
         ))}
+
+        {/* Seção Compliance/LGPD — visível apenas para ADMIN/AUDITOR */}
+        {complianceItems.some(i => i.roles.includes(user?.role ?? '')) && (
+          <div className="pt-4 mt-4 border-t border-gray-100">
+            {!sidebarCollapsed && (
+              <p className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Compliance</p>
+            )}
+            {complianceItems
+              .filter(i => i.roles.includes(user?.role ?? ''))
+              .map(({ href, label, icon: Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive(href)
+                      ? 'bg-primary-50 text-primary-700'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                  title={sidebarCollapsed ? label : undefined}
+                >
+                  <Icon size={20} className="flex-shrink-0" />
+                  {!sidebarCollapsed && <span>{label}</span>}
+                </Link>
+              ))}
+          </div>
+        )}
       </nav>
 
       {/* Bottom */}

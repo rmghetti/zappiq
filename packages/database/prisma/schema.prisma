@@ -99,6 +99,37 @@ enum Urgency {
   HIGH
 }
 
+// LGPD Art. 7 + Art. 11 — bases legais de tratamento
+enum LegalBasis {
+  CONSENT               // Art. 7, I / Art. 11, I
+  CONTRACT              // Art. 7, V
+  LEGAL_OBLIGATION      // Art. 7, II
+  LEGITIMATE_INTEREST   // Art. 7, IX
+  VITAL_INTERESTS       // Art. 7, VII
+  PUBLIC_INTEREST       // Art. 7, III
+  CREDIT_PROTECTION     // Art. 7, X
+  HEALTH_PROTECTION     // Art. 11, II, f
+}
+
+// Tipos de requisição do titular — LGPD Art. 18
+enum DataSubjectRequestType {
+  ACCESS          // confirmação + acesso
+  CORRECTION      // correção
+  ANONYMIZATION   // anonimização
+  PORTABILITY     // portabilidade
+  DELETION        // eliminação
+  CONSENT_REVOKE  // revogação de consentimento
+  INFORMATION     // informação sobre compartilhamento
+}
+
+enum DataSubjectRequestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  EXPIRED
+}
+
 // ═══════════════════════════════════════════════════════
 // MODELS
 // ═══════════════════════════════════════════════════════
@@ -115,13 +146,20 @@ model Organization {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
-  users          User[]
-  contacts       Contact[]
-  conversations  Conversation[]
-  campaigns      Campaign[]
-  flows          Flow[]
-  knowledgeBases KnowledgeBase[]
-  templates      MessageTemplate[]
+  // LGPD — retenção customizável por organização (dias).
+  // Default conservador: 1825d (5 anos) audit / 730d (2 anos) soft-deleted.
+  auditRetentionDays        Int      @default(1825)
+  softDeleteRetentionDays   Int      @default(730)
+  dpoEmail                  String?  // Art. 41 — contato do encarregado
+
+  users              User[]
+  contacts           Contact[]
+  conversations      Conversation[]
+  campaigns          Campaign[]
+  flows              Flow[]
+  knowledgeBases     KnowledgeBase[]
+  templates          MessageTemplate[]
+  dataSubjectRequests DataSubjectRequest[]
 
   @@map("organizations")
 }
@@ -138,6 +176,7 @@ model User {
   organizationId        String
   organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedConversations Conversation[]
+  deletedConversations  Conversation[] @relation("DeletedConversations")
   messages              Message[]
   auditLogs             AuditLog[]
   createdAt             DateTime @default(now())
@@ -197,11 +236,17 @@ model Conversation {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   closedAt         DateTime?
+  deletedAt        DateTime?          // LGPD Art. 16 — marcação de exclusão
+  deletedById      String?
+  deletedBy        User?              @relation("DeletedConversations", fields: [deletedById], references: [id])
+  deletionReason   String?            // motivo (DSR, operacional, purge por retenção)
+  anonymizedAt     DateTime?          // LGPD Art. 12 — anonimização de PII
 
   @@index([organizationId])
   @@index([contactId])
   @@index([status])
   @@index([assignedToId])
+  @@index([deletedAt])
   @@map("conversations")
 }
 
@@ -359,19 +404,63 @@ model InternalNote {
   @@map("internal_notes")
 }
 
+// LGPD Art. 37 (ROPA) + Art. 46 (segurança) + Art. 48 (incidentes)
+// Cadeia hash garante detecção de adulteração. Append-only via policy de banco.
 model AuditLog {
-  id             String   @id @default(cuid())
-  action         String
-  resource       String
+  id             String      @id @default(cuid())
+  sequence       BigInt      @default(autoincrement())  // ordem estrita p/ cadeia
+  action         String                                  // e.g. "conversation.delete"
+  resource       String                                  // e.g. "conversation"
+  resourceId     String?                                 // id do recurso tocado
+  purpose        String?                                 // LGPD Art. 6 — finalidade
+  legalBasis     LegalBasis?                             // LGPD Art. 7/11
+  dataSubjectId  String?                                 // contactId quando toca dados pessoais
   details        Json?
+  before         Json?                                   // snapshot antes (forense)
+  after          Json?                                   // snapshot depois
+  ipAddress      String?
+  userAgent      String?
+  hash           String?                                 // SHA-256 do registro (null em linhas legacy)
+  prevHash       String?                                 // hash do registro anterior (chain)
   userId         String
-  user           User     @relation(fields: [userId], references: [id])
+  user           User        @relation(fields: [userId], references: [id])
   organizationId String
-  createdAt      DateTime @default(now())
+  anonymizedAt   DateTime?                               // LGPD Art. 16 — marcado ao anonimizar
+  createdAt      DateTime    @default(now())
 
   @@index([organizationId])
   @@index([userId])
+  @@index([resource, resourceId])
+  @@index([dataSubjectId])
+  @@index([createdAt])
+  @@index([sequence])
   @@map("audit_logs")
+}
+
+// LGPD Art. 18 — requisições do titular dos dados
+model DataSubjectRequest {
+  id             String                   @id @default(cuid())
+  type           DataSubjectRequestType
+  status         DataSubjectRequestStatus @default(PENDING)
+  requesterEmail String                                      // email do titular
+  requesterName  String?
+  contactId      String?                                     // Contact.id se identificado
+  reason         String?                                     // justificativa do titular
+  responseData   Json?                                       // payload da resposta (para ACCESS/PORTABILITY)
+  handledById    String?                                     // user.id do operador
+  rejectionReason String?
+  dueDate        DateTime                                    // prazo legal (15 dias — Art. 19)
+  completedAt    DateTime?
+  organizationId String
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([contactId])
+  @@index([dueDate])
+  @@map("data_subject_requests")
 }
 
 model Consent {

@@ -4,6 +4,13 @@ primary_region = "gru"
 [build]
 dockerfile = "apps/api/Dockerfile"
 
+# LGPD compliance: schema migrations run automatically before each deploy.
+# Fly.io boots a release machine with the same image + secrets (DATABASE_URL),
+# runs prisma db push, then only if successful promotes the new image.
+# npx --yes downloads prisma CLI on demand (prisma is devDep, not shipped).
+[deploy]
+release_command = "npx --yes prisma@6.3.0 db push --schema=./node_modules/@zappiq/database/prisma/schema.prisma --skip-generate"
+
 [checks.health]
 grace_period = "20s"
 interval = "30s"
