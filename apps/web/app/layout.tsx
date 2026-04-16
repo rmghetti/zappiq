@@ -1,26 +1,45 @@
 import type { Metadata } from 'next';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
+import '@/lib/sentry.js';
+import { OrganizationJsonLd } from '@/components/seo/OrganizationJsonLd';
+import { CookieBanner } from '@/components/shared/CookieBanner';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const jakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-jakarta' });
 
 export const metadata: Metadata = {
-  title: 'ZappIQ — Empresas que usam ZappIQ vendem 3x mais pelo WhatsApp',
-  description: 'Plataforma de IA conversacional para PMEs brasileiras. Chatbot inteligente, CRM, campanhas e analytics em um só lugar. Automação WhatsApp Business com IA. 14 dias grátis.',
+  metadataBase: new URL('https://zappiq.com.br'),
+  title: {
+    default: 'ZappIQ · IA para WhatsApp sem setup fee',
+    template: '%s · ZappIQ',
+  },
+  description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 21 dias grátis para testar ZappIQ, plataforma de IA conversacional para WhatsApp Business.',
   keywords: 'automação whatsapp, chatbot ia, whatsapp business api, crm whatsapp, atendimento automatizado, pulse ai, zappiq',
   openGraph: {
-    title: 'ZappIQ — Inteligência Conversacional para WhatsApp',
-    description: 'Automatize atendimento, vendas e campanhas no WhatsApp com IA. +500 empresas já usam. 14 dias grátis.',
     type: 'website',
     locale: 'pt_BR',
     url: 'https://zappiq.com.br',
     siteName: 'ZappIQ',
+    title: 'ZappIQ · IA para WhatsApp sem setup fee',
+    description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 21 dias grátis para testar ZappIQ.',
+    images: [
+      {
+        url: '/og-default.png',
+        width: 1200,
+        height: 630,
+        alt: 'ZappIQ',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ZappIQ — Automação WhatsApp com IA',
-    description: 'Automatize atendimento, vendas e campanhas no WhatsApp com IA. +500 empresas já usam.',
+    title: 'ZappIQ · IA para WhatsApp sem setup fee',
+    description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 21 dias grátis para testar ZappIQ.',
+    images: ['/og-default.png'],
+  },
+  alternates: {
+    canonical: '/',
   },
   robots: {
     index: true,
@@ -78,7 +97,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaSoftware) }}
         />
       </head>
-      <body className={`${inter.variable} ${jakarta.variable} font-sans`}>{children}</body>
+      <body className={`${inter.variable} ${jakarta.variable} font-sans`}>
+        <OrganizationJsonLd />
+        {children}
+        <CookieBanner />
+      </body>
     </html>
   );
 }
