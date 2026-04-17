@@ -1,9 +1,22 @@
-import { Star } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowRight, Sparkles, Users, Percent } from 'lucide-react';
 
-const TESTIMONIALS = [
-  { name: 'Dra. Camila', role: 'Clínica Vida Plena', text: 'A ZappIQ transformou nosso atendimento. De 4 horas de espera para resposta instantânea.', initials: 'DC' },
-  { name: 'Ricardo', role: 'TrendMix Moda', text: 'Nossas vendas pelo WhatsApp cresceram 35% no primeiro mês. O Pulse AI vende sozinho!', initials: 'RM' },
-  { name: 'Marcos', role: 'AutoTech', text: 'Recuperei 3 horas do meu dia. Agora posso focar na oficina em vez de ficar no celular.', initials: 'MA' },
+const PERKS = [
+  {
+    icon: Percent,
+    title: '50% off por 12 meses',
+    description: 'Metade do preço no primeiro ano. Cupom exclusivo para fundadores.',
+  },
+  {
+    icon: Users,
+    title: 'Acesso direto ao time',
+    description: 'Canal privado com os founders. Influencie o roadmap e priorize features que importam para você.',
+  },
+  {
+    icon: Sparkles,
+    title: 'Badge de Fundador',
+    description: 'Reconhecimento permanente na plataforma. Quem entra antes, constrói junto.',
+  },
 ];
 
 export function Testimonials() {
@@ -11,27 +24,33 @@ export function Testimonials() {
     <section className="py-20 lg:py-28 bg-[#F8FAF9]">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-12">
-          <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">Depoimentos</p>
-          <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900">O que dizem nossos clientes</h2>
+          <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">Programa Fundadores</p>
+          <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900">Seja um dos primeiros. Construa conosco.</h2>
+          <p className="text-gray-500 mt-4 max-w-2xl mx-auto leading-relaxed">
+            Estamos selecionando empresas para co-criar a ZappIQ. Em troca de feedback real, oferecemos condições que não vão existir depois do lançamento.
+          </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {TESTIMONIALS.map((t) => (
-            <div key={t.name} className="bg-white rounded-2xl border border-gray-200 p-7 relative hover:shadow-lg transition-shadow">
-              <div className="text-6xl font-serif text-primary-100 absolute top-4 right-6">&ldquo;</div>
-              <div className="flex gap-0.5 mb-4">
-                {[...Array(5)].map((_, i) => <Star key={i} size={14} className="text-yellow-400 fill-yellow-400" />)}
+        <div className="grid md:grid-cols-3 gap-6 mb-10">
+          {PERKS.map((p) => (
+            <div key={p.title} className="bg-white rounded-2xl border border-gray-200 p-7 hover:shadow-lg transition-shadow text-center">
+              <div className="w-14 h-14 mx-auto rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center mb-4">
+                <p.icon size={28} />
               </div>
-              <p className="text-gray-600 leading-relaxed mb-6 relative z-10">&ldquo;{t.text}&rdquo;</p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-xs font-bold">{t.initials}</div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{t.name}</p>
-                  <p className="text-xs text-gray-400">{t.role}</p>
-                </div>
-              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{p.title}</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">{p.description}</p>
             </div>
           ))}
+        </div>
+
+        <div className="text-center">
+          <Link
+            href="/register"
+            className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-8 py-4 rounded-xl text-base transition-all shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 hover:-translate-y-0.5"
+          >
+            Quero ser Fundador <ArrowRight size={18} />
+          </Link>
+          <p className="text-xs text-gray-400 mt-3">Vagas limitadas — 14 dias grátis, sem cartão de crédito</p>
         </div>
       </div>
     </section>

@@ -43,11 +43,10 @@ const SCENARIOS = [
   },
 ];
 
-/* PLACEHOLDER: substituir por dados reais */
 const HERO_METRICS = [
-  { target: 500, suffix: '+', label: 'empresas atendidas' },
-  { target: 2, suffix: 'M+', label: 'mensagens processadas/mês' },
-  { target: 12, suffix: 'M+', prefix: 'R$', label: 'em vendas geradas para clientes' },
+  { target: 14, suffix: ' dias', label: 'grátis para testar' },
+  { target: 5, suffix: ' min', label: 'para configurar' },
+  { target: 100, suffix: '%', label: 'API oficial Meta' },
 ];
 
 function AnimatedCounter({ target, suffix = '', prefix = '', triggered }: { target: number; suffix?: string; prefix?: string; triggered: boolean }) {
@@ -195,8 +194,7 @@ export function Hero() {
             </div>
 
             <h1 className="font-display text-4xl lg:text-5xl xl:text-[3.5rem] font-extrabold text-gray-900 leading-[1.1] tracking-tight mb-6">
-              {/* PLACEHOLDER: substituir por headline validado em teste A/B */}
-              Empresas que usam ZappIQ vendem <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">3x mais pelo WhatsApp</span> em 30 dias.
+              Automatize seu WhatsApp com <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">IA que atende, vende e agenda</span> — 24 horas por dia.
             </h1>
 
             <p className="text-lg text-gray-500 leading-relaxed max-w-xl mb-8">
@@ -292,24 +290,24 @@ export function Hero() {
                 </div>
               </div>
 
-              {/* Floating stats */}
+              {/* Floating badges */}
               <div className="absolute -bottom-4 -left-6 bg-white rounded-xl shadow-lg border border-gray-100 px-4 py-3 flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-green-600 font-bold text-sm">89%</div>
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-green-600 font-bold text-sm">IA</div>
                 <div>
-                  <p className="text-xs font-semibold text-gray-900">Taxa de automação</p>
-                  <p className="text-[10px] text-gray-400">Último mês</p>
+                  <p className="text-xs font-semibold text-gray-900">Pulse AI integrado</p>
+                  <p className="text-[10px] text-gray-400">Respostas em segundos</p>
                 </div>
               </div>
 
               <div className="absolute -top-2 -right-4 bg-white rounded-xl shadow-lg border border-gray-100 px-4 py-3">
-                <p className="text-xs font-bold text-gray-900">4.8 ★★★★★</p>
-                <p className="text-[10px] text-gray-400">CSAT médio</p>
+                <p className="text-xs font-bold text-gray-900">LGPD ✓</p>
+                <p className="text-[10px] text-gray-400">Dados protegidos</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Contadores animados — PLACEHOLDER: substituir por dados reais */}
+        {/* Contadores animados */}
         <div ref={countersRef} className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-3xl mx-auto">
           {HERO_METRICS.map((m) => (
             <div key={m.label} className="text-center">
