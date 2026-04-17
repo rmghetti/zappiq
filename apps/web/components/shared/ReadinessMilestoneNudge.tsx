@@ -35,7 +35,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { X, Sparkles, CheckCircle2 } from 'lucide-react';
-import SavingsCalculator from './SavingsCalculator';
+import { SavingsCalculator } from './SavingsCalculator';
 
 const STORAGE_KEY = 'zappiq_readiness_milestone_60_fired_at';
 const THRESHOLD = 60;
