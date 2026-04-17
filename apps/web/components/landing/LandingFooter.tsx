@@ -96,7 +96,7 @@ export function Footer() {
           <div className="text-xs text-gray-600 leading-relaxed text-center sm:text-left">
             <p className="font-semibold text-gray-500">ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA</p>
             <p>CNPJ 46.788.145/0001-08 — detentora da marca ZappIQ</p>
-            <p>São Paulo, SP — Brasil</p>
+            <p>Av. das Nações Unidas, 12901 — CENU Torre Norte, 25° andar — São Paulo/SP</p>
             <p>
               Encarregado de Dados (DPO): Rodrigo Ghetti —{' '}
               <a href="mailto:dpo@zappiq.com" className="text-gray-400 hover:text-gray-300">dpo@zappiq.com</a>
