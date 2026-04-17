@@ -10,12 +10,18 @@ on:
       - 'pnpm-lock.yaml'
       - '.github/workflows/fly-deploy.yml'
   workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy (api, rag, all)'
+        required: false
+        default: 'all'
 
 # Restrict default permissions to read-only (principle of least privilege)
 permissions:
   contents: read
 
 jobs:
+  # ── Build gate — must pass before any deploy ──────────────────
   build-check:
     name: Build & Security Check
     runs-on: ubuntu-24.04
@@ -38,17 +44,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm --filter @zappiq/database exec prisma generate
+
       - name: Audit dependencies for known vulnerabilities
         run: pnpm audit --prod --audit-level=high || true
 
       - name: Build all packages
-        run: pnpm run build --filter=@zappiq/api...
+        run: pnpm run build
 
-  deploy:
+  # ── Deploy API to Fly.io (gru region) ─────────────────────────
+  deploy-api:
     name: Deploy API to Fly.io
     runs-on: ubuntu-24.04
     needs: build-check
-    concurrency: deploy-group
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.service == 'api' || github.event.inputs.service == 'all'))
+    concurrency: deploy-api
     permissions:
       contents: read
     steps:
@@ -57,7 +71,72 @@ jobs:
       - name: Install flyctl
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Deploy to Fly.io
-        run: flyctl deploy --remote-only
+      - name: Deploy API
+        run: flyctl deploy --remote-only --config fly.toml
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Smoke test — API health
+        run: |
+          sleep 10
+          curl -sf https://zappiq-api.fly.dev/health | jq .
+        continue-on-error: true
+
+  # ── Deploy RAG to Fly.io (gru region) ─────────────────────────
+  deploy-rag:
+    name: Deploy RAG to Fly.io
+    runs-on: ubuntu-24.04
+    needs: build-check
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (github.event.inputs.service == 'rag' || github.event.inputs.service == 'all')
+    concurrency: deploy-rag
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy RAG service
+        run: flyctl deploy --remote-only --config services/rag/fly.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Smoke test — RAG health
+        run: |
+          sleep 10
+          curl -sf https://zappiq-rag.fly.dev/health | jq .
+        continue-on-error: true
+
+  # ── Run DB migrations ──────────────────────────────────────────
+  migrate:
+    name: Run Prisma migrations
+    runs-on: ubuntu-24.04
+    needs: [deploy-api]
+    if: always() && needs.deploy-api.result == 'success'
+    concurrency: db-migrate
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run migrations
+        run: pnpm --filter @zappiq/database exec prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
