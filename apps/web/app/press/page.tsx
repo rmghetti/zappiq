@@ -238,8 +238,8 @@ export default function PressPage() {
             </div>
             <div className="flex items-center gap-3 text-gray-700">
               <Phone className="h-5 w-5 text-indigo-600" />
-              <a href="https://wa.me/5511999999999" className="hover:text-indigo-600">
-                (11) 99999-9999 (WhatsApp)
+              <a href="https://wa.me/5511945633305" className="hover:text-indigo-600">
+                (11) 94563-3305 (WhatsApp)
               </a>
             </div>
             <div className="flex items-center gap-3 text-gray-700">
