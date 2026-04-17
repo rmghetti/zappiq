@@ -1,0 +1,59 @@
+app = "zappiq-rag"
+primary_region = "gru"
+
+[build]
+# Dockerfile usa COPY services/rag/ — precisa de contexto na raiz do monorepo.
+# flyctl deploy --remote-only roda o build no Fly Builders com contexto cwd.
+# Rodar: cd <raiz-monorepo> && flyctl deploy --config services/rag/fly.toml
+dockerfile = "services/rag/Dockerfile"
+
+[checks.health]
+grace_period = "30s"
+interval = "30s"
+method = "GET"
+path = "/health"
+port = 8001
+timeout = "5s"
+type = "http"
+
+[checks.ready]
+grace_period = "60s"
+interval = "15s"
+method = "GET"
+path = "/ready"
+port = 8001
+timeout = "10s"
+type = "http"
+
+[env]
+DEPLOYMENT_ENV = "production"
+EMBEDDING_DIM = "1024"
+EMBEDDING_MODEL = "voyage-3"
+EMBEDDING_PROVIDER = "voyage"
+OTEL_SERVICE_NAME = "zappiq-rag"
+PORT = "8001"
+
+# Secrets (set via flyctl secrets set):
+#   DATABASE_URL       — Supabase pooler (direct, não session mode)
+#   VOYAGE_API_KEY     — Voyage AI embedding key
+#   OPENAI_API_KEY     — OpenAI fallback (opcional)
+#   OTEL_EXPORTER_OTLP_ENDPOINT — Grafana Cloud OTLP gateway
+#   OTEL_EXPORTER_OTLP_HEADERS  — Grafana Cloud auth header
+
+# RAG é stateless e low-traffic. 1 machine basta, auto-stop habilitado
+# para reduzir custo. Cold start ~8s (Python + tiktoken load).
+[http_service]
+auto_start_machines = true
+auto_stop_machines = true
+force_https = true
+internal_port = 8001
+min_machines_running = 1
+
+[http_service.concurrency]
+hard_limit = 50
+soft_limit = 30
+type = "requests"
+
+[[vm]]
+memory = "1gb"
+size = "shared-cpu-1x"
