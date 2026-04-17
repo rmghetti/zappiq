@@ -33,7 +33,7 @@ export interface SavingsCalculatorProps {
   showCta?: boolean;
   /** Destino do CTA. Default = "/register". */
   ctaHref?: string;
-  /** Texto do CTA. Default = "Começar 21 dias grátis". */
+  /** Texto do CTA. Default = "Começar 14 dias grátis". */
   ctaLabel?: string;
   /** Callback opcional — útil no dashboard para instrumentar clicks. */
   onCtaClick?: () => void;
@@ -74,7 +74,7 @@ export function SavingsCalculator({
   zappiqTierLabel = 'ZappIQ Starter',
   showCta,
   ctaHref = '/register',
-  ctaLabel = 'Começar 21 dias grátis',
+  ctaLabel = 'Começar 14 dias grátis',
   onCtaClick,
   title,
   subtitle,

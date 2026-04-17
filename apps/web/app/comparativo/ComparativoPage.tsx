@@ -38,7 +38,7 @@ const ROWS: Row[] = [
   // Preço e fricção financeira
   { feature: 'Setup fee / taxa de implantação', zappiq: 'R$ 0', blip: 'R$ 8k–15k', huggy: 'R$ 3k–8k', zenvia: 'R$ 10k+', poli: 'R$ 1,5k–5k', emphasis: true },
   { feature: 'Mensalidade de entrada', zappiq: 'R$ 247', blip: 'R$ 1.800+', huggy: 'R$ 489+', zenvia: 'R$ 2.500+', poli: 'R$ 249+' },
-  { feature: 'Trial gratuito', zappiq: '21 dias', blip: 'Não', huggy: '7 dias', zenvia: 'Não', poli: '7 dias' },
+  { feature: 'Trial gratuito', zappiq: '14 dias', blip: 'Não', huggy: '7 dias', zenvia: 'Não', poli: '7 dias' },
   { feature: 'Exige cartão no trial', zappiq: 'no', blip: '—', huggy: 'yes', zenvia: '—', poli: 'yes' },
 
   // Treinamento da IA — pilar do storytelling
@@ -115,8 +115,8 @@ const OBJECTIONS = [
     a: 'Sim. O tier Business (R$ 3.997) e Enterprise (a partir de R$ 9.9k) entregam multi-tenant, SLA contratual, observabilidade dedicada, RAG isolado, SSO e auditoria LGPD. A única diferença: o setup continua self-service. Se o cliente Enterprise quiser consultoria, ela é opcional e precificada à parte, sem amarrar o contrato principal.',
   },
   {
-    q: 'O trial de 21 dias é suficiente para avaliar?',
-    a: 'Sim. Nossos dados mostram que quem configura a IA nos primeiros 3 dias chega a AI Readiness Score ≥ 60 em menos de 24 horas e mede resultados reais até o 7º dia. Os 21 dias existem para você validar volume real de atendimento, não para empurrar decisão. O cap de US$ 15 em LLM no trial protege você de surpresa na conversão.',
+    q: 'O trial de 14 dias é suficiente para avaliar?',
+    a: 'Sim. Nossos dados mostram que quem configura a IA nos primeiros 3 dias chega a AI Readiness Score ≥ 60 em menos de 24 horas e mede resultados reais até o 7º dia. Os 14 dias existem para você validar volume real de atendimento, não para empurrar decisão. O cap de US$ 15 em LLM no trial protege você de surpresa na conversão.',
   },
   {
     q: 'E se minha equipe não for técnica?',
@@ -179,7 +179,7 @@ export function ComparativoPage() {
               href="/register"
               className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-7 py-3.5 rounded-xl shadow-lg shadow-primary-500/30 transition-colors"
             >
-              Testar 21 dias grátis <ArrowRight size={18} />
+              Testar 14 dias grátis <ArrowRight size={18} />
             </Link>
             <Link
               href="#calculadora"
@@ -348,7 +348,7 @@ export function ComparativoPage() {
             </Link>
           </div>
           <p className="text-xs text-gray-500 mt-6">
-            21 dias grátis · sem cartão · cap de custo no trial · cancelamento em 1 clique
+            14 dias grátis · sem cartão · cap de custo no trial · cancelamento em 1 clique
           </p>
         </div>
       </section>

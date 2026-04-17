@@ -18,9 +18,12 @@ enum PlanType {
   STARTER
   GROWTH
   SCALE
+  BUSINESS
+  ENTERPRISE
 }
 
 enum UserRole {
+  SUPERADMIN
   ADMIN
   SUPERVISOR
   AGENT
@@ -152,6 +155,21 @@ model Organization {
   softDeleteRetentionDays   Int      @default(730)
   dpoEmail                  String?  // Art. 41 — contato do encarregado
 
+  // ── Trial (14 dias com cap de custo LLM) ────────────────
+  // trialStartedAt/trialEndsAt: janela do período grátis.
+  // trialCostCapUsd: teto de LLM que o tenant pode queimar no trial
+  // para não impactar margem em signups curiosos/abusivos.
+  // trialConverted: marca que o trial virou assinatura paga.
+  trialStartedAt     DateTime?
+  trialEndsAt        DateTime?
+  trialCostCapUsd    Float       @default(15.00)
+  trialConverted     Boolean     @default(false)
+  isTrialActive      Boolean     @default(true)
+
+  // ── Billing cycle sinc com Stripe ───────────────────────
+  billingCycle       String?     // "monthly" | "annual"
+  subscriptionStatus String?     // active | past_due | canceled | trialing
+
   users              User[]
   contacts           Contact[]
   conversations      Conversation[]
@@ -160,8 +178,57 @@ model Organization {
   knowledgeBases     KnowledgeBase[]
   templates          MessageTemplate[]
   dataSubjectRequests DataSubjectRequest[]
+  tenantUsageMonthly TenantUsageMonthly[]
+  qaPairs            QAPair[]
+
+  // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
+  // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
+  // criação de Q&A, preenchimento de survey). Exposto no dashboard como
+  // "termômetro" guiando o cliente ao próximo passo de qualificação da IA.
+  aiReadinessScore   Int         @default(0)
+  aiReadinessUpdatedAt DateTime?
+  // Data em que o cliente finalizou a configuração inicial recomendada
+  // (survey mínimo + 1 doc/URL + 3 Q&As). Marco usado para campanhas de
+  // ativação e para o NPS do onboarding.
+  aiTrainingReadyAt  DateTime?
 
   @@map("organizations")
+}
+
+// ═══════════════════════════════════════════════════════════
+// TenantUsageMonthly — H10 unit economics por tenant
+// Agregado denormalizado atualizado por job diário.
+// Permite responder "esse cliente dá lucro?" em milissegundos.
+// ═══════════════════════════════════════════════════════════
+model TenantUsageMonthly {
+  id                   String   @id @default(cuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Janela mensal no formato YYYY-MM (ex: "2026-04").
+  periodYearMonth      String
+  // Consumo bruto observado.
+  llmCostUsd           Float    @default(0)
+  llmInputTokens       BigInt   @default(0)
+  llmOutputTokens      BigInt   @default(0)
+  aiMessagesProcessed  Int      @default(0)
+  broadcastsSent       Int      @default(0)
+  conversationsOpened  Int      @default(0)
+  conversationsClosed  Int      @default(0)
+  conversationsAiResolved    Int      @default(0)
+  conversationsHumanResolved Int      @default(0)
+  handoffsCount        Int      @default(0)
+  // Receita reconhecida no período (derivada do plano × cycle).
+  revenueBrlCents      Int      @default(0)
+  // Custo da infra atribuído ao tenant (fly/supabase/loki) — rateio proporcional.
+  infraCostUsd         Float    @default(0)
+  // Gross margin derivada = (revenue - llmCost - infraCost) / revenue.
+  grossMarginPercent   Float?
+  computedAt           DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([organizationId, periodYearMonth])
+  @@index([periodYearMonth])
+  @@map("tenant_usage_monthly")
 }
 
 model User {
@@ -352,6 +419,34 @@ model KBChunk {
   document   KBDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@map("kb_chunks")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// QAPair — Perguntas & Respostas editáveis pelo cliente
+// ─────────────────────────────────────────────────────────────────
+// Estrutura explícita (pergunta → resposta) para casos em que o cliente
+// quer "fixar" uma resposta sem depender de RAG de documento longo.
+// Ingerido como chunks no vector store, mas mantido como registro
+// canônico editável no CRUD. Categoria opcional para agrupamento
+// (ex.: "horário de atendimento", "política de trocas", "pricing").
+// ═══════════════════════════════════════════════════════════════════
+model QAPair {
+  id             String       @id @default(cuid())
+  question       String
+  answer         String
+  category       String?
+  priority       Int          @default(0)       // ordem de exibição / peso no RAG
+  isActive       Boolean      @default(true)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // ID do chunk correspondente no vector store — permite resync sem duplicar.
+  ragChunkId     String?      @unique
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+  @@map("qa_pairs")
 }
 
 model Deal {

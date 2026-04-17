@@ -3,6 +3,7 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
+import { authMiddleware } from '../middleware/auth.js';
 import { signToken, signRefreshToken } from '../utils/token.js';
 import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
@@ -34,6 +35,41 @@ const onboardingSchema = z.object({
   websiteUrl: z.string().url().optional().or(z.literal('')),
 });
 
+// GET /api/onboarding/status — check if onboarding is complete
+router.get('/status', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const orgId = req.user!.organizationId;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const org = orgId
+      ? await prisma.organization.findUnique({ where: { id: orgId } })
+      : null;
+
+    res.json({
+      completed: !!org,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      },
+      organization: org ? {
+        id: org.id,
+        name: org.name,
+        plan: (org as any).plan,
+        isTrialActive: (org as any).isTrialActive,
+      } : null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/onboarding/complete
 router.post('/complete', validate(onboardingSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -56,11 +92,23 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
     const result = await prisma.$transaction(async (tx) => {
       const slug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+      // Trial de 14 dias com cap de US$ 15 em custo LLM.
+      // Janela curta o bastante para criar urgência, longa o bastante
+      // para o cliente sentir ROI. Cap protege margem de signups curiosos.
+      const trialStartedAt = new Date();
+      const trialEndsAt = new Date(trialStartedAt.getTime() + 14 * 24 * 60 * 60 * 1000);
+
       const org = await tx.organization.create({
         data: {
           name: businessName,
           slug: `${slug}-${Date.now().toString(36)}`,
           plan: 'STARTER',
+          trialStartedAt,
+          trialEndsAt,
+          trialCostCapUsd: 15.0,
+          isTrialActive: true,
+          trialConverted: false,
+          subscriptionStatus: 'trialing',
           settings: {
             niche,
             agentName: agentName || 'Bia',
@@ -71,7 +119,7 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
             handoffMessage: handoffMessage || null,
             phone: phone || null,
           },
-        },
+        } as any,
       });
 
       const user = await tx.user.create({

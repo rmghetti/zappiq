@@ -38,7 +38,7 @@ const previewQuery = z.object({
     competitorSetup: z.coerce.number().int().min(0).max(100_000).optional(),
     competitorMonthly: z.coerce.number().int().min(0).max(50_000).optional(),
     format: z.enum(['html', 'json']).optional(),
-    /** Cupom a acoplar no CTA, e.g. TRIAL21OFF. */
+    /** Cupom a acoplar no CTA, e.g. TRIAL14OFF. */
     coupon: z.string().trim().max(40).optional(),
   }),
 });

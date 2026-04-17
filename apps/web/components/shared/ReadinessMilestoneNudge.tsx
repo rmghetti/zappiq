@@ -15,13 +15,13 @@
  *   • Celebração do marco (visual limpo, sem confete exagerado)
  *   • SavingsCalculator embutido (dashboard variant) — com o número da
  *     economia calculado contra a baseline do concorrente
- *   • CTA "Antecipar conversão com 21% off" → /billing?coupon=EARLY21
+ *   • CTA "Antecipar conversão com 14% off" → /billing?coupon=EARLY14
  *
  * Por que funciona:
  *   - O cliente vê a IA funcionando ("ready") e o número da economia no
  *     mesmo frame visual. A decisão de converter fica muito mais fácil.
- *   - O cupom EARLY21 dá 21% off no primeiro ano = "21 dias grátis
- *     viram 21% off", narrativa coerente com o posicionamento de launch.
+ *   - O cupom EARLY14 dá 14% off no primeiro ano = "14 dias grátis
+ *     viram 14% off", narrativa coerente com o posicionamento de launch.
  *   - Dispara em qualquer página do dashboard (hook globalmente via
  *     `useReadinessMilestone`), então não exige que o cliente volte a
  *     /ai-training para ver o nudge.
@@ -85,7 +85,7 @@ export function useReadinessMilestone(score: number | null | undefined): {
 export interface ReadinessMilestoneNudgeProps {
   /** Score atual (0-100). O hook só dispara em ≥ 60. */
   score: number | null | undefined;
-  /** Cupom a acoplar no CTA. Default "EARLY21". */
+  /** Cupom a acoplar no CTA. Default "EARLY14". */
   coupon?: string;
   /** Override do ctaHref se for necessário (multi-tenant host). */
   billingBaseHref?: string;
@@ -93,7 +93,7 @@ export interface ReadinessMilestoneNudgeProps {
 
 export default function ReadinessMilestoneNudge({
   score,
-  coupon = 'EARLY21',
+  coupon = 'EARLY14',
   billingBaseHref = '/billing',
 }: ReadinessMilestoneNudgeProps) {
   const { open, close } = useReadinessMilestone(score);
@@ -141,7 +141,7 @@ export default function ReadinessMilestoneNudge({
             <CheckCircle2 size={16} />
             <span className="text-white/95">
               Antecipe a conversão agora e trave{' '}
-              <strong>21% off no 1º ano</strong> com o cupom{' '}
+              <strong>14% off no 1º ano</strong> com o cupom{' '}
               <code className="px-2 py-0.5 rounded bg-white/20 font-mono text-xs">
                 {coupon}
               </code>
