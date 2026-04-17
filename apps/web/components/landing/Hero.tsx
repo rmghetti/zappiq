@@ -43,7 +43,7 @@ const SCENARIOS = [
   },
 ];
 
-const HERO_METRICS = [
+const HERO_METRICS: { target: number; suffix: string; label: string; prefix?: string }[] = [
   { target: 14, suffix: ' dias', label: 'grátis para testar' },
   { target: 5, suffix: ' min', label: 'para configurar' },
   { target: 100, suffix: '%', label: 'API oficial Meta' },
