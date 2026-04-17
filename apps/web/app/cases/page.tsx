@@ -2,11 +2,11 @@ import type { Metadata } from 'next';
 import { CasesPage } from './CasesPage';
 
 export const metadata: Metadata = {
-  title: 'Cases de Sucesso — ZappIQ | Resultados Reais de Clientes',
-  description: 'Veja como empresas reais estão usando ZappIQ para automatizar WhatsApp, aumentar vendas e reduzir custos. Cases com métricas comprovadas.',
+  title: 'Segmentos e Cases — ZappIQ | Automação WhatsApp para Seu Negócio',
+  description: 'Veja como a ZappIQ resolve o gargalo do WhatsApp manual em clínicas, e-commerce, escolas, serviços e consultoria B2B. Comece grátis por 14 dias.',
   openGraph: {
-    title: 'Cases de Sucesso — ZappIQ',
-    description: 'Resultados reais: +250% leads, -70% tempo de resposta, +R$180k receita. Veja como.',
+    title: 'Segmentos e Cases — ZappIQ',
+    description: 'A dor do WhatsApp manual é universal. Veja como a ZappIQ resolve para o seu segmento.',
   },
 };
 
