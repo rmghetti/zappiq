@@ -24,8 +24,7 @@ export function WhatsAppButton() {
     sessionStorage.setItem('zappiq_chat_bubble_dismissed', 'true');
   };
 
-  /* PLACEHOLDER: substituir número de WhatsApp por número real */
-  const whatsappUrl = `https://wa.me/5511999999999?text=${encodeURIComponent(WELCOME_MESSAGE)}`;
+  const whatsappUrl = `https://wa.me/5511945633305?text=${encodeURIComponent(WELCOME_MESSAGE)}`;
 
   return (
     <>
