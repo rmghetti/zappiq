@@ -33,6 +33,56 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pgvector.asyncpg import register_vector
 from pydantic import BaseModel, Field
 
+# ── OpenTelemetry ──────────────────────────────────────────────────────
+# SDK init precisa rodar antes de qualquer import instrumentado.
+# Exporta traces + metrics via OTLP HTTP para o mesmo gateway Grafana Cloud da API.
+from opentelemetry import trace, metrics as otel_metrics
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+_OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").rstrip("/")
+_resource = Resource.create({
+    SERVICE_NAME: os.getenv("OTEL_SERVICE_NAME", "zappiq-rag"),
+    SERVICE_VERSION: "0.2.0",
+    "deployment.environment": os.getenv("DEPLOYMENT_ENV", os.getenv("NODE_ENV", "development")),
+    "service.instance.id": os.getenv("FLY_MACHINE_ID", os.getenv("HOSTNAME", "local")),
+})
+
+# Traces
+_tracer_provider = TracerProvider(resource=_resource)
+if _OTEL_ENDPOINT:
+    _tracer_provider.add_span_processor(
+        BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{_OTEL_ENDPOINT}/v1/traces"))
+    )
+trace.set_tracer_provider(_tracer_provider)
+_tracer = trace.get_tracer("zappiq.rag", "0.2.0")
+
+# Metrics
+_metric_readers = []
+if _OTEL_ENDPOINT:
+    _metric_readers.append(
+        PeriodicExportingMetricReader(
+            OTLPMetricExporter(endpoint=f"{_OTEL_ENDPOINT}/v1/metrics"),
+            export_interval_millis=30_000,
+        )
+    )
+_meter_provider = MeterProvider(resource=_resource, metric_readers=_metric_readers)
+otel_metrics.set_meter_provider(_meter_provider)
+_meter = otel_metrics.get_meter("zappiq.rag", "0.2.0")
+
+# Custom metrics
+rag_embed_duration = _meter.create_histogram("zappiq_rag_embed_duration_seconds", unit="s", description="Embedding batch duration")
+rag_embed_tokens = _meter.create_counter("zappiq_rag_embed_tokens_total", description="Tokens embedded")
+rag_query_duration = _meter.create_histogram("zappiq_rag_query_duration_seconds", unit="s", description="Vector search duration")
+rag_ingest_duration = _meter.create_histogram("zappiq_rag_ingest_duration_seconds", unit="s", description="Full ingest pipeline duration")
+rag_ingest_chunks = _meter.create_counter("zappiq_rag_ingest_chunks_total", description="Chunks ingested")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Config
@@ -166,6 +216,11 @@ async def lifespan(_app: FastAPI):
 
     yield
 
+    # Shutdown OTel (flush pending spans/metrics)
+    _tracer_provider.shutdown()
+    _meter_provider.shutdown()
+    logger.info("OTel SDK shut down")
+
     if state.pool:
         await state.pool.close()
         logger.info("asyncpg pool fechado")
@@ -186,6 +241,9 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
 )
+
+# Auto-instrumenta rotas FastAPI (request/response spans + http metrics)
+FastAPIInstrumentor.instrument_app(app)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -262,9 +320,12 @@ async def _embed_batch(texts: list[str], input_type: Literal["document", "query"
     Gera embeddings em batch. Voyage aceita 128 inputs/call, OpenAI 2048.
     Fazemos batching de 64 para ficar conservador em ambos.
     """
+    import time as _time
+
     if not texts:
         return []
 
+    t0 = _time.monotonic()
     batch_size = 64
     vectors: list[list[float]] = []
 
@@ -274,6 +335,14 @@ async def _embed_batch(texts: list[str], input_type: Literal["document", "query"
             vectors.extend(await _embed_voyage(batch, input_type))
         else:
             vectors.extend(await _embed_openai(batch))
+
+    elapsed = _time.monotonic() - t0
+    attrs = {"provider": EMBEDDING_PROVIDER, "input_type": input_type}
+    rag_embed_duration.record(elapsed, attrs)
+    token_count = sum(len(state.tokenizer.encode(t)) for t in texts) if state.tokenizer else 0
+    if token_count > 0:
+        rag_embed_tokens.add(token_count, attrs)
+
     return vectors
 
 
@@ -500,7 +569,9 @@ async def query(request: QueryRequest):
         min_similarity=request.min_similarity,
     )
 
-    latency = int((time.monotonic() - t0) * 1000)
+    elapsed = time.monotonic() - t0
+    latency = int(elapsed * 1000)
+    rag_query_duration.record(elapsed, {"namespace": request.namespace})
     logger.info(
         f"query ns={request.namespace} k={request.top_k} "
         f"returned={len(results)} latency_ms={latency}"
@@ -577,8 +648,13 @@ async def ingest(
         metadata=meta,
     )
 
-    latency = int((time.monotonic() - t0) * 1000)
+    elapsed = time.monotonic() - t0
+    latency = int(elapsed * 1000)
     tokens = sum(len(state.tokenizer.encode(c)) for c in chunks) if state.tokenizer else 0
+
+    # OTel metrics
+    rag_ingest_duration.record(elapsed, {"namespace": namespace})
+    rag_ingest_chunks.add(len(chunks), {"namespace": namespace})
 
     logger.info(
         f"ingest ns={namespace} source={source_id} "
