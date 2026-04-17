@@ -3,6 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Calculator, ArrowRight, Sparkles } from 'lucide-react';
+import { PLAN_CONFIG } from '@zappiq/shared';
+
+/** Preço Starter derivado de planConfig.ts (single source of truth) */
+const STARTER_PRICE = PLAN_CONFIG.STARTER.priceMonthly!;
+const GROWTH_PRICE = PLAN_CONFIG.GROWTH.priceMonthly!;
+const SCALE_PRICE = PLAN_CONFIG.SCALE.priceMonthly!;
 
 /* ═══════════════════════════════════════════════════════════════════════
  * Shared · SavingsCalculator
@@ -25,7 +31,7 @@ export interface SavingsCalculatorProps {
   initialSetup?: number;
   /** Mensalidade inicial do campo (R$). Default = 1500. */
   initialMonthly?: number;
-  /** Preço do tier de referência (R$/mês). Default = 247 (Starter). */
+  /** Preço do tier de referência (R$/mês). Default = Starter (via planConfig). */
   zappiqMonthly?: number;
   /** Label customizado para o tier da ZappIQ. Default = "ZappIQ Starter". */
   zappiqTierLabel?: string;
@@ -50,7 +56,7 @@ export interface SavingsCalculatorProps {
 export function computeSavings(
   competitorSetup: number,
   competitorMonthly: number,
-  zappiqMonthly: number = 247,
+  zappiqMonthly: number = STARTER_PRICE,
 ) {
   const firstYearCompetitor = Math.max(0, competitorSetup) + Math.max(0, competitorMonthly) * 12;
   const firstYearZappiq = Math.max(0, zappiqMonthly) * 12;
@@ -70,7 +76,7 @@ export function SavingsCalculator({
   variant = 'full',
   initialSetup = 8000,
   initialMonthly = 1500,
-  zappiqMonthly = 247,
+  zappiqMonthly = STARTER_PRICE,
   zappiqTierLabel = 'ZappIQ Starter',
   showCta,
   ctaHref = '/register',
@@ -247,7 +253,7 @@ export function SavingsCalculator({
 
       {!ctaVisible && !compact && (
         <p className="text-xs text-gray-400 mt-4">
-          * Baseline conservador: {zappiqTierLabel} R$ {zappiqMonthly.toLocaleString('pt-BR')}/mês × 12 + R$ 0 de setup. Para volumes maiores, considere Growth (R$ 797) ou Scale (R$ 1.697).
+          * Baseline conservador: {zappiqTierLabel} R$ {zappiqMonthly.toLocaleString('pt-BR')}/mês × 12 + R$ 0 de setup. Para volumes maiores, considere Growth (R$ {GROWTH_PRICE.toLocaleString('pt-BR')}) ou Scale (R$ {SCALE_PRICE.toLocaleString('pt-BR')}).
         </p>
       )}
     </div>

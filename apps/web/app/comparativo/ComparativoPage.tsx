@@ -5,6 +5,12 @@ import Link from 'next/link';
 import { ArrowRight, Check, X, Minus, Sparkles, ShieldCheck, Zap } from 'lucide-react';
 import { PublicLayout } from '../../components/landing/PublicLayout';
 import { SavingsCalculator } from '../../components/shared/SavingsCalculator';
+import { PLAN_CONFIG } from '@zappiq/shared';
+
+/** Preços derivados de planConfig.ts (single source of truth) */
+const STARTER_PRICE = PLAN_CONFIG.STARTER.priceMonthly!;
+const BUSINESS_PRICE = PLAN_CONFIG.BUSINESS.priceMonthly!;
+const ENTERPRISE_MIN = '9.9k'; // Enterprise é sob consulta — baseline do modelo comercial
 
 /* ═════════════════════════════════════════════════════════════════════
  * Página /comparativo — versão 2026.04 (Launch)
@@ -37,7 +43,7 @@ const COMPETITORS = [
 const ROWS: Row[] = [
   // Preço e fricção financeira
   { feature: 'Setup fee / taxa de implantação', zappiq: 'R$ 0', blip: 'R$ 8k–15k', huggy: 'R$ 3k–8k', zenvia: 'R$ 10k+', poli: 'R$ 1,5k–5k', emphasis: true },
-  { feature: 'Mensalidade de entrada', zappiq: 'R$ 247', blip: 'R$ 1.800+', huggy: 'R$ 489+', zenvia: 'R$ 2.500+', poli: 'R$ 249+' },
+  { feature: 'Mensalidade de entrada', zappiq: `R$ ${STARTER_PRICE}`, blip: 'R$ 1.800+', huggy: 'R$ 489+', zenvia: 'R$ 2.500+', poli: 'R$ 249+' },
   { feature: 'Trial gratuito', zappiq: '21 dias', blip: 'Não', huggy: '7 dias', zenvia: 'Não', poli: '7 dias' },
   { feature: 'Exige cartão no trial', zappiq: 'no', blip: '—', huggy: 'yes', zenvia: '—', poli: 'yes' },
 
@@ -112,7 +118,7 @@ const OBJECTIONS = [
   },
   {
     q: 'Preciso de IA enterprise. ZappIQ atende?',
-    a: 'Sim. O tier Business (R$ 3.997) e Enterprise (a partir de R$ 9.9k) entregam multi-tenant, SLA contratual, observabilidade dedicada, RAG isolado, SSO e auditoria LGPD. A única diferença: o setup continua self-service. Se o cliente Enterprise quiser consultoria, ela é opcional e precificada à parte, sem amarrar o contrato principal.',
+    a: `Sim. O tier Business (R$ ${BUSINESS_PRICE.toLocaleString('pt-BR')}) e Enterprise (a partir de R$ ${ENTERPRISE_MIN}) entregam multi-tenant, SLA contratual, observabilidade dedicada, RAG isolado, SSO e auditoria LGPD. A única diferença: o setup continua self-service. Se o cliente Enterprise quiser consultoria, ela é opcional e precificada à parte, sem amarrar o contrato principal.`,
   },
   {
     q: 'O trial de 21 dias é suficiente para avaliar?',

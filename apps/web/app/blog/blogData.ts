@@ -1,4 +1,7 @@
 /* PLACEHOLDER: substituir por dados reais do CMS ou API */
+/* NOTA: Preços mencionados no conteúdo editorial devem acompanhar
+   packages/shared/src/planConfig.ts (single source of truth).
+   Valores atuais: STARTER=R$247, GROWTH=R$797, SCALE=R$1.697, BUSINESS=R$3.997. */
 
 export interface BlogAuthor {
   name: string;
@@ -354,7 +357,7 @@ export const articles: BlogArticle[] = [
 
 <h3>Custos fixos mensais</h3>
 <ul>
-<li><strong>Plataforma de chatbot:</strong> assinatura mensal (ex: ZappIQ Starter = R$ 197/mês)</li>
+<li><strong>Plataforma de chatbot:</strong> assinatura mensal (ex: ZappIQ Starter = R$ 247/mês)</li>
 <li><strong>WhatsApp Business API:</strong> custo por conversa (estimativa baseada no volume)</li>
 <li><strong>Infraestrutura:</strong> servidores, banco de dados (se aplicável)</li>
 </ul>
@@ -367,7 +370,7 @@ export const articles: BlogArticle[] = [
 </ul>
 
 <h3>Exemplo prático</h3>
-<p>Uma clínica com 800 conversas/mês: ZappIQ Starter (R$ 197) + WhatsApp API (~R$ 200 em conversas) + 10h/mês de supervisão (R$ 250) = <strong>R$ 647/mês</strong></p>
+<p>Uma clínica com 800 conversas/mês: ZappIQ Starter (R$ 247) + WhatsApp API (~R$ 200 em conversas) + 10h/mês de supervisão (R$ 250) = <strong>R$ 697/mês</strong></p>
 
 <h2>Componente 2: Ganhos do chatbot</h2>
 <p>Os ganhos se dividem em duas categorias: receita gerada e custos economizados.</p>
