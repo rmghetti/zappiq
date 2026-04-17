@@ -15,6 +15,7 @@ import { logger } from './utils/logger.js';
 import { redis } from './utils/redis.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
+import { rlsTenantMiddleware } from './middleware/rlsTenant.js';
 import { initQueues, closeQueues } from './services/queueService.js';
 import { prisma } from '@zappiq/database';
 
@@ -181,24 +182,27 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 
-// ── Protected Routes ────────────────────────────
-app.use('/api/contacts', authMiddleware, contactsRoutes);
-app.use('/api/conversations', authMiddleware, conversationsRoutes);
-app.use('/api/conversations', authMiddleware, messagesRoutes);
-app.use('/api/campaigns', authMiddleware, campaignsRoutes);
-app.use('/api/analytics', authMiddleware, analyticsRoutes);
-app.use('/api/flows', authMiddleware, flowsRoutes);
-app.use('/api/kb', authMiddleware, knowledgeBaseRoutes);
-app.use('/api/templates', authMiddleware, templatesRoutes);
-app.use('/api/deals', authMiddleware, dealsRoutes);
-app.use('/api/billing', authMiddleware, billingRoutes);
-app.use('/api/settings', authMiddleware, settingsRoutes);
-app.use('/api/audit-logs', authMiddleware, auditLogsRoutes);
+// ── Protected Routes (auth + RLS tenant isolation) ─
+app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, contactsRoutes);
+app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, conversationsRoutes);
+app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, messagesRoutes);
+app.use('/api/campaigns', authMiddleware, rlsTenantMiddleware, campaignsRoutes);
+app.use('/api/analytics', authMiddleware, rlsTenantMiddleware, analyticsRoutes);
+app.use('/api/flows', authMiddleware, rlsTenantMiddleware, flowsRoutes);
+app.use('/api/kb', authMiddleware, rlsTenantMiddleware, knowledgeBaseRoutes);
+app.use('/api/templates', authMiddleware, rlsTenantMiddleware, templatesRoutes);
+app.use('/api/deals', authMiddleware, rlsTenantMiddleware, dealsRoutes);
+app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes);
+app.use('/api/settings', authMiddleware, rlsTenantMiddleware, settingsRoutes);
+app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, auditLogsRoutes);
 
-// DSR — POST público (titular não é usuário); demais exigem auth interna
+// DSR — POST público (titular não é usuário); demais exigem auth + RLS
 app.use('/api/dsr', (req, res, next) => {
   if (req.method === 'POST' && req.path === '/') return next();
-  return authMiddleware(req, res, next);
+  authMiddleware(req, res, (err?: any) => {
+    if (err) return next(err);
+    rlsTenantMiddleware(req, res, next);
+  });
 }, dsrRoutes);
 
 // ── LGPD retention job ──────────────────────────
