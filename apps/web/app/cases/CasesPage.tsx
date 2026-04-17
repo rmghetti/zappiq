@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { ArrowRight, Star } from 'lucide-react';
 import { PublicLayout } from '../../components/landing/PublicLayout';
 
-/* PLACEHOLDER: substituir todos os cases por dados reais de clientes */
+/* PLACEHOLDER: substituir todos os cases por dados reais de clientes.
+   Enquanto não houver cases reais, os cenários abaixo são ILUSTRATIVOS
+   e baseados em benchmarks de mercado para os segmentos-alvo. */
 const CASES = [
   {
     id: 'clinica-vida-plena',
@@ -89,12 +91,15 @@ export function CasesPage() {
       {/* Header */}
       <div className="max-w-7xl mx-auto px-6 mb-16">
         <div className="text-center max-w-3xl mx-auto">
-          <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">Cases de Sucesso</p>
+          <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">Cenários de Uso</p>
           <h1 className="font-display text-4xl lg:text-5xl font-extrabold text-gray-900 leading-tight mb-5">
-            Resultados reais de empresas reais
+            O que a ZappIQ resolve na prática
           </h1>
           <p className="text-lg text-gray-500">
-            Descubra como empresas de diferentes segmentos estão usando ZappIQ para automatizar atendimento, aumentar vendas e reduzir custos.
+            Cenários ilustrativos baseados em benchmarks de mercado para os segmentos-alvo da ZappIQ.
+          </p>
+          <p className="text-xs text-gray-400 mt-2">
+            Métricas baseadas em simulações e referências de mercado. Cases reais serão publicados após o lançamento.
           </p>
         </div>
       </div>

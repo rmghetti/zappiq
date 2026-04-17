@@ -59,10 +59,11 @@ export function SocialProof() {
           </a>
         </div>
 
-        {/* Cases de Sucesso */}
+        {/* Cases ilustrativos — cenários reais de segmentos-alvo */}
         <div className="text-center mb-10">
-          <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">Cases de Sucesso</p>
-          <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900">Resultados reais de quem já usa ZappIQ</h2>
+          <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">O que a ZappIQ resolve</p>
+          <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900">Cenários reais de quem automatiza com IA</h2>
+          <p className="text-sm text-gray-400 mt-2">Baseados em benchmarks de mercado e simulações do modelo ZappIQ</p>
         </div>
 
         {/* PLACEHOLDER: substituir depoimentos por dados reais */}

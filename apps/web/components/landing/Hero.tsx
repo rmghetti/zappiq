@@ -43,11 +43,11 @@ const SCENARIOS = [
   },
 ];
 
-/* PLACEHOLDER: substituir por dados reais */
+/* Métricas estruturais — não dependem de volume de clientes */
 const HERO_METRICS = [
-  { target: 500, suffix: '+', label: 'empresas atendidas' },
-  { target: 2, suffix: 'M+', label: 'mensagens processadas/mês' },
-  { target: 12, suffix: 'M+', prefix: 'R$', label: 'em vendas geradas para clientes' },
+  { target: 0, suffix: '', prefix: 'R$', label: 'de setup fee' },
+  { target: 30, suffix: ' min', label: 'até sua IA responder' },
+  { target: 14, suffix: ' dias', label: 'de trial grátis' },
 ];
 
 function AnimatedCounter({ target, suffix = '', prefix = '', triggered }: { target: number; suffix?: string; prefix?: string; triggered: boolean }) {
@@ -195,34 +195,37 @@ export function Hero() {
             </div>
 
             <h1 className="font-display text-4xl lg:text-5xl xl:text-[3.5rem] font-extrabold text-gray-900 leading-[1.1] tracking-tight mb-6">
-              {/* PLACEHOLDER: substituir por headline validado em teste A/B */}
-              Empresas que usam ZappIQ vendem <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">3x mais pelo WhatsApp</span> em 30 dias.
+              Você treina a IA do seu WhatsApp <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">em minutos</span> — sem consultor, sem setup pago.
             </h1>
 
-            <p className="text-lg text-gray-500 leading-relaxed max-w-xl mb-8">
-              Automação inteligente com IA para WhatsApp Business. Conecte, configure e escale em minutos.
+            <p className="text-lg text-gray-600 leading-relaxed max-w-xl mb-6">
+              Survey guiado, upload de documentos, Q&A editável. A IA aprende do seu jeito e <strong className="text-gray-900">ROI medido em tempo real</strong> no dashboard — tudo self-service. Enquanto concorrentes cobram de R$ 3.000 a R$ 15.000 só para você ligar, aqui você sai do zero ao ar hoje.
             </p>
 
-            <div className="flex flex-wrap gap-4 mb-8">
+            <div className="flex flex-wrap gap-4 mb-6">
               <Link href="/register" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-7 py-3.5 rounded-xl text-base transition-all shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 hover:-translate-y-0.5">
-                Começar Grátis <ArrowRight size={18} />
+                Testar 21 dias grátis <ArrowRight size={18} />
               </Link>
-              {/* PLACEHOLDER: substituir href por link real de agendamento (ex: Calendly) */}
-              <a href="#agendar-demo" className="inline-flex items-center gap-2 border border-primary-300 hover:border-primary-500 text-primary-600 hover:text-primary-700 font-semibold px-7 py-3.5 rounded-xl text-base transition-all bg-white hover:bg-primary-50">
-                <Calendar size={18} /> Agendar Demonstração
+              <a href="#roi-calculator" className="inline-flex items-center gap-2 border border-primary-300 hover:border-primary-500 text-primary-600 hover:text-primary-700 font-semibold px-7 py-3.5 rounded-xl text-base transition-all bg-white hover:bg-primary-50">
+                <Calendar size={18} /> Calcular meu ROI
               </a>
             </div>
 
             {/* Botão de vídeo demo */}
-            <button onClick={() => setVideoOpen(true)} className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-primary-600 transition-colors mb-8 group">
+            <button onClick={() => setVideoOpen(true)} className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-primary-600 transition-colors mb-6 group">
               <span className="w-8 h-8 rounded-full bg-primary-100 group-hover:bg-primary-200 flex items-center justify-center transition-colors">
                 <Play size={14} className="text-primary-600 ml-0.5" />
               </span>
-              Ver Demonstração em 2 minutos
+              Ver demo de 2 minutos — treinando a IA ao vivo
             </button>
 
-            <div className="flex flex-wrap gap-5 text-sm text-gray-500">
-              {['Sem cartão de crédito', 'Setup em 5 minutos', 'Parceiro oficial Meta'].map((badge) => (
+            <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+              {[
+                '21 dias grátis, sem cartão',
+                'Zero setup fee',
+                'LGPD + SLA + Observabilidade',
+                'Parceiro oficial Meta',
+              ].map((badge) => (
                 <span key={badge} className="flex items-center gap-1.5">
                   <CheckCircle2 size={14} className="text-secondary-500" /> {badge}
                 </span>
