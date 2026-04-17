@@ -13,6 +13,12 @@ const envSchema = z.object({
 
   // Database
   DATABASE_URL: z.string().min(1),
+  DIRECT_URL: z.string().optional(),
+
+  // App URLs
+  APP_URL: z.string().default('https://app.zappiq.com.br'),
+  FRONTEND_URL: z.string().default('http://localhost:3003'),
+  CORS_ORIGINS: z.string().default('http://localhost:3003,http://localhost:3000'),
 
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6379'),
@@ -51,6 +57,15 @@ const envSchema = z.object({
   // RAG Service
   RAG_SERVICE_URL: z.string().default('http://localhost:8001'),
   RAG_SERVICE_SECRET: z.string().optional(),
+
+  // Email provider (Resend)
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('ZappIQ <hello@zappiq.com.br>'),
+  EMAIL_REPLY_TO: z.string().default('founders@zappiq.com.br'),
+
+  // Sentry
+  SENTRY_DSN: z.string().optional(),
+  GIT_SHA: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
