@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
-import '@/lib/sentry.js';
+import '@/lib/sentry';
 import { OrganizationJsonLd } from '@/components/seo/OrganizationJsonLd';
 import { CookieBanner } from '@/components/shared/CookieBanner';
 
