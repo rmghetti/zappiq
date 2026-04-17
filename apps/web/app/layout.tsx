@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     default: 'ZappIQ · IA para WhatsApp sem setup fee',
     template: '%s · ZappIQ',
   },
-  description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 21 dias grátis para testar ZappIQ, plataforma de IA conversacional para WhatsApp Business.',
+  description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 14 dias grátis para testar ZappIQ, plataforma de IA conversacional para WhatsApp Business.',
   keywords: 'automação whatsapp, chatbot ia, whatsapp business api, crm whatsapp, atendimento automatizado, pulse ai, zappiq',
   openGraph: {
     type: 'website',
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     url: 'https://zappiq.com.br',
     siteName: 'ZappIQ',
     title: 'ZappIQ · IA para WhatsApp sem setup fee',
-    description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 21 dias grátis para testar ZappIQ.',
+    description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 14 dias grátis para testar ZappIQ.',
     images: [
       {
         url: '/og-default.png',
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'ZappIQ · IA para WhatsApp sem setup fee',
-    description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 21 dias grátis para testar ZappIQ.',
+    description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 14 dias grátis para testar ZappIQ.',
     images: ['/og-default.png'],
   },
   alternates: {

@@ -10,7 +10,7 @@ import { SavingsCalculator } from './SavingsCalculator';
  * TrialSavingsBanner
  * ---------------------------------------------------------------------
  * Card persistente na dashboard home que, durante o trial:
- *   1. Mostra a contagem regressiva do trial (21 dias → 0).
+ *   1. Mostra a contagem regressiva do trial (14 dias → 0).
  *   2. Incentiva o usuário a refinar a cotação do concorrente em um
  *      mini-calculator (reusa SavingsCalculator, variant="dashboard").
  *   3. Oferece CTA direto para /billing para antecipar a conversão.
@@ -95,11 +95,11 @@ export function TrialSavingsBanner() {
               Trial · {daysRemaining} {daysRemaining === 1 ? 'dia restante' : 'dias restantes'} · cap US$ 15
             </div>
             <h3 className="text-white font-display text-xl md:text-2xl font-extrabold leading-tight mb-1">
-              {daysRemaining > 14
+              {daysRemaining > 10
                 ? 'Zero setup fee. Você já começou a economizar.'
-                : daysRemaining > 7
+                : daysRemaining > 3
                 ? 'O concorrente cobraria setup. Aqui você só paga se converter.'
-                : 'Reta final do trial. Converta antes do vencimento e trave 21% off no 1º ano.'}
+                : 'Reta final do trial. Converta antes do vencimento e trave 14% off no 1º ano.'}
             </h3>
             <p className="text-white/80 text-sm">
               Calcule quanto você economiza em 1 ano vs. a cotação que recebeu dos concorrentes.
