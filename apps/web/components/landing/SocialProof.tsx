@@ -35,10 +35,10 @@ export function SocialProof() {
   return (
     <section className="py-16 lg:py-20 border-y border-gray-100 bg-white">
       <div className="max-w-7xl mx-auto px-6">
-        {/* Badge Meta — PLACEHOLDER: substituir URL por link real da Meta */}
+        {/* Badge Meta — link para diretório de parceiros WhatsApp Business */}
         <div className="flex justify-center mb-12">
           <a
-            href="#META_PARTNER_URL"
+            href="https://www.facebook.com/business/partner-directory/search?platforms=whatsapp"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-3 bg-gradient-to-r from-primary-50 to-secondary-50 border border-primary-200 px-6 py-3 rounded-full hover:shadow-md transition-shadow"
