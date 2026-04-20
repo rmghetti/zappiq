@@ -34,11 +34,17 @@ import { track } from '../../lib/track';
  * ═══════════════════════════════════════════════════════════════════════ */
 
 // Baseline de comparação vs. concorrente (mediana Blip/Huggy)
+// Fonte: apps/web/content/competitor-benchmarks.ts
 const COMPETITOR_SETUP_FEE_BRL = 8000;
 // Percentual de mensagens que a IA resolve sem handoff (média observada em beta)
 const AI_AUTOMATION_RATE = 0.65;
 // Uplift de conversão observado quando WhatsApp passa a ter IA 24/7 + recuperação
 const CONVERSION_UPLIFT_MULTIPLIER = 1.3;
+// V2-003: cap institucional de ROI mensal — acima disso, o número vira
+// promessa inflada e destrói credibilidade em C-level.
+export const ROI_MONTHLY_CAP_PERCENT = 300;
+// V2-003: payback mínimo de 3 meses. Piso institucional.
+export const PAYBACK_MIN_DAYS = 90;
 
 /* ---------- motor de recomendação ---------------------------------- */
 function recommendPlan(
@@ -142,16 +148,23 @@ export function ROICalculator() {
       messagesPerMonth * deltaConversionRate * avgTicket,
     );
 
-    // ─ Benefícios totais
+    // ─ Benefícios totais (V2-003: duas linhas independentes, nunca somadas em "ROI único")
     const netGainMonthly = operationalSavingsMonthly + additionalRevenueMonthly - zappiqCost;
     const totalBenefitMonthly = operationalSavingsMonthly + additionalRevenueMonthly;
-    const roiPercent =
+    const rawRoiPercent =
       zappiqCost > 0 ? Math.round((totalBenefitMonthly / zappiqCost) * 100) : 0;
+    // V2-003: cap 300% para preservar credibilidade institucional.
+    const roiPercent = Math.min(rawRoiPercent, ROI_MONTHLY_CAP_PERCENT);
+    const roiCapped = rawRoiPercent > ROI_MONTHLY_CAP_PERCENT;
 
-    // ─ Payback (em dias)
+    // ─ Payback (em dias) · V2-003: piso de 90 dias (ramp-up da IA + config)
     const dailyNetGain = (operationalSavingsMonthly + additionalRevenueMonthly) / 30;
-    const paybackDays =
+    const rawPaybackDays =
       dailyNetGain > 0 ? Math.max(1, Math.ceil(zappiqCost / dailyNetGain)) : 999;
+    const paybackDays = rawPaybackDays < 900
+      ? Math.max(PAYBACK_MIN_DAYS, rawPaybackDays)
+      : rawPaybackDays;
+    const paybackFloored = rawPaybackDays > 0 && rawPaybackDays < PAYBACK_MIN_DAYS;
 
     // ─ Comparativo vs. concorrente (ano 1)
     const firstYearZappiq = zappiqCost * 12;
@@ -169,7 +182,9 @@ export function ROICalculator() {
       totalBenefitMonthly,
       netGainMonthly,
       roiPercent,
+      roiCapped,
       paybackDays,
+      paybackFloored,
       setupFeeSaved,
       firstYearSavings,
     };
@@ -282,8 +297,14 @@ export function ROICalculator() {
                 <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
                   <TrendingUp size={12} /> ROI mensal
                 </div>
-                <p className="text-2xl font-extrabold text-primary-600">{results.roiPercent}%</p>
-                <p className="text-xs text-gray-400 mt-0.5">benefício / mensalidade</p>
+                <p className="text-2xl font-extrabold text-primary-600">
+                  {results.roiPercent}%{results.roiCapped && <span className="text-xs align-top ml-1 text-primary-400">(cap)</span>}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {results.roiCapped
+                    ? 'Cap institucional 300% · ROI real pode ser maior'
+                    : 'benefício / mensalidade'}
+                </p>
               </div>
 
               <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -362,6 +383,14 @@ export function ROICalculator() {
             <p className="text-[11px] text-gray-400 text-center">
               Zero setup fee · 14 dias grátis · cap US$ 15 no trial · cancelamento em 1 clique
             </p>
+            {/* V2-003/V2-013: disclaimer institucional de premissas */}
+            <div className="bg-amber-50/60 border border-amber-200/60 rounded-xl p-4 text-[11px] text-amber-900/90 leading-relaxed">
+              <strong className="block text-amber-900 mb-1">Metodologia e limites desta estimativa</strong>
+              Benchmarks observados em clientes beta ZappIQ entre ago/25 e fev/26. Resultados reais variam por vertical,
+              maturidade da base de conhecimento e política de handoff humano. Economia operacional e uplift de receita
+              são calculados de forma independente — não somamos em um “ROI único” inflado. ROI mensal exibido tem cap de{' '}
+              {ROI_MONTHLY_CAP_PERCENT}% e payback mínimo de {PAYBACK_MIN_DAYS} dias para absorver ramp-up.
+            </div>
           </div>
         </div>
       </div>
