@@ -27,7 +27,7 @@ dockerfile = "apps/api/Dockerfile"
 # é útil em dev, mas em prod é anti-pattern — pode dropar colunas ou
 # tabelas sem warning e não mantém histórico de migrations.
 [deploy]
-release_command = "sh -c 'PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1 prisma migrate deploy --schema=./node_modules/@zappiq/database/prisma/schema.prisma'"
+release_command = "sh -c 'set -e; SCHEMA=; if [ -z \"$SCHEMA\" ]; then echo \"ERROR: schema.prisma not found\"; exit 1; fi; echo \"Using schema: $SCHEMA\"; PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1 prisma migrate deploy --schema=\"$SCHEMA\"'"
 release_command_timeout = "10m"
 
 [checks.health]
