@@ -40,7 +40,7 @@ jobs:
         run: pnpm --filter @zappiq/database exec prisma generate
 
       - name: Lint
-        run: pnpm run lint --if-present
+        run: pnpm run lint
 
       - name: Type-check API
         run: pnpm --filter @zappiq/api exec tsc --noEmit
@@ -128,4 +128,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Validate Prisma schema
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/zappiq_ci?schema=public
+          DIRECT_URL: postgresql://user:pass@localhost:5432/zappiq_ci?schema=public
         run: pnpm --filter @zappiq/database exec prisma validate
