@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Play, CheckCircle2, X, Calendar } from 'lucide-react';
+import { ArrowRight, Play, CheckCircle2, X, Calendar, Zap } from 'lucide-react';
 
 const SCENARIOS = [
   {
@@ -15,30 +15,6 @@ const SCENARIOS = [
       { type: 'in', text: '14h perfeito!', delay: 1200 },
       { type: 'typing', delay: 1500 },
       { type: 'out', text: '✅ Agendado! Quinta, 14h com a Dra. responsável.\n\nVou enviar um lembrete amanhã! 📅', ai: true, delay: 800 },
-    ],
-  },
-  {
-    business: 'TrendMix Moda',
-    label: '🛒 Venda',
-    messages: [
-      { type: 'in', text: 'Boa tarde! Vi o vestido floral no Instagram, ainda tem?', delay: 800 },
-      { type: 'typing', delay: 1500 },
-      { type: 'out', text: 'Oi! Sim, temos! 🌸\n\n👗 Vestido Floral Primavera\n💰 R$ 189,90 ou 3x de R$ 63,30\n📦 Frete grátis acima de R$ 150\n\nTemos P, M e G. Qual seu tamanho?', ai: true, delay: 800 },
-      { type: 'in', text: 'M! Quero comprar', delay: 1200 },
-      { type: 'typing', delay: 1500 },
-      { type: 'out', text: '✅ Ótima escolha! Seu link de pagamento:\n\n🔗 pay.trendmix.com/abc123\n\nApós o pagamento, envio o rastreio em até 2h! 🚀', ai: true, delay: 800 },
-    ],
-  },
-  {
-    business: 'AutoTech Oficina',
-    label: '💬 Atendimento',
-    messages: [
-      { type: 'in', text: 'Meu carro está fazendo um barulho estranho na roda, quanto custa uma avaliação?', delay: 800 },
-      { type: 'typing', delay: 1500 },
-      { type: 'out', text: 'Olá! Avaliação diagnóstica: R$ 80 (abate no serviço) 🔧\n\nHorários disponíveis amanhã:\n🕐 8h\n🕐 10h30\n🕐 14h\n\nQual prefere?', ai: true, delay: 800 },
-      { type: 'in', text: '10h30 por favor!', delay: 1200 },
-      { type: 'typing', delay: 1500 },
-      { type: 'out', text: '✅ Confirmado! Amanhã, 10h30\n📍 Av. Brasil, 1500 — AutoTech\n\nTraga o documento do veículo. Até amanhã! 🚗', ai: true, delay: 800 },
     ],
   },
 ];
@@ -72,7 +48,7 @@ function AnimatedCounter({ target, suffix = '', prefix = '', triggered }: { targ
   }, [triggered, target]);
 
   return (
-    <span className="text-3xl lg:text-4xl font-extrabold font-display bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">
+    <span className="text-3xl lg:text-4xl font-extrabold font-display bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
       {prefix}{count}{suffix}
     </span>
   );
@@ -100,7 +76,7 @@ function VideoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div className="text-center text-white/60">
             <Play size={64} className="mx-auto mb-4 opacity-50" />
             <p className="text-sm">Vídeo de demonstração</p>
-            <p className="text-xs text-white/40 mt-1">Substitua por embed real em #VIDEO_DEMO_URL</p>
+            <p className="text-xs text-white/40 mt-1">Substitua por embed real</p>
           </div>
         </div>
       </div>
@@ -108,8 +84,7 @@ function VideoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-export function HeroVariantA() {
-  const [scenarioIdx, setScenarioIdx] = useState(0);
+export function HeroVariantC() {
   const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
   const [showTyping, setShowTyping] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
@@ -140,7 +115,7 @@ export function HeroVariantA() {
     setVisibleMessages([]);
     setShowTyping(false);
 
-    const scenario = SCENARIOS[scenarioIdx];
+    const scenario = SCENARIOS[0];
     let totalDelay = 500;
 
     scenario.messages.forEach((msg) => {
@@ -156,72 +131,61 @@ export function HeroVariantA() {
       timeoutsRef.current.push(t);
     });
 
-    const nextT = setTimeout(() => {
-      setScenarioIdx((prev) => (prev + 1) % SCENARIOS.length);
-    }, totalDelay + 3000);
-    timeoutsRef.current.push(nextT);
-
     return () => timeoutsRef.current.forEach(clearTimeout);
-  }, [scenarioIdx]);
+  }, []);
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [visibleMessages, showTyping]);
 
-  const scenario = SCENARIOS[scenarioIdx];
-
   return (
     <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-28 overflow-hidden">
       <div className="absolute inset-0 -z-10">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-secondary-200/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 right-10 w-96 h-96 bg-primary-200/15 rounded-full blur-3xl" />
+        <div className="absolute top-20 left-10 w-72 h-72 bg-blue-200/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-10 right-10 w-96 h-96 bg-cyan-200/15 rounded-full blur-3xl" />
       </div>
 
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div>
-            <div className="inline-flex items-center gap-2 bg-secondary-50 border border-secondary-200 text-secondary-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6">
-              <span className="w-2 h-2 bg-secondary-500 rounded-full animate-pulse" />
-              <svg width="16" height="16" viewBox="0 0 256 256" className="flex-shrink-0" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M128 20C68.4 20 20 68.4 20 128s48.4 108 108 108 108-48.4 108-108S187.6 20 128 20z" fill="#0081FB"/>
-                <path d="M90.3 130.3c0-16.5 4.4-30 11.2-38.8 8.2-10.6 19.8-15.4 30.6-15.4 8.6 0 15.4 2.6 20.8 7.4 5.6 4.8 10 12.2 13 22.2 2.6 8.8 4 19.6 4 32.8 0 14.6-2.6 27-7.2 36.4-5.6 11.4-14 17.4-24.6 17.4-10.4 0-19.4-6.2-26-17.4-7.2-12.2-11.8-27.4-11.8-44.6zm-24.6-4.6c0 24.6 7 44.2 17.6 58 12.2 15.8 28.6 24.4 44.8 24.4 18.2 0 33.2-10.4 43-27.6 8.8-15.4 13.8-36 13.8-59.2 0-20.2-4.2-37.4-12.4-50.4-10-15.8-25-25-42.4-25-18.8 0-34 10.6-44 27.2-9 15-20.4 33.4-20.4 52.6z" fill="white"/>
-              </svg>
-              Parceiro Oficial Meta WhatsApp Business
+            <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6">
+              <Zap size={14} className="flex-shrink-0" />
+              Deploy em 30 minutos, zero fricção
             </div>
 
             <h1 className="font-display text-4xl lg:text-5xl xl:text-[3.5rem] font-extrabold text-gray-900 leading-[1.1] tracking-tight mb-6">
-              Você treina a IA do seu WhatsApp <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">em minutos</span> — sem consultor, sem setup pago.
+              Sua IA do WhatsApp pronta <span className="bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">em 30 minutos</span>, sem consultor.
             </h1>
 
             <p className="text-lg text-gray-600 leading-relaxed max-w-xl mb-6">
-              Survey guiado, upload de documentos, Q&A editável. A IA aprende do seu jeito e <strong className="text-gray-900">ROI medido em tempo real</strong> no dashboard — tudo self-service. Enquanto concorrentes cobram de R$ 3.000 a R$ 15.000 só para você ligar, aqui você sai do zero ao ar hoje.
+              Survey inteligente + upload de docs = IA treinada. Não precisa de reuniões, consultoria ou setup complexo. Você mesmo faz tudo em 30 minutos e já tá resolvendo suporte, agenda e vendas no WhatsApp. Time inteiro economizado.
             </p>
 
             <div className="flex flex-wrap gap-4 mb-6">
-              <Link href="/register" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-7 py-3.5 rounded-xl text-base transition-all shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 hover:-translate-y-0.5">
-                Testar 14 dias grátis <ArrowRight size={18} />
+              <Link href="/register" className="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold px-7 py-3.5 rounded-xl text-base transition-all shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5">
+                Começar em 30 minutos <ArrowRight size={18} />
               </Link>
-              <a href="#roi-calculator" className="inline-flex items-center gap-2 border border-primary-300 hover:border-primary-500 text-primary-600 hover:text-primary-700 font-semibold px-7 py-3.5 rounded-xl text-base transition-all bg-white hover:bg-primary-50">
-                <Calendar size={18} /> Calcular meu ROI
+              <a href="#roi-calculator" className="inline-flex items-center gap-2 border border-blue-300 hover:border-blue-500 text-blue-600 hover:text-blue-700 font-semibold px-7 py-3.5 rounded-xl text-base transition-all bg-white hover:bg-blue-50">
+                <Calendar size={18} /> Ver timeline
               </a>
             </div>
 
-            <button onClick={() => setVideoOpen(true)} className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-primary-600 transition-colors mb-6 group">
-              <span className="w-8 h-8 rounded-full bg-primary-100 group-hover:bg-primary-200 flex items-center justify-center transition-colors">
-                <Play size={14} className="text-primary-600 ml-0.5" />
+            <button onClick={() => setVideoOpen(true)} className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-blue-600 transition-colors mb-6 group">
+              <span className="w-8 h-8 rounded-full bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center transition-colors">
+                <Play size={14} className="text-blue-600 ml-0.5" />
               </span>
-              Ver demo de 2 minutos — treinando a IA ao vivo
+              Assista ao processo de setup passo a passo
             </button>
 
             <div className="flex flex-wrap gap-4 text-sm text-gray-600">
               {[
-                '14 dias grátis, sem cartão',
-                'Zero setup fee',
-                'LGPD + SLA + Observabilidade',
-                'Parceiro oficial Meta',
+                'Setup em 30 minutos',
+                'Zero treinamento',
+                'Deploy imediato',
+                'Self-service 100%',
               ].map((badge) => (
                 <span key={badge} className="flex items-center gap-1.5">
-                  <CheckCircle2 size={14} className="text-secondary-500" /> {badge}
+                  <CheckCircle2 size={14} className="text-blue-500" /> {badge}
                 </span>
               ))}
             </div>
@@ -235,7 +199,7 @@ export function HeroVariantA() {
                 aria-label="Ver Demonstração"
               >
                 <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-xl hover:scale-110 transition-transform">
-                  <Play size={28} className="text-primary-600 ml-1" />
+                  <Play size={28} className="text-blue-600 ml-1" />
                 </div>
               </button>
 
@@ -249,15 +213,15 @@ export function HeroVariantA() {
                   </div>
 
                   <div className="bg-[#075E54] px-3 pb-2.5 flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-secondary-400 flex items-center justify-center text-white text-[10px] font-bold">ZQ</div>
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white text-[10px] font-bold">ZQ</div>
                     <div>
-                      <p className="text-white text-xs font-semibold">{scenario.business}</p>
+                      <p className="text-white text-xs font-semibold">{SCENARIOS[0].business}</p>
                       <p className="text-green-200 text-[9px]">● Agente IA ativo</p>
                     </div>
                   </div>
 
                   <div className="bg-[#ECE5DD] flex justify-center py-1.5">
-                    <span className="bg-white/80 text-[10px] text-gray-600 px-3 py-0.5 rounded-full font-medium">{scenario.label}</span>
+                    <span className="bg-white/80 text-[10px] text-gray-600 px-3 py-0.5 rounded-full font-medium">Pronto em 30min</span>
                   </div>
 
                   <div ref={chatRef} className="bg-[#ECE5DD] h-[380px] overflow-y-auto px-3 py-2 space-y-2 scroll-smooth"
@@ -282,16 +246,16 @@ export function HeroVariantA() {
               </div>
 
               <div className="absolute -bottom-4 -left-6 bg-white rounded-xl shadow-lg border border-gray-100 px-4 py-3 flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-green-600 font-bold text-sm">89%</div>
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 font-bold text-sm">30m</div>
                 <div>
-                  <p className="text-xs font-semibold text-gray-900">Taxa de automação</p>
-                  <p className="text-[10px] text-gray-400">Último mês</p>
+                  <p className="text-xs font-semibold text-gray-900">Setup completo</p>
+                  <p className="text-[10px] text-gray-400">Sem treinamento</p>
                 </div>
               </div>
 
               <div className="absolute -top-2 -right-4 bg-white rounded-xl shadow-lg border border-gray-100 px-4 py-3">
-                <p className="text-xs font-bold text-gray-900">4.8 ★★★★★</p>
-                <p className="text-[10px] text-gray-400">CSAT médio</p>
+                <p className="text-xs font-bold text-gray-900">1 pessoa</p>
+                <p className="text-[10px] text-gray-400">Faz tudo sozinha</p>
               </div>
             </div>
           </div>

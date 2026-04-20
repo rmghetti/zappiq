@@ -23,7 +23,7 @@ const SCENARIOS: Scenario[] = [
     id: 'clinica',
     label: 'Sou uma Clinica',
     icon: '🏥',
-    greeting: 'Ola! Bem-vindo a Clinica Vida Plena. Sou a assistente virtual. Como posso ajudar voce hoje?',
+    greeting: 'Ola! Bem-vindo a sua clinica. Sou a assistente virtual treinada com seu fluxo. Como posso ajudar voce hoje?',
     pairs: [
       {
         keywords: ['agendar', 'consulta', 'marcar'],

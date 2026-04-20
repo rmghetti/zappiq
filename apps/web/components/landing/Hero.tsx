@@ -4,9 +4,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Play, CheckCircle2, X, Calendar } from 'lucide-react';
 
+// V2-014: chat animado do hero usa placeholders genéricos ("Sua Clínica",
+// "A Dra."). Cases com nome real só em /cases (após autorização LGPD — ver
+// apps/web/content/cases/vida-plena.ts e BLOCKERS.md item B-01).
 const SCENARIOS = [
   {
-    business: 'Clínica Vida Plena',
+    business: 'Sua Clínica',
     label: '📅 Agendamento',
     messages: [
       { type: 'in', text: 'Oi! Quero agendar uma consulta para quinta-feira, tem horário?', delay: 800 },
@@ -14,7 +17,7 @@ const SCENARIOS = [
       { type: 'out', text: 'Olá! Claro! 😊 Temos horários disponíveis na quinta:\n\n🕐 9h\n🕐 14h\n🕐 16h\n\nQual você prefere?', ai: true, delay: 800 },
       { type: 'in', text: '14h perfeito!', delay: 1200 },
       { type: 'typing', delay: 1500 },
-      { type: 'out', text: '✅ Agendado! Quinta, 14h — Dra. Camila\n\nVou enviar um lembrete amanhã! 📅', ai: true, delay: 800 },
+      { type: 'out', text: '✅ Agendado! Quinta, 14h com a Dra. responsável.\n\nVou enviar um lembrete amanhã! 📅', ai: true, delay: 800 },
     ],
   },
   {

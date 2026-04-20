@@ -236,11 +236,14 @@ const PRODUCTS = [
       { label: 'Conversas gerenciadas/agente', value: '5x mais' },
       { label: 'Satisfação do cliente (CSAT)', value: '4.8/5' },
     ],
+    // V2-010: case canônico importa de apps/web/content/cases/vida-plena.ts.
+    // Enquanto autorização LGPD não chega (BLOCKER B-01), renderizamos versão
+    // genérica com métricas-benchmark beta — sem atribuir a cliente específico.
     caseStudy: {
-      business: 'Clínica Vida Plena', segment: 'Saúde',
-      quote: 'Antes, perdíamos 40% das mensagens fora do horário comercial. Com o ZappIQ Core, nossa taxa de resposta chegou a 99,2% e o tempo médio caiu de 4 horas para 3 minutos.',
-      author: 'Dra. Camila Andrade', role: 'Diretora Clínica',
-      results: ['99,2% taxa de resposta', '3 min tempo médio', '+45% agendamentos'],
+      business: 'Exemplo ilustrativo · Clínica Saúde (beta)', segment: 'Saúde',
+      quote: 'A taxa de resposta saltou para 99,2% e o tempo médio de atendimento caiu de 4 horas para 3 minutos depois que a IA assumiu o primeiro contato no WhatsApp.',
+      author: 'Diretora Clínica (identidade preservada)', role: 'Case em validação — LGPD Art. 7 IX',
+      results: ['99,2% taxa de resposta¹', '3 min tempo médio¹', '+45% agendamentos¹'],
     },
     mockup: 'inbox',
   },
