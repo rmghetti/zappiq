@@ -19,7 +19,6 @@ Decisoes chave:
 
 import asyncio
 import hashlib
-import io
 import json
 import logging
 import os
@@ -47,12 +46,18 @@ from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExp
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 _OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").rstrip("/")
-_resource = Resource.create({
-    SERVICE_NAME: os.getenv("OTEL_SERVICE_NAME", "zappiq-rag"),
-    SERVICE_VERSION: "0.2.0",
-    "deployment.environment": os.getenv("DEPLOYMENT_ENV", os.getenv("NODE_ENV", "development")),
-    "service.instance.id": os.getenv("FLY_MACHINE_ID", os.getenv("HOSTNAME", "local")),
-})
+_resource = Resource.create(
+    {
+        SERVICE_NAME: os.getenv("OTEL_SERVICE_NAME", "zappiq-rag"),
+        SERVICE_VERSION: "0.2.0",
+        "deployment.environment": os.getenv(
+            "DEPLOYMENT_ENV", os.getenv("NODE_ENV", "development")
+        ),
+        "service.instance.id": os.getenv(
+            "FLY_MACHINE_ID", os.getenv("HOSTNAME", "local")
+        ),
+    }
+)
 
 # Traces
 _tracer_provider = TracerProvider(resource=_resource)
@@ -77,11 +82,25 @@ otel_metrics.set_meter_provider(_meter_provider)
 _meter = otel_metrics.get_meter("zappiq.rag", "0.2.0")
 
 # Custom metrics
-rag_embed_duration = _meter.create_histogram("zappiq_rag_embed_duration_seconds", unit="s", description="Embedding batch duration")
-rag_embed_tokens = _meter.create_counter("zappiq_rag_embed_tokens_total", description="Tokens embedded")
-rag_query_duration = _meter.create_histogram("zappiq_rag_query_duration_seconds", unit="s", description="Vector search duration")
-rag_ingest_duration = _meter.create_histogram("zappiq_rag_ingest_duration_seconds", unit="s", description="Full ingest pipeline duration")
-rag_ingest_chunks = _meter.create_counter("zappiq_rag_ingest_chunks_total", description="Chunks ingested")
+rag_embed_duration = _meter.create_histogram(
+    "zappiq_rag_embed_duration_seconds",
+    unit="s",
+    description="Embedding batch duration",
+)
+rag_embed_tokens = _meter.create_counter(
+    "zappiq_rag_embed_tokens_total", description="Tokens embedded"
+)
+rag_query_duration = _meter.create_histogram(
+    "zappiq_rag_query_duration_seconds", unit="s", description="Vector search duration"
+)
+rag_ingest_duration = _meter.create_histogram(
+    "zappiq_rag_ingest_duration_seconds",
+    unit="s",
+    description="Full ingest pipeline duration",
+)
+rag_ingest_chunks = _meter.create_counter(
+    "zappiq_rag_ingest_chunks_total", description="Chunks ingested"
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -92,12 +111,16 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 VOYAGE_API_KEY = os.getenv("VOYAGE_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-EMBEDDING_PROVIDER: Literal["voyage", "openai"] = os.getenv("EMBEDDING_PROVIDER", "voyage")  # type: ignore
+EMBEDDING_PROVIDER: Literal["voyage", "openai"] = os.getenv(
+    "EMBEDDING_PROVIDER", "voyage"
+)  # type: ignore
 EMBEDDING_MODEL = os.getenv(
     "EMBEDDING_MODEL",
     "voyage-3" if EMBEDDING_PROVIDER == "voyage" else "text-embedding-3-small",
 )
-EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024" if EMBEDDING_PROVIDER == "voyage" else "1536"))
+EMBEDDING_DIM = int(
+    os.getenv("EMBEDDING_DIM", "1024" if EMBEDDING_PROVIDER == "voyage" else "1536")
+)
 
 CHUNK_TOKENS = int(os.getenv("CHUNK_TOKENS", "512"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "64"))
@@ -263,11 +286,15 @@ def _extract_text(content_type: str | None, filename: str, data: bytes) -> str:
     lower = filename.lower()
     if (content_type == "application/pdf") or lower.endswith(".pdf"):
         return _extract_pdf(data)
-    if (content_type and content_type.startswith("text/")) or lower.endswith((".txt", ".md")):
+    if (content_type and content_type.startswith("text/")) or lower.endswith(
+        (".txt", ".md")
+    ):
         try:
             return data.decode("utf-8", errors="replace").strip()
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Falha ao decodificar texto: {exc}")
+            raise HTTPException(
+                status_code=400, detail=f"Falha ao decodificar texto: {exc}"
+            )
     raise HTTPException(
         status_code=415,
         detail=f"Content-type nao suportado: {content_type} ({filename}). Use pdf/txt/md.",
@@ -279,7 +306,9 @@ def _extract_text(content_type: str | None, filename: str, data: bytes) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _chunk_text(text: str, chunk_tokens: int = CHUNK_TOKENS, overlap: int = CHUNK_OVERLAP) -> list[str]:
+def _chunk_text(
+    text: str, chunk_tokens: int = CHUNK_TOKENS, overlap: int = CHUNK_OVERLAP
+) -> list[str]:
     """
     Chunk por tokens (nao por chars). Overlap preserva contexto entre chunks.
 
@@ -315,7 +344,9 @@ def _chunk_text(text: str, chunk_tokens: int = CHUNK_TOKENS, overlap: int = CHUN
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-async def _embed_batch(texts: list[str], input_type: Literal["document", "query"]) -> list[list[float]]:
+async def _embed_batch(
+    texts: list[str], input_type: Literal["document", "query"]
+) -> list[list[float]]:
     """
     Gera embeddings em batch. Voyage aceita 128 inputs/call, OpenAI 2048.
     Fazemos batching de 64 para ficar conservador em ambos.
@@ -339,14 +370,18 @@ async def _embed_batch(texts: list[str], input_type: Literal["document", "query"
     elapsed = _time.monotonic() - t0
     attrs = {"provider": EMBEDDING_PROVIDER, "input_type": input_type}
     rag_embed_duration.record(elapsed, attrs)
-    token_count = sum(len(state.tokenizer.encode(t)) for t in texts) if state.tokenizer else 0
+    token_count = (
+        sum(len(state.tokenizer.encode(t)) for t in texts) if state.tokenizer else 0
+    )
     if token_count > 0:
         rag_embed_tokens.add(token_count, attrs)
 
     return vectors
 
 
-async def _embed_voyage(texts: list[str], input_type: Literal["document", "query"]) -> list[list[float]]:
+async def _embed_voyage(
+    texts: list[str], input_type: Literal["document", "query"]
+) -> list[list[float]]:
     """Voyage AI. SDK oficial e sincrono, chamamos via run_in_executor."""
     if not VOYAGE_API_KEY:
         raise HTTPException(status_code=500, detail="VOYAGE_API_KEY nao configurada")
@@ -440,7 +475,7 @@ async def _upsert_chunks(
 
     async with state.pool.acquire() as conn:
         async with conn.transaction():
-            result = await conn.executemany(
+            await conn.executemany(
                 """
                 INSERT INTO rag_chunks
                     (namespace, source, chunk_idx, chunk_hash, text, embedding, metadata)
@@ -524,7 +559,11 @@ async def ready():
     has_key = (EMBEDDING_PROVIDER == "voyage" and bool(VOYAGE_API_KEY)) or (
         EMBEDDING_PROVIDER == "openai" and bool(OPENAI_API_KEY)
     )
-    checks["embedding"] = {"ok": has_key, "provider": EMBEDDING_PROVIDER, "model": EMBEDDING_MODEL}
+    checks["embedding"] = {
+        "ok": has_key,
+        "provider": EMBEDDING_PROVIDER,
+        "model": EMBEDDING_MODEL,
+    }
     if not has_key:
         ok = False
 
@@ -619,7 +658,9 @@ async def ingest(
             if not isinstance(meta, dict):
                 raise ValueError("metadata deve ser um objeto JSON")
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"metadata JSON invalido: {exc}")
+            raise HTTPException(
+                status_code=400, detail=f"metadata JSON invalido: {exc}"
+            )
 
     source_id = source or file.filename or "unknown"
     meta.setdefault("original_filename", file.filename)
@@ -634,7 +675,9 @@ async def ingest(
     # Chunk
     chunks = _chunk_text(text)
     if not chunks:
-        raise HTTPException(status_code=422, detail="Nenhum chunk gerado apos tokenizacao")
+        raise HTTPException(
+            status_code=422, detail="Nenhum chunk gerado apos tokenizacao"
+        )
 
     # Embed
     vectors = await _embed_batch(chunks, input_type="document")
@@ -650,7 +693,9 @@ async def ingest(
 
     elapsed = time.monotonic() - t0
     latency = int(elapsed * 1000)
-    tokens = sum(len(state.tokenizer.encode(c)) for c in chunks) if state.tokenizer else 0
+    tokens = (
+        sum(len(state.tokenizer.encode(c)) for c in chunks) if state.tokenizer else 0
+    )
 
     # OTel metrics
     rag_ingest_duration.record(elapsed, {"namespace": namespace})
