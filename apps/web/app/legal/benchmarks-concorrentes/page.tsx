@@ -70,10 +70,10 @@ export default function BenchmarksPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {COMPETITOR_BENCHMARKS.map((b) => (
-                <tr key={`${b.competitor}-${b.metric}`}>
+                <tr key={`${b.competitor}-${b.feature}`}>
                   <td className="px-4 py-3 font-semibold">{b.competitor}</td>
-                  <td className="px-4 py-3">{b.metric}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{b.value}</td>
+                  <td className="px-4 py-3">{b.feature}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{b.deltaSummary}</td>
                   <td className="px-4 py-3 text-gray-500">{b.capturedAt ?? '—'}</td>
                   <td className="px-4 py-3">
                     {b.verifiedBy ? (
