@@ -93,12 +93,14 @@ function ZappIQBadge({ size = 200 }: { size?: number }) {
 /* Empresas certificadas (placeholder)                                 */
 /* ------------------------------------------------------------------ */
 
-/* PLACEHOLDER: substituir por dado real — logos e nomes de clientes */
+/* V2-009/V2-011: enquanto autorização LGPD dos cases não chega (BLOCKER B-01
+ * e B-02), exibimos segmentos representativos — zero nome fictício de cliente
+ * associado a dado mensurável. Quando logos reais chegarem, preencher. */
 const CERTIFIED_COMPANIES = [
-  { name: 'Clinica Vida Plena', segment: 'Saude', initials: 'VP' },
-  { name: 'TrendMix Moda', segment: 'Varejo', initials: 'TM' },
-  { name: 'AutoTech Oficina', segment: 'Automotivo', initials: 'AT' },
-  { name: 'Escola Nova Era', segment: 'Educacao', initials: 'NE' },
+  { name: 'Clínica de Saúde (beta)', segment: 'Saude', initials: 'CS' },
+  { name: 'Varejo de Moda (beta)', segment: 'Varejo', initials: 'VM' },
+  { name: 'Oficina Automotiva (beta)', segment: 'Automotivo', initials: 'OA' },
+  { name: 'Escola Particular (beta)', segment: 'Educacao', initials: 'EP' },
 ];
 
 /* ------------------------------------------------------------------ */
