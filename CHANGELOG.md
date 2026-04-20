@@ -3,6 +3,51 @@
 All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Pre-launch] — 2026-04-30 — Onda V2 · Dossiê Cru (52 gaps)
+
+### Added — Conformidade & institucional
+- **V2-023** `docs`: `BLOCKERS.md` com 12 bloqueadores humanos, owner, prazo e fallback técnico
+- **V2-028** `feat(web)`: 5 páginas legais públicas — `/legal/termos`, `/legal/privacidade`, `/legal/cookies`, `/legal/dpa`, `/legal/fair-use`
+- **V2-013** `feat(web)`: `/legal/parceria-meta` explicando BSP 360Dialog homologado (anti-publicidade enganosa)
+- **V2-010 V2-050** `feat(web)`: `/legal/benchmarks-concorrentes` com metodologia pública e direito de resposta
+- **V2-027** `feat(web)`: `/legal/enderecos-comerciais` (CDC Art. 39 XII)
+- **V2-033** `feat(web)`: páginas institucionais `/sobre`, `/contato`, `/carreiras`
+- **V2-043 V2-052** `feat(web)`: `/parceiros` com Programa ZappIQ Partners (3 tiers, até 30% recorrente)
+- **V2-005 V2-007** `feat(web)`: `/founders` restruturado com 50 vagas · 30% vitalício
+- **V2-048 V2-049** `feat(web)`: `/migracao-zenvia` playbook 4 fases, setup fee zero
+
+### Added — Source-of-truth & conteúdo canônico
+- **V2-001 V2-002** `feat(web)`: `apps/web/content/cases/vida-plena.ts` fonte canônica do case + flag `AUTHORIZATION_STATUS`
+- **V2-009** `feat(web)`: `apps/web/content/competitor-benchmarks.ts` registry com `evidenceUrl/capturedAt/verifiedBy`
+- **V2-024** `refactor(web)`: footer lista 8 módulos canônicos (ZappIQCore, PulseAI, SparkCampaigns, RadarInsights, NexusCRM, ForgeStudio, EchoCopilot, ShieldCompliance)
+
+### Added — Back-end de segurança e resiliência
+- **V2-018 V2-019** `feat(api)`: `LLMRouter` com fallback Claude Opus 4.6 → Haiku 4.5 → GPT-4o-mini + circuit breaker por provedor
+- **V2-021** `feat(api)`: `AuthRevocationService` (JTI blacklist Redis + revogação user-wide)
+- **V2-022** `feat(api)`: `webhookReplayProtection` middleware (janela ±5min + dedup messageId 24h)
+
+### Added — Métricas & observabilidade
+- **V2-003 V2-016** `feat(web)`: `roiMath.ts` puro + cap 300% / payback mín 90d + disclaimer metodológico no ROICalculator
+- **V2-003** `test(web)`: 4 testes de ROI passando (tsx runner)
+
+### Changed
+- **V2-011** `refactor(web)`: `SocialProof` agora é trust bar de parceiros tecnológicos (Meta BSP, Anthropic, Stripe, Cloudflare, Supabase, Vercel), sem logo-washing de cliente
+- **V2-025** `fix(web)`: nome "Rodrigo Ghetti" removido do papel de DPO em `/legal/dpa`, `/lgpd` e footer (LGPD Art. 41 exige independência)
+- **V2-026 V2-004** `refactor(web)`: razão social canônica "ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA (d.b.a. ZappIQ)" em footer, `/sobre`, `/lgpd`, `/legal/dpa`, `/legal/enderecos-comerciais`
+- **V2-030** `fix(web)`: ícones sociais removidos do footer (até abertura dos perfis oficiais — B-06); substituídos por canal marketing
+- **V2-034 V2-038** `refactor(web)`: links footer Documentação/API/Status apontam para subdomínios oficiais (`docs.zappiq.com.br`, `status.zappiq.com.br`)
+- **V2-002 V2-035 V2-039** `fix(web)`: "Dra. Camila"/"Clínica Vida Plena" substituídos por placeholders anônimos em Hero, HeroVariantA/B/C, Products, SegmentTemplate (saúde), DemoPage, SeloPage
+- **V2-014** `refactor(web)`: SocialProof cita "Parceria WhatsApp Business via BSP homologado Meta (360Dialog)" em lugar de "Parceiro Oficial Meta"
+
+### Infrastructure
+- **V2** `feat(scripts)`: `scripts/v2_regression_check.ts` com 52 assertions (gate de merge)
+- **V2** `docs`: `MORNING_CHECKLIST.md`, `RELATORIO_ONDA_1.md`, `RELATORIO_ONDA_2.md`, `RELATORIO_ONDA_3.md`, `DOSSIE_V2_EXECUCAO_COMPLETA.md`
+
+### Deferred — Bloqueadores humanos (rastreados em `BLOCKERS.md`)
+- B-01 · autorização LGPD Vida Plena · B-02 · logos reais de clientes · B-03 · DPO externo · B-04 · nova razão social · B-05 · cotações concorrentes PDFs · B-06 · contas sociais · B-07 · Anthropic Enterprise · B-08 · Meta Tech Provider · B-09 · validação endereço CENU · B-10 · produção de vídeo demo · B-11 · aprovação P&L stack real · B-12 · aprovação dossiê V3.1.
+
+---
+
 ## [Unreleased] — Onda P0 (Pre-Launch) — 2026-04-17
 
 ### Added
