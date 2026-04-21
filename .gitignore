@@ -49,3 +49,12 @@ prisma/migrations/dev.db*
 *.bak
 *.backup
 *.orig
+
+# ── Session artifacts (Cowork deploy runners / diag logs) ────
+*.command
+push_to_prod.log
+deploy_rag_*.log
+fly_audit_latest.txt
+fly_state.txt
+release_fail_diag.txt
+debug_prisma_*.txt
