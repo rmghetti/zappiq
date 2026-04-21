@@ -216,14 +216,23 @@ async def lifespan(_app: FastAPI):
     if not DATABASE_URL:
         logger.error("DATABASE_URL nao definido — RAG nao pode operar")
     else:
+        # statement_cache_size=0 e OBRIGATORIO quando DATABASE_URL aponta pro
+        # pooler do Supabase (pgbouncer em transaction mode). Sem isso, asyncpg
+        # gera prepared statements __asyncpg_stmt_N__ que o pgbouncer recicla
+        # entre conexoes, causando:
+        #   InvalidSQLStatementNameError: prepared statement "__asyncpg_stmt_1__"
+        #   does not exist
+        # /health e /ready passam (SELECT 1 simples), mas /query e /ingest
+        # quebram no primeiro hit. Fix preventivo pre-producao.
         state.pool = await asyncpg.create_pool(
             dsn=DATABASE_URL,
             min_size=2,
             max_size=10,
             command_timeout=30,
+            statement_cache_size=0,
             init=_register_vector,
         )
-        logger.info("asyncpg pool criado (min=2, max=10)")
+        logger.info("asyncpg pool criado (min=2, max=10, statement_cache=0)")
 
     state.tokenizer = tiktoken.get_encoding("cl100k_base")
 

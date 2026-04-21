@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────────────────────────────
+# fly.rag.toml · zappiq-rag deploy config (root do monorepo)
+#
+# Este arquivo vive na RAIZ pra que o dockerfile path resolva
+# corretamente (relativo ao diretorio do fly.toml).
+#
+# Deploy: flyctl deploy --config fly.rag.toml --app zappiq-rag
+#
+# Mantido paridade com services/rag/fly.toml · unica diferenca
+# e o path do dockerfile.
+# ─────────────────────────────────────────────────────────────────
+
+app = "zappiq-rag"
+primary_region = "gru"
+
+[build]
+dockerfile = "services/rag/Dockerfile"
+
+[checks.health]
+grace_period = "30s"
+interval = "30s"
+method = "GET"
+path = "/health"
+port = 8001
+timeout = "5s"
+type = "http"
+
+[checks.ready]
+grace_period = "60s"
+interval = "15s"
+method = "GET"
+path = "/ready"
+port = 8001
+timeout = "10s"
+type = "http"
+
+[env]
+DEPLOYMENT_ENV = "production"
+OTEL_SERVICE_NAME = "zappiq-rag"
+PORT = "8001"
+
+[http_service]
+auto_start_machines = true
+auto_stop_machines = true
+force_https = true
+internal_port = 8001
+min_machines_running = 1
+
+[http_service.concurrency]
+hard_limit = 50
+soft_limit = 30
+type = "requests"
+
+[[vm]]
+memory = "1gb"
+size = "shared-cpu-1x"

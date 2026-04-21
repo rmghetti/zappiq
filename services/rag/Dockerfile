@@ -22,7 +22,9 @@ RUN apk add --no-cache --virtual .build-deps \
     linux-headers
 
 # Copiar requirements e instalar em venv
-COPY requirements.txt .
+# NOTA: build context e a raiz do monorepo (fly.rag.toml vive la),
+# entao o path precisa ser explicito a partir da raiz.
+COPY services/rag/requirements.txt .
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir -r requirements.txt
@@ -31,8 +33,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION}
 
 # Dependências runtime (sem build-deps)
+# libstdc++ e requerido pelo binario nativo do PyMuPDF (_extra.so)
 RUN apk add --no-cache \
     curl \
+    libstdc++ \
     && addgroup --system --gid 1001 python \
     && adduser --system --uid 1001 --ingroup python appuser
 
@@ -46,7 +50,16 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PORT=8001
 
 # Copiar código da aplicação
-COPY services/rag/ ./
+# --chown garante que appuser (uid 1001) e o dono, nao root.
+# --chmod=0755 forca perms legives por todos, defendendo contra umask
+# 077 do ambiente de build (Cowork/sandboxes restritivos gravam 600/700).
+# Sem isso, COPY preserva os perms do host e o appuser nao consegue ler
+# /app/main.py, resultando em PermissionError: [Errno 13] no startup.
+COPY --chown=appuser:python --chmod=0755 services/rag/ ./
+
+# Belt-and-suspenders: garante que todos os arquivos sao legives/executaveis
+# por qualquer user, mesmo se algum COPY futuro esquecer o --chmod.
+RUN chmod -R a+rX /app
 
 # User não-root
 USER appuser

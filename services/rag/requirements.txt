@@ -1,3 +1,9 @@
+# Pin setuptools <81 porque setuptools 81+ removeu pkg_resources
+# e opentelemetry-instrumentation==0.48b0 ainda importa pkg_resources.
+# Sem este pin, pip resolve setuptools-82+ e o boot crasha com
+# ModuleNotFoundError: No module named 'pkg_resources'
+setuptools<81
+
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.9.2
@@ -22,6 +28,6 @@ openai==1.51.0
 # Observabilidade (alinhado com apps/api)
 opentelemetry-api==1.27.0
 opentelemetry-sdk==1.27.0
-opentelemetry-exporter-otlp==0.48b0
+opentelemetry-exporter-otlp==1.27.0
 opentelemetry-instrumentation-fastapi==0.48b0
 opentelemetry-instrumentation-asyncpg==0.48b0
