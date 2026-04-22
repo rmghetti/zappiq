@@ -41,6 +41,10 @@ const envSchema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().default('zappiq-webhook-secret-2026'),
   WHATSAPP_API_VERSION: z.string().default('v21.0'),
+  // Meta App Secret — usado para verificar assinatura X-Hub-Signature-256 dos webhooks.
+  // ATENCAO: e diferente do WHATSAPP_ACCESS_TOKEN. Pegar em
+  // Meta for Developers > seu App > Settings > Basic > App Secret.
+  META_APP_SECRET: z.string().optional(),
 
   // Google
   GOOGLE_CLIENT_ID: z.string().optional(),
