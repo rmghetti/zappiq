@@ -37,6 +37,7 @@ import onboardingRoutes from './routes/onboarding.js';
 import stripeWebhookRoutes from './routes/stripeWebhook.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 import dsrRoutes from './routes/dataSubjectRequests.js';
+import adminWhatsappRoutes from './routes/adminWhatsapp.js';
 import { initRetentionJob } from './services/retentionService.js';
 
 const app = express();
@@ -187,6 +188,9 @@ app.get('/ready', async (_req, res) => {
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/onboarding', onboardingRoutes);
+
+// ── Admin diagnostics (auth via header X-Admin-Secret == META_APP_SECRET) ─
+app.use('/api/admin/whatsapp', adminWhatsappRoutes);
 
 // ── Protected Routes (auth + RLS tenant isolation) ─
 app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, contactsRoutes);
