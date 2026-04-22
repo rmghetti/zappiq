@@ -1,4 +1,3 @@
-# PLACEHOLDER: substituir domínio por URL real
 User-agent: *
 Allow: /
 Disallow: /dashboard
