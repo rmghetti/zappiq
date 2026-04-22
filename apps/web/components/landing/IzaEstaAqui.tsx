@@ -6,13 +6,17 @@
  * Dogfooding: o próprio ZappIQ é atendido pela Iza (agente IA rodando no
  * ZappIQ), no WhatsApp da empresa. Prova social ao vivo.
  *
- * PLACEHOLDER: substituir IZA_WA_URL por wa.me real quando a conta Iza estiver ativa.
+ * IZA_WA_URL: número oficial WhatsApp Business da ZappIQ/Iza.
+ * Env NEXT_PUBLIC_IZA_WA_URL permite override sem redeploy (ex.: troca de BSP,
+ * rota temporária, A/B test). Default hardcoded pro número de produção pra
+ * garantir que a landing NUNCA renderize um CTA quebrado se a env sumir.
  */
 import { useState } from 'react';
 import { Sparkles, Send, ArrowRight } from 'lucide-react';
 
-// PLACEHOLDER — trocar pelo número real da Iza quando T7.A for executada.
-const IZA_WA_URL = process.env.NEXT_PUBLIC_IZA_WA_URL || 'https://wa.me/5511000000000?text=Oi%20Iza!%20Quero%20conhecer%20o%20ZappIQ.';
+const IZA_WA_URL =
+  process.env.NEXT_PUBLIC_IZA_WA_URL ||
+  'https://wa.me/5511945633305?text=Oi%20Iza!%20Quero%20conhecer%20o%20ZappIQ.';
 
 const SUGGESTED_PROMPTS = [
   'Quanto custa o plano Growth?',
