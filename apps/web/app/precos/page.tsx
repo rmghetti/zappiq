@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Planos e Preços — ZappIQ',
     description:
-      'Automação WhatsApp com IA a partir de R$ 247/mês. Zero setup fee, 14 dias grátis. Compare planos e escolha o ideal para seu negócio.',
+      'Automação WhatsApp com IA a partir de R$ 197/mês. Zero setup fee, 14 dias grátis. Compare planos e escolha o ideal para seu negócio.',
   },
   alternates: {
     canonical: 'https://zappiq.com.br/precos',

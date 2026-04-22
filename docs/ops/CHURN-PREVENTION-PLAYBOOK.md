@@ -176,7 +176,7 @@ Ex.: reduzir custo de suporte, responder mais rápido?"
 
 Antes de você cancelar, posso sugerir 3 coisas:
 
-[OFERTA 1] Reduzir preço pra Growth [R$797] por 3 meses, testar em volume menor?
+[OFERTA 1] Reduzir preço pra Growth [R$497] por 3 meses, testar em volume menor?
 [OFERTA 2] Fazer uma pausa de 30 dias grátis — às vezes contexto muda?
 [OFERTA 3] Chamar um especialista meu pra revisar seu setup em 30 min — pode estar
 subotimizado?
@@ -245,7 +245,7 @@ Entendi que ZappIQ não deu certo aí.
 Mas guarda esse cupom: COMEBACK25
 
 Se sua situação mudar e quiser dar uma segunda chance:
-- 30% de desconto nos primeiros 3 meses (volta em Growth = R$559/mês em vez de R$797)
+- 30% de desconto nos primeiros 3 meses (volta em Growth = R$348/mês em vez de R$497)
 - Sem compromisso — cancela quando quiser
 - Seu histórico e IA treinada ainda estão aqui
 
@@ -269,11 +269,11 @@ Vi que preço tá apertado aí.
 
 Em vez de cancelar, posso oferecer:
 
-OPÇÃO A: Downgrade Growth por 3 meses (R$797 em vez de R$1.697)
+OPÇÃO A: Downgrade Growth por 3 meses (R$497 em vez de R$997)
          Depois volta pra Scale se quiser — sem penalidade
 
 OPÇÃO B: Pausa de 60 dias, depois volta em Growth
-         Economiza 2 meses completos = R$3.394 de economia
+         Economiza 2 meses completos = R$1.994 de economia
 
 OPÇÃO C: Cancelamento normal, mas ativa cupom COMEBACK25 (30% off quando volta)
 

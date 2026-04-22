@@ -39,7 +39,7 @@ const PLANS = [
   {
     id: 'SCALE',
     name: 'Scale',
-    price: 1197,
+    price: 997,
     desc: 'Para franquias, redes e múltiplas unidades',
     features: [
       'Tudo do Growth +',
@@ -49,6 +49,22 @@ const PLANS = [
       'API aberta',
       'Múltiplos números',
       'Gerente de sucesso dedicado',
+    ],
+    highlight: false,
+  },
+  {
+    id: 'BUSINESS',
+    name: 'Business',
+    price: 1997,
+    desc: 'Para operações enterprise e multi-marca',
+    features: [
+      'Tudo do Scale +',
+      'Radar 360° Observabilidade incluído',
+      'SLA 99,9% + plantão 24/7',
+      'Garantia 60d contratual com KPIs',
+      'DSR LGPD prioridade 48h',
+      'Integrações customizadas',
+      'Success manager sênior dedicado',
     ],
     highlight: false,
   },
@@ -93,7 +109,7 @@ export default function BillingPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {PLANS.map((plan) => {
           const isCurrent = currentPlan === plan.id;
           return (

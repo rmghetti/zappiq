@@ -31,10 +31,10 @@
 
 | Plano | BRL/mês | Mensagens IA | Agentes | WhatsApp nºs | Ideal para |
 |---|---|---|---|---|---|
-| **Starter** | R$ 247 | 2.000 | 2 | 1 | Pequena loja / profissional liberal validando |
-| **Growth** | R$ 797 | 10.000 | 5 | 2 | PME em expansão com vendas ativas |
-| **Scale** | R$ 1.697 | 30.000 | 15 | 5 | Operação multi-canal, múltiplas lojas |
-| **Business** | R$ 3.997 | 100.000 | 40 | 10 | Mid-market com múltiplas frentes |
+| **Starter** | R$ 197 | 2.000 | 2 | 1 | Pequena loja / profissional liberal validando |
+| **Growth** | R$ 497 | 10.000 | 5 | 2 | PME em expansão com vendas ativas |
+| **Scale** | R$ 997 | 30.000 | 15 | 5 | Operação multi-canal, múltiplas lojas |
+| **Business** | R$ 1.997 | 100.000 | 40 | 10 | Mid-market com múltiplas frentes, inclui Radar 360° Observabilidade |
 | **Enterprise** | a partir de R$ 9.900 | Custom | Ilimitado | Custom | Grandes contas, regulação, SOC/NOC 24x7 |
 
 **Anual:** 20% de desconto. **Trial:** 14 dias em qualquer tier (cap de US$ 15 de consumo de IA, protegendo margem).
@@ -87,7 +87,7 @@
 
 - Quer ligar sem plano, sem trial, esperando pagar por resultado → churn alto, não ICP.
 - Exige exclusividade contratual com multa → fora da filosofia self-service.
-- Orçamento < R$ 247/mês → indicar parceiro SMB / programa de afiliados quando existir.
+- Orçamento < R$ 197/mês → indicar parceiro SMB / programa de afiliados quando existir.
 
 ## 10. Métricas do funil digital (baseline 2026)
 

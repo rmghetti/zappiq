@@ -34,7 +34,7 @@ export interface TrialSavingsEmailInput {
   competitorMonthlyBrl: number;
   /** AI Readiness atual do tenant (0-100). Opcional — se omitido o bloco some. */
   aiReadinessScore?: number;
-  /** Tier da ZappIQ que está sendo comparado. Default: Starter R$ 247. */
+  /** Tier da ZappIQ que está sendo comparado. Default: Starter R$ 197. */
   zappiqTierLabel?: string;
   zappiqMonthlyBrl?: number;
   /** URL absoluta do CTA (com cupom, trackers etc). */
@@ -110,7 +110,7 @@ export function renderTrialSavingsFollowupEmail(
     competitorMonthlyBrl,
     aiReadinessScore,
     zappiqTierLabel = 'ZappIQ Starter',
-    zappiqMonthlyBrl = 247,
+    zappiqMonthlyBrl = 197,
     ctaUrl,
     signature = 'Rodrigo Ghetti — Founder, ZappIQ',
   } = input;
@@ -206,7 +206,7 @@ export function renderTrialSavingsFollowupEmail(
 
                 <p style="margin:28px 0 0;font-size:13px;line-height:1.7;color:#6b7280;">
                   Sem consultor. Sem setup fee. Você treinou sua IA sozinho e já tem o que é seu.
-                  Se preferir comparar tier Growth (R$ 797) ou Scale (R$ 1.697) para volumes maiores,
+                  Se preferir comparar tier Growth (R$ 497) ou Scale (R$ 997) para volumes maiores,
                   responda esse e-mail e eu mesmo entro no cálculo com você.
                 </p>
 

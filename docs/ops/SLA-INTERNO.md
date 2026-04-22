@@ -80,16 +80,16 @@ Janela de medição: 30 dias calendário, a partir do 1º dia de cobrança.
 
 | Downtime Excedido | Crédito |
 |-------------------|---------|
-| 0-30 min | 1% do mês (~R$16 Growth, ~R$170 Business) |
+| 0-30 min | 1% do mês (~R$5 Growth, ~R$20 Business) |
 | 31-60 min | 5% |
 | 61-120 min | 10% |
 | 121-240 min | 25% |
 | >240 min | 50% |
 
-**Exemplo:** Scale R$1.697/mês cai para 99.8% (downtime 45 min):
+**Exemplo:** Scale R$997/mês cai para 99.8% (downtime 45 min):
 - Limite Scale: 26 min
 - Excesso: 45 - 26 = 19 min
-- Crédito: 1% = R$16,97
+- Crédito: 1% = R$9,97
 
 **Automação:** Cálculo rodado D+1 do mês, crédito aplicado na próxima cobrança.
 
