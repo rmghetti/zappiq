@@ -7,18 +7,28 @@ import { env } from '../config/env.js';
 const router = Router();
 
 // ── WhatsApp payload signature verification (X-Hub-Signature-256) ──
+// Meta assina os payloads de webhook com o APP SECRET (Settings > Basic do
+// Meta App), NAO com o WhatsApp Access Token. Sao credenciais distintas.
+// Fallback para WHATSAPP_ACCESS_TOKEN apenas em transicao — remover depois.
 function verifyWhatsAppSignature(payload: string | Buffer, signature: string | undefined): boolean {
   if (!signature) return false;
-  const appSecret = env.WHATSAPP_ACCESS_TOKEN;
+  const appSecret = env.META_APP_SECRET || env.WHATSAPP_ACCESS_TOKEN;
   if (!appSecret) {
-    logger.warn('[Webhook] WHATSAPP_ACCESS_TOKEN not set — cannot verify signatures');
+    logger.warn('[Webhook] META_APP_SECRET not set — cannot verify signatures, rejecting POST');
     return false;
+  }
+  if (!env.META_APP_SECRET) {
+    logger.warn('[Webhook] META_APP_SECRET ausente — usando fallback WHATSAPP_ACCESS_TOKEN (provavelmente vai falhar). Configure META_APP_SECRET.');
   }
   const expectedSig = 'sha256=' + crypto
     .createHmac('sha256', appSecret)
-    .update(typeof payload === 'string' ? payload : payload)
+    .update(payload)
     .digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig));
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expectedSig);
+  // timingSafeEqual lanca se buffers tiverem tamanhos diferentes.
+  if (sigBuf.length !== expBuf.length) return false;
+  return crypto.timingSafeEqual(sigBuf, expBuf);
 }
 
 // ── GET /api/webhook/whatsapp — Meta verification ──
@@ -39,8 +49,11 @@ router.get('/whatsapp', (req: Request, res: Response) => {
 
 // ── POST /api/webhook/whatsapp — Incoming messages ──
 router.post('/whatsapp', async (req: Request, res: Response) => {
-  // Verify Meta signature before processing
-  const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+  // req.body chega como Buffer porque mountamos express.raw em server.ts.
+  // Verify Meta signature before processing — usar bytes brutos.
+  const rawBody: Buffer = Buffer.isBuffer(req.body)
+    ? req.body
+    : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
   const signature = req.headers['x-hub-signature-256'] as string | undefined;
 
   if (env.NODE_ENV === 'production' && !verifyWhatsAppSignature(rawBody, signature)) {
@@ -53,7 +66,7 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
   res.status(200).json({ status: 'received' });
 
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const body = JSON.parse(rawBody.toString('utf8'));
 
     const entry = body?.entry?.[0];
     const changes = entry?.changes?.[0];

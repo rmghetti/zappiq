@@ -106,6 +106,12 @@ initQueues().catch((err) => {
 // ── Stripe Webhook (raw body, must be before express.json) ──
 app.use('/api/stripe-webhook', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
 
+// ── WhatsApp Webhook POST (raw body, must be before express.json) ──
+// Necessario para validar HMAC X-Hub-Signature-256 byte-a-byte com o payload
+// original que a Meta assinou. Se for parseado pelo express.json, JSON.stringify
+// volta diferente (ordem de chaves, espacos) e a assinatura nunca bate.
+app.use('/api/webhook/whatsapp', express.raw({ type: 'application/json', limit: '10mb' }));
+
 // ── Global Middleware ────────────────────────────
 app.use(helmet());
 app.use(cors({ origin: env.NEXT_PUBLIC_APP_URL, credentials: true }));
