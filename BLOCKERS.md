@@ -97,12 +97,12 @@ Formato: `#id | descrição | quem libera | prazo interno | fallback técnico j�
 - **Prazo interno:** 24/04 (antes de próxima board meeting).
 - **Fallback já implementado:** `financeiro/PnL_2026_stack_real.xlsx` versão draft criada com 3 cenários (conservador/base/esticado). Board precisa validar antes de circular para investidor.
 
-### B-12 · Aprovação dossiê V3.1 com stack real + pricing atualizado
+### B-12 · Aprovação dossiê V3.2 com stack real + pricing atualizado
 - **Gap V2:** #02, #16
-- **Descrição:** Substituir dossiê V3 "AWS, R$297/597/997" pelo V3.1 "Fly+Vercel+Supabase, R$247/797/1697/3997".
+- **Descrição:** Substituir dossiê V3 "AWS, R$297/597/997" pelo V3.2 "Fly+Vercel+Supabase, R$197/497/997/1997". V3.1 (R$247/797/1697/3997) foi desativado em 21/04/2026 junto com os Prices V2 no Stripe (evidência: `ZappIQ_V32_Actions/sprint_1_pricing_garantia_cloud_api/STRIPE_PRICES_V32_CRIADOS.md`).
 - **Quem libera:** Rodrigo + CEO.
 - **Prazo interno:** 23/04.
-- **Fallback já implementado:** `docs/V3.1_pricing_atualizado.md` e `docs/V3.1_stack_real.md` publicados. Dossiê V3 original arquivado em `docs/archive/V3.0_deprecated.md` com nota "SUPERSEDED BY V3.1".
+- **Fallback já implementado:** `docs/V3.1_pricing_atualizado.md` e `docs/V3.1_stack_real.md` publicados (a serem atualizados para V3.2). Dossiê V3 original arquivado em `docs/archive/V3.0_deprecated.md` com nota "SUPERSEDED BY V3.2".
 
 ---
 

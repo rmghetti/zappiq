@@ -330,8 +330,8 @@ Rodrigo
    - A quanto sai isso em custo de operacional?
    - Se ZappIQ responde 70% automaticamente, qual é o ROI em 3 meses?"
 5. **Alternativa (5 min):** 
-   - "Se mensal fica apertado, tenho Growth [R$797] — metade do preço, menos features. Começa ali?"
-   - Ou: "Posso fazer 3 meses de Scale [R$1.697] com cupom LAUNCH25 — fica R$1.300/mês."
+   - "Se mensal fica apertado, tenho Growth [R$497] — metade do preço, menos features. Começa ali?"
+   - Ou: "Posso fazer 3 meses de Scale [R$997] com cupom LAUNCH25 — fica R$748/mês."
 6. **Fechamento (2 min):** "Qual faz mais sentido? Growth ou Scale com cupom?"
 
 ### Cenário C — Cliente com objeção técnica (integração, dados)

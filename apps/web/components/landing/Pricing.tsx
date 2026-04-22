@@ -2,13 +2,21 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, X as XIcon, Radar, Shield, Sparkles, Crown } from 'lucide-react';
+import { Check, X as XIcon, Radar, Shield, Sparkles, Crown, Mic } from 'lucide-react';
 import { listPlans, ADDONS, getAnnualPrice, type PlanConfig } from '@zappiq/shared';
 
 const PLANS: PlanConfig[] = listPlans();
 const RADAR_ADDON = ADDONS.RADAR_360;
 
-const STARTER_PRICE = PLANS[0]?.priceMonthly ?? 247;
+// Voz outbound V3.2 — add-on (split padrão/premium)
+const VOICE_OUTBOUND = {
+  padrao: { price: 197, label: 'Padrão', minutes: 30, engine: 'OpenAI TTS' },
+  premium: { price: 597, label: 'Premium', minutes: 120, engine: 'ElevenLabs' },
+} as const;
+
+type VoiceTier = 'none' | 'padrao' | 'premium';
+
+const STARTER_PRICE = PLANS[0]?.priceMonthly ?? 197;
 const COMPARISON = [
   { without: '5 atendentes manuais', with: 'IA + 1 atendente' },
   { without: 'R$15.000/mês em folha', with: `A partir de R$${STARTER_PRICE}/mês` },
@@ -19,6 +27,7 @@ const COMPARISON = [
 export function Pricing() {
   const [annual, setAnnual] = useState(false);
   const [addRadar, setAddRadar] = useState(false);
+  const [voiceTier, setVoiceTier] = useState<VoiceTier>('none');
 
   const computePrice = (plan: PlanConfig): number | null => {
     if (plan.priceMonthly === null) return null;
@@ -34,6 +43,15 @@ export function Pricing() {
       : RADAR_ADDON.priceMonthly;
   };
 
+  const computeVoiceExtra = (plan: PlanConfig): number => {
+    if (voiceTier === 'none') return 0;
+    if (plan.id === 'ENTERPRISE') return 0; // Enterprise sob consulta — voz incluída na negociação
+    const base = VOICE_OUTBOUND[voiceTier].price;
+    return annual
+      ? Math.round(base * (1 - plan.annualDiscountPercent / 100))
+      : base;
+  };
+
   return (
     <section id="precos" className="py-20 lg:py-28 bg-white">
       <div className="max-w-7xl mx-auto px-6">
@@ -42,11 +60,11 @@ export function Pricing() {
           <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900 mb-3">
             Planos para cada fase do seu negócio
           </h2>
-          <p className="text-gray-500">14 dias grátis. Sem fidelidade. Cancele quando quiser.</p>
+          <p className="text-gray-500">30 dias grátis. 60 dias de garantia. Sem fidelidade.</p>
         </div>
 
         {/* Toggles */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mb-12">
+        <div className="flex flex-col items-center justify-center gap-4 mb-12">
           <div className="flex items-center gap-3">
             <span className={`text-sm font-medium ${!annual ? 'text-gray-900' : 'text-gray-400'}`}>Mensal</span>
             <button
@@ -61,17 +79,40 @@ export function Pricing() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3 bg-purple-50 border border-purple-100 rounded-full px-4 py-2">
-            <button
-              onClick={() => setAddRadar(!addRadar)}
-              className={`relative w-12 h-6 rounded-full transition-colors ${addRadar ? 'bg-purple-600' : 'bg-gray-300'}`}
-              aria-label="Adicionar Radar 360"
-            >
-              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${addRadar ? 'translate-x-6' : 'translate-x-0.5'}`} />
-            </button>
-            <span className="text-sm font-medium text-purple-900 flex items-center gap-1.5">
-              <Radar size={14} /> Adicionar Radar 360° (Observabilidade)
-            </span>
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="flex items-center gap-3 bg-purple-50 border border-purple-100 rounded-full px-4 py-2">
+              <button
+                onClick={() => setAddRadar(!addRadar)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${addRadar ? 'bg-purple-600' : 'bg-gray-300'}`}
+                aria-label="Adicionar Radar 360"
+              >
+                <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${addRadar ? 'translate-x-6' : 'translate-x-0.5'}`} />
+              </button>
+              <span className="text-sm font-medium text-purple-900 flex items-center gap-1.5">
+                <Radar size={14} /> Radar 360°
+              </span>
+            </div>
+
+            {/* Toggle Voz Outbound (segmented) */}
+            <div className="inline-flex items-center bg-primary-50 border border-primary-100 rounded-full p-1">
+              <span className="px-3 text-xs font-semibold text-primary-800 flex items-center gap-1.5">
+                <Mic size={14} /> Voz outbound
+              </span>
+              {(['none', 'padrao', 'premium'] as VoiceTier[]).map((tier) => (
+                <button
+                  key={tier}
+                  onClick={() => setVoiceTier(tier)}
+                  className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
+                    voiceTier === tier
+                      ? 'bg-primary-500 text-white shadow'
+                      : 'text-primary-700 hover:bg-primary-100'
+                  }`}
+                  aria-label={`Voz outbound ${tier}`}
+                >
+                  {tier === 'none' ? 'Nenhuma' : tier === 'padrao' ? `Padrão R$${VOICE_OUTBOUND.padrao.price}` : `Premium R$${VOICE_OUTBOUND.premium.price}`}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -79,7 +120,8 @@ export function Pricing() {
           {PLANS.map((plan) => {
             const basePrice = computePrice(plan);
             const radarExtra = computeRadarExtra(plan);
-            const totalPrice = basePrice !== null ? basePrice + radarExtra : null;
+            const voiceExtra = computeVoiceExtra(plan);
+            const totalPrice = basePrice !== null ? basePrice + radarExtra + voiceExtra : null;
             const isEnterprise = plan.id === 'ENTERPRISE';
             const isBusiness = plan.id === 'BUSINESS';
 
@@ -134,6 +176,16 @@ export function Pricing() {
                       {radarExtra > 0 && (
                         <div className="text-xs text-purple-600 mt-1 flex items-center gap-1">
                           <Radar size={10} /> +R${radarExtra} Radar 360°
+                        </div>
+                      )}
+                      {voiceExtra > 0 && (
+                        <div className={`text-xs mt-1 flex items-center gap-1 ${isEnterprise ? 'text-amber-300' : 'text-primary-600'}`}>
+                          <Mic size={10} /> +R${voiceExtra} Voz {voiceTier === 'premium' ? 'Premium' : 'Padrão'}
+                        </div>
+                      )}
+                      {voiceTier !== 'none' && plan.id === 'ENTERPRISE' && (
+                        <div className="text-xs text-amber-300 mt-1 flex items-center gap-1">
+                          <Mic size={10} /> Voz incluída na negociação
                         </div>
                       )}
                     </>

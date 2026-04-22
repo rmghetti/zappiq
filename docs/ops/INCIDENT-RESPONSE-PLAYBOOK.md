@@ -163,9 +163,9 @@ Oi [Nome],
 Incidente de 43 min ontem. Isso não deveria ter acontecido.
 
 Sua conta recebeu crédito automático:
-- Plano: Scale R$1.697/mês
-- Crédito: 2 dias = ~R$113
-- Próxima cobrança: reduzida em R$113
+- Plano: Scale R$997/mês
+- Crédito: 2 dias = ~R$66
+- Próxima cobrança: reduzida em R$66
 
 Não precisa fazer nada. Já aplicamos.
 

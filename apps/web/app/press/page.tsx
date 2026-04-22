@@ -4,7 +4,7 @@ import { Mail, Phone, Calendar, Download, ChevronDown } from 'lucide-react';
 
 /* NOTA: Preços mencionados nesta página editorial devem acompanhar
    packages/shared/src/planConfig.ts (single source of truth).
-   Valores atuais: STARTER=R$247, GROWTH=R$797, SCALE=R$1.697, BUSINESS=R$3.997. */
+   Valores atuais (V3.2 — 21/04/2026): STARTER=R$197, GROWTH=R$497, SCALE=R$997, BUSINESS=R$1.997. */
 
 export const metadata: Metadata = {
   title: 'Press Kit · ZappIQ',
@@ -105,7 +105,7 @@ export default function PressPage() {
               <strong>Categoria:</strong> SaaS B2B (IA Conversacional)
             </li>
             <li>
-              <strong>Tier inicial:</strong> R$ 247/mês (Starter)
+              <strong>Tier inicial:</strong> R$ 197/mês (Starter)
             </li>
             <li>
               <strong>Trial:</strong> 21 dias com até US$ 15 em crédito LLM

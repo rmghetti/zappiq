@@ -81,7 +81,7 @@ Cinco decisões de produto deliberadas.
 
 5. Vinte e um dias de trial com cap de US$ 15 em custo de LLM. Se o cliente abusar, a plataforma protege a margem sem parar o trial — o fundador absorve a diferença nos primeiros 30 dias, porque o trial gratuito sem dor na margem é a prova de que o modelo funciona.
 
-O tier inicial é R$ 247 por mês. O que o cliente paga para ter a IA rodando é vinte vezes menor que o setup fee do fornecedor incumbente médio.
+O tier inicial é R$ 197 por mês. O que o cliente paga para ter a IA rodando é vinte e cinco vezes menor que o setup fee do fornecedor incumbente médio.
 
 ## Conclusão: a pergunta que derruba qualquer cotação
 

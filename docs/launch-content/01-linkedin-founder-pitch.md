@@ -30,7 +30,7 @@ Lancei hoje a ZappIQ.
 — Vê em tempo real, num score de 0 a 100, o quão pronta sua IA está para atender.
 — Paga zero de setup. Testa 14 dias. Cancela em um clique.
 
-Tier inicial: R$ 247/mês.
+Tier inicial: R$ 197/mês.
 
 A régua do mercado continua em R$ 3 mil a R$ 15 mil só para começar. Eu tirei essa régua.
 

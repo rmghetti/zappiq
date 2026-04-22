@@ -193,24 +193,24 @@ export function Hero() {
                 <path d="M128 20C68.4 20 20 68.4 20 128s48.4 108 108 108 108-48.4 108-108S187.6 20 128 20z" fill="#0081FB"/>
                 <path d="M90.3 130.3c0-16.5 4.4-30 11.2-38.8 8.2-10.6 19.8-15.4 30.6-15.4 8.6 0 15.4 2.6 20.8 7.4 5.6 4.8 10 12.2 13 22.2 2.6 8.8 4 19.6 4 32.8 0 14.6-2.6 27-7.2 36.4-5.6 11.4-14 17.4-24.6 17.4-10.4 0-19.4-6.2-26-17.4-7.2-12.2-11.8-27.4-11.8-44.6zm-24.6-4.6c0 24.6 7 44.2 17.6 58 12.2 15.8 28.6 24.4 44.8 24.4 18.2 0 33.2-10.4 43-27.6 8.8-15.4 13.8-36 13.8-59.2 0-20.2-4.2-37.4-12.4-50.4-10-15.8-25-25-42.4-25-18.8 0-34 10.6-44 27.2-9 15-20.4 33.4-20.4 52.6z" fill="white"/>
               </svg>
-              Parceiro Oficial Meta WhatsApp Business
+              Operamos sobre a infraestrutura oficial da Meta
             </div>
 
             <h1 className="font-display text-4xl lg:text-5xl xl:text-[3.5rem] font-extrabold text-gray-900 leading-[1.1] tracking-tight mb-6">
-              Automatize seu WhatsApp com <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">IA que atende, vende e agenda</span> — 24 horas por dia.
+              IA no WhatsApp que <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">atende, vende, agenda e fala</span> — sem setup fee.
             </h1>
 
             <p className="text-lg text-gray-500 leading-relaxed max-w-xl mb-8">
-              Automação inteligente com IA para WhatsApp Business. Conecte, configure e escale em minutos.
+              Cloud API direto da Meta, Claude como IA, voz nativa inclusa, onboarding self-service em 30–90 min.
+              30 dias grátis + 60 dias de garantia.
             </p>
 
             <div className="flex flex-wrap gap-4 mb-8">
               <Link href="/register" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-7 py-3.5 rounded-xl text-base transition-all shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 hover:-translate-y-0.5">
-                Começar Grátis <ArrowRight size={18} />
+                Começar 30 dias grátis <ArrowRight size={18} />
               </Link>
-              {/* PLACEHOLDER: substituir href por link real de agendamento (ex: Calendly) */}
-              <a href="#agendar-demo" className="inline-flex items-center gap-2 border border-primary-300 hover:border-primary-500 text-primary-600 hover:text-primary-700 font-semibold px-7 py-3.5 rounded-xl text-base transition-all bg-white hover:bg-primary-50">
-                <Calendar size={18} /> Agendar Demonstração
+              <a href="#iza" className="inline-flex items-center gap-2 border border-primary-300 hover:border-primary-500 text-primary-600 hover:text-primary-700 font-semibold px-7 py-3.5 rounded-xl text-base transition-all bg-white hover:bg-primary-50">
+                <Calendar size={18} /> Conversar com a Iza
               </a>
             </div>
 

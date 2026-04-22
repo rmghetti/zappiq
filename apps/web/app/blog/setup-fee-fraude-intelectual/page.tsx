@@ -238,8 +238,8 @@ export default function SetupFeeArticle() {
               </li>
             </ol>
             <p>
-              O tier inicial é R$ 247 por mês. O que o cliente paga para ter a IA rodando é vinte
-              vezes menor que o setup fee do fornecedor incumbente médio.
+              O tier inicial é R$ 197 por mês. O que o cliente paga para ter a IA rodando é vinte e
+              cinco vezes menor que o setup fee do fornecedor incumbente médio.
             </p>
 
             <h2 className="font-jakarta text-2xl font-bold text-gray-900 mt-10">

@@ -12,7 +12,7 @@ Quando o comitê de compras sentar para decidir qual plataforma de IA para Whats
 Critério                      ZappIQ  | Blip      | Huggy   | Zenvia  | Poli
 ------------------------------|--------|-----------|---------|---------|---------
 Setup fee                     R$ 0    | R$ 5k-15k | R$ 3k-8k| R$ 5k+  | R$ 3k-6k
-Mensalidade inicial           R$ 247  | R$ 2k+    | R$ 1,5k+| R$ 3k+  | R$ 800+
+Mensalidade inicial           R$ 197  | R$ 2k+    | R$ 1,5k+| R$ 3k+  | R$ 800+
 Trial grátis                  14 dias | —         | 7 dias  | —       | 14 dias
 Self-service para treinar IA  Sim     | Não       | Parcial | Não     | Parcial
 LGPD-by-design no schema      Sim     | Add-on    | Parcial | Add-on  | Parcial

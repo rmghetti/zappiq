@@ -80,7 +80,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
     tagline: 'Para começar a automatizar',
     description:
       'Profissionais liberais, solopreneurs e micro-operações validando o canal WhatsApp com IA.',
-    priceMonthly: 247,
+    priceMonthly: 197,
     annualDiscountPercent: 20,
     highlight: false,
     premium: false,
@@ -132,7 +132,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
     tagline: 'Para equipes em crescimento',
     description:
       'PMEs com equipe de atendimento, pipeline de leads ativo e necessidade de integrações.',
-    priceMonthly: 797,
+    priceMonthly: 497,
     annualDiscountPercent: 20,
     highlight: true,
     premium: false,
@@ -185,7 +185,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
     tagline: 'Para operações em escala',
     description:
       'Redes, franquias e operações multi-time com volume alto e exigência de uptime.',
-    priceMonthly: 1697,
+    priceMonthly: 997,
     annualDiscountPercent: 20,
     highlight: false,
     premium: false,
@@ -239,8 +239,8 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
     tagline: 'Para operações críticas com SLA formal',
     description:
       'Operações de missão crítica que precisam de SLA contratual, observabilidade avançada e governança LGPD madura — sem migrar para um contrato totalmente customizado.',
-    priceMonthly: 3997,
-    annualDiscountPercent: 15,
+    priceMonthly: 1997,
+    annualDiscountPercent: 20,
     highlight: false,
     premium: false,
     order: 4,
@@ -441,6 +441,25 @@ export const ADDONS: Record<string, AddonConfig> = {
     priceMonthly: 490,
     availableFor: ['SCALE', 'BUSINESS'],
     includedIn: ['ENTERPRISE'],
+  },
+  VOICE_INBOUND: {
+    id: 'VOICE_INBOUND',
+    name: 'Voice Inbound',
+    description:
+      'Recebimento de mensagens de voz com transcrição automática via Whisper. Transcrição ilimitada (prática) para fluxos de atendimento e compreensão de intenção.',
+    priceMonthly: 197,
+    availableFor: ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
+    includedIn: [],
+  },
+  VOICE_OUTBOUND: {
+    id: 'VOICE_OUTBOUND',
+    name: 'Voice Outbound',
+    description:
+      'Envio de mensagens de voz geradas por TTS (OpenAI ou ElevenLabs). 500 minutos/mês inclusos; excedente cobrado a R$ 0,50/min.',
+    priceMonthly: 497,
+    priceLabel: 'R$ 497/mês (500 min) + R$ 0,50/min excedente',
+    availableFor: ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
+    includedIn: [],
   },
 };
 

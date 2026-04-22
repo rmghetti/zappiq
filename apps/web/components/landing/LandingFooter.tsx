@@ -49,6 +49,8 @@ const COLUMNS = [
       { label: 'Starter · Growth · Scale', href: '/#precos' },
       { label: 'Business', href: '/#precos' },
       { label: 'Enterprise', href: '/enterprise' },
+      { label: 'Garantia 60 dias', href: '/garantia' },
+      { label: 'Voz Nativa (add-on)', href: '/voz' },
       { label: 'Migração Zenvia', href: '/migracao-zenvia' },
       { label: 'SLA contratual', href: '/sla' },
     ],
@@ -61,7 +63,6 @@ const COLUMNS = [
       { label: 'Cases', href: '/cases' },
       { label: 'Carreiras', href: '/carreiras' },
       { label: 'Parceiros', href: '/parceiros' },
-      { label: 'Fundadores', href: '/founders' },
       { label: 'Contato', href: '/contato' },
     ],
   },
@@ -72,7 +73,8 @@ const COLUMNS = [
       { label: 'API Reference', href: 'https://docs.zappiq.com.br/api' },
       { label: 'Comparativo', href: '/comparativo' },
       { label: 'Demo interativo', href: '/demo' },
-      { label: 'Selo ZappIQ', href: '/selo-zappiq' },
+      { label: 'Como funciona o Survey', href: '/como-funciona-survey' },
+      { label: 'Selo ZappIQ', href: '/selo' },
       { label: 'Status da plataforma', href: 'https://status.zappiq.com.br' },
     ],
   },
@@ -85,8 +87,9 @@ const COLUMNS = [
       { label: 'DPA (Data Processing Addendum)', href: '/legal/dpa' },
       { label: 'Fair-Use & Limites Técnicos', href: '/legal/fair-use' },
       { label: 'Parceria WhatsApp Business', href: '/legal/parceria-meta' },
+      { label: 'Deletar meus dados (LGPD)', href: '/legal/deletar-dados' },
       { label: 'Benchmarks concorrentes', href: '/legal/benchmarks-concorrentes' },
-      { label: 'Contato DPO', href: 'mailto:dpo@zappiq.com.br' },
+      { label: 'Contato DPO', href: 'mailto:rodrigo.ghetti@zappiq.com.br' },
     ],
   },
 ];
@@ -123,7 +126,7 @@ export function Footer() {
               Inteligência conversacional para PMEs brasileiras via WhatsApp.
             </p>
             <p className="text-[11px] text-gray-600 leading-relaxed mt-3">
-              Plataforma em pré-lançamento · D-Day 30/04/2026
+              V3.2 — Onboarding Zero · Voz Nativa · Garantia 60 dias
             </p>
           </div>
 
@@ -172,14 +175,16 @@ export function Footer() {
                 Caixa genérica até contratação do DPO externo (BLOCKER B-03). */}
             <p className="mt-2">
               Encarregado de Dados (DPO):{' '}
-              <a href="mailto:dpo@zappiq.com.br" className="text-gray-400 hover:text-gray-300">dpo@zappiq.com.br</a>
+              <a href="mailto:rodrigo.ghetti@zappiq.com.br" className="text-gray-400 hover:text-gray-300">rodrigo.ghetti@zappiq.com.br</a>
               {' · '}
               <Link href="/legal/privacidade" className="text-gray-400 hover:text-gray-300">Política de Privacidade</Link>
+              {' · '}
+              <Link href="/legal/deletar-dados" className="text-gray-400 hover:text-gray-300">Deletar meus dados</Link>
               {' · '}
               <Link href="/legal/dpa" className="text-gray-400 hover:text-gray-300">DPA</Link>
             </p>
             <p className="text-[11px] text-gray-700 mt-1">
-              Em conformidade com LGPD Art. 41 — DPO externo, independente da área operacional, em processo de homologação.
+              DPO contatável diretamente conforme LGPD Art. 41. Prazo de resposta: 15 dias úteis (48h planos Business/Enterprise).
             </p>
           </div>
 

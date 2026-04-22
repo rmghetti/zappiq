@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Calculator, Sparkles, TrendingUp, Zap, Users } from 'lucide-react';
+import { ArrowRight, Calculator, Sparkles, TrendingUp, Zap, Users, Mic } from 'lucide-react';
 import { PLAN_CONFIG, type PlanConfig, type PlanId } from '@zappiq/shared';
 import { track } from '../../lib/track';
 
@@ -45,6 +45,10 @@ const CONVERSION_UPLIFT_MULTIPLIER = 1.3;
 export const ROI_MONTHLY_CAP_PERCENT = 300;
 // V2-003: payback mínimo de 3 meses. Piso institucional.
 export const PAYBACK_MIN_DAYS = 90;
+
+// V3.2 — Voz outbound add-on
+const VOICE_OUTBOUND_PRICE = { none: 0, padrao: 197, premium: 597 } as const;
+type VoiceTier = 'none' | 'padrao' | 'premium';
 
 /* ---------- motor de recomendação ---------------------------------- */
 function recommendPlan(
@@ -116,6 +120,8 @@ export function ROICalculator() {
   const [avgSalary, setAvgSalary] = useState(2800);
   const [avgTicket, setAvgTicket] = useState(450);
   const [currentConversionPct, setCurrentConversionPct] = useState(8);
+  // V3.2 — Voz outbound add-on (opcional)
+  const [voiceOutbound, setVoiceOutbound] = useState<VoiceTier>('none');
 
   const results = useMemo(() => {
     // ─ Estimativas de volume
@@ -125,7 +131,10 @@ export function ROICalculator() {
     // ─ Plano recomendado
     const recommendedId = recommendPlan(aiMessagesPerMonth, attendants);
     const plan: PlanConfig = PLAN_CONFIG[recommendedId];
-    const zappiqCost = plan.priceMonthly ?? 9900; // Enterprise baseline
+    // V3.2 — voz outbound é zero para Enterprise (voz incluída na negociação)
+    const voiceExtra = recommendedId === 'ENTERPRISE' ? 0 : VOICE_OUTBOUND_PRICE[voiceOutbound];
+    const basePlanPrice = plan.priceMonthly ?? 9900; // Enterprise baseline
+    const zappiqCost = basePlanPrice + voiceExtra;
 
     // ─ Economia operacional (atendentes que IA substitui)
     //   IA resolve 65% → precisamos de menos atendentes humanos.
@@ -175,6 +184,8 @@ export function ROICalculator() {
     return {
       plan,
       zappiqCost,
+      basePlanPrice,
+      voiceExtra,
       aiMessagesPerMonth,
       attendantsSaved,
       operationalSavingsMonthly,
@@ -188,7 +199,7 @@ export function ROICalculator() {
       setupFeeSaved,
       firstYearSavings,
     };
-  }, [attendants, messagesPerDay, avgSalary, avgTicket, currentConversionPct]);
+  }, [attendants, messagesPerDay, avgSalary, avgTicket, currentConversionPct, voiceOutbound]);
 
   const isEnterprise = results.plan.id === 'ENTERPRISE';
   const ctaHref = isEnterprise
@@ -196,7 +207,7 @@ export function ROICalculator() {
     : `/register?plan=${results.plan.id}&utm_source=roi_calc`;
   const ctaLabel = isEnterprise
     ? 'Falar com especialista'
-    : `Começar com ${results.plan.name} — 14 dias grátis`;
+    : `Começar com ${results.plan.name} — 30 dias grátis`;
 
   return (
     <section className="py-20 lg:py-28 bg-[#F8FAF9]">
@@ -211,7 +222,7 @@ export function ROICalculator() {
           </h2>
           <p className="text-gray-500 max-w-2xl mx-auto">
             Ticket médio + volume + atendentes → tier recomendado, payback em dias e economia no 1º ano.
-            Zero setup fee, 14 dias grátis.
+            Zero setup fee, 30 dias grátis e 60 dias de garantia.
           </p>
         </div>
 
@@ -252,6 +263,51 @@ export function ROICalculator() {
               onChange={setAvgSalary}
             />
 
+            {/* V3.2 — Voz outbound (opcional) */}
+            <div className="pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <Mic size={14} className="text-secondary-500" />
+                  Voz outbound (opcional)
+                </label>
+                <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Add-on V3.2</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(['none', 'padrao', 'premium'] as const).map((tier) => {
+                  const active = voiceOutbound === tier;
+                  const label = tier === 'none' ? 'Sem voz' : tier === 'padrao' ? 'Padrão' : 'Premium';
+                  const sub = tier === 'none'
+                    ? 'R$ 0'
+                    : tier === 'padrao'
+                      ? 'R$ 197 · 30min'
+                      : 'R$ 597 · 120min';
+                  return (
+                    <button
+                      key={tier}
+                      type="button"
+                      onClick={() => setVoiceOutbound(tier)}
+                      className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                        active
+                          ? 'border-primary-500 bg-primary-50 shadow-sm'
+                          : 'border-gray-200 bg-white hover:border-gray-300'
+                      }`}
+                    >
+                      <p className={`text-sm font-semibold ${active ? 'text-primary-700' : 'text-gray-700'}`}>
+                        {label}
+                      </p>
+                      <p className={`text-[11px] ${active ? 'text-primary-600' : 'text-gray-500'}`}>
+                        {sub}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">
+                Padrão: OpenAI TTS · Premium: ElevenLabs com voz clonada (opcional). Inbound (recebimento de áudio com
+                transcrição Whisper) já é incluso em todos os planos.
+              </p>
+            </div>
+
             <p className="text-[11px] text-gray-400 pt-4 border-t border-gray-100 leading-relaxed">
               Premissas: IA resolve {Math.round(AI_AUTOMATION_RATE * 100)}% dos atendimentos sem humano ·
               uplift de conversão de {Math.round((CONVERSION_UPLIFT_MULTIPLIER - 1) * 100)}% com IA 24/7 + recuperação ·
@@ -269,7 +325,7 @@ export function ROICalculator() {
               <p className="text-xs uppercase tracking-wider text-white/70 mb-1">Plano ideal para você</p>
               <h3 className="font-display text-3xl font-extrabold mb-1">ZappIQ {results.plan.name}</h3>
               <p className="text-white/80 text-sm mb-4">{results.plan.tagline}</p>
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-baseline gap-2 flex-wrap">
                 {isEnterprise ? (
                   <span className="text-2xl font-bold">Sob consulta</span>
                 ) : (
@@ -279,6 +335,17 @@ export function ROICalculator() {
                   </>
                 )}
               </div>
+              {!isEnterprise && results.voiceExtra > 0 && (
+                <p className="text-[11px] text-white/75 mt-2">
+                  Inclui {brl(results.basePlanPrice)} plano + {brl(results.voiceExtra)} voz outbound{' '}
+                  {voiceOutbound === 'premium' ? 'Premium (ElevenLabs)' : 'Padrão (OpenAI TTS)'}
+                </p>
+              )}
+              {isEnterprise && (
+                <p className="text-[11px] text-white/75 mt-2">
+                  Voz outbound incluída na negociação Enterprise.
+                </p>
+              )}
             </div>
 
             {/* Grid de métricas */}
@@ -381,7 +448,7 @@ export function ROICalculator() {
               {ctaLabel} <ArrowRight size={18} />
             </Link>
             <p className="text-[11px] text-gray-400 text-center">
-              Zero setup fee · 14 dias grátis · cap US$ 15 no trial · cancelamento em 1 clique
+              Zero setup fee · 30 dias grátis · 60 dias de garantia · cancelamento em 1 clique
             </p>
             {/* V2-003/V2-013: disclaimer institucional de premissas */}
             <div className="bg-amber-50/60 border border-amber-200/60 rounded-xl p-4 text-[11px] text-amber-900/90 leading-relaxed">
