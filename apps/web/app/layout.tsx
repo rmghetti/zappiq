@@ -1,12 +1,15 @@
 import type { Metadata } from 'next';
-import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import '@/lib/sentry';
 import { OrganizationJsonLd } from '@/components/seo/OrganizationJsonLd';
 import { CookieBanner } from '@/components/shared/CookieBanner';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
-const jakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-jakarta' });
+/* ═══════════════════════════════════════════════════════════════════
+ * Design V4 · fontes Geist (substitui Inter + Plus Jakarta)
+ * Geist cobre sans · Geist Mono cobre blocos de código / specs
+ * ═══════════════════════════════════════════════════════════════════ */
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://zappiq.com.br'),
@@ -97,7 +100,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaSoftware) }}
         />
       </head>
-      <body className={`${inter.variable} ${jakarta.variable} font-sans`}>
+      <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased bg-bg text-ink`}>
         <OrganizationJsonLd />
         {children}
         <CookieBanner />

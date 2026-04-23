@@ -1,15 +1,15 @@
 'use client';
 
-/**
- * Bloco V3.2 — Voz Nativa
- * -----------------------
- * Inbound (transcrição de áudios WhatsApp): INCLUSA em todos os planos.
- * Outbound (respostas em áudio via TTS): add-on com 2 tiers.
- *   — R$ 197/mês: voz padrão (OpenAI TTS), até 30 minutos/mês
- *   — R$ 597/mês: voz premium (ElevenLabs), até 120 minutos/mês, voz clonada opcional
- */
+/* ══════════════════════════════════════════════════════════════════════════
+ * VozNativa — Design V4 (Chatbase-style · inbound/outbound TTS)
+ * --------------------------------------------------------------------------
+ * Inbound (transcrição) incluso em todos os planos via Whisper.
+ * Outbound (TTS) em 2 tiers: R$ 197 padrão (OpenAI) / R$ 597 premium (ElevenLabs).
+ * Visual novo: 2 cards (inbound esquerda + outbound split direita).
+ * ══════════════════════════════════════════════════════════════════════════ */
+
 import Link from 'next/link';
-import { Mic, MessageSquare, Headphones, CheckCircle2, Star, ArrowRight } from 'lucide-react';
+import { Mic, Headphones, Check, Star, ArrowRight } from 'lucide-react';
 
 const INBOUND_ITEMS = [
   'Cliente manda áudio de 1 min perguntando sobre produto',
@@ -20,109 +20,125 @@ const INBOUND_ITEMS = [
 
 const OUTBOUND_PADRAO = [
   'Voz masculina ou feminina (PT-BR neutro)',
-  'Até 30 minutos de áudio sintetizado por mês',
+  'Até 30 minutos de áudio sintetizado/mês',
   'Ideal pra saudações, confirmações, agendamentos',
   'Sem configuração adicional',
 ];
 
 const OUTBOUND_PREMIUM = [
   'Voz premium com entonação natural (ElevenLabs)',
-  'Até 120 minutos de áudio sintetizado por mês',
-  'Opção de clonar a voz do atendente humano da sua marca',
+  'Até 120 minutos de áudio sintetizado/mês',
+  'Opção de clonar a voz do atendente humano',
   'Controle de personalidade por agente',
 ];
 
+/* Mini-waveform estático (5 alturas que se repetem) */
+const WAVE_PATTERN = [8, 16, 12, 20, 14, 10, 18, 8, 16, 12, 20, 14, 8, 16, 12, 20, 14, 10];
+
 export function VozNativa() {
   return (
-    <section id="voz-nativa" className="py-20 lg:py-28 bg-white">
-      <div className="max-w-7xl mx-auto px-6">
+    <section id="voz-nativa" className="py-20 lg:py-28 bg-bg">
+      <div className="zappiq-wrap">
         <div className="text-center max-w-3xl mx-auto mb-14">
-          <div className="inline-flex items-center gap-2 bg-primary-50 border border-primary-200 text-primary-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-4">
-            <Mic size={14} /> Novidade V3.2
-          </div>
-          <h2 className="font-display text-3xl lg:text-5xl font-extrabold text-gray-900 leading-tight mb-4">
-            Voz nativa, no WhatsApp,<br />
-            <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">sem integrações esquisitas.</span>
+          <span className="eyebrow">Novidade V3.2 · Voz</span>
+          <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-4">
+            Voz nativa no WhatsApp.{' '}
+            <span className="text-grad">Sem integrações esquisitas.</span>
           </h2>
-          <p className="text-lg text-gray-500 leading-relaxed">
-            Seu cliente manda áudio? Sua IA entende. Quer responder por áudio? Sua IA fala.
-            Tudo dentro da mesma conversa, com custo transparente.
+          <p className="text-[16px] lg:text-[17px] text-muted leading-relaxed">
+            Cliente manda áudio? Sua IA entende. Quer responder por áudio? Sua IA fala.
+            Tudo na mesma conversa, custo transparente.
           </p>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-6 lg:gap-8 max-w-6xl mx-auto">
+        <div className="grid lg:grid-cols-2 gap-5 lg:gap-6 max-w-6xl mx-auto">
           {/* Inbound — INCLUSO */}
-          <div className="bg-gradient-to-br from-secondary-50 to-white rounded-2xl p-8 border-2 border-secondary-200 relative">
-            <div className="absolute -top-4 left-6 bg-secondary-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow">
+          <div className="card-soft p-8 relative">
+            <div className="absolute -top-3 left-7 px-3 py-1 rounded-full bg-[#2FB57A] text-white text-[11px] font-semibold tracking-wide">
               Incluso em todos os planos
             </div>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-secondary-100 flex items-center justify-center">
-                <Headphones size={24} className="text-secondary-600" />
+            <div className="flex items-center gap-3 mb-5 mt-2">
+              <div className="w-11 h-11 rounded-[12px] bg-[#F2F0EA] border border-line flex items-center justify-center">
+                <Headphones size={20} className="text-ink" />
               </div>
               <div>
-                <h3 className="font-display text-2xl font-extrabold text-gray-900">Voz Inbound</h3>
-                <p className="text-sm text-gray-500">Cliente → ZappIQ (transcrição)</p>
+                <h3 className="text-[22px] font-medium text-ink leading-tight tracking-tight">Voz Inbound</h3>
+                <p className="text-[12.5px] text-muted">Cliente → ZappIQ · transcrição Whisper</p>
               </div>
             </div>
-            <div className="flex items-baseline gap-2 mb-5">
-              <span className="text-4xl font-extrabold text-secondary-600 font-display">R$ 0</span>
-              <span className="text-gray-500 text-sm">sem custo adicional</span>
+
+            {/* mini waveform decorativo */}
+            <div className="flex items-center gap-[3px] h-10 mb-5 px-1">
+              {WAVE_PATTERN.map((h, i) => (
+                <div
+                  key={i}
+                  className="w-[3px] rounded-full bg-gradient-to-t from-[#2FB57A] to-[#4A52D0]"
+                  style={{ height: `${h}px` }}
+                />
+              ))}
             </div>
-            <ul className="space-y-3">
+
+            <div className="flex items-baseline gap-2 mb-5">
+              <span className="text-[40px] font-semibold text-ink leading-none tracking-tight">R$ 0</span>
+              <span className="text-[13px] text-muted">sem custo adicional</span>
+            </div>
+            <ul className="space-y-2.5">
               {INBOUND_ITEMS.map((item) => (
-                <li key={item} className="flex items-start gap-3 text-sm text-gray-600">
-                  <CheckCircle2 size={16} className="text-secondary-500 flex-shrink-0 mt-0.5" />
+                <li key={item} className="flex items-start gap-2.5 text-[13.5px] text-muted">
+                  <Check size={14} className="text-[#2FB57A] flex-shrink-0 mt-0.5" strokeWidth={2.5} />
                   <span>{item}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Outbound — split R$197 / R$597 */}
-          <div className="bg-white rounded-2xl border-2 border-primary-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-primary-500 to-secondary-500 px-8 py-4 text-white flex items-center gap-3">
-              <MessageSquare size={22} />
+          {/* Outbound — split 2 tiers */}
+          <div className="card-soft overflow-hidden">
+            <div
+              className="px-8 py-5 text-white flex items-center gap-3"
+              style={{
+                background: 'linear-gradient(135deg, #2FB57A 0%, #2F7FB5 45%, #4A52D0 100%)',
+              }}
+            >
+              <Mic size={22} />
               <div>
-                <h3 className="font-display text-xl font-extrabold">Voz Outbound</h3>
-                <p className="text-xs text-white/90">ZappIQ → Cliente (TTS) — add-on opcional</p>
+                <h3 className="text-[20px] font-medium leading-tight tracking-tight">Voz Outbound</h3>
+                <p className="text-[12px] text-white/85">ZappIQ → Cliente · TTS add-on opcional</p>
               </div>
             </div>
 
-            <div className="grid sm:grid-cols-2 divide-x divide-gray-100">
+            <div className="grid sm:grid-cols-2 divide-x divide-line">
+              {/* Padrão */}
               <div className="p-6">
-                <div className="mb-3">
-                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Padrão</p>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-extrabold text-gray-900 font-display">R$ 197</span>
-                    <span className="text-gray-400 text-sm">/mês</span>
-                  </div>
+                <p className="text-[10.5px] text-muted font-semibold uppercase tracking-[0.12em] mb-2">Padrão</p>
+                <div className="flex items-baseline gap-1 mb-4">
+                  <span className="text-[26px] font-semibold text-ink leading-none tracking-tight">R$ 197</span>
+                  <span className="text-[12.5px] text-muted">/mês</span>
                 </div>
                 <ul className="space-y-2">
                   {OUTBOUND_PADRAO.map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-xs text-gray-600">
-                      <CheckCircle2 size={12} className="text-primary-500 flex-shrink-0 mt-0.5" />
+                    <li key={item} className="flex items-start gap-2 text-[12px] text-muted">
+                      <Check size={11} className="text-accent flex-shrink-0 mt-0.5" strokeWidth={2.5} />
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              <div className="p-6 bg-gradient-to-b from-amber-50 to-white relative">
-                <div className="absolute top-3 right-3 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <Star size={10} /> Premium
+              {/* Premium */}
+              <div className="p-6 bg-bg-soft relative">
+                <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-ink text-white text-[9.5px] font-semibold tracking-wide flex items-center gap-1">
+                  <Star size={9} /> Premium
                 </div>
-                <div className="mb-3">
-                  <p className="text-xs text-amber-700 font-semibold uppercase tracking-wide mb-1">Premium</p>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-extrabold text-gray-900 font-display">R$ 597</span>
-                    <span className="text-gray-400 text-sm">/mês</span>
-                  </div>
+                <p className="text-[10.5px] text-accent font-semibold uppercase tracking-[0.12em] mb-2">Premium</p>
+                <div className="flex items-baseline gap-1 mb-4">
+                  <span className="text-[26px] font-semibold text-ink leading-none tracking-tight">R$ 597</span>
+                  <span className="text-[12.5px] text-muted">/mês</span>
                 </div>
                 <ul className="space-y-2">
                   {OUTBOUND_PREMIUM.map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-xs text-gray-600">
-                      <CheckCircle2 size={12} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                    <li key={item} className="flex items-start gap-2 text-[12px] text-muted">
+                      <Check size={11} className="text-accent flex-shrink-0 mt-0.5" strokeWidth={2.5} />
                       <span>{item}</span>
                     </li>
                   ))}
@@ -130,9 +146,9 @@ export function VozNativa() {
               </div>
             </div>
 
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-100">
-              <p className="text-xs text-gray-500">
-                Ativação e desativação self-service direto no dashboard.
+            <div className="bg-bg-soft px-6 py-4 border-t border-line">
+              <p className="text-[11.5px] text-muted">
+                Ativação e desativação self-service no dashboard.
                 Consumo medido em segundos e exibido em tempo real.
               </p>
             </div>
@@ -142,9 +158,9 @@ export function VozNativa() {
         <div className="mt-10 text-center">
           <Link
             href="/voz"
-            className="inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 font-semibold transition-colors"
+            className="inline-flex items-center gap-1.5 text-[14px] font-medium text-accent hover:underline"
           >
-            Ver demonstração e casos de uso de voz <ArrowRight size={16} />
+            Ver demonstração e casos de uso de voz <ArrowRight size={14} />
           </Link>
         </div>
       </div>

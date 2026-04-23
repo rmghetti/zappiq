@@ -1,32 +1,32 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * LandingPage — V3.2 (Onboarding Zero · Voz Nativa · Garantia 60d)
+ * LandingPage — V4 Chatbase-style (Onboarding Zero · Voz Nativa · 14 dias grátis)
  * --------------------------------------------------------------------------
- * Ordem dos blocos reconstruída para a narrativa V3.2:
+ * Ordem dos blocos para a narrativa V4:
  *
- *   1. Hero                 → promessa canônica (IA + voz + 30d grátis / 60d garantia)
+ *   1. Hero                 → promessa canônica (IA + voz + 14 dias grátis)
  *   2. SocialProof          → logos / provas sociais
- *   3. PorQueZappIQ         → 8 razões objetivas (Cloud API direto, Claude, LGPD, etc.)
- *   4. OnboardingZero       → diferenciador V3.2 #1 · R$ 0 vs R$ 3-8k do mercado
- *   5. VozNativa            → diferenciador V3.2 #2 · inbound incluso + outbound R$197/R$597
+ *   3. PorQueZappIQ         → bento razões (Cloud API direto, Claude, LGPD, etc.)
+ *   4. OnboardingZero       → diferenciador V4 #1 · R$ 0 vs R$ 3-8k do mercado
+ *   5. VozNativa            → diferenciador V4 #2 · inbound incluso + outbound R$197/R$597
  *   6. HowItWorks           → como funciona (fluxo produto)
- *   7. Garantia60d          → diferenciador V3.2 #3 · 30 dias grátis + 60 dias garantia
- *   8. ROICalculator        → recomendador de tier + payback (inclui toggle voz)
- *   9. TrustAndCompliance   → LGPD · AES-256 · TLS 1.3 · BR · SLA Enterprise
- *  10. IzaEstaAqui          → ZappIQ se vende (dogfooding) — CTA Iza no WhatsApp
- *  11. Pricing              → 3 toggles (anual, Radar 360°, voz)
- *  12. LeadMagnetBanner     → lead magnet
- *  13. BlogPreview          → blog recente
- *  14. Testimonials         → depoimentos (movido para após BlogPreview, suavizar ritmo)
- *  15. FAQ                  → 25 Qs em 7 grupos com filtro
- *  16. CTAFinal             → fecho
- *  17. Footer + WAButton + Toast
+ *   7. ROICalculator        → recomendador de tier + payback (inclui toggle voz)
+ *   8. TrustAndCompliance   → LGPD · AES-256 · TLS 1.3 · BR · SLA Enterprise
+ *   9. IzaEstaAqui          → ZappIQ se vende (dogfooding) — CTA Iza no WhatsApp
+ *  10. Pricing              → 3 toggles (anual, Radar 360°, voz) + 5 tiers
+ *  11. LeadMagnetBanner     → lead magnet
+ *  12. BlogPreview          → blog recente
+ *  13. Testimonials         → depoimentos
+ *  14. FAQ                  → Qs em grupos com filtro (sem grupo Garantia)
+ *  15. CTAFinal             → fecho
+ *  16. Footer + WAButton + Toast
  *
  * Blocos removidos do V3.2 (reduzir ruído pré-lançamento):
  *   - ProblemSolution → absorvido em PorQueZappIQ + OnboardingZero
  *   - Products        → movido para /#produtos via Footer (8 módulos canônicos)
  *   - Segments        → movido para /segmentos (página satélite · pós-D-Day)
+ *   - Garantia60d     → removido · trial 14 dias → escolha de pagamento, sem garantia
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { Navbar } from './Navbar';
@@ -36,7 +36,6 @@ import { PorQueZappIQ } from './PorQueZappIQ';
 import { OnboardingZero } from './OnboardingZero';
 import { VozNativa } from './VozNativa';
 import { HowItWorks } from './HowItWorks';
-import { Garantia60d } from './Garantia60d';
 import { ROICalculator } from './ROICalculator';
 import { TrustAndCompliance } from './TrustAndCompliance';
 import { IzaEstaAqui } from './IzaEstaAqui';
@@ -60,7 +59,6 @@ export function LandingPage() {
       <OnboardingZero />
       <VozNativa />
       <HowItWorks />
-      <Garantia60d />
       <ROICalculator />
       <TrustAndCompliance />
       <IzaEstaAqui />

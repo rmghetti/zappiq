@@ -1,5 +1,20 @@
 'use client';
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * Pricing — Design V4 (5 tiers + toggles · Chatbase-style)
+ * --------------------------------------------------------------------------
+ * LÓGICA PRESERVADA 100%:
+ *   - 5 planos via listPlans() de @zappiq/shared
+ *   - toggle anual (-20%) + Radar 360° add-on + Voz outbound (none/padrao/premium)
+ *   - Enterprise: voz incluída, Radar incluso, sob consulta
+ *   - Business: SLA 99,9% destaque
+ *   - Card "Com vs Sem ZappIQ" no fim
+ *
+ * Visual novo: tier cards card-soft, featured com shadow-tier-feat,
+ * tipografia Geist semibold, tokens var(--bg-soft) pra fundo, gradient
+ * só no card destacado (highlight).
+ * ══════════════════════════════════════════════════════════════════════════ */
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { Check, X as XIcon, Radar, Shield, Sparkles, Crown, Mic } from 'lucide-react';
@@ -8,7 +23,6 @@ import { listPlans, ADDONS, getAnnualPrice, type PlanConfig } from '@zappiq/shar
 const PLANS: PlanConfig[] = listPlans();
 const RADAR_ADDON = ADDONS.RADAR_360;
 
-// Voz outbound V3.2 — add-on (split padrão/premium)
 const VOICE_OUTBOUND = {
   padrao: { price: 197, label: 'Padrão', minutes: 30, engine: 'OpenAI TTS' },
   premium: { price: 597, label: 'Premium', minutes: 120, engine: 'ElevenLabs' },
@@ -36,7 +50,7 @@ export function Pricing() {
 
   const computeRadarExtra = (plan: PlanConfig): number => {
     if (!addRadar) return 0;
-    if (plan.features.radar360) return 0; // já incluso
+    if (plan.features.radar360) return 0;
     if (RADAR_ADDON.priceMonthly === null) return 0;
     return annual
       ? Math.round(RADAR_ADDON.priceMonthly * (1 - plan.annualDiscountPercent / 100))
@@ -45,7 +59,7 @@ export function Pricing() {
 
   const computeVoiceExtra = (plan: PlanConfig): number => {
     if (voiceTier === 'none') return 0;
-    if (plan.id === 'ENTERPRISE') return 0; // Enterprise sob consulta — voz incluída na negociação
+    if (plan.id === 'ENTERPRISE') return 0;
     const base = VOICE_OUTBOUND[voiceTier].price;
     return annual
       ? Math.round(base * (1 - plan.annualDiscountPercent / 100))
@@ -53,70 +67,92 @@ export function Pricing() {
   };
 
   return (
-    <section id="precos" className="py-20 lg:py-28 bg-white">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-8">
-          <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">Preços</p>
-          <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900 mb-3">
-            Planos para cada fase do seu negócio
+    <section id="precos" className="py-20 lg:py-28 bg-bg">
+      <div className="zappiq-wrap">
+        <div className="text-center max-w-3xl mx-auto mb-8">
+          <span className="eyebrow">Preços · sem surpresas</span>
+          <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-3">
+            Um plano pra cada fase.{' '}
+            <span className="text-grad">Zero setup fee.</span>
           </h2>
-          <p className="text-gray-500">30 dias grátis. 60 dias de garantia. Sem fidelidade.</p>
+          <p className="text-[16px] text-muted">14 dias grátis · sem fidelidade · depois escolha a forma de pagamento</p>
         </div>
 
         {/* Toggles */}
         <div className="flex flex-col items-center justify-center gap-4 mb-12">
+          {/* Mensal/Anual */}
           <div className="flex items-center gap-3">
-            <span className={`text-sm font-medium ${!annual ? 'text-gray-900' : 'text-gray-400'}`}>Mensal</span>
+            <span className={`text-[13.5px] font-medium ${!annual ? 'text-ink' : 'text-muted'}`}>Mensal</span>
             <button
               onClick={() => setAnnual(!annual)}
-              className={`relative w-14 h-7 rounded-full transition-colors ${annual ? 'bg-primary-500' : 'bg-gray-300'}`}
+              className={`relative w-14 h-7 rounded-full transition-colors ${
+                annual ? 'bg-ink' : 'bg-line'
+              }`}
               aria-label="Alternar entre mensal e anual"
             >
-              <div className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-transform ${annual ? 'translate-x-7' : 'translate-x-0.5'}`} />
+              <div
+                className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-transform ${
+                  annual ? 'translate-x-7' : 'translate-x-0.5'
+                }`}
+              />
             </button>
-            <span className={`text-sm font-medium ${annual ? 'text-gray-900' : 'text-gray-400'}`}>
-              Anual <span className="text-xs font-semibold text-secondary-600 bg-secondary-50 px-2 py-0.5 rounded-full ml-1">até -20%</span>
+            <span className={`text-[13.5px] font-medium ${annual ? 'text-ink' : 'text-muted'}`}>
+              Anual{' '}
+              <span className="text-[11px] font-semibold text-[#2FB57A] bg-[#2FB57A]/10 px-2 py-0.5 rounded-full ml-1">
+                até −20%
+              </span>
             </span>
           </div>
 
+          {/* Radar + Voz */}
           <div className="flex flex-col sm:flex-row items-center gap-3">
-            <div className="flex items-center gap-3 bg-purple-50 border border-purple-100 rounded-full px-4 py-2">
+            <div className="flex items-center gap-3 bg-bg-soft border border-line rounded-full px-4 py-2">
               <button
                 onClick={() => setAddRadar(!addRadar)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${addRadar ? 'bg-purple-600' : 'bg-gray-300'}`}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  addRadar ? 'bg-accent' : 'bg-line'
+                }`}
                 aria-label="Adicionar Radar 360"
               >
-                <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${addRadar ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
+                    addRadar ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
               </button>
-              <span className="text-sm font-medium text-purple-900 flex items-center gap-1.5">
-                <Radar size={14} /> Radar 360°
+              <span className="text-[12.5px] font-medium text-ink flex items-center gap-1.5">
+                <Radar size={13} className="text-accent" /> Radar 360°
               </span>
             </div>
 
-            {/* Toggle Voz Outbound (segmented) */}
-            <div className="inline-flex items-center bg-primary-50 border border-primary-100 rounded-full p-1">
-              <span className="px-3 text-xs font-semibold text-primary-800 flex items-center gap-1.5">
-                <Mic size={14} /> Voz outbound
+            <div className="inline-flex items-center bg-bg-soft border border-line rounded-full p-1">
+              <span className="px-3 text-[11.5px] font-medium text-muted flex items-center gap-1.5 uppercase tracking-[0.08em]">
+                <Mic size={12} /> Voz
               </span>
               {(['none', 'padrao', 'premium'] as VoiceTier[]).map((tier) => (
                 <button
                   key={tier}
                   onClick={() => setVoiceTier(tier)}
-                  className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
+                  className={`text-[11.5px] font-medium px-3 py-1.5 rounded-full transition-all ${
                     voiceTier === tier
-                      ? 'bg-primary-500 text-white shadow'
-                      : 'text-primary-700 hover:bg-primary-100'
+                      ? 'bg-ink text-white shadow-soft'
+                      : 'text-muted hover:text-ink'
                   }`}
                   aria-label={`Voz outbound ${tier}`}
                 >
-                  {tier === 'none' ? 'Nenhuma' : tier === 'padrao' ? `Padrão R$${VOICE_OUTBOUND.padrao.price}` : `Premium R$${VOICE_OUTBOUND.premium.price}`}
+                  {tier === 'none'
+                    ? 'Nenhuma'
+                    : tier === 'padrao'
+                      ? `Padrão R$${VOICE_OUTBOUND.padrao.price}`
+                      : `Premium R$${VOICE_OUTBOUND.premium.price}`}
                 </button>
               ))}
             </div>
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-5 max-w-7xl mx-auto">
+        {/* Grid de 5 tiers */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4 max-w-7xl mx-auto">
           {PLANS.map((plan) => {
             const basePrice = computePrice(plan);
             const radarExtra = computeRadarExtra(plan);
@@ -124,77 +160,92 @@ export function Pricing() {
             const totalPrice = basePrice !== null ? basePrice + radarExtra + voiceExtra : null;
             const isEnterprise = plan.id === 'ENTERPRISE';
             const isBusiness = plan.id === 'BUSINESS';
+            const isHighlight = plan.highlight && !isBusiness && !isEnterprise;
 
             return (
               <div
                 key={plan.id}
-                className={`rounded-2xl p-6 relative transition-shadow flex flex-col ${
+                className={`rounded-[20px] p-6 relative transition-all flex flex-col ${
                   isEnterprise
-                    ? 'bg-gradient-to-br from-gray-900 to-gray-800 border-2 border-amber-400/40 shadow-xl shadow-amber-500/10 text-white'
+                    ? 'text-white'
+                    : 'bg-white'
+                } ${
+                  isHighlight
+                    ? 'border-2 border-accent shadow-[0_30px_50px_-20px_rgba(74,82,208,0.25)]'
                     : isBusiness
-                      ? 'bg-gradient-to-br from-primary-50 to-white border-2 border-primary-300 shadow-lg shadow-primary-100'
-                      : plan.highlight
-                        ? 'bg-white border-2 border-primary-500 shadow-xl shadow-primary-100'
-                        : 'bg-white border border-gray-200 hover:shadow-lg'
+                      ? 'border-2 border-accent/40 shadow-card'
+                      : isEnterprise
+                        ? 'border-2 border-white/10'
+                        : 'border border-line hover:border-accent/25 hover:shadow-card'
                 }`}
+                style={
+                  isEnterprise
+                    ? {
+                        background: '#0A0B12',
+                      }
+                    : undefined
+                }
               >
-                {plan.highlight && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-primary-500 to-secondary-500 text-white text-xs font-bold px-4 py-1 rounded-full">
+                {/* Badges */}
+                {isHighlight && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-grad text-white text-[10.5px] font-semibold px-3 py-1 rounded-full tracking-wide">
                     Mais Popular
                   </div>
                 )}
                 {isBusiness && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-primary-600 to-purple-600 text-white text-xs font-bold px-4 py-1 rounded-full flex items-center gap-1">
-                    <Crown size={12} /> SLA 99,9%
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-ink text-white text-[10.5px] font-semibold px-3 py-1 rounded-full flex items-center gap-1 tracking-wide">
+                    <Crown size={10} /> SLA 99,9%
                   </div>
                 )}
                 {isEnterprise && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-400 to-orange-500 text-gray-900 text-xs font-bold px-4 py-1 rounded-full flex items-center gap-1">
-                    <Sparkles size={12} /> Premium
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-grad text-white text-[10.5px] font-semibold px-3 py-1 rounded-full flex items-center gap-1 tracking-wide">
+                    <Sparkles size={10} /> Premium
                   </div>
                 )}
 
-                <h3 className={`font-display text-lg font-bold ${isEnterprise ? 'text-white' : 'text-gray-900'}`}>
+                <h3 className={`text-[17px] font-medium tracking-tight ${isEnterprise ? 'text-white' : 'text-ink'}`}>
                   {plan.name}
                 </h3>
-                <p className={`text-xs mb-4 ${isEnterprise ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className={`text-[11.5px] mb-4 leading-snug ${isEnterprise ? 'text-white/60' : 'text-muted'}`}>
                   {plan.tagline}
                 </p>
 
                 <div className="mb-5">
                   {annual && basePrice !== null && plan.priceMonthly !== null && (
-                    <span className={`text-sm mr-2 line-through ${isEnterprise ? 'text-gray-500' : 'text-gray-300'}`}>
+                    <span className={`text-[13px] mr-2 line-through ${isEnterprise ? 'text-white/30' : 'text-muted/60'}`}>
                       R${plan.priceMonthly.toLocaleString('pt-BR')}
                     </span>
                   )}
                   {totalPrice !== null ? (
                     <>
-                      <span className={`text-3xl lg:text-4xl font-extrabold ${isEnterprise ? 'text-white' : 'text-gray-900'}`}>
+                      <span className={`text-[28px] lg:text-[32px] font-semibold tracking-tight ${isEnterprise ? 'text-white' : 'text-ink'}`}>
                         R${totalPrice.toLocaleString('pt-BR')}
                       </span>
-                      <span className={`text-sm ${isEnterprise ? 'text-gray-400' : 'text-gray-400'}`}>/mês</span>
+                      <span className={`text-[12px] ml-1 ${isEnterprise ? 'text-white/60' : 'text-muted'}`}>
+                        /mês
+                      </span>
                       {radarExtra > 0 && (
-                        <div className="text-xs text-purple-600 mt-1 flex items-center gap-1">
+                        <div className="text-[11px] text-accent mt-1 flex items-center gap-1">
                           <Radar size={10} /> +R${radarExtra} Radar 360°
                         </div>
                       )}
                       {voiceExtra > 0 && (
-                        <div className={`text-xs mt-1 flex items-center gap-1 ${isEnterprise ? 'text-amber-300' : 'text-primary-600'}`}>
+                        <div className={`text-[11px] mt-1 flex items-center gap-1 ${isEnterprise ? 'text-white/70' : 'text-accent'}`}>
                           <Mic size={10} /> +R${voiceExtra} Voz {voiceTier === 'premium' ? 'Premium' : 'Padrão'}
                         </div>
                       )}
                       {voiceTier !== 'none' && plan.id === 'ENTERPRISE' && (
-                        <div className="text-xs text-amber-300 mt-1 flex items-center gap-1">
+                        <div className="text-[11px] text-white/70 mt-1 flex items-center gap-1">
                           <Mic size={10} /> Voz incluída na negociação
                         </div>
                       )}
                     </>
                   ) : (
                     <>
-                      <span className={`text-xs block mb-1 ${isEnterprise ? 'text-amber-300' : 'text-gray-500'}`}>
+                      <span className={`text-[11px] block mb-1 ${isEnterprise ? 'text-white/60' : 'text-muted'}`}>
                         a partir de
                       </span>
-                      <span className={`text-2xl font-extrabold ${isEnterprise ? 'text-white' : 'text-gray-900'}`}>
+                      <span className={`text-[22px] font-semibold tracking-tight ${isEnterprise ? 'text-white' : 'text-ink'}`}>
                         Sob consulta
                       </span>
                     </>
@@ -203,19 +254,26 @@ export function Pricing() {
 
                 <ul className="space-y-2 mb-6 flex-grow">
                   {plan.bullets.slice(0, 9).map((f) => (
-                    <li key={f} className={`flex items-start gap-2 text-xs ${isEnterprise ? 'text-gray-300' : 'text-gray-600'}`}>
-                      <Check size={14} className={`flex-shrink-0 mt-0.5 ${isEnterprise ? 'text-amber-400' : 'text-secondary-500'}`} />
+                    <li
+                      key={f}
+                      className={`flex items-start gap-2 text-[11.5px] leading-snug ${isEnterprise ? 'text-white/80' : 'text-muted'}`}
+                    >
+                      <Check
+                        size={12}
+                        className={`flex-shrink-0 mt-0.5 ${isEnterprise ? 'text-[#2FB57A]' : 'text-[#2FB57A]'}`}
+                        strokeWidth={2.5}
+                      />
                       <span>{f}</span>
                     </li>
                   ))}
                   {plan.bullets.length > 9 && (
-                    <li className={`text-xs italic ${isEnterprise ? 'text-gray-400' : 'text-gray-400'} pl-6`}>
+                    <li className={`text-[11px] italic pl-4 ${isEnterprise ? 'text-white/50' : 'text-muted'}`}>
                       +{plan.bullets.length - 9} recursos adicionais
                     </li>
                   )}
                   {!plan.features.radar360 && addRadar && (
-                    <li className="flex items-start gap-2 text-xs text-purple-700 bg-purple-50 rounded-lg px-2 py-1.5 border border-purple-100">
-                      <Radar size={14} className="flex-shrink-0 mt-0.5 text-purple-600" />
+                    <li className="flex items-start gap-2 text-[11px] text-accent bg-accent/5 rounded-[8px] px-2 py-1.5 border border-accent/15">
+                      <Radar size={12} className="flex-shrink-0 mt-0.5 text-accent" />
                       <span className="font-medium">Radar 360° incluído</span>
                     </li>
                   )}
@@ -223,14 +281,12 @@ export function Pricing() {
 
                 <Link
                   href={plan.cta.href}
-                  className={`block w-full text-center py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                  className={`block w-full text-center py-2.5 rounded-[12px] text-[13px] font-medium transition-colors ${
                     isEnterprise
-                      ? 'bg-amber-400 text-gray-900 hover:bg-amber-300 shadow-lg shadow-amber-500/20'
-                      : isBusiness
-                        ? 'bg-primary-600 text-white hover:bg-primary-700 shadow-lg shadow-primary-500/20'
-                        : plan.highlight
-                          ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-lg shadow-primary-500/20'
-                          : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
+                      ? 'bg-white text-ink hover:bg-white/90'
+                      : isHighlight || isBusiness
+                        ? 'bg-ink text-white hover:bg-black'
+                        : 'border border-line text-ink hover:border-ink'
                   }`}
                 >
                   {plan.cta.label}
@@ -240,54 +296,74 @@ export function Pricing() {
           })}
         </div>
 
-        {/* CTA Radar 360° explicativo */}
-        <div className="mt-10 max-w-4xl mx-auto bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 rounded-2xl p-6 flex flex-col sm:flex-row items-start gap-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center flex-shrink-0">
-            <Radar size={24} className="text-white" />
+        {/* CTA Radar */}
+        <div className="mt-10 max-w-4xl mx-auto card-soft bg-white p-6 flex flex-col sm:flex-row items-start gap-4">
+          <div
+            className="w-11 h-11 rounded-[12px] flex items-center justify-center flex-shrink-0 shadow-[0_8px_16px_-8px_rgba(74,82,208,0.4)]"
+            style={{
+              background: 'linear-gradient(135deg, #2FB57A 0%, #2F7FB5 45%, #4A52D0 100%)',
+            }}
+          >
+            <Radar size={20} className="text-white" />
           </div>
           <div className="flex-1">
-            <h4 className="font-display font-bold text-gray-900 mb-1">Radar 360° — Observabilidade de Negócio</h4>
-            <p className="text-sm text-gray-600 mb-3">
-              BI conversacional com cohort analysis, previsão de pipeline (ML), benchmarking de mercado e alertas proativos. Exporta para Power BI e Looker.{' '}
-              <strong className="text-purple-700">Incluído nos planos Business e Enterprise.</strong>
+            <h4 className="text-[16px] font-medium text-ink tracking-tight mb-1">
+              Radar 360° · Observabilidade de Negócio
+            </h4>
+            <p className="text-[13.5px] text-muted mb-3 leading-relaxed">
+              BI conversacional com cohort analysis, forecast ML, benchmarking e alertas proativos.
+              Exporta pra Power BI e Looker.{' '}
+              <strong className="text-ink">Incluso em Business e Enterprise.</strong>
             </p>
-            <Link href="/observabilidade" className="text-sm font-semibold text-purple-700 hover:text-purple-900 inline-flex items-center gap-1">
+            <Link
+              href="/observabilidade"
+              className="text-[13px] font-medium text-accent hover:underline inline-flex items-center gap-1"
+            >
               Conhecer o Radar 360° →
             </Link>
           </div>
         </div>
 
-        {/* SLA destaque */}
-        <div className="mt-6 max-w-4xl mx-auto bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl p-6 flex flex-col sm:flex-row items-start gap-4 text-white">
-          <div className="w-12 h-12 rounded-xl bg-amber-400 flex items-center justify-center flex-shrink-0">
-            <Shield size={24} className="text-gray-900" />
+        {/* SLA destaque (dark) */}
+        <div
+          className="mt-6 max-w-4xl mx-auto rounded-[20px] p-6 flex flex-col sm:flex-row items-start gap-4 text-white"
+          style={{ background: '#0A0B12' }}
+        >
+          <div className="w-11 h-11 rounded-[12px] bg-white flex items-center justify-center flex-shrink-0">
+            <Shield size={20} className="text-ink" />
           </div>
           <div className="flex-1">
-            <h4 className="font-display font-bold mb-1">SLA contratual 99,9% a partir do plano Business</h4>
-            <p className="text-sm text-gray-300 mb-3">
-              Uptime garantido por contrato, com créditos automáticos em caso de descumprimento. Relatório mensal de disponibilidade + RPO 1h / RTO 4h documentados. Enterprise inclui SOC/NOC dedicado 24/7.
+            <h4 className="text-[16px] font-medium mb-1 tracking-tight">
+              SLA contratual 99,9% a partir de Business.
+            </h4>
+            <p className="text-[13.5px] text-white/70 mb-3 leading-relaxed">
+              Uptime por contrato com créditos automáticos em descumprimento. Relatório mensal de disponibilidade,
+              RPO 1h / RTO 4h documentados. Enterprise inclui SOC/NOC dedicado 24/7.
             </p>
-            <Link href="/sla" className="text-sm font-semibold text-amber-400 hover:text-amber-300 inline-flex items-center gap-1">
+            <Link
+              href="/sla"
+              className="text-[13px] font-medium text-white hover:underline inline-flex items-center gap-1"
+            >
               Ver termos do SLA →
             </Link>
           </div>
         </div>
 
-        {/* Tabela Com vs. Sem ZappIQ */}
+        {/* Com vs Sem ZappIQ */}
         <div className="mt-20 max-w-4xl mx-auto">
-          <h3 className="font-display text-2xl lg:text-3xl font-extrabold text-gray-900 text-center mb-10">
+          <h3 className="text-[30px] lg:text-[36px] font-medium text-ink text-center mb-10 tracking-tight">
             Com vs. Sem ZappIQ
           </h3>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-red-50/50 border border-red-100 rounded-2xl p-6">
-              <h4 className="text-lg font-bold text-red-600 mb-5 flex items-center gap-2">
-                <XIcon size={20} /> Sem ZappIQ
+          <div className="grid md:grid-cols-2 gap-5">
+            <div className="card-soft p-6 bg-[#FEF3F2]/30 border-[#FECDD3]/60">
+              <h4 className="text-[15px] font-medium text-[#B42318] mb-5 flex items-center gap-2 tracking-tight">
+                <XIcon size={18} /> Sem ZappIQ
               </h4>
               <ul className="space-y-4">
                 {COMPARISON.map((c) => (
-                  <li key={c.without} className="flex items-center gap-3 text-sm text-gray-600">
-                    <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <XIcon size={12} className="text-red-500" />
+                  <li key={c.without} className="flex items-center gap-3 text-[13.5px] text-muted">
+                    <div className="w-6 h-6 bg-[#FEF3F2] rounded-full flex items-center justify-center flex-shrink-0">
+                      <XIcon size={11} className="text-[#B42318]" />
                     </div>
                     {c.without}
                   </li>
@@ -295,15 +371,22 @@ export function Pricing() {
               </ul>
             </div>
 
-            <div className="bg-primary-50/50 border border-primary-100 rounded-2xl p-6">
-              <h4 className="text-lg font-bold text-primary-600 mb-5 flex items-center gap-2">
-                <Check size={20} /> Com ZappIQ
+            <div
+              className="card-soft p-6"
+              style={{
+                background:
+                  'linear-gradient(135deg, rgba(47,181,122,.05) 0%, rgba(74,82,208,.05) 100%)',
+                borderColor: 'rgba(74,82,208,0.2)',
+              }}
+            >
+              <h4 className="text-[15px] font-medium text-accent mb-5 flex items-center gap-2 tracking-tight">
+                <Check size={18} /> Com ZappIQ
               </h4>
               <ul className="space-y-4">
                 {COMPARISON.map((c) => (
-                  <li key={c.with} className="flex items-center gap-3 text-sm text-gray-600">
-                    <div className="w-6 h-6 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Check size={12} className="text-primary-600" />
+                  <li key={c.with} className="flex items-center gap-3 text-[13.5px] text-muted">
+                    <div className="w-6 h-6 bg-accent/10 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Check size={11} className="text-accent" strokeWidth={2.5} />
                     </div>
                     {c.with}
                   </li>

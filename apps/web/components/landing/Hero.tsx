@@ -1,335 +1,376 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+/* ══════════════════════════════════════════════════════════════════════════
+ * Hero — Design V4 (Chatbase-style · WhatsApp phone demo + 5 cenários)
+ * --------------------------------------------------------------------------
+ * Layout: grid 1.05fr/.95fr · copy à esquerda + iPhone à direita.
+ * Phone: 340x680 frame com WhatsApp screen #F5F3EE + bolhas verdes/brancas,
+ * typing indicator, 5 cenários rotativos automáticos (Sorriso&Cia, Horizonte,
+ * Torque, Allure, Moda Viva). 3 badges flutuantes + geo shapes decorativos.
+ * Promessa V4: Onboarding Zero · Voz Nativa · 14 dias grátis · LGPD-first.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Play, CheckCircle2, X, Calendar } from 'lucide-react';
 
-// V2-014: chat animado do hero usa placeholders genéricos ("Sua Clínica",
-// "A Dra."). Cases com nome real só em /cases (após autorização LGPD — ver
-// apps/web/content/cases/vida-plena.ts e BLOCKERS.md item B-01).
-const SCENARIOS = [
+/* ── Tipos do scenario ── */
+type ChatMsg =
+  | { role: 'me'; text: string; dur: number; audio?: undefined }
+  | { role: 'me'; text: 'audio'; audio: string; dur: number }
+  | { role: 'ia'; text: string; dur: number; audio?: undefined };
+
+type Scenario = {
+  seg: string;
+  name: string;
+  initials: string;
+  grad: string;
+  sub: string;
+  script: ChatMsg[];
+};
+
+const SCENARIOS: Scenario[] = [
   {
-    business: 'Sua Clínica',
-    label: '📅 Agendamento',
-    messages: [
-      { type: 'in', text: 'Oi! Quero agendar uma consulta para quinta-feira, tem horário?', delay: 800 },
-      { type: 'typing', delay: 1500 },
-      { type: 'out', text: 'Olá! Claro! 😊 Temos horários disponíveis na quinta:\n\n🕐 9h\n🕐 14h\n🕐 16h\n\nQual você prefere?', ai: true, delay: 800 },
-      { type: 'in', text: '14h perfeito!', delay: 1200 },
-      { type: 'typing', delay: 1500 },
-      { type: 'out', text: '✅ Agendado! Quinta, 14h com a Dra. responsável.\n\nVou enviar um lembrete amanhã! 📅', ai: true, delay: 800 },
+    seg: 'Clínica odontológica',
+    name: 'Sorriso & Cia',
+    initials: 'SC',
+    grad: 'linear-gradient(135deg,#2FB57A,#2F7FB5)',
+    sub: 'responde em segundos · IA',
+    script: [
+      { role: 'me', text: 'Oi, tô com dor no dente e preciso marcar emergência hoje', dur: 2200 },
+      { role: 'ia', text: 'Oi! Sinto muito 🦷 Temos encaixe <b>hoje 14h30</b> com o Dr. Rafael ou <b>16h</b> com a Dra. Letícia. Qual prefere?', dur: 2600 },
+      { role: 'me', text: '14h30 por favor', dur: 1400 },
+      { role: 'ia', text: 'Perfeito ✓ <b>Agendado</b>. Seu convênio <b>Unimed</b> cobre avaliação de urgência. Posso enviar o endereço e instruções?', dur: 2800 },
     ],
   },
   {
-    business: 'TrendMix Moda',
-    label: '🛒 Venda',
-    messages: [
-      { type: 'in', text: 'Boa tarde! Vi o vestido floral no Instagram, ainda tem?', delay: 800 },
-      { type: 'typing', delay: 1500 },
-      { type: 'out', text: 'Oi! Sim, temos! 🌸\n\n👗 Vestido Floral Primavera\n💰 R$ 189,90 ou 3x de R$ 63,30\n📦 Frete grátis acima de R$ 150\n\nTemos P, M e G. Qual seu tamanho?', ai: true, delay: 800 },
-      { type: 'in', text: 'M! Quero comprar', delay: 1200 },
-      { type: 'typing', delay: 1500 },
-      { type: 'out', text: '✅ Ótima escolha! Seu link de pagamento:\n\n🔗 pay.trendmix.com/abc123\n\nApós o pagamento, envio o rastreio em até 2h! 🚀', ai: true, delay: 800 },
+    seg: 'Imobiliária',
+    name: 'Horizonte Imóveis',
+    initials: 'HI',
+    grad: 'linear-gradient(135deg,#4A52D0,#6B74E8)',
+    sub: 'resposta em 1s · IA Pulse',
+    script: [
+      { role: 'me', text: 'Busco apartamento 2 quartos Moema até 850k', dur: 2200 },
+      { role: 'ia', text: 'Ótimo! Separei <b>4 imóveis</b> com seu perfil. O mais bem avaliado: <b>R$ 795.000</b> · 68m² · reformado · 1 vaga. Quer ver fotos?', dur: 2900 },
+      { role: 'me', text: 'Quero sim, e dá pra visitar sábado?', dur: 1800 },
+      { role: 'ia', text: 'Claro ✓ Tenho <b>sáb 10h</b> e <b>sáb 14h</b> com o corretor Marcos. Qual horário fecha melhor pra você?', dur: 2600 },
     ],
   },
   {
-    business: 'AutoTech Oficina',
-    label: '💬 Atendimento',
-    messages: [
-      { type: 'in', text: 'Meu carro está fazendo um barulho estranho na roda, quanto custa uma avaliação?', delay: 800 },
-      { type: 'typing', delay: 1500 },
-      { type: 'out', text: 'Olá! Avaliação diagnóstica: R$ 80 (abate no serviço) 🔧\n\nHorários disponíveis amanhã:\n🕐 8h\n🕐 10h30\n🕐 14h\n\nQual prefere?', ai: true, delay: 800 },
-      { type: 'in', text: '10h30 por favor!', delay: 1200 },
-      { type: 'typing', delay: 1500 },
-      { type: 'out', text: '✅ Confirmado! Amanhã, 10h30\n📍 Av. Brasil, 1500 — AutoTech\n\nTraga o documento do veículo. Até amanhã! 🚗', ai: true, delay: 800 },
+    seg: 'Mecânica automotiva',
+    name: 'Torque Auto Center',
+    initials: 'TA',
+    grad: 'linear-gradient(135deg,#F59E0B,#EF4444)',
+    sub: 'online · IA + técnico humano',
+    script: [
+      { role: 'me', text: 'audio', audio: '00:14', dur: 1800 },
+      { role: 'ia', text: 'Entendi — barulho no freio do <b>Civic 2019</b>. Soa como pastilha gasta. Revisão custa <b>R$ 320</b> e dura 2h.', dur: 2900 },
+      { role: 'me', text: 'Fecha pra amanhã?', dur: 1200 },
+      { role: 'ia', text: '✓ Agendado <b>quarta 09h</b>. Enviei endereço e PIX pro sinal. Seu carro volta no mesmo dia.', dur: 2600 },
+    ],
+  },
+  {
+    seg: 'Clínica estética',
+    name: 'Clínica Allure',
+    initials: 'AL',
+    grad: 'linear-gradient(135deg,#EC4899,#8B5CF6)',
+    sub: 'atendimento 24/7 · IA',
+    script: [
+      { role: 'me', text: 'Quero saber valores de botox região da testa', dur: 1800 },
+      { role: 'ia', text: 'Claro! <b>Aplicação Allergan</b> na testa: <b>R$ 890</b> (3 pontos) ou <b>R$ 1.290</b> (5 pontos). Primeira consulta é <b>gratuita</b>.', dur: 3000 },
+      { role: 'me', text: 'Tem horário amanhã à tarde?', dur: 1600 },
+      { role: 'ia', text: 'Sim ✓ <b>Amanhã 15h</b> ou <b>17h30</b> com a Dra. Júlia. Qual prefere?', dur: 2200 },
+    ],
+  },
+  {
+    seg: 'E-commerce',
+    name: 'Moda Viva',
+    initials: 'MV',
+    grad: 'linear-gradient(135deg,#10B981,#3B82F6)',
+    sub: 'online · IA Nexus',
+    script: [
+      { role: 'me', text: 'Meu pedido #48812 já saiu?', dur: 1800 },
+      { role: 'ia', text: 'Saiu sim ✓ Saiu do CD às <b>08:14</b>, está em <b>Osasco · SP</b>. Previsão de entrega: <b>hoje até 18h</b>.', dur: 2800 },
+      { role: 'me', text: 'Show! E se não entregarem hoje?', dur: 1700 },
+      { role: 'ia', text: 'Aviso automático te chega aqui. Se passar do prazo, a <b>devolução fica 100% por minha conta</b> 😊', dur: 2800 },
     ],
   },
 ];
 
-const HERO_METRICS: { target: number; suffix: string; label: string; prefix?: string }[] = [
-  { target: 14, suffix: ' dias', label: 'grátis para testar' },
-  { target: 5, suffix: ' min', label: 'para configurar' },
-  { target: 100, suffix: '%', label: 'API oficial Meta' },
-];
+/* ── Helpers ── */
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const padN = (n: number) => String(n).padStart(2, '0');
+const clockNow = () => {
+  const d = new Date();
+  return `${padN(d.getHours())}:${padN(d.getMinutes())}`;
+};
+const waveBars = (n: number) =>
+  Array.from({ length: n }, (_, i) => 8 + Math.round(Math.sin(i / 2) * 6 + Math.random() * 5));
 
-function AnimatedCounter({ target, suffix = '', prefix = '', triggered }: { target: number; suffix?: string; prefix?: string; triggered: boolean }) {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    if (!triggered) return;
-    setCount(0);
-    const duration = 2000;
-    const steps = 60;
-    const increment = target / steps;
-    let current = 0;
-    const interval = setInterval(() => {
-      current += increment;
-      if (current >= target) {
-        setCount(target);
-        clearInterval(interval);
-      } else {
-        setCount(Math.floor(current));
-      }
-    }, duration / steps);
-    return () => clearInterval(interval);
-  }, [triggered, target]);
-
-  return (
-    <span className="text-3xl lg:text-4xl font-extrabold font-display bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">
-      {prefix}{count}{suffix}
-    </span>
-  );
-}
-
-function TypingIndicator() {
-  return (
-    <div className="flex gap-1 px-3 py-2">
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
-      ))}
-    </div>
-  );
-}
-
-/* Modal de vídeo demo */
-function VideoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative w-full max-w-3xl mx-4" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute -top-10 right-0 text-white hover:text-gray-300 transition-colors">
-          <X size={28} />
-        </button>
-        <div className="bg-black rounded-2xl overflow-hidden aspect-video flex items-center justify-center">
-          {/* PLACEHOLDER: substituir #VIDEO_DEMO_URL por URL real do vídeo */}
-          <div className="text-center text-white/60">
-            <Play size={64} className="mx-auto mb-4 opacity-50" />
-            <p className="text-sm">Vídeo de demonstração</p>
-            <p className="text-xs text-white/40 mt-1">Substitua por embed real em #VIDEO_DEMO_URL</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/* ── Componente Hero ── */
 export function Hero() {
-  const [scenarioIdx, setScenarioIdx] = useState(0);
-  const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
-  const [showTyping, setShowTyping] = useState(false);
-  const [videoOpen, setVideoOpen] = useState(false);
-  const [countersTriggered, setCountersTriggered] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
-  const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
-  const countersRef = useRef<HTMLDivElement>(null);
+  const [scenario, setScenario] = useState<Scenario>(SCENARIOS[0]);
+  const [bubbles, setBubbles] = useState<JSX.Element[]>([]);
+  const [typing, setTyping] = useState(false);
+  const [respTime, setRespTime] = useState('1.2s');
+  const [clock, setClock] = useState('');
 
-  // Intersection Observer para contadores animados
+  /* relógio (só client) */
   useEffect(() => {
-    const el = countersRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setCountersTriggered(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.3 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
+    setClock(clockNow());
+    const id = setInterval(() => setClock(clockNow()), 30_000);
+    return () => clearInterval(id);
   }, []);
 
+  /* loop de cenários */
   useEffect(() => {
-    timeoutsRef.current.forEach(clearTimeout);
-    timeoutsRef.current = [];
-    setVisibleMessages([]);
-    setShowTyping(false);
+    let alive = true;
+    let scIndex = 0;
 
-    const scenario = SCENARIOS[scenarioIdx];
-    let totalDelay = 500;
+    const renderBubble = (msg: ChatMsg, key: number): JSX.Element => {
+      const isMe = msg.role === 'me';
+      if (isMe && msg.audio) {
+        return (
+          <div
+            key={key}
+            className="ml-auto bg-[#DCF8C6] rounded-[14px] px-3 py-2 max-w-[80%] text-[13.5px] text-[#111] flex items-center gap-2 animate-fade-in"
+          >
+            <span className="w-6 h-6 rounded-full bg-[#075E54] text-white flex items-center justify-center text-[10px]">▶</span>
+            <span className="flex items-end gap-[2px] flex-1 h-[20px]">
+              {waveBars(20).map((h, i) => (
+                <span
+                  key={i}
+                  className="w-[2px] bg-[#075E54]/60 rounded-full"
+                  style={{ height: `${h}px` }}
+                />
+              ))}
+            </span>
+            <span className="text-[11px] text-[#666]">{msg.audio}</span>
+          </div>
+        );
+      }
+      return (
+        <div
+          key={key}
+          className={`${isMe ? 'ml-auto bg-[#DCF8C6]' : 'mr-auto bg-white'} rounded-[14px] px-3 py-2 max-w-[80%] text-[13.5px] text-[#111] shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] animate-fade-in`}
+          dangerouslySetInnerHTML={{
+            __html: `${msg.text}<div class="flex items-center justify-end gap-1 mt-0.5 text-[10.5px] text-[#666]"><span>${clockNow()}</span>${
+              isMe ? '<span class="text-[#34B7F1]">✓✓</span>' : ''
+            }</div>`,
+          }}
+        />
+      );
+    };
 
-    scenario.messages.forEach((msg) => {
-      totalDelay += msg.delay;
-      const t = setTimeout(() => {
-        if (msg.type === 'typing') {
-          setShowTyping(true);
-        } else {
-          setShowTyping(false);
-          setVisibleMessages((prev) => [...prev, msg]);
+    async function playScenario(sc: Scenario) {
+      if (!alive) return;
+      setScenario(sc);
+      setBubbles([]);
+      await wait(180);
+      let key = 0;
+      for (const msg of sc.script) {
+        if (!alive) return;
+        if (msg.role === 'ia') {
+          setTyping(true);
+          setRespTime(`${(0.7 + Math.random() * 0.7).toFixed(1)}s`);
+          await wait(900);
+          if (!alive) return;
+          setTyping(false);
         }
-      }, totalDelay);
-      timeoutsRef.current.push(t);
-    });
+        const k = key++;
+        setBubbles((prev) => [...prev, renderBubble(msg, k)]);
+        requestAnimationFrame(() => {
+          if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+        });
+        await wait(msg.dur);
+      }
+      await wait(1800);
+    }
 
-    const nextT = setTimeout(() => {
-      setScenarioIdx((prev) => (prev + 1) % SCENARIOS.length);
-    }, totalDelay + 3000);
-    timeoutsRef.current.push(nextT);
+    (async () => {
+      while (alive) {
+        await playScenario(SCENARIOS[scIndex % SCENARIOS.length]);
+        scIndex++;
+      }
+    })();
 
-    return () => timeoutsRef.current.forEach(clearTimeout);
-  }, [scenarioIdx]);
-
-  useEffect(() => {
-    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
-  }, [visibleMessages, showTyping]);
-
-  const scenario = SCENARIOS[scenarioIdx];
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
-    <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-28 overflow-hidden">
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-secondary-200/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 right-10 w-96 h-96 bg-primary-200/15 rounded-full blur-3xl" />
-      </div>
+    <section className="relative pt-[140px] pb-[100px] lg:pt-[160px] lg:pb-[120px] overflow-hidden">
+      {/* Geo shapes decorativos */}
+      <span
+        className="geo-pill animate-geo-float hidden lg:block"
+        style={{ top: '20%', left: '6%', width: 140, height: 64 }}
+        aria-hidden
+      />
+      <span
+        className="geo-pill animate-geo-float-slow hidden lg:block"
+        style={{ top: '60%', left: '4%', width: 100, height: 48, animationDelay: '2s' }}
+        aria-hidden
+      />
+      <span
+        className="geo-pill animate-geo-float hidden lg:block"
+        style={{ top: '15%', right: '8%', width: 80, height: 80, animationDelay: '4s' }}
+        aria-hidden
+      />
+      <span
+        className="geo-pill animate-geo-float-slow hidden lg:block"
+        style={{ bottom: '15%', right: '6%', width: 160, height: 60, animationDelay: '1s' }}
+        aria-hidden
+      />
 
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
-          <div>
-            <div className="inline-flex items-center gap-2 bg-secondary-50 border border-secondary-200 text-secondary-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6">
-              <span className="w-2 h-2 bg-secondary-500 rounded-full animate-pulse" />
-              {/* Meta logo */}
-              <svg width="16" height="16" viewBox="0 0 256 256" className="flex-shrink-0" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M128 20C68.4 20 20 68.4 20 128s48.4 108 108 108 108-48.4 108-108S187.6 20 128 20z" fill="#0081FB"/>
-                <path d="M90.3 130.3c0-16.5 4.4-30 11.2-38.8 8.2-10.6 19.8-15.4 30.6-15.4 8.6 0 15.4 2.6 20.8 7.4 5.6 4.8 10 12.2 13 22.2 2.6 8.8 4 19.6 4 32.8 0 14.6-2.6 27-7.2 36.4-5.6 11.4-14 17.4-24.6 17.4-10.4 0-19.4-6.2-26-17.4-7.2-12.2-11.8-27.4-11.8-44.6zm-24.6-4.6c0 24.6 7 44.2 17.6 58 12.2 15.8 28.6 24.4 44.8 24.4 18.2 0 33.2-10.4 43-27.6 8.8-15.4 13.8-36 13.8-59.2 0-20.2-4.2-37.4-12.4-50.4-10-15.8-25-25-42.4-25-18.8 0-34 10.6-44 27.2-9 15-20.4 33.4-20.4 52.6z" fill="white"/>
-              </svg>
-              Operamos sobre a infraestrutura oficial da Meta
+      <div className="zappiq-wrap relative">
+        <div className="grid lg:grid-cols-[1.05fr_.95fr] gap-12 lg:gap-20 items-center">
+          {/* Coluna esquerda: copy */}
+          <div className="animate-slide-up">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-soft border border-line text-[12px] text-muted mb-6">
+              <span className="w-2 h-2 rounded-full bg-grad" />
+              Parceiro oficial Meta · Cloud API direto · LGPD-first
             </div>
 
-            <h1 className="font-display text-4xl lg:text-5xl xl:text-[3.5rem] font-extrabold text-gray-900 leading-[1.1] tracking-tight mb-6">
-              IA no WhatsApp que <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">atende, vende, agenda e fala</span> — sem setup fee.
+            <h1 className="text-[44px] sm:text-[56px] lg:text-[72px] leading-[1.02] tracking-[-0.04em] font-medium text-ink mb-6">
+              Sua IA no <span className="text-grad">WhatsApp</span>
+              <br />
+              em uma tarde.
             </h1>
 
-            <p className="text-lg text-gray-500 leading-relaxed max-w-xl mb-8">
-              Cloud API direto da Meta, Claude como IA, voz nativa inclusa, onboarding self-service em 30–90 min.
-              30 dias grátis + 60 dias de garantia.
+            <p className="text-[17px] lg:text-[18.5px] text-muted leading-[1.55] max-w-[560px] mb-8">
+              Pulse AI atende 24/7 em texto e voz. <b className="text-ink">Onboarding zero</b> —
+              sem consultor, sem setup fee. <b className="text-ink">14 dias grátis</b> e depois
+              você escolhe a forma de pagamento. Cloud API direto Meta, dados 100% no Brasil.
             </p>
 
-            <div className="flex flex-wrap gap-4 mb-8">
-              <Link href="/register" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-7 py-3.5 rounded-xl text-base transition-all shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 hover:-translate-y-0.5">
-                Começar 30 dias grátis <ArrowRight size={18} />
+            <div className="flex flex-wrap gap-3 mb-8">
+              <Link href="/register" className="btn btn-accent btn-lg">
+                Começar grátis <span aria-hidden>→</span>
               </Link>
-              <a href="#iza" className="inline-flex items-center gap-2 border border-primary-300 hover:border-primary-500 text-primary-600 hover:text-primary-700 font-semibold px-7 py-3.5 rounded-xl text-base transition-all bg-white hover:bg-primary-50">
-                <Calendar size={18} /> Conversar com a Iza
+              <a href="#demo" className="btn btn-line btn-lg">
+                Agendar demo
               </a>
             </div>
 
-            {/* Botão de vídeo demo */}
-            <button onClick={() => setVideoOpen(true)} className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-primary-600 transition-colors mb-8 group">
-              <span className="w-8 h-8 rounded-full bg-primary-100 group-hover:bg-primary-200 flex items-center justify-center transition-colors">
-                <Play size={14} className="text-primary-600 ml-0.5" />
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-muted">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-g1 font-semibold">✓</span> Sem cartão
               </span>
-              Ver Demonstração em 2 minutos
-            </button>
-
-            <div className="flex flex-wrap gap-5 text-sm text-gray-500">
-              {['Sem cartão de crédito', 'Setup em 5 minutos', 'Parceiro oficial Meta'].map((badge) => (
-                <span key={badge} className="flex items-center gap-1.5">
-                  <CheckCircle2 size={14} className="text-secondary-500" /> {badge}
-                </span>
-              ))}
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-g1 font-semibold">✓</span> Setup em 90 min
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-g1 font-semibold">✓</span> Cancela em 1 clique
+              </span>
             </div>
           </div>
 
-          {/* Smartphone Mockup */}
-          <div className="reveal lg:pl-8 flex justify-center">
-            <div className="relative">
-              {/* Botão play sobreposto ao mockup */}
-              <button
-                onClick={() => setVideoOpen(true)}
-                className="absolute inset-0 z-20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300 bg-black/20 rounded-[40px]"
-                aria-label="Ver Demonstração"
-              >
-                <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center shadow-xl hover:scale-110 transition-transform">
-                  <Play size={28} className="text-primary-600 ml-1" />
+          {/* Coluna direita: iPhone WhatsApp demo */}
+          <div className="relative flex justify-center lg:justify-end">
+            {/* Badges flutuantes (escondidos no mobile) */}
+            <div
+              className="hidden md:flex absolute z-20 top-8 -left-4 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
+              style={{ animation: 'badgePulse 4s ease-in-out infinite' }}
+            >
+              <span className="w-2 h-2 rounded-full bg-g1 animate-pulse" />
+              Agendado · 12s
+            </div>
+            <div
+              className="hidden md:flex absolute z-20 top-1/2 -right-4 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
+              style={{ animation: 'badgePulse 5s ease-in-out infinite', animationDelay: '1.5s' }}
+            >
+              Confiança IA <b className="text-grad ml-0.5">96%</b>
+            </div>
+            <div
+              className="hidden md:flex absolute z-20 bottom-12 -left-2 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
+              style={{ animation: 'badgePulse 4.5s ease-in-out infinite', animationDelay: '0.8s' }}
+            >
+              Lead score <b className="text-accent ml-0.5">89/100</b>
+            </div>
+
+            {/* iPhone frame */}
+            <div className="relative w-[340px] h-[680px] bg-[#1a1a1a] rounded-[44px] p-[10px] shadow-[0_50px_100px_-30px_rgba(17,17,17,0.4)]">
+              {/* Notch */}
+              <div className="absolute top-[18px] left-1/2 -translate-x-1/2 w-[110px] h-[26px] bg-black rounded-full z-10" />
+
+              {/* Screen */}
+              <div className="relative w-full h-full bg-[#F5F3EE] rounded-[36px] overflow-hidden flex flex-col">
+                {/* Status bar fake */}
+                <div className="absolute top-0 left-0 right-0 h-[42px] flex items-center justify-between px-5 text-[11px] font-medium text-white z-[5] pointer-events-none">
+                  <span>{clock || '—'}</span>
+                  <span className="flex items-center gap-1.5 text-[10px]">
+                    <span>•••</span>
+                    <span>📡</span>
+                    <span>🔋</span>
+                  </span>
                 </div>
-              </button>
 
-              {/* Phone frame */}
-              <div className="w-[300px] bg-black rounded-[40px] p-[10px] shadow-2xl shadow-gray-900/20">
-                <div className="bg-white rounded-[32px] overflow-hidden relative">
-                  {/* Notch */}
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120px] h-[28px] bg-black rounded-b-[16px] z-10" />
-
-                  {/* Status bar */}
-                  <div className="bg-[#075E54] pt-8 pb-1 px-4 flex justify-between text-white text-[10px]">
-                    <span>9:41</span>
-                    <span>●●● ⬤ 100%</span>
+                {/* WhatsApp top bar */}
+                <div className="bg-[#075E54] text-white pt-[42px] px-3 pb-3 flex items-center gap-3">
+                  <span className="text-[14px]">←</span>
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0"
+                    style={{ background: scenario.grad }}
+                  >
+                    {scenario.initials}
                   </div>
-
-                  {/* WA Header */}
-                  <div className="bg-[#075E54] px-3 pb-2.5 flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-secondary-400 flex items-center justify-center text-white text-[10px] font-bold">ZQ</div>
-                    <div>
-                      <p className="text-white text-xs font-semibold">{scenario.business}</p>
-                      <p className="text-green-200 text-[9px]">● Agente IA ativo</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-medium truncate">
+                      {scenario.name} <span className="text-white/70 text-[10px]">✓</span>
                     </div>
+                    <div className="text-[11px] text-white/80 truncate">{scenario.sub}</div>
                   </div>
+                  <span className="text-[14px]">📞</span>
+                  <span className="text-[14px]">⋮</span>
+                </div>
 
-                  {/* Scenario label */}
-                  <div className="bg-[#ECE5DD] flex justify-center py-1.5">
-                    <span className="bg-white/80 text-[10px] text-gray-600 px-3 py-0.5 rounded-full font-medium">{scenario.label}</span>
+                {/* Segment label */}
+                <div
+                  key={scenario.seg}
+                  className="text-[10.5px] text-center py-1.5 bg-[#FFF3CD] text-[#856404] border-b border-[#FFE69C] animate-fade-in"
+                >
+                  {scenario.seg}
+                </div>
+
+                {/* Chat area */}
+                <div
+                  ref={chatRef}
+                  className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-1.5"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+                >
+                  <div className="text-center text-[10.5px] text-[#666] bg-white/70 self-center px-2 py-0.5 rounded-md mb-1">
+                    Hoje
                   </div>
+                  {bubbles}
+                  {typing && (
+                    <div className="typing-dots mr-auto">
+                      <span /> <span /> <span />
+                    </div>
+                  )}
+                </div>
 
-                  {/* Chat body */}
-                  <div ref={chatRef} className="bg-[#ECE5DD] h-[380px] overflow-y-auto px-3 py-2 space-y-2 scroll-smooth"
-                    style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' opacity='.03'%3E%3Crect fill='%23075E54' width='100%25' height='100%25'/%3E%3C/svg%3E\")" }}>
-                    {visibleMessages.map((msg, i) => (
-                      <div key={i} className={`max-w-[85%] px-3 py-2 rounded-lg text-[11px] leading-relaxed shadow-sm transition-all duration-300 ${
-                        msg.type === 'in'
-                          ? 'bg-white text-gray-700 rounded-tl-none self-start'
-                          : 'bg-[#D9FDD3] text-gray-700 rounded-tr-none ml-auto'
-                      }`} style={{ animation: 'fadeSlideIn 0.3s ease' }}>
-                        {msg.ai && <div className="text-[8px] text-[#075E54] font-bold mb-0.5">⚡ Pulse IA</div>}
-                        <span className="whitespace-pre-line">{msg.text}</span>
-                      </div>
-                    ))}
-                    {showTyping && (
-                      <div className="bg-white rounded-lg rounded-tl-none max-w-[60%] shadow-sm">
-                        <TypingIndicator />
-                      </div>
-                    )}
+                {/* Input bar */}
+                <div className="bg-[#F0EFEA] px-2 py-2 flex items-center gap-1.5 border-t border-black/5">
+                  <span className="text-[15px] text-[#888]">😊</span>
+                  <div className="flex-1 bg-white rounded-full px-3 py-2 text-[12px] text-[#888]">
+                    Mensagem
+                  </div>
+                  <span className="text-[15px] text-[#888]">📎</span>
+                  <div className="w-9 h-9 rounded-full bg-[#075E54] flex items-center justify-center text-white text-[14px]">
+                    🎤
                   </div>
                 </div>
-              </div>
 
-              {/* Floating badges */}
-              <div className="absolute -bottom-4 -left-6 bg-white rounded-xl shadow-lg border border-gray-100 px-4 py-3 flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-green-600 font-bold text-sm">IA</div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-900">Pulse AI integrado</p>
-                  <p className="text-[10px] text-gray-400">Respostas em segundos</p>
+                {/* Resp time chip */}
+                <div className="absolute bottom-[68px] right-3 bg-black/70 text-white text-[10px] px-2 py-1 rounded-md backdrop-blur-sm font-mono">
+                  resp · <b>{respTime}</b>
                 </div>
-              </div>
-
-              <div className="absolute -top-2 -right-4 bg-white rounded-xl shadow-lg border border-gray-100 px-4 py-3">
-                <p className="text-xs font-bold text-gray-900">LGPD ✓</p>
-                <p className="text-[10px] text-gray-400">Dados protegidos</p>
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Contadores animados */}
-        <div ref={countersRef} className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-3xl mx-auto">
-          {HERO_METRICS.map((m) => (
-            <div key={m.label} className="text-center">
-              <AnimatedCounter target={m.target} suffix={m.suffix} prefix={m.prefix || ''} triggered={countersTriggered} />
-              <p className="text-sm text-gray-500 mt-1">{m.label}</p>
-            </div>
-          ))}
         </div>
       </div>
-
-      {/* Modal de vídeo */}
-      <VideoModal open={videoOpen} onClose={() => setVideoOpen(false)} />
-
-      <style jsx>{`
-        @keyframes fadeSlideIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </section>
   );
 }
