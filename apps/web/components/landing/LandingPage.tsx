@@ -1,32 +1,29 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * LandingPage — V4 Chatbase-style (Onboarding Zero · Voz Nativa · 14 dias grátis)
+ * LandingPage — V4 Chatbase-style (fidelidade modelo Claude Design)
  * --------------------------------------------------------------------------
- * Ordem dos blocos para a narrativa V4:
+ * Hybrid cut (V4_DESIGN_REFERENCE.md Onda C seletiva):
+ *   - REMOVIDO: LeadMagnetBanner (CTA band 202px — modelo não tem)
+ *   - REMOVIDO: BlogPreview (teaser de blog — modelo não tem; /blog vive no nav)
+ *   - MANTIDO: OnboardingZero + VozNativa + IzaEstaAqui (strategic commercial blocks)
+ *   - MANTIDO: SocialProof (pode ser compactado via prop `compact` depois)
  *
- *   1. Hero                 → promessa canônica (IA + voz + 14 dias grátis)
- *   2. SocialProof          → logos / provas sociais
- *   3. PorQueZappIQ         → bento razões (Cloud API direto, Claude, LGPD, etc.)
- *   4. OnboardingZero       → diferenciador V4 #1 · R$ 0 vs R$ 3-8k do mercado
- *   5. VozNativa            → diferenciador V4 #2 · inbound incluso + outbound R$197/R$597
- *   6. HowItWorks           → como funciona (fluxo produto)
- *   7. ROICalculator        → recomendador de tier + payback (inclui toggle voz)
- *   8. TrustAndCompliance   → LGPD · AES-256 · TLS 1.3 · BR · SLA Enterprise
- *   9. IzaEstaAqui          → ZappIQ se vende (dogfooding) — CTA Iza no WhatsApp
- *  10. Pricing              → 3 toggles (anual, Radar 360°, voz) + 5 tiers
- *  11. LeadMagnetBanner     → lead magnet
- *  12. BlogPreview          → blog recente
- *  13. Testimonials         → depoimentos
- *  14. FAQ                  → Qs em grupos com filtro (sem grupo Garantia)
- *  15. CTAFinal             → fecho
- *  16. Footer + WAButton + Toast
- *
- * Blocos removidos do V3.2 (reduzir ruído pré-lançamento):
- *   - ProblemSolution → absorvido em PorQueZappIQ + OnboardingZero
- *   - Products        → movido para /#produtos via Footer (8 módulos canônicos)
- *   - Segments        → movido para /segmentos (página satélite · pós-D-Day)
- *   - Garantia60d     → removido · trial 14 dias → escolha de pagamento, sem garantia
+ * Ordem dos blocos:
+ *   1. Hero              → promessa canônica
+ *   2. SocialProof       → logos / provas
+ *   3. PorQueZappIQ      → bento razões
+ *   4. OnboardingZero    → diferenciador V4 · R$ 0 setup
+ *   5. VozNativa         → diferenciador V4 · voz inbound/outbound
+ *   6. HowItWorks        → fluxo produto
+ *   7. ROICalculator     → payback + recomendador de tier
+ *   8. TrustAndCompliance→ LGPD · AES-256 · SLA
+ *   9. IzaEstaAqui       → dogfooding
+ *  10. Pricing           → 5 tiers
+ *  11. Testimonials      → depoimentos + SLA badge
+ *  12. FAQ               → Qs agrupadas
+ *  13. CTAFinal          → fecho
+ *  14. Footer + WAButton + Toast
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { Navbar } from './Navbar';
@@ -40,8 +37,6 @@ import { ROICalculator } from './ROICalculator';
 import { TrustAndCompliance } from './TrustAndCompliance';
 import { IzaEstaAqui } from './IzaEstaAqui';
 import { Pricing } from './Pricing';
-import { LeadMagnetBanner } from './LeadMagnetBanner';
-import { BlogPreview } from './BlogPreview';
 import { Testimonials } from './Testimonials';
 import { FAQ } from './FAQ';
 import { CTAFinal } from './CTAFinal';
@@ -63,8 +58,6 @@ export function LandingPage() {
       <TrustAndCompliance />
       <IzaEstaAqui />
       <Pricing />
-      <LeadMagnetBanner />
-      <BlogPreview />
       <Testimonials />
       <FAQ />
       <CTAFinal />

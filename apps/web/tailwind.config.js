@@ -23,15 +23,20 @@ module.exports = {
         /* Core neutros (via CSS vars — ver globals.css) */
         bg: 'var(--bg)',
         'bg-soft': 'var(--bg-soft)',
+        'bg-soft-2': 'var(--bg-soft-2)',
         ink: 'var(--ink)',
+        'ink-2': 'var(--ink-2)',
         muted: 'var(--muted)',
+        'muted-2': 'var(--muted-2)',
         line: 'var(--line)',
+        'line-2': 'var(--line-2)',
 
         /* Gradiente canônico da marca · g→b→p */
         g1: 'var(--g1)',         // verde-marca     #2FB57A
         g2: 'var(--g2)',         // azul-transição  #2F7FB5
         g3: 'var(--g3)',         // roxo-fecho      #4A52D0
         accent: 'var(--accent)', // alias === g3    #4A52D0
+        'accent-soft': 'var(--accent-soft)',
 
         /* WhatsApp specs (phone demo) */
         wa: {
@@ -65,16 +70,22 @@ module.exports = {
         mono: ['var(--font-geist-mono)', 'ui-monospace', 'Menlo', 'monospace'],
       },
       fontSize: {
-        /* Escala expressiva do novo hero (h1 hero = 72px) */
-        'hero': ['72px', { lineHeight: '1.02', letterSpacing: '-0.04em', fontWeight: '500' }],
-        'h2': ['48px', { lineHeight: '1.08', letterSpacing: '-0.03em', fontWeight: '500' }],
-        'h3': ['28px', { lineHeight: '1.25', letterSpacing: '-0.025em', fontWeight: '600' }],
+        /* Escala expressiva do novo hero (h1 hero = 72px) — alinhada ao modelo V4 */
+        'hero': ['72px', { lineHeight: '1.0', letterSpacing: '-0.045em', fontWeight: '600' }],
+        'h2': ['48px', { lineHeight: '1.05', letterSpacing: '-0.035em', fontWeight: '600' }],
+        'h3': ['28px', { lineHeight: '1.2',  letterSpacing: '-0.025em', fontWeight: '600' }],
       },
       borderRadius: {
+        /* Legado — mantidos pra compat com componentes que usam sm2/md2/lg2/xl2 */
         'sm2': '10px',
         'md2': '14px',
         'lg2': '20px',
         'xl2': '28px',
+        /* V4 canon (modelo Claude Design · 10 / 16 / 24 / 32 — mais generoso) */
+        'v4-sm': '10px',
+        'v4-md': '16px',
+        'v4-lg': '24px',
+        'v4-xl': '32px',
       },
       backgroundImage: {
         /* Gradient canônico — usado em botões, badges, CTA final */
@@ -97,6 +108,15 @@ module.exports = {
         'tail-tick': 'tailTick 2s linear infinite',
         'fade-in': 'fadeIn .6s ease-out',
         'slide-up': 'slideUp .6s ease-out',
+        /* V4 · portadas do modelo Claude Design */
+        'bg-pulse': 'bgPulse 8s ease-in-out infinite',
+        'badge-float': 'badgeFloat 5s ease-in-out infinite',
+        'seg-in': 'segIn .6s ease-out forwards',
+        'bub-in': 'bubIn .6s ease-out forwards',
+        'typ-dot': 'typDot 1.4s ease-in-out infinite',
+        'pm-pulse': 'pmPulse 2.2s ease-in-out infinite',
+        'geo-in': 'geoIn 1.1s cubic-bezier(.2,.8,.2,1) forwards',
+        'wv': 'wv 1.2s ease-in-out infinite',
       },
       keyframes: {
         geoFloat: {
@@ -122,6 +142,37 @@ module.exports = {
         slideUp: {
           from: { opacity: '0', transform: 'translateY(16px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        /* V4 · portadas do modelo Claude Design */
+        bgPulse: {
+          '0%, 100%': { transform: 'translate(-50%, -50%) scale(1)', opacity: '0.6' },
+          '50%':      { transform: 'translate(-50%, -50%) scale(1.1)', opacity: '1' },
+        },
+        badgeFloat: {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%':      { transform: 'translateY(-10px)' },
+        },
+        segIn: {
+          '100%': { opacity: '1' },
+        },
+        bubIn: {
+          '100%': { opacity: '1', transform: 'translateY(0px)' },
+        },
+        typDot: {
+          '0%, 100%': { opacity: '0.3', transform: 'translateY(0px)' },
+          '50%':      { opacity: '1',   transform: 'translateY(-3px)' },
+        },
+        pmPulse: {
+          '0%, 100%': { boxShadow: 'rgba(47,181,122,.25) 0 0 0 3px' },
+          '50%':      { boxShadow: 'rgba(47,181,122,.1) 0 0 0 6px' },
+        },
+        geoIn: {
+          '0%':   { opacity: '0', transform: 'translateY(-60px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        wv: {
+          '0%, 100%': { transform: 'scaleY(.5)' },
+          '50%':      { transform: 'scaleY(1)' },
         },
       },
     },
