@@ -141,7 +141,7 @@ export default function ComoFuncionaSurveyPage() {
               href="/register"
               className="bg-primary-400 text-gray-900 font-semibold px-7 py-4 rounded-xl hover:bg-primary-300 transition-colors inline-flex items-center justify-center gap-2"
             >
-              Começar 30 dias grátis <ArrowRight size={18} />
+              Começar 14 dias grátis <ArrowRight size={18} />
             </Link>
             <Link
               href="#etapas"
@@ -345,8 +345,8 @@ export default function ComoFuncionaSurveyPage() {
             Pronto em 30 a 90 minutos. Sem consultor.
           </h2>
           <p className="text-gray-600 max-w-2xl mx-auto mb-8">
-            Zero setup fee, 30 dias grátis, 60 dias de garantia. Cancelamento em 1 clique.
-            Se travar, CSM assume a partir do dia 7.
+            Zero setup fee, 14 dias grátis, sem fidelidade. Cancelamento em 1 clique.
+            Se travar, CSM assume a partir do dia 7. Ao fim do trial, você escolhe a forma de pagamento.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link

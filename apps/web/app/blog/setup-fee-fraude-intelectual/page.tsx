@@ -231,10 +231,11 @@ export default function SetupFeeArticle() {
                 Nome, tom, horário. Três minutos.
               </li>
               <li>
-                <strong>Vinte e um dias de trial</strong> com cap de US$ 15 em custo de LLM. Se o
-                cliente abusar, a plataforma protege a margem sem parar o trial — o fundador absorve
-                a diferença nos primeiros 30 dias, porque o trial gratuito sem dor na margem é a
-                prova de que o modelo funciona.
+                <strong>Quatorze dias de trial grátis</strong> com cap de US$ 15 em custo de LLM.
+                Se o cliente abusar, a plataforma protege a margem sem parar o trial — o fundador
+                absorve a diferença no período, porque o trial gratuito sem dor na margem é a prova
+                de que o modelo funciona. Ao fim dos 14 dias, o cliente escolhe a forma de pagamento
+                e segue contratando.
               </li>
             </ol>
             <p>
