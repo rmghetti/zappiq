@@ -133,7 +133,8 @@ export function Hero() {
         return (
           <div
             key={key}
-            className="ml-auto bg-[#DCF8C6] rounded-[14px] px-3 py-2 max-w-[80%] text-[13.5px] text-[#111] flex items-center gap-2 animate-fade-in"
+            className="ml-auto bg-[#DCF8C6] rounded-[14px] px-3 py-2 max-w-[80%] text-[13.5px] text-[#111] flex items-center gap-2"
+            style={{ opacity: 0, transform: 'translateY(8px)', animation: 'bubIn .4s ease-out forwards' }}
           >
             <span className="w-6 h-6 rounded-full bg-[#075E54] text-white flex items-center justify-center text-[10px]">▶</span>
             <span className="flex items-end gap-[2px] flex-1 h-[20px]">
@@ -152,7 +153,8 @@ export function Hero() {
       return (
         <div
           key={key}
-          className={`${isMe ? 'ml-auto bg-[#DCF8C6]' : 'mr-auto bg-white'} rounded-[14px] px-3 py-2 max-w-[80%] text-[13.5px] text-[#111] shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] animate-fade-in`}
+          className={`${isMe ? 'ml-auto bg-[#DCF8C6]' : 'mr-auto bg-white'} rounded-[14px] px-3 py-2 max-w-[80%] text-[13.5px] text-[#111] shadow-[0_1px_0.5px_rgba(0,0,0,0.13)]`}
+          style={{ opacity: 0, transform: 'translateY(8px)', animation: 'bubIn .4s ease-out forwards' }}
           dangerouslySetInnerHTML={{
             __html: `${msg.text}<div class="flex items-center justify-end gap-1 mt-0.5 text-[10.5px] text-[#666]"><span>${clockNow()}</span>${
               isMe ? '<span class="text-[#34B7F1]">✓✓</span>' : ''
@@ -201,25 +203,51 @@ export function Hero() {
 
   return (
     <section className="relative pt-[140px] pb-[100px] lg:pt-[160px] lg:pb-[120px] overflow-hidden">
-      {/* Geo shapes decorativos */}
+      {/* Fundo pulsante (modelo V4 · bgPulse) */}
       <span
-        className="geo-pill animate-geo-float hidden lg:block"
-        style={{ top: '20%', left: '6%', width: 140, height: 64 }}
+        className="pointer-events-none absolute left-1/2 top-1/2 w-[900px] h-[900px] rounded-full opacity-60 hidden lg:block"
+        style={{
+          background: 'radial-gradient(circle, rgba(74,82,208,0.06) 0%, transparent 60%)',
+          animation: 'bgPulse 8s ease-in-out infinite',
+          transform: 'translate(-50%, -50%)',
+        }}
+        aria-hidden
+      />
+
+      {/* Geo shapes decorativos (entry geoIn + loop geoFloat) */}
+      <span
+        className="geo-pill hidden lg:block"
+        style={{
+          top: '20%', left: '6%', width: 140, height: 64,
+          animation: 'geoIn 1.1s cubic-bezier(.2,.8,.2,1) forwards, geoFloat 12s ease-in-out infinite 1.1s',
+        }}
         aria-hidden
       />
       <span
-        className="geo-pill animate-geo-float-slow hidden lg:block"
-        style={{ top: '60%', left: '4%', width: 100, height: 48, animationDelay: '2s' }}
+        className="geo-pill hidden lg:block"
+        style={{
+          top: '60%', left: '4%', width: 100, height: 48,
+          animation: 'geoIn 1.1s cubic-bezier(.2,.8,.2,1) .15s forwards, geoFloat 18s ease-in-out infinite 1.25s',
+          opacity: 0,
+        }}
         aria-hidden
       />
       <span
-        className="geo-pill animate-geo-float hidden lg:block"
-        style={{ top: '15%', right: '8%', width: 80, height: 80, animationDelay: '4s' }}
+        className="geo-pill hidden lg:block"
+        style={{
+          top: '15%', right: '8%', width: 80, height: 80,
+          animation: 'geoIn 1.1s cubic-bezier(.2,.8,.2,1) .3s forwards, geoFloat 12s ease-in-out infinite 1.4s',
+          opacity: 0,
+        }}
         aria-hidden
       />
       <span
-        className="geo-pill animate-geo-float-slow hidden lg:block"
-        style={{ bottom: '15%', right: '6%', width: 160, height: 60, animationDelay: '1s' }}
+        className="geo-pill hidden lg:block"
+        style={{
+          bottom: '15%', right: '6%', width: 160, height: 60,
+          animation: 'geoIn 1.1s cubic-bezier(.2,.8,.2,1) .45s forwards, geoFloat 18s ease-in-out infinite 1.55s',
+          opacity: 0,
+        }}
         aria-hidden
       />
 
@@ -232,10 +260,8 @@ export function Hero() {
               Parceiro oficial Meta · Cloud API direto · LGPD-first
             </div>
 
-            <h1 className="text-[44px] sm:text-[56px] lg:text-[72px] leading-[1.02] tracking-[-0.04em] font-medium text-ink mb-6">
-              Sua IA no <span className="text-grad">WhatsApp</span>
-              <br />
-              em uma tarde.
+            <h1 className="text-[44px] sm:text-[56px] lg:text-[72px] leading-[1.0] tracking-[-0.045em] font-semibold text-ink mb-6">
+              A plataforma de IA completa para <span className="text-grad">WhatsApp Business</span>.
             </h1>
 
             <p className="text-[17px] lg:text-[18.5px] text-muted leading-[1.55] max-w-[560px] mb-8">
@@ -271,20 +297,20 @@ export function Hero() {
             {/* Badges flutuantes (escondidos no mobile) */}
             <div
               className="hidden md:flex absolute z-20 top-8 -left-4 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
-              style={{ animation: 'badgePulse 4s ease-in-out infinite' }}
+              style={{ animation: 'badgeFloat 5s ease-in-out infinite' }}
             >
               <span className="w-2 h-2 rounded-full bg-g1 animate-pulse" />
               Agendado · 12s
             </div>
             <div
               className="hidden md:flex absolute z-20 top-1/2 -right-4 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
-              style={{ animation: 'badgePulse 5s ease-in-out infinite', animationDelay: '1.5s' }}
+              style={{ animation: 'badgeFloat 5s ease-in-out infinite', animationDelay: '1.5s' }}
             >
               Confiança IA <b className="text-grad ml-0.5">96%</b>
             </div>
             <div
               className="hidden md:flex absolute z-20 bottom-12 -left-2 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
-              style={{ animation: 'badgePulse 4.5s ease-in-out infinite', animationDelay: '0.8s' }}
+              style={{ animation: 'badgeFloat 4.5s ease-in-out infinite', animationDelay: '0.8s' }}
             >
               Lead score <b className="text-accent ml-0.5">89/100</b>
             </div>

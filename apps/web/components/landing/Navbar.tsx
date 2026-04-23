@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Menu,
   X,
@@ -84,11 +85,16 @@ export function Navbar() {
       }`}
     >
       <div className="zappiq-wrap flex items-center justify-between h-[68px]">
-        {/* Wordmark */}
-        <Link href="/" className="flex items-center gap-2" aria-label="ZappIQ home">
-          <span className="text-[20px] font-semibold tracking-tight text-ink">
-            Zapp<span className="text-grad">IQ</span>
-          </span>
+        {/* Logo (SVG real · /public/logo-positivo.svg) */}
+        <Link href="/" className="flex items-center" aria-label="ZappIQ home">
+          <Image
+            src="/logo-positivo.svg"
+            alt="ZappIQ"
+            width={120}
+            height={28}
+            priority
+            className="h-7 w-auto"
+          />
         </Link>
 
         {/* Desktop nav */}
