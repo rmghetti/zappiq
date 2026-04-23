@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import '@/lib/sentry';
 import { OrganizationJsonLd } from '@/components/seo/OrganizationJsonLd';
@@ -9,16 +10,6 @@ import { CookieBanner } from '@/components/shared/CookieBanner';
  * Design V4 · fontes Geist (substitui Inter + Plus Jakarta)
  * Geist cobre sans · Geist Mono cobre blocos de código / specs
  * ═══════════════════════════════════════════════════════════════════ */
-const geist = Geist({
-  subsets: ['latin'],
-  variable: '--font-geist',
-  display: 'swap',
-});
-const geistMono = Geist_Mono({
-  subsets: ['latin'],
-  variable: '--font-geist-mono',
-  display: 'swap',
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://zappiq.com.br'),
@@ -109,7 +100,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaSoftware) }}
         />
       </head>
-      <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased bg-bg text-ink`}>
+      <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased bg-bg text-ink`}>
         <OrganizationJsonLd />
         {children}
         <CookieBanner />
