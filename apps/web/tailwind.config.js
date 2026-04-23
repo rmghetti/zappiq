@@ -60,8 +60,8 @@ module.exports = {
         'text-secondary': 'var(--muted)',
       },
       fontFamily: {
-        sans: ['var(--font-geist)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        display: ['var(--font-geist)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-geist-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['var(--font-geist-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['var(--font-geist-mono)', 'ui-monospace', 'Menlo', 'monospace'],
       },
       fontSize: {
