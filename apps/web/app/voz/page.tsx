@@ -115,7 +115,7 @@ export default function VozPage() {
               href="/register"
               className="bg-secondary-400 text-gray-900 font-semibold px-7 py-4 rounded-xl hover:bg-secondary-300 transition-colors inline-flex items-center justify-center gap-2"
             >
-              Começar 30 dias grátis <ArrowRight size={18} />
+              Começar 14 dias grátis <ArrowRight size={18} />
             </Link>
             <Link
               href="#planos"
@@ -372,14 +372,15 @@ export default function VozPage() {
           </h2>
           <p className="text-gray-600 max-w-2xl mx-auto mb-8">
             Ative o add-on de voz no checkout ou depois, no painel. Premium com voz clonada leva até 48h
-            para calibrar. Zero setup fee, 30 dias grátis + 60 dias de garantia no plano base.
+            para calibrar. Zero setup fee, 14 dias grátis, sem fidelidade — ao fim do trial, você escolhe
+            a forma de pagamento.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/register"
               className="bg-secondary-500 hover:bg-secondary-600 text-white font-semibold px-8 py-4 rounded-xl transition-colors inline-flex items-center justify-center gap-2 shadow-lg shadow-secondary-500/25"
             >
-              Começar 30 dias grátis <ArrowRight size={18} />
+              Começar 14 dias grátis <ArrowRight size={18} />
             </Link>
             <Link
               href="/demo"

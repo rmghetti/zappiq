@@ -61,7 +61,7 @@ const PLANS = [
       'Tudo do Scale +',
       'Radar 360° Observabilidade incluído',
       'SLA 99,9% + plantão 24/7',
-      'Garantia 60d contratual com KPIs',
+      'SLA contratual com KPIs mensuráveis',
       'DSR LGPD prioridade 48h',
       'Integrações customizadas',
       'Success manager sênior dedicado',

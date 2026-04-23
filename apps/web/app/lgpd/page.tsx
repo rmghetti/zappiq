@@ -81,7 +81,7 @@ export default function LGPDPage() {
             LGPD não é um <span className="text-emerald-400">checkbox</span>.<br className="hidden sm:block" /> É a <span className="text-emerald-400">arquitetura</span>.
           </h1>
           <p className="text-lg lg:text-xl text-gray-300 max-w-3xl mb-8 leading-relaxed">
-            ZappIQ é 100% compatível com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Segurança, privacidade e conformidade estão no código — não no rodapé. Sua empresa ganha tranquilidade legal e credibilidade com clientes que exigem garantias.
+            ZappIQ é 100% compatível com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Segurança, privacidade e conformidade estão no código — não no rodapé. Sua empresa ganha tranquilidade legal e credibilidade com clientes que exigem conformidade comprovada.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link href="#o-que-e-lgpd"

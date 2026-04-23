@@ -3,7 +3,7 @@ import { ComparativoPage } from './ComparativoPage';
 
 export const metadata: Metadata = {
   title: 'ZappIQ vs. Concorrentes — Comparativo Completo',
-  description: 'Compare ZappIQ com outras plataformas de atendimento WhatsApp. IA nativa, setup em minutos, suporte em português e garantia de ROI.',
+  description: 'Compare ZappIQ com outras plataformas de atendimento WhatsApp. IA nativa, setup em minutos, suporte em português e 14 dias grátis sem cartão.',
   openGraph: {
     title: 'ZappIQ vs. Concorrentes — Comparativo',
     description: 'Veja por que ZappIQ é a melhor escolha para automação WhatsApp. Comparativo detalhado.',
