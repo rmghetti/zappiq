@@ -261,7 +261,8 @@ export default function SetupFeeArticle() {
             </p>
             <p>
               A ZappIQ nasceu para ser a resposta concreta dessa pergunta. Zero setup. Self-service
-              completo. Vinte e um dias grátis para provar que funciona.
+              completo. Quatorze dias grátis, sem cartão, para provar que funciona. Ao fim do trial,
+              você escolhe a forma de pagamento — mensal, anual ou PIX.
             </p>
             <p className="text-lg font-semibold text-gray-900">A régua mudou.</p>
           </section>
