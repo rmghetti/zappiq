@@ -1,14 +1,15 @@
 'use client';
 
-/**
- * Bloco V3.2 — Onboarding Zero
- * ----------------------------
- * Tese: setup fee é fraude intelectual.
- * Comparativo mercado (R$3–8k) vs ZappIQ (R$0).
- * Link pra /como-funciona-survey explica a mecânica.
- */
+/* ══════════════════════════════════════════════════════════════════════════
+ * OnboardingZero — Design V4 (Chatbase-style · mercado vs ZappIQ)
+ * --------------------------------------------------------------------------
+ * Tese V3.2 preservada: setup fee é fraude intelectual (R$ 3–8k virou R$ 0).
+ * Visual novo: comparativo 2-col em card-soft, tipografia Geist, gradient
+ * g→b→p no card ZappIQ, bloco âncora humana preservado.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
 import Link from 'next/link';
-import { X, CheckCircle2, Clock, ArrowRight } from 'lucide-react';
+import { X, Check, ArrowRight, Sparkles } from 'lucide-react';
 
 const MERCADO = [
   'Reunião de kickoff com consultor (R$ 1.500)',
@@ -21,65 +22,72 @@ const MERCADO = [
 const ZAPPIQ = [
   'Survey digital guiado (30–90 min, self-service)',
   'Você mesmo sobe os PDFs e documentos',
-  'IA é calibrada automaticamente no seu dashboard',
+  'IA é calibrada automaticamente no dashboard',
   'Score de prontidão de 0 a 100 em tempo real',
   'Em minutos você está operando no WhatsApp',
 ];
 
 export function OnboardingZero() {
   return (
-    <section id="onboarding-zero" className="py-20 lg:py-28 bg-gradient-to-b from-white to-gray-50">
-      <div className="max-w-7xl mx-auto px-6">
+    <section id="onboarding-zero" className="py-20 lg:py-28 bg-bg-soft">
+      <div className="zappiq-wrap">
         <div className="text-center max-w-3xl mx-auto mb-14">
-          <div className="inline-flex items-center gap-2 bg-secondary-50 border border-secondary-200 text-secondary-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-4">
-            <Clock size={14} /> Novidade V3.2
-          </div>
-          <h2 className="font-display text-3xl lg:text-5xl font-extrabold text-gray-900 leading-tight mb-4">
-            Onboarding Zero.<br />
-            <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">Sem setup fee. Sem consultor. Sem espera.</span>
+          <span className="eyebrow">Novidade V3.2 · Onboarding</span>
+          <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-4">
+            Setup fee é fraude intelectual.{' '}
+            <span className="text-grad">A gente cobra R$ 0.</span>
           </h2>
-          <p className="text-lg text-gray-500 leading-relaxed">
-            O mercado cobra de R$ 3 mil a R$ 8 mil para "treinar a IA com os dados da sua operação".
-            Em 2026, isso é atrito. Subir um PDF em um vector store custa US$ 0,02. Você faz sozinho, em minutos.
+          <p className="text-[16px] lg:text-[17px] text-muted leading-relaxed">
+            O mercado cobra R$ 3–8k pra "treinar a IA com seus dados". Em 2026 isso é atrito.
+            Subir um PDF em um vector store custa US$ 0,02. Você faz sozinho em minutos.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 lg:gap-8 max-w-5xl mx-auto">
-          {/* Mercado */}
-          <div className="bg-white rounded-2xl p-8 border-2 border-red-100 relative">
-            <div className="absolute -top-4 left-6 bg-red-50 text-red-600 text-xs font-bold px-3 py-1 rounded-full border border-red-200">
+        <div className="grid md:grid-cols-2 gap-5 lg:gap-6 max-w-5xl mx-auto">
+          {/* Mercado — card neutro */}
+          <div className="card-soft p-8 lg:p-9 relative">
+            <div className="absolute -top-3 left-7 px-3 py-1 rounded-full bg-[#FEF3F2] border border-[#FECDD3] text-[11px] font-semibold text-[#B42318] tracking-wide">
               Padrão do mercado
             </div>
-            <div className="flex items-baseline gap-2 mb-6">
-              <span className="text-4xl font-extrabold text-red-600 font-display">R$ 3.000</span>
-              <span className="text-gray-400 text-sm">a</span>
-              <span className="text-4xl font-extrabold text-red-600 font-display">R$ 8.000</span>
+            <div className="flex items-baseline gap-2 mb-2 mt-2">
+              <span className="text-[44px] lg:text-[52px] font-semibold text-ink leading-none tracking-tight">R$ 3–8k</span>
             </div>
-            <p className="text-sm text-gray-500 mb-5 -mt-4">setup fee para começar</p>
+            <p className="text-[13px] text-muted mb-6">setup fee só pra começar</p>
             <ul className="space-y-3">
               {MERCADO.map((item) => (
-                <li key={item} className="flex items-start gap-3 text-sm text-gray-500">
-                  <X size={16} className="text-red-500 flex-shrink-0 mt-0.5" />
+                <li key={item} className="flex items-start gap-3 text-[14px] text-muted">
+                  <span className="flex-shrink-0 w-4 h-4 rounded-full bg-[#FEF3F2] flex items-center justify-center mt-0.5">
+                    <X size={10} className="text-[#B42318]" strokeWidth={3} />
+                  </span>
                   <span>{item}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* ZappIQ */}
-          <div className="bg-gradient-to-br from-primary-500 to-secondary-500 rounded-2xl p-8 text-white relative shadow-xl shadow-primary-500/20">
-            <div className="absolute -top-4 left-6 bg-white text-primary-600 text-xs font-bold px-3 py-1 rounded-full shadow">
-              Jeito ZappIQ
+          {/* ZappIQ — card gradient */}
+          <div
+            className="rounded-[20px] p-8 lg:p-9 text-white relative overflow-hidden"
+            style={{
+              background:
+                'linear-gradient(135deg, #2FB57A 0%, #2F7FB5 45%, #4A52D0 100%)',
+              boxShadow:
+                '0 30px 60px -20px rgba(74,82,208,.35), 0 0 0 1px rgba(255,255,255,.08) inset',
+            }}
+          >
+            <div className="absolute -top-3 left-7 px-3 py-1 rounded-full bg-white text-[11px] font-semibold text-accent tracking-wide shadow-sm flex items-center gap-1">
+              <Sparkles size={11} /> Jeito ZappIQ
             </div>
-            <div className="flex items-baseline gap-2 mb-6">
-              <span className="text-5xl font-extrabold font-display">R$ 0</span>
-              <span className="text-white/80 text-sm">de setup</span>
+            <div className="flex items-baseline gap-2 mb-2 mt-2">
+              <span className="text-[52px] lg:text-[64px] font-semibold leading-none tracking-tight">R$ 0</span>
             </div>
-            <p className="text-sm text-white/80 mb-5 -mt-4">você só paga a assinatura mensal</p>
+            <p className="text-[13px] text-white/80 mb-6">você só paga a assinatura mensal</p>
             <ul className="space-y-3">
               {ZAPPIQ.map((item) => (
-                <li key={item} className="flex items-start gap-3 text-sm text-white/95">
-                  <CheckCircle2 size={16} className="text-white flex-shrink-0 mt-0.5" />
+                <li key={item} className="flex items-start gap-3 text-[14px] text-white/95">
+                  <span className="flex-shrink-0 w-4 h-4 rounded-full bg-white/20 flex items-center justify-center mt-0.5">
+                    <Check size={10} className="text-white" strokeWidth={3} />
+                  </span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -90,17 +98,21 @@ export function OnboardingZero() {
         <div className="mt-10 text-center">
           <Link
             href="/como-funciona-survey"
-            className="inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 font-semibold transition-colors"
+            className="inline-flex items-center gap-1.5 text-[14px] font-medium text-accent hover:underline"
           >
-            Ver como o survey funciona em detalhes <ArrowRight size={16} />
+            Ver como o survey funciona em detalhes <ArrowRight size={14} />
           </Link>
         </div>
 
-        <div className="mt-14 bg-amber-50 border border-amber-200 rounded-2xl p-6 lg:p-8 max-w-4xl mx-auto">
-          <p className="text-sm text-amber-900 leading-relaxed">
-            <strong className="font-bold">E se eu preferir ajuda humana?</strong> Se você não finalizar o survey em 7 dias,
-            um consultor ZappIQ entra em contato por WhatsApp para destravar o que estiver pendente — sem custo adicional.
-            Self-service é o padrão, mas nunca deixamos você empacar.
+        {/* Âncora humana — card claro */}
+        <div className="mt-14 card-soft p-6 lg:p-8 max-w-4xl mx-auto bg-white">
+          <p className="text-[13.5px] text-ink leading-relaxed">
+            <strong className="font-semibold">E se eu preferir ajuda humana?</strong>{' '}
+            <span className="text-muted">
+              Se você não finalizar o survey em 7 dias, um consultor ZappIQ entra em contato
+              por WhatsApp pra destravar o que estiver pendente — sem custo adicional.
+              Self-service é o padrão, mas nunca deixamos você empacar.
+            </span>
           </p>
         </div>
       </div>

@@ -1,32 +1,16 @@
+/* ══════════════════════════════════════════════════════════════════════════
+ * LandingFooter — Design V4 (Chatbase-style · dark #0A0B12 · Geist)
+ * --------------------------------------------------------------------------
+ * Footer institucional com 5 colunas (Produto · Planos · Empresa · Recursos ·
+ * Conformidade), badges de segurança, razão social CNPJ, DPO LGPD, créditos.
+ *
+ * V4 purge: link "Garantia 60 dias" substituído por "14 dias grátis".
+ * Tagline: "Onboarding Zero · Voz Nativa · 14 dias grátis".
+ * ══════════════════════════════════════════════════════════════════════════ */
+
 import Link from 'next/link';
 import { Logo } from '../Logo';
 import { Shield, Lock, Server, Activity, Radar } from 'lucide-react';
-
-/* ------------------------------------------------------------------ */
-/* Footer — source of truth institucional                              */
-/*                                                                     */
-/* V2-024 Módulos canônicos: 8 módulos (ZappIQCore, PulseAI,           */
-/*        SparkCampaigns, RadarInsights, NexusCRM, ForgeStudio,        */
-/*        EchoCopilot, ShieldCompliance).                              */
-/* V2-025 DPO externo: CEO deixa de figurar como DPO (LGPD Art. 41     */
-/*        exige independência). Caixa genérica dpo@zappiq.com.br até   */
-/*        contratação de DPO externo (BLOCKER B-03).                   */
-/* V2-026 Razão social: "Onze e Onze Consultoria Empresarial Ltda"     */
-/*        (d.b.a. ZappIQ) — migração para razão social própria         */
-/*        registrada em BLOCKER B-04.                                  */
-/* V2-028 Todos os 5 links legais reais e acessíveis (termos,          */
-/*        privacidade, cookies, DPA, fair-use).                        */
-/* V2-030 Ícones de rede social removidos até abertura dos perfis      */
-/*        oficiais (BLOCKER B-06). Substituído por contato de          */
-/*        marketing + placeholder informativo.                         */
-/* V2-033 Coluna Empresa: todos os links resolvem para páginas reais   */
-/*        (Sobre, Blog, Cases, Carreiras, Contato).                    */
-/* V2-034 Coluna Recursos: Documentação e API apontam para subdomínios */
-/*        reais (docs.zappiq.com.br / status.zappiq.com.br). Enquanto  */
-/*        os subdomínios não estão publicados, /docs-prelaunch         */
-/*        retorna página "em breve" com CTA para /contato.             */
-/* V2-038 Status page com link real e rel="noopener".                  */
-/* ------------------------------------------------------------------ */
 
 const COLUMNS = [
   {
@@ -49,7 +33,7 @@ const COLUMNS = [
       { label: 'Starter · Growth · Scale', href: '/#precos' },
       { label: 'Business', href: '/#precos' },
       { label: 'Enterprise', href: '/enterprise' },
-      { label: 'Garantia 60 dias', href: '/garantia' },
+      { label: '14 dias grátis', href: '/#precos' },
       { label: 'Voz Nativa (add-on)', href: '/voz' },
       { label: 'Migração Zenvia', href: '/migracao-zenvia' },
       { label: 'SLA contratual', href: '/sla' },
@@ -104,44 +88,76 @@ const SECURITY_BADGES = [
 
 export function Footer() {
   return (
-    <footer className="bg-[#1A1A2E] border-t border-white/5 pt-16 pb-8">
-      <div className="max-w-7xl mx-auto px-6">
+    <footer
+      className="relative overflow-hidden text-white pt-20 pb-10"
+      style={{ background: '#0A0B12' }}
+    >
+      {/* glow decorativo topo */}
+      <div
+        className="absolute -top-32 left-1/2 -translate-x-1/2 w-[900px] h-64 pointer-events-none opacity-30"
+        style={{
+          background:
+            'radial-gradient(ellipse at center, rgba(74,82,208,0.4) 0%, transparent 70%)',
+        }}
+      />
+
+      <div className="relative zappiq-wrap">
         {/* Badges de segurança */}
-        <div className="flex flex-wrap items-center justify-center gap-6 mb-12 pb-10 border-b border-white/5">
-          {SECURITY_BADGES.map((b) => (
-            <div key={b.label} className="flex items-center gap-2.5 bg-white/5 border border-white/10 rounded-full px-5 py-2.5">
-              <b.icon size={16} className="text-primary-400" />
-              <span className="text-sm text-gray-400 font-medium">{b.label}</span>
-            </div>
-          ))}
+        <div className="flex flex-wrap items-center justify-center gap-3 mb-14 pb-12 border-b border-white/8">
+          {SECURITY_BADGES.map((b) => {
+            const Icon = b.icon;
+            return (
+              <div
+                key={b.label}
+                className="flex items-center gap-2.5 bg-white/[0.04] border border-white/[0.08] rounded-full px-4 py-2 backdrop-blur-sm"
+              >
+                <div
+                  className="w-6 h-6 rounded-[6px] flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, rgba(47,181,122,0.25), rgba(74,82,208,0.3))',
+                  }}
+                >
+                  <Icon size={12} className="text-white" />
+                </div>
+                <span className="text-[11.5px] text-white/85 font-medium">{b.label}</span>
+              </div>
+            );
+          })}
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-8 mb-12">
-          {/* Logo column */}
+        {/* Grid principal */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-8 mb-14">
+          {/* Coluna brand */}
           <div className="col-span-2 md:col-span-1">
             <div className="mb-4">
-              <Link href="/"><Logo variant="negativo" height={54} /></Link>
+              <Link href="/" aria-label="ZappIQ home">
+                <Logo variant="negativo" height={48} />
+              </Link>
             </div>
-            <p className="text-xs text-gray-500 leading-relaxed">
+            <p className="text-[12.5px] text-white/55 leading-relaxed">
               Inteligência conversacional para PMEs brasileiras via WhatsApp.
             </p>
-            <p className="text-[11px] text-gray-600 leading-relaxed mt-3">
-              V3.2 — Onboarding Zero · Voz Nativa · Garantia 60 dias
+            <p className="text-[11px] text-white/35 leading-relaxed mt-3">
+              V4 · Onboarding Zero · Voz Nativa · 14 dias grátis
             </p>
           </div>
 
           {COLUMNS.map((col) => (
             <div key={col.title}>
-              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{col.title}</h4>
-              <ul className="space-y-2">
+              <h4 className="text-[10.5px] font-semibold text-white/60 uppercase tracking-[0.12em] mb-4">
+                {col.title}
+              </h4>
+              <ul className="space-y-2.5">
                 {col.links.map((link) => {
-                  const isExternal = link.href.startsWith('http') || link.href.startsWith('mailto:');
+                  const isExternal =
+                    link.href.startsWith('http') || link.href.startsWith('mailto:');
                   if (isExternal) {
                     return (
                       <li key={link.label}>
                         <a
                           href={link.href}
-                          className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+                          className="text-[12.5px] text-white/55 hover:text-white transition-colors"
                           rel="noopener noreferrer"
                           target={link.href.startsWith('http') ? '_blank' : undefined}
                         >
@@ -152,7 +168,10 @@ export function Footer() {
                   }
                   return (
                     <li key={link.label}>
-                      <Link href={link.href} className="text-sm text-gray-500 hover:text-gray-300 transition-colors">
+                      <Link
+                        href={link.href}
+                        className="text-[12.5px] text-white/55 hover:text-white transition-colors"
+                      >
                         {link.label}
                       </Link>
                     </li>
@@ -163,43 +182,59 @@ export function Footer() {
           ))}
         </div>
 
-        <div className="border-t border-white/5 pt-6 space-y-4">
-          {/* V2-026: Razão social canônica */}
-          <div className="text-xs text-gray-600 leading-relaxed text-center sm:text-left">
-            <p className="font-semibold text-gray-500">
-              ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA <span className="text-gray-600 font-normal">(d.b.a. ZappIQ)</span>
+        {/* Bloco institucional */}
+        <div className="border-t border-white/8 pt-8 space-y-5">
+          <div className="text-[11.5px] text-white/45 leading-relaxed text-center sm:text-left">
+            <p className="font-semibold text-white/70">
+              ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA{' '}
+              <span className="text-white/40 font-normal">(d.b.a. ZappIQ)</span>
             </p>
             <p>CNPJ 46.788.145/0001-08 — detentora da marca ZappIQ</p>
-            <p>Av. das Nações Unidas, 12901 — CENU Torre Norte, 25° andar — São Paulo/SP — CEP 04578-910</p>
-            {/* V2-025: DPO externo — CEO removido como DPO (LGPD Art. 41).
-                Caixa genérica até contratação do DPO externo (BLOCKER B-03). */}
-            <p className="mt-2">
-              Encarregado de Dados (DPO):{' '}
-              <a href="mailto:rodrigo.ghetti@zappiq.com.br" className="text-gray-400 hover:text-gray-300">rodrigo.ghetti@zappiq.com.br</a>
-              {' · '}
-              <Link href="/legal/privacidade" className="text-gray-400 hover:text-gray-300">Política de Privacidade</Link>
-              {' · '}
-              <Link href="/legal/deletar-dados" className="text-gray-400 hover:text-gray-300">Deletar meus dados</Link>
-              {' · '}
-              <Link href="/legal/dpa" className="text-gray-400 hover:text-gray-300">DPA</Link>
+            <p>
+              Av. das Nações Unidas, 12901 — CENU Torre Norte, 25° andar — São Paulo/SP —
+              CEP 04578-910
             </p>
-            <p className="text-[11px] text-gray-700 mt-1">
-              DPO contatável diretamente conforme LGPD Art. 41. Prazo de resposta: 15 dias úteis (48h planos Business/Enterprise).
+            <p className="mt-3">
+              Encarregado de Dados (DPO):{' '}
+              <a
+                href="mailto:rodrigo.ghetti@zappiq.com.br"
+                className="text-white/70 hover:text-white"
+              >
+                rodrigo.ghetti@zappiq.com.br
+              </a>
+              {' · '}
+              <Link href="/legal/privacidade" className="text-white/70 hover:text-white">
+                Política de Privacidade
+              </Link>
+              {' · '}
+              <Link href="/legal/deletar-dados" className="text-white/70 hover:text-white">
+                Deletar meus dados
+              </Link>
+              {' · '}
+              <Link href="/legal/dpa" className="text-white/70 hover:text-white">
+                DPA
+              </Link>
+            </p>
+            <p className="text-[10.5px] text-white/30 mt-1">
+              DPO contatável diretamente conforme LGPD Art. 41. Prazo de resposta: 15 dias úteis
+              (48h planos Business/Enterprise).
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-gray-600">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-white/5">
+            <p className="text-[11.5px] text-white/40">
               © 2026 ZappIQ. Todos os direitos reservados. Produto brasileiro 🇧🇷
             </p>
-            {/* V2-030: ícones sociais removidos. Substituído por contato marketing. */}
-            <p className="text-xs text-gray-600">
+            <p className="text-[11.5px] text-white/40">
               Imprensa e parcerias:{' '}
-              <a href="mailto:marketing@zappiq.com.br" className="text-gray-500 hover:text-gray-300">
+              <a
+                href="mailto:marketing@zappiq.com.br"
+                className="text-white/60 hover:text-white"
+              >
                 marketing@zappiq.com.br
               </a>
               {' · '}
-              <span className="text-gray-700">redes sociais oficiais em breve</span>
+              <span className="text-white/25">redes sociais oficiais em breve</span>
             </p>
           </div>
         </div>

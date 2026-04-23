@@ -1,217 +1,272 @@
 'use client';
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * Navbar — Design V4 (Chatbase-style · Geist + gradient g→b→p)
+ * --------------------------------------------------------------------------
+ * Minimalista: wordmark ZappIQ, 7 links centrais, CTA dual (Entrar + Começar).
+ * Sticky com backdrop-blur. Preserva mega menu de produtos (8 módulos) e
+ * mobile menu com accordion (padrão V3.2).
+ * ══════════════════════════════════════════════════════════════════════════ */
+
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Menu, X, ChevronDown, Inbox, Brain, Megaphone, BarChart3, Users, Workflow, Headphones, ArrowRight } from 'lucide-react';
-import { Logo } from '../Logo';
+import {
+  Menu,
+  X,
+  ChevronDown,
+  Inbox,
+  Brain,
+  Megaphone,
+  BarChart3,
+  Users,
+  Workflow,
+  Headphones,
+  ShieldCheck,
+  ArrowRight,
+} from 'lucide-react';
 
 const PRODUCTS = [
-  { icon: Inbox, name: 'ZappIQ Core', desc: 'Central de conversas unificada', href: '#produtos' },
-  { icon: Brain, name: 'Pulse AI', desc: 'Agente de IA que atende 24/7', href: '#produtos' },
-  { icon: Megaphone, name: 'Spark Campaigns', desc: 'Campanhas em massa no WhatsApp', href: '#produtos' },
-  { icon: BarChart3, name: 'Radar Insights', desc: 'Analytics e relatórios em tempo real', href: '#produtos' },
-  { icon: Users, name: 'Nexus CRM', desc: 'CRM nativo para WhatsApp', href: '#produtos' },
-  { icon: Workflow, name: 'Forge Studio', desc: 'Automações visuais drag-and-drop', href: '#produtos' },
-  { icon: Headphones, name: 'Echo Copilot', desc: 'Copiloto IA para atendentes', href: '#produtos' },
+  { icon: Inbox,       name: 'ZappIQ Core',      desc: 'Central de conversas unificada',     href: '#produtos' },
+  { icon: Brain,       name: 'Pulse AI',         desc: 'Agente IA que atende 24/7',          href: '#produtos' },
+  { icon: Megaphone,   name: 'Spark Campaigns',  desc: 'Campanhas em massa no WhatsApp',     href: '#produtos' },
+  { icon: BarChart3,   name: 'Radar 360°',       desc: 'Observabilidade + forecast ML',      href: '/observabilidade' },
+  { icon: Users,       name: 'Nexus CRM',        desc: 'CRM nativo para WhatsApp',           href: '#produtos' },
+  { icon: Workflow,    name: 'Forge Studio',     desc: 'Automações visuais drag-and-drop',   href: '#produtos' },
+  { icon: Headphones,  name: 'Echo Copilot',     desc: 'Copiloto IA para atendentes',        href: '#produtos' },
+  { icon: ShieldCheck, name: 'Shield Compliance',desc: 'LGPD · Art. 18/37/48 · DPA',         href: '/lgpd' },
 ];
 
-const NAV_ITEMS = [
-  { label: 'Produtos', href: '#produtos', hasMegaMenu: true },
-  { label: 'Enterprise', href: '/enterprise', hasMegaMenu: false },
-  { label: 'Radar 360°', href: '/observabilidade', hasMegaMenu: false },
-  { label: 'Cases', href: '/cases', hasMegaMenu: false },
-  { label: 'Preços', href: '#precos', hasMegaMenu: false },
-  { label: 'LGPD', href: '/lgpd', hasMegaMenu: false },
+const NAV_ITEMS: { label: string; href: string; mega?: boolean }[] = [
+  { label: 'Produtos', href: '#produtos', mega: true },
+  { label: 'Preços',   href: '#precos' },
+  { label: 'Cases',    href: '/cases' },
+  { label: 'Blog',     href: '/blog' },
+  { label: 'Empresa',  href: '/enterprise' },
 ];
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [megaMenuOpen, setMegaMenuOpen] = useState(false);
-  const [bannerVisible, setBannerVisible] = useState(true);
+  const [megaOpen, setMegaOpen] = useState(false);
   const [mobileProductsOpen, setMobileProductsOpen] = useState(false);
-  const megaMenuRef = useRef<HTMLDivElement>(null);
-  const megaMenuTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  // Banner dismissível via sessionStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const dismissed = sessionStorage.getItem('zappiq_banner_dismissed');
-      if (dismissed === 'true') setBannerVisible(false);
-    }
-  }, []);
-
-  const dismissBanner = () => {
-    setBannerVisible(false);
-    sessionStorage.setItem('zappiq_banner_dismissed', 'true');
-  };
+  const megaRef = useRef<HTMLDivElement>(null);
+  const megaTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', onScroll);
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Fechar mega menu ao clicar fora
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (megaMenuRef.current && !megaMenuRef.current.contains(e.target as Node)) {
-        setMegaMenuOpen(false);
-      }
+    const onClick = (e: MouseEvent) => {
+      if (megaRef.current && !megaRef.current.contains(e.target as Node)) setMegaOpen(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
-  const handleMegaMenuEnter = () => {
-    if (megaMenuTimeout.current) clearTimeout(megaMenuTimeout.current);
-    setMegaMenuOpen(true);
+  const handleMegaEnter = () => {
+    if (megaTimeout.current) clearTimeout(megaTimeout.current);
+    setMegaOpen(true);
   };
-
-  const handleMegaMenuLeave = () => {
-    megaMenuTimeout.current = setTimeout(() => setMegaMenuOpen(false), 200);
+  const handleMegaLeave = () => {
+    megaTimeout.current = setTimeout(() => setMegaOpen(false), 180);
   };
 
   return (
-    <>
-      {/* Banner promocional — PLACEHOLDER: substituir texto e datas por dados reais */}
-      {bannerVisible && (
-        <div className="bg-[#0F5132] text-white text-center text-sm py-2.5 px-6 relative z-[60]">
-          <span className="inline-block mr-2">🚀</span>
-          <span className="font-medium">Semana da Automação: 30 dias grátis + onboarding assistido.</span>
-          <span className="text-white/70 ml-1">Válido até sexta-feira.</span>
-          <button
-            onClick={dismissBanner}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition-colors p-1"
-            aria-label="Fechar banner"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
+    <nav
+      className={`fixed left-0 right-0 top-0 z-50 transition-all duration-300 ${
+        scrolled
+          ? 'bg-[rgba(250,250,250,0.85)] backdrop-blur-xl border-b border-line'
+          : 'bg-transparent'
+      }`}
+    >
+      <div className="zappiq-wrap flex items-center justify-between h-[68px]">
+        {/* Wordmark */}
+        <Link href="/" className="flex items-center gap-2" aria-label="ZappIQ home">
+          <span className="text-[20px] font-semibold tracking-tight text-ink">
+            Zapp<span className="text-grad">IQ</span>
+          </span>
+        </Link>
 
-      <nav className={`fixed left-0 right-0 z-50 transition-all duration-300 ${bannerVisible ? 'top-[42px]' : 'top-0'} ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100' : 'bg-transparent'}`}>
-        <div className="max-w-7xl mx-auto px-6 h-[80px] flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/">
-            <Logo variant="positivo" height={66} />
-          </Link>
-
-          {/* Desktop nav */}
-          <div className="hidden lg:flex items-center gap-8">
-            {NAV_ITEMS.map((item) => (
-              item.hasMegaMenu ? (
-                <div
-                  key={item.href}
-                  ref={megaMenuRef}
-                  className="relative"
-                  onMouseEnter={handleMegaMenuEnter}
-                  onMouseLeave={handleMegaMenuLeave}
+        {/* Desktop nav */}
+        <div className="hidden lg:flex items-center gap-1">
+          {NAV_ITEMS.map((item) =>
+            item.mega ? (
+              <div
+                key={item.href}
+                ref={megaRef}
+                className="relative"
+                onMouseEnter={handleMegaEnter}
+                onMouseLeave={handleMegaLeave}
+              >
+                <button
+                  className="flex items-center gap-1 px-3 py-2 text-[14px] text-muted hover:text-ink transition-colors"
+                  aria-expanded={megaOpen}
                 >
-                  <button className="flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors">
-                    {item.label} <ChevronDown size={14} className={`transition-transform ${megaMenuOpen ? 'rotate-180' : ''}`} />
-                  </button>
+                  {item.label}
+                  <ChevronDown size={13} className={`transition-transform ${megaOpen ? 'rotate-180' : ''}`} />
+                </button>
 
-                  {/* Mega Menu */}
-                  {megaMenuOpen && (
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-4 w-[600px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                      {PRODUCTS.map((p) => (
-                        <a
-                          key={p.name}
-                          href={p.href}
-                          onClick={() => setMegaMenuOpen(false)}
-                          className="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group"
-                        >
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center flex-shrink-0 group-hover:shadow-md transition-shadow">
-                            <p.icon size={20} className="text-white" />
+                {megaOpen && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[640px] bg-white rounded-[20px] shadow-[0_30px_60px_-20px_rgba(17,17,17,0.18)] border border-line p-5 grid grid-cols-2 gap-2 animate-fade-in">
+                    {PRODUCTS.map((p) => {
+                      const Icon = p.icon;
+                      const isInternal = p.href.startsWith('/');
+                      const content = (
+                        <>
+                          <div className="w-10 h-10 rounded-[10px] bg-grad flex items-center justify-center flex-shrink-0 shadow-[0_8px_16px_-8px_rgba(74,82,208,0.4)]">
+                            <Icon size={18} className="text-white" />
                           </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">{p.name}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">{p.desc}</p>
+                          <div className="min-w-0">
+                            <div className="text-[14px] font-medium text-ink leading-tight">{p.name}</div>
+                            <div className="text-[12.5px] text-muted mt-0.5 leading-snug">{p.desc}</div>
                           </div>
+                        </>
+                      );
+                      const cls =
+                        'flex items-start gap-3 p-3 rounded-[14px] hover:bg-bg-soft transition-colors';
+                      return isInternal ? (
+                        <Link key={p.name} href={p.href} onClick={() => setMegaOpen(false)} className={cls}>
+                          {content}
+                        </Link>
+                      ) : (
+                        <a key={p.name} href={p.href} onClick={() => setMegaOpen(false)} className={cls}>
+                          {content}
                         </a>
-                      ))}
-                      <div className="col-span-2 border-t border-gray-100 pt-3 mt-2">
-                        <a href="#produtos" onClick={() => setMegaMenuOpen(false)} className="flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors">
-                          Ver todos os recursos <ArrowRight size={14} />
-                        </a>
-                      </div>
+                      );
+                    })}
+                    <div className="col-span-2 border-t border-line pt-3 mt-1">
+                      <a
+                        href="#produtos"
+                        onClick={() => setMegaOpen(false)}
+                        className="inline-flex items-center gap-1 text-[13px] font-medium text-accent hover:underline"
+                      >
+                        Ver todos os módulos <ArrowRight size={13} />
+                      </a>
                     </div>
-                  )}
-                </div>
-              ) : (
-                item.href.startsWith('/') ? (
-                  <Link key={item.href} href={item.href} className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors">
-                    {item.label}
+                  </div>
+                )}
+              </div>
+            ) : item.href.startsWith('/') ? (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="px-3 py-2 text-[14px] text-muted hover:text-ink transition-colors"
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <a
+                key={item.href}
+                href={item.href}
+                className="px-3 py-2 text-[14px] text-muted hover:text-ink transition-colors"
+              >
+                {item.label}
+              </a>
+            )
+          )}
+        </div>
+
+        {/* CTAs desktop */}
+        <div className="hidden lg:flex items-center gap-2">
+          <Link
+            href="/login"
+            className="text-[14px] text-muted hover:text-ink transition-colors px-3 py-2"
+          >
+            Entrar
+          </Link>
+          <Link href="/register" className="btn btn-primary text-[14px]">
+            Começar grátis
+          </Link>
+        </div>
+
+        {/* Mobile hamburger */}
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className="lg:hidden p-2 text-ink"
+          aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
+        >
+          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+      </div>
+
+      {/* Mobile menu */}
+      {mobileOpen && (
+        <div className="lg:hidden bg-white border-t border-line px-6 py-4 space-y-1 shadow-lg max-h-[80vh] overflow-y-auto">
+          <button
+            onClick={() => setMobileProductsOpen(!mobileProductsOpen)}
+            className="flex items-center justify-between w-full text-[15px] font-medium text-ink py-3"
+          >
+            Produtos
+            <ChevronDown size={14} className={`transition-transform ${mobileProductsOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {mobileProductsOpen && (
+            <div className="pl-4 space-y-1 pb-2">
+              {PRODUCTS.map((p) => {
+                const Icon = p.icon;
+                const close = () => {
+                  setMobileOpen(false);
+                  setMobileProductsOpen(false);
+                };
+                const cls = 'flex items-center gap-3 py-2.5 text-[14px] text-muted hover:text-ink';
+                return p.href.startsWith('/') ? (
+                  <Link key={p.name} href={p.href} onClick={close} className={cls}>
+                    <Icon size={16} className="text-accent" />
+                    {p.name}
                   </Link>
                 ) : (
-                  <a key={item.href} href={item.href} className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors">
-                    {item.label}
+                  <a key={p.name} href={p.href} onClick={close} className={cls}>
+                    <Icon size={16} className="text-accent" />
+                    {p.name}
                   </a>
-                )
-              )
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
-          <div className="hidden lg:flex items-center gap-3">
-            <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-primary-600 px-4 py-2">Entrar</Link>
-            {/* PLACEHOLDER: substituir href por link real de agendamento */}
-            <a href="#agendar-demo" className="text-sm font-semibold text-primary-600 border border-primary-300 hover:bg-primary-50 px-4 py-2.5 rounded-lg transition-colors">
-              Agendar Demo
-            </a>
-            <Link href="/register" className="text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 px-5 py-2.5 rounded-lg transition-colors shadow-sm">
+          {NAV_ITEMS.filter((i) => !i.mega).map((item) =>
+            item.href.startsWith('/') ? (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className="block text-[15px] font-medium text-ink py-3"
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <a
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className="block text-[15px] font-medium text-ink py-3"
+              >
+                {item.label}
+              </a>
+            )
+          )}
+
+          <div className="border-t border-line pt-3 space-y-2">
+            <Link
+              href="/login"
+              onClick={() => setMobileOpen(false)}
+              className="block text-[15px] font-medium text-muted py-2"
+            >
+              Entrar
+            </Link>
+            <Link
+              href="/register"
+              onClick={() => setMobileOpen(false)}
+              className="btn btn-primary w-full justify-center"
+            >
               Começar grátis
             </Link>
           </div>
-
-          {/* Mobile hamburger */}
-          <button onClick={() => setMobileOpen(!mobileOpen)} className="lg:hidden p-2">
-            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
         </div>
-
-        {/* Mobile menu */}
-        {mobileOpen && (
-          <div className="lg:hidden bg-white border-t border-gray-100 px-6 py-4 space-y-1 shadow-lg max-h-[80vh] overflow-y-auto">
-            {/* Produtos accordion mobile */}
-            <button
-              onClick={() => setMobileProductsOpen(!mobileProductsOpen)}
-              className="flex items-center justify-between w-full text-sm font-medium text-gray-700 py-3"
-            >
-              Produtos <ChevronDown size={14} className={`transition-transform ${mobileProductsOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {mobileProductsOpen && (
-              <div className="pl-4 space-y-1 pb-2">
-                {PRODUCTS.map((p) => (
-                  <a
-                    key={p.name}
-                    href={p.href}
-                    onClick={() => { setMobileOpen(false); setMobileProductsOpen(false); }}
-                    className="flex items-center gap-3 py-2.5 text-sm text-gray-600 hover:text-primary-600"
-                  >
-                    <p.icon size={16} className="text-primary-500" />
-                    {p.name}
-                  </a>
-                ))}
-              </div>
-            )}
-
-            {NAV_ITEMS.filter(i => !i.hasMegaMenu).map((item) => (
-              item.href.startsWith('/') ? (
-                <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} className="block text-sm font-medium text-gray-700 py-3">{item.label}</Link>
-              ) : (
-                <a key={item.href} href={item.href} onClick={() => setMobileOpen(false)} className="block text-sm font-medium text-gray-700 py-3">{item.label}</a>
-              )
-            ))}
-
-            <div className="border-t border-gray-100 pt-3 space-y-2">
-              <Link href="/login" onClick={() => setMobileOpen(false)} className="block text-sm font-medium text-gray-700 py-2">Entrar</Link>
-              <a href="#agendar-demo" onClick={() => setMobileOpen(false)} className="block text-center text-sm font-semibold text-primary-600 border border-primary-300 px-5 py-2.5 rounded-lg">Agendar Demo</a>
-              <Link href="/register" onClick={() => setMobileOpen(false)} className="block text-center text-sm font-semibold text-white bg-primary-500 px-5 py-2.5 rounded-lg">Começar grátis</Link>
-            </div>
-          </div>
-        )}
-      </nav>
-    </>
+      )}
+    </nav>
   );
 }

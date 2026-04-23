@@ -2,18 +2,233 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════════
+ * ZappIQ · Design System V4 (Chatbase-style)
+ * --------------------------------------------------------------------
+ * Design tokens extraídos de LANDING_NEW_DESIGN.html.
+ * - Cores: #FAFAFA bg, #F2F0EA bg-soft, #111 ink, #6B6B6B muted,
+ *   #E5E4DE line, #2FB57A→#2F7FB5→#4A52D0 gradient, #4A52D0 accent
+ * - Raios: 10/14/20/28 (sm/md/lg/xl)
+ * - Fonts: Geist (sans) + Geist Mono (code)
+ * ═══════════════════════════════════════════════════════════════════ */
+
 @layer base {
   :root {
-    --background: #F8FAF9;
-    --foreground: #1A1A2E;
+    /* Neutros */
+    --bg: #FAFAFA;
+    --bg-soft: #F2F0EA;
+    --ink: #111111;
+    --muted: #6B6B6B;
+    --line: #E5E4DE;
+
+    /* Gradient canônico · g→b→p */
+    --g1: #2FB57A;  /* verde-marca */
+    --g2: #2F7FB5;  /* azul-transição */
+    --g3: #4A52D0;  /* roxo-fecho */
+    --accent: #4A52D0;
+
+    /* Shorthand gradient (reutilizável) */
+    --grad: linear-gradient(135deg, var(--g1) 0%, var(--g2) 45%, var(--g3) 100%);
+    --grad-soft: linear-gradient(135deg, rgba(47,181,122,.1), rgba(74,82,208,.1));
+
+    /* Raios */
+    --r-sm: 10px;
+    --r-md: 14px;
+    --r-lg: 20px;
+    --r-xl: 28px;
+
+    /* Shadows */
+    --shadow-soft: 0 1px 2px rgba(17,17,17,.04), 0 8px 24px -12px rgba(17,17,17,.08);
+    --shadow-card: 0 20px 40px -20px rgba(17,17,17,.15);
+    --shadow-tier-feat: 0 0 0 2px var(--accent), 0 30px 50px -20px rgba(74,82,208,.25);
+
+    /* Legado pra compat (algum componente antigo pode tá referenciando) */
+    --background: #FAFAFA;
+    --foreground: #111111;
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    color: var(--foreground);
-    background: var(--background);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-geist), ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Tipografia canônica */
+  h1, h2, h3, h4, h5 {
+    letter-spacing: -0.03em;
+    font-weight: 500;
+  }
+
+  ::selection {
+    background: rgba(74, 82, 208, .2);
+    color: var(--ink);
   }
 }
 
-@layer utilities {
-  .font-display { font-family: var(--font-jakarta), system-ui, sans-serif; }
-  .font-body { font-family: var(--font-inter), system-ui, sans-serif; }
+/* ═══════════════════════════════════════════════════════════════════
+ * Components (classes utilitárias reutilizáveis · espelham o HTML fonte)
+ * ═══════════════════════════════════════════════════════════════════ */
+@layer components {
+
+  /* Container canônico · 1240px max */
+  .zappiq-wrap {
+    max-width: 1240px;
+    margin-inline: auto;
+    padding-inline: 40px;
+  }
+
+  @media (max-width: 640px) {
+    .zappiq-wrap { padding-inline: 20px; }
+  }
+
+  /* Eyebrow (rótulo sobre títulos) */
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 14px;
+    display: inline-block;
+  }
+
+  /* Botões base */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 22px;
+    border-radius: var(--r-md);
+    font-size: 14.5px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .btn-lg { padding: 16px 28px; font-size: 15px; }
+  .btn-primary {
+    background: var(--ink);
+    color: #fff;
+  }
+  .btn-primary:hover { background: #000; transform: translateY(-1px); }
+  .btn-accent {
+    background: var(--grad);
+    color: #fff;
+    box-shadow: 0 8px 20px -8px rgba(74,82,208,.4);
+  }
+  .btn-accent:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px -8px rgba(74,82,208,.5);
+  }
+  .btn-line {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .btn-line:hover { border-color: var(--ink); }
+
+  /* Texto com gradient aplicado */
+  .text-grad {
+    background: var(--grad);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Card base */
+  .card-soft {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    transition: all 0.25s ease;
+  }
+  .card-soft:hover {
+    border-color: rgba(74, 82, 208, .25);
+    box-shadow: var(--shadow-card);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * Animations
+ * ═══════════════════════════════════════════════════════════════════ */
+
+@keyframes geoFloat {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-12px) rotate(3deg); }
+}
+
+@keyframes sliderLoop {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes typingDot {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30%           { opacity: 1; transform: translateY(-4px); }
+}
+
+@keyframes tailTick {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes badgePulse {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(-4px, -4px); }
+}
+
+@keyframes wavePulse {
+  0%, 100% { height: 8px; }
+  50%      { height: 20px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * Utilities extras (espelham o HTML fonte sem virar classes Tailwind)
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* Typing indicator (3 dots) */
+.typing-dots {
+  display: inline-flex;
+  gap: 4px;
+  padding: 8px 12px;
+  background: #fff;
+  border-radius: 14px;
+  width: fit-content;
+}
+.typing-dots span {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #999;
+  animation: typingDot 1.2s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+/* Geo shape (pílulas decorativas flutuando) */
+.geo-pill {
+  position: absolute;
+  border-radius: 999px;
+  background: var(--grad-soft);
+  backdrop-filter: blur(10px);
+  opacity: 0.4;
+  pointer-events: none;
 }

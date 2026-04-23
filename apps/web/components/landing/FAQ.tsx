@@ -1,11 +1,13 @@
 'use client';
 
-/**
- * FAQ V3.2 — 25 perguntas
- * -----------------------
- * Ampliado para cobrir: Onboarding Zero, Voz Nativa, Garantia 60d, parceria
- * Meta reformulada, Iza, sub-processadores V3.2, DSR self-service.
- */
+/* ══════════════════════════════════════════════════════════════════════════
+ * FAQ — Design V4 (Chatbase-style · Geist + gradient g→b→p)
+ * --------------------------------------------------------------------------
+ * 21 perguntas em 6 grupos: Onboarding · Trial · Voz Nativa · Tecnologia ·
+ * LGPD · Planos · Iza. Filtro por grupo, accordion minimalista.
+ * Purge V4: removido grupo "Garantia 60 dias" e todas referências "30 dias".
+ * ══════════════════════════════════════════════════════════════════════════ */
+
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { PLAN_CONFIG, ADDONS } from '@zappiq/shared';
@@ -18,9 +20,7 @@ const EXTRA_BROADCASTS_PRICE = ADDONS.EXTRA_BROADCASTS.priceMonthly!;
 type FaqItem = { q: string; a: string; group: string };
 
 const FAQS: FaqItem[] = [
-  // ----------------------------------------------------------------------
-  // Onboarding e Primeiros Passos
-  // ----------------------------------------------------------------------
+  // ──────────────────────────── Onboarding ──────────────────────────────
   {
     group: 'Onboarding',
     q: 'Preciso de conhecimento técnico para usar o ZappIQ?',
@@ -29,12 +29,12 @@ const FAQS: FaqItem[] = [
   {
     group: 'Onboarding',
     q: 'O que é o Onboarding Zero?',
-    a: 'É o modelo V3.2 que substitui o setup fee tradicional (R$ 3–8 mil) por um survey digital guiado, self-service, de 30 a 90 minutos. Você mesmo estrutura a base de conhecimento pela plataforma. Zero cobrança de implantação.',
+    a: 'É o modelo V4 que substitui o setup fee tradicional (R$ 3–8 mil) por um survey digital guiado, self-service, de 30 a 90 minutos. Você mesmo estrutura a base de conhecimento pela plataforma. Zero cobrança de implantação.',
   },
   {
     group: 'Onboarding',
     q: 'E se eu não conseguir terminar o survey sozinho?',
-    a: 'Se em 7 dias você não concluir o survey, um consultor ZappIQ entra em contato por WhatsApp para destravar o que faltar. Sem custo adicional. É self-service por padrão, humano como fallback.',
+    a: 'Se em 7 dias você não concluir o survey, um consultor ZappIQ entra em contato por WhatsApp para destravar o que faltar. Sem custo adicional. Self-service por padrão, humano como fallback.',
   },
   {
     group: 'Onboarding',
@@ -42,33 +42,29 @@ const FAQS: FaqItem[] = [
     a: 'Depende do volume de base de conhecimento. Operações simples (restaurante, clínica pequena) entram em produção no mesmo dia do survey. Operações complexas (varejo multi-SKU, serviços regulados) em 2 a 5 dias com revisão conjunta.',
   },
 
-  // ----------------------------------------------------------------------
-  // Garantia e Trial
-  // ----------------------------------------------------------------------
+  // ───────────────────────────── Trial ──────────────────────────────────
   {
-    group: 'Garantia',
-    q: 'Como funciona a garantia de 60 dias?',
-    a: 'Você tem 30 dias de trial grátis + 60 dias de garantia após assinar. Se em 60 dias a IA não bater os KPIs definidos no seu Acordo de Performance, devolvemos 100% do valor pago. Sem pergunta, sem burocracia.',
+    group: 'Trial',
+    q: 'Como funcionam os 14 dias grátis?',
+    a: 'Você ativa a plataforma imediatamente e tem 14 dias para testar IA, voz, dashboards e fluxos sem pagar nada. Ao final do período, o dashboard te direciona a escolher a forma de pagamento para continuar (cartão, boleto ou Pix recorrente). Se não contratar, o acesso é suspenso sem multa.',
   },
   {
-    group: 'Garantia',
-    q: 'Quais KPIs são usados na garantia?',
-    a: 'Os KPIs são definidos com você no survey de onboarding, por vertical. Exemplos típicos: tempo médio de resposta, taxa de resolução automática, taxa de agendamento concluído, NPS de primeiro contato. Tudo fica registrado no Acordo que você assina.',
-  },
-  {
-    group: 'Garantia',
+    group: 'Trial',
     q: 'Existe fidelidade contratual?',
-    a: 'Não nos planos self-serve (Starter, Growth, Scale, Business). Assinatura mensal, cancelamento self-service, sem multa. No Enterprise oferecemos desconto para contratos de 24 ou 36 meses conforme volume negociado.',
+    a: 'Não nos planos self-serve (Starter, Growth, Scale, Business). Assinatura mensal ou anual, cancelamento self-service, sem multa. No Enterprise oferecemos desconto para contratos de 24 ou 36 meses conforme volume negociado.',
   },
   {
-    group: 'Garantia',
+    group: 'Trial',
     q: 'Como cancelo se quiser parar?',
-    a: 'Um clique no dashboard. Você continua com acesso até o fim do ciclo já pago. Se estiver no trial, cancelamento é imediato e sem cobrança.',
+    a: 'Um clique no dashboard. Você continua com acesso até o fim do ciclo já pago. Se estiver no trial de 14 dias, não há cobrança nenhuma — é só deixar o trial expirar ou cancelar pelo painel.',
+  },
+  {
+    group: 'Trial',
+    q: 'Posso trocar de plano durante o trial?',
+    a: 'Sim. No dashboard você pode subir ou descer de tier a qualquer momento. O trial continua válido até completar 14 dias corridos a partir da ativação inicial, independente de upgrades.',
   },
 
-  // ----------------------------------------------------------------------
-  // Voz Nativa
-  // ----------------------------------------------------------------------
+  // ─────────────────────────── Voz Nativa ───────────────────────────────
   {
     group: 'Voz Nativa',
     q: 'A IA entende áudios de WhatsApp?',
@@ -90,9 +86,7 @@ const FAQS: FaqItem[] = [
     a: 'Sim, pelo dashboard. Ativação e desativação são self-service, sem contato com comercial. Consumo de minutos é exibido em tempo real.',
   },
 
-  // ----------------------------------------------------------------------
-  // Meta WhatsApp e Tecnologia
-  // ----------------------------------------------------------------------
+  // ─────────────────────────── Tecnologia ───────────────────────────────
   {
     group: 'Tecnologia',
     q: 'O ZappIQ é BSP da Meta?',
@@ -114,9 +108,7 @@ const FAQS: FaqItem[] = [
     a: 'Banco primário em AWS São Paulo (sa-east-1). Transferências internacionais para Anthropic/OpenAI/Cloudflare acontecem sob Cláusulas Padrão (LGPD Art. 33 IV) para cada invocação de IA, sem persistência externa.',
   },
 
-  // ----------------------------------------------------------------------
-  // LGPD e Compliance
-  // ----------------------------------------------------------------------
+  // ───────────────────────────── LGPD ───────────────────────────────────
   {
     group: 'LGPD',
     q: 'Como exerço meus direitos LGPD (acesso, exclusão, correção)?',
@@ -129,18 +121,11 @@ const FAQS: FaqItem[] = [
   },
   {
     group: 'LGPD',
-    q: 'O ZappIQ é controlador ou operador dos meus dados?',
-    a: 'Para os dados dos seus end-users WhatsApp, ZappIQ é operador (você, cliente contratante, é o controlador). Para seus dados de cadastro e faturamento, ZappIQ é controlador. Detalhe em /legal/privacidade §1.',
-  },
-  {
-    group: 'LGPD',
     q: 'Meus dados são usados para treinar modelos de IA?',
     a: 'Não. Nem pela ZappIQ, nem pela Anthropic, nem pela OpenAI. Todos sob DPA com cláusula de não-treinamento. Inputs e outputs são efêmeros nas chamadas de IA.',
   },
 
-  // ----------------------------------------------------------------------
-  // Pricing e Planos
-  // ----------------------------------------------------------------------
+  // ───────────────────────────── Planos ─────────────────────────────────
   {
     group: 'Planos',
     q: 'Qual a diferença entre Radar Insights e Radar 360°?',
@@ -149,7 +134,7 @@ const FAQS: FaqItem[] = [
   {
     group: 'Planos',
     q: 'O que diferencia os planos Business e Enterprise?',
-    a: `O plano Business (R$ ${BUSINESS_PRICE.toLocaleString('pt-BR')}/mês) já inclui SLA contratual 99,9% com créditos automáticos, Radar 360°, SSO SAML/OIDC, DPO contato direto (48h DSR), CSM dedicado, 20h/mês de integração customizada e retenção de logs de 24 meses. O Enterprise (sob consulta, a partir de R$ ${ENTERPRISE_MIN.toLocaleString('pt-BR')}/mês) adiciona infraestrutura isolada, SOC/NOC dedicado 24/7, 40h/mês de integração, retenção de logs até 5 anos e contratos customizados (MSA, DPA específicos).`,
+    a: `Business (R$ ${BUSINESS_PRICE.toLocaleString('pt-BR')}/mês) já inclui SLA contratual 99,9% com créditos automáticos, Radar 360°, SSO SAML/OIDC, DPO contato direto (48h DSR), CSM dedicado, 20h/mês de integração customizada e retenção de logs de 24 meses. Enterprise (sob consulta, a partir de R$ ${ENTERPRISE_MIN.toLocaleString('pt-BR')}/mês) adiciona infraestrutura isolada, SOC/NOC dedicado 24/7, 40h/mês de integração, retenção de logs até 5 anos e contratos customizados (MSA, DPA específicos).`,
   },
   {
     group: 'Planos',
@@ -162,13 +147,11 @@ const FAQS: FaqItem[] = [
     a: 'Sim, a partir do plano Business. 99,9% de uptime contratual com créditos automáticos de 10/25/50% conforme severidade. RPO 1h e RTO 4h documentados. Relatório mensal em status.zappiq.com.br. Starter, Growth e Scale têm disponibilidade best-effort com alvo interno de 99,5%.',
   },
 
-  // ----------------------------------------------------------------------
-  // Iza e dogfooding
-  // ----------------------------------------------------------------------
+  // ────────────────────────────── Iza ───────────────────────────────────
   {
     group: 'Iza',
     q: 'Quem é a Iza?',
-    a: 'A Iza é a agente de IA oficial do ZappIQ — a própria ZappIQ rodando no ZappIQ. Ela atende no WhatsApp 24/7, responde dúvidas sobre produto, preço, garantia e implementação, e escala para um humano quando não consegue resolver.',
+    a: 'A Iza é a agente de IA oficial do ZappIQ — a própria ZappIQ rodando no ZappIQ. Ela atende no WhatsApp 24/7, responde dúvidas sobre produto, preço, trial e implementação, e escala para um humano quando não consegue resolver.',
   },
 ];
 
@@ -181,14 +164,20 @@ export function FAQ() {
   const filtered = activeGroup === 'Todas' ? FAQS : FAQS.filter((f) => f.group === activeGroup);
 
   return (
-    <section id="faq" className="py-20 lg:py-28 bg-[#F8FAF9]">
-      <div className="max-w-4xl mx-auto px-6">
+    <section id="faq" className="py-20 lg:py-28 bg-bg-soft">
+      <div className="zappiq-wrap max-w-4xl">
         <div className="text-center mb-10">
-          <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">FAQ</p>
-          <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900 mb-3">Perguntas frequentes</h2>
-          <p className="text-gray-500 text-sm">25 perguntas organizadas por tema. Filtre por categoria ou veja todas.</p>
+          <span className="eyebrow">FAQ</span>
+          <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-3">
+            Perguntas{' '}
+            <span className="text-grad">frequentes.</span>
+          </h2>
+          <p className="text-[16px] text-muted">
+            {FAQS.length} perguntas organizadas por tema. Filtre por categoria ou veja todas.
+          </p>
         </div>
 
+        {/* Filtros */}
         <div className="flex flex-wrap justify-center gap-2 mb-8">
           {['Todas', ...GROUPS].map((g) => (
             <button
@@ -197,10 +186,10 @@ export function FAQ() {
                 setActiveGroup(g);
                 setOpenIdx(null);
               }}
-              className={`text-xs font-semibold px-4 py-2 rounded-full transition-colors border ${
+              className={`text-[12px] font-medium px-4 py-2 rounded-full transition-all border ${
                 activeGroup === g
-                  ? 'bg-primary-500 text-white border-primary-500'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'
+                  ? 'bg-ink text-white border-ink'
+                  : 'bg-white text-muted border-line hover:border-accent hover:text-accent'
               }`}
             >
               {g}
@@ -208,25 +197,36 @@ export function FAQ() {
           ))}
         </div>
 
+        {/* Accordion */}
         <div className="space-y-3">
           {filtered.map((faq, i) => (
-            <div key={`${faq.group}-${i}`} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div
+              key={`${faq.group}-${i}`}
+              className="bg-white rounded-[16px] border border-line overflow-hidden transition-colors hover:border-accent/30"
+            >
               <button
                 onClick={() => setOpenIdx(openIdx === i ? null : i)}
-                className="w-full flex items-center justify-between px-6 py-4 text-left"
+                className="w-full flex items-center justify-between px-6 py-5 text-left"
+                aria-expanded={openIdx === i}
               >
                 <div className="pr-4">
-                  <span className="text-xs font-semibold text-primary-600 uppercase tracking-wide">{faq.group}</span>
-                  <p className="text-sm font-semibold text-gray-900 mt-0.5">{faq.q}</p>
+                  <span className="text-[10.5px] font-semibold text-accent uppercase tracking-[0.12em]">
+                    {faq.group}
+                  </span>
+                  <p className="text-[14.5px] font-medium text-ink mt-1 leading-snug tracking-tight">
+                    {faq.q}
+                  </p>
                 </div>
                 <ChevronDown
                   size={18}
-                  className={`text-gray-400 flex-shrink-0 transition-transform ${openIdx === i ? 'rotate-180' : ''}`}
+                  className={`text-muted flex-shrink-0 transition-transform ${
+                    openIdx === i ? 'rotate-180 text-accent' : ''
+                  }`}
                 />
               </button>
               {openIdx === i && (
-                <div className="px-6 pb-4">
-                  <p className="text-sm text-gray-500 leading-relaxed">{faq.a}</p>
+                <div className="px-6 pb-5 -mt-1">
+                  <p className="text-[13.5px] text-muted leading-relaxed">{faq.a}</p>
                 </div>
               )}
             </div>

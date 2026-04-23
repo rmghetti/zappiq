@@ -1,61 +1,35 @@
 'use client';
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * ROICalculator — Design V4 (Chatbase-style)
+ * --------------------------------------------------------------------------
+ * LÓGICA PRESERVADA 100% · apenas restyle:
+ *   - recommendPlan() + caps V2-003 (ROI ≤300%, payback ≥90d)
+ *   - 5 sliders + voice outbound tier
+ *   - hero tier recomendado + 4 métricas + net gain + 1º ano + volume IA
+ *   - disclaimer metodológico
+ *
+ * Tipografia Geist, cards card-soft, gradient g→b→p no hero de tier,
+ * slider com fill gradient custom.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Calculator, Sparkles, TrendingUp, Zap, Users, Mic } from 'lucide-react';
 import { PLAN_CONFIG, type PlanConfig, type PlanId } from '@zappiq/shared';
 import { track } from '../../lib/track';
 
-/* ═══════════════════════════════════════════════════════════════════════
- * ROI Calculator — versão 2026.04 (Launch)
- * ---------------------------------------------------------------------
- * Objetivo: deixar de ser "calculadora de economia" genérica e virar
- * um recomendador de tier + estimador de payback.
- *
- * Entradas (o que o cliente realmente sabe):
- *   - atendentes humanos hoje
- *   - mensagens WhatsApp/dia
- *   - ticket médio (R$)
- *   - taxa de conversão atual do canal WhatsApp (%)
- *   - salário médio do atendente (R$)
- *
- * Motor de recomendação:
- *   - calcula aiMessagesPerMonth estimado (volume × 30 × automation rate)
- *   - bate contra limits.agents + limits.aiMessagesPerMonth
- *   - pega o menor tier que cabe
- *
- * Saídas:
- *   - tier recomendado (com badge "Recomendado para você")
- *   - payback em dias (zappiqCost / receita incremental diária)
- *   - economia operacional (atendentes que IA substitui)
- *   - receita adicional (uplift de conversão com IA 24/7)
- *   - setup fee economizado (R$ 8k baseline concorrente)
- *   - CTA deep-link direto para /register?plan=GROWTH
- * ═══════════════════════════════════════════════════════════════════════ */
-
-// Baseline de comparação vs. concorrente (mediana Blip/Huggy)
-// Fonte: apps/web/content/competitor-benchmarks.ts
+/* ───────── constantes institucionais (preservadas V3.2) ───────── */
 const COMPETITOR_SETUP_FEE_BRL = 8000;
-// Percentual de mensagens que a IA resolve sem handoff (média observada em beta)
 const AI_AUTOMATION_RATE = 0.65;
-// Uplift de conversão observado quando WhatsApp passa a ter IA 24/7 + recuperação
 const CONVERSION_UPLIFT_MULTIPLIER = 1.3;
-// V2-003: cap institucional de ROI mensal — acima disso, o número vira
-// promessa inflada e destrói credibilidade em C-level.
 export const ROI_MONTHLY_CAP_PERCENT = 300;
-// V2-003: payback mínimo de 3 meses. Piso institucional.
 export const PAYBACK_MIN_DAYS = 90;
 
-// V3.2 — Voz outbound add-on
 const VOICE_OUTBOUND_PRICE = { none: 0, padrao: 197, premium: 597 } as const;
 type VoiceTier = 'none' | 'padrao' | 'premium';
 
-/* ---------- motor de recomendação ---------------------------------- */
-function recommendPlan(
-  aiMessagesPerMonth: number,
-  agents: number,
-): PlanId {
-  // Ordenado — primeiro que encaixa, ganha.
+function recommendPlan(aiMessagesPerMonth: number, agents: number): PlanId {
   const tryOrder: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
   for (const id of tryOrder) {
     const limits = PLAN_CONFIG[id].limits;
@@ -67,7 +41,11 @@ function recommendPlan(
   return 'ENTERPRISE';
 }
 
-/* ---------- slider reutilizável ------------------------------------ */
+function brl(v: number): string {
+  return `R$ ${v.toLocaleString('pt-BR')}`;
+}
+
+/* ───────── Slider com fill gradient V4 ───────── */
 interface SliderInputProps {
   label: string;
   value: number;
@@ -84,9 +62,11 @@ function SliderInput({ label, value, min, max, step = 1, prefix = '', suffix = '
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <label className="text-sm font-medium text-gray-700">{label}</label>
-        <span className="text-sm font-bold text-gray-900 bg-gray-100 px-3 py-1 rounded-lg">
-          {prefix}{value.toLocaleString('pt-BR')}{suffix}
+        <label className="text-[13px] font-medium text-ink">{label}</label>
+        <span className="text-[12.5px] font-mono font-semibold text-ink bg-bg-soft border border-line px-2.5 py-1 rounded-[8px]">
+          {prefix}
+          {value.toLocaleString('pt-BR')}
+          {suffix}
         </span>
       </div>
       <input
@@ -96,49 +76,46 @@ function SliderInput({ label, value, min, max, step = 1, prefix = '', suffix = '
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 rounded-full appearance-none cursor-pointer"
+        className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
         style={{
-          background: `linear-gradient(to right, #1B6B3A 0%, #25D366 ${percentage}%, #e5e7eb ${percentage}%, #e5e7eb 100%)`,
+          background: `linear-gradient(to right, #2FB57A 0%, #4A52D0 ${percentage}%, #E5E4DE ${percentage}%, #E5E4DE 100%)`,
         }}
       />
-      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-        <span>{prefix}{min.toLocaleString('pt-BR')}{suffix}</span>
-        <span>{prefix}{max.toLocaleString('pt-BR')}{suffix}</span>
+      <div className="flex justify-between text-[10px] text-muted mt-1">
+        <span>
+          {prefix}
+          {min.toLocaleString('pt-BR')}
+          {suffix}
+        </span>
+        <span>
+          {prefix}
+          {max.toLocaleString('pt-BR')}
+          {suffix}
+        </span>
       </div>
     </div>
   );
 }
 
-function brl(v: number): string {
-  return `R$ ${v.toLocaleString('pt-BR')}`;
-}
-
-/* ---------- Componente principal ----------------------------------- */
+/* ───────── Componente principal ───────── */
 export function ROICalculator() {
   const [attendants, setAttendants] = useState(5);
   const [messagesPerDay, setMessagesPerDay] = useState(200);
   const [avgSalary, setAvgSalary] = useState(2800);
   const [avgTicket, setAvgTicket] = useState(450);
   const [currentConversionPct, setCurrentConversionPct] = useState(8);
-  // V3.2 — Voz outbound add-on (opcional)
   const [voiceOutbound, setVoiceOutbound] = useState<VoiceTier>('none');
 
   const results = useMemo(() => {
-    // ─ Estimativas de volume
     const messagesPerMonth = messagesPerDay * 30;
     const aiMessagesPerMonth = Math.round(messagesPerMonth * AI_AUTOMATION_RATE);
 
-    // ─ Plano recomendado
     const recommendedId = recommendPlan(aiMessagesPerMonth, attendants);
     const plan: PlanConfig = PLAN_CONFIG[recommendedId];
-    // V3.2 — voz outbound é zero para Enterprise (voz incluída na negociação)
     const voiceExtra = recommendedId === 'ENTERPRISE' ? 0 : VOICE_OUTBOUND_PRICE[voiceOutbound];
-    const basePlanPrice = plan.priceMonthly ?? 9900; // Enterprise baseline
+    const basePlanPrice = plan.priceMonthly ?? 9900;
     const zappiqCost = basePlanPrice + voiceExtra;
 
-    // ─ Economia operacional (atendentes que IA substitui)
-    //   IA resolve 65% → precisamos de menos atendentes humanos.
-    //   Mas mantemos pelo menos 1 para handoff.
     const attendantsNeededAfterAI = Math.max(
       1,
       Math.ceil(attendants * (1 - AI_AUTOMATION_RATE)),
@@ -146,38 +123,29 @@ export function ROICalculator() {
     const attendantsSaved = Math.max(0, attendants - attendantsNeededAfterAI);
     const operationalSavingsMonthly = attendantsSaved * avgSalary;
 
-    // ─ Receita adicional (IA 24/7 + recuperação → uplift de conversão)
     const currentConversionRate = currentConversionPct / 100;
-    const newConversionRate = Math.min(
-      currentConversionRate * CONVERSION_UPLIFT_MULTIPLIER,
-      1,
-    );
+    const newConversionRate = Math.min(currentConversionRate * CONVERSION_UPLIFT_MULTIPLIER, 1);
     const deltaConversionRate = newConversionRate - currentConversionRate;
     const additionalRevenueMonthly = Math.round(
       messagesPerMonth * deltaConversionRate * avgTicket,
     );
 
-    // ─ Benefícios totais (V2-003: duas linhas independentes, nunca somadas em "ROI único")
     const netGainMonthly = operationalSavingsMonthly + additionalRevenueMonthly - zappiqCost;
     const totalBenefitMonthly = operationalSavingsMonthly + additionalRevenueMonthly;
     const rawRoiPercent =
       zappiqCost > 0 ? Math.round((totalBenefitMonthly / zappiqCost) * 100) : 0;
-    // V2-003: cap 300% para preservar credibilidade institucional.
     const roiPercent = Math.min(rawRoiPercent, ROI_MONTHLY_CAP_PERCENT);
     const roiCapped = rawRoiPercent > ROI_MONTHLY_CAP_PERCENT;
 
-    // ─ Payback (em dias) · V2-003: piso de 90 dias (ramp-up da IA + config)
-    const dailyNetGain = (operationalSavingsMonthly + additionalRevenueMonthly) / 30;
+    const dailyNetGain = totalBenefitMonthly / 30;
     const rawPaybackDays =
       dailyNetGain > 0 ? Math.max(1, Math.ceil(zappiqCost / dailyNetGain)) : 999;
     const paybackDays = rawPaybackDays < 900
       ? Math.max(PAYBACK_MIN_DAYS, rawPaybackDays)
       : rawPaybackDays;
-    const paybackFloored = rawPaybackDays > 0 && rawPaybackDays < PAYBACK_MIN_DAYS;
 
-    // ─ Comparativo vs. concorrente (ano 1)
     const firstYearZappiq = zappiqCost * 12;
-    const firstYearCompetitor = COMPETITOR_SETUP_FEE_BRL + zappiqCost * 12 * 1.8; // baseline: concorrente cobra ~80% a mais
+    const firstYearCompetitor = COMPETITOR_SETUP_FEE_BRL + zappiqCost * 12 * 1.8;
     const setupFeeSaved = COMPETITOR_SETUP_FEE_BRL;
     const firstYearSavings = firstYearCompetitor - firstYearZappiq;
 
@@ -195,7 +163,6 @@ export function ROICalculator() {
       roiPercent,
       roiCapped,
       paybackDays,
-      paybackFloored,
       setupFeeSaved,
       firstYearSavings,
     };
@@ -207,70 +174,86 @@ export function ROICalculator() {
     : `/register?plan=${results.plan.id}&utm_source=roi_calc`;
   const ctaLabel = isEnterprise
     ? 'Falar com especialista'
-    : `Começar com ${results.plan.name} — 30 dias grátis`;
+    : `Começar com ${results.plan.name} — 14 dias grátis`;
 
   return (
-    <section className="py-20 lg:py-28 bg-[#F8FAF9]">
-      <div className="max-w-7xl mx-auto px-6">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">
-            Calculadora de ROI · recomendador de tier
-          </p>
-          <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900 mb-3">
-            Diga o que você tem hoje. <span className="text-primary-600">A calculadora escolhe o plano certo.</span>
+    <section className="py-20 lg:py-28 bg-bg-soft">
+      <div className="zappiq-wrap">
+        <div className="text-center mb-12 max-w-3xl mx-auto">
+          <span className="eyebrow">Calculadora de ROI · recomendador de tier</span>
+          <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-3">
+            Diga o que você tem hoje.{' '}
+            <span className="text-grad">A calculadora escolhe o plano certo.</span>
           </h2>
-          <p className="text-gray-500 max-w-2xl mx-auto">
-            Ticket médio + volume + atendentes → tier recomendado, payback em dias e economia no 1º ano.
-            Zero setup fee, 30 dias grátis e 60 dias de garantia.
+          <p className="text-[16px] text-muted leading-relaxed">
+            Ticket médio + volume + atendentes → tier recomendado, payback em dias
+            e economia no 1º ano. Zero setup fee, 14 dias grátis, sem fidelidade.
           </p>
         </div>
 
-        <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8">
-          {/* ───────── Inputs ───────── */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-8 space-y-7 h-fit">
-            <div className="flex items-center gap-3 mb-2">
-              <Calculator size={20} className="text-primary-500" />
-              <h3 className="font-display text-lg font-bold text-gray-900">Seus dados atuais</h3>
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-6 lg:gap-8">
+          {/* ────── Inputs ────── */}
+          <div className="card-soft bg-white p-7 lg:p-8 space-y-6 h-fit">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="w-9 h-9 rounded-[10px] bg-bg-soft border border-line flex items-center justify-center">
+                <Calculator size={16} className="text-ink" />
+              </div>
+              <h3 className="text-[17px] font-medium text-ink tracking-tight">Seus dados atuais</h3>
             </div>
 
             <SliderInput
               label="Atendentes humanos hoje"
-              value={attendants} min={1} max={50}
+              value={attendants}
+              min={1}
+              max={50}
               onChange={setAttendants}
             />
             <SliderInput
               label="Mensagens WhatsApp por dia"
-              value={messagesPerDay} min={20} max={3000} step={20}
+              value={messagesPerDay}
+              min={20}
+              max={3000}
+              step={20}
               onChange={setMessagesPerDay}
             />
             <SliderInput
-              label="Ticket médio do seu produto/serviço"
-              value={avgTicket} min={50} max={10000} step={50}
+              label="Ticket médio do produto/serviço"
+              value={avgTicket}
+              min={50}
+              max={10000}
+              step={50}
               prefix="R$ "
               onChange={setAvgTicket}
             />
             <SliderInput
-              label="Taxa de conversão atual do WhatsApp"
-              value={currentConversionPct} min={1} max={30} step={1}
+              label="Taxa de conversão atual WhatsApp"
+              value={currentConversionPct}
+              min={1}
+              max={30}
+              step={1}
               suffix=" %"
               onChange={setCurrentConversionPct}
             />
             <SliderInput
               label="Salário médio do atendente"
-              value={avgSalary} min={1800} max={6000} step={100}
+              value={avgSalary}
+              min={1800}
+              max={6000}
+              step={100}
               prefix="R$ "
               onChange={setAvgSalary}
             />
 
-            {/* V3.2 — Voz outbound (opcional) */}
-            <div className="pt-4 border-t border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <Mic size={14} className="text-secondary-500" />
+            {/* Voz outbound */}
+            <div className="pt-4 border-t border-line">
+              <div className="flex items-center justify-between mb-2.5">
+                <label className="text-[13px] font-medium text-ink flex items-center gap-1.5">
+                  <Mic size={13} className="text-accent" />
                   Voz outbound (opcional)
                 </label>
-                <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Add-on V3.2</span>
+                <span className="text-[10px] text-muted uppercase tracking-[0.12em] font-semibold">
+                  Add-on V3.2
+                </span>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {(['none', 'padrao', 'premium'] as const).map((tier) => {
@@ -286,151 +269,164 @@ export function ROICalculator() {
                       key={tier}
                       type="button"
                       onClick={() => setVoiceOutbound(tier)}
-                      className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                      className={`rounded-[10px] border px-3 py-2.5 text-left transition-all ${
                         active
-                          ? 'border-primary-500 bg-primary-50 shadow-sm'
-                          : 'border-gray-200 bg-white hover:border-gray-300'
+                          ? 'border-accent bg-accent/5 shadow-soft'
+                          : 'border-line bg-white hover:border-ink/30'
                       }`}
                     >
-                      <p className={`text-sm font-semibold ${active ? 'text-primary-700' : 'text-gray-700'}`}>
+                      <p className={`text-[12.5px] font-semibold ${active ? 'text-accent' : 'text-ink'}`}>
                         {label}
                       </p>
-                      <p className={`text-[11px] ${active ? 'text-primary-600' : 'text-gray-500'}`}>
+                      <p className={`text-[10.5px] ${active ? 'text-accent/80' : 'text-muted'}`}>
                         {sub}
                       </p>
                     </button>
                   );
                 })}
               </div>
-              <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">
-                Padrão: OpenAI TTS · Premium: ElevenLabs com voz clonada (opcional). Inbound (recebimento de áudio com
-                transcrição Whisper) já é incluso em todos os planos.
+              <p className="text-[10.5px] text-muted mt-2 leading-relaxed">
+                Padrão: OpenAI TTS · Premium: ElevenLabs (voz clonada opcional).
+                Inbound (Whisper) incluso em todos os planos.
               </p>
             </div>
 
-            <p className="text-[11px] text-gray-400 pt-4 border-t border-gray-100 leading-relaxed">
-              Premissas: IA resolve {Math.round(AI_AUTOMATION_RATE * 100)}% dos atendimentos sem humano ·
-              uplift de conversão de {Math.round((CONVERSION_UPLIFT_MULTIPLIER - 1) * 100)}% com IA 24/7 + recuperação ·
-              comparativo de concorrente: setup fee de {brl(COMPETITOR_SETUP_FEE_BRL)} + mensalidade ~80% maior.
+            <p className="text-[10.5px] text-muted pt-4 border-t border-line leading-relaxed">
+              <strong className="text-ink">Premissas:</strong> IA resolve {Math.round(AI_AUTOMATION_RATE * 100)}% dos atendimentos sem humano ·
+              uplift de {Math.round((CONVERSION_UPLIFT_MULTIPLIER - 1) * 100)}% com IA 24/7 ·
+              concorrente: setup de {brl(COMPETITOR_SETUP_FEE_BRL)} + mensalidade ~80% maior.
             </p>
           </div>
 
-          {/* ───────── Outputs ───────── */}
+          {/* ────── Outputs ────── */}
           <div className="space-y-4">
-            {/* Hero card — tier recomendado */}
-            <div className="relative bg-gradient-to-br from-primary-600 to-purple-600 rounded-2xl p-6 text-white overflow-hidden">
-              <span className="absolute top-4 right-4 inline-flex items-center gap-1 bg-white/20 backdrop-blur text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded">
+            {/* Hero tier recomendado */}
+            <div
+              className="relative rounded-[20px] p-7 text-white overflow-hidden"
+              style={{
+                background: 'linear-gradient(135deg, #2FB57A 0%, #2F7FB5 45%, #4A52D0 100%)',
+                boxShadow: '0 30px 60px -20px rgba(74,82,208,.35)',
+              }}
+            >
+              <span className="absolute top-4 right-4 inline-flex items-center gap-1 bg-white/20 backdrop-blur text-[10px] font-semibold uppercase tracking-[0.12em] px-2.5 py-1 rounded-full">
                 <Sparkles size={10} /> Recomendado
               </span>
-              <p className="text-xs uppercase tracking-wider text-white/70 mb-1">Plano ideal para você</p>
-              <h3 className="font-display text-3xl font-extrabold mb-1">ZappIQ {results.plan.name}</h3>
-              <p className="text-white/80 text-sm mb-4">{results.plan.tagline}</p>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-white/75 mb-1.5 font-semibold">
+                Plano ideal para você
+              </p>
+              <h3 className="text-[32px] lg:text-[36px] font-semibold tracking-tight mb-1 leading-none">
+                ZappIQ {results.plan.name}
+              </h3>
+              <p className="text-white/85 text-[13px] mb-5">{results.plan.tagline}</p>
               <div className="flex items-baseline gap-2 flex-wrap">
                 {isEnterprise ? (
-                  <span className="text-2xl font-bold">Sob consulta</span>
+                  <span className="text-[24px] font-semibold">Sob consulta</span>
                 ) : (
                   <>
-                    <span className="text-4xl font-extrabold">{brl(results.zappiqCost)}</span>
-                    <span className="text-white/70 text-sm">/mês · sem setup fee</span>
+                    <span className="text-[40px] font-semibold tracking-tight leading-none">
+                      {brl(results.zappiqCost)}
+                    </span>
+                    <span className="text-white/80 text-[13px]">/mês · sem setup fee</span>
                   </>
                 )}
               </div>
               {!isEnterprise && results.voiceExtra > 0 && (
-                <p className="text-[11px] text-white/75 mt-2">
-                  Inclui {brl(results.basePlanPrice)} plano + {brl(results.voiceExtra)} voz outbound{' '}
+                <p className="text-[11px] text-white/80 mt-2">
+                  Inclui {brl(results.basePlanPrice)} plano + {brl(results.voiceExtra)} voz{' '}
                   {voiceOutbound === 'premium' ? 'Premium (ElevenLabs)' : 'Padrão (OpenAI TTS)'}
                 </p>
               )}
               {isEnterprise && (
-                <p className="text-[11px] text-white/75 mt-2">
+                <p className="text-[11px] text-white/80 mt-2">
                   Voz outbound incluída na negociação Enterprise.
                 </p>
               )}
             </div>
 
-            {/* Grid de métricas */}
+            {/* Grid de 4 métricas */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  <Zap size={12} /> Payback
+              <div className="card-soft bg-white p-5">
+                <div className="flex items-center gap-1.5 mb-1 text-[10px] font-semibold text-muted uppercase tracking-[0.12em]">
+                  <Zap size={11} className="text-accent" /> Payback
                 </div>
-                <p className="text-2xl font-extrabold text-primary-600">
+                <p className="text-[26px] font-semibold text-ink tracking-tight leading-none">
                   {results.paybackDays < 900 ? `${results.paybackDays} dias` : '—'}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">do investimento</p>
+                <p className="text-[11px] text-muted mt-1">do investimento</p>
               </div>
 
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  <TrendingUp size={12} /> ROI mensal
+              <div className="card-soft bg-white p-5">
+                <div className="flex items-center gap-1.5 mb-1 text-[10px] font-semibold text-muted uppercase tracking-[0.12em]">
+                  <TrendingUp size={11} className="text-accent" /> ROI mensal
                 </div>
-                <p className="text-2xl font-extrabold text-primary-600">
-                  {results.roiPercent}%{results.roiCapped && <span className="text-xs align-top ml-1 text-primary-400">(cap)</span>}
+                <p className="text-[26px] font-semibold text-ink tracking-tight leading-none">
+                  {results.roiPercent}%
+                  {results.roiCapped && <span className="text-[11px] align-top ml-1 text-muted font-normal">(cap)</span>}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {results.roiCapped
-                    ? 'Cap institucional 300% · ROI real pode ser maior'
-                    : 'benefício / mensalidade'}
+                <p className="text-[11px] text-muted mt-1">
+                  {results.roiCapped ? 'Cap institucional 300%' : 'benefício / mensalidade'}
                 </p>
               </div>
 
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  <Users size={12} /> Economia operacional
+              <div className="card-soft bg-white p-5">
+                <div className="flex items-center gap-1.5 mb-1 text-[10px] font-semibold text-muted uppercase tracking-[0.12em]">
+                  <Users size={11} className="text-accent" /> Economia op.
                 </div>
-                <p className="text-lg font-extrabold text-gray-900">
+                <p className="text-[20px] font-semibold text-ink tracking-tight leading-none">
                   {brl(results.operationalSavingsMonthly)}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {results.attendantsSaved} {results.attendantsSaved === 1 ? 'atendente' : 'atendentes'} liberados/mês
+                <p className="text-[11px] text-muted mt-1">
+                  {results.attendantsSaved} {results.attendantsSaved === 1 ? 'atendente liberado' : 'atendentes liberados'}/mês
                 </p>
               </div>
 
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  <TrendingUp size={12} /> Receita adicional
+              <div className="card-soft bg-white p-5">
+                <div className="flex items-center gap-1.5 mb-1 text-[10px] font-semibold text-muted uppercase tracking-[0.12em]">
+                  <TrendingUp size={11} className="text-accent" /> Receita adicional
                 </div>
-                <p className="text-lg font-extrabold text-gray-900">
+                <p className="text-[20px] font-semibold text-ink tracking-tight leading-none">
                   {brl(results.additionalRevenueMonthly)}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">uplift de conversão/mês</p>
+                <p className="text-[11px] text-muted mt-1">uplift de conversão/mês</p>
               </div>
             </div>
 
-            {/* Linha de sucesso total */}
-            <div className="bg-gradient-to-r from-green-50 to-primary-50 border border-green-200 rounded-xl p-5">
-              <div className="flex items-center justify-between flex-wrap gap-2">
+            {/* Net gain + 1º ano */}
+            <div
+              className="rounded-[16px] border border-line p-5 bg-white"
+              style={{
+                background:
+                  'linear-gradient(135deg, rgba(47,181,122,.06) 0%, rgba(74,82,208,.06) 100%)',
+              }}
+            >
+              <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                  <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-1">
+                  <p className="text-[10px] font-semibold text-[#2FB57A] uppercase tracking-[0.12em] mb-1">
                     Benefício mensal líquido
                   </p>
-                  <p className="text-3xl font-extrabold text-green-700">
+                  <p className="text-[30px] font-semibold text-ink tracking-tight leading-none">
                     {brl(results.netGainMonthly)}
                   </p>
-                  <p className="text-[11px] text-green-600 mt-0.5">
-                    (economia + receita) − mensalidade ZappIQ
-                  </p>
+                  <p className="text-[11px] text-muted mt-1">(economia + receita) − mensalidade</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold text-primary-700 uppercase tracking-wider mb-1">
+                  <p className="text-[10px] font-semibold text-accent uppercase tracking-[0.12em] mb-1">
                     Economia no 1º ano vs. concorrente
                   </p>
-                  <p className="text-2xl font-extrabold text-primary-700">
+                  <p className="text-[22px] font-semibold text-ink tracking-tight leading-none">
                     {brl(Math.round(results.firstYearSavings))}
                   </p>
-                  <p className="text-[11px] text-primary-600 mt-0.5">
+                  <p className="text-[11px] text-muted mt-1">
                     incluindo {brl(results.setupFeeSaved)} de setup fee evitado
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Volume processado pela IA (transparência) */}
-            <div className="flex items-center justify-between bg-white rounded-xl border border-gray-100 px-5 py-3">
-              <p className="text-xs text-gray-500">
-                Volume estimado pela IA / mês
-              </p>
-              <p className="text-sm font-bold text-gray-900">
+            {/* Volume IA */}
+            <div className="flex items-center justify-between card-soft bg-white px-5 py-3">
+              <p className="text-[12px] text-muted">Volume estimado pela IA/mês</p>
+              <p className="text-[13.5px] font-mono font-semibold text-ink">
                 {results.aiMessagesPerMonth.toLocaleString('pt-BR')} mensagens
               </p>
             </div>
@@ -438,25 +434,28 @@ export function ROICalculator() {
             {/* CTA */}
             <Link
               href={ctaHref}
-              onClick={() => track('roi_calc_submitted', {
-                plan: results.plan.id,
-                paybackDays: results.paybackDays,
-                roi: results.roiPercent
-              })}
-              className="flex items-center justify-center gap-2 w-full bg-primary-500 hover:bg-primary-600 text-white font-semibold px-6 py-4 rounded-xl transition-colors shadow-lg shadow-primary-500/25 text-base"
+              onClick={() =>
+                track('roi_calc_submitted', {
+                  plan: results.plan.id,
+                  paybackDays: results.paybackDays,
+                  roi: results.roiPercent,
+                })
+              }
+              className="btn btn-accent btn-lg w-full justify-center"
             >
-              {ctaLabel} <ArrowRight size={18} />
+              {ctaLabel} <ArrowRight size={16} />
             </Link>
-            <p className="text-[11px] text-gray-400 text-center">
-              Zero setup fee · 30 dias grátis · 60 dias de garantia · cancelamento em 1 clique
+            <p className="text-[11px] text-muted text-center">
+              Zero setup fee · 14 dias grátis · sem fidelidade · cancelamento em 1 clique
             </p>
-            {/* V2-003/V2-013: disclaimer institucional de premissas */}
-            <div className="bg-amber-50/60 border border-amber-200/60 rounded-xl p-4 text-[11px] text-amber-900/90 leading-relaxed">
-              <strong className="block text-amber-900 mb-1">Metodologia e limites desta estimativa</strong>
+
+            {/* Disclaimer metodológico */}
+            <div className="rounded-[12px] bg-[#FEF9C3]/40 border border-[#FDE68A]/70 p-4 text-[11px] text-[#78350F] leading-relaxed">
+              <strong className="block text-[#78350F] mb-1">Metodologia e limites desta estimativa</strong>
               Benchmarks observados em clientes beta ZappIQ entre ago/25 e fev/26. Resultados reais variam por vertical,
-              maturidade da base de conhecimento e política de handoff humano. Economia operacional e uplift de receita
-              são calculados de forma independente — não somamos em um “ROI único” inflado. ROI mensal exibido tem cap de{' '}
-              {ROI_MONTHLY_CAP_PERCENT}% e payback mínimo de {PAYBACK_MIN_DAYS} dias para absorver ramp-up.
+              maturidade da base de conhecimento e política de handoff. Economia operacional e uplift de receita são
+              calculados independentes — não somamos em "ROI único" inflado. ROI mensal tem cap de {ROI_MONTHLY_CAP_PERCENT}%,
+              payback mínimo de {PAYBACK_MIN_DAYS} dias para absorver ramp-up.
             </div>
           </div>
         </div>
