@@ -27,14 +27,19 @@ type Brand = {
   w: number;
 };
 
+/* Alturas harmonizadas na banda 24-28px (variação ~17%).
+ * Logos com ícone+wordmark (AWS, Salesforce) ficam no topo da banda
+ * porque parte da altura é ocupada pelo glifo e a parte textual precisa
+ * casar visualmente com os wordmarks line-only (Meta, Anthropic, etc).
+ * Widths recalculados mantendo o aspect ratio original de cada SVG. */
 const BRANDS: Brand[] = [
   { name: 'Meta',       src: '/partners/meta.svg',       h: 26, w: 129 },
-  { name: 'Anthropic',  src: '/partners/anthropic.svg',  h: 20, w: 178 },
-  { name: 'OpenAI',     src: '/partners/openai.svg',     h: 22, w: 81  },
-  { name: 'AWS',        src: '/partners/aws.svg',        h: 34, w: 57  },
-  { name: 'Cloudflare', src: '/partners/cloudflare.svg', h: 30, w: 91  },
-  { name: 'Salesforce', src: '/partners/salesforce.svg', h: 36, w: 51  },
-  { name: 'Stripe',     src: '/partners/stripe.svg',     h: 28, w: 67  },
+  { name: 'Anthropic',  src: '/partners/anthropic.svg',  h: 24, w: 214 },
+  { name: 'OpenAI',     src: '/partners/openai.svg',     h: 24, w: 88  },
+  { name: 'AWS',        src: '/partners/aws.svg',        h: 28, w: 47  },
+  { name: 'Cloudflare', src: '/partners/cloudflare.svg', h: 26, w: 79  },
+  { name: 'Salesforce', src: '/partners/salesforce.svg', h: 28, w: 40  },
+  { name: 'Stripe',     src: '/partners/stripe.svg',     h: 26, w: 62  },
   { name: 'RD Station', src: '/partners/rd-station.svg', h: 24, w: 107 },
 ];
 
