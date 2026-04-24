@@ -221,7 +221,7 @@ export function Hero() {
               'radial-gradient(ellipse at 50% 8%, black 12%, transparent 72%)',
             WebkitMaskImage:
               'radial-gradient(ellipse at 50% 8%, black 12%, transparent 72%)',
-            animation: 'aurora 28s linear infinite',
+            animation: 'aurora 60s linear infinite',
           }}
         />
       </div>
