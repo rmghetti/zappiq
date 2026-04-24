@@ -90,10 +90,10 @@ export function Navbar() {
           <Image
             src="/logo-positivo.svg"
             alt="ZappIQ"
-            width={120}
-            height={28}
+            width={168}
+            height={40}
             priority
-            className="h-7 w-auto"
+            className="h-10 w-auto"
           />
         </Link>
 
