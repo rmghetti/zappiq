@@ -246,6 +246,15 @@
   50%      { transform: scaleY(1); }
 }
 
+/* Aurora Background (padrão Aceternity · V4 light canon)
+ * Anima background-position pra criar o movimento característico do aurora.
+ * Duas camadas: estrias brancas (mascaram) + gradient colorido g→b→p.
+ */
+@keyframes aurora {
+  0%   { background-position: 50% 50%, 50% 50%; }
+  100% { background-position: 350% 50%, 350% 50%; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════
  * Utilities extras (espelham o HTML fonte sem virar classes Tailwind)
  * ═══════════════════════════════════════════════════════════════════ */
