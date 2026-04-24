@@ -203,37 +203,28 @@ export function Hero() {
 
   return (
     <section className="relative pt-[140px] pb-[100px] lg:pt-[160px] lg:pb-[120px] overflow-hidden">
-      {/* Aurora Background (V4 canon · g→b→p · padrão Aceternity em light mode) */}
+      {/* Aurora Background (V4 canon · g→b→p · padrão Aceternity em light mode)
+       * Intensidade média, velocidade harmônica · sem layer pulsante legado.
+       */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
         <div
           className="absolute -inset-[10px] will-change-[background-position]"
           style={{
             backgroundImage:
-              'repeating-linear-gradient(100deg, #fff 0%, #fff 7%, transparent 10%, transparent 12%, #fff 16%), repeating-linear-gradient(100deg, rgba(47,181,122,0.85) 10%, rgba(47,127,181,0.72) 25%, rgba(74,82,208,0.85) 40%, rgba(47,181,122,0.72) 55%, rgba(74,82,208,0.85) 70%)',
+              'repeating-linear-gradient(100deg, #fff 0%, #fff 7%, transparent 10%, transparent 12%, #fff 16%), repeating-linear-gradient(100deg, rgba(47,181,122,0.95) 10%, rgba(47,127,181,0.82) 25%, rgba(74,82,208,0.95) 40%, rgba(47,181,122,0.82) 55%, rgba(74,82,208,0.95) 70%)',
             backgroundSize: '300%, 200%',
             backgroundPosition: '50% 50%, 50% 50%',
-            filter: 'blur(10px)',
+            filter: 'blur(12px)',
             mixBlendMode: 'multiply',
-            opacity: 0.32,
+            opacity: 0.55,
             maskImage:
-              'radial-gradient(ellipse at 50% 10%, black 10%, transparent 70%)',
+              'radial-gradient(ellipse at 50% 8%, black 12%, transparent 72%)',
             WebkitMaskImage:
-              'radial-gradient(ellipse at 50% 10%, black 10%, transparent 70%)',
-            animation: 'aurora 60s linear infinite',
+              'radial-gradient(ellipse at 50% 8%, black 12%, transparent 72%)',
+            animation: 'aurora 28s linear infinite',
           }}
         />
       </div>
-
-      {/* Fundo pulsante secundário (acento accent-soft sutil) */}
-      <span
-        className="pointer-events-none absolute left-1/2 top-1/2 w-[900px] h-[900px] rounded-full opacity-40 hidden lg:block"
-        style={{
-          background: 'radial-gradient(circle, rgba(74,82,208,0.05) 0%, transparent 60%)',
-          animation: 'bgPulse 8s ease-in-out infinite',
-          transform: 'translate(-50%, -50%)',
-        }}
-        aria-hidden
-      />
 
       {/* Geo shapes decorativos (entry geoIn + loop geoFloat) */}
       <span
