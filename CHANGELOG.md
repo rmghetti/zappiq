@@ -67,6 +67,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - **P0-03** `fix(web)`: Replaced inflated vanity metrics with honest pre-launch data — `076736f`
 - **P0-05** `fix(web)`: Replaced fictional case studies with honest segment-based `/cases` page — `436c3e5`
-- **P0-06** `fix(web)`: Replaced placeholder WhatsApp number with real number (+55 11 94563-3305) — `447a3cc`
+- **P0-06** `fix(web)`: Replaced placeholder WhatsApp number with real number (+55 11 94563-3305 — substituído por +55 11 92616-0159 em V5.1) — `447a3cc`
 - **P0-07** `fix(web)`: Replaced `#META_PARTNER_URL` placeholder with real Meta partner directory URL — `2a04313`
 - **P0-08** `fix(web)`: Footer updated with full legal info (CNPJ, CENU address, DPO contact) — `5886f6d`
