@@ -12,24 +12,24 @@ import Link from 'next/link';
 import { Mic, Headphones, Check, Star, ArrowRight } from 'lucide-react';
 
 const INBOUND_ITEMS = [
-  'Cliente manda áudio de 1 min perguntando sobre produto',
-  'ZappIQ transcreve em segundos (Whisper OpenAI)',
-  'IA responde em texto, sem fricção',
-  'Nenhum custo extra — já vem com qualquer plano',
+  'Seu cliente manda áudio de 1 minuto perguntando sobre produto',
+  'A Iza transcreve em segundos — entende o que ele quer',
+  'Responde em texto na hora, sem pedir pra ele "digitar de novo"',
+  'Zero custo adicional — já vem incluso em qualquer plano',
 ];
 
 const OUTBOUND_PADRAO = [
-  'Voz masculina ou feminina (PT-BR neutro)',
-  'Até 30 minutos de áudio sintetizado/mês',
-  'Ideal pra saudações, confirmações, agendamentos',
-  'Sem configuração adicional',
+  'Voz masculina ou feminina em PT-BR natural',
+  'Até 30 minutos de áudio respondido/mês',
+  'Perfeito pra saudações, confirmações e agendamentos',
+  'Ativa num clique, sem configurar nada',
 ];
 
 const OUTBOUND_PREMIUM = [
-  'Voz premium com entonação natural (ElevenLabs)',
-  'Até 120 minutos de áudio sintetizado/mês',
-  'Opção de clonar a voz do atendente humano',
-  'Controle de personalidade por agente',
+  'Voz com entonação natural, praticamente humana',
+  'Até 120 minutos de áudio respondido/mês',
+  'Pode clonar a voz do seu atendente humano',
+  'Personalidade controlável por agente',
 ];
 
 /* Mini-waveform estático (5 alturas que se repetem) */
@@ -40,20 +40,20 @@ export function VozNativa() {
     <section id="voz-nativa" className="py-20 lg:py-28 bg-bg">
       <div className="zappiq-wrap">
         <div className="text-center max-w-3xl mx-auto mb-14">
-          <span className="eyebrow">Novidade V3.2 · Voz</span>
+          <span className="eyebrow">Voz no WhatsApp · texto e áudio</span>
           <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-4">
-            Voz nativa no WhatsApp.{' '}
-            <span className="text-grad">Sem integrações esquisitas.</span>
+            Voz direto no WhatsApp.{' '}
+            <span className="text-grad">Do jeito que o brasileiro conversa.</span>
           </h2>
           <p className="text-[16px] lg:text-[17px] text-muted leading-relaxed">
-            Cliente manda áudio? Sua IA entende. Quer responder por áudio? Sua IA fala.
-            Tudo na mesma conversa, custo transparente.
+            Cliente mandou áudio? A Iza entende. Quer que ela responda falando?
+            Ela fala. Tudo na mesma conversa, com preço transparente.
           </p>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-5 lg:gap-6 max-w-6xl mx-auto">
           {/* Inbound — INCLUSO */}
-          <div className="card-soft p-8 relative">
+          <div className="card-soft p-8 relative flex flex-col">
             <div className="absolute -top-3 left-7 px-3 py-1 rounded-full bg-[#2FB57A] text-white text-[11px] font-semibold tracking-wide">
               Incluso em todos os planos
             </div>
@@ -62,8 +62,8 @@ export function VozNativa() {
                 <Headphones size={20} className="text-ink" />
               </div>
               <div>
-                <h3 className="text-[22px] font-medium text-ink leading-tight tracking-tight">Voz Inbound</h3>
-                <p className="text-[12.5px] text-muted">Cliente → ZappIQ · transcrição Whisper</p>
+                <h3 className="text-[22px] font-medium text-ink leading-tight tracking-tight">Seu cliente manda áudio</h3>
+                <p className="text-[12.5px] text-muted">A Iza entende e responde na hora</p>
               </div>
             </div>
 
@@ -82,7 +82,7 @@ export function VozNativa() {
               <span className="text-[40px] font-semibold text-ink leading-none tracking-tight">R$ 0</span>
               <span className="text-[13px] text-muted">sem custo adicional</span>
             </div>
-            <ul className="space-y-2.5">
+            <ul className="space-y-2.5 flex-1">
               {INBOUND_ITEMS.map((item) => (
                 <li key={item} className="flex items-start gap-2.5 text-[13.5px] text-muted">
                   <Check size={14} className="text-[#2FB57A] flex-shrink-0 mt-0.5" strokeWidth={2.5} />
@@ -102,8 +102,8 @@ export function VozNativa() {
             >
               <Mic size={22} />
               <div>
-                <h3 className="text-[20px] font-medium leading-tight tracking-tight">Voz Outbound</h3>
-                <p className="text-[12px] text-white/85">ZappIQ → Cliente · TTS add-on opcional</p>
+                <h3 className="text-[20px] font-medium leading-tight tracking-tight">Sua IA responde em áudio</h3>
+                <p className="text-[12px] text-white/85">Ativa quando quiser · add-on opcional</p>
               </div>
             </div>
 
@@ -148,8 +148,8 @@ export function VozNativa() {
 
             <div className="bg-bg-soft px-6 py-4 border-t border-line">
               <p className="text-[11.5px] text-muted">
-                Ativação e desativação self-service no dashboard.
-                Consumo medido em segundos e exibido em tempo real.
+                Você ativa e desativa quando quiser — sem ligar pra comercial.
+                Acompanha o uso em tempo real no painel.
               </p>
             </div>
           </div>

@@ -180,14 +180,15 @@ export function ROICalculator() {
     <section className="py-20 lg:py-28 bg-bg-soft">
       <div className="zappiq-wrap">
         <div className="text-center mb-12 max-w-3xl mx-auto">
-          <span className="eyebrow">Calculadora de ROI · recomendador de tier</span>
+          <span className="eyebrow">Calculadora: quanto você economiza e ganha em 1 mês</span>
           <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-3">
-            Diga o que você tem hoje.{' '}
-            <span className="text-grad">A calculadora escolhe o plano certo.</span>
+            Diga seus números.{' '}
+            <span className="text-grad">A gente te mostra em reais quanto economiza.</span>
           </h2>
           <p className="text-[16px] text-muted leading-relaxed">
-            Ticket médio + volume + atendentes → tier recomendado, payback em dias
-            e economia no 1º ano. Zero setup fee, 14 dias grátis, sem fidelidade.
+            Ticket médio, volume de conversa e quantos atendentes você tem hoje.
+            Em segundos a calculadora mostra qual plano serve, em quantos dias
+            o investimento volta pra você e quanto você economiza no primeiro ano.
           </p>
         </div>
 
@@ -226,7 +227,7 @@ export function ROICalculator() {
               onChange={setAvgTicket}
             />
             <SliderInput
-              label="Taxa de conversão atual WhatsApp"
+              label="De cada 100 conversas hoje, quantas viram venda?"
               value={currentConversionPct}
               min={1}
               max={30}
@@ -286,15 +287,15 @@ export function ROICalculator() {
                 })}
               </div>
               <p className="text-[10.5px] text-muted mt-2 leading-relaxed">
-                Padrão: OpenAI TTS · Premium: ElevenLabs (voz clonada opcional).
-                Inbound (Whisper) incluso em todos os planos.
+                Padrão: voz sintética natural · Premium: voz praticamente humana, com opção de clonar.
+                Escutar áudio do cliente: incluso em todos os planos.
               </p>
             </div>
 
             <p className="text-[10.5px] text-muted pt-4 border-t border-line leading-relaxed">
-              <strong className="text-ink">Premissas:</strong> IA resolve {Math.round(AI_AUTOMATION_RATE * 100)}% dos atendimentos sem humano ·
-              uplift de {Math.round((CONVERSION_UPLIFT_MULTIPLIER - 1) * 100)}% com IA 24/7 ·
-              concorrente: setup de {brl(COMPETITOR_SETUP_FEE_BRL)} + mensalidade ~80% maior.
+              <strong className="text-ink">Como a conta é feita:</strong> a Iza resolve {Math.round(AI_AUTOMATION_RATE * 100)}% dos atendimentos
+              sem precisar de humano · conversão sobe {Math.round((CONVERSION_UPLIFT_MULTIPLIER - 1) * 100)}% porque você responde em segundos
+              às 3 da manhã · concorrente cobra {brl(COMPETITOR_SETUP_FEE_BRL)} de setup + mensalidade aprox. 80% maior.
             </p>
           </div>
 
@@ -333,7 +334,7 @@ export function ROICalculator() {
               {!isEnterprise && results.voiceExtra > 0 && (
                 <p className="text-[11px] text-white/80 mt-2">
                   Inclui {brl(results.basePlanPrice)} plano + {brl(results.voiceExtra)} voz{' '}
-                  {voiceOutbound === 'premium' ? 'Premium (ElevenLabs)' : 'Padrão (OpenAI TTS)'}
+                  {voiceOutbound === 'premium' ? 'Premium' : 'Padrão'}
                 </p>
               )}
               {isEnterprise && (
@@ -451,11 +452,11 @@ export function ROICalculator() {
 
             {/* Disclaimer metodológico */}
             <div className="rounded-[12px] bg-[#FEF9C3]/40 border border-[#FDE68A]/70 p-4 text-[11px] text-[#78350F] leading-relaxed">
-              <strong className="block text-[#78350F] mb-1">Metodologia e limites desta estimativa</strong>
-              Benchmarks observados em clientes beta ZappIQ entre ago/25 e fev/26. Resultados reais variam por vertical,
-              maturidade da base de conhecimento e política de handoff. Economia operacional e uplift de receita são
-              calculados independentes — não somamos em "ROI único" inflado. ROI mensal tem cap de {ROI_MONTHLY_CAP_PERCENT}%,
-              payback mínimo de {PAYBACK_MIN_DAYS} dias para absorver ramp-up.
+              <strong className="block text-[#78350F] mb-1">Como a estimativa é feita (e seus limites)</strong>
+              Números observados em clientes beta ZappIQ entre ago/25 e fev/26. O seu resultado real
+              depende do seu setor, da qualidade da base de conhecimento e de quando você passa pro humano.
+              A gente separa economia de pessoal e ganho de conversão — não inventa um "ROI único" inflado.
+              Limitamos o retorno mensal a {ROI_MONTHLY_CAP_PERCENT}% e o payback mínimo a {PAYBACK_MIN_DAYS} dias pra dar tempo da operação amadurecer.
             </div>
           </div>
         </div>

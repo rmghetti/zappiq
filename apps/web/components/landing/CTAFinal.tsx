@@ -70,12 +70,12 @@ function ExitIntentPopup() {
         </div>
 
         <h3 className="text-[22px] font-medium text-ink mb-3 tracking-tight">
-          Antes de ir{' '}
-          <span className="text-grad">veja em 2 minutos</span>
+          Espera — 60 segundos,{' '}
+          <span className="text-grad">1 demo</span>
         </h3>
         <p className="text-[14px] text-muted mb-6 leading-relaxed">
-          A ZappIQ atendendo em produção. IA, voz, dashboards — tudo rodando.
-          Sem compromisso, sem cadastro.
+          A ZappIQ atendendo um cliente de verdade. Iza respondendo em texto, em áudio,
+          agendando, qualificando. Sem cadastro, sem compromisso.
         </p>
 
         <div className="flex flex-col gap-3">
@@ -84,7 +84,7 @@ function ExitIntentPopup() {
             href="#VIDEO_DEMO_URL"
             className="btn btn-accent justify-center"
           >
-            <Play size={14} /> Ver demonstração
+            <Play size={14} /> Ver a ZappIQ em ação
           </a>
           <button
             onClick={() => setShow(false)}
@@ -136,7 +136,7 @@ export function CTAFinal() {
 
         <div className="relative zappiq-wrap max-w-3xl text-center">
           <div className="inline-flex items-center gap-2 bg-white/10 border border-white/15 text-white text-[11px] font-semibold px-3 py-1.5 rounded-full mb-6 backdrop-blur-sm uppercase tracking-[0.12em]">
-            Sua última chance de começar hoje
+            Pare de perder cliente por demora na resposta
           </div>
 
           <h2 className="text-[44px] lg:text-[60px] font-medium leading-[1.02] tracking-[-0.03em] mb-5">
@@ -154,8 +154,8 @@ export function CTAFinal() {
           </h2>
 
           <p className="text-[17px] text-white/75 mb-10 max-w-xl mx-auto leading-relaxed">
-            Ative a plataforma em 14 dias grátis. Se funcionar — e vai funcionar —
-            você escolhe a forma de pagamento. Se não, basta deixar expirar.
+            Ative a Iza em minutos. Tem 14 dias pra testar com clientes reais, sem pagar nada.
+            Se funcionar — e vai funcionar — você escolhe como pagar. Se não, é só deixar expirar.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">

@@ -17,7 +17,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, X as XIcon, Radar, Shield, Sparkles, Crown, Mic } from 'lucide-react';
+import { Check, Radar, Shield, Sparkles, Crown, Mic } from 'lucide-react';
 import { listPlans, ADDONS, getAnnualPrice, type PlanConfig } from '@zappiq/shared';
 
 const PLANS: PlanConfig[] = listPlans();
@@ -30,13 +30,6 @@ const VOICE_OUTBOUND = {
 
 type VoiceTier = 'none' | 'padrao' | 'premium';
 
-const STARTER_PRICE = PLANS[0]?.priceMonthly ?? 197;
-const COMPARISON = [
-  { without: '5 atendentes manuais', with: 'IA + 1 atendente' },
-  { without: 'R$15.000/mês em folha', with: `A partir de R$${STARTER_PRICE}/mês` },
-  { without: 'Tempo de resposta: 2h', with: 'Tempo de resposta: 30s' },
-  { without: 'Leads perdidos: ~40%', with: 'Leads recuperados: +60%' },
-];
 
 export function Pricing() {
   const [annual, setAnnual] = useState(false);
@@ -70,12 +63,14 @@ export function Pricing() {
     <section id="precos" className="py-20 lg:py-28 bg-bg">
       <div className="zappiq-wrap">
         <div className="text-center max-w-3xl mx-auto mb-8">
-          <span className="eyebrow">Preços · sem surpresas</span>
+          <span className="eyebrow">Preços claros · sem letra miúda</span>
           <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-3">
-            Um plano pra cada fase.{' '}
-            <span className="text-grad">Zero setup fee.</span>
+            Um plano pra cada tamanho.{' '}
+            <span className="text-grad">Sem pegadinha.</span>
           </h2>
-          <p className="text-[16px] text-muted">14 dias grátis · sem fidelidade · depois escolha a forma de pagamento</p>
+          <p className="text-[16px] text-muted">
+            14 dias grátis · sem fidelidade · você escolhe a forma de pagamento depois
+          </p>
         </div>
 
         {/* Toggles */}
@@ -151,8 +146,8 @@ export function Pricing() {
           </div>
         </div>
 
-        {/* Grid de 5 tiers */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4 max-w-7xl mx-auto">
+        {/* Grid de 5 tiers · md:2-col / lg:5-col */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-3 max-w-7xl mx-auto">
           {PLANS.map((plan) => {
             const basePrice = computePrice(plan);
             const radarExtra = computeRadarExtra(plan);
@@ -308,12 +303,12 @@ export function Pricing() {
           </div>
           <div className="flex-1">
             <h4 className="text-[16px] font-medium text-ink tracking-tight mb-1">
-              Radar 360° · Observabilidade de Negócio
+              Radar 360° · dashboards que viram decisão
             </h4>
             <p className="text-[13.5px] text-muted mb-3 leading-relaxed">
-              BI conversacional com cohort analysis, forecast ML, benchmarking e alertas proativos.
-              Exporta pra Power BI e Looker.{' '}
-              <strong className="text-ink">Incluso em Business e Enterprise.</strong>
+              Dashboards executivos, alertas quando algo foge do normal, previsão de vendas por IA
+              e comparativo anônimo com o seu setor. Exporta pro Power BI ou Looker.{' '}
+              <strong className="text-ink">Já vem incluso em Business e Enterprise.</strong>
             </p>
             <Link
               href="/observabilidade"
@@ -334,11 +329,12 @@ export function Pricing() {
           </div>
           <div className="flex-1">
             <h4 className="text-[16px] font-medium mb-1 tracking-tight">
-              SLA contratual 99,9% a partir de Business.
+              Uptime 99,9% em contrato a partir de Business.
             </h4>
             <p className="text-[13.5px] text-white/70 mb-3 leading-relaxed">
-              Uptime por contrato com créditos automáticos em descumprimento. Relatório mensal de disponibilidade,
-              RPO 1h / RTO 4h documentados. Enterprise inclui SOC/NOC dedicado 24/7.
+              Se a plataforma cair além do combinado, você recebe crédito automático.
+              Relatório mensal público. Recuperação completa em até 4 horas.
+              Enterprise ainda tem time de monitoramento 24/7 dedicado só pra você.
             </p>
             <Link
               href="/sla"
@@ -349,52 +345,6 @@ export function Pricing() {
           </div>
         </div>
 
-        {/* Com vs Sem ZappIQ */}
-        <div className="mt-20 max-w-4xl mx-auto">
-          <h3 className="text-[30px] lg:text-[36px] font-medium text-ink text-center mb-10 tracking-tight">
-            Com vs. Sem ZappIQ
-          </h3>
-          <div className="grid md:grid-cols-2 gap-5">
-            <div className="card-soft p-6 bg-[#FEF3F2]/30 border-[#FECDD3]/60">
-              <h4 className="text-[15px] font-medium text-[#B42318] mb-5 flex items-center gap-2 tracking-tight">
-                <XIcon size={18} /> Sem ZappIQ
-              </h4>
-              <ul className="space-y-4">
-                {COMPARISON.map((c) => (
-                  <li key={c.without} className="flex items-center gap-3 text-[13.5px] text-muted">
-                    <div className="w-6 h-6 bg-[#FEF3F2] rounded-full flex items-center justify-center flex-shrink-0">
-                      <XIcon size={11} className="text-[#B42318]" />
-                    </div>
-                    {c.without}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div
-              className="card-soft p-6"
-              style={{
-                background:
-                  'linear-gradient(135deg, rgba(47,181,122,.05) 0%, rgba(74,82,208,.05) 100%)',
-                borderColor: 'rgba(74,82,208,0.2)',
-              }}
-            >
-              <h4 className="text-[15px] font-medium text-accent mb-5 flex items-center gap-2 tracking-tight">
-                <Check size={18} /> Com ZappIQ
-              </h4>
-              <ul className="space-y-4">
-                {COMPARISON.map((c) => (
-                  <li key={c.with} className="flex items-center gap-3 text-[13.5px] text-muted">
-                    <div className="w-6 h-6 bg-accent/10 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Check size={11} className="text-accent" strokeWidth={2.5} />
-                    </div>
-                    {c.with}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
   );

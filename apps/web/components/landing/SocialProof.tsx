@@ -59,10 +59,10 @@ export function SocialProof() {
       <div className="zappiq-wrap">
         <div className="text-center mb-10">
           <h3 className="text-[17px] lg:text-[19px] font-medium text-ink mb-2 tracking-tight">
-            Integrado com as ferramentas que sua empresa já usa.
+            Roda sobre a mesma infraestrutura que empresas Fortune 500 usam.
           </h3>
           <p className="text-[13.5px] text-muted">
-            Parceiro oficial Meta · IA da Anthropic e OpenAI · dados no Brasil.
+            Integração direta com WhatsApp · IA de ponta · seus dados processados no Brasil.
           </p>
         </div>
 

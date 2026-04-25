@@ -67,7 +67,7 @@ export function IzaEstaAqui() {
           {/* Esquerda — copy + CTA */}
           <div>
             <div className="inline-flex items-center gap-2 bg-white/10 border border-white/15 text-white text-[11px] font-semibold px-3 py-1.5 rounded-full mb-5 backdrop-blur-sm uppercase tracking-[0.12em]">
-              <Sparkles size={12} /> Dogfooding ao vivo
+              <Sparkles size={12} /> Teste você mesmo · agora
             </div>
             <h2 className="text-[40px] lg:text-[56px] font-medium leading-[1.02] tracking-[-0.03em] mb-5">
               A Iza está aqui.
@@ -79,16 +79,16 @@ export function IzaEstaAqui() {
                     'linear-gradient(135deg, #2FB57A 0%, #2F7FB5 45%, #8AB7E9 100%)',
                 }}
               >
-                E ela usa ZappIQ.
+                E ela É a ZappIQ atendendo você.
               </span>
             </h2>
             <p className="text-[17px] text-white/80 leading-relaxed mb-4">
-              A Iza é nossa agente de IA oficial. Tira dúvidas sobre produto, preço, trial e implementação
-              no WhatsApp, 24/7. Quem atende você é a própria ZappIQ rodando no ZappIQ.
+              A Iza é a nossa IA oficial. Pergunta sobre produto, preço, trial, implementação —
+              ela responde no WhatsApp, 24/7. Quem atende você agora é a própria ZappIQ rodando no ZappIQ.
             </p>
             <p className="text-[14px] text-white/65 leading-relaxed mb-8">
-              Se a Iza não consegue resolver, escala pra um humano do time. Se ela responde bem,
-              você já está testando o produto antes de comprar. Prova pública de que funciona.
+              Se ela não consegue resolver, chama um humano do time. Se ela resolve bem,
+              você já viu o produto funcionar antes de comprar. Prova pública, ao vivo.
             </p>
 
             <a

@@ -13,18 +13,18 @@ import { X, Check, ArrowRight, Sparkles } from 'lucide-react';
 
 const MERCADO = [
   'Reunião de kickoff com consultor (R$ 1.500)',
-  'Levantamento de base de conhecimento (R$ 2.000)',
+  'Tem que mapear FAQ, catálogo e políticas manualmente (R$ 2.000)',
   'Configuração e integração inicial (R$ 2.500)',
   'Treinamento da equipe (R$ 1.000)',
   '4 a 8 semanas até entrar em produção',
 ];
 
 const ZAPPIQ = [
-  'Survey digital guiado (30–90 min, self-service)',
-  'Você mesmo sobe os PDFs e documentos',
-  'IA é calibrada automaticamente no dashboard',
-  'Score de prontidão de 0 a 100 em tempo real',
-  'Em minutos você está operando no WhatsApp',
+  'Formulário guiado de 30 a 90 minutos — você mesmo faz',
+  'Você mesmo sobe seus documentos (PDF, planilha, site)',
+  'A Iza é calibrada automaticamente no painel',
+  'Score de prontidão de 0 a 100, você vê em tempo real',
+  'Em minutos você está atendendo cliente no WhatsApp',
 ];
 
 export function OnboardingZero() {
@@ -32,14 +32,15 @@ export function OnboardingZero() {
     <section id="onboarding-zero" className="py-20 lg:py-28 bg-bg-soft">
       <div className="zappiq-wrap">
         <div className="text-center max-w-3xl mx-auto mb-14">
-          <span className="eyebrow">Novidade V3.2 · Onboarding</span>
+          <span className="eyebrow">Setup grátis · sem consultor</span>
           <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-4">
-            Setup fee é fraude intelectual.{' '}
-            <span className="text-grad">A gente cobra R$ 0.</span>
+            Setup fee é coisa do passado.{' '}
+            <span className="text-grad">Aqui você paga R$ 0 pra começar.</span>
           </h2>
           <p className="text-[16px] lg:text-[17px] text-muted leading-relaxed">
-            O mercado cobra R$ 3–8k pra "treinar a IA com seus dados". Em 2026 isso é atrito.
-            Subir um PDF em um vector store custa US$ 0,02. Você faz sozinho em minutos.
+            O mercado cobra de R$ 3 a 8 mil só pra "treinar a IA com seus dados". Em 2026 isso é
+            atrito desnecessário. Você mesmo sobe seus documentos em minutos, e a Iza aprende
+            seu negócio sozinha. Setup fee: zero.
           </p>
         </div>
 

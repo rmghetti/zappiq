@@ -20,11 +20,28 @@ const EXTRA_BROADCASTS_PRICE = ADDONS.EXTRA_BROADCASTS.priceMonthly!;
 type FaqItem = { q: string; a: string; group: string };
 
 const FAQS: FaqItem[] = [
+  // ─────────────────────────── Negócio ──────────────────────────────────
+  {
+    group: 'Negócio',
+    q: 'Funciona pro meu setor?',
+    a: 'Funciona em qualquer negócio que atende cliente por WhatsApp: clínicas (médica, odonto, estética), varejo, e-commerce, imobiliária, autoescola, serviços, salão, academia, escritório de advocacia, contabilidade, hotelaria, agência. A Iza aprende o seu negócio a partir dos SEUS documentos — não é um script genérico pronto.',
+  },
+  {
+    group: 'Negócio',
+    q: 'Preciso mudar meu número de WhatsApp?',
+    a: 'Não. Você conecta o seu número atual — comercial ou pessoal de empresa — à plataforma via integração oficial com a Meta. O cliente continua te mandando mensagem no mesmo número de sempre. Seu número é seu, a gente só liga a IA nele.',
+  },
+  {
+    group: 'Negócio',
+    q: 'Quanto tempo até eu ver os primeiros resultados?',
+    a: 'Nas primeiras 24 horas já vê: a Iza responde em segundos, não deixa cliente esperando, dispara agendamento na hora. Resultado em reais (mais venda, menos folha) costuma aparecer na 2ª a 4ª semana — quando o volume do trial vira padrão de operação.',
+  },
+
   // ──────────────────────────── Onboarding ──────────────────────────────
   {
     group: 'Onboarding',
     q: 'Preciso de conhecimento técnico para usar o ZappIQ?',
-    a: 'Não. A plataforma foi desenhada para operação não-técnica. Você sobe PDFs, cadastra pares de pergunta e resposta, conecta seu número WhatsApp e acompanha a prontidão da IA num score de 0 a 100.',
+    a: 'Não. A plataforma foi desenhada pra ser operada sem time de TI. Você sobe PDFs, cadastra pares de pergunta e resposta, conecta seu número WhatsApp e acompanha a prontidão da IA num score de 0 a 100 em tempo real.',
   },
   {
     group: 'Onboarding',
@@ -67,45 +84,45 @@ const FAQS: FaqItem[] = [
   // ─────────────────────────── Voz Nativa ───────────────────────────────
   {
     group: 'Voz Nativa',
-    q: 'A IA entende áudios de WhatsApp?',
-    a: 'Sim, em todos os planos. Transcrição via Whisper (OpenAI), sem custo adicional. Cliente manda áudio, a IA entende e responde em texto.',
+    q: 'A IA entende áudio que o cliente manda no WhatsApp?',
+    a: 'Entende. Já vem em todos os planos, sem custo adicional. Cliente manda áudio de 30 segundos ou 2 minutos — a Iza transcreve em segundos, entende o que ele quer e responde na hora, em texto.',
   },
   {
     group: 'Voz Nativa',
-    q: 'A IA consegue responder por áudio?',
-    a: 'Sim, via add-on opcional de voz outbound (TTS). Dois tiers: R$ 197/mês (voz padrão OpenAI, até 30 min/mês) ou R$ 597/mês (ElevenLabs premium, até 120 min/mês, opção de voz clonada).',
+    q: 'A IA consegue responder por áudio também?',
+    a: 'Consegue, como add-on opcional. Dois preços: R$ 197/mês (voz padrão, até 30 min de áudio respondido/mês — ótimo pra saudações, confirmações e agendamentos) ou R$ 597/mês (voz premium com entonação natural quase humana, até 120 min/mês, e pode clonar a voz do seu atendente).',
   },
   {
     group: 'Voz Nativa',
     q: 'Qual a diferença entre voz padrão e premium?',
-    a: 'Padrão usa vozes sintéticas neutras em PT-BR, ótima para saudações, confirmações e agendamentos. Premium usa ElevenLabs com entonação natural, permite clonar a voz do atendente humano da marca e controle fino de personalidade por agente.',
+    a: 'A padrão é perfeita pro dia-a-dia — "Oi, seu agendamento tá confirmado pras 14h". Funciona bem e é barata. A premium tem entonação natural, quase humana, dá pra clonar a voz do seu atendente e ajustar a personalidade por canal. Indicada pra marcas que fazem da voz parte da experiência.',
   },
   {
     group: 'Voz Nativa',
-    q: 'Posso ativar e desativar voz outbound quando quiser?',
-    a: 'Sim, pelo dashboard. Ativação e desativação são self-service, sem contato com comercial. Consumo de minutos é exibido em tempo real.',
+    q: 'Posso ligar e desligar a voz quando quiser?',
+    a: 'Pode. Um clique no painel liga, outro clique desliga. Sem ligar pro comercial, sem contrato novo. Você acompanha quantos minutos já foram consumidos em tempo real.',
   },
 
   // ─────────────────────────── Tecnologia ───────────────────────────────
   {
     group: 'Tecnologia',
-    q: 'O ZappIQ é BSP da Meta?',
-    a: 'Não. Operamos sobre a infraestrutura oficial da WhatsApp Business Cloud API da Meta, sem intermediário BSP. Isso significa menor latência, custos repassados à tabela oficial da Meta e sem camadas de reempacotamento.',
+    q: 'Como é a relação do ZappIQ com a Meta?',
+    a: 'Conexão oficial, direta com o WhatsApp da Meta — sem atravessador. Isso significa resposta mais rápida pro seu cliente, custo repassado direto da tabela oficial e seu número continua sendo seu (a gente não é dono do seu WhatsApp, você é).',
   },
   {
     group: 'Tecnologia',
     q: 'Como funciona a IA do ZappIQ?',
-    a: 'Usamos os modelos Claude (Anthropic) em produção — Claude Sonnet para resposta em tempo real e Claude Opus para tarefas complexas. A Anthropic opera sob DPA assinado: zero treinamento nos seus dados, retenção efêmera, isolamento por tenant.',
+    a: 'A Iza roda sobre a mesma IA de ponta que empresas Fortune 500 usam no mundo. A gente tem contrato que garante: seus dados nunca viram treino, não ficam armazenados lá fora e são isolados de qualquer outro cliente. Se um provedor cair, outro assume no automático — sua operação não para.',
   },
   {
     group: 'Tecnologia',
-    q: 'Quem são os sub-processadores do ZappIQ?',
-    a: 'Anthropic (IA Claude), OpenAI (Whisper/TTS para voz), Meta (Cloud API), Cloudflare (CDN/webhooks), Stripe (pagamentos), Resend (e-mails transacionais), Supabase (banco de dados) e AWS sa-east-1 (infraestrutura). Lista completa e atualizada em /legal/privacidade §4.',
+    q: 'Com quais empresas o ZappIQ divide operação?',
+    a: 'A gente opera com parceiros de primeira linha: provedores globais de IA, Meta (pra infra do WhatsApp), Stripe (pra cobrança), AWS no Brasil (pra dados) e alguns serviços técnicos de apoio. A lista completa e atualizada fica em /legal/privacidade, seção 4 — seu jurídico pode conferir a qualquer momento.',
   },
   {
     group: 'Tecnologia',
     q: 'Onde meus dados ficam armazenados?',
-    a: 'Banco primário em AWS São Paulo (sa-east-1). Transferências internacionais para Anthropic/OpenAI/Cloudflare acontecem sob Cláusulas Padrão (LGPD Art. 33 IV) para cada invocação de IA, sem persistência externa.',
+    a: 'Banco primário em servidor brasileiro (AWS São Paulo). Quando precisamos consultar IA fora do país, isso acontece sob cláusulas contratuais padrão exigidas pela LGPD, apenas pra cada consulta — nada fica armazenado lá fora.',
   },
 
   // ───────────────────────────── LGPD ───────────────────────────────────
@@ -117,7 +134,7 @@ const FAQS: FaqItem[] = [
   {
     group: 'LGPD',
     q: 'Quem é o DPO do ZappIQ?',
-    a: 'Rodrigo Ghetti, Encarregado de Dados — contato direto em rodrigo.ghetti@zappiq.com.br. Atendimento em 15 dias úteis (48h nos planos Business e Enterprise). Em incidente de segurança, notificamos ANPD e controladores em até 72h (Art. 48).',
+    a: 'Rodrigo Ghetti, Encarregado de Dados — contato direto em rodrigo.ghetti@zappiq.com.br. Resposta em 15 dias úteis (48h nos planos Business e Enterprise). Em caso de incidente crítico, notificamos autoridade e cliente em até 72 horas, como a LGPD exige.',
   },
   {
     group: 'LGPD',
@@ -129,22 +146,22 @@ const FAQS: FaqItem[] = [
   {
     group: 'Planos',
     q: 'Qual a diferença entre Radar Insights e Radar 360°?',
-    a: `Radar Insights é o módulo de analytics nativo (incluso em todos os planos) com métricas operacionais. Radar 360° é o BI conversacional premium — cohort analysis, previsão de pipeline por ML, benchmarking, alertas proativos, exportação Power BI/Looker. Incluso nos planos Business e Enterprise, add-on opcional de R$ ${RADAR_360_PRICE}/mês nos planos Starter, Growth e Scale.`,
+    a: `Radar Insights é o painel de métricas que já vem em todos os planos — quantos atendimentos, conversões, tempo médio, etc. Radar 360° é o BI executivo: dashboards do jeito que você precisa, alertas quando algo foge do normal, previsão de vendas por IA, comparativo anônimo com o seu setor e exportação pro Power BI/Looker. Já vem incluso em Business e Enterprise; nos planos menores vira add-on opcional de R$ ${RADAR_360_PRICE}/mês.`,
   },
   {
     group: 'Planos',
     q: 'O que diferencia os planos Business e Enterprise?',
-    a: `Business (R$ ${BUSINESS_PRICE.toLocaleString('pt-BR')}/mês) já inclui SLA contratual 99,9% com créditos automáticos, Radar 360°, SSO SAML/OIDC, DPO contato direto (48h DSR), CSM dedicado, 20h/mês de integração customizada e retenção de logs de 24 meses. Enterprise (sob consulta, a partir de R$ ${ENTERPRISE_MIN.toLocaleString('pt-BR')}/mês) adiciona infraestrutura isolada, SOC/NOC dedicado 24/7, 40h/mês de integração, retenção de logs até 5 anos e contratos customizados (MSA, DPA específicos).`,
+    a: `Business (R$ ${BUSINESS_PRICE.toLocaleString('pt-BR')}/mês) já vem com uptime 99,9% em contrato e crédito automático se cair, Radar 360° incluso, login único corporativo, contato direto com o DPO (resposta em 48h), gerente de conta dedicado, 20h por mês pra integrações customizadas e histórico de 24 meses. Enterprise (sob consulta, a partir de R$ ${ENTERPRISE_MIN.toLocaleString('pt-BR')}/mês) adiciona ambiente isolado só seu, time de monitoramento dedicado 24/7, 40h por mês pra integrações, histórico de até 5 anos e contratos sob medida.`,
   },
   {
     group: 'Planos',
     q: 'Quantas mensagens posso enviar em cada plano?',
-    a: `Starter inclui 500 disparos/mês, Growth 5.000, Scale 20.000, Business 60.000 e Enterprise ilimitado. Pacotes adicionais de 10.000 disparos custam R$ ${EXTRA_BROADCASTS_PRICE}. Custos de conversação da Meta são cobrados à parte conforme tabela oficial da Cloud API.`,
+    a: `Starter inclui 500 disparos por mês, Growth 5.000, Scale 20.000, Business 60.000 e Enterprise ilimitado. Precisou de mais? Pacote de 10 mil disparos extras por R$ ${EXTRA_BROADCASTS_PRICE}. A tarifa que a Meta cobra pelas conversas é repassada direto da tabela oficial dela — sem remarcação.`,
   },
   {
     group: 'Planos',
-    q: 'Existe SLA formal?',
-    a: 'Sim, a partir do plano Business. 99,9% de uptime contratual com créditos automáticos de 10/25/50% conforme severidade. RPO 1h e RTO 4h documentados. Relatório mensal em status.zappiq.com.br. Starter, Growth e Scale têm disponibilidade best-effort com alvo interno de 99,5%.',
+    q: 'Existe garantia de uptime no contrato?',
+    a: 'Sim, a partir do plano Business. 99,9% de uptime escrito em contrato, com crédito automático de 10%, 25% ou 50% da mensalidade se cair além do combinado. Recuperação completa em até 4 horas. Relatório mensal público em status.zappiq.com.br. Starter, Growth e Scale rodam na mesma infra, mas sem SLA contratual (alvo interno de 99,5%).',
   },
 
   // ────────────────────────────── Iza ───────────────────────────────────

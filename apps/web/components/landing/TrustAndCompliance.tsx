@@ -14,45 +14,45 @@ import { Shield, Lock, Server, Activity, FileCheck, Radar, ArrowRight } from 'lu
 const PILLARS = [
   {
     icon: Shield,
-    title: 'LGPD Compliance by design',
+    title: 'LGPD resolvida. Pronta pra auditoria.',
     summary:
-      'ZappIQ foi construída desde o primeiro dia com LGPD no core. Não é checkbox, é arquitetura.',
+      'Não é checkbox bonito na landing. É LGPD no núcleo do produto desde o dia 1.',
     points: [
-      'Art. 18 · DSR com SLA de 15 dias',
-      'Art. 37 · ROP auditável',
-      'Art. 46 · segurança documentada',
-      'Art. 48 · incidente em ≤72h',
-      'DPO disponível para contato direto',
+      'Seu cliente pede pra apagar? Resolvido em até 15 dias',
+      'Registro de quem mexeu em quê, auditável',
+      'Segurança documentada pra mostrar pro jurídico',
+      'Incidente crítico? Avisamos em até 72 horas',
+      'Encarregado de dados (DPO) com contato direto',
     ],
     href: '/lgpd',
     cta: 'Ver conformidade LGPD',
   },
   {
     icon: Activity,
-    title: 'SLA contratual 99,9% (Enterprise)',
+    title: 'Uptime 99,9% — escrito em contrato.',
     summary:
-      'Uptime garantido por contrato com créditos automáticos. RPO 1h, RTO 4h, formalmente documentados.',
+      'Se a plataforma cair além do combinado, você recebe crédito automático. Sem precisar brigar.',
     points: [
-      'Relatório mensal público de uptime',
-      'Créditos 10% / 25% / 50% por severidade',
-      'Deploy rolling · zero downtime',
-      'Point-in-time recovery 30 dias',
-      'Backup cifrado offsite semanal',
+      'Relatório mensal de disponibilidade, público',
+      'Créditos automáticos de 10% a 50% por incidente',
+      'Atualizações sem tirar sua operação do ar',
+      'Recuperação completa em até 4 horas',
+      'Backup criptografado, fora do site, toda semana',
     ],
     href: '/sla',
     cta: 'Ver termos do SLA',
   },
   {
     icon: Radar,
-    title: 'Observabilidade que vira decisão',
+    title: 'Dashboards que viram decisão.',
     summary:
-      'Radar 360° transforma conversas em BI executável. Cohort analysis, forecast ML, benchmarking — incluso no Enterprise.',
+      'O Radar 360° transforma suas conversas em BI executável. Incluído nos planos Business e Enterprise.',
     points: [
-      'Dashboards executivos customizáveis',
-      'Alertas proativos (queda/picos)',
-      'Forecast de pipeline via ML',
-      'Benchmarking anônimo por segmento',
-      'Export pra Power BI e Looker',
+      'Dashboards executivos do jeito que você precisa',
+      'Alertas automáticos quando algo foge do normal',
+      'Previsão de vendas por IA',
+      'Comparativo anônimo com o seu setor',
+      'Exporta pra Power BI e Looker sem dor',
     ],
     href: '/observabilidade',
     cta: 'Conhecer Radar 360°',
@@ -60,12 +60,12 @@ const PILLARS = [
 ];
 
 const CERTIFICATIONS = [
-  { icon: Lock, label: 'Criptografia AES-256 em repouso' },
-  { icon: Lock, label: 'TLS 1.3 em trânsito' },
+  { icon: Lock, label: 'Dados criptografados no banco' },
+  { icon: Lock, label: 'Conexão criptografada ponta a ponta' },
   { icon: Server, label: 'Servidores 100% no Brasil (São Paulo)' },
-  { icon: FileCheck, label: 'Backup cifrado + PITR 30 dias' },
-  { icon: Shield, label: 'Isolamento multi-tenant (RLS)' },
-  { icon: Activity, label: 'Auditoria completa de acessos' },
+  { icon: FileCheck, label: 'Backup seguro + restauração até 30 dias atrás' },
+  { icon: Shield, label: 'Seus dados isolados dos de outros clientes' },
+  { icon: Activity, label: 'Registro auditável de todos os acessos' },
 ];
 
 export function TrustAndCompliance() {
@@ -75,12 +75,12 @@ export function TrustAndCompliance() {
         <div className="text-center max-w-3xl mx-auto mb-14">
           <span className="eyebrow">Segurança · Conformidade · Confiança</span>
           <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-4">
-            Feita pra empresas que não podem parar.{' '}
-            <span className="text-grad">E precisam responder pra auditoria.</span>
+            Segurança e conformidade que seu jurídico aprova.{' '}
+            <span className="text-grad">Operação que seu CEO confia.</span>
           </h2>
           <p className="text-[16px] text-muted leading-relaxed">
-            ZappIQ não é canal de atendimento. É infraestrutura crítica.
-            Por isso tratamos segurança, conformidade e observabilidade como produto — não como checkbox.
+            ZappIQ não é um "chatbotzinho". É infraestrutura crítica pro seu negócio.
+            Por isso segurança, LGPD e visibilidade são produto aqui — não um capricho de marketing.
           </p>
         </div>
 
@@ -142,10 +142,10 @@ export function TrustAndCompliance() {
             }}
           />
           <h3 className="text-[22px] lg:text-[26px] font-medium text-white text-center mb-2 tracking-tight relative">
-            Stack de segurança técnica.
+            Por baixo do capô: segurança de banco.
           </h3>
           <p className="text-[13.5px] text-white/60 text-center mb-10 relative">
-            Auditável. Documentação sob NDA para prospects Enterprise.
+            Auditável. Documentação completa disponível para prospects Enterprise sob NDA.
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 relative">
             {CERTIFICATIONS.map((c) => {

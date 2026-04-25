@@ -16,14 +16,14 @@ const COLUMNS = [
   {
     title: 'Produto',
     links: [
-      { label: 'ZappIQCore', href: '/#produtos' },
-      { label: 'PulseAI', href: '/#produtos' },
-      { label: 'SparkCampaigns', href: '/#produtos' },
-      { label: 'RadarInsights', href: '/#produtos' },
-      { label: 'NexusCRM', href: '/#produtos' },
-      { label: 'ForgeStudio', href: '/#produtos' },
-      { label: 'EchoCopilot', href: '/#produtos' },
-      { label: 'ShieldCompliance', href: '/#produtos' },
+      { label: 'Central de conversas', href: '/#produtos' },
+      { label: 'Iza · IA 24/7', href: '/#produtos' },
+      { label: 'Campanhas WhatsApp', href: '/#produtos' },
+      { label: 'Dashboard gerencial', href: '/#produtos' },
+      { label: 'CRM no WhatsApp', href: '/#produtos' },
+      { label: 'Automações visuais', href: '/#produtos' },
+      { label: 'Copiloto para atendentes', href: '/#produtos' },
+      { label: 'Conformidade LGPD', href: '/#produtos' },
       { label: 'Radar 360° (add-on)', href: '/observabilidade' },
     ],
   },
@@ -79,11 +79,11 @@ const COLUMNS = [
 ];
 
 const SECURITY_BADGES = [
-  { icon: Shield, label: 'Conforme LGPD (Lei 13.709/18)' },
-  { icon: Lock, label: 'Criptografia AES-256 + TLS 1.3' },
-  { icon: Server, label: 'Dados hospedados no Brasil' },
-  { icon: Activity, label: 'SLA 99,9% contratual (Enterprise)' },
-  { icon: Radar, label: 'Observabilidade de negócio (Radar 360°)' },
+  { icon: Shield, label: 'LGPD no núcleo do produto' },
+  { icon: Lock, label: 'Dados criptografados ponta a ponta' },
+  { icon: Server, label: 'Servidores 100% no Brasil' },
+  { icon: Activity, label: 'Uptime 99,9% em contrato (Business)' },
+  { icon: Radar, label: 'Dashboards que viram decisão (Radar 360°)' },
 ];
 
 export function Footer() {
@@ -216,8 +216,8 @@ export function Footer() {
               </Link>
             </p>
             <p className="text-[10.5px] text-white/30 mt-1">
-              DPO contatável diretamente conforme LGPD Art. 41. Prazo de resposta: 15 dias úteis
-              (48h planos Business/Enterprise).
+              Encarregado de Dados com contato direto, como a LGPD exige. Resposta em até 15 dias
+              úteis (48h nos planos Business/Enterprise).
             </p>
           </div>
 
