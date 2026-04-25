@@ -24,7 +24,7 @@ export function WhatsAppButton() {
     sessionStorage.setItem('zappiq_chat_bubble_dismissed', 'true');
   };
 
-  const whatsappUrl = `https://wa.me/5511945633305?text=${encodeURIComponent(WELCOME_MESSAGE)}`;
+  const whatsappUrl = `https://wa.me/5511926160159?text=${encodeURIComponent(WELCOME_MESSAGE)}`;
 
   return (
     <>

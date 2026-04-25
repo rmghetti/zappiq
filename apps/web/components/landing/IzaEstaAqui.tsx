@@ -15,7 +15,7 @@ import { Sparkles, Send, ArrowRight } from 'lucide-react';
 
 const IZA_WA_URL =
   process.env.NEXT_PUBLIC_IZA_WA_URL ||
-  'https://wa.me/5511945633305?text=Oi%20Iza!%20Quero%20conhecer%20o%20ZappIQ.';
+  'https://wa.me/5511926160159?text=Oi%20Iza!%20Quero%20conhecer%20o%20ZappIQ.';
 
 const SUGGESTED_PROMPTS = [
   'Quanto custa o plano Growth?',
