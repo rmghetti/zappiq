@@ -47,7 +47,7 @@ const SCENARIOS: Scenario[] = [
     name: 'Horizonte Imóveis',
     initials: 'HI',
     grad: 'linear-gradient(135deg,#4A52D0,#6B74E8)',
-    sub: 'resposta em 1s · IA Pulse',
+    sub: 'resposta em 1s · IA Iza',
     script: [
       { role: 'me', text: 'Busco apartamento 2 quartos Moema até 850k', dur: 2200 },
       { role: 'ia', text: 'Ótimo! Separei <b>4 imóveis</b> com seu perfil. O mais bem avaliado: <b>R$ 795.000</b> · 68m² · reformado · 1 vaga. Quer ver fotos?', dur: 2900 },
@@ -86,7 +86,7 @@ const SCENARIOS: Scenario[] = [
     name: 'Moda Viva',
     initials: 'MV',
     grad: 'linear-gradient(135deg,#10B981,#3B82F6)',
-    sub: 'online · IA Nexus',
+    sub: 'online · IA Iza',
     script: [
       { role: 'me', text: 'Meu pedido #48812 já saiu?', dur: 1800 },
       { role: 'ia', text: 'Saiu sim ✓ Saiu do CD às <b>08:14</b>, está em <b>Osasco · SP</b>. Previsão de entrega: <b>hoje até 18h</b>.', dur: 2800 },
@@ -269,17 +269,17 @@ export function Hero() {
           <div className="animate-slide-up">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-soft border border-line text-[12px] text-muted mb-6">
               <span className="w-2 h-2 rounded-full bg-grad" />
-              Parceiro oficial Meta · Cloud API direto · LGPD-first
+              Integração oficial WhatsApp · dados no Brasil · sem fidelidade
             </div>
 
             <h1 className="text-[44px] sm:text-[56px] lg:text-[72px] leading-[1.0] tracking-[-0.045em] font-semibold text-ink mb-6">
-              A plataforma de IA completa para <span className="text-grad">WhatsApp Business</span>.
+              Atenda no WhatsApp 24 horas por dia. <span className="text-grad">Sem contratar mais ninguém.</span>
             </h1>
 
             <p className="text-[17px] lg:text-[18.5px] text-muted leading-[1.55] max-w-[560px] mb-8">
-              Pulse AI atende 24/7 em texto e voz. <b className="text-ink">Onboarding zero</b> —
-              sem consultor, sem setup fee. <b className="text-ink">14 dias grátis</b> e depois
-              você escolhe a forma de pagamento. Cloud API direto Meta, dados 100% no Brasil.
+              A <b className="text-ink">Iza</b> — sua IA treinada com o próprio negócio — atende, tira dúvidas,
+              agenda e qualifica lead no WhatsApp, 24/7, em texto e em áudio.
+              Ative em minutos, teste <b className="text-ink">14 dias grátis</b> e decide depois.
             </p>
 
             <div className="flex flex-wrap gap-3 mb-8">
@@ -293,38 +293,32 @@ export function Hero() {
 
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-muted">
               <span className="inline-flex items-center gap-1.5">
-                <span className="text-g1 font-semibold">✓</span> Sem cartão
+                <span className="text-g1 font-semibold">✓</span> Sem cartão no trial
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="text-g1 font-semibold">✓</span> Setup em 90 min
+                <span className="text-g1 font-semibold">✓</span> Cancela quando quiser
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="text-g1 font-semibold">✓</span> Cancela em 1 clique
+                <span className="text-g1 font-semibold">✓</span> Dados no Brasil
               </span>
             </div>
           </div>
 
           {/* Coluna direita: iPhone WhatsApp demo */}
           <div className="relative flex justify-center lg:justify-end">
-            {/* Badges flutuantes (escondidos no mobile) */}
+            {/* Badges flutuantes (escondidos no mobile) — 1 esq/1 dir para equilíbrio visual */}
             <div
-              className="hidden md:flex absolute z-20 top-8 -left-4 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
+              className="hidden md:flex absolute z-20 top-10 -left-4 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
               style={{ animation: 'badgeFloat 5s ease-in-out infinite' }}
             >
               <span className="w-2 h-2 rounded-full bg-g1 animate-pulse" />
-              Agendado · 12s
+              Consulta agendada em 12 segundos
             </div>
             <div
-              className="hidden md:flex absolute z-20 top-1/2 -right-4 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
-              style={{ animation: 'badgeFloat 5s ease-in-out infinite', animationDelay: '1.5s' }}
-            >
-              Confiança IA <b className="text-grad ml-0.5">96%</b>
-            </div>
-            <div
-              className="hidden md:flex absolute z-20 bottom-12 -left-2 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
+              className="hidden md:flex absolute z-20 bottom-16 -right-4 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
               style={{ animation: 'badgeFloat 4.5s ease-in-out infinite', animationDelay: '0.8s' }}
             >
-              Lead score <b className="text-accent ml-0.5">89/100</b>
+              Lead qualificado <b className="text-accent ml-0.5">automaticamente</b>
             </div>
 
             {/* iPhone frame */}

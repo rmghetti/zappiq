@@ -33,12 +33,12 @@ export function PorQueZappIQ() {
         <div className="text-center max-w-3xl mx-auto mb-14">
           <span className="eyebrow">Por que ZappIQ</span>
           <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-4">
-            Oito decisões de arquitetura.{' '}
-            <span className="text-grad">Zero feature cosmética.</span>
+            Oito motivos pra escolher ZappIQ.{' '}
+            <span className="text-grad">Todos viram dinheiro no seu caixa.</span>
           </h2>
           <p className="text-[16px] lg:text-[17px] text-muted leading-relaxed">
-            Não vendemos promessa. Vendemos escolhas de engenharia, contrato com a Meta
-            e modelo de preço que não te surpreende no boleto do mês que vem.
+            A gente não vende promessa bonita. A gente vende escolha técnica séria,
+            contrato direto com o WhatsApp e preço que não te pega de surpresa no final do mês.
           </p>
         </div>
 
@@ -53,22 +53,23 @@ export function PorQueZappIQ() {
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">01 · Infra</span>
             </div>
             <h3 className="text-[24px] lg:text-[28px] font-medium text-ink leading-tight tracking-tight mb-3">
-              Cloud API direto da Meta. Sem BSP no meio.
+              Integração oficial com o WhatsApp. Seu número é seu.
             </h3>
             <p className="text-[14.5px] text-muted leading-relaxed mb-6">
-              Você é titular do seu WABA. Zero markup de intermediário. Zero risco de perder
-              a conta se trocarmos de provedor. Suporte vem direto da Meta quando precisa.
+              Seu WhatsApp, sua conta, seu nome. A gente liga direto na infraestrutura oficial —
+              sem atravessador, sem taxa de intermediário, sem risco de perder seu número se
+              mudarmos de fornecedor. E quando precisar de suporte, é direto.
             </p>
             {/* mini-visual: fluxo arquitetural */}
             <div className="flex items-center gap-3 text-[11.5px] font-mono text-muted">
               <div className="px-3 py-2 rounded-[10px] border border-line bg-white">Seu cliente</div>
               <div className="flex-1 h-px bg-gradient-to-r from-line via-accent/40 to-line" />
-              <div className="px-3 py-2 rounded-[10px] bg-grad text-white font-medium">Meta Cloud API</div>
+              <div className="px-3 py-2 rounded-[10px] bg-grad text-white font-medium">WhatsApp oficial</div>
               <div className="flex-1 h-px bg-gradient-to-r from-line via-accent/40 to-line" />
               <div className="px-3 py-2 rounded-[10px] border border-line bg-white">ZappIQ</div>
             </div>
             <div className="mt-3 text-[11px] text-muted">
-              <span className="text-[#2FB57A]">✓</span> Parceiro oficial Meta · sem camada adicional
+              <span className="text-[#2FB57A]">✓</span> Integração oficial direta — sem camada no meio
             </div>
           </div>
 
@@ -81,16 +82,15 @@ export function PorQueZappIQ() {
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">02 · Modelos</span>
             </div>
             <h3 className="text-[20px] lg:text-[22px] font-medium text-ink leading-tight tracking-tight mb-3">
-              Claude Sonnet & GPT-4. Em produção.
+              A mesma IA que Fortune 500 usa. Pro seu negócio.
             </h3>
             <p className="text-[13.5px] text-muted leading-relaxed mb-5">
-              Mesmos modelos que Fortune 500 roda. Zero treinamento nos seus dados.
-              Fallback automático entre provedores.
+              A Iza roda sobre a IA mais avançada do planeta — a mesma que grandes empresas
+              globais usam. Seus dados não viram treino. E se um provedor cair, o outro assume.
             </p>
             <div className="flex gap-2 flex-wrap">
-              <span className="px-2.5 py-1 rounded-full border border-line text-[11px] text-ink font-medium">Anthropic Claude</span>
-              <span className="px-2.5 py-1 rounded-full border border-line text-[11px] text-ink font-medium">OpenAI GPT-4</span>
-              <span className="px-2.5 py-1 rounded-full bg-bg-soft text-[11px] text-muted">+ fallback auto</span>
+              <span className="px-2.5 py-1 rounded-full border border-line text-[11px] text-ink font-medium">IA de classe mundial</span>
+              <span className="px-2.5 py-1 rounded-full bg-bg-soft text-[11px] text-muted">Nunca cai</span>
             </div>
           </div>
         </div>
@@ -106,16 +106,17 @@ export function PorQueZappIQ() {
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">03 · Compliance</span>
             </div>
             <h3 className="text-[18px] font-medium text-ink leading-tight tracking-tight mb-2">
-              LGPD desde o onboarding.
+              LGPD resolvida. Seu jurídico agradece.
             </h3>
             <p className="text-[13px] text-muted leading-relaxed mb-4">
-              DPO acessível, sub-processadores listados, DSR self-service em até 48h úteis.
-              DPA assinável em 2 cliques.
+              A gente nasceu LGPD-first. Contrato de privacidade (DPA) pronto em 2 cliques,
+              encarregado de dados acessível, e seu cliente pode pedir pra apagar os dados dele
+              em 48 horas — tudo pela plataforma.
             </p>
             <ul className="space-y-1.5 text-[12px] text-muted">
-              <li className="flex items-center gap-2"><Check size={12} className="text-[#2FB57A]" /> Art. 18 · direitos do titular</li>
-              <li className="flex items-center gap-2"><Check size={12} className="text-[#2FB57A]" /> Art. 37 · registro de operações</li>
-              <li className="flex items-center gap-2"><Check size={12} className="text-[#2FB57A]" /> Art. 48 · incidentes &lt; 48h</li>
+              <li className="flex items-center gap-2"><Check size={12} className="text-[#2FB57A]" /> Direitos do titular resolvidos</li>
+              <li className="flex items-center gap-2"><Check size={12} className="text-[#2FB57A]" /> Registro auditável de operações</li>
+              <li className="flex items-center gap-2"><Check size={12} className="text-[#2FB57A]" /> Resposta a incidentes em até 72h</li>
             </ul>
           </div>
 
@@ -128,11 +129,11 @@ export function PorQueZappIQ() {
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">04 · Radar 360°</span>
             </div>
             <h3 className="text-[18px] font-medium text-ink leading-tight tracking-tight mb-2">
-              Observabilidade completa.
+              Você enxerga tudo. Em tempo real.
             </h3>
             <p className="text-[13px] text-muted leading-relaxed mb-4">
-              Métricas em tempo real, PostHog integrado, Sentry para falhas, forecast ML
-              de churn/receita.
+              Quantos atendimentos a Iza fechou hoje, quanto converteu, quanto você gastou,
+              qual fila está travada. Tudo num dashboard executivo — sem precisar de analista.
             </p>
             {/* mini sparkline */}
             <svg viewBox="0 0 200 40" className="w-full h-10" aria-hidden>
@@ -154,9 +155,6 @@ export function PorQueZappIQ() {
 
           {/* Onboarding zero */}
           <div className="card-soft p-7 relative">
-            <div className="absolute top-4 right-4 px-2 py-0.5 rounded-full bg-grad text-white text-[10px] font-semibold tracking-wide">
-              NOVO V3.2
-            </div>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-9 h-9 rounded-[10px] bg-[#F2F0EA] border border-line flex items-center justify-center">
                 <Zap size={16} className="text-ink" />
@@ -164,11 +162,11 @@ export function PorQueZappIQ() {
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">05 · Setup</span>
             </div>
             <h3 className="text-[18px] font-medium text-ink leading-tight tracking-tight mb-2">
-              Onboarding zero. 30–90 min.
+              Sem consultor. Sem mês de implantação.
             </h3>
             <p className="text-[13px] text-muted leading-relaxed mb-4">
-              Survey self-service. Sem consultor. Sem setup fee de R$ 3–8k que outros cobram
-              só pra fingir que implantam.
+              Um formulário guiado de 30 a 90 minutos e você ativa sozinho. O mercado cobra
+              de R$ 3 a 8 mil só pra começar. A gente cobra zero.
             </p>
             <div className="flex items-center gap-2 text-[12px] font-mono">
               <span className="text-muted line-through">R$ 3.000–8.000</span>
@@ -188,11 +186,12 @@ export function PorQueZappIQ() {
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">06 · Dados BR</span>
             </div>
             <h3 className="text-[18px] font-medium text-ink leading-tight tracking-tight mb-2">
-              Dados processados em São Paulo.
+              Seus dados, no Brasil. Ponto.
             </h3>
             <p className="text-[13px] text-muted leading-relaxed">
-              AWS sa-east-1. Latência baixa, compliance LGPD por default.
-              Transferência internacional? Só com seu opt-in explícito.
+              Tudo processado e armazenado em servidor brasileiro. Rápido pro seu cliente
+              e dentro da LGPD por padrão. Se algum dado precisar sair do país, só com sua
+              autorização expressa.
             </p>
           </div>
 
@@ -206,17 +205,14 @@ export function PorQueZappIQ() {
                 <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">07 · Pricing</span>
               </div>
               <h3 className="text-[18px] font-medium text-ink leading-tight tracking-tight mb-2">
-                Preço previsível.
+                Zero surpresa no boleto.
               </h3>
               <p className="text-[13px] text-muted leading-relaxed">
-                Mensalidade fixa. Sem cobrança por conversa surpresa, sem overage
-                escondido, sem janela de 24h inventada.
+                Mensalidade fixa. A gente não cobra por conversa, não tem taxa escondida,
+                não inventa "janela de 24h" pra pesar no final do mês. O que você vê é o que paga.
               </p>
             </div>
             <div className="card-soft p-7 relative">
-              <div className="absolute top-4 right-4 px-2 py-0.5 rounded-full bg-grad text-white text-[10px] font-semibold tracking-wide">
-                NOVO V3.2
-              </div>
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-9 h-9 rounded-[10px] bg-[#F2F0EA] border border-line flex items-center justify-center">
                   <Mic size={16} className="text-ink" />
@@ -224,12 +220,13 @@ export function PorQueZappIQ() {
                 <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">08 · Voz</span>
               </div>
               <h3 className="text-[18px] font-medium text-ink leading-tight tracking-tight mb-2">
-                Voz nativa. Inbound incluso.
+                Cliente mandou áudio? A IA entende e responde.
               </h3>
               <p className="text-[13px] text-muted leading-relaxed">
-                Transcrição de áudio: grátis. TTS outbound opcional:
-                <span className="font-semibold text-ink"> R$ 197</span> ou
-                <span className="font-semibold text-ink"> R$ 597</span>.
+                Seu cliente é brasileiro, manda áudio. A Iza entende tudo
+                <span className="font-semibold text-ink"> sem custo extra</span>. Quer que ela
+                responda falando? Ativa voz por <span className="font-semibold text-ink">R$ 197</span>
+                ou <span className="font-semibold text-ink">R$ 597</span>/mês.
               </p>
             </div>
           </div>

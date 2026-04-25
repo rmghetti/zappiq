@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { MessageCircle, X } from 'lucide-react';
 
 /* Mensagem de boas-vindas do widget de chat */
-const WELCOME_MESSAGE = 'Oi! Eu sou a IA da ZappIQ. Essa conversa que você está tendo agora é exatamente o que seus clientes vão experimentar. Quer ver como funciona?';
+const WELCOME_MESSAGE = 'Oi! Sou a Iza, a IA da ZappIQ. Essa conversa que você tá tendo comigo agora é exatamente o que seus clientes vão ter. Quer ver como funciona?';
 
 export function WhatsAppButton() {
   const [showBubble, setShowBubble] = useState(false);
@@ -39,7 +39,7 @@ export function WhatsAppButton() {
               <span className="text-white text-[10px] font-bold">ZQ</span>
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-900 mb-1">Pulse IA</p>
+              <p className="text-xs font-semibold text-gray-900 mb-1">Iza · ZappIQ</p>
               <p className="text-xs text-gray-600 leading-relaxed">{WELCOME_MESSAGE}</p>
             </div>
           </div>

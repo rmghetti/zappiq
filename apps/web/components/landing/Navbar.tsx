@@ -27,14 +27,14 @@ import {
 } from 'lucide-react';
 
 const PRODUCTS = [
-  { icon: Inbox,       name: 'ZappIQ Core',      desc: 'Central de conversas unificada',     href: '#produtos' },
-  { icon: Brain,       name: 'Pulse AI',         desc: 'Agente IA que atende 24/7',          href: '#produtos' },
-  { icon: Megaphone,   name: 'Spark Campaigns',  desc: 'Campanhas em massa no WhatsApp',     href: '#produtos' },
-  { icon: BarChart3,   name: 'Radar 360°',       desc: 'Observabilidade + forecast ML',      href: '/observabilidade' },
-  { icon: Users,       name: 'Nexus CRM',        desc: 'CRM nativo para WhatsApp',           href: '#produtos' },
-  { icon: Workflow,    name: 'Forge Studio',     desc: 'Automações visuais drag-and-drop',   href: '#produtos' },
-  { icon: Headphones,  name: 'Echo Copilot',     desc: 'Copiloto IA para atendentes',        href: '#produtos' },
-  { icon: ShieldCheck, name: 'Shield Compliance',desc: 'LGPD · Art. 18/37/48 · DPA',         href: '/lgpd' },
+  { icon: Inbox,       name: 'Central de conversas',    desc: 'Todas as mensagens num só inbox',              href: '#produtos' },
+  { icon: Brain,       name: 'Iza · IA 24/7',           desc: 'Agente inteligente que atende em texto e voz',  href: '#produtos' },
+  { icon: Megaphone,   name: 'Campanhas WhatsApp',      desc: 'Disparos em massa com templates aprovados',     href: '#produtos' },
+  { icon: BarChart3,   name: 'Dashboard gerencial',     desc: 'Métricas, previsão e alertas do seu negócio',   href: '/observabilidade' },
+  { icon: Users,       name: 'CRM no WhatsApp',         desc: 'Histórico do cliente em um só lugar',           href: '#produtos' },
+  { icon: Workflow,    name: 'Automações visuais',      desc: 'Arraste e conecte — sem programar',             href: '#produtos' },
+  { icon: Headphones,  name: 'Copiloto para atendentes', desc: 'A IA sugere respostas em tempo real',          href: '#produtos' },
+  { icon: ShieldCheck, name: 'Conformidade LGPD',       desc: 'Privacidade e direitos do titular resolvidos',  href: '/lgpd' },
 ];
 
 const NAV_ITEMS: { label: string; href: string; mega?: boolean }[] = [

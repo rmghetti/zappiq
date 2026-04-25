@@ -37,11 +37,11 @@ export function Testimonials() {
           <span className="eyebrow">Programa Fundadores · vagas limitadas</span>
           <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-4">
             Seja um dos primeiros.{' '}
-            <span className="text-grad">Construa conosco.</span>
+            <span className="text-grad">Saia na frente do seu concorrente.</span>
           </h2>
           <p className="text-[16px] text-muted leading-relaxed">
-            Estamos selecionando empresas para co-criar a ZappIQ. Em troca de feedback real, oferecemos
-            condições que não existem depois do lançamento.
+            Estamos selecionando empresas pra co-criar a ZappIQ. Em troca do seu feedback real, a gente
+            te dá condições que não vão existir depois que o mercado acordar.
           </p>
         </div>
 

@@ -4,12 +4,12 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 const HIGHLIGHTS = [
-  'Pulse AI: respostas inteligentes em menos de 3 segundos',
-  'Novo: CRM nativo integrado ao WhatsApp',
-  'Infraestrutura 100% no Brasil — região São Paulo (GRU)',
-  'LGPD compliant: consentimento granular e DPO nomeado',
-  'Programa Fundadores aberto — 50% off no 1º ano',
-  'Setup em 5 minutos, sem dependência de TI',
+  'Iza responde seu cliente em menos de 3 segundos',
+  'CRM pronto, direto dentro do WhatsApp',
+  'Seus dados no Brasil — servidor em São Paulo',
+  'LGPD resolvida, pronta pra auditoria do jurídico',
+  'Programa Fundadores: 50% off no 1º ano',
+  'Liga em 5 minutos — sem ligar pra TI',
 ];
 
 export function SocialProofToast() {

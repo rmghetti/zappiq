@@ -9,27 +9,29 @@
  *   - MANTIDO: OnboardingZero + VozNativa + IzaEstaAqui (strategic commercial blocks)
  *   - MANTIDO: SocialProof (pode ser compactado via prop `compact` depois)
  *
- * Ordem dos blocos:
+ * Ordem dos blocos (V5):
  *   1. Hero              → promessa canônica
  *   2. SocialProof       → logos / provas
  *   3. PorQueZappIQ      → bento razões
- *   4. OnboardingZero    → diferenciador V4 · R$ 0 setup
- *   5. VozNativa         → diferenciador V4 · voz inbound/outbound
- *   6. HowItWorks        → fluxo produto
- *   7. ROICalculator     → payback + recomendador de tier
- *   8. TrustAndCompliance→ LGPD · AES-256 · SLA
- *   9. IzaEstaAqui       → dogfooding
- *  10. Pricing           → 5 tiers
- *  11. Testimonials      → depoimentos + SLA badge
- *  12. FAQ               → Qs agrupadas
- *  13. CTAFinal          → fecho
- *  14. Footer + WAButton + Toast
+ *   4. ComVsSem          → antes vs depois (promovido V5)
+ *   5. OnboardingZero    → diferenciador · R$ 0 setup
+ *   6. VozNativa         → diferenciador · voz inbound/outbound
+ *   7. HowItWorks        → fluxo produto
+ *   8. ROICalculator     → payback + recomendador de tier
+ *   9. TrustAndCompliance→ LGPD · segurança · SLA
+ *  10. IzaEstaAqui       → dogfooding
+ *  11. Pricing           → 5 tiers (sem Com vs Sem, agora standalone)
+ *  12. Testimonials      → depoimentos + SLA badge
+ *  13. FAQ               → Qs agrupadas
+ *  14. CTAFinal          → fecho
+ *  15. Footer + WAButton + Toast
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { Navbar } from './Navbar';
 import { Hero } from './Hero';
 import { SocialProof } from './SocialProof';
 import { PorQueZappIQ } from './PorQueZappIQ';
+import { ComVsSem } from './ComVsSem';
 import { OnboardingZero } from './OnboardingZero';
 import { VozNativa } from './VozNativa';
 import { HowItWorks } from './HowItWorks';
@@ -51,6 +53,7 @@ export function LandingPage() {
       <Hero />
       <SocialProof />
       <PorQueZappIQ />
+      <ComVsSem />
       <OnboardingZero />
       <VozNativa />
       <HowItWorks />
