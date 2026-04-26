@@ -30,7 +30,7 @@ const envSchema = z.object({
 
   // Anthropic
   ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-20250514'),
+  ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-6'),
 
   // OpenAI
   OPENAI_API_KEY: z.string().optional(),

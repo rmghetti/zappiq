@@ -64,8 +64,9 @@ export const agentPipelineDuration = meter.createHistogram('zappiq_agent_pipelin
 // Docs: https://www.anthropic.com/pricing
 const PRICING: Record<string, { input: number; output: number }> = {
   // Claude Sonnet 4
-  'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 },
+  'claude-sonnet-4-20250514': { input: 3.0, output: 15.0 }, // deprecado, mantido pra rollback
   'claude-sonnet-4-5': { input: 3.0, output: 15.0 },
+  'claude-sonnet-4-6': { input: 3.0, output: 15.0 }, // padrão atual (Apr 2026)
   // Claude Haiku 4.5
   'claude-haiku-4-5-20251001': { input: 0.8, output: 4.0 },
   'claude-haiku-4-5': { input: 0.8, output: 4.0 },

@@ -51,7 +51,7 @@ timeout = "8s"
 type = "http"
 
 [env]
-ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+ANTHROPIC_MODEL = "claude-sonnet-4-6"
 APP_URL = "https://zappiq-api.fly.dev"
 CORS_ORIGINS = "https://zappiq.vercel.app,https://zappiq.com.br,https://www.zappiq.com.br"
 FRONTEND_URL = "https://zappiq.vercel.app"
