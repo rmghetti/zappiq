@@ -65,10 +65,10 @@
   margin-left: 2px;
 }
 .cobrandOnze {
-  height: 48px !important;
+  height: 26px !important;
   width: auto !important;
   display: block;
-  margin-left: -16px;
+  margin-left: -4px;
 }
 
 .tagPill {
@@ -1027,9 +1027,10 @@
   display: block;
 }
 .footOnze {
-  height: 32px !important;
-  width: auto !important;
+  height: 28px !important;
+  width: 28px !important;
   display: block;
+  flex-shrink: 0;
 }
 .footRight {
   display: flex;
