@@ -1,0 +1,12 @@
+<svg id="svg-modelo-10-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 120" width="100%" height="100%">
+                        <defs>
+                            
+                        </defs>
+                        <g transform="translate(85, 18)">
+                            <text x="0" y="42" font-family="&#39;Poppins&#39;, sans-serif" font-weight="700" font-size="46" fill="#4b5563" letter-spacing="-2">onze</text>
+                            <text x="110" y="42" font-family="&#39;Poppins&#39;, sans-serif" font-weight="700" font-size="46" fill="#111827" letter-spacing="-2">&amp;</text>
+                            <text x="35" y="74" font-family="&#39;Poppins&#39;, sans-serif" font-weight="700" font-size="46" fill="#4b5563" letter-spacing="-2">onze</text>
+                            <text x="145" y="74" font-family="&#39;Poppins&#39;, sans-serif" font-weight="800" font-size="46" fill="transparent" stroke="#0284c7" stroke-width="2.5" letter-spacing="-2">ai</text>
+                            <circle cx="195" cy="70" r="4.5" fill="#0284c7"></circle>
+                        </g>
+                    </svg>
