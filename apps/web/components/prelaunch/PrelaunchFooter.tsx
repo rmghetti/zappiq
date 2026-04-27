@@ -18,11 +18,11 @@ export function PrelaunchFooter() {
               height={26}
             />
             <Image
-              src="/partners/onze/onze-prata.svg"
-              alt="onze&onze.ai"
+              src="/partners/onze/onze-ai.png"
+              alt="onze.[ai]"
               className={s.footOnze}
-              width={100}
-              height={26}
+              width={108}
+              height={36}
             />
           </div>
           <nav className={s.footRight}>
