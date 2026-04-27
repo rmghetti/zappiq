@@ -22,8 +22,8 @@ export function PrelaunchHeader() {
               src="/partners/onze/onze-ai.svg"
               alt="onze.[ai]"
               className={s.cobrandOnze}
-              width={156}
-              height={52}
+              width={120}
+              height={26}
               priority
             />
           </div>
