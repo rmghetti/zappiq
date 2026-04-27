@@ -8,7 +8,7 @@ export function PrelaunchHeader() {
     <header className={s.topbar}>
       <div className={s.shell}>
         <div className={s.topRow}>
-          <div className={s.cobrand} aria-label="ZappIQ é uma marca do grupo onze&onze.ai">
+          <div className={s.cobrand} aria-label="ZappIQ é uma marca do grupo onze.[ai]">
             <Image
               src="/logo-positivo.svg"
               alt="ZappIQ"
@@ -19,11 +19,11 @@ export function PrelaunchHeader() {
             />
             <span className={s.cobrandBy}>por</span>
             <Image
-              src="/partners/onze/onze-prata.svg"
-              alt="onze&onze.ai"
+              src="/partners/onze/onze-ai.png"
+              alt="onze.[ai]"
               className={s.cobrandOnze}
-              width={150}
-              height={42}
+              width={156}
+              height={52}
               priority
             />
           </div>
