@@ -21,6 +21,12 @@
 import { LandingPage } from '../components/landing/LandingPage';
 import { PrelaunchPage } from '../components/prelaunch/PrelaunchPage';
 
+/* Força dynamic rendering pra ler process.env.LAUNCH_MODE em request-time
+ * (sem isso, Next prerenderiza static no build com env potencialmente vazio).
+ */
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function Home() {
   const mode = process.env.LAUNCH_MODE?.toLowerCase().trim();
   if (mode === 'prelaunch') {
