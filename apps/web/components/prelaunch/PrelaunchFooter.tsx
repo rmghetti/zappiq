@@ -18,7 +18,7 @@ export function PrelaunchFooter() {
               height={26}
             />
             <Image
-              src="/partners/onze/onze-ai.png"
+              src="/partners/onze/onze-ai.svg"
               alt="onze.[ai]"
               className={s.footOnze}
               width={108}

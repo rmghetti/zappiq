@@ -19,7 +19,7 @@ export function PrelaunchHeader() {
             />
             <span className={s.cobrandBy}>por</span>
             <Image
-              src="/partners/onze/onze-ai.png"
+              src="/partners/onze/onze-ai.svg"
               alt="onze.[ai]"
               className={s.cobrandOnze}
               width={156}
