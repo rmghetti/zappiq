@@ -129,6 +129,20 @@
 
 **PR**: `release/v2-stab/observability-day-1`
 
+## Onda 3 — Validação operacional (V2-026)
+
+| # | Critério | Status | Evidência |
+|---|---|---|---|
+| 3.1 | Script k6 pra load test webhook (HMAC + 100 msg/s × 60s) | ✅ | `tools/load-test/zappiq-webhook.k6.js` — env-driven, custom metrics, thresholds |
+| 3.2 | Roteiro QA full pass — 5 segmentos × 10 turnos | ✅ | `docs/sprint0/qa_full_pass_roteiro.md` — saúde/educação/varejo/imobiliária/serviço (incluindo persona dual `suporte`); folha de score; SQL inspeção |
+| 3.3 | Soak overnight checklist (12h+) | ✅ | `docs/sprint0/soak_overnight_checklist.md` — 4 checkpoints horários, queries SQL por checkpoint, critérios Go-No-Go |
+| 3.4 | Execução QA full pass | ⏳ sexta/sábado | Manual via WhatsApp pessoal pra Iza |
+| 3.5 | Execução load test k6 | ⏳ sexta | `k6 run tools/load-test/zappiq-webhook.k6.js` |
+| 3.6 | Execução soak overnight | ⏳ sábado→domingo | Tráfego sintético 3 msg/s × 12h |
+| 3.7 | Decisão Go-Live (domingo 09h30) | ⏳ | Baseado em 3.4 + 3.5 + 3.6 |
+
+**PR**: `release/v2-stab/onda-3-tooling`
+
 ## Critério de Go-Live (sábado 10/05 às 18h)
 
 Tudo abaixo verde antes do flip `LAUNCH_MODE=live`:
