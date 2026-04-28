@@ -38,6 +38,7 @@ import stripeWebhookRoutes from './routes/stripeWebhook.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 import dsrRoutes from './routes/dataSubjectRequests.js';
 import adminWhatsappRoutes from './routes/adminWhatsapp.js';
+import adminLlmRoutes from './routes/adminLlm.js'; // V2-025 Observability DAY 1
 import { initRetentionJob } from './services/retentionService.js';
 
 const app = express();
@@ -191,6 +192,7 @@ app.use('/api/onboarding', onboardingRoutes);
 
 // ── Admin diagnostics (auth via header X-Admin-Secret == META_APP_SECRET) ─
 app.use('/api/admin/whatsapp', adminWhatsappRoutes);
+app.use('/api/admin', adminLlmRoutes); // V2-025: GET /api/admin/llm-status
 
 // ── Protected Routes (auth + RLS tenant isolation) ─
 app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, contactsRoutes);
