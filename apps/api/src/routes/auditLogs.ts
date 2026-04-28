@@ -8,6 +8,7 @@ import { prisma, Prisma } from '@zappiq/database';
 import { requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { verifyAuditChain, logAuditEvent } from '../services/auditService.js';
+import { withTenant } from '../middleware/rlsTenant.js';
 
 const router = Router();
 
@@ -27,13 +28,15 @@ const listQuerySchema = z.object({
 });
 
 // ── GET /api/audit-logs ─────────────────────────
+// V2-024: encapsulado em withTenant — SET LOCAL + queries garantidos
+// na mesma conexão (resiliente a pgbouncer transaction-mode).
 router.get('/', validate(listQuerySchema, 'query'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, action, resource, resourceId, userId, dataSubjectId, from, to } = req.query as any;
     const skip = (page - 1) * limit;
 
     const where: Prisma.AuditLogWhereInput = {
-      organizationId: req.organizationId!,
+      organizationId: req.organizationId!, // defesa em profundidade — RLS já filtra
       ...(action && { action }),
       ...(resource && { resource }),
       ...(resourceId && { resourceId }),
@@ -47,18 +50,21 @@ router.get('/', validate(listQuerySchema, 'query'), async (req: Request, res: Re
       }),
     };
 
-    const [logs, total] = await Promise.all([
-      prisma.auditLog.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { sequence: 'desc' },
-        include: {
-          user: { select: { id: true, name: true, email: true, role: true } },
-        },
-      }),
-      prisma.auditLog.count({ where }),
-    ]);
+    const { logs, total } = await withTenant(req, async (tx) => {
+      const [logsResult, totalResult] = await Promise.all([
+        tx.auditLog.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { sequence: 'desc' },
+          include: {
+            user: { select: { id: true, name: true, email: true, role: true } },
+          },
+        }),
+        tx.auditLog.count({ where }),
+      ]);
+      return { logs: logsResult, total: totalResult };
+    });
 
     // BigInt não é JSON-serializável — converter sequence para string
     const serialized = logs.map((l) => ({ ...l, sequence: l.sequence.toString() }));
@@ -114,16 +120,19 @@ router.get('/verify', async (req: Request, res: Response, next: NextFunction) =>
 });
 
 // ── GET /api/audit-logs/subject/:contactId — trilha consolidada do titular (DSR Art. 18, II) ──
+// V2-024: encapsulado em withTenant.
 router.get('/subject/:contactId', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const logs = await prisma.auditLog.findMany({
-      where: {
-        organizationId: req.organizationId!,
-        dataSubjectId: req.params.contactId,
-      },
-      orderBy: { sequence: 'desc' },
-      include: { user: { select: { id: true, name: true, email: true, role: true } } },
-    });
+    const logs = await withTenant(req, (tx) =>
+      tx.auditLog.findMany({
+        where: {
+          organizationId: req.organizationId!,
+          dataSubjectId: req.params.contactId,
+        },
+        orderBy: { sequence: 'desc' },
+        include: { user: { select: { id: true, name: true, email: true, role: true } } },
+      }),
+    );
 
     const serialized = logs.map((l) => ({ ...l, sequence: l.sequence.toString() }));
 

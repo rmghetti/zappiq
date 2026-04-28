@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma, Prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
+import { withTenant } from '../middleware/rlsTenant.js';
 
 const router = Router();
 
@@ -27,13 +28,15 @@ const querySchema = z.object({
 });
 
 // ── GET /api/contacts ───────────────────────────
+// V2-024: encapsulado em withTenant — SET LOCAL + queries garantidos
+// na mesma conexão (resiliente a pgbouncer transaction-mode).
 router.get('/', validate(querySchema, 'query'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, search, status, tag } = req.query as any;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ContactWhereInput = {
-      organizationId: req.organizationId!,
+      organizationId: req.organizationId!, // defesa em profundidade — RLS já filtra
       ...(status && { leadStatus: status }),
       ...(tag && { tags: { has: tag } }),
       ...(search && {
@@ -45,23 +48,26 @@ router.get('/', validate(querySchema, 'query'), async (req: Request, res: Respon
       }),
     };
 
-    const [contacts, total] = await Promise.all([
-      prisma.contact.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { lastInteractionAt: 'desc' },
-      }),
-      prisma.contact.count({ where }),
-    ]);
+    const result = await withTenant(req, async (tx) => {
+      const [contacts, total] = await Promise.all([
+        tx.contact.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { lastInteractionAt: 'desc' },
+        }),
+        tx.contact.count({ where }),
+      ]);
+      return { contacts, total };
+    });
 
     res.json({
       success: true,
-      data: contacts,
-      total,
+      data: result.contacts,
+      total: result.total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(result.total / limit),
     });
   } catch (err) {
     next(err);
@@ -71,13 +77,15 @@ router.get('/', validate(querySchema, 'query'), async (req: Request, res: Respon
 // ── POST /api/contacts ──────────────────────────
 router.post('/', validate(createContactSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const contact = await prisma.contact.create({
-      data: {
-        ...req.body,
-        whatsappId: req.body.phone,
-        organizationId: req.organizationId!,
-      },
-    });
+    const contact = await withTenant(req, (tx) =>
+      tx.contact.create({
+        data: {
+          ...req.body,
+          whatsappId: req.body.phone,
+          organizationId: req.organizationId!,
+        },
+      }),
+    );
 
     res.status(201).json({ success: true, data: contact });
   } catch (err: any) {
@@ -92,13 +100,15 @@ router.post('/', validate(createContactSchema), async (req: Request, res: Respon
 // ── GET /api/contacts/:id ───────────────────────
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const contact = await prisma.contact.findFirst({
-      where: { id: req.params.id, organizationId: req.organizationId! },
-      include: {
-        conversations: { orderBy: { updatedAt: 'desc' }, take: 5 },
-        deals: { orderBy: { createdAt: 'desc' } },
-      },
-    });
+    const contact = await withTenant(req, (tx) =>
+      tx.contact.findFirst({
+        where: { id: req.params.id, organizationId: req.organizationId! },
+        include: {
+          conversations: { orderBy: { updatedAt: 'desc' }, take: 5 },
+          deals: { orderBy: { createdAt: 'desc' } },
+        },
+      }),
+    );
 
     if (!contact) {
       res.status(404).json({ error: 'Contact not found' });
@@ -114,18 +124,21 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 // ── PUT /api/contacts/:id ───────────────────────
 router.put('/:id', validate(updateContactSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const contact = await prisma.contact.updateMany({
-      where: { id: req.params.id, organizationId: req.organizationId! },
-      data: req.body,
+    const result = await withTenant(req, async (tx) => {
+      const updated = await tx.contact.updateMany({
+        where: { id: req.params.id, organizationId: req.organizationId! },
+        data: req.body,
+      });
+      if (updated.count === 0) return null;
+      return tx.contact.findUnique({ where: { id: req.params.id } });
     });
 
-    if (contact.count === 0) {
+    if (!result) {
       res.status(404).json({ error: 'Contact not found' });
       return;
     }
 
-    const updated = await prisma.contact.findUnique({ where: { id: req.params.id } });
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: result });
   } catch (err) {
     next(err);
   }
@@ -134,9 +147,11 @@ router.put('/:id', validate(updateContactSchema), async (req: Request, res: Resp
 // ── DELETE /api/contacts/:id ────────────────────
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const result = await prisma.contact.deleteMany({
-      where: { id: req.params.id, organizationId: req.organizationId! },
-    });
+    const result = await withTenant(req, (tx) =>
+      tx.contact.deleteMany({
+        where: { id: req.params.id, organizationId: req.organizationId! },
+      }),
+    );
 
     if (result.count === 0) {
       res.status(404).json({ error: 'Contact not found' });
@@ -152,10 +167,12 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
 // ── GET /api/contacts/export ────────────────────
 router.get('/export', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const contacts = await prisma.contact.findMany({
-      where: { organizationId: req.organizationId! },
-      orderBy: { createdAt: 'desc' },
-    });
+    const contacts = await withTenant(req, (tx) =>
+      tx.contact.findMany({
+        where: { organizationId: req.organizationId! },
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
 
     // CSV export — sanitize values to prevent formula injection in Excel/Sheets
     const sanitize = (val: string): string => {
