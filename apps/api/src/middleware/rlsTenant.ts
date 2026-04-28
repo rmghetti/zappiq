@@ -83,3 +83,45 @@ export async function setTenantContext(
     `SET LOCAL app.current_organization_id = '${organizationId}'`
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * V2-024 (Sprint 0 Blocker 4) · withTenant — wrapper ergonômico
+ * --------------------------------------------------------------------
+ * Encapsula handler em prisma.$transaction com SET LOCAL na primeira
+ * linha. Resolve o problema do middleware rlsTenant em pgbouncer
+ * transaction-mode: SET LOCAL + queries SUBSEQUENTES garantidos na mesma
+ * conexão.
+ *
+ * Antes:
+ *   const contacts = await prisma.contact.findMany({ where: { orgId, ... } });
+ *
+ * Depois:
+ *   const contacts = await withTenant(req, (tx) =>
+ *     tx.contact.findMany({ where: { ... } })
+ *   );
+ *
+ * Notas:
+ *   - Filtro `organizationId` no `where` continua sendo defesa em profundidade
+ *     (recomendado, mas RLS policy faz o trabalho mesmo sem)
+ *   - Lança erro 400 se req.organizationId ausente (assumido após auth)
+ *   - O callback recebe o TransactionClient — mesma API do prisma global
+ *     mas com SET LOCAL aplicado e contexto isolado
+ *   - Erros propagam normalmente (rollback automático em transaction)
+ * ═══════════════════════════════════════════════════════════════════════ */
+import type { Prisma } from '@zappiq/database';
+
+export type TenantTx = Prisma.TransactionClient;
+
+export async function withTenant<T>(
+  req: { organizationId?: string },
+  fn: (tx: TenantTx) => Promise<T>,
+): Promise<T> {
+  const orgId = req.organizationId;
+  if (!orgId) {
+    throw new Error('withTenant: req.organizationId ausente — autenticação necessária');
+  }
+  return prisma.$transaction(async (tx) => {
+    await setTenantContext(tx, orgId);
+    return fn(tx as TenantTx);
+  });
+}

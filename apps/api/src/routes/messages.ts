@@ -4,6 +4,7 @@ import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { messageSendQueue } from '../services/queueService.js';
+import { withTenant } from '../middleware/rlsTenant.js';
 
 const router = Router();
 
@@ -13,41 +14,47 @@ const querySchema = z.object({
 });
 
 // ── GET /api/conversations/:id/messages ─────────
+// V2-024: encapsulado em withTenant — verify conversation + load messages
+// na MESMA transaction (consistência + RLS no pgbouncer transaction-mode).
 router.get('/:id/messages', validate(querySchema, 'query'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit } = req.query as any;
     const skip = (page - 1) * limit;
 
-    // Verify conversation belongs to org
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: req.params.id, organizationId: req.organizationId! },
+    const result = await withTenant(req, async (tx) => {
+      // Verify conversation belongs to org
+      const conversation = await tx.conversation.findFirst({
+        where: { id: req.params.id, organizationId: req.organizationId! },
+      });
+      if (!conversation) return null;
+
+      const [messages, total] = await Promise.all([
+        tx.message.findMany({
+          where: { conversationId: req.params.id },
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'asc' },
+          include: {
+            sender: { select: { id: true, name: true, avatar: true } },
+          },
+        }),
+        tx.message.count({ where: { conversationId: req.params.id } }),
+      ]);
+      return { messages, total };
     });
 
-    if (!conversation) {
+    if (!result) {
       res.status(404).json({ error: 'Conversation not found' });
       return;
     }
 
-    const [messages, total] = await Promise.all([
-      prisma.message.findMany({
-        where: { conversationId: req.params.id },
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'asc' },
-        include: {
-          sender: { select: { id: true, name: true, avatar: true } },
-        },
-      }),
-      prisma.message.count({ where: { conversationId: req.params.id } }),
-    ]);
-
     res.json({
       success: true,
-      data: messages,
-      total,
+      data: result.messages,
+      total: result.total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(result.total / limit),
     });
   } catch (err) {
     next(err);
@@ -55,6 +62,8 @@ router.get('/:id/messages', validate(querySchema, 'query'), async (req: Request,
 });
 
 // ── POST /api/conversations/:id/messages ────────
+// V2-024: verify + create na mesma transaction. Garante atomicidade
+// (se message.create falha, conversation lookup também rollback).
 router.post('/:id/messages', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { content, type = 'TEXT' } = req.body;
@@ -63,29 +72,35 @@ router.post('/:id/messages', async (req: Request, res: Response, next: NextFunct
       return;
     }
 
-    // Verify conversation belongs to org
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: req.params.id, organizationId: req.organizationId! },
-      include: { contact: true },
+    const result = await withTenant(req, async (tx) => {
+      // Verify conversation belongs to org
+      const conversation = await tx.conversation.findFirst({
+        where: { id: req.params.id, organizationId: req.organizationId! },
+        include: { contact: true },
+      });
+      if (!conversation) return null;
+
+      // Save message
+      const message = await tx.message.create({
+        data: {
+          direction: 'OUTBOUND',
+          type: type as any,
+          content,
+          status: 'SENT',
+          conversationId: conversation.id,
+          senderId: req.user!.userId,
+          isFromBot: false,
+        },
+      });
+      return { conversation, message };
     });
 
-    if (!conversation) {
+    if (!result) {
       res.status(404).json({ error: 'Conversation not found' });
       return;
     }
 
-    // Save message
-    const message = await prisma.message.create({
-      data: {
-        direction: 'OUTBOUND',
-        type: type as any,
-        content,
-        status: 'SENT',
-        conversationId: conversation.id,
-        senderId: req.user!.userId,
-        isFromBot: false,
-      },
-    });
+    const { conversation, message } = result;
 
     // Enfileira envio via WhatsApp API (BullMQ com rate limit 80/seg)
     await messageSendQueue.add('send', {

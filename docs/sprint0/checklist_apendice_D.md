@@ -61,12 +61,16 @@
 
 | # | Critério | Status | Evidência / PR |
 |---|---|---|---|
-| 4.1 | Auditoria de handlers: `docs/audit/rls_handlers.md` gerado | ⬜ | Onda 2 |
-| 4.2 | Handlers críticos encapsulados em `prisma.$transaction` | ⬜ | Onda 2 |
-| 4.3 | Teste integração tenant-isolation passa pra 5 entidades core (Conversation, Message, Contact, KBDocument, AuditLog) | ⬜ | Onda 2 |
-| 4.4 | CI bloqueia merge se teste falhar | ⬜ | Onda 2 (workflow update) |
+| 4.1 | Auditoria de handlers: `docs/audit/rls_handlers.md` gerado | ✅ | Doc completo: 12 routes RLS-protected, 64 handlers totais, status por route + plano de migração faseado |
+| 4.2 | Handlers críticos encapsulados em `prisma.$transaction` (via helper `withTenant`) | ✅ parcial | 11/64 handlers refatorados (3 entidades core: contacts 6/6, messages 2/2, auditLogs 2/3). Conversations/KnowledgeBase + 8 routes secundárias ficam Onda 2 follow-up |
+| 4.3 | Teste integração tenant-isolation pra 5 entidades core | ⏳ | Unit test do helper `withTenant` adicionado (6 casos: SET LOCAL ordering, orgId validation, SQL injection, error propagation). Integration test com Postgres real fica Onda 3 (precisa CI com Postgres+RLS) |
+| 4.4 | CI bloqueia merge se teste falhar | ✅ | Step `Test API (Vitest)` em `.github/workflows/ci.yml` (Blocker 1) já bloqueia merge — testes do helper rodam junto |
 
-**PR**: `release/v2-stab/blocker-4` (planejado Onda 2)
+**Helper introduzido:** `withTenant<T>(req, fn): Promise<T>` em `apps/api/src/middleware/rlsTenant.ts`. Encapsula handler em `prisma.$transaction` com `SET LOCAL` na primeira linha — garante que SET LOCAL + queries rodam na mesma conexão (resiliente a pgbouncer transaction-mode).
+
+**PR**: `release/v2-stab/blocker-4`
+
+**Onda 2 follow-up (pós-launch ou paralelo):** refatorar conversations.ts (7), knowledgeBase.ts (6), campaigns.ts (7), analytics.ts (5), flows.ts (7), templates.ts (6), deals.ts (6), billing.ts (3), settings.ts (6) — 53 handlers restantes. Risco baixo (defesa em profundidade já existe via filtro `organizationId` explícito + RLS policy).
 
 ---
 
