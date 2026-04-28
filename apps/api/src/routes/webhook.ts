@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { aiProcessQueue } from '../services/queueService.js';
 
 const router = Router();
 
@@ -172,13 +173,19 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
 
     logger.info(`[Webhook] Message saved for conversation ${conversation.id}`);
 
-    // ── Trigger AI processing ───────────────────────
-    // Import dynamically to avoid circular deps at startup
-    const { processIncomingMessage } = await import('../agents/agentOrchestrator.js');
-    const io = req.app.get('io');
-
-    // Fire and forget — don't block the webhook response
-    processIncomingMessage({
+    // ── V2-023 (Sprint 0 Blocker 2): enfileira processamento LLM em BullMQ ──
+    // ANTES: chamava processIncomingMessage inline (fire-and-forget no event
+    // loop). Pico de mensagens estourava memória do Fly.
+    // DEPOIS: webhook só enfileira; worker ai-process consome com retry
+    // estruturado (3x exponential backoff) + deadletter automático.
+    //
+    // Persistência (org/contact/conversation/message) FICA síncrona no
+    // webhook — é I/O DB rápido (~50-100ms) e garante que a mensagem é
+    // gravada mesmo se o worker estiver atrás (não perdemos).
+    //
+    // Job payload: só IDs + minimal context. Worker reload via Prisma se
+    // precisar mais. Mantém payload leve no Redis.
+    await aiProcessQueue.add('process-incoming', {
       organizationId: org.id,
       conversationId: conversation.id,
       contactId: contact.id,
@@ -187,9 +194,14 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
       messageContent: content,
       messageType: message.type || 'text',
       whatsappMessageId: message.id,
-      orgSettings: org.settings as any || {},
-      io,
-    }).catch((err: any) => logger.error('[Webhook] AI processing error:', err));
+      orgSettings: (org.settings as any) || {},
+      // io não é serializável — worker reemite via app.get('io') após processar
+    }, {
+      // Cada job ganha jobId único pra dedupe (idempotência via whatsappMessageId)
+      jobId: `wamid:${message.id}`,
+    });
+
+    logger.info(`[Webhook] AI job enqueued for conversation ${conversation.id} (wamid: ${message.id})`);
 
   } catch (err) {
     logger.error('[Webhook] Processing error:', err);

@@ -1,6 +1,12 @@
 import { Queue, Worker, Job } from 'bullmq';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import {
+  queueDepth,
+  queueOldestJobAge,
+  recordQueueJobCompleted,
+  recordQueueJobFailed,
+} from '../config/metrics.js';
 
 // ── Conexão Redis para BullMQ ────────────────────
 // BullMQ requer uma conexão própria (não reutiliza ioredis do app)
@@ -49,11 +55,20 @@ export const campaignDispatchQueue = new Queue('campaign-dispatch', {
   },
 });
 
-/** Fila de processamento de respostas da IA (Claude) */
+/** Fila de processamento de respostas da IA (Claude).
+ * V2-023 (Sprint 0 Blocker 2): caminho de produção da Iza. Webhook
+ * apenas enfileira aqui — worker abaixo consome chamando o orchestrator.
+ *
+ * Política:
+ *   - 3 tentativas com exponential backoff (3s, 6s, 12s)
+ *   - removeOnFail mantém 2000 últimas falhas pra inspeção (~deadletter
+ *     em memória; BullMQ não tem DLQ separada, falhas ficam em "failed" set)
+ *   - removeOnComplete mantém 5000 últimas pra retro de cost-per-tenant
+ */
 export const aiProcessQueue = new Queue('ai-process', {
   connection,
   defaultJobOptions: {
-    attempts: 2,
+    attempts: 3,
     backoff: { type: 'exponential', delay: 3000 },
     removeOnComplete: { count: 5000 },
     removeOnFail: { count: 2000 },
@@ -229,67 +244,69 @@ export async function initQueues(): Promise<void> {
   );
 
   // ── AI Process Worker ────────────────────────
+  // V2-023 (Sprint 0 Blocker 2): caminho de produção da Iza.
+  // Webhook enfileira → este worker consome → chama agentOrchestrator
+  // (que internamente usa LLMRouter com cascade Sonnet→Haiku→GPT-4o-mini).
+  //
+  // Concorrência via env (BULLMQ_LLM_CONCURRENCY, default 10) — permite
+  // tunar pra capacidade do Fly sem deploy.
+  //
+  // Retry: 3 attempts com exponential backoff (3s, 6s, 12s) — config no
+  // defaultJobOptions da queue.
+  //
+  // Idempotência: jobId = `wamid:${whatsappMessageId}` (setado no webhook).
+  // Se Meta reenviar o mesmo webhook (timeout), BullMQ ignora dup.
+  const aiConcurrency = parseInt(process.env.BULLMQ_LLM_CONCURRENCY || '10', 10);
   aiProcessWorker = new Worker(
     'ai-process',
     async (job: Job) => {
-      const { conversationId, messageContent, contactId, organizationId } = job.data;
+      const data = job.data as {
+        organizationId: string;
+        conversationId: string;
+        contactId: string;
+        contactPhone: string;
+        contactName: string;
+        messageContent: string;
+        messageType: string;
+        whatsappMessageId: string;
+        orgSettings: any;
+      };
+
+      logger.info(`[Queue:AIProcess] Processing wamid=${data.whatsappMessageId} attempt=${job.attemptsMade + 1}`);
+      const t0 = Date.now();
+
       try {
-        logger.info(`[Queue:AIProcess] Processing AI response for conversation ${conversationId}`);
-
-        const { prisma } = await import('@zappiq/database');
-
-        // TODO: importar agentOrchestrator quando estiver pronto
-        // const { processMessage } = await import('../agents/agentOrchestrator.js');
-        // const aiResponse = await processMessage({ conversationId, messageContent, contactId, organizationId });
-
-        // Placeholder — resposta simulada até integração completa
-        const aiResponse = {
-          content: '[AI response placeholder — agentOrchestrator pendente]',
-          intent: 'general',
-          sentiment: 'neutral',
-        };
-
-        // Salva resposta da IA como mensagem.
-        // status defaults to SENT in schema; the message-send worker is the source
-        // of truth for delivery state once the WhatsApp API call succeeds.
-        const message = await prisma.message.create({
-          data: {
-            direction: 'OUTBOUND',
-            type: 'TEXT',
-            content: aiResponse.content,
-            conversationId,
-            isFromBot: true,
-          },
+        const { processIncomingMessage } = await import('../agents/agentOrchestrator.js');
+        // io não é serializável via Redis — worker não recebe Socket.io.
+        // agentOrchestrator usa io só pra notification UI (dashboard interno
+        // do operador). Em background processing, o caminho do WhatsApp
+        // (resposta ao cliente) é o crítico — Socket.io é cosmético aqui.
+        // Onda 3 follow-up: emit via Redis pub/sub se UI precisar live.
+        await processIncomingMessage({
+          organizationId: data.organizationId,
+          conversationId: data.conversationId,
+          contactId: data.contactId,
+          contactPhone: data.contactPhone,
+          contactName: data.contactName,
+          messageContent: data.messageContent,
+          messageType: data.messageType,
+          whatsappMessageId: data.whatsappMessageId,
+          orgSettings: data.orgSettings,
+          io: undefined,
         });
 
-        // Enfileira envio via WhatsApp
-        const conversation = await prisma.conversation.findUnique({
-          where: { id: conversationId },
-          include: { contact: true },
-        });
-
-        if (conversation?.contact?.whatsappId) {
-          await messageSendQueue.add('send', {
-            messageId: message.id,
-            conversationId,
-            content: aiResponse.content,
-            to: conversation.contact.whatsappId,
-          });
-        }
-
-        // Emite evento via Socket.io (se disponível via variável global)
-        // O Socket.io é acessado via app.get('io') nas rotas — aqui usamos evento do worker
-        logger.info(`[Queue:AIProcess] AI response saved for conversation ${conversationId}, message ${message.id}`);
-
-        return { success: true, messageId: message.id, intent: aiResponse.intent };
+        const elapsed = Date.now() - t0;
+        logger.info(`[Queue:AIProcess] Completed wamid=${data.whatsappMessageId} in ${elapsed}ms`);
+        return { success: true, conversationId: data.conversationId, latencyMs: elapsed };
       } catch (error) {
-        logger.error(`[Queue:AIProcess] Failed to process AI for conversation ${conversationId}:`, error);
-        throw error;
+        const elapsed = Date.now() - t0;
+        logger.error(`[Queue:AIProcess] Failed wamid=${data.whatsappMessageId} attempt=${job.attemptsMade + 1} after ${elapsed}ms:`, error);
+        throw error; // BullMQ retry kicks in (3 tentativas com backoff exponencial)
       }
     },
     {
       connection,
-      concurrency: 10,
+      concurrency: aiConcurrency,
     },
   );
 
@@ -351,21 +368,35 @@ export async function initQueues(): Promise<void> {
   );
 
   // ── Eventos globais dos workers ──────────────
+  // V2-023 (Sprint 0 Blocker 2): registro OTel em cada job completed/failed
+  // pra dashboard de fail rate e job duration p95 em Grafana.
   const workers = [
-    { name: 'messageSend', worker: messageSendWorker },
-    { name: 'campaignDispatch', worker: campaignDispatchWorker },
-    { name: 'aiProcess', worker: aiProcessWorker },
-    { name: 'audioTranscription', worker: audioTranscriptionWorker },
-    { name: 'sentimentAnalysis', worker: sentimentAnalysisWorker },
+    { name: 'messageSend', queueName: 'message-send', worker: messageSendWorker },
+    { name: 'campaignDispatch', queueName: 'campaign-dispatch', worker: campaignDispatchWorker },
+    { name: 'aiProcess', queueName: 'ai-process', worker: aiProcessWorker },
+    { name: 'audioTranscription', queueName: 'audio-transcription', worker: audioTranscriptionWorker },
+    { name: 'sentimentAnalysis', queueName: 'sentiment-analysis', worker: sentimentAnalysisWorker },
   ];
 
-  for (const { name, worker } of workers) {
+  for (const { name, queueName, worker } of workers) {
     worker.on('completed', (job) => {
-      logger.debug(`[Queue:${name}] Job ${job.id} completed`);
+      const durationMs = (job.finishedOn ?? Date.now()) - (job.timestamp ?? Date.now());
+      recordQueueJobCompleted({
+        queue: queueName,
+        durationSeconds: durationMs / 1000,
+        attempts: job.attemptsMade,
+      });
+      logger.debug(`[Queue:${name}] Job ${job.id} completed in ${durationMs}ms (attempts=${job.attemptsMade})`);
     });
 
     worker.on('failed', (job, err) => {
-      logger.error(`[Queue:${name}] Job ${job?.id} failed: ${err.message}`);
+      const errorType = classifyJobError(err);
+      recordQueueJobFailed({
+        queue: queueName,
+        attempts: job?.attemptsMade ?? 0,
+        errorType,
+      });
+      logger.error(`[Queue:${name}] Job ${job?.id} failed (attempts=${job?.attemptsMade}, type=${errorType}): ${err.message}`);
     });
 
     worker.on('error', (err) => {
@@ -381,7 +412,62 @@ export async function initQueues(): Promise<void> {
     });
   }
 
+  // ── Observable gauges (depth + oldest job age) ──
+  // Polling-based: OTel chama este callback a cada export interval (~60s).
+  // Custo é baixo: 5 chamadas getJobCounts() agregadas.
+  setupQueueObservableMetrics();
+
   logger.info('[Queues] All BullMQ workers initialized successfully');
+}
+
+// V2-023: classifica erro do worker pra labels de fail_rate por tipo.
+function classifyJobError(err: Error): string {
+  const msg = err.message.toLowerCase();
+  if (msg.includes('rate limit') || msg.includes('429')) return 'rate_limit';
+  if (msg.includes('timeout') || err.name === 'AbortError') return 'timeout';
+  if (msg.includes('econnreset') || msg.includes('econnrefused')) return 'network';
+  if (msg.includes('5')) return 'server_error';
+  return 'unknown';
+}
+
+// V2-023: registra observable gauges. Chamado uma vez no init.
+// O OTel SDK chama o callback a cada exportInterval pra coletar os valores.
+function setupQueueObservableMetrics(): void {
+  const queues = [
+    { name: 'message-send', queue: messageSendQueue },
+    { name: 'campaign-dispatch', queue: campaignDispatchQueue },
+    { name: 'ai-process', queue: aiProcessQueue },
+    { name: 'audio-transcription', queue: audioTranscriptionQueue },
+    { name: 'sentiment-analysis', queue: sentimentAnalysisQueue },
+  ];
+
+  queueDepth.addCallback(async (result) => {
+    for (const { name, queue } of queues) {
+      try {
+        const counts = await queue.getJobCounts('waiting', 'active');
+        const total = (counts.waiting ?? 0) + (counts.active ?? 0);
+        result.observe(total, { queue: name });
+      } catch (err) {
+        // Redis transitório — não trava o exporter; valor seguinte pegará
+        logger.debug(`[Queue:metrics] depth probe falhou pra ${name}`, { err });
+      }
+    }
+  });
+
+  queueOldestJobAge.addCallback(async (result) => {
+    for (const { name, queue } of queues) {
+      try {
+        const waiting = await queue.getWaiting(0, 0);
+        const oldest = waiting[0];
+        const ageSec = oldest && oldest.timestamp
+          ? Math.max(0, (Date.now() - oldest.timestamp) / 1000)
+          : 0;
+        result.observe(ageSec, { queue: name });
+      } catch (err) {
+        logger.debug(`[Queue:metrics] age probe falhou pra ${name}`, { err });
+      }
+    }
+  });
 }
 
 /**
