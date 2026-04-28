@@ -1,4 +1,19 @@
 import { logger } from '../utils/logger.js';
+import { redactPII, redactDeep } from '../utils/piiRedactor.js';
+
+/**
+ * V2-022 (Sprint 0 Blocker 3): beforeSend hook que redaciona PII BR
+ * de todo payload antes de enviar pro Sentry. Cobre message, exception
+ * value, request URL/headers e user.id.
+ *
+ * Sentry SaaS não está em GRU1 (US), então qualquer PII vazada aqui é
+ * transferência internacional de dado pessoal sem base legal — fix
+ * obrigatório pré-launch.
+ */
+function redactSentryPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const r = redactDeep(payload);
+  return r.redacted as Record<string, unknown>;
+}
 
 interface SentryContext {
   req?: { method?: string; url?: string; headers?: Record<string, string> };
@@ -94,10 +109,12 @@ export async function captureException(
     }
 
     const storeUrl = `${dsnOrigin}/api/${projectId}/store/`;
+    // V2-022: redaciona PII BR antes de enviar pro Sentry (US-hosted)
+    const redactedPayload = redactSentryPayload(payload as unknown as Record<string, unknown>);
     await fetch(storeUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(redactedPayload),
     });
   } catch (sendErr) {
     logger.warn(`[Sentry] Failed to send exception`, { error: sendErr });
@@ -133,10 +150,12 @@ export async function captureMessage(
     }
 
     const storeUrl = `${dsnOrigin}/api/${projectId}/store/`;
+    // V2-022: redaciona PII BR antes de enviar pro Sentry (US-hosted)
+    const redactedPayload = redactSentryPayload(payload as unknown as Record<string, unknown>);
     await fetch(storeUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(redactedPayload),
     });
   } catch (sendErr) {
     logger.warn(`[Sentry] Failed to send message`, { error: sendErr });

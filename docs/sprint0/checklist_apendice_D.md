@@ -38,15 +38,15 @@
 
 | # | Critério | Status | Evidência / PR |
 |---|---|---|---|
-| 3.1 | `piiRedactor.ts` implementado com 6 patterns BR (CPF, CNPJ, cartão Luhn, email, telefone, CEP) | ⬜ | Onda 2 |
-| 3.2 | Plugado em Winston transport | ⬜ | Onda 2 |
-| 3.3 | Plugado em OTel span attributes | ⬜ | Onda 2 |
-| 3.4 | Plugado em Sentry beforeSend | ⬜ | Onda 2 |
-| 3.5 | Plugado em audit_log content | ⬜ | Onda 2 |
-| 3.6 | 50 testes unit (CPF válido/inválido, CNPJ, Luhn, etc) | ⬜ | Onda 2 |
-| 3.7 | Teste E2E: 20 mensagens com PII em conversa → grep nos logs/Sentry/OTel — zero CPF/CNPJ visível | ⬜ | Onda 3 |
+| 3.1 | `piiRedactor.ts` implementado com 6 patterns BR (CPF, CNPJ, cartão Luhn, email, telefone, CEP) | ✅ | `apps/api/src/utils/piiRedactor.ts` — 240 linhas, 8 regex (CPF/CNPJ formatado + bare separados), validators dígito verificador + Luhn |
+| 3.2 | Plugado em Winston transport | ✅ | `logger.ts:piiRedactor()` format aplicado em devFormat e prodFormat antes do output |
+| 3.3 | Plugado em OTel span attributes | ⏳ | Cobertura indireta via Winston transport OTel (logs vão pra Loki redacionados). Span attribute filter dedicado fica pra Onda 2 follow-up se houver código adicionando attributes manualmente |
+| 3.4 | Plugado em Sentry beforeSend | ✅ | `sentry.ts:redactSentryPayload()` aplicado em ambos `captureException` e `captureMessage` antes do POST pro DSN |
+| 3.5 | Plugado em audit_log content | ✅ | `auditService.ts:sanitizeSnapshot()` agora aplica `redactDeep` na 2ª camada após remoção de campos sensíveis |
+| 3.6 | 50+ testes unit | ✅ | `piiRedactor.test.ts` — 50+ casos (CPF válido/inválido/repetido, CNPJ, Luhn 13-19 dígitos, e-mail, telefone com/sem +55, CEP, false positives, estruturas profundas, vault roundtrip) |
+| 3.7 | Teste E2E: 20 mensagens com PII → grep nos sinks → zero PII visível | ⏳ | Onda 3 (QA full pass) |
 
-**PR**: `release/v2-stab/blocker-3` (planejado Onda 2)
+**PR**: `release/v2-stab/blocker-3` (Onda 2)
 
 ---
 
