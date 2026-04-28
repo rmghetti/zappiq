@@ -72,14 +72,15 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     }
 
     // ── 7. Build system prompt ──────────────────────────
-    const systemPrompt = getSystemPrompt({
-      niche: orgSettings.niche || 'generic',
-      agentName: orgSettings.agentName || 'Assistente',
-      businessName: orgSettings.businessName || 'Empresa',
-      tone: orgSettings.tone || 'friendly',
-      businessHours: orgSettings.businessHours,
+    // V2-021 (Sprint 0): persona dual via Agent table.
+    // - lead/trial (leadStatus in NEW/CONTACTED/QUALIFIED/UNQUALIFIED) → role='comercial'
+    // - customer (leadStatus = CONVERTED)                              → role='suporte'
+    // Fallback pro promptEngine antigo se Agent não existir (orgs sem seed).
+    const systemPrompt = await buildSystemPromptForContact({
+      organizationId,
+      contactId,
+      orgSettings,
       ragContext,
-      currentDateTime: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
     });
 
     // ── 8. Build messages array ─────────────────────────
@@ -298,4 +299,72 @@ async function handleNonTextMessage(phone: string, msgType: string): Promise<voi
 
   const reply = responses[msgType] || 'Recebi sua mensagem! Como posso te ajudar?';
   await waService.sendText(phone, reply);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// V2-021 (Sprint 0 §11.3) · Persona dual via Agent table
+// ─────────────────────────────────────────────────────────────────
+// Decisão de persona:
+//   - leadStatus in [NEW, CONTACTED, QUALIFIED, UNQUALIFIED] → comercial
+//   - leadStatus = CONVERTED                                  → suporte
+//
+// Carrega Agent.systemPrompt do DB se existir (seedado em V2-021 migration).
+// Se não existir (ex.: org criada antes da migration ou seed falhou),
+// faz fallback pro promptEngine antigo — preserva back-compat.
+// ═══════════════════════════════════════════════════════════════════
+async function buildSystemPromptForContact(input: {
+  organizationId: string;
+  contactId: string;
+  orgSettings: any;
+  ragContext: string;
+}): Promise<string> {
+  const { organizationId, contactId, orgSettings, ragContext } = input;
+
+  // 1. Decidir role baseado em leadStatus do Contact
+  let role: 'comercial' | 'suporte' = 'comercial';
+  try {
+    const contact = await prisma.contact.findUnique({
+      where: { id: contactId },
+      select: { leadStatus: true },
+    });
+    if (contact?.leadStatus === 'CONVERTED') role = 'suporte';
+  } catch (err) {
+    logger.warn('[Agent] buildSystemPromptForContact: lookup contact falhou — assumindo comercial', { err });
+  }
+
+  // 2. Tentar carregar Agent live correspondente
+  try {
+    const agent = await prisma.agent.findFirst({
+      where: { organizationId, role, status: 'live' },
+      select: { systemPrompt: true, name: true },
+      orderBy: { createdAt: 'desc' }, // se houver múltiplos, pega o mais recente
+    });
+    if (agent?.systemPrompt) {
+      // Apêndices A.1/A.2 do Plano: prompts já contêm regras estruturais.
+      // Só anexamos contexto dinâmico (RAG + agora).
+      const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      return [
+        agent.systemPrompt,
+        '',
+        `# Contexto recuperado (RAG)`,
+        ragContext || '(sem contexto relevante encontrado para esta query)',
+        '',
+        `# Agora`,
+        now,
+      ].join('\n');
+    }
+  } catch (err) {
+    logger.warn('[Agent] buildSystemPromptForContact: lookup agent falhou — fallback promptEngine', { err });
+  }
+
+  // 3. Fallback (orgs sem seed): promptEngine antigo
+  return getSystemPrompt({
+    niche: orgSettings.niche || 'generic',
+    agentName: orgSettings.agentName || 'Assistente',
+    businessName: orgSettings.businessName || 'Empresa',
+    tone: orgSettings.tone || 'friendly',
+    businessHours: orgSettings.businessHours,
+    ragContext,
+    currentDateTime: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+  });
 }

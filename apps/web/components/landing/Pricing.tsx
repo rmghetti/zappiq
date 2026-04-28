@@ -17,24 +17,19 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, Radar, Shield, Sparkles, Crown, Mic } from 'lucide-react';
+import { Check, Radar, Shield, Sparkles, Crown } from 'lucide-react';
 import { listPlans, ADDONS, getAnnualPrice, type PlanConfig } from '@zappiq/shared';
 
 const PLANS: PlanConfig[] = listPlans();
 const RADAR_ADDON = ADDONS.RADAR_360;
 
-const VOICE_OUTBOUND = {
-  padrao: { price: 197, label: 'Padrão', minutes: 30, engine: 'OpenAI TTS' },
-  premium: { price: 597, label: 'Premium', minutes: 120, engine: 'ElevenLabs' },
-} as const;
-
-type VoiceTier = 'none' | 'padrao' | 'premium';
-
+// V2-020 (Sprint 0 Blocker 6): seletor de Voz removido até julho/2026.
+// Backend (Whisper STT + TTS) está em roadmap. Ver /roadmap pra timeline.
+// Quando voltar (Q3): re-introduzir VOICE_OUTBOUND e toggle abaixo.
 
 export function Pricing() {
   const [annual, setAnnual] = useState(false);
   const [addRadar, setAddRadar] = useState(false);
-  const [voiceTier, setVoiceTier] = useState<VoiceTier>('none');
 
   const computePrice = (plan: PlanConfig): number | null => {
     if (plan.priceMonthly === null) return null;
@@ -48,15 +43,6 @@ export function Pricing() {
     return annual
       ? Math.round(RADAR_ADDON.priceMonthly * (1 - plan.annualDiscountPercent / 100))
       : RADAR_ADDON.priceMonthly;
-  };
-
-  const computeVoiceExtra = (plan: PlanConfig): number => {
-    if (voiceTier === 'none') return 0;
-    if (plan.id === 'ENTERPRISE') return 0;
-    const base = VOICE_OUTBOUND[voiceTier].price;
-    return annual
-      ? Math.round(base * (1 - plan.annualDiscountPercent / 100))
-      : base;
   };
 
   return (
@@ -99,7 +85,7 @@ export function Pricing() {
             </span>
           </div>
 
-          {/* Radar + Voz */}
+          {/* Radar add-on (Voz removida até jul/2026 — ver /roadmap) */}
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <div className="flex items-center gap-3 bg-bg-soft border border-line rounded-full px-4 py-2">
               <button
@@ -120,29 +106,12 @@ export function Pricing() {
               </span>
             </div>
 
-            <div className="inline-flex items-center bg-bg-soft border border-line rounded-full p-1">
-              <span className="px-3 text-[11.5px] font-medium text-muted flex items-center gap-1.5 uppercase tracking-[0.08em]">
-                <Mic size={12} /> Voz
-              </span>
-              {(['none', 'padrao', 'premium'] as VoiceTier[]).map((tier) => (
-                <button
-                  key={tier}
-                  onClick={() => setVoiceTier(tier)}
-                  className={`text-[11.5px] font-medium px-3 py-1.5 rounded-full transition-all ${
-                    voiceTier === tier
-                      ? 'bg-ink text-white shadow-soft'
-                      : 'text-muted hover:text-ink'
-                  }`}
-                  aria-label={`Voz outbound ${tier}`}
-                >
-                  {tier === 'none'
-                    ? 'Nenhuma'
-                    : tier === 'padrao'
-                      ? `Padrão R$${VOICE_OUTBOUND.padrao.price}`
-                      : `Premium R$${VOICE_OUTBOUND.premium.price}`}
-                </button>
-              ))}
-            </div>
+            <Link
+              href="/roadmap"
+              className="text-[11.5px] font-medium text-muted hover:text-ink transition-colors underline-offset-4 hover:underline"
+            >
+              Voz (chegando em julho/2026) →
+            </Link>
           </div>
         </div>
 
@@ -151,8 +120,7 @@ export function Pricing() {
           {PLANS.map((plan) => {
             const basePrice = computePrice(plan);
             const radarExtra = computeRadarExtra(plan);
-            const voiceExtra = computeVoiceExtra(plan);
-            const totalPrice = basePrice !== null ? basePrice + radarExtra + voiceExtra : null;
+            const totalPrice = basePrice !== null ? basePrice + radarExtra : null;
             const isEnterprise = plan.id === 'ENTERPRISE';
             const isBusiness = plan.id === 'BUSINESS';
             const isHighlight = plan.highlight && !isBusiness && !isEnterprise;

@@ -442,25 +442,18 @@ export const ADDONS: Record<string, AddonConfig> = {
     availableFor: ['SCALE', 'BUSINESS'],
     includedIn: ['ENTERPRISE'],
   },
-  VOICE_INBOUND: {
-    id: 'VOICE_INBOUND',
-    name: 'Voice Inbound',
-    description:
-      'Recebimento de mensagens de voz com transcrição automática via Whisper. Transcrição ilimitada (prática) para fluxos de atendimento e compreensão de intenção.',
-    priceMonthly: 197,
-    availableFor: ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
-    includedIn: [],
-  },
-  VOICE_OUTBOUND: {
-    id: 'VOICE_OUTBOUND',
-    name: 'Voice Outbound',
-    description:
-      'Envio de mensagens de voz geradas por TTS (OpenAI ou ElevenLabs). 500 minutos/mês inclusos; excedente cobrado a R$ 0,50/min.',
-    priceMonthly: 497,
-    priceLabel: 'R$ 497/mês (500 min) + R$ 0,50/min excedente',
-    availableFor: ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
-    includedIn: [],
-  },
+  // ─────────────────────────────────────────────────────────
+  // V2-020 (Sprint 0 Blocker 6): Voz Padrão (R$197) e Voz
+  // Premium (R$497) REMOVIDAS do planConfig público até Q3/2026.
+  // Backend (Whisper STT + TTS) não está implementado — vender sem
+  // entregar configura risco regulatório (CDC art. 30, 35) e LGPD.
+  //
+  // Roadmap público em zappiq.com.br/roadmap; comunicação aos
+  // clientes do trial é manual via CSM.
+  //
+  // Quando voltar (Q3): re-introduzir os blocos VOICE_INBOUND e
+  // VOICE_OUTBOUND com pricing definitivo (Plano §6.2).
+  // ─────────────────────────────────────────────────────────
 };
 
 // ═══════════════════════════════════════════════════════════

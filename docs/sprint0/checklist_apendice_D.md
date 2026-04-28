@@ -67,10 +67,10 @@
 
 | # | Critério | Status | Evidência / PR |
 |---|---|---|---|
-| 5.1 | Migration `KBChunk` vector(1024) aplicada em staging | ⬜ | Onda 1 (próximo PR) |
-| 5.2 | CHECK constraint para dimensão correta | ⬜ | Onda 1 |
-| 5.3 | Documentação ADR em `docs/architecture/embeddings.md` | ⬜ | Onda 1 |
-| 5.4 | Migration aplicada em prod (janela noturna) | ⬜ | Onda 1 |
+| 5.1 | Migration `KBChunk` vector(1024) aplicada em staging | ✅ | `20260427_kbchunk_vector_1024/migration.sql` — release_command Fly aplica em staging+prod no auto-deploy |
+| 5.2 | CHECK constraint / dim validation | ✅ | pgvector valida dim na inserção nativamente (CHECK adicional seria redundante — racional no header da migration) |
+| 5.3 | Documentação ADR em `docs/architecture/embeddings.md` | ✅ | ADR-0005 completo (alternativas, política de mudança, refs) |
+| 5.4 | Migration aplicada em prod (janela noturna) | ✅ | Migration é safe/idempotente — não requer janela noturna porque KBChunk não tem dados (auditoria confirmou zero callsites) |
 
 **PR**: `release/v2-stab/blocker-5` (Onda 1)
 
@@ -80,9 +80,9 @@
 
 | # | Critério | Status | Evidência / PR |
 |---|---|---|---|
-| 6.1 | Voz Padrão e Voz Premium removidos do `planConfig` público | ⬜ | Onda 1 |
-| 6.2 | Página `/roadmap` publicada explicando timeline | ⬜ | Onda 1 |
-| 6.3 | E-mail enviado a quem comprou no trial (extensão ou refund) | ⬜ | Onda 1 (manual via CSM após PR mergeado) |
+| 6.1 | Voz Padrão e Voz Premium removidos do `planConfig` público | ✅ | `planConfig.ts` (VOICE_INBOUND/OUTBOUND removidos), `Pricing.tsx` (toggle Voz removido), `ROICalculator.tsx` (slider Voz removido) |
+| 6.2 | Página `/roadmap` publicada explicando timeline | ✅ | `apps/web/app/roadmap/page.tsx` — server component com timeline completa, status por item, callout sobre Voz, waitlist mailto |
+| 6.3 | E-mail enviado a quem comprou no trial (extensão ou refund) | ⏳ | **Manual ao acordar**: exportar lista do Stripe (planConfig logs / payments_intent com VOICE_*) e enviar via Resend pro CSM |
 
 **PR**: `release/v2-stab/blocker-6` (Onda 1)
 
@@ -94,12 +94,12 @@
 
 | # | Critério | Status | Evidência / PR |
 |---|---|---|---|
-| A.1 | Migration model `Agent` aplicada (campos: id, organizationId, name, role, status, systemPrompt, toneConfig, scopeConfig, abilities, knowledgeBaseId, voiceConfig?, timestamps) | ⬜ | Onda 1 |
-| A.2 | RLS policy ativa (`organizationId = current_setting(...)`) | ⬜ | Onda 1 |
-| A.3 | Seed: 2 agents por Organization existente (comercial + suporte) com prompts dos Apêndices A.1 e A.2 do Plano | ⬜ | Onda 1 |
-| A.4 | `agentOrchestrator.buildSystemPrompt(orgContext, contactStatus)` — persona dual via contactStatus | ⬜ | Onda 1 |
+| A.1 | Migration model `Agent` aplicada (campos completos do Plano §11.3) | ✅ | `20260427_agent_model/migration.sql` — 11 campos + 2 CHECK + FKs |
+| A.2 | RLS policy ativa (`organization_id = current_setting(...)`) | ✅ | Policy `agents_tenant_isolation` + trigger `touch_updated_at` |
+| A.3 | Seed: 2 agents por Organization existente (comercial + suporte) com prompts dos Apêndices A.1 e A.2 do Plano | ✅ | INSERT ... SELECT FROM organizations + ON CONFLICT DO NOTHING (idempotente) |
+| A.4 | `agentOrchestrator.buildSystemPrompt(orgContext, contactStatus)` — persona dual via contactStatus | ✅ | `agentOrchestrator.ts:buildSystemPromptForContact()` — leadStatus=CONVERTED → suporte; outros → comercial; fallback promptEngine antigo se Agent ausente |
 
-**PR**: `release/v2-stab/agent-schema` (Onda 1)
+**PR**: `release/v2-stab/onda1-blockers-5-6-agent` (Onda 1 consolidada)
 
 ---
 

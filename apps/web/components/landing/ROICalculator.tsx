@@ -15,7 +15,7 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Calculator, Sparkles, TrendingUp, Zap, Users, Mic } from 'lucide-react';
+import { ArrowRight, Calculator, Sparkles, TrendingUp, Zap, Users } from 'lucide-react';
 import { PLAN_CONFIG, type PlanConfig, type PlanId } from '@zappiq/shared';
 import { track } from '../../lib/track';
 
@@ -26,8 +26,9 @@ const CONVERSION_UPLIFT_MULTIPLIER = 1.3;
 export const ROI_MONTHLY_CAP_PERCENT = 300;
 export const PAYBACK_MIN_DAYS = 90;
 
-const VOICE_OUTBOUND_PRICE = { none: 0, padrao: 197, premium: 597 } as const;
-type VoiceTier = 'none' | 'padrao' | 'premium';
+// V2-020 (Sprint 0 Blocker 6): Voz removida do ROI até backend pronto
+// (julho/2026). Quando voltar, re-introduzir VOICE_OUTBOUND_PRICE +
+// VoiceTier + slider correspondente. Ver /roadmap.
 
 function recommendPlan(aiMessagesPerMonth: number, agents: number): PlanId {
   const tryOrder: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
@@ -104,7 +105,6 @@ export function ROICalculator() {
   const [avgSalary, setAvgSalary] = useState(2800);
   const [avgTicket, setAvgTicket] = useState(450);
   const [currentConversionPct, setCurrentConversionPct] = useState(8);
-  const [voiceOutbound, setVoiceOutbound] = useState<VoiceTier>('none');
 
   const results = useMemo(() => {
     const messagesPerMonth = messagesPerDay * 30;
@@ -112,9 +112,8 @@ export function ROICalculator() {
 
     const recommendedId = recommendPlan(aiMessagesPerMonth, attendants);
     const plan: PlanConfig = PLAN_CONFIG[recommendedId];
-    const voiceExtra = recommendedId === 'ENTERPRISE' ? 0 : VOICE_OUTBOUND_PRICE[voiceOutbound];
     const basePlanPrice = plan.priceMonthly ?? 9900;
-    const zappiqCost = basePlanPrice + voiceExtra;
+    const zappiqCost = basePlanPrice; // Voz: roadmap jul/2026, ver /roadmap
 
     const attendantsNeededAfterAI = Math.max(
       1,
@@ -153,7 +152,6 @@ export function ROICalculator() {
       plan,
       zappiqCost,
       basePlanPrice,
-      voiceExtra,
       aiMessagesPerMonth,
       attendantsSaved,
       operationalSavingsMonthly,
@@ -166,7 +164,7 @@ export function ROICalculator() {
       setupFeeSaved,
       firstYearSavings,
     };
-  }, [attendants, messagesPerDay, avgSalary, avgTicket, currentConversionPct, voiceOutbound]);
+  }, [attendants, messagesPerDay, avgSalary, avgTicket, currentConversionPct]);
 
   const isEnterprise = results.plan.id === 'ENTERPRISE';
   const ctaHref = isEnterprise
@@ -245,52 +243,8 @@ export function ROICalculator() {
               onChange={setAvgSalary}
             />
 
-            {/* Voz outbound */}
-            <div className="pt-4 border-t border-line">
-              <div className="flex items-center justify-between mb-2.5">
-                <label className="text-[13px] font-medium text-ink flex items-center gap-1.5">
-                  <Mic size={13} className="text-accent" />
-                  Voz outbound (opcional)
-                </label>
-                <span className="text-[10px] text-muted uppercase tracking-[0.12em] font-semibold">
-                  Add-on V3.2
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {(['none', 'padrao', 'premium'] as const).map((tier) => {
-                  const active = voiceOutbound === tier;
-                  const label = tier === 'none' ? 'Sem voz' : tier === 'padrao' ? 'Padrão' : 'Premium';
-                  const sub = tier === 'none'
-                    ? 'R$ 0'
-                    : tier === 'padrao'
-                      ? 'R$ 197 · 30min'
-                      : 'R$ 597 · 120min';
-                  return (
-                    <button
-                      key={tier}
-                      type="button"
-                      onClick={() => setVoiceOutbound(tier)}
-                      className={`rounded-[10px] border px-3 py-2.5 text-left transition-all ${
-                        active
-                          ? 'border-accent bg-accent/5 shadow-soft'
-                          : 'border-line bg-white hover:border-ink/30'
-                      }`}
-                    >
-                      <p className={`text-[12.5px] font-semibold ${active ? 'text-accent' : 'text-ink'}`}>
-                        {label}
-                      </p>
-                      <p className={`text-[10.5px] ${active ? 'text-accent/80' : 'text-muted'}`}>
-                        {sub}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-[10.5px] text-muted mt-2 leading-relaxed">
-                Padrão: voz sintética natural · Premium: voz praticamente humana, com opção de clonar.
-                Escutar áudio do cliente: incluso em todos os planos.
-              </p>
-            </div>
+            {/* V2-020 (Sprint 0 Blocker 6): Voz removida do ROI calculator
+                até backend pronto (jul/2026). Ver /roadmap. */}
 
             <p className="text-[10.5px] text-muted pt-4 border-t border-line leading-relaxed">
               <strong className="text-ink">Como a conta é feita:</strong> a Iza resolve {Math.round(AI_AUTOMATION_RATE * 100)}% dos atendimentos
@@ -331,17 +285,8 @@ export function ROICalculator() {
                   </>
                 )}
               </div>
-              {!isEnterprise && results.voiceExtra > 0 && (
-                <p className="text-[11px] text-white/80 mt-2">
-                  Inclui {brl(results.basePlanPrice)} plano + {brl(results.voiceExtra)} voz{' '}
-                  {voiceOutbound === 'premium' ? 'Premium' : 'Padrão'}
-                </p>
-              )}
-              {isEnterprise && (
-                <p className="text-[11px] text-white/80 mt-2">
-                  Voz outbound incluída na negociação Enterprise.
-                </p>
-              )}
+              {/* V2-020: bloco de breakdown Voz removido. Quando voltar (jul/2026)
+                  re-introduzir junto com o seletor acima. */}
             </div>
 
             {/* Grid de 4 métricas */}
