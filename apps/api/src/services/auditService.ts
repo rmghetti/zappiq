@@ -25,6 +25,7 @@ import { createHash } from 'node:crypto';
 import type { Request } from 'express';
 import { prisma, Prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
+import { redactDeep } from '../utils/piiRedactor.js';
 
 type LegalBasis =
   | 'CONSENT'
@@ -90,8 +91,15 @@ function computeHash(record: {
 }
 
 /**
- * Sanitiza um snapshot antes de persistir: remove campos altamente sensíveis
- * que não deveriam estar no log (princípio da minimização — Art. 6, III).
+ * Sanitiza um snapshot antes de persistir.
+ * Duas camadas:
+ *   1. Remove campos altamente sensíveis (password, token, etc) — minimização (Art. 6, III).
+ *   2. V2-022: redaciona PII BR (CPF/CNPJ/cartão/email/telefone/CEP) em qualquer
+ *      campo textual restante. Garante que mesmo `Message.content` ou
+ *      `Contact.notes` não vazam PII pra audit_logs.
+ *
+ * NOTA: a redação de PII é determinística (mesmo valor → mesmo placeholder),
+ * permitindo correlação entre eventos sem expor o dado original.
  */
 function sanitizeSnapshot(obj: unknown): unknown {
   if (!obj || typeof obj !== 'object') return obj;
@@ -115,7 +123,9 @@ function sanitizeSnapshot(obj: unknown): unknown {
       clone[k] = v;
     }
   }
-  return clone;
+  // 2ª camada: redação de PII brasileira em campos textuais (recursivo).
+  // redactDeep não muta input — devolve nova estrutura.
+  return redactDeep(clone).redacted;
 }
 
 /**

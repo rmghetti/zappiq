@@ -2,6 +2,7 @@ import winston from 'winston';
 import { trace, context } from '@opentelemetry/api';
 import { OpenTelemetryTransportV3 } from '@opentelemetry/winston-transport';
 import { env } from '../config/env.js';
+import { redactDeep } from './piiRedactor.js';
 
 const { combine, timestamp, colorize, printf, json } = winston.format;
 
@@ -19,8 +20,30 @@ const otelContext = winston.format((info) => {
   return info;
 });
 
+/**
+ * V2-022 (Sprint 0 Blocker 3): redaciona PII brasileira ANTES de qualquer
+ * sink (console em dev, OTel/Loki em prod). Garante que CPF/CNPJ/cartão/
+ * e-mail/telefone/CEP nunca vazam pra Grafana ou Sentry.
+ *
+ * Campos passthrough (não redacionados) são identificadores técnicos:
+ * traceId, spanId, level, service, env. Os demais (incluindo message
+ * e qualquer meta) passam por redactDeep antes de serializar.
+ */
+const PII_PASSTHROUGH = new Set(['traceId', 'spanId', 'level', 'service', 'env']);
+const piiRedactor = winston.format((info) => {
+  for (const [k, v] of Object.entries(info)) {
+    if (PII_PASSTHROUGH.has(k)) continue;
+    if (typeof v === 'string' || (v !== null && typeof v === 'object')) {
+      const r = redactDeep(v);
+      (info as Record<string, unknown>)[k] = r.redacted;
+    }
+  }
+  return info;
+});
+
 const devFormat = combine(
   otelContext(),
+  piiRedactor(),
   colorize(),
   timestamp({ format: 'HH:mm:ss' }),
   printf(({ timestamp, level, message, traceId, ...meta }) => {
@@ -30,7 +53,7 @@ const devFormat = combine(
   }),
 );
 
-const prodFormat = combine(otelContext(), timestamp(), json());
+const prodFormat = combine(otelContext(), piiRedactor(), timestamp(), json());
 
 // OTel Logs bridge: em producao, envia logs via OTLP HTTP pro Grafana Cloud
 // (Loki). Reusa a mesma credencial OTLP configurada pros traces — ou seja,
