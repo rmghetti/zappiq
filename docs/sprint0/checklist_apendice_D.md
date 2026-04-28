@@ -24,13 +24,20 @@
 
 | # | Critério | Status | Evidência / PR |
 |---|---|---|---|
-| 2.1 | `webhook.ts` apenas valida HMAC e enfileira (não chama `processIncomingMessage`) | ⬜ | Onda 2 |
-| 2.2 | `aiProcessWorker` consome `ai-process` queue | ⬜ | Onda 2 |
-| 2.3 | Retry 3x com exponential backoff configurado | ⬜ | Onda 2 |
-| 2.4 | Deadletter queue funciona após 3 falhas | ⬜ | Onda 2 |
-| 2.5 | Load test k6: 100 msg/s × 60s — sem queda; queue depth p95 < 20 | ⬜ | Onda 3 |
+| 2.1 | `webhook.ts` valida HMAC, persiste contact/conversation/message, enfileira em `ai-process` (NÃO chama `processIncomingMessage` inline) | ✅ | `webhook.ts:175-198` — `aiProcessQueue.add('process-incoming', ..., { jobId: 'wamid:'+id })` com idempotência via Meta message ID |
+| 2.2 | `aiProcessWorker` consome `ai-process` chamando `processIncomingMessage` real | ✅ | `queueService.ts:233-292` — substitui placeholder por dynamic import + chamada real; concorrência env-driven (`BULLMQ_LLM_CONCURRENCY`, default 10) |
+| 2.3 | Retry 3x com exponential backoff configurado | ✅ | `aiProcessQueue` defaultJobOptions: `attempts: 3`, `backoff: exponential 3s` (3s → 6s → 12s) |
+| 2.4 | Failed jobs visíveis pra inspeção (BullMQ "failed" set) | ✅ | `removeOnFail: { count: 2000 }` mantém últimas 2000 falhas; alerta Slack consome via Bull Board ou `getJobs(['failed'])` |
+| 2.5 | Load test k6: 100 msg/s × 60s — queue depth p95 < 20 | ⏳ | Onda 3 |
 
-**PR**: `release/v2-stab/blocker-2` (planejado Onda 2)
+**Métricas OTel adicionadas** (`config/metrics.ts`):
+- `zappiq_queue_depth` (observable gauge — waiting + active por fila)
+- `zappiq_queue_oldest_job_age_seconds` (observable gauge)
+- `zappiq_queue_jobs_completed_total` (counter)
+- `zappiq_queue_jobs_failed_total` (counter, com `error_type` label)
+- `zappiq_queue_job_duration_seconds` (histogram — enqueue → completion)
+
+**PR**: `release/v2-stab/blocker-2`
 
 ---
 

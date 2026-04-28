@@ -142,3 +142,48 @@ export function classifyAnthropicError(err: unknown): string {
   if (msg.includes('network') || msg.includes('enotfound') || msg.includes('econnreset')) return 'network';
   return 'unknown';
 }
+
+// ── BullMQ queue metrics ────────────────────────────────
+// V2-023 (Sprint 0 Blocker 2): observabilidade da fila ai-process e demais.
+// Usadas pelo poller em queueService.startMetricsPoller() — emite a cada 15s.
+
+// Profundidade da fila (waiting + active). Alerta quando > 20 sustained.
+export const queueDepth = meter.createObservableGauge('zappiq_queue_depth', {
+  description: 'Number of jobs in queue (waiting + active)',
+});
+
+// Idade do job mais antigo aguardando (segundos). Indica saturação.
+export const queueOldestJobAge = meter.createObservableGauge('zappiq_queue_oldest_job_age_seconds', {
+  description: 'Age of oldest waiting job in seconds',
+  unit: 's',
+});
+
+// Counter de jobs concluídos (sucesso) e falhos. Permite calcular fail_rate
+// = rate(failed) / (rate(completed) + rate(failed)).
+export const queueJobsCompleted = meter.createCounter('zappiq_queue_jobs_completed_total', {
+  description: 'Jobs completed successfully',
+});
+export const queueJobsFailed = meter.createCounter('zappiq_queue_jobs_failed_total', {
+  description: 'Jobs failed permanently (after all retry attempts)',
+});
+
+// Latência fim-a-fim do job (enqueue → completion). Diferente de
+// agentPipelineDuration (que mede só o processIncomingMessage).
+export const queueJobLatency = meter.createHistogram('zappiq_queue_job_duration_seconds', {
+  description: 'Job duration from enqueue to completion (seconds)',
+  unit: 's',
+});
+
+export function recordQueueJobCompleted(params: { queue: string; durationSeconds: number; attempts: number }): void {
+  const attrs = { queue: params.queue };
+  queueJobsCompleted.add(1, { ...attrs, attempts: String(params.attempts) });
+  queueJobLatency.record(params.durationSeconds, attrs);
+}
+
+export function recordQueueJobFailed(params: { queue: string; attempts: number; errorType: string }): void {
+  queueJobsFailed.add(1, {
+    queue: params.queue,
+    attempts: String(params.attempts),
+    error_type: params.errorType,
+  });
+}
