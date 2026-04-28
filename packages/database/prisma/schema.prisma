@@ -571,3 +571,29 @@ model Consent {
   @@index([contactId])
   @@map("consents")
 }
+
+// ═══════════════════════════════════════════════════════
+// V2-018 · llm_call_logs (Sprint 0 Blocker 1)
+// Audit por turn das chamadas LLM via LLMRouter.
+// Não polui audit_logs (hash chain) — ver migration.sql para racional.
+// ═══════════════════════════════════════════════════════
+model LLMCallLog {
+  id                  String   @id @default(uuid()) @db.Text
+  organizationId      String?  @map("organization_id")
+  conversationId      String?  @map("conversation_id")
+  provider            String   // 'anthropic-sonnet' | 'anthropic-haiku' | 'openai-mini' | 'none'
+  model               String   // 'claude-sonnet-4-6' | etc
+  operation           String   @default("chat") // 'chat' | 'classify' | 'sentiment'
+  inputTokens         Int?     @map("input_tokens")
+  outputTokens        Int?     @map("output_tokens")
+  costUsdEstimate     Decimal? @map("cost_usd_estimate") @db.Decimal(10, 6)
+  latencyMs           Int      @map("latency_ms")
+  fallbackTriggered   Boolean  @default(false) @map("fallback_triggered")
+  attemptCount        Int      @default(1) @map("attempt_count")
+  error               String?
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([organizationId, createdAt])
+  @@index([provider, createdAt])
+  @@map("llm_call_logs")
+}
