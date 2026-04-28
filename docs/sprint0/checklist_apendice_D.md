@@ -114,6 +114,21 @@
 
 ---
 
+## Observability DAY 1 (V2-025)
+
+| # | Critério | Status | Evidência |
+|---|---|---|---|
+| O.1 | Métricas OTel custom (latency p50/p95, error rate, queue depth, fallback rate, cost) exportando | ✅ | `apps/api/src/config/metrics.ts` — 11 métricas LLM/agent/queue (Blockers 1, 2, 3) |
+| O.2 | Endpoint admin healthcheck `/api/admin/llm-status` | ✅ | `apps/api/src/routes/adminLlm.ts` — providers cascade + 24h aggregates (cost, fallback rate, latency) |
+| O.3 | PromQL queries documentadas pra dashboard Grafana | ✅ | `docs/operations/observability_day1.md` §3 — 8 painéis canônicos |
+| O.4 | Alertas A1–A4 definidos (yaml) | ✅ | `observability_day1.md` §4 — error rate, latency p95, queue depth, fallback rate |
+| O.5 | Runbook on-call por alerta | ✅ | `observability_day1.md` §5 — diagnóstico + ações pra cada alerta |
+| O.6 | Runbook do war room dia do launch | ✅ | `docs/operations/launch_runbook_2026-05-11.md` — 11 seções, cronograma, gate Go-Live, rollback, smoke test |
+| O.7 | Dashboard Grafana criado em produção | ⏳ manual | Setup externo — usar queries de `observability_day1.md §3` no Grafana Cloud |
+| O.8 | Alertas Grafana ativos + webhook Slack | ⏳ manual | Setup externo — Grafana Alerting → contact point Slack `#zappiq-alerts` |
+
+**PR**: `release/v2-stab/observability-day-1`
+
 ## Critério de Go-Live (sábado 10/05 às 18h)
 
 Tudo abaixo verde antes do flip `LAUNCH_MODE=live`:
@@ -124,5 +139,6 @@ Tudo abaixo verde antes do flip `LAUNCH_MODE=live`:
 - [ ] Soak overnight (sábado → domingo): zero exceptions críticas Grafana/Sentry; latency p95 estável
 - [ ] Descope de Voz: 100% removido do produto público
 - [ ] War room montado e plantão confirmado
+- [ ] Dashboard Grafana + alertas Slack ativos (O.7, O.8)
 
 Falha em qualquer critério até sábado 18h → escalation pra decisão entre (a) adiar pra 18/05, ou (b) launch reduzido com feature flag desativando o item falho.
