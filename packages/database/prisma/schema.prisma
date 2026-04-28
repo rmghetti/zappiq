@@ -176,6 +176,7 @@ model Organization {
   campaigns          Campaign[]
   flows              Flow[]
   knowledgeBases     KnowledgeBase[]
+  agents             Agent[]            // V2-021 (Sprint 0 §11.3)
   templates          MessageTemplate[]
   dataSubjectRequests DataSubjectRequest[]
   tenantUsageMonthly TenantUsageMonthly[]
@@ -390,6 +391,7 @@ model KnowledgeBase {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   documents      KBDocument[]
+  agents         Agent[]
   createdAt      DateTime     @default(now())
 
   @@index([organizationId])
@@ -410,10 +412,13 @@ model KBDocument {
   @@map("kb_documents")
 }
 
+// V2-019 (Sprint 0 Blocker 5): embedding alinhado ao canônico
+// Voyage voyage-3 1024 dim. Ver ADR docs/architecture/embeddings.md.
+// Migration: 20260427_kbchunk_vector_1024.
 model KBChunk {
   id         String                          @id @default(cuid())
   content    String
-  embedding  Unsupported("vector(1536)")?
+  embedding  Unsupported("vector(1024)")?
   metadata   Json?
   documentId String
   document   KBDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -573,6 +578,33 @@ model Consent {
 }
 
 // ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// V2-021 · Agent (Sprint 0 — Plano §11.3)
+// Persona configurável por Organization. 2 seed por org:
+// comercial (lead/trial) + suporte (customer). Builder
+// self-service Q3 estende esse modelo.
+// ═══════════════════════════════════════════════════════
+model Agent {
+  id              String          @id @default(uuid()) @db.Text
+  organizationId  String          @map("organization_id")
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String          // "Iza", "Bella", "Ana"
+  role            String          // 'comercial' | 'suporte' | 'onboarding' | 'financeiro'
+  status          String          @default("live") // 'draft' | 'reviewed' | 'live'
+  systemPrompt    String          @map("system_prompt") @db.Text
+  toneConfig      Json            @default("{}") @map("tone_config")
+  scopeConfig     Json            @default("{}") @map("scope_config")
+  abilities       Json            @default("{}")
+  knowledgeBaseId String?         @map("knowledge_base_id")
+  knowledgeBase   KnowledgeBase?  @relation(fields: [knowledgeBaseId], references: [id], onDelete: SetNull)
+  voiceConfig     Json?           @map("voice_config") // null até voz voltar Q3
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  @@index([organizationId, role, status])
+  @@map("agents")
+}
+
 // V2-018 · llm_call_logs (Sprint 0 Blocker 1)
 // Audit por turn das chamadas LLM via LLMRouter.
 // Não polui audit_logs (hash chain) — ver migration.sql para racional.
