@@ -3,7 +3,7 @@ import { logger } from '../utils/logger.js';
 import redis from '../utils/redis.js';
 import * as waService from '../services/whatsappService.js';
 import * as ragService from '../services/ragService.js';
-import { chatCompletion, classify, type LLMMessage } from '../services/llm/langchainClient.js';
+import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
 import { getSystemPrompt } from './promptEngine.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
@@ -52,7 +52,9 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     });
 
     // ── 4. Classify intent ──────────────────────────────
-    const intent = await classifyIntent(messageContent);
+    // V2-018: passa contexto pra audit por turn em llm_call_logs
+    const llmCtx: LLMContext = { orgId: organizationId, conversationId };
+    const intent = await classifyIntent(messageContent, llmCtx);
     logger.info(`[Agent] Intent: ${intent}`, { contactPhone, organizationId });
 
     // ── 5. Check for handoff request ────────────────────
@@ -88,7 +90,9 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     messages.push({ role: 'user', content: messageContent });
 
     // ── 9. Call LLM ─────────────────────────────────────
-    const llmResponse = await chatCompletion(systemPrompt, messages);
+    // V2-018: cascade Sonnet 4.6 → Haiku 4.5 → GPT-4o-mini via LLMRouter,
+    // com circuit breaker e audit por turn em llm_call_logs.
+    const llmResponse = await chatCompletion(systemPrompt, messages, 1024, llmCtx);
 
     // ── 10. Parse structured response ───────────────────
     const parsed = parseAgentResponse(llmResponse.text);
@@ -145,7 +149,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 }
 
 // ── Intent Classification ───────────────────────────────
-async function classifyIntent(text: string): Promise<string> {
+async function classifyIntent(text: string, ctx?: LLMContext): Promise<string> {
   const cacheKey = `intent:${Buffer.from(text).toString('base64').slice(0, 32)}`;
 
   try {
@@ -160,7 +164,9 @@ Message: "${text}"
 
 Respond with ONLY the intent word, nothing else.`;
 
-  const intent = await classify(prompt);
+  // V2-018: classify usa Haiku 4.5 forçado via LLMRouter (com fallback automático
+  // pra cascade completa se Haiku cair). Audit por turn em llm_call_logs.
+  const intent = await classify(prompt, ctx);
 
   try { await redis.setex(cacheKey, 300, intent); } catch {}
 
