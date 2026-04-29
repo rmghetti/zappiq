@@ -124,8 +124,8 @@
 | O.4 | Alertas A1–A4 definidos (yaml) | ✅ | `observability_day1.md` §4 — error rate, latency p95, queue depth, fallback rate |
 | O.5 | Runbook on-call por alerta | ✅ | `observability_day1.md` §5 — diagnóstico + ações pra cada alerta |
 | O.6 | Runbook do war room dia do launch | ✅ | `docs/operations/launch_runbook_2026-05-11.md` — 11 seções, cronograma, gate Go-Live, rollback, smoke test |
-| O.7 | Dashboard Grafana criado em produção | ⏳ manual | Setup externo — usar queries de `observability_day1.md §3` no Grafana Cloud |
-| O.8 | Alertas Grafana ativos + webhook Slack | ⏳ manual | Setup externo — Grafana Alerting → contact point Slack `#zappiq-alerts` |
+| O.7 | Dashboard Grafana criado em produção | ⏳ aguarda execução | Tooling pronto: `tools/grafana/dashboard.json` (1-click import) — README com passo a passo |
+| O.8 | Alertas Grafana ativos + webhook Slack | ⏳ aguarda execução | Tooling pronto: `tools/grafana/alerts_provisioning.yaml` (4 alertas A1-A4 + Slack contact point) — README §3 |
 
 **PR**: `release/v2-stab/observability-day-1`
 

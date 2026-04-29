@@ -1,0 +1,202 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Selecione o Prometheus do Grafana Cloud (geralmente 'grafanacloud-zappiq-prom').",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "LLM Latency p50 / p95",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 5}]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(zappiq_llm_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(zappiq_llm_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "description": "Latência das chamadas Anthropic/OpenAI. Threshold 5s (Plano §8.3)."
+    },
+    {
+      "id": 2,
+      "title": "LLM Error Rate",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.01}]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(zappiq_llm_errors_total[5m])) / clamp_min(sum(rate(zappiq_llm_request_duration_seconds_count[5m])), 1)",
+          "refId": "A"
+        }
+      ],
+      "description": "Erros / total. Alerta A1 dispara em >1% por 10min."
+    },
+    {
+      "id": 3,
+      "title": "Cost per Hour (USD estimado)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(zappiq_llm_cost_usd_total[1h])) * 3600",
+          "refId": "A"
+        }
+      ],
+      "description": "Sanity ~US$ 16/h em 100 conv/h (Plano §9)."
+    },
+    {
+      "id": 4,
+      "title": "Queue Depth ai-process",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "red", "value": 20}]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "zappiq_queue_depth{queue=\"ai-process\"}",
+          "legendFormat": "ai-process",
+          "refId": "A"
+        }
+      ],
+      "description": "Jobs waiting + active. Threshold 20 (Plano §2.1)."
+    },
+    {
+      "id": 5,
+      "title": "Fallback Rate por Provider",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}},
+      "targets": [
+        {
+          "expr": "sum by (provider) (rate(zappiq_queue_jobs_completed_total{queue=\"ai-process\",attempts!=\"1\"}[5m])) / clamp_min(sum(rate(zappiq_queue_jobs_completed_total{queue=\"ai-process\"}[5m])), 1)",
+          "legendFormat": "{{provider}}",
+          "refId": "A"
+        }
+      ],
+      "description": "% jobs que precisaram retry. Alerta A4 dispara em >50%."
+    },
+    {
+      "id": 6,
+      "title": "Pipeline p95 (latência percebida)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 7}]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(zappiq_agent_pipeline_duration_seconds_bucket[5m])))",
+          "legendFormat": "pipeline p95",
+          "refId": "A"
+        }
+      ],
+      "description": "Inbound webhook → resposta WhatsApp. Target ≤5s."
+    },
+    {
+      "id": 7,
+      "title": "Mensagens processadas (msg/min)",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 16},
+      "targets": [
+        {
+          "expr": "sum(rate(zappiq_conversation_messages_total[5m])) * 60",
+          "legendFormat": "msgs/min",
+          "refId": "A"
+        }
+      ],
+      "description": "Volume de mensagens. Útil pra correlacionar pico com latência."
+    },
+    {
+      "id": 8,
+      "title": "Handoff Rate (%)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 16},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.35}]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(zappiq_conversation_handoff_total[1h])) / clamp_min(sum(rate(zappiq_conversation_messages_total[1h])), 1)",
+          "refId": "A"
+        }
+      ],
+      "description": "Bot → humano. Target <35% (Plano §8.3 escalation rate)."
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["zappiq", "production", "v2.0"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "America/Sao_Paulo",
+  "title": "ZappIQ Production Day 1",
+  "uid": "zappiq-prod-day1",
+  "version": 1,
+  "weekStart": "monday"
+}
