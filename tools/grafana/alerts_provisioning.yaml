@@ -1,0 +1,195 @@
+# Grafana Alerting — Provisioning (Sprint 0 Onda 3)
+# ─────────────────────────────────────────────────────────────────────
+# 4 alertas A1-A4 do plano V2.0 §2.1 + observability_day1.md §4.
+# Roteamento: Slack #zappiq-alerts via contact point.
+#
+# COMO USAR:
+#   Opção A (UI): copiar/colar cada regra na UI do Grafana Alerting →
+#     Alert rules → New alert rule. PromQL e thresholds vêm prontos abaixo.
+#
+#   Opção B (provisioning automático): Grafana Cloud aceita upload deste
+#     YAML em Settings → Provisioning → Upload (recurso Pro/Advanced).
+#     Antes de subir, substituir <PROMETHEUS_DATASOURCE_UID> e
+#     <SLACK_CONTACT_POINT_UID> pelos UIDs reais (ver no Grafana UI).
+#
+# Refs:
+#   - docs/operations/observability_day1.md §4
+#   - docs/operations/launch_runbook_2026-05-11.md §6
+# ─────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: zappiq-production-day1
+    folder: ZappIQ
+    interval: 1m
+    rules:
+
+      # ─── A1 — LLM error rate >1% por 10min ─────────────────────────
+      - uid: zappiq-a1-llm-error-rate
+        title: A1 - LLM error rate >1%
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: <PROMETHEUS_DATASOURCE_UID>
+            model:
+              expr: |
+                sum(rate(zappiq_llm_errors_total[5m]))
+                /
+                clamp_min(sum(rate(zappiq_llm_request_duration_seconds_count[5m])), 1)
+              refId: A
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [0.01], type: gt}
+        for: 10m
+        labels:
+          severity: warning
+          team: zappiq-eng
+        annotations:
+          summary: "LLM error rate acima de 1% nos últimos 10min"
+          description: "Provider degradado. Cascade do LLMRouter pode estar caindo pra fallback."
+          runbook_url: "https://github.com/rmghetti/zappiq/blob/main/docs/operations/observability_day1.md#runbook-A1"
+        isPaused: false
+
+      # ─── A2 — Pipeline latency p95 >7s por 5min ────────────────────
+      - uid: zappiq-a2-pipeline-latency
+        title: A2 - Pipeline p95 >7s
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: <PROMETHEUS_DATASOURCE_UID>
+            model:
+              expr: |
+                histogram_quantile(0.95,
+                  sum by (le) (rate(zappiq_agent_pipeline_duration_seconds_bucket[5m]))
+                )
+              refId: A
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [7], type: gt}
+        for: 5m
+        labels:
+          severity: warning
+          team: zappiq-eng
+        annotations:
+          summary: "Pipeline da Iza com p95 >7s — cliente percebendo lentidão"
+          runbook_url: "https://github.com/rmghetti/zappiq/blob/main/docs/operations/observability_day1.md#runbook-A2"
+        isPaused: false
+
+      # ─── A3 — Queue depth ai-process crescente sem decrescer 30min ─
+      - uid: zappiq-a3-queue-depth
+        title: A3 - Queue ai-process backlog crescente
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1800, to: 0}
+            datasourceUid: <PROMETHEUS_DATASOURCE_UID>
+            model:
+              expr: |
+                zappiq_queue_depth{queue="ai-process"}
+              refId: A
+              instant: true
+          - refId: B
+            relativeTimeRange: {from: 1800, to: 0}
+            datasourceUid: <PROMETHEUS_DATASOURCE_UID>
+            model:
+              expr: |
+                delta(zappiq_queue_depth{queue="ai-process"}[30m])
+              refId: B
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [5], type: gt}
+        for: 30m
+        labels:
+          severity: critical
+          team: zappiq-eng
+        annotations:
+          summary: "Fila ai-process com backlog crescente — worker não dá conta"
+          runbook_url: "https://github.com/rmghetti/zappiq/blob/main/docs/operations/observability_day1.md#runbook-A3"
+        isPaused: false
+
+      # ─── A4 — Fallback rate >50% por 5min ──────────────────────────
+      - uid: zappiq-a4-fallback-rate
+        title: A4 - Fallback rate >50%
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: <PROMETHEUS_DATASOURCE_UID>
+            model:
+              expr: |
+                sum(rate(zappiq_queue_jobs_completed_total{queue="ai-process",attempts!="1"}[5m]))
+                /
+                clamp_min(sum(rate(zappiq_queue_jobs_completed_total{queue="ai-process"}[5m])), 1)
+              refId: A
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [0.5], type: gt}
+        for: 5m
+        labels:
+          severity: critical
+          team: zappiq-eng
+        annotations:
+          summary: "Mais de 50% das respostas vêm de fallback — provider primário em queda"
+          runbook_url: "https://github.com/rmghetti/zappiq/blob/main/docs/operations/observability_day1.md#runbook-A4"
+        isPaused: false
+
+# ─── Notification policy ─────────────────────────────────────────────
+# Roteamento: tudo com label team=zappiq-eng vai pra Slack #zappiq-alerts.
+# Substituir <SLACK_CONTACT_POINT_UID> pelo UID criado em Contact points.
+policies:
+  - orgId: 1
+    receiver: zappiq-alerts-slack
+    group_by: [alertname, severity]
+    matchers:
+      - team = zappiq-eng
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+
+# ─── Contact point Slack ─────────────────────────────────────────────
+# Webhook URL: criar em Slack → Apps → Incoming Webhooks → Add to Workspace → #zappiq-alerts
+# Cole a URL no campo `url` abaixo.
+contactPoints:
+  - orgId: 1
+    name: zappiq-alerts-slack
+    receivers:
+      - uid: zappiq-slack-webhook
+        type: slack
+        settings:
+          url: <SLACK_WEBHOOK_URL_INCOMING>
+          recipient: "#zappiq-alerts"
+          username: "Grafana Alerting"
+          title: |
+            [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+          text: |
+            {{ range .Alerts -}}
+            *Severity:* `{{ .Labels.severity }}` *Team:* `{{ .Labels.team }}`
+            *Summary:* {{ .Annotations.summary }}
+            *Runbook:* {{ .Annotations.runbook_url }}
+            *Started:* {{ .StartsAt }}
+            {{ end }}
+        disableResolveMessage: false
