@@ -38,12 +38,14 @@ vi.mock('../../utils/logger.js', () => ({
   },
 }));
 
-// Mock env pra controlar ANTHROPIC_MODEL
+// Mock env pra controlar ANTHROPIC_MODEL + GEMINI_MODEL (V4 #V4-001)
 vi.mock('../../config/env.js', () => ({
   env: {
     ANTHROPIC_MODEL: 'claude-sonnet-4-6',
     ANTHROPIC_API_KEY: 'test-key-anthropic',
     OPENAI_API_KEY: 'test-key-openai',
+    GOOGLE_API_KEY: 'test-key-google',
+    GEMINI_MODEL: 'gemini-2.5-flash',
     NODE_ENV: 'test',
   },
 }));
@@ -77,6 +79,17 @@ function httpError(status: number): Response {
   return new Response(JSON.stringify({ error: 'simulated' }), { status });
 }
 
+// V4 #V4-001: helper Gemini-like response (Generative Language API v1beta).
+function geminiOk(text: string, promptTok = 100, candidatesTok = 50): Response {
+  return new Response(
+    JSON.stringify({
+      candidates: [{ content: { parts: [{ text }] } }],
+      usageMetadata: { promptTokenCount: promptTok, candidatesTokenCount: candidatesTok },
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
 describe('LLMRouter', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
@@ -87,6 +100,7 @@ describe('LLMRouter', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch');
     process.env.ANTHROPIC_API_KEY = 'test-key-anthropic';
     process.env.OPENAI_API_KEY = 'test-key-openai';
+    process.env.GOOGLE_API_KEY = 'test-key-google';
   });
 
   afterEach(() => {
@@ -279,6 +293,219 @@ describe('LLMRouter', () => {
           forceProvider: 'inexistente',
         }),
       ).rejects.toThrow(/não encontrado/);
+    });
+  });
+
+  // V4 #V4-001: Tier-based default routing.
+  // Decisão consolidada pós-Gate 1 (2026-04-30):
+  //   STARTER/GROWTH → Gemini default (200× mais barato)
+  //   SCALE/BUSINESS/ENTERPRISE → Sonnet default (qualidade premium)
+  describe('V4 #V4-001 — tier-based default routing', () => {
+    it('STARTER tier usa Gemini 2.5 Flash como primary', async () => {
+      fetchSpy.mockResolvedValueOnce(geminiOk('Resposta Gemini', 200, 50));
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+        tier: 'STARTER',
+      });
+      expect(resp.provider).toBe('google-gemini-flash');
+      expect(resp.model).toBe('gemini-2.5-flash');
+      expect(resp.attempt).toBe(1);
+      // Confirma URL Gemini (não Anthropic)
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).toContain('generativelanguage.googleapis.com');
+      expect(url).toContain('gemini-2.5-flash');
+    });
+
+    it('GROWTH tier também usa Gemini como primary', async () => {
+      fetchSpy.mockResolvedValueOnce(geminiOk('Growth response'));
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+        tier: 'GROWTH',
+      });
+      expect(resp.provider).toBe('google-gemini-flash');
+    });
+
+    it('SCALE tier usa Sonnet como primary (mesmo cascade default)', async () => {
+      fetchSpy.mockResolvedValueOnce(anthropicOk('Sonnet premium response'));
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+        tier: 'SCALE',
+      });
+      expect(resp.provider).toBe('anthropic-sonnet');
+      // NÃO chama Gemini
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).not.toContain('googleapis.com');
+    });
+
+    it('BUSINESS tier usa Sonnet como primary', async () => {
+      fetchSpy.mockResolvedValueOnce(anthropicOk('Business response'));
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+        tier: 'BUSINESS',
+      });
+      expect(resp.provider).toBe('anthropic-sonnet');
+    });
+
+    it('ENTERPRISE tier usa Sonnet como primary', async () => {
+      fetchSpy.mockResolvedValueOnce(anthropicOk('Enterprise response'));
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+        tier: 'ENTERPRISE',
+      });
+      expect(resp.provider).toBe('anthropic-sonnet');
+    });
+
+    it('sem tier nem forceProvider, preserva cascade default V3 (Sonnet primary)', async () => {
+      fetchSpy.mockResolvedValueOnce(anthropicOk('Iza response (Sonnet default)'));
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+      });
+      expect(resp.provider).toBe('anthropic-sonnet');
+    });
+
+    it('forceProvider tem prioridade sobre tier', async () => {
+      fetchSpy.mockResolvedValueOnce(anthropicOk('Haiku forced'));
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+        tier: 'STARTER', // tier diz Gemini
+        forceProvider: 'anthropic-haiku', // mas force diz Haiku
+      });
+      // Force vence
+      expect(resp.provider).toBe('anthropic-haiku');
+    });
+
+    it('tier STARTER: Gemini falha 5xx → cascade pra Sonnet', async () => {
+      fetchSpy
+        .mockResolvedValueOnce(httpError(503))                         // Gemini fail
+        .mockResolvedValueOnce(anthropicOk('Sonnet recovered Gemini')); // Sonnet OK
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+        tier: 'STARTER',
+      });
+      expect(resp.provider).toBe('anthropic-sonnet');
+      expect(resp.attempt).toBe(2);
+    });
+
+    it('tier STARTER: Gemini 429 → fallback Sonnet sem expor erro 429 ao caller', async () => {
+      fetchSpy
+        .mockResolvedValueOnce(httpError(429))           // Gemini rate-limited
+        .mockResolvedValueOnce(anthropicOk('Sonnet OK'));
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+        tier: 'STARTER',
+      });
+      expect(resp.provider).toBe('anthropic-sonnet');
+      expect(resp.attempt).toBe(2);
+    });
+  });
+
+  // V4 #V4-001: GoogleProvider integration.
+  describe('V4 #V4-001 — GoogleProvider Gemini 2.5 Flash', () => {
+    it('força provider google-gemini-flash via forceProvider', async () => {
+      fetchSpy.mockResolvedValueOnce(geminiOk('Gemini direct'));
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'classify' }],
+        forceProvider: 'google-gemini-flash',
+        operation: 'classify',
+      });
+      expect(resp.provider).toBe('google-gemini-flash');
+      expect(resp.model).toBe('gemini-2.5-flash');
+    });
+
+    it('Gemini envia system instruction em campo separado (não em messages)', async () => {
+      fetchSpy.mockResolvedValueOnce(geminiOk('OK'));
+      const router = new LLMRouter();
+      await router.complete({
+        system: 'Você é a Iza.',
+        messages: [{ role: 'user', content: 'oi' }],
+        forceProvider: 'google-gemini-flash',
+      });
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.systemInstruction).toEqual({ parts: [{ text: 'Você é a Iza.' }] });
+      expect(body.contents).toEqual([{ role: 'user', parts: [{ text: 'oi' }] }]);
+    });
+
+    it('Gemini converte role assistant → model', async () => {
+      fetchSpy.mockResolvedValueOnce(geminiOk('OK'));
+      const router = new LLMRouter();
+      await router.complete({
+        messages: [
+          { role: 'user', content: 'oi' },
+          { role: 'assistant', content: 'olá' },
+          { role: 'user', content: 'tudo bem?' },
+        ],
+        forceProvider: 'google-gemini-flash',
+      });
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.contents[1].role).toBe('model'); // não 'assistant'
+    });
+
+    it('Gemini extrai tokens de usageMetadata (schema diferente do Anthropic)', async () => {
+      fetchSpy.mockResolvedValueOnce(geminiOk('OK', 333, 77));
+      const router = new LLMRouter();
+      const resp = await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+        forceProvider: 'google-gemini-flash',
+      });
+      expect(resp.usage?.inputTokens).toBe(333);
+      expect(resp.usage?.outputTokens).toBe(77);
+    });
+
+    it('GoogleProvider sem GOOGLE_API_KEY lança ProviderError client', async () => {
+      delete process.env.GOOGLE_API_KEY;
+      const router = new LLMRouter();
+      await expect(
+        router.complete({
+          messages: [{ role: 'user', content: 'oi' }],
+          forceProvider: 'google-gemini-flash',
+        }),
+      ).rejects.toThrow(ProviderError);
+      // Não chamou fetch — falhou no guard
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('audit log captura provider=google-gemini-flash com cost USD correto', async () => {
+      fetchSpy.mockResolvedValueOnce(geminiOk('OK', 1000, 200));
+      const router = new LLMRouter();
+      await router.complete({
+        messages: [{ role: 'user', content: 'oi' }],
+        forceProvider: 'google-gemini-flash',
+        orgId: 'org-test',
+      });
+      expect(logLLMCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'google-gemini-flash',
+          model: 'gemini-2.5-flash',
+          inputTokens: 1000,
+          outputTokens: 200,
+          organizationId: 'org-test',
+        }),
+      );
+    });
+  });
+
+  // V4 #V4-001: getStatus deve listar todos os providers do pool.
+  describe('V4 #V4-001 — getStatus inclui Gemini', () => {
+    it('lista 4 providers (Gemini + Sonnet + Haiku + OpenAI)', () => {
+      const router = new LLMRouter();
+      const status = router.getStatus();
+      const ids = status.map((s) => s.id).sort();
+      expect(ids).toEqual([
+        'anthropic-haiku',
+        'anthropic-sonnet',
+        'google-gemini-flash',
+        'openai-mini',
+      ]);
     });
   });
 });

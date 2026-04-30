@@ -15,9 +15,14 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock prisma antes de importar o middleware
-const mockExecuteRaw = vi.fn().mockResolvedValue(1);
-const mockTransaction = vi.fn();
+// Mock prisma antes de importar o middleware.
+// Vitest hoists vi.mock pro topo do arquivo — variáveis usadas no factory
+// precisam estar dentro de vi.hoisted() pra serem inicializadas antes.
+// Sem isso: ReferenceError "Cannot access 'mockExecuteRaw' before initialization".
+const { mockExecuteRaw, mockTransaction } = vi.hoisted(() => ({
+  mockExecuteRaw: vi.fn().mockResolvedValue(1),
+  mockTransaction: vi.fn(),
+}));
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
