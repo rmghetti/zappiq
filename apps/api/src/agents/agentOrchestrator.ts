@@ -4,6 +4,8 @@ import redis from '../utils/redis.js';
 import * as waService from '../services/whatsappService.js';
 import * as ragService from '../services/ragService.js';
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
+import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
+import type { LLMTier, LLMProviderId } from '../services/llm/LLMRouter.js';
 import { getSystemPrompt } from './promptEngine.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
@@ -114,19 +116,65 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       ragContext,
     });
 
-    // ── 8. Build messages array ─────────────────────────
-    const messages: LLMMessage[] = historyMessages.map((msg) => ({
+    // ── 8. Build history array (sem messageContent — routeIzaTurn adiciona) ───
+    const history: LLMMessage[] = historyMessages.map((msg) => ({
       role: msg.direction === 'INBOUND' ? 'user' as const : 'assistant' as const,
       content: msg.content,
     }));
-    messages.push({ role: 'user', content: messageContent });
 
-    // ── 9. Call LLM ─────────────────────────────────────
-    // V2-018: cascade Sonnet 4.6 → Haiku 4.5 → GPT-4o-mini via LLMRouter,
-    // com circuit breaker e audit por turn em llm_call_logs.
-    const llmResponse = await chatCompletion(systemPrompt, messages, 1024, llmCtx);
+    // ── 9. V4 routing: pre-filter + classify + tier-based ─────
+    // V4 #V4-001 + #143 (2026-04-30): routeIzaTurn aplica defesa em camadas:
+    //   1. Pre-filter regex de verticais bloqueadas (apostas/cripto/MLM/porn) —
+    //      retorna template estático SEM custo LLM
+    //   2. Classify intent via Haiku — escala pra Sonnet em handoff/objection/
+    //      enterprise mesmo em tiers Gemini
+    //   3. Tier-based default — Starter/Growth=Gemini, Scale+=Sonnet
+    //   4. Cascade fallback Sonnet→Haiku→OpenAI preservado (V3)
+    // Per-org override via organizations.settings.llm_routing (#133):
+    //   { forceProvider: "anthropic-sonnet" | ... } → bypassa tier-based
+    //   { useDefaultCascade: true }                 → cascade default (Iza)
+    const { tier, forceProvider } = await pickTierAndOverride(organizationId);
+    const turnResult = await routeIzaTurn({
+      systemPrompt,
+      userMessage: messageContent,
+      history,
+      tier,
+      forceProvider,
+      orgId: organizationId,
+      conversationId,
+    });
+
+    // ── 9.5. Vertical bloqueada — template estático, sem LLM ──────
+    if (turnResult.kind === 'blocked') {
+      logger.info(`[Agent] Vertical bloqueada: ${turnResult.vertical}`, {
+        contactPhone,
+        organizationId,
+        snippet: turnResult.matchedSnippet,
+      });
+      await waService.sendText(contactPhone, turnResult.response);
+      await prisma.message.create({
+        data: {
+          direction: 'OUTBOUND',
+          type: 'TEXT',
+          content: turnResult.response,
+          status: 'SENT',
+          conversationId,
+          isFromBot: true,
+          aiConfidence: 1.0, // resposta determinística (regex match)
+        },
+      });
+      return;
+    }
+
+    if (turnResult.escalated) {
+      logger.info(`[Agent] Intent ${turnResult.intent} → escalou pra ${turnResult.response.provider}`, {
+        contactPhone,
+        organizationId,
+      });
+    }
 
     // ── 10. Parse structured response ───────────────────
+    const llmResponse = { text: turnResult.response.text };
     const parsed = parseAgentResponse(llmResponse.text);
 
     // ── 11. Execute actions ─────────────────────────────
@@ -177,6 +225,49 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       contactPhone,
       'Olá! Estou com uma dificuldade técnica momentânea. Em breve um atendente entrará em contato. Desculpe o inconveniente! 🙏'
     ).catch(() => {});
+  }
+}
+
+// ── V4 #133 · Per-org LLM routing (lê organizations.settings.llm_routing) ──
+// Schema esperado em org.settings.llm_routing (todos opcionais):
+//   {
+//     forceProvider?: 'anthropic-sonnet' | 'anthropic-haiku' | 'openai-mini' | 'google-gemini-flash'
+//     useDefaultCascade?: boolean  // true = ignora tier, usa Sonnet primário (Iza)
+//   }
+// Sem settings.llm_routing → fallback pra tier-based via org.plan.
+// Sem org → fallback pra cascade default (Sonnet primário).
+async function pickTierAndOverride(orgId: string): Promise<{
+  tier?: LLMTier;
+  forceProvider?: LLMProviderId;
+}> {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { plan: true, settings: true },
+    });
+    if (!org) return {};
+
+    // Per-org override (#133)
+    const settings = (org.settings as any) ?? {};
+    const llmRouting = settings.llm_routing;
+    if (llmRouting && typeof llmRouting === 'object') {
+      if (typeof llmRouting.forceProvider === 'string') {
+        return { forceProvider: llmRouting.forceProvider as LLMProviderId };
+      }
+      if (llmRouting.useDefaultCascade === true) {
+        return {}; // cascade default = Sonnet primário (vitrine Iza)
+      }
+    }
+
+    // Tier-based padrão (#V4-001)
+    const validTiers: LLMTier[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
+    if (validTiers.includes(org.plan as LLMTier)) {
+      return { tier: org.plan as LLMTier };
+    }
+    return {};
+  } catch (err: any) {
+    logger.warn(`[Agent] pickTierAndOverride failed: ${err.message} — fallback default cascade`, { orgId });
+    return {};
   }
 }
 
