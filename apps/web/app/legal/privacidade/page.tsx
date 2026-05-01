@@ -2,11 +2,16 @@
  * Política de Privacidade — ZappIQ V3.2
  *
  * Aprovada pelo jurídico em 21/04/2026 (texto exato da minuta V3.2).
+ * Publicada em 27/04/2026 (junto com patch dos Termos de Uso V3.2 — necessário
+ * para fechar inconsistência interna detectada na auditoria Tech Provider).
  * Vigência: 14/05/2026 (Onda 1).
  * Evidência: ZappIQ_V32_Actions/sprint_1_pricing_garantia_cloud_api/PRIVACY_V32_APROVADA_JURIDICO.md
  *
- * HOLD-FOR-RELEASE: este arquivo pode ser commitado, mas o merge pra main
- * SÓ deve acontecer no D-Day Onda 1 (14/05/2026) junto com o pricing V3.2.
+ * Nota sobre o "Hold-for-release" original: o documento foi disponibilizado
+ * publicamente antes do D-Day Onda 1 para alinhar com a Privacy V3.2 já em
+ * produção. A data de publicação e a data de vigência ficam separadas para
+ * eliminar ruído de antedatação detectável por auditoria externa (Meta, ANPD,
+ * cliente enterprise).
  */
 
 export const metadata = {
@@ -19,7 +24,8 @@ export const metadata = {
 };
 
 export default function PrivacidadePage() {
-  const lastUpdate = '14 de maio de 2026';
+  const publishedAt = '27 de abril de 2026';
+  const effectiveAt = '14 de maio de 2026';
 
   return (
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
@@ -31,7 +37,9 @@ export default function PrivacidadePage() {
         </div>
 
         <h1>Política de Privacidade</h1>
-        <p className="text-gray-600 text-sm">Atualizado em {lastUpdate}</p>
+        <p className="text-gray-600 text-sm">
+          Publicada em {publishedAt}. Entra em vigor em {effectiveAt}.
+        </p>
 
         <p>
           A ZappIQ Brasil Sistemas de IA LTDA (&ldquo;ZappIQ&rdquo; ou &ldquo;Empresa&rdquo;) valoriza a privacidade

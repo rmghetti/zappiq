@@ -58,3 +58,12 @@ fly_audit_latest.txt
 fly_state.txt
 release_fail_diag.txt
 debug_prisma_*.txt
+# Local-only secrets (não commitar)
+tools/grafana/.webhook_url.local
+
+# ── Test outputs (Gate 1, Gate 1.5, etc — gerados localmente) ──
+apps/api/v4_gate1_*.json
+apps/api/v4_gate1_*.md
+apps/api/scripts/v4_gate1_*_results_*.json
+apps/api/scripts/v4_gate1_*_report_*.md
+*.tmp
