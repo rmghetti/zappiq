@@ -29,6 +29,37 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // ── 0. Mark message as read ─────────────────────────
     await waService.markAsRead(whatsappMessageId).catch(() => {});
 
+    // ── 0.5. AUTOREPLY MODE (Plano B pre-Go-Live) ───────
+    // Quando IZA_AUTOREPLY_TEMPLATE estiver setado em env, responder
+    // sempre o mesmo texto fixo e marcar contato como handoff (pausa AI
+    // até Rodrigo destrabar manualmente). Garante zero hallucination
+    // enquanto Iza nao esta GA. Remover env quando Iza estiver pronta.
+    const autoReplyTemplate = process.env.IZA_AUTOREPLY_TEMPLATE;
+    if (autoReplyTemplate) {
+      logger.info(`[Agent] AUTOREPLY mode active for ${contactPhone}`);
+      try {
+        await waService.sendText(contactPhone, autoReplyTemplate);
+        await prisma.message.create({
+          data: {
+            direction: 'OUTBOUND',
+            type: 'TEXT',
+            content: autoReplyTemplate,
+            status: 'SENT',
+            conversationId,
+            isFromBot: true,
+            aiConfidence: 1.0,
+          },
+        });
+        // Pausa AI pra esse contato — proximas mensagens nao geram autoreply
+        // de novo, ficam aguardando atendimento humano.
+        const pauseKey = `ai_paused:${organizationId}:${contactPhone}`;
+        await redis.set(pauseKey, 'autoreply', 'EX', 60 * 60 * 24 * 7).catch(() => {});
+      } catch (err) {
+        logger.error('[Agent] Autoreply send failed:', err);
+      }
+      return;
+    }
+
     // ── 1. Check if AI is paused (handoff mode) ─────────
     const pauseKey = `ai_paused:${organizationId}:${contactPhone}`;
     const isPaused = await redis.get(pauseKey).catch(() => null);

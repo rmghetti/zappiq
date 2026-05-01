@@ -198,7 +198,7 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
       // io não é serializável — worker reemite via app.get('io') após processar
     }, {
       // Cada job ganha jobId único pra dedupe (idempotência via whatsappMessageId)
-      jobId: `wamid:${message.id}`,
+      jobId: `wamid_${message.id}`,
     });
 
     logger.info(`[Webhook] AI job enqueued for conversation ${conversation.id} (wamid: ${message.id})`);
