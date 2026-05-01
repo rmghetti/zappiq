@@ -35,6 +35,10 @@ const envSchema = z.object({
   // OpenAI
   OPENAI_API_KEY: z.string().optional(),
 
+  // Google (V4 #V4-001 — Gemini 2.5 Flash via Generative Language API)
+  GOOGLE_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+
   // WhatsApp
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().optional(),

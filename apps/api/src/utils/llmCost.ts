@@ -27,7 +27,7 @@
  *   - Não conta image tokens (vision) — adicionar quando entrar.
  * ══════════════════════════════════════════════════════════════════════ */
 
-export const PRICING_VERSION = '2026-04-27';
+export const PRICING_VERSION = '2026-04-30';
 
 export interface ModelPricing {
   /** USD por 1M input tokens */
@@ -50,6 +50,9 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   // OpenAI
   'gpt-4o-mini':                 { inputUsdPerMillion: 0.15,  outputUsdPerMillion: 0.60 },
   'gpt-4o':                      { inputUsdPerMillion: 2.5,   outputUsdPerMillion: 10.0 },
+  // Google (V4 #V4-001 — adicionado em 2026-04-30 pós-Gate 1)
+  'gemini-2.5-flash':            { inputUsdPerMillion: 0.075, outputUsdPerMillion: 0.30 },
+  'gemini-2.0-flash':            { inputUsdPerMillion: 0.075, outputUsdPerMillion: 0.30 },
 };
 
 /**
