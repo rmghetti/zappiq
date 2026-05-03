@@ -89,10 +89,15 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       }
     }
 
+    // V4 #157 (PR #70) — flag pra TTS mirror: se input foi áudio, marcamos
+    // pra responder com áudio também (caso voice_routing esteja habilitado
+    // e dentro do quota). Default trigger é "mirror_input".
+    const inputWasAudio = messageType === 'audio' && !!mediaId;
+
     // ── 2. Audio inbound: transcrever via Whisper e seguir como texto ──
     // V4 #156 — Whisper STT permite que cliente mande áudio e Iza processe
     // o conteúdo igual a uma mensagem de texto (RAG, intent, prompt V6).
-    // Resposta de saída continua sendo texto (TTS outbound só V5).
+    // V4 #157 (PR #70) — Se voice_routing habilitado, resposta volta como áudio.
     if (messageType === 'audio' && mediaId) {
       logger.info(`[Agent] Transcrevendo áudio inbound (mediaId=${mediaId}) de ${contactPhone}`);
       const transcribeResult = await transcribeAudio(mediaId, {
@@ -170,6 +175,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     const systemPrompt = await buildSystemPromptForContact({
       organizationId,
       contactId,
+      contactPhone, // V4 #157 (PR #70) — pra REGRA 9 do prompt V7
       orgSettings,
       ragContext,
     });
@@ -242,17 +248,75 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
     // ── 12. Send reply via WhatsApp ─────────────────────
     if (parsed.replyText) {
-      if (parsed.buttons && parsed.buttons.length > 0) {
-        await waService.sendButtons(contactPhone, null, parsed.replyText, parsed.buttons);
-      } else {
-        await waService.sendText(contactPhone, parsed.replyText);
+      // V4 #157 (PR #70) — Decide se resposta vai como áudio (TTS) ou texto.
+      // Critérios pra responder por VOZ:
+      //   1. Input foi áudio (trigger mirror_input) — default da Iza/clientes
+      //   2. Org tem voice_routing.enabled = true em settings
+      //   3. Buttons não estão presentes (botões precisam ser texto interativo)
+      //   4. Texto < 4096 chars (limite OpenAI tts-1)
+      //   5. (Futuro #PR70.1) — não excedeu quota mensal de minutos
+      const voiceCfg = (orgSettings?.voice_routing || {}) as {
+        enabled?: boolean;
+        trigger?: 'mirror_input' | 'always' | 'off';
+        voice?: 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer';
+      };
+      const trigger = voiceCfg.trigger || 'mirror_input';
+      const wantVoiceReply =
+        voiceCfg.enabled === true &&
+        trigger !== 'off' &&
+        (!parsed.buttons || parsed.buttons.length === 0) &&
+        parsed.replyText.length < 4096 &&
+        (trigger === 'always' || (trigger === 'mirror_input' && inputWasAudio));
+
+      let sentAsAudio = false;
+      if (wantVoiceReply) {
+        try {
+          const phoneNumberId = (orgSettings?.whatsappPhoneNumberId
+            || (await prisma.organization.findUnique({
+                 where: { id: organizationId },
+                 select: { whatsappPhoneNumberId: true },
+               }))?.whatsappPhoneNumberId) as string | undefined;
+
+          if (phoneNumberId) {
+            const { generateAndUploadSpeech } = await import('../services/llm/textToSpeech.js');
+            const ttsResult = await generateAndUploadSpeech(parsed.replyText, {
+              organizationId,
+              conversationId,
+              contactPhone,
+              phoneNumberId,
+              voice: voiceCfg.voice,
+            });
+            if (ttsResult.mediaId) {
+              await waService.sendAudio(contactPhone, ttsResult.mediaId);
+              sentAsAudio = true;
+              logger.info('[Agent] Resposta enviada como ÁUDIO (TTS)', {
+                contactPhone, minutesEstimate: ttsResult.minutesEstimate,
+              });
+            } else {
+              logger.warn('[Agent] TTS falhou, fallback texto', {
+                contactPhone, error: ttsResult.error,
+              });
+            }
+          }
+        } catch (err) {
+          logger.warn('[Agent] TTS exception, fallback texto', { err });
+        }
+      }
+
+      // Fallback ou caminho normal: envia como texto
+      if (!sentAsAudio) {
+        if (parsed.buttons && parsed.buttons.length > 0) {
+          await waService.sendButtons(contactPhone, null, parsed.replyText, parsed.buttons);
+        } else {
+          await waService.sendText(contactPhone, parsed.replyText);
+        }
       }
 
       // Save outbound message
       await prisma.message.create({
         data: {
           direction: 'OUTBOUND',
-          type: 'TEXT',
+          type: sentAsAudio ? 'AUDIO' as any : 'TEXT',
           content: parsed.replyText,
           status: 'SENT',
           conversationId,
@@ -467,6 +531,25 @@ async function executeAction(
         }
         break;
 
+      // V4 #157 (PR #70) — Iza captura ou atualiza o nome preferido do cliente
+      // Trigger pelo prompt V7 REGRA 9 quando: (a) primeiro contato sem nome
+      // no profile WhatsApp, (b) cliente pediu pra ser chamado de forma
+      // diferente ("me chama de X", "prefiro Y", "pode me chamar X").
+      // actionData esperado: { name: string }
+      case 'set_contact_name': {
+        const newName = (actionData?.name || '').toString().trim().slice(0, 80);
+        if (!newName) {
+          logger.warn('[Agent] set_contact_name sem name no actionData', { contactPhone });
+          break;
+        }
+        await prisma.contact.update({
+          where: { id: contactId },
+          data: { name: newName },
+        });
+        logger.info(`[Agent] Contact name atualizado: "${newName}"`, { contactPhone });
+        break;
+      }
+
       default:
         logger.warn(`[Agent] Unknown action: ${action}`);
     }
@@ -543,22 +626,57 @@ async function handleNonTextMessage(phone: string, msgType: string): Promise<voi
 async function buildSystemPromptForContact(input: {
   organizationId: string;
   contactId: string;
+  contactPhone?: string;
   orgSettings: any;
   ragContext: string;
 }): Promise<string> {
-  const { organizationId, contactId, orgSettings, ragContext } = input;
+  const { organizationId, contactId, contactPhone, orgSettings, ragContext } = input;
 
-  // 1. Decidir role baseado em leadStatus do Contact
+  // V4 #157 (PR #70) — Lookup completo do Contact pra injetar nome no prompt.
+  // Antes: lookup só pegava leadStatus → Iza não sabia o nome → sempre
+  // perguntava ou ficava genérica. Agora puxa name + leadStatus + history count
+  // pra REGRA 9 do prompt V7 ter contexto suficiente.
   let role: 'comercial' | 'suporte' = 'comercial';
+  let contactName: string | null = null;
+  let leadStatus: string = 'NEW';
+  let messageCount = 0;
   try {
     const contact = await prisma.contact.findUnique({
       where: { id: contactId },
-      select: { leadStatus: true },
+      select: {
+        leadStatus: true,
+        name: true,
+        _count: { select: { conversations: { where: {} } } },
+      },
     });
-    if (contact?.leadStatus === 'CONVERTED') role = 'suporte';
+    if (contact) {
+      contactName = (contact.name || '').trim() || null;
+      leadStatus = contact.leadStatus || 'NEW';
+      if (contact.leadStatus === 'CONVERTED') role = 'suporte';
+    }
+    // Conta mensagens reais do contato (mais útil que conversation count)
+    if (contact) {
+      messageCount = await prisma.message.count({
+        where: { conversation: { contactId } },
+      });
+    }
   } catch (err) {
     logger.warn('[Agent] buildSystemPromptForContact: lookup contact falhou — assumindo comercial', { err });
   }
+
+  // V4 #157 — bloco "# Cliente atual" injetado SEMPRE antes do RAG.
+  // Iza usa isso pra cumprir REGRA 9 (use o nome desde o "oi" se já tem).
+  const isFirstContact = messageCount <= 1; // 1 = a mensagem inbound atual
+  const clienteBlock = [
+    '# Cliente atual',
+    contactName
+      ? `Nome registrado: ${contactName}`
+      : 'Nome registrado: (ainda não capturado — peça no primeiro turno conforme REGRA 9)',
+    contactPhone ? `Telefone: ${contactPhone}` : '',
+    `Status do lead: ${leadStatus}`,
+    `Mensagens trocadas até agora: ${messageCount}`,
+    `Primeiro contato? ${isFirstContact ? 'SIM' : 'NÃO (já tem histórico — não pergunte nome de novo, use o que está acima)'}`,
+  ].filter(Boolean).join('\n');
 
   // 2. Tentar carregar Agent live correspondente
   try {
@@ -569,10 +687,12 @@ async function buildSystemPromptForContact(input: {
     });
     if (agent?.systemPrompt) {
       // Apêndices A.1/A.2 do Plano: prompts já contêm regras estruturais.
-      // Só anexamos contexto dinâmico (RAG + agora).
+      // Anexamos contexto dinâmico: cliente atual + RAG + agora.
       const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
       return [
         agent.systemPrompt,
+        '',
+        clienteBlock,
         '',
         `# Contexto recuperado (RAG)`,
         ragContext || '(sem contexto relevante encontrado para esta query)',
@@ -585,8 +705,8 @@ async function buildSystemPromptForContact(input: {
     logger.warn('[Agent] buildSystemPromptForContact: lookup agent falhou — fallback promptEngine', { err });
   }
 
-  // 3. Fallback (orgs sem seed): promptEngine antigo
-  return getSystemPrompt({
+  // 3. Fallback (orgs sem seed): promptEngine antigo + cliente block
+  const fallback = getSystemPrompt({
     niche: orgSettings.niche || 'generic',
     agentName: orgSettings.agentName || 'Assistente',
     businessName: orgSettings.businessName || 'Empresa',
@@ -595,4 +715,5 @@ async function buildSystemPromptForContact(input: {
     ragContext,
     currentDateTime: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
   });
+  return `${fallback}\n\n${clienteBlock}`;
 }

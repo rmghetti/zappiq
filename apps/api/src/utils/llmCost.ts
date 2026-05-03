@@ -27,13 +27,20 @@
  *   - Não conta image tokens (vision) — adicionar quando entrar.
  * ══════════════════════════════════════════════════════════════════════ */
 
-export const PRICING_VERSION = '2026-04-30';
+export const PRICING_VERSION = '2026-05-03'; // V4 #157 (PR #70) — added whisper-1 + tts-1
 
 export interface ModelPricing {
   /** USD por 1M input tokens */
   inputUsdPerMillion: number;
   /** USD por 1M output tokens */
   outputUsdPerMillion: number;
+  /**
+   * V4 #157 (PR #70) — preço por minuto de áudio (Whisper STT, TTS).
+   * Quando preenchido, estimateCostUsd usa este campo via override no caller
+   * (passa minutos via inputTokens convertidos pra "tokens de áudio").
+   * Modelos puramente audio: input/output tokens ficam null.
+   */
+  audioUsdPerMinute?: number;
 }
 
 /**
@@ -50,10 +57,26 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   // OpenAI
   'gpt-4o-mini':                 { inputUsdPerMillion: 0.15,  outputUsdPerMillion: 0.60 },
   'gpt-4o':                      { inputUsdPerMillion: 2.5,   outputUsdPerMillion: 10.0 },
+  // OpenAI Audio (V4 #157 — PR #70)
+  'whisper-1':                   { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.006 },
+  'tts-1':                       { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.015 },
+  'tts-1-hd':                    { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.030 },
   // Google (V4 #V4-001 — adicionado em 2026-04-30 pós-Gate 1)
   'gemini-2.5-flash':            { inputUsdPerMillion: 0.075, outputUsdPerMillion: 0.30 },
   'gemini-2.0-flash':            { inputUsdPerMillion: 0.075, outputUsdPerMillion: 0.30 },
 };
+
+/**
+ * V4 #157 (PR #70) — estima custo de um áudio (Whisper / TTS).
+ * Use quando o modelo é audio-only (não tem tokens). Retorna 0 se modelo
+ * desconhecido ou não tem audioUsdPerMinute.
+ */
+export function estimateAudioCostUsd(model: string, minutes: number): number {
+  const pricing = MODEL_PRICING[model];
+  if (!pricing?.audioUsdPerMinute) return 0;
+  const cost = pricing.audioUsdPerMinute * Math.max(0, minutes);
+  return Math.round(cost * 1_000_000) / 1_000_000;
+}
 
 /**
  * Estima custo em USD de uma chamada. Retorna 0 se modelo desconhecido
