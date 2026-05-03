@@ -239,14 +239,25 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
   }
 }
 
-// ── V4 #133 · Per-org LLM routing (lê organizations.settings.llm_routing) ──
+// ── V4 #133 + #68 · Per-org LLM routing (lê organizations.settings.llm_routing) ──
 // Schema esperado em org.settings.llm_routing (todos opcionais):
 //   {
 //     forceProvider?: 'anthropic-sonnet' | 'anthropic-haiku' | 'openai-mini' | 'google-gemini-flash'
-//     useDefaultCascade?: boolean  // true = ignora tier, usa Sonnet primário (Iza)
+//        // Bypassa tier completamente. ATENÇÃO: cascade pular fallback automático
+//        // quando forceProvider está setado (LLMRouter.buildChain retorna [único provider]).
+//        // Use só pra Enterprise customizado ou debug.
+//     tierOverride?: 'STARTER' | 'GROWTH' | 'SCALE' | 'BUSINESS' | 'ENTERPRISE'
+//        // PR #68: força tier específico mesmo se org.plan for diferente.
+//        // Cascade COMPLETA preservada (fallback Sonnet→Haiku→OpenAI).
+//        // Caso de uso: dogfood Iza com tier de cliente real (testar Gemini).
+//     useDefaultCascade?: boolean
+//        // true = ignora tier, usa Sonnet primário (vitrine Iza original).
 //   }
+// Prioridade: forceProvider > tierOverride > useDefaultCascade > tier-based padrão (org.plan).
 // Sem settings.llm_routing → fallback pra tier-based via org.plan.
 // Sem org → fallback pra cascade default (Sonnet primário).
+const VALID_TIERS: LLMTier[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
+
 async function pickTierAndOverride(orgId: string): Promise<{
   tier?: LLMTier;
   forceProvider?: LLMProviderId;
@@ -258,21 +269,27 @@ async function pickTierAndOverride(orgId: string): Promise<{
     });
     if (!org) return {};
 
-    // Per-org override (#133)
+    // Per-org override (#133 + #68)
     const settings = (org.settings as any) ?? {};
     const llmRouting = settings.llm_routing;
     if (llmRouting && typeof llmRouting === 'object') {
+      // 1. forceProvider (mais alta prioridade — Enterprise customizado, sem fallback)
       if (typeof llmRouting.forceProvider === 'string') {
         return { forceProvider: llmRouting.forceProvider as LLMProviderId };
       }
+      // 2. tierOverride (#68 — força tier específico, cascade completa preservada)
+      if (typeof llmRouting.tierOverride === 'string'
+          && VALID_TIERS.includes(llmRouting.tierOverride as LLMTier)) {
+        return { tier: llmRouting.tierOverride as LLMTier };
+      }
+      // 3. useDefaultCascade (Iza vitrine original — Sonnet primário)
       if (llmRouting.useDefaultCascade === true) {
-        return {}; // cascade default = Sonnet primário (vitrine Iza)
+        return {};
       }
     }
 
-    // Tier-based padrão (#V4-001)
-    const validTiers: LLMTier[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
-    if (validTiers.includes(org.plan as LLMTier)) {
+    // 4. Tier-based padrão (#V4-001) — derivado de org.plan
+    if (VALID_TIERS.includes(org.plan as LLMTier)) {
       return { tier: org.plan as LLMTier };
     }
     return {};
