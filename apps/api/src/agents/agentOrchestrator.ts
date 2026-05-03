@@ -63,11 +63,22 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     }
 
     // ── 1. Check if AI is paused (handoff mode) ─────────
+    // V4 patch (2026-05-01): pause keys com valor 'autoreply' são LEGACY do
+    // Plan B (já removido). Quando Plan B foi desligado, pause keys ativas
+    // continuaram bloqueando V4. Detecção + cleanup automático.
     const pauseKey = `ai_paused:${organizationId}:${contactPhone}`;
-    const isPaused = await redis.get(pauseKey).catch(() => null);
-    if (isPaused) {
-      logger.info(`[Agent] AI paused for ${contactPhone}, skipping`);
-      return;
+    const pauseValue = await redis.get(pauseKey).catch(() => null);
+    if (pauseValue) {
+      if (pauseValue === 'autoreply') {
+        // Legacy Plan B — limpa silenciosamente e segue
+        logger.info(`[Agent] Limpando pause key legacy Plan B para ${contactPhone}`);
+        await redis.del(pauseKey).catch(() => {});
+        // continua processamento normal abaixo
+      } else {
+        // Pause real (handoff humano ativo) — respeita
+        logger.info(`[Agent] AI paused for ${contactPhone} (value=${pauseValue}), skipping`);
+        return;
+      }
     }
 
     // ── 2. Handle non-text messages ─────────────────────
