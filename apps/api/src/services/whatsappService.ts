@@ -47,6 +47,25 @@ export async function sendText(to: string, text: string, previewUrl = false) {
   return data;
 }
 
+/**
+ * V4 #157 (PR #70) — envia mensagem de áudio usando mediaId previamente
+ * uploadado (via /PHONE_ID/media). mediaId é gerado por textToSpeech.ts
+ * após sintetizar via OpenAI TTS e fazer upload Meta CDN.
+ */
+export async function sendAudio(to: string, mediaId: string) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'audio',
+    audio: { id: mediaId },
+  };
+
+  const { data } = await waClient.post(`/${PHONE_ID}/messages`, payload);
+  logger.info(`[WA] Audio sent to ${to}`, { messageId: data.messages?.[0]?.id, mediaId });
+  return data;
+}
+
 export async function sendTemplate(to: string, templateName: string, languageCode: string, components: any[] = []) {
   const payload = {
     messaging_product: 'whatsapp',

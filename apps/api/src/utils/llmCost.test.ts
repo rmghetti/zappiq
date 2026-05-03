@@ -109,8 +109,11 @@ describe('llmCost', () => {
       expect(PRICING_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 
-    it('todos os preços são números positivos', () => {
+    it('todos os preços são números positivos (modelos baseados em token)', () => {
+      // V4 #157 (PR #70): modelos audio-only (whisper-1, tts-1, tts-1-hd)
+      // têm input/output token = 0 e cobram via audioUsdPerMinute.
       for (const [model, pricing] of Object.entries(MODEL_PRICING)) {
+        if (pricing.audioUsdPerMinute) continue; // skip audio-only
         expect(pricing.inputUsdPerMillion, `${model} input`).toBeGreaterThan(0);
         expect(pricing.outputUsdPerMillion, `${model} output`).toBeGreaterThan(0);
       }
@@ -119,10 +122,19 @@ describe('llmCost', () => {
     it('output sempre custa mais ou igual ao input (sanity check)', () => {
       // Pricing histórico de LLMs: output é ~3-5x input. Catch errado-fácil.
       for (const [model, pricing] of Object.entries(MODEL_PRICING)) {
+        if (pricing.audioUsdPerMinute) continue; // skip audio-only
         expect(
           pricing.outputUsdPerMillion,
           `${model}: output ($${pricing.outputUsdPerMillion}) deveria ser >= input ($${pricing.inputUsdPerMillion})`,
         ).toBeGreaterThanOrEqual(pricing.inputUsdPerMillion);
+      }
+    });
+
+    it('modelos audio-only (whisper-1, tts-1, tts-1-hd) têm audioUsdPerMinute', () => {
+      const audioModels = ['whisper-1', 'tts-1', 'tts-1-hd'];
+      for (const m of audioModels) {
+        expect(MODEL_PRICING[m], `${m} ausente em MODEL_PRICING`).toBeDefined();
+        expect(MODEL_PRICING[m].audioUsdPerMinute, `${m} sem audioUsdPerMinute`).toBeGreaterThan(0);
       }
     });
   });

@@ -443,17 +443,138 @@ export const ADDONS: Record<string, AddonConfig> = {
     includedIn: ['ENTERPRISE'],
   },
   // ─────────────────────────────────────────────────────────
-  // V2-020 (Sprint 0 Blocker 6): Voz Padrão (R$197) e Voz
-  // Premium (R$497) REMOVIDAS do planConfig público até Q3/2026.
-  // Backend (Whisper STT + TTS) não está implementado — vender sem
-  // entregar configura risco regulatório (CDC art. 30, 35) e LGPD.
+  // V4 #157 (PR #70 — 2026-05-03): Voice add-ons RE-INTRODUZIDOS.
+  // Backend Whisper STT (PR #69) + OpenAI TTS (PR #70) implementados.
+  // 6 SKUs comerciais com Stripe Prices LIVE criados via MCP.
   //
-  // Roadmap público em zappiq.com.br/roadmap; comunicação aos
-  // clientes do trial é manual via CSM.
+  // Provider: OpenAI tts-1 ($0.015/min). Margem ~73-79% líquida.
+  // Trial 14d / 30 min em Voice 200 e Voice 400.
+  // Hard ceiling 2× minutos inclusos — acima vira conversa Enterprise.
   //
-  // Quando voltar (Q3): re-introduzir os blocos VOICE_INBOUND e
-  // VOICE_OUTBOUND com pricing definitivo (Plano §6.2).
+  // Pricing curve estritamente decrescente em R$/min:
+  //   Voice 200:  R$ 0,4495/min
+  //   Voice 400:  R$ 0,4248/min
+  //   Voice 600:  R$ 0,3998/min
+  //   Voice 800:  R$ 0,3749/min
+  //   Voice 1500: R$ 0,3333/min  (corrigido vs proposta inicial)
+  //   Voice 4000: R$ 0,3250/min  (corrigido vs proposta inicial)
+  //
+  // Stripe Price IDs em livemode (cuidado): documentados na descrição
+  // de cada add-on abaixo. NÃO HARDCODE no checkout — leia daqui.
   // ─────────────────────────────────────────────────────────
+  VOICE_200: {
+    id: 'VOICE_200',
+    name: 'Voice 200 — add-on de voz outbound',
+    description:
+      '200 minutos/mês de TTS (resposta por áudio) via Iza ou seu agente IA. Overage R$ 0,49/min. Trial 14 dias com 30 min grátis. Stripe price_1TT8J8Klp5SWv74XG5O4Xww2 (prod_US2Nf2zRn1dn2H).',
+    priceMonthly: 89.9,
+    priceLabel: 'R$ 89,90/mês — 200 min',
+    availableFor: ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
+    includedIn: [],
+  },
+  VOICE_400: {
+    id: 'VOICE_400',
+    name: 'Voice 400 — add-on de voz outbound',
+    description:
+      '400 minutos/mês de TTS via Iza ou seu agente IA. Overage R$ 0,49/min. Trial 14 dias com 30 min grátis. Stripe price_1TT8JIKlp5SWv74XglVhUFLG (prod_US2NGJ6tk2AGPh).',
+    priceMonthly: 169.9,
+    priceLabel: 'R$ 169,90/mês — 400 min',
+    availableFor: ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
+    includedIn: [],
+  },
+  VOICE_600: {
+    id: 'VOICE_600',
+    name: 'Voice 600 — add-on de voz outbound',
+    description:
+      '600 minutos/mês de TTS via Iza ou seu agente IA. Overage R$ 0,49/min. Stripe price_1TT8JPKlp5SWv74XZrZYTN19 (prod_US2NL4KgL8LsJl).',
+    priceMonthly: 239.9,
+    priceLabel: 'R$ 239,90/mês — 600 min',
+    availableFor: ['GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
+    includedIn: [],
+  },
+  VOICE_800: {
+    id: 'VOICE_800',
+    name: 'Voice 800 — add-on de voz outbound',
+    description:
+      '800 minutos/mês de TTS via Iza ou seu agente IA. Overage R$ 0,49/min. Stripe price_1TT8JVKlp5SWv74Xe9hBfPAf (prod_US2Nzdk9qWJw9R).',
+    priceMonthly: 299.9,
+    priceLabel: 'R$ 299,90/mês — 800 min',
+    availableFor: ['GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
+    includedIn: [],
+  },
+  VOICE_1500: {
+    id: 'VOICE_1500',
+    name: 'Voice 1.500 — add-on de voz outbound',
+    description:
+      '1.500 minutos/mês de TTS via Iza ou seu agente IA. Overage R$ 0,39/min. Stripe price_1TT8JbKlp5SWv74XIib1o6eL (prod_US2N18PMNq8X3l).',
+    priceMonthly: 499.9,
+    priceLabel: 'R$ 499,90/mês — 1.500 min',
+    availableFor: ['SCALE', 'BUSINESS', 'ENTERPRISE'],
+    includedIn: [],
+  },
+  VOICE_4000: {
+    id: 'VOICE_4000',
+    name: 'Voice 4.000 — add-on de voz outbound',
+    description:
+      '4.000 minutos/mês de TTS via Iza ou seu agente IA. Overage R$ 0,29/min. Hard ceiling 8.000 min/mês — acima disso, conversa Enterprise. Stripe price_1TT8JlKlp5SWv74XwQCxeKrA (prod_US2N7nMCXScddo).',
+    priceMonthly: 1299.9,
+    priceLabel: 'R$ 1.299,90/mês — 4.000 min',
+    availableFor: ['BUSINESS', 'ENTERPRISE'],
+    includedIn: [],
+  },
+};
+
+// V4 #157 (PR #70) — Voice add-on metadata adicional (minutos, overage,
+// Stripe IDs). Separado de AddonConfig pra não inflar interface base com
+// campos voice-only. Leitura: lookup por add-on ID.
+export interface VoiceAddonMeta {
+  minutesIncluded: number;
+  overagePerMinBrl: number;
+  /** Hard ceiling: minutesIncluded × 2. Acima disso, conversa Enterprise. */
+  hardCeilingMinutes: number;
+  trialDays: number;
+  trialMinutes: number;
+  stripeProductId: string;
+  stripePriceId: string;
+}
+
+export const VOICE_ADDON_META: Record<string, VoiceAddonMeta> = {
+  VOICE_200: {
+    minutesIncluded: 200, overagePerMinBrl: 0.49, hardCeilingMinutes: 400,
+    trialDays: 14, trialMinutes: 30,
+    stripeProductId: 'prod_US2Nf2zRn1dn2H',
+    stripePriceId: 'price_1TT8J8Klp5SWv74XG5O4Xww2',
+  },
+  VOICE_400: {
+    minutesIncluded: 400, overagePerMinBrl: 0.49, hardCeilingMinutes: 800,
+    trialDays: 14, trialMinutes: 30,
+    stripeProductId: 'prod_US2NGJ6tk2AGPh',
+    stripePriceId: 'price_1TT8JIKlp5SWv74XglVhUFLG',
+  },
+  VOICE_600: {
+    minutesIncluded: 600, overagePerMinBrl: 0.49, hardCeilingMinutes: 1200,
+    trialDays: 0, trialMinutes: 0,
+    stripeProductId: 'prod_US2NL4KgL8LsJl',
+    stripePriceId: 'price_1TT8JPKlp5SWv74XZrZYTN19',
+  },
+  VOICE_800: {
+    minutesIncluded: 800, overagePerMinBrl: 0.49, hardCeilingMinutes: 1600,
+    trialDays: 0, trialMinutes: 0,
+    stripeProductId: 'prod_US2Nzdk9qWJw9R',
+    stripePriceId: 'price_1TT8JVKlp5SWv74Xe9hBfPAf',
+  },
+  VOICE_1500: {
+    minutesIncluded: 1500, overagePerMinBrl: 0.39, hardCeilingMinutes: 3000,
+    trialDays: 0, trialMinutes: 0,
+    stripeProductId: 'prod_US2N18PMNq8X3l',
+    stripePriceId: 'price_1TT8JbKlp5SWv74XIib1o6eL',
+  },
+  VOICE_4000: {
+    minutesIncluded: 4000, overagePerMinBrl: 0.29, hardCeilingMinutes: 8000,
+    trialDays: 0, trialMinutes: 0,
+    stripeProductId: 'prod_US2N7nMCXScddo',
+    stripePriceId: 'price_1TT8JlKlp5SWv74XwQCxeKrA',
+  },
 };
 
 // ═══════════════════════════════════════════════════════════
