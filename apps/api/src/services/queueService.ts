@@ -270,6 +270,8 @@ export async function initQueues(): Promise<void> {
         messageType: string;
         whatsappMessageId: string;
         orgSettings: any;
+        // V4 #156 — mediaId pra Whisper STT (audio inbound)
+        mediaId?: string | null;
       };
 
       logger.info(`[Queue:AIProcess] Processing wamid=${data.whatsappMessageId} attempt=${job.attemptsMade + 1}`);
@@ -292,6 +294,7 @@ export async function initQueues(): Promise<void> {
           messageType: data.messageType,
           whatsappMessageId: data.whatsappMessageId,
           orgSettings: data.orgSettings,
+          mediaId: data.mediaId ?? null, // V4 #156
           io: undefined,
         });
 
