@@ -6,6 +6,7 @@ import * as ragService from '../services/ragService.js';
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
 import type { LLMTier, LLMProviderId } from '../services/llm/LLMRouter.js';
+import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
@@ -20,10 +21,17 @@ export interface ProcessMessageInput {
   whatsappMessageId: string;
   orgSettings: any;
   io?: SocketIOServer;
+  /** V4 #156 — mediaId Meta CDN (presente quando type=audio/image/document/video) */
+  mediaId?: string | null;
 }
 
 export async function processIncomingMessage(input: ProcessMessageInput): Promise<void> {
-  const { organizationId, conversationId, contactId, contactPhone, contactName, messageContent, messageType, whatsappMessageId, orgSettings, io } = input;
+  const { organizationId, conversationId, contactId, contactPhone, contactName, whatsappMessageId, orgSettings, io, mediaId } = input;
+
+  // V4 #156 — messageContent e messageType são mutáveis: áudio é transcrito via
+  // Whisper e segue como texto pelo motor de venda padrão (RAG, intent, prompt).
+  let messageContent = input.messageContent;
+  let messageType = input.messageType;
 
   logger.info(`[Agent] Processing message from ${contactPhone}`, { organizationId, messageType });
 
@@ -81,7 +89,46 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       }
     }
 
-    // ── 2. Handle non-text messages ─────────────────────
+    // ── 2. Audio inbound: transcrever via Whisper e seguir como texto ──
+    // V4 #156 — Whisper STT permite que cliente mande áudio e Iza processe
+    // o conteúdo igual a uma mensagem de texto (RAG, intent, prompt V6).
+    // Resposta de saída continua sendo texto (TTS outbound só V5).
+    if (messageType === 'audio' && mediaId) {
+      logger.info(`[Agent] Transcrevendo áudio inbound (mediaId=${mediaId}) de ${contactPhone}`);
+      const transcribeResult = await transcribeAudio(mediaId, {
+        organizationId,
+        conversationId,
+        contactPhone,
+      });
+
+      if (transcribeResult.text && transcribeResult.text.trim().length > 0) {
+        // Persiste transcript no Message já gravado pra historico/audit
+        try {
+          await prisma.message.updateMany({
+            where: { whatsappMessageId },
+            data: { content: `[áudio transcrito] ${transcribeResult.text}` },
+          });
+        } catch (err) {
+          logger.warn('[Agent] Falha ao persistir transcript no Message', { err });
+        }
+
+        // Reescreve content + type pra seguir o fluxo de texto normal
+        messageContent = transcribeResult.text;
+        messageType = 'text';
+        logger.info(`[Agent] Transcrição OK (${transcribeResult.text.length} chars, ${transcribeResult.latencyMs}ms) — segue fluxo texto`);
+        // Cai pra fluxo de texto abaixo (não return)
+      } else {
+        // Transcrição falhou — manda fallback educado (sem emojis)
+        logger.warn(`[Agent] Transcrição falhou: ${transcribeResult.error || 'unknown'} — fallback texto`);
+        await waService.sendText(
+          contactPhone,
+          'Não consegui processar seu áudio agora. Pode me mandar em texto?',
+        );
+        return;
+      }
+    }
+
+    // ── 2.5. Handle outros não-textos (image, document, video, location) ─
     if (messageType !== 'text' && messageType !== 'button_reply' && messageType !== 'list_reply') {
       await handleNonTextMessage(contactPhone, messageType);
       return;
@@ -308,10 +355,35 @@ async function classifyIntent(text: string, ctx?: LLMContext): Promise<string> {
     if (cached) return cached;
   } catch {}
 
-  const prompt = `Classify this customer message into ONE of these intents:
-scheduling | pricing | faq | complaint | purchase | request_human | greeting | followup | other
+  // V4 #156 (2026-05-03) — calibração conservadora pra request_human.
+  // Bug observado smoke test 03/05: cliente perguntou "responde por voz?"
+  // (técnica) e classify retornou request_human → disparou handoff
+  // indevido. Agora request_human EXIGE keyword explícita.
+  const prompt = `Classify the LAST customer message into ONE intent.
+Categories: scheduling | pricing | faq | complaint | purchase | request_human | greeting | followup | other
 
-Message: "${text}"
+REGRA CRÍTICA pra request_human:
+  Só classifique como request_human se a mensagem EXPLICITAMENTE pede falar com humano usando frases como:
+  - "quero falar com gente"
+  - "não quero bot"
+  - "prefiro humano"
+  - "humano por favor"
+  - "fale com alguém aí"
+  - "atendente"
+  - "pessoa real"
+
+Pergunta TÉCNICA do cliente (ex: "responde por voz?", "tem integração com X?",
+"qual a diferença pra Y?", "como funciona Z?") NÃO é request_human — classifique
+como faq.
+
+Pergunta de PREÇO/PLANO (ex: "quanto custa?", "qual plano cabe pra mim?")
+classifique como pricing.
+
+Saudação simples (ex: "oi", "olá", "bom dia") classifique como greeting.
+
+Em DÚVIDA, nunca classifique como request_human — use other ou faq.
+
+Customer message: "${text}"
 
 Respond with ONLY the intent word, nothing else.`;
 
@@ -438,16 +510,22 @@ async function handleHandoff(
 }
 
 // ── Handle Non-Text Messages ────────────────────────────
+// V4 #156 (2026-05-03): emojis 🎙️ 📷 📄 🎥 📍 e tom V3 ("Como posso te
+// ajudar?") removidos. Agora alinhado com REGRA 4 (anti-padrões) do
+// prompt V6 da Iza. Áudio NÃO cai mais aqui — é interceptado em
+// processIncomingMessage (etapa 2) e transcrito via Whisper.
 async function handleNonTextMessage(phone: string, msgType: string): Promise<void> {
   const responses: Record<string, string> = {
-    audio: 'Recebi seu áudio! 🎙️ Para agilizar, você pode me enviar a mensagem em texto? Consigo te ajudar mais rápido assim 😊',
-    image: 'Recebi sua imagem! 📷 Para que posso te ajudar hoje?',
-    document: 'Recebi seu documento! 📄 Em breve um atendente irá analisá-lo. Posso te ajudar com algo mais?',
-    video: 'Recebi seu vídeo! 🎥 Como posso te ajudar?',
-    location: 'Recebemos sua localização! 📍 Um de nossos atendentes irá verificar.',
+    // audio nunca chega aqui em prod (Whisper trata antes), mas mantém fallback
+    // pra caso mediaId esteja vazio ou OPENAI_API_KEY desconfigurada.
+    audio: 'Não consegui processar seu áudio agora. Pode me mandar em texto?',
+    image: 'Recebi sua imagem. Me conta em texto o que você precisa que eu já te ajudo.',
+    document: 'Recebi seu documento. Me diz em texto o que você precisa resolver.',
+    video: 'Recebi seu vídeo. Me conta em texto o que você precisa.',
+    location: 'Recebi sua localização. Me diz em texto como posso ajudar.',
   };
 
-  const reply = responses[msgType] || 'Recebi sua mensagem! Como posso te ajudar?';
+  const reply = responses[msgType] || 'Recebi sua mensagem. Me conta em texto o que você precisa.';
   await waService.sendText(phone, reply);
 }
 

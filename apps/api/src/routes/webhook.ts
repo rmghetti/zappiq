@@ -195,6 +195,8 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
       messageType: message.type || 'text',
       whatsappMessageId: message.id,
       orgSettings: (org.settings as any) || {},
+      // V4 #156 — mediaId pra Whisper STT em áudio inbound
+      mediaId: message.image?.id || message.audio?.id || message.document?.id || message.video?.id || null,
       // io não é serializável — worker reemite via app.get('io') após processar
     }, {
       // Cada job ganha jobId único pra dedupe (idempotência via whatsappMessageId)
