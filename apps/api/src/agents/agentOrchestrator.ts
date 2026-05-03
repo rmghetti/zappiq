@@ -107,11 +107,18 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       });
 
       if (transcribeResult.text && transcribeResult.text.trim().length > 0) {
-        // Persiste transcript no Message já gravado pra historico/audit
+        // V4 #159 (PR #71 HOTFIX) — Persiste transcript SEM prefixo "[áudio
+        // transcrito]". Antes salvávamos "[áudio transcrito] X" mas isso
+        // contaminava o history que vai pro LLM: a Iza imitava colocando
+        // "[áudio]" no início das respostas (e TTS sintetizava literalmente).
+        //
+        // Agora salvamos texto puro. O sinal "veio de áudio" fica em
+        // mediaType='audio' (já preenchido pelo webhook) — uso estruturado,
+        // não polui o conteúdo visível.
         try {
           await prisma.message.updateMany({
             where: { whatsappMessageId },
-            data: { content: `[áudio transcrito] ${transcribeResult.text}` },
+            data: { content: transcribeResult.text },
           });
         } catch (err) {
           logger.warn('[Agent] Falha ao persistir transcript no Message', { err });
@@ -471,9 +478,7 @@ interface ParsedResponse {
 function parseAgentResponse(rawResponse: string): ParsedResponse {
   const result: ParsedResponse = { replyText: null, action: null, actionData: null, buttons: null };
 
-  const replyMatch = rawResponse.match(/<reply>([\s\S]*?)<\/reply>/i);
-  result.replyText = replyMatch ? replyMatch[1].trim() : rawResponse.trim();
-
+  // Extract structured tags first
   const actionMatch = rawResponse.match(/<action>(.*?)<\/action>/i);
   if (actionMatch) result.action = actionMatch[1].trim();
 
@@ -487,7 +492,59 @@ function parseAgentResponse(rawResponse: string): ParsedResponse {
     try { result.buttons = JSON.parse(btnMatch[1].trim()); } catch {}
   }
 
+  // V4 #159 (PR #71 HOTFIX 2026-05-03) — Strip TODAS tags estruturadas do
+  // replyText antes de retornar. Bug detectado em smoke real: Iza emitia
+  // "<action>set_contact_name</action><action_data>{...}</action_data>texto"
+  // e o texto inteiro (com tags) ia pro WhatsApp porque o regex <reply>…</reply>
+  // não batia. Cliente recebia tags raw no chat.
+  //
+  // Strategy: se houver <reply>…</reply> usa esse conteúdo. Caso contrário,
+  // usa rawResponse mas REMOVE todas as tags conhecidas + prefixos vazados
+  // do PR #69 (ex: "[áudio]" / "[áudio transcrito]" no INÍCIO da resposta —
+  // a Iza imitava do history corrompido).
+  const replyMatch = rawResponse.match(/<reply>([\s\S]*?)<\/reply>/i);
+  let candidate = replyMatch ? replyMatch[1].trim() : rawResponse.trim();
+  candidate = stripStructuredTags(candidate);
+  candidate = stripLeakedPrefixes(candidate);
+  result.replyText = candidate;
+
   return result;
+}
+
+/**
+ * V4 #159 (PR #71 HOTFIX) — Remove tags estruturadas que escaparam pra
+ * dentro do replyText. Cobre: <action>, <action_data>, <buttons>, <reply>
+ * (open/close, e self-closing por garantia). Case-insensitive. Multi-line.
+ */
+export function stripStructuredTags(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/<action_data>[\s\S]*?<\/action_data>/gi, '')
+    .replace(/<action>[\s\S]*?<\/action>/gi, '')
+    .replace(/<buttons>[\s\S]*?<\/buttons>/gi, '')
+    .replace(/<\/?reply>/gi, '')
+    // Tags solitárias remanescentes (ex: <action> sem fechamento por bug LLM)
+    .replace(/<\/?(action|action_data|buttons|reply)\b[^>]*>/gi, '')
+    .trim();
+}
+
+/**
+ * V4 #159 (PR #71 HOTFIX) — Remove prefixos vazados do PR #69.
+ * Quando audio inbound era transcrito, salvávamos "[áudio transcrito] X"
+ * no Message.content. Esse texto entrava no history e a Iza, vendo o padrão,
+ * imitava em respostas (ex: "[áudio] Oi, Rodrigo!"). TTS sintetizava
+ * literalmente "abre colchete áudio fecha colchete".
+ *
+ * Esta função remove SOMENTE no INÍCIO do texto (não no meio — alguém pode
+ * legitimamente discutir áudios em geral). Conservador.
+ */
+export function stripLeakedPrefixes(text: string): string {
+  if (!text) return text;
+  // Remove "[áudio]", "[audio]", "[áudio transcrito]", "[texto]", "[transcrito]"
+  // no início, com possíveis espaços. Case-insensitive.
+  return text
+    .replace(/^\s*\[(áudio|audio|áudio transcrito|audio transcrito|texto|transcrito)\]\s*/i, '')
+    .trim();
 }
 
 // ── Execute Actions ─────────────────────────────────────
