@@ -1,19 +1,19 @@
-<svg id="logo-dark" viewBox="0 0 380 120" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
+<svg id="logo-light" viewBox="0 0 380 120" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
                         <defs>
-                            <linearGradient id="brand_grad_2" x1="20" y1="15" x2="100" y2="95" gradientUnits="userSpaceOnUse">
+                            <linearGradient id="brand_grad_1" x1="20" y1="15" x2="100" y2="95" gradientUnits="userSpaceOnUse">
                                 <stop stop-color="#25D366"/>
                                 <stop offset="1" stop-color="#4F46E5"/>
                             </linearGradient>
                         </defs>
                         <!-- Ícone -->
                         <g transform="translate(10, 10) scale(0.833)">
-                            <path d="M60 95C82.0914 95 100 77.0914 100 55C100 32.9086 82.0914 15 60 15C37.9086 15 20 32.9086 20 55C20 63.271 22.508 70.9554 26.8407 77.2646L20 95L38.9912 89.6133C45.242 93.1171 52.4096 95 60 95Z" fill="url(#brand_grad_2)"/>
-                            <path d="M65 32L42 60H58L53 82L78 48H62L65 32Z" fill="#FFFFFF"/> <!-- Raio BRANCO — fica visível dentro da bolha colorida em fundos escuros (Aurora). Fix do PR #78 — antes era #0F172A (cinza escuro), invisível contra a parte escura do gradiente da bolha. -->
-                            <path d="M102 22C102 22 97 27 92 27C97 27 102 32 102 32C102 32 107 27 112 27C107 27 102 22 102 22Z" fill="#818CF8"/>
-                            <path d="M90 10C90 10 87 14 84 14C87 14 90 18 90 18C90 18 93 14 96 14C93 14 90 10 90 10Z" fill="#A5B4FC"/>
+                            <path d="M60 95C82.0914 95 100 77.0914 100 55C100 32.9086 82.0914 15 60 15C37.9086 15 20 32.9086 20 55C20 63.271 22.508 70.9554 26.8407 77.2646L20 95L38.9912 89.6133C45.242 93.1171 52.4096 95 60 95Z" fill="url(#brand_grad_1)"/>
+                            <path d="M65 32L42 60H58L53 82L78 48H62L65 32Z" fill="white"/>
+                            <path d="M102 22C102 22 97 27 92 27C97 27 102 32 102 32C102 32 107 27 112 27C107 27 102 22 102 22Z" fill="#4F46E5"/>
+                            <path d="M90 10C90 10 87 14 84 14C87 14 90 18 90 18C90 18 93 14 96 14C93 14 90 10 90 10Z" fill="#6366F1"/>
                         </g>
                         <!-- Texto -->
                         <text x="105" y="78" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" letter-spacing="-2">
-                            <tspan font-weight="800" font-size="64" fill="#FFFFFF">Zapp</tspan><tspan font-weight="300" font-size="64" fill="#818CF8">IQ</tspan>
+                            <tspan font-weight="800" font-size="64" fill="#1E293B">Zapp</tspan><tspan font-weight="300" font-size="64" fill="#4F46E5">IQ</tspan>
                         </text>
                     </svg>
