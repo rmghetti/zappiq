@@ -268,12 +268,30 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         voice?: 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer';
       };
       const trigger = voiceCfg.trigger || 'mirror_input';
+      // V4 #162 (PR #74 hotfix 2026-05-04) — Limite reduzido de 4096 → 800 chars.
+      // Feedback usuário: respostas longas viraram áudio incompreensível
+      // (TTS narrando tabela inteira de pricing) e cortavam por estouro de
+      // limite TTS. Solução: respostas > 800 chars vão SEMPRE como texto,
+      // mesmo se input foi áudio. Prompt V7.4 (REGRA 14) ensina a Iza a
+      // proativamente dizer "vou te passar a tabela por texto" em vez de
+      // tentar narrar tudo em áudio.
+      const MAX_TTS_CHARS = 800;
       const wantVoiceReply =
         voiceCfg.enabled === true &&
         trigger !== 'off' &&
         (!parsed.buttons || parsed.buttons.length === 0) &&
-        parsed.replyText.length < 4096 &&
+        parsed.replyText.length <= MAX_TTS_CHARS &&
         (trigger === 'always' || (trigger === 'mirror_input' && inputWasAudio));
+
+      if (
+        voiceCfg.enabled === true &&
+        inputWasAudio &&
+        parsed.replyText.length > MAX_TTS_CHARS
+      ) {
+        logger.info('[Agent] Resposta > 800 chars — pulando TTS, enviando texto', {
+          contactPhone, replyChars: parsed.replyText.length,
+        });
+      }
 
       let sentAsAudio = false;
       if (wantVoiceReply) {

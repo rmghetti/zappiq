@@ -175,6 +175,13 @@ async function synthesizeGoogle(
         audioConfig: {
           audioEncoding: 'OGG_OPUS', // formato nativo WhatsApp
           sampleRateHertz: 16000, // suficiente pra voz, reduz tamanho
+          // V4 #162 (PR #74 hotfix 2026-05-04) — feedback usuário: voz default
+          // (1.0) está rápida demais pra entender em pt-BR conversacional.
+          // 0.92 = 8% mais devagar — mais natural pra ouvido brasileiro,
+          // ainda dentro do range que o Google considera "natural".
+          // Range válido: 0.25-4.0. Mexer só se feedback de usuário mudar.
+          speakingRate: 0.92,
+          // pitch default (0.0) já é adequado pra Neural2-C feminina jovem.
         },
       },
       {
