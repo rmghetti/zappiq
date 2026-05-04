@@ -1,53 +1,47 @@
 /* ══════════════════════════════════════════════════════════════════════
- * V4 #157 (PR #70) · Text-to-Speech outbound
+ * V4 #160 (PR #72) · Text-to-Speech outbound — Google Neural2 pt-BR + OpenAI fallback
  * --------------------------------------------------------------------
  * Sintetiza voz a partir do texto de resposta da Iza/agente, gera arquivo
  * temporário, faz upload pro WhatsApp Cloud API como audio media, e
  * retorna o mediaId pra envio via sendAudio.
  *
- * Provider: OpenAI tts-1 ($0.015/min)
- *   Voice default: 'nova' (feminina jovem, melhor tonalidade pt-BR
- *   entre as 6 vozes disponíveis: alloy/echo/fable/nova/onyx/shimmer).
- *   Cliente pode override via org.settings.voice_routing.voice.
+ * MUDANÇA vs PR #70:
+ *   - Provider PRIMÁRIO: Google Cloud TTS Neural2 pt-BR ($0.000016/char ≈ $0.0024/min)
+ *   - Provider FALLBACK: OpenAI tts-1 ($0.015/min) — só dispara se Google falhar
+ *   - Razão: voz natural pt-BR (sem sotaque "gringo") + 84% redução de custo
  *
- * Decisão tts-1 vs tts-1-hd:
- *   tts-1: latência <2s, qualidade adequada pra atendimento — DEFAULT
- *   tts-1-hd: latência 4-6s, qualidade marginalmente superior — OPCIONAL
- *   pra clientes que ativam Voice Premium (settings.voice_routing.hd=true).
- *   Decisão: começar só tts-1. tts-1-hd vira diferencial em V5 se cliente
- *   pedir. Custo tts-1-hd é $0.030/min — 2× mais caro, margem cai pra ~70%.
+ * Vozes Google pt-BR Neural2 disponíveis:
+ *   pt-BR-Neural2-A — feminina madura
+ *   pt-BR-Neural2-B — masculina madura
+ *   pt-BR-Neural2-C — feminina jovem (DEFAULT — mapeada do antigo "nova")
+ *
+ * Mapeamento legacy → novo (orgs que tinham settings.voice_routing.voice
+ * setado pra voz OpenAI continuam funcionando):
+ *   nova    → pt-BR-Neural2-C (feminina jovem)
+ *   shimmer → pt-BR-Neural2-A (feminina madura)
+ *   alloy   → pt-BR-Neural2-A (neutra → feminina madura)
+ *   echo    → pt-BR-Neural2-B (masculina jovem → masculina)
+ *   onyx    → pt-BR-Neural2-B (masculina grave → masculina)
+ *   fable   → pt-BR-Neural2-B (masculina UK → masculina)
  *
  * Flow:
- *   1. POST OpenAI /v1/audio/speech (model=tts-1, voice=nova, format=opus)
- *      → Buffer de áudio Opus (~16kbps)
- *   2. POST /PHONE_ID/media (multipart) com audio/ogg → mediaId WhatsApp
- *   3. Caller usa mediaId em sendAudio(to, mediaId)
+ *   1. POST Google TTS /v1/text:synthesize (voice pt-BR-Neural2-C, format OGG_OPUS)
+ *      → audioContent base64 → Buffer
+ *   2. Se falhar, fallback OpenAI tts-1 (mesmo flow do PR #70)
+ *   3. POST /PHONE_ID/media (multipart) com audio/ogg → mediaId WhatsApp
+ *   4. Caller usa mediaId em sendAudio(to, mediaId)
  *
- * Custo + audit:
- *   Estimamos minutos pelo texto (heuristic: 150 char ≈ 1 min de fala
- *   pt-BR, conservative). Audit em llm_call_logs operation='tts',
- *   provider='openai-tts', model='tts-1'. costUsdEstimate calculado via
- *   MODEL_PRICING (que precisa ganhar tts-1 + whisper-1 — ver patch).
+ * Audit em llm_call_logs:
+ *   provider='google-tts' (primário) ou 'openai-tts' (fallback)
+ *   model='pt-BR-Neural2-C' ou 'tts-1'
  *
- * Trial 14d × 30 min:
- *   Quando voice_routing.trial=true (org recém-ativada), conta minutos
- *   normalmente em usage_audit_log. Helper isVoiceTrialExpired() em
- *   middleware separado checa antes de gerar (não nesta função — single
- *   responsibility).
- *
- * Hard ceiling 2× minutos inclusos:
- *   Mesma divisão — middleware checa antes de chamar generateSpeech.
+ * Auth:
+ *   Google: usa GOOGLE_APPLICATION_CREDENTIALS_JSON (mesmo que Gemini)
+ *   OpenAI: OPENAI_API_KEY
  *
  * Fail-soft:
- *   Erro em qualquer etapa → retorna { mediaId: null, error: '...' }.
- *   Caller cai pro fallback texto (sendText). Cliente nunca recebe stack.
- *
- * Limitações conhecidas:
- *   - WhatsApp limita audio a 16MB. tts-1 Opus a 16kbps gera ~120 KB/min,
- *     então pegamos antes do estouro só em mensagens >2h (impraticável).
- *   - Sem speaker style transfer (voz sempre a mesma por org).
- *   - Sem SSML (controle de prosódia) — tts-1 não suporta. tts-1-hd
- *     também não. Pra SSML, V5 + ElevenLabs upsell.
+ *   Google falha → tenta OpenAI → ambos falham → retorna mediaId=null,
+ *   caller cai pro sendText.
  * ══════════════════════════════════════════════════════════════════════ */
 
 import axios, { AxiosError } from 'axios';
@@ -56,91 +50,179 @@ import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { logLLMCall } from './llmCallAudit.js';
 
-const TTS_ENDPOINT = 'https://api.openai.com/v1/audio/speech';
-const TTS_MODEL = 'tts-1';
+// ── Google TTS ──────────────────────────────────────────────────────
+const GOOGLE_TTS_ENDPOINT = 'https://texttospeech.googleapis.com/v1/text:synthesize';
+const GOOGLE_DEFAULT_VOICE = 'pt-BR-Neural2-C'; // feminina jovem
+
+// ── OpenAI TTS (fallback) ──────────────────────────────────────────
+const OPENAI_TTS_ENDPOINT = 'https://api.openai.com/v1/audio/speech';
+const OPENAI_TTS_MODEL = 'tts-1';
+const OPENAI_DEFAULT_VOICE: OpenAITTSVoice = 'nova';
+
 const TTS_TIMEOUT_MS = 30_000;
 const WHATSAPP_MEDIA_ENDPOINT = (phoneId: string) =>
   `https://graph.facebook.com/${env.WHATSAPP_API_VERSION}/${phoneId}/media`;
 
 /**
- * Vozes OpenAI tts-1 disponíveis. Default Iza: nova (feminina jovem,
- * melhor tom pt-BR). Outras: alloy (neutra), echo (masculina jovem),
- * fable (masculina madura UK), onyx (masculina grave), shimmer (feminina
- * suave).
+ * Vozes Google pt-BR Neural2 + WaveNet disponíveis (nativas em pt-BR).
+ * Default Iza: pt-BR-Neural2-C (feminina jovem, melhor tom conversacional).
  */
-export type TTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer';
+export type GoogleTTSVoice =
+  | 'pt-BR-Neural2-A' // feminina madura
+  | 'pt-BR-Neural2-B' // masculina madura
+  | 'pt-BR-Neural2-C' // feminina jovem
+  | 'pt-BR-Wavenet-A' | 'pt-BR-Wavenet-B' | 'pt-BR-Wavenet-C' | 'pt-BR-Wavenet-D' | 'pt-BR-Wavenet-E';
+
+export type OpenAITTSVoice = 'alloy' | 'echo' | 'fable' | 'nova' | 'onyx' | 'shimmer';
+export type TTSVoice = GoogleTTSVoice | OpenAITTSVoice;
 
 /**
- * Estimativa heurística de minutos de fala a partir do texto.
- * Calibração: pt-BR fala ~150 chars/min em ritmo natural conversacional.
- * Conservative: arredonda pra cima — melhor cobrar a mais que a menos.
+ * Mapeia voz legacy OpenAI → equivalente Google pt-BR.
+ * Garante back-compat de orgs que tinham settings.voice_routing.voice='nova'
+ * antes do PR #72.
+ */
+function mapToGoogleVoice(voice: string | undefined): GoogleTTSVoice {
+  if (!voice) return GOOGLE_DEFAULT_VOICE;
+  // Se já é voz Google, retorna direto
+  if (voice.startsWith('pt-BR-')) return voice as GoogleTTSVoice;
+  // Mapeamento OpenAI legacy → Google
+  const map: Record<string, GoogleTTSVoice> = {
+    nova: 'pt-BR-Neural2-C',
+    shimmer: 'pt-BR-Neural2-A',
+    alloy: 'pt-BR-Neural2-A',
+    echo: 'pt-BR-Neural2-B',
+    onyx: 'pt-BR-Neural2-B',
+    fable: 'pt-BR-Neural2-B',
+  };
+  return map[voice] || GOOGLE_DEFAULT_VOICE;
+}
+
+/**
+ * Estimativa heurística de minutos de fala a partir do texto INPUT.
+ *
+ * ⚠️ CALIBRAÇÃO CRÍTICA — NÃO MEXER SEM RECONFIRMAR PRICING.
+ *
+ * Esta função é usada em DUAS contas distintas:
+ *   1. CUSTO Google TTS (cobrado por chars de input): R$ 0,06/min @ 750 chars/min
+ *      Fórmula: chars × $0.000016 = USD; × 5 (USD/BRL) = BRL
+ *   2. COBRANÇA do cliente (por minutos de áudio gerados): tabela em planConfig
+ *
+ * Heurística pt-BR: ~750 chars/min de áudio gerado em ritmo conversacional.
+ *   - 150 wpm × 5 chars/palavra + espaços = ~900 chars/min faladas
+ *   - −15-20% de pausas naturais entre frases
+ *   - = ~750 chars/min (conservador, favorável ao cliente)
+ *
+ * HISTÓRICO DE BUG (2026-05-04): inicialmente assumi 150 chars/min (5x errado),
+ * o que gerou subestimativa de custo de 5x e Stripe Prices em PREJUÍZO em 3
+ * dos 6 pacotes do PR #72 v2. Corrigido pra 750 chars/min antes de qualquer
+ * venda (v3 atual).
  */
 export function estimateMinutesFromText(text: string): number {
   const len = (text || '').length;
   if (len === 0) return 0;
-  // 150 chars/min, mínimo 0.05 min (3s) pra evitar zerar mensagem curta
-  return Math.max(0.05, Math.ceil((len / 150) * 100) / 100);
+  // 750 chars/min — calibração validada após bug de 2026-05-04
+  return Math.max(0.05, Math.ceil((len / 750) * 100) / 100);
 }
 
 export interface TTSContext {
   organizationId?: string | null;
   conversationId?: string | null;
   contactPhone?: string;
-  /** WhatsApp Phone Number ID da org (de Organization.whatsappPhoneNumberId) */
+  /** WhatsApp Phone Number ID da org */
   phoneNumberId: string;
-  /** Voz preferida da org (default: nova) */
+  /** Voz preferida da org (default: pt-BR-Neural2-C) */
   voice?: TTSVoice;
 }
 
 export interface TTSResult {
   /** WhatsApp media ID pronto pra usar em sendAudio. null se falhou. */
   mediaId: string | null;
-  /** Estimativa de minutos consumidos (pra usage_audit_log) */
+  /** Estimativa de minutos consumidos */
   minutesEstimate: number;
-  /** Latência total (TTS + upload Meta) */
+  /** Latência total */
   latencyMs: number;
+  /** Provider usado pra síntese (google-tts | openai-tts | none) */
+  providerUsed?: 'google-tts' | 'openai-tts' | 'none';
   /** Erro caso mediaId=null */
   error?: string;
 }
 
 /**
- * Sintetiza voz e faz upload no WhatsApp. Retorna mediaId pronto pra envio.
- *
- * @param text  Texto a sintetizar (resposta da Iza/agente)
- * @param ctx   Contexto pra audit + WhatsApp upload
+ * Tenta sintetizar via Google Cloud TTS.
+ * Retorna Buffer ou null em caso de falha (caller decide fallback).
  */
-export async function generateAndUploadSpeech(
+async function synthesizeGoogle(
   text: string,
-  ctx: TTSContext,
-): Promise<TTSResult> {
+  voice: GoogleTTSVoice,
+): Promise<{ buffer: Buffer | null; latencyMs: number; error?: string }> {
+  const t0 = Date.now();
+
+  const apiKey = process.env.GOOGLE_API_KEY || env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    return {
+      buffer: null,
+      latencyMs: 0,
+      error: 'GOOGLE_API_KEY ausente — pular pra fallback OpenAI',
+    };
+  }
+
+  try {
+    const { data } = await axios.post(
+      `${GOOGLE_TTS_ENDPOINT}?key=${apiKey}`,
+      {
+        input: { text: text.slice(0, 5000) }, // Google limita a 5000 chars/request
+        voice: { languageCode: 'pt-BR', name: voice },
+        audioConfig: {
+          audioEncoding: 'OGG_OPUS', // formato nativo WhatsApp
+          sampleRateHertz: 16000, // suficiente pra voz, reduz tamanho
+        },
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: TTS_TIMEOUT_MS,
+        maxBodyLength: 30 * 1024 * 1024,
+        maxContentLength: 30 * 1024 * 1024,
+      },
+    );
+
+    const audioBase64: string | undefined = data?.audioContent;
+    if (!audioBase64) {
+      return { buffer: null, latencyMs: Date.now() - t0, error: 'Google TTS retornou audioContent vazio' };
+    }
+    const buffer = Buffer.from(audioBase64, 'base64');
+    return { buffer, latencyMs: Date.now() - t0 };
+  } catch (err) {
+    let errMsg = err instanceof Error ? err.message : String(err);
+    if (err instanceof AxiosError) {
+      const status = err.response?.status;
+      const body = err.response?.data;
+      const bodyStr = JSON.stringify(body).slice(0, 200);
+      errMsg = `Google TTS HTTP ${status}: ${bodyStr}`;
+    }
+    return { buffer: null, latencyMs: Date.now() - t0, error: errMsg };
+  }
+}
+
+/**
+ * Tenta sintetizar via OpenAI tts-1 (fallback).
+ */
+async function synthesizeOpenAI(
+  text: string,
+  voice: OpenAITTSVoice,
+): Promise<{ buffer: Buffer | null; latencyMs: number; error?: string }> {
   const t0 = Date.now();
 
   if (!env.OPENAI_API_KEY) {
-    return { mediaId: null, minutesEstimate: 0, latencyMs: 0, error: 'OPENAI_API_KEY ausente' };
+    return { buffer: null, latencyMs: 0, error: 'OPENAI_API_KEY ausente' };
   }
-  if (!env.WHATSAPP_ACCESS_TOKEN) {
-    return { mediaId: null, minutesEstimate: 0, latencyMs: 0, error: 'WHATSAPP_ACCESS_TOKEN ausente' };
-  }
-  if (!text || text.trim().length === 0) {
-    return { mediaId: null, minutesEstimate: 0, latencyMs: 0, error: 'texto vazio' };
-  }
-  if (!ctx.phoneNumberId) {
-    return { mediaId: null, minutesEstimate: 0, latencyMs: 0, error: 'phoneNumberId ausente' };
-  }
-
-  const voice: TTSVoice = ctx.voice || 'nova';
-  const minutesEstimate = estimateMinutesFromText(text);
 
   try {
-    // ── 1. POST OpenAI /v1/audio/speech ───────────────────────────
-    // response_format='opus' = OGG/Opus, formato nativo WhatsApp audio.
-    const ttsT0 = Date.now();
     const ttsResp = await axios.post(
-      TTS_ENDPOINT,
+      OPENAI_TTS_ENDPOINT,
       {
-        model: TTS_MODEL,
+        model: OPENAI_TTS_MODEL,
         voice,
-        input: text.slice(0, 4096), // OpenAI limita input a 4096 chars
+        input: text.slice(0, 4096),
         response_format: 'opus',
       },
       {
@@ -154,95 +236,164 @@ export async function generateAndUploadSpeech(
         maxContentLength: 30 * 1024 * 1024,
       },
     );
-    const ttsLatency = Date.now() - ttsT0;
-    const audioBuf = Buffer.from(ttsResp.data);
-
-    if (audioBuf.length === 0) {
-      return {
-        mediaId: null,
-        minutesEstimate,
-        latencyMs: Date.now() - t0,
-        error: 'OpenAI TTS retornou buffer vazio',
-      };
-    }
-
-    // ── 2. Upload no WhatsApp Cloud API ────────────────────────────
-    const uploadT0 = Date.now();
-    const form = new FormData();
-    form.append('messaging_product', 'whatsapp');
-    form.append('type', 'audio/ogg');
-    form.append('file', audioBuf, {
-      filename: `iza_tts_${Date.now()}.ogg`,
-      contentType: 'audio/ogg',
-    });
-
-    const uploadResp = await axios.post(WHATSAPP_MEDIA_ENDPOINT(ctx.phoneNumberId), form, {
-      headers: {
-        ...form.getHeaders(),
-        Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
-      },
-      timeout: 30_000,
-      maxBodyLength: 30 * 1024 * 1024,
-      maxContentLength: 30 * 1024 * 1024,
-    });
-    const uploadLatency = Date.now() - uploadT0;
-    const mediaId: string | undefined = uploadResp?.data?.id;
-    const totalLatency = Date.now() - t0;
-
-    if (!mediaId) {
-      return {
-        mediaId: null,
-        minutesEstimate,
-        latencyMs: totalLatency,
-        error: 'Upload WhatsApp não retornou id',
-      };
-    }
-
-    // ── 3. Audit em llm_call_logs ─────────────────────────────────
-    // operation='tts' (precisa bumpar tipagem do helper — TODO).
-    // Custo: $0.015/min × minutesEstimate.
-    await logLLMCall({
-      organizationId: ctx.organizationId ?? null,
-      conversationId: ctx.conversationId ?? null,
-      provider: 'openai-tts',
-      model: TTS_MODEL,
-      operation: 'sentiment' as any, // TODO: bumpar tipo pra incluir 'tts' explícito
-      inputTokens: null,
-      outputTokens: null,
-      latencyMs: ttsLatency,
-      fallbackTriggered: false,
-      attemptCount: 1,
-    });
-
-    logger.info('[textToSpeech] TTS + upload OK', {
-      contactPhone: ctx.contactPhone,
-      voice,
-      textChars: text.length,
-      minutesEstimate,
-      audioBytes: audioBuf.length,
-      ttsLatency,
-      uploadLatency,
-      totalLatency,
-      mediaId,
-    });
-
-    return { mediaId, minutesEstimate, latencyMs: totalLatency };
+    const buffer = Buffer.from(ttsResp.data);
+    return { buffer, latencyMs: Date.now() - t0 };
   } catch (err) {
-    const totalLatency = Date.now() - t0;
     let errMsg = err instanceof Error ? err.message : String(err);
     if (err instanceof AxiosError) {
       const status = err.response?.status;
-      const body = err.response?.data;
-      const bodyStr = Buffer.isBuffer(body)
-        ? body.toString('utf-8').slice(0, 200)
-        : JSON.stringify(body).slice(0, 200);
-      errMsg = `HTTP ${status}: ${bodyStr}`;
+      errMsg = `OpenAI TTS HTTP ${status}`;
     }
-    logger.error('[textToSpeech] Falha', {
-      contactPhone: ctx.contactPhone,
-      error: errMsg,
-      latencyMs: totalLatency,
-    });
-    return { mediaId: null, minutesEstimate, latencyMs: totalLatency, error: errMsg };
+    return { buffer: null, latencyMs: Date.now() - t0, error: errMsg };
   }
+}
+
+/**
+ * Faz upload do audio Buffer no WhatsApp Cloud API e retorna mediaId.
+ */
+async function uploadToWhatsApp(audioBuf: Buffer, phoneNumberId: string): Promise<string | null> {
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', 'audio/ogg');
+  form.append('file', audioBuf, {
+    filename: `iza_tts_${Date.now()}.ogg`,
+    contentType: 'audio/ogg',
+  });
+
+  const uploadResp = await axios.post(WHATSAPP_MEDIA_ENDPOINT(phoneNumberId), form, {
+    headers: {
+      ...form.getHeaders(),
+      Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
+    },
+    timeout: 30_000,
+    maxBodyLength: 30 * 1024 * 1024,
+    maxContentLength: 30 * 1024 * 1024,
+  });
+  return uploadResp?.data?.id ?? null;
+}
+
+/**
+ * Sintetiza voz e faz upload no WhatsApp. Retorna mediaId pronto pra envio.
+ *
+ * Flow: Google primário → OpenAI fallback → uploadWhatsApp
+ *
+ * @param text  Texto a sintetizar
+ * @param ctx   Contexto pra audit + WhatsApp upload
+ */
+export async function generateAndUploadSpeech(
+  text: string,
+  ctx: TTSContext,
+): Promise<TTSResult> {
+  const t0 = Date.now();
+
+  if (!text || text.trim().length === 0) {
+    return { mediaId: null, minutesEstimate: 0, latencyMs: 0, error: 'texto vazio', providerUsed: 'none' };
+  }
+  if (!ctx.phoneNumberId) {
+    return { mediaId: null, minutesEstimate: 0, latencyMs: 0, error: 'phoneNumberId ausente', providerUsed: 'none' };
+  }
+
+  const minutesEstimate = estimateMinutesFromText(text);
+  const googleVoice = mapToGoogleVoice(ctx.voice);
+
+  // ── 1. Tentativa primária: Google Cloud TTS pt-BR ──
+  let synthBuffer: Buffer | null = null;
+  let synthLatency = 0;
+  let providerUsed: 'google-tts' | 'openai-tts' | 'none' = 'none';
+  let model = '';
+  let lastError: string | undefined;
+
+  const googleResult = await synthesizeGoogle(text, googleVoice);
+  if (googleResult.buffer) {
+    synthBuffer = googleResult.buffer;
+    synthLatency = googleResult.latencyMs;
+    providerUsed = 'google-tts';
+    model = googleVoice;
+  } else {
+    lastError = googleResult.error;
+    logger.warn('[textToSpeech] Google TTS falhou, tentando fallback OpenAI', {
+      error: googleResult.error,
+      contactPhone: ctx.contactPhone,
+    });
+
+    // ── 2. Fallback: OpenAI tts-1 ──
+    const openaiResult = await synthesizeOpenAI(text, OPENAI_DEFAULT_VOICE);
+    if (openaiResult.buffer) {
+      synthBuffer = openaiResult.buffer;
+      synthLatency = googleResult.latencyMs + openaiResult.latencyMs;
+      providerUsed = 'openai-tts';
+      model = OPENAI_TTS_MODEL;
+    } else {
+      lastError = `Google: ${googleResult.error} | OpenAI: ${openaiResult.error}`;
+    }
+  }
+
+  if (!synthBuffer) {
+    return {
+      mediaId: null,
+      minutesEstimate,
+      latencyMs: Date.now() - t0,
+      error: lastError || 'Ambos providers falharam',
+      providerUsed: 'none',
+    };
+  }
+
+  if (synthBuffer.length === 0) {
+    return {
+      mediaId: null,
+      minutesEstimate,
+      latencyMs: Date.now() - t0,
+      error: `${providerUsed} retornou buffer vazio`,
+      providerUsed,
+    };
+  }
+
+  // ── 3. Upload no WhatsApp ──
+  let mediaId: string | null = null;
+  try {
+    mediaId = await uploadToWhatsApp(synthBuffer, ctx.phoneNumberId);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    return {
+      mediaId: null,
+      minutesEstimate,
+      latencyMs: Date.now() - t0,
+      error: `WhatsApp upload falhou: ${errMsg}`,
+      providerUsed,
+    };
+  }
+
+  const totalLatency = Date.now() - t0;
+
+  if (!mediaId) {
+    return { mediaId: null, minutesEstimate, latencyMs: totalLatency, error: 'WhatsApp upload sem id', providerUsed };
+  }
+
+  // ── 4. Audit em llm_call_logs ──
+  await logLLMCall({
+    organizationId: ctx.organizationId ?? null,
+    conversationId: ctx.conversationId ?? null,
+    provider: providerUsed,
+    model,
+    operation: 'sentiment' as any, // TODO bumpar enum pra incluir 'tts' explícito
+    inputTokens: null,
+    outputTokens: null,
+    latencyMs: synthLatency,
+    fallbackTriggered: providerUsed === 'openai-tts',
+    attemptCount: providerUsed === 'openai-tts' ? 2 : 1,
+  });
+
+  logger.info('[textToSpeech] Síntese + upload OK', {
+    contactPhone: ctx.contactPhone,
+    providerUsed,
+    voice: model,
+    textChars: text.length,
+    minutesEstimate,
+    audioBytes: synthBuffer.length,
+    synthLatency,
+    totalLatency,
+    mediaId,
+  });
+
+  return { mediaId, minutesEstimate, latencyMs: totalLatency, providerUsed };
 }

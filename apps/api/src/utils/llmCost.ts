@@ -27,7 +27,7 @@
  *   - Não conta image tokens (vision) — adicionar quando entrar.
  * ══════════════════════════════════════════════════════════════════════ */
 
-export const PRICING_VERSION = '2026-05-03'; // V4 #157 (PR #70) — added whisper-1 + tts-1
+export const PRICING_VERSION = '2026-05-04'; // V4 #160 (PR #72) — added Google TTS pt-BR Neural2/Wavenet
 
 export interface ModelPricing {
   /** USD por 1M input tokens */
@@ -57,10 +57,22 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   // OpenAI
   'gpt-4o-mini':                 { inputUsdPerMillion: 0.15,  outputUsdPerMillion: 0.60 },
   'gpt-4o':                      { inputUsdPerMillion: 2.5,   outputUsdPerMillion: 10.0 },
-  // OpenAI Audio (V4 #157 — PR #70)
+  // OpenAI Audio (V4 #157 — PR #70) — fallback após PR #72
   'whisper-1':                   { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.006 },
   'tts-1':                       { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.015 },
   'tts-1-hd':                    { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.030 },
+  // Google Cloud TTS pt-BR (V4 #160 — PR #72) — provider PRIMÁRIO de TTS
+  // Pricing: $16/1M chars Neural2/WaveNet. Em pt-BR ~150 chars/min ≈ $0.0024/min.
+  // Mesmo custo pra Neural2-A/B/C e WaveNet-A/B/C/D/E (Google cobra por chars,
+  // não por voice). Mantemos entrada por voice pra audit granular.
+  'pt-BR-Neural2-A':             { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.0024 },
+  'pt-BR-Neural2-B':             { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.0024 },
+  'pt-BR-Neural2-C':             { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.0024 },
+  'pt-BR-Wavenet-A':             { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.0024 },
+  'pt-BR-Wavenet-B':             { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.0024 },
+  'pt-BR-Wavenet-C':             { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.0024 },
+  'pt-BR-Wavenet-D':             { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.0024 },
+  'pt-BR-Wavenet-E':             { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.0024 },
   // Google (V4 #V4-001 — adicionado em 2026-04-30 pós-Gate 1)
   'gemini-2.5-flash':            { inputUsdPerMillion: 0.075, outputUsdPerMillion: 0.30 },
   'gemini-2.0-flash':            { inputUsdPerMillion: 0.075, outputUsdPerMillion: 0.30 },

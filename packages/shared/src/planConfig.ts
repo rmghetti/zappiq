@@ -443,90 +443,99 @@ export const ADDONS: Record<string, AddonConfig> = {
     includedIn: ['ENTERPRISE'],
   },
   // ─────────────────────────────────────────────────────────
-  // V4 #157 (PR #70 — 2026-05-03): Voice add-ons RE-INTRODUZIDOS.
-  // Backend Whisper STT (PR #69) + OpenAI TTS (PR #70) implementados.
-  // 6 SKUs comerciais com Stripe Prices LIVE criados via MCP.
+  // V4 #161 (PR #72 — 2026-05-04 v4 FINAL): Voice add-ons.
   //
-  // Provider: OpenAI tts-1 ($0.015/min). Margem ~73-79% líquida.
+  // CONTEXTO HISTÓRICO COMPLETO:
+  //   v1 (PR #70): OpenAI tts-1, R$ 89,90 a R$ 1.299,90, margem ~76%
+  //   v2: Google Neural2, R$ 16,90 a R$ 199,90, ERRADO (custo TTS subestimado
+  //     5x). Margem real seria 22% a -24% (PREJUÍZO). ARQUIVADO antes de venda.
+  //   v3: R$ 46,90 a R$ 558,90, margem 53-70% (média 65%). Substituído por
+  //     v4 antes de qualquer venda — Rodrigo decidiu margens mais altas.
+  //   v4 (FINAL — ESTE): R$ 79,90 a R$ 929,90, margem 70-80% (média 77,1%).
+  //     Curva linear -2pp por pacote. Aprovado Rodrigo 2026-05-04.
+  //
+  // Provider PRIMÁRIO: Google Cloud TTS Neural2-C ($0.012/min @ 750 chars).
+  // Provider FALLBACK: OpenAI tts-1 ($0.015/min) — só dispara se Google falhar.
+  //
   // Trial 14d / 30 min em Voice 200 e Voice 400.
   // Hard ceiling 2× minutos inclusos — acima vira conversa Enterprise.
   //
   // Pricing curve estritamente decrescente em R$/min:
-  //   Voice 200:  R$ 0,4495/min
-  //   Voice 400:  R$ 0,4248/min
-  //   Voice 600:  R$ 0,3998/min
-  //   Voice 800:  R$ 0,3749/min
-  //   Voice 1500: R$ 0,3333/min  (corrigido vs proposta inicial)
-  //   Voice 4000: R$ 0,3250/min  (corrigido vs proposta inicial)
+  //   Voice 200:  R$ 0,3995/min  (R$ 79,90)   → margem 80,5%
+  //   Voice 400:  R$ 0,3448/min  (R$ 137,90)  → margem 78,3%
+  //   Voice 600:  R$ 0,3082/min  (R$ 184,90)  → margem 76,2%
+  //   Voice 800:  R$ 0,2811/min  (R$ 224,90)  → margem 74,5%
+  //   Voice 1500: R$ 0,2533/min  (R$ 379,90)  → margem 72,2%
+  //   Voice 4000: R$ 0,2325/min  (R$ 929,90)  → margem 70,2%
   //
-  // Stripe Price IDs em livemode (cuidado): documentados na descrição
-  // de cada add-on abaixo. NÃO HARDCODE no checkout — leia daqui.
+  // Overage curve descendente alinhada com margem do pacote:
+  //   200/400/600/800/1500/4000 = R$ 0,35 / 0,30 / 0,28 / 0,25 / 0,22 / 0,20
+  //
+  // Stripe Price IDs v4 LIVE (criados 2026-05-04). v3 arquivados.
   // ─────────────────────────────────────────────────────────
   VOICE_200: {
     id: 'VOICE_200',
-    name: 'Voice 200 — add-on de voz outbound',
+    name: 'Voice 200 — add-on de voz outbound (pt-BR Neural)',
     description:
-      '200 minutos/mês de TTS (resposta por áudio) via Iza ou seu agente IA. Overage R$ 0,49/min. Trial 14 dias com 30 min grátis. Stripe price_1TT8J8Klp5SWv74XG5O4Xww2 (prod_US2Nf2zRn1dn2H).',
-    priceMonthly: 89.9,
-    priceLabel: 'R$ 89,90/mês — 200 min',
+      '200 minutos/mês de TTS com voz natural pt-BR (Google Neural2). Overage R$ 0,35/min. Trial 14 dias com 30 min grátis. Stripe price_1TTBQmKlp5SWv74Xb5e5Y9hA (prod_US5b5W8BDsOyU0).',
+    priceMonthly: 79.9,
+    priceLabel: 'R$ 79,90/mês — 200 min',
     availableFor: ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
     includedIn: [],
   },
   VOICE_400: {
     id: 'VOICE_400',
-    name: 'Voice 400 — add-on de voz outbound',
+    name: 'Voice 400 — add-on de voz outbound (pt-BR Neural)',
     description:
-      '400 minutos/mês de TTS via Iza ou seu agente IA. Overage R$ 0,49/min. Trial 14 dias com 30 min grátis. Stripe price_1TT8JIKlp5SWv74XglVhUFLG (prod_US2NGJ6tk2AGPh).',
-    priceMonthly: 169.9,
-    priceLabel: 'R$ 169,90/mês — 400 min',
+      '400 minutos/mês de TTS pt-BR natural. Overage R$ 0,30/min. Trial 14 dias com 30 min grátis. Stripe price_1TTBQvKlp5SWv74XSwCoSFnf (prod_US5brzwtrvWGBn).',
+    priceMonthly: 137.9,
+    priceLabel: 'R$ 137,90/mês — 400 min',
     availableFor: ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
     includedIn: [],
   },
   VOICE_600: {
     id: 'VOICE_600',
-    name: 'Voice 600 — add-on de voz outbound',
+    name: 'Voice 600 — add-on de voz outbound (pt-BR Neural)',
     description:
-      '600 minutos/mês de TTS via Iza ou seu agente IA. Overage R$ 0,49/min. Stripe price_1TT8JPKlp5SWv74XZrZYTN19 (prod_US2NL4KgL8LsJl).',
-    priceMonthly: 239.9,
-    priceLabel: 'R$ 239,90/mês — 600 min',
+      '600 minutos/mês de TTS pt-BR natural. Overage R$ 0,28/min. Stripe price_1TTBR5Klp5SWv74XILSYFDHS (prod_US5bijQ5sOGPTf).',
+    priceMonthly: 184.9,
+    priceLabel: 'R$ 184,90/mês — 600 min',
     availableFor: ['GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
     includedIn: [],
   },
   VOICE_800: {
     id: 'VOICE_800',
-    name: 'Voice 800 — add-on de voz outbound',
+    name: 'Voice 800 — add-on de voz outbound (pt-BR Neural)',
     description:
-      '800 minutos/mês de TTS via Iza ou seu agente IA. Overage R$ 0,49/min. Stripe price_1TT8JVKlp5SWv74Xe9hBfPAf (prod_US2Nzdk9qWJw9R).',
-    priceMonthly: 299.9,
-    priceLabel: 'R$ 299,90/mês — 800 min',
+      '800 minutos/mês de TTS pt-BR natural. Overage R$ 0,25/min. Stripe price_1TTBRCKlp5SWv74XiLq3JFpp (prod_US5b42q8QDMyJC).',
+    priceMonthly: 224.9,
+    priceLabel: 'R$ 224,90/mês — 800 min',
     availableFor: ['GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'],
     includedIn: [],
   },
   VOICE_1500: {
     id: 'VOICE_1500',
-    name: 'Voice 1.500 — add-on de voz outbound',
+    name: 'Voice 1.500 — add-on de voz outbound (pt-BR Neural)',
     description:
-      '1.500 minutos/mês de TTS via Iza ou seu agente IA. Overage R$ 0,39/min. Stripe price_1TT8JbKlp5SWv74XIib1o6eL (prod_US2N18PMNq8X3l).',
-    priceMonthly: 499.9,
-    priceLabel: 'R$ 499,90/mês — 1.500 min',
+      '1.500 minutos/mês de TTS pt-BR natural. Overage R$ 0,22/min. Stripe price_1TTBRKKlp5SWv74Xej7QUZOo (prod_US5b2csvlZSjDx).',
+    priceMonthly: 379.9,
+    priceLabel: 'R$ 379,90/mês — 1.500 min',
     availableFor: ['SCALE', 'BUSINESS', 'ENTERPRISE'],
     includedIn: [],
   },
   VOICE_4000: {
     id: 'VOICE_4000',
-    name: 'Voice 4.000 — add-on de voz outbound',
+    name: 'Voice 4.000 — add-on de voz outbound (pt-BR Neural)',
     description:
-      '4.000 minutos/mês de TTS via Iza ou seu agente IA. Overage R$ 0,29/min. Hard ceiling 8.000 min/mês — acima disso, conversa Enterprise. Stripe price_1TT8JlKlp5SWv74XwQCxeKrA (prod_US2N7nMCXScddo).',
-    priceMonthly: 1299.9,
-    priceLabel: 'R$ 1.299,90/mês — 4.000 min',
+      '4.000 minutos/mês de TTS pt-BR natural. Overage R$ 0,20/min. Hard ceiling 8.000 min/mês — acima vira conversa Enterprise. Stripe price_1TTBRSKlp5SWv74XxIRs5gr1 (prod_US5bjZBsYDjffz).',
+    priceMonthly: 929.9,
+    priceLabel: 'R$ 929,90/mês — 4.000 min',
     availableFor: ['BUSINESS', 'ENTERPRISE'],
     includedIn: [],
   },
 };
 
-// V4 #157 (PR #70) — Voice add-on metadata adicional (minutos, overage,
-// Stripe IDs). Separado de AddonConfig pra não inflar interface base com
-// campos voice-only. Leitura: lookup por add-on ID.
+// V4 #161 (PR #72) — Voice add-on metadata v4 FINAL.
 export interface VoiceAddonMeta {
   minutesIncluded: number;
   overagePerMinBrl: number;
@@ -540,42 +549,72 @@ export interface VoiceAddonMeta {
 
 export const VOICE_ADDON_META: Record<string, VoiceAddonMeta> = {
   VOICE_200: {
-    minutesIncluded: 200, overagePerMinBrl: 0.49, hardCeilingMinutes: 400,
+    minutesIncluded: 200, overagePerMinBrl: 0.35, hardCeilingMinutes: 400,
     trialDays: 14, trialMinutes: 30,
-    stripeProductId: 'prod_US2Nf2zRn1dn2H',
-    stripePriceId: 'price_1TT8J8Klp5SWv74XG5O4Xww2',
+    stripeProductId: 'prod_US5b5W8BDsOyU0',
+    stripePriceId: 'price_1TTBQmKlp5SWv74Xb5e5Y9hA',
   },
   VOICE_400: {
-    minutesIncluded: 400, overagePerMinBrl: 0.49, hardCeilingMinutes: 800,
+    minutesIncluded: 400, overagePerMinBrl: 0.30, hardCeilingMinutes: 800,
     trialDays: 14, trialMinutes: 30,
-    stripeProductId: 'prod_US2NGJ6tk2AGPh',
-    stripePriceId: 'price_1TT8JIKlp5SWv74XglVhUFLG',
+    stripeProductId: 'prod_US5brzwtrvWGBn',
+    stripePriceId: 'price_1TTBQvKlp5SWv74XSwCoSFnf',
   },
   VOICE_600: {
-    minutesIncluded: 600, overagePerMinBrl: 0.49, hardCeilingMinutes: 1200,
+    minutesIncluded: 600, overagePerMinBrl: 0.28, hardCeilingMinutes: 1200,
     trialDays: 0, trialMinutes: 0,
-    stripeProductId: 'prod_US2NL4KgL8LsJl',
-    stripePriceId: 'price_1TT8JPKlp5SWv74XZrZYTN19',
+    stripeProductId: 'prod_US5bijQ5sOGPTf',
+    stripePriceId: 'price_1TTBR5Klp5SWv74XILSYFDHS',
   },
   VOICE_800: {
-    minutesIncluded: 800, overagePerMinBrl: 0.49, hardCeilingMinutes: 1600,
+    minutesIncluded: 800, overagePerMinBrl: 0.25, hardCeilingMinutes: 1600,
     trialDays: 0, trialMinutes: 0,
-    stripeProductId: 'prod_US2Nzdk9qWJw9R',
-    stripePriceId: 'price_1TT8JVKlp5SWv74Xe9hBfPAf',
+    stripeProductId: 'prod_US5b42q8QDMyJC',
+    stripePriceId: 'price_1TTBRCKlp5SWv74XiLq3JFpp',
   },
   VOICE_1500: {
-    minutesIncluded: 1500, overagePerMinBrl: 0.39, hardCeilingMinutes: 3000,
+    minutesIncluded: 1500, overagePerMinBrl: 0.22, hardCeilingMinutes: 3000,
     trialDays: 0, trialMinutes: 0,
-    stripeProductId: 'prod_US2N18PMNq8X3l',
-    stripePriceId: 'price_1TT8JbKlp5SWv74XIib1o6eL',
+    stripeProductId: 'prod_US5b2csvlZSjDx',
+    stripePriceId: 'price_1TTBRKKlp5SWv74Xej7QUZOo',
   },
   VOICE_4000: {
-    minutesIncluded: 4000, overagePerMinBrl: 0.29, hardCeilingMinutes: 8000,
+    minutesIncluded: 4000, overagePerMinBrl: 0.20, hardCeilingMinutes: 8000,
     trialDays: 0, trialMinutes: 0,
-    stripeProductId: 'prod_US2N7nMCXScddo',
-    stripePriceId: 'price_1TT8JlKlp5SWv74XwQCxeKrA',
+    stripeProductId: 'prod_US5bjZBsYDjffz',
+    stripePriceId: 'price_1TTBRSKlp5SWv74XxIRs5gr1',
   },
 };
+
+// Stripe IDs v1 (LEGACY OpenAI — clientes que assinaram antes de 2026-05-04
+// continuam ativos no v1 até churn ou upgrade ativo).
+export const VOICE_ADDON_LEGACY_V1_STRIPE_IDS = {
+  VOICE_200_V1: { product: 'prod_US2Nf2zRn1dn2H', price: 'price_1TT8J8Klp5SWv74XG5O4Xww2', priceBrl: 89.9 },
+  VOICE_400_V1: { product: 'prod_US2NGJ6tk2AGPh', price: 'price_1TT8JIKlp5SWv74XglVhUFLG', priceBrl: 169.9 },
+  VOICE_600_V1: { product: 'prod_US2NL4KgL8LsJl', price: 'price_1TT8JPKlp5SWv74XZrZYTN19', priceBrl: 239.9 },
+  VOICE_800_V1: { product: 'prod_US2Nzdk9qWJw9R', price: 'price_1TT8JVKlp5SWv74Xe9hBfPAf', priceBrl: 299.9 },
+  VOICE_1500_V1: { product: 'prod_US2N18PMNq8X3l', price: 'price_1TT8JbKlp5SWv74XIib1o6eL', priceBrl: 499.9 },
+  VOICE_4000_V1: { product: 'prod_US2N7nMCXScddo', price: 'price_1TT8JlKlp5SWv74XwQCxeKrA', priceBrl: 1299.9 },
+} as const;
+
+// Stripe IDs v2 e v3 (DEPRECATED — arquivados antes de qualquer venda).
+// Documentado APENAS pra rastreabilidade. Nunca use estes IDs em código novo.
+export const VOICE_ADDON_DEPRECATED_STRIPE_IDS = {
+  // v2 (custo TTS calculado errado — preços em prejuízo)
+  VOICE_200_V2_ERRADO: { product: 'prod_US4cooECtyeV5N', price: 'price_1TTATpKlp5SWv74XemiBN86A', priceBrl: 16.9 },
+  VOICE_400_V2_ERRADO: { product: 'prod_US4cwl8gVOnepV', price: 'price_1TTATwKlp5SWv74XoD3EU2I1', priceBrl: 29.9 },
+  VOICE_600_V2_ERRADO: { product: 'prod_US4co7Z39TMV0d', price: 'price_1TTAUFKlp5SWv74X6OWYNd5I', priceBrl: 39.9 },
+  VOICE_800_V2_ERRADO: { product: 'prod_US4cggAQR7eCcS', price: 'price_1TTAUMKlp5SWv74Xp9r976HR', priceBrl: 49.9 },
+  VOICE_1500_V2_ERRADO: { product: 'prod_US4cy0LXPQtkQO', price: 'price_1TTAUUKlp5SWv74XUmUIG17B', priceBrl: 79.9 },
+  VOICE_4000_V2_ERRADO: { product: 'prod_US4coegcABrtCl', price: 'price_1TTAUbKlp5SWv74X0gLbYKQk', priceBrl: 199.9 },
+  // v3 (margens 53-70% — substituído por v4 com margens 70-80%)
+  VOICE_200_V3: { product: 'prod_US5CuMnWPeXkod', price: 'price_1TTB30Klp5SWv74Xt1QeYoQT', priceBrl: 46.9 },
+  VOICE_400_V3: { product: 'prod_US5CJnYyhTORTn', price: 'price_1TTB3JKlp5SWv74XIleKEx8n', priceBrl: 84.9 },
+  VOICE_600_V3: { product: 'prod_US5C6YUQs24uVs', price: 'price_1TTB3QKlp5SWv74XuRt14pjS', priceBrl: 114.9 },
+  VOICE_800_V3: { product: 'prod_US5D9zDFnPDGdK', price: 'price_1TTB3YKlp5SWv74XqJmA5TuH', priceBrl: 137.9 },
+  VOICE_1500_V3: { product: 'prod_US5DsG2treo6VH', price: 'price_1TTB3fKlp5SWv74XPDmbdW5Q', priceBrl: 232.9 },
+  VOICE_4000_V3: { product: 'prod_US5DjMK7SCUYqp', price: 'price_1TTB3oKlp5SWv74XZpMLqqjj', priceBrl: 558.9 },
+} as const;
 
 // ═══════════════════════════════════════════════════════════
 // HELPERS
