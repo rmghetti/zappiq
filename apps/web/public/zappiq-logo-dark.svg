@@ -8,7 +8,7 @@
                         <!-- Ícone -->
                         <g transform="translate(10, 10) scale(0.833)">
                             <path d="M60 95C82.0914 95 100 77.0914 100 55C100 32.9086 82.0914 15 60 15C37.9086 15 20 32.9086 20 55C20 63.271 22.508 70.9554 26.8407 77.2646L20 95L38.9912 89.6133C45.242 93.1171 52.4096 95 60 95Z" fill="url(#brand_grad_2)"/>
-                            <path d="M65 32L42 60H58L53 82L78 48H62L65 32Z" fill="#0F172A"/> <!-- Raio escuro para destacar no fundo -->
+                            <path d="M65 32L42 60H58L53 82L78 48H62L65 32Z" fill="#FFFFFF"/> <!-- Raio BRANCO — fica visível dentro da bolha colorida em fundos escuros (Aurora). Fix do PR #78 — antes era #0F172A (cinza escuro), invisível contra a parte escura do gradiente da bolha. -->
                             <path d="M102 22C102 22 97 27 92 27C97 27 102 32 102 32C102 32 107 27 112 27C107 27 102 22 102 22Z" fill="#818CF8"/>
                             <path d="M90 10C90 10 87 14 84 14C87 14 90 18 90 18C90 18 93 14 96 14C93 14 90 10 90 10Z" fill="#A5B4FC"/>
                         </g>
