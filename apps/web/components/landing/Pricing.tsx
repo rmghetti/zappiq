@@ -192,16 +192,14 @@ export function Pricing() {
                           <Radar size={10} /> +R${radarExtra} Radar 360°
                         </div>
                       )}
-                      {voiceExtra > 0 && (
-                        <div className={`text-[11px] mt-1 flex items-center gap-1 ${isEnterprise ? 'text-white/70' : 'text-accent'}`}>
-                          <Mic size={10} /> +R${voiceExtra} Voz {voiceTier === 'premium' ? 'Premium' : 'Padrão'}
-                        </div>
-                      )}
-                      {voiceTier !== 'none' && plan.id === 'ENTERPRISE' && (
-                        <div className="text-[11px] text-white/70 mt-1 flex items-center gap-1">
-                          <Mic size={10} /> Voz incluída na negociação
-                        </div>
-                      )}
+                      {/* V4 #163 (PR #75 hotfix) — refs voice (extra/tier)
+                          legadas REMOVIDAS. Voz era inline no Pricing V3.
+                          Sprint 0 Blocker 6 (PR #108) descopou Voz Padrão e
+                          Premium do planConfig público; agora voz é add-on
+                          separado (PR #72 v4 — pacotes 200/400/600/800/1500/
+                          4000 com preços R$ 79,90 a R$ 929,90). Pra exibir
+                          voz add-on aqui, criar componente VoiceAddons.tsx
+                          separado em PR futuro. */}
                     </>
                   ) : (
                     <>
