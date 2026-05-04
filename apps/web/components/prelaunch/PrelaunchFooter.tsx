@@ -11,15 +11,15 @@ export function PrelaunchFooter() {
         <div className={s.footRow}>
           <div className={s.footLeft}>
             <Image
-              src="/logo-positivo.svg"
+              src="/zappiq-logo-dark.svg"
               alt="ZappIQ"
               className={s.footZapp}
               width={100}
               height={26}
             />
             <Image
-              src="/partners/onze/onze-icon.svg"
-              alt="onze.[ai]"
+              src="/partners/machia/machia-symbol-dark.svg"
+              alt="MACHIA"
               className={s.footOnze}
               width={32}
               height={32}
