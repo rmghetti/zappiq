@@ -1,20 +1,19 @@
-<svg id="logo-zappiq-machia-light" viewBox="0 0 380 120" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="brand_grad_machia_light" x1="20" y1="15" x2="100" y2="95" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#25D366"></stop>
-      <stop offset="1" stop-color="#4F46E5"></stop>
-    </linearGradient>
-  </defs>
-  <g transform="translate(10, 10) scale(0.833)">
-    <path d="M60 95C82.0914 95 100 77.0914 100 55C100 32.9086 82.0914 15 60 15C37.9086 15 20 32.9086 20 55C20 63.271 22.508 70.9554 26.8407 77.2646L20 95L38.9912 89.6133C45.242 93.1171 52.4096 95 60 95Z" fill="url(#brand_grad_machia_light)"></path>
-    <g transform="translate(34.913 28.270) scale(0.045)" fill="#FFFFFF">
-      <path d="M749.0 94.5 L 731.5 134.0 L 449.5 833.0 L 470.5 889.0 L 475.5 898.0 L 554.0 1093.5 L 557.5 1092.0 L 561.5 1083.0 L 744.5 628.0 L 748.0 623.5 L 751.5 626.0 L 817.5 792.0 L 825.0 806.5 L 1036.0 807.5 L 1037.5 806.0 L 1037.5 801.0 L 1023.5 766.0 L 787.5 185.0 L 771.5 142.0 L 752.5 96.0 L 749.0 94.5 Z"></path>
-      <path d="M363.0 99.5 L 349.5 129.0 L 337.5 162.0 L 82.5 790.0 L 77.5 803.0 L 79.0 807.5 L 279.0 807.5 L 282.5 804.0 L 449.5 392.0 L 464.5 354.0 L 464.5 344.0 L 375.5 123.0 L 365.5 100.0 L 363.0 99.5 Z"></path>
-    </g>
-    <path d="M102 22C102 22 97 27 92 27C97 27 102 32 102 32C102 32 107 27 112 27C107 27 102 22 102 22Z" fill="#4F46E5"></path>
-    <path d="M90 10C90 10 87 14 84 14C87 14 90 18 90 18C90 18 93 14 96 14C93 14 90 10 90 10Z" fill="#6366F1"></path>
-  </g>
-  <text x="105" y="78" font-family="system-ui, -apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, sans-serif" letter-spacing="-2">
-    <tspan font-weight="800" font-size="64" fill="#1E293B">Zapp</tspan><tspan font-weight="300" font-size="64" fill="#4F46E5">IQ</tspan>
-  </text>
-</svg>
+<svg id="logo-light" viewBox="0 0 380 120" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="brand_grad_1" x1="20" y1="15" x2="100" y2="95" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#25D366"/>
+                                <stop offset="1" stop-color="#4F46E5"/>
+                            </linearGradient>
+                        </defs>
+                        <!-- Ícone -->
+                        <g transform="translate(10, 10) scale(0.833)">
+                            <path d="M60 95C82.0914 95 100 77.0914 100 55C100 32.9086 82.0914 15 60 15C37.9086 15 20 32.9086 20 55C20 63.271 22.508 70.9554 26.8407 77.2646L20 95L38.9912 89.6133C45.242 93.1171 52.4096 95 60 95Z" fill="url(#brand_grad_1)"/>
+                            <path d="M65 32L42 60H58L53 82L78 48H62L65 32Z" fill="white"/>
+                            <path d="M102 22C102 22 97 27 92 27C97 27 102 32 102 32C102 32 107 27 112 27C107 27 102 22 102 22Z" fill="#4F46E5"/>
+                            <path d="M90 10C90 10 87 14 84 14C87 14 90 18 90 18C90 18 93 14 96 14C93 14 90 10 90 10Z" fill="#6366F1"/>
+                        </g>
+                        <!-- Texto -->
+                        <text x="105" y="78" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" letter-spacing="-2">
+                            <tspan font-weight="800" font-size="64" fill="#1E293B">Zapp</tspan><tspan font-weight="300" font-size="64" fill="#4F46E5">IQ</tspan>
+                        </text>
+                    </svg>
