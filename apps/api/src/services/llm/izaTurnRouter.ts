@@ -161,7 +161,12 @@ export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> 
   const resp = await llmRouter.complete({
     system: req.systemPrompt,
     messages,
-    maxTokens: req.maxTokens ?? 1024,
+    // V4 #162 (PR #74 hotfix 2026-05-04) — bumpado de 1024 → 2048.
+    // Feedback usuário: resposta com 6 pacotes Voice + intro foi cortada em
+    // "trial 14 dias inclui 30 minutos grát" (pareceu estourar limite output).
+    // 2048 tokens (~6000-8000 chars) cobre listas longas confortavelmente.
+    // Custo extra negligenciável (Gemini Flash $0.30/1M output ≈ +$0.0003/turn).
+    maxTokens: req.maxTokens ?? 2048,
     operation: 'chat',
     forceProvider: finalProvider,
     tier: finalProvider ? undefined : req.tier, // se já forçou, tier não importa
