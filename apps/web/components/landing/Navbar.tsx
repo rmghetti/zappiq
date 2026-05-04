@@ -38,11 +38,12 @@ const PRODUCTS = [
 ];
 
 const NAV_ITEMS: { label: string; href: string; mega?: boolean }[] = [
-  { label: 'Produtos', href: '#produtos', mega: true },
-  { label: 'Preços',   href: '#precos' },
-  { label: 'Cases',    href: '/cases' },
-  { label: 'Blog',     href: '/blog' },
-  { label: 'Empresa',  href: '/enterprise' },
+  { label: 'Produtos',          href: '#produtos', mega: true },
+  { label: 'Preços',            href: '#precos' },
+  { label: 'Conectar WhatsApp', href: '/conectar-whatsapp' },
+  { label: 'Cases',             href: '/cases' },
+  { label: 'Blog',              href: '/blog' },
+  { label: 'Empresa',           href: '/enterprise' },
 ];
 
 export function Navbar() {

@@ -81,6 +81,33 @@ const FAQS: FaqItem[] = [
     a: 'Sim. No dashboard você pode subir ou descer de tier a qualquer momento. O trial continua válido até completar 14 dias corridos a partir da ativação inicial, independente de upgrades.',
   },
 
+  // ───────────────────── Conexão WhatsApp · Cloud API ───────────────────
+  {
+    group: 'Conexão WhatsApp',
+    q: 'Vou perder meu WhatsApp comum no celular se conectar à ZappIQ?',
+    a: 'Sim, no número que for usado pelo bot. A Cloud API e o WhatsApp comum/Business app não coexistem no mesmo número. Por isso recomendamos chip dedicado novo (R$ 20-50). Ver guia completo em /conectar-whatsapp.',
+  },
+  {
+    group: 'Conexão WhatsApp',
+    q: 'Sou pessoa física sem CNPJ. Posso usar?',
+    a: 'A Cloud API exige CNPJ — restrição da Meta, não da ZappIQ. Solução: abrir MEI grátis no Portal do Empreendedor (gov.br/empresas-e-negocios) leva 15 minutos. Aí você cadastra normalmente.',
+  },
+  {
+    group: 'Conexão WhatsApp',
+    q: 'Quanto tempo demora para meu bot estar 100% no ar?',
+    a: 'Tempo de calendário: 1 a 15 dias úteis (depende da Verificação de Negócio Meta). Tempo ATIVO seu: 30-60 minutos. O resto é espera por aprovação Meta — você usa esse tempo pra preparar o conteúdo do bot.',
+  },
+  {
+    group: 'Conexão WhatsApp',
+    q: 'Posso fazer onboarding sem ajuda da ZappIQ?',
+    a: 'Pode. Oferecemos 3 caminhos: Assistido (especialista faz com você em call de 30-60 min — recomendado pra 80% dos casos), Embedded Signup (self-service guiado pelo painel oficial Meta) e Setup Manual (pra times técnicos com Permanent Access Token). Detalhes em /conectar-whatsapp.',
+  },
+  {
+    group: 'Conexão WhatsApp',
+    q: 'Quanto a Meta cobra por mês?',
+    a: 'A Meta cobra por "conversa" (janela de 24h). Pequena loja: R$ 30-80/mês. PME ativa: R$ 200-500/mês. Operação grande com marketing: R$ 1.500-4.000/mês. ZappIQ NÃO marca up sobre Meta — você paga direto à Meta, com dashboard de gasto em tempo real no nosso painel.',
+  },
+
   // ─────────────────────────── Voz Nativa ───────────────────────────────
   {
     group: 'Voz Nativa',
@@ -90,12 +117,12 @@ const FAQS: FaqItem[] = [
   {
     group: 'Voz Nativa',
     q: 'A IA consegue responder por áudio também?',
-    a: 'Consegue, como add-on opcional. Dois preços: R$ 197/mês (voz padrão, até 30 min de áudio respondido/mês — ótimo pra saudações, confirmações e agendamentos) ou R$ 597/mês (voz premium com entonação natural quase humana, até 120 min/mês, e pode clonar a voz do seu atendente).',
+    a: 'Consegue, como add-on opcional. 6 pacotes disponíveis com voz natural pt-BR (Google Neural2): Voice 200 (R$ 79,90/mês), Voice 400 (R$ 137,90), Voice 600 (R$ 184,90), Voice 800 (R$ 224,90), Voice 1.500 (R$ 379,90) e Voice 4.000 (R$ 929,90). Trial de 14 dias com 30 min grátis nos pacotes 200 e 400.',
   },
   {
     group: 'Voz Nativa',
-    q: 'Qual a diferença entre voz padrão e premium?',
-    a: 'A padrão é perfeita pro dia-a-dia — "Oi, seu agendamento tá confirmado pras 14h". Funciona bem e é barata. A premium tem entonação natural, quase humana, dá pra clonar a voz do seu atendente e ajustar a personalidade por canal. Indicada pra marcas que fazem da voz parte da experiência.',
+    q: 'Como escolho o pacote de voz certo?',
+    a: 'Use a regra 1 minuto = 1 áudio de ~30s respondido. Loja pequena com 200 atendimentos/mês: pacote 200 atende. PME com 800 atendimentos com áudio: pacote 800. O dashboard mostra consumo em tempo real e sugere upgrade automático.',
   },
   {
     group: 'Voz Nativa',
