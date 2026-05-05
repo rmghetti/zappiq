@@ -65,6 +65,43 @@ export function Cadastro() {
     }
   }, [search]);
 
+  // Processa tokens do hash (implicit flow do Supabase Confirm Signup).
+  // O Supabase devolve `#access_token=...&refresh_token=...&type=signup`
+  // após o user clicar no magic link. Detectamos client-side, mandamos
+  // os tokens pro backend pra atualizar signup status, limpamos hash,
+  // e mostramos step 3.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash;
+    if (!hash || !hash.includes('access_token=')) return;
+
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    const type = params.get('type');
+
+    if (!accessToken || type !== 'signup') return;
+
+    // Avança imediatamente pro step 3 (UX)
+    setStep(3);
+
+    // Limpa hash da URL pra não vazar tokens em logs/screenshots
+    const cleanUrl = window.location.pathname + window.location.search;
+    window.history.replaceState({}, document.title, cleanUrl);
+
+    // Atualiza signup status no backend (fire-and-forget)
+    fetch('/api/auth/confirm-signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      }),
+    }).catch((err) => {
+      console.error('[cadastro] Confirm signup background error:', err);
+    });
+  }, []);
+
   // ─── Step 1 → submit ───
   const submitStep1 = async (e: React.FormEvent) => {
     e.preventDefault();

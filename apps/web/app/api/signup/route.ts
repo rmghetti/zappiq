@@ -124,12 +124,14 @@ export async function POST(req: Request) {
       process.env.APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
 
-    // URL-encode do `next` pra evitar ambiguidade com 2 `?` na URL
-    const next = encodeURIComponent('/cadastro?verified=1');
+    // emailRedirectTo aponta DIRETO pra /cadastro?verified=1 porque
+    // Supabase Confirm Signup usa implicit flow com tokens no HASH
+    // (#access_token=...&refresh_token=...), não PKCE com ?code=.
+    // O componente Cadastro.tsx detecta o hash client-side e processa.
     const { error: otpErr } = await sb.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${baseUrl}/auth/callback?next=${next}`,
+        emailRedirectTo: `${baseUrl}/cadastro?verified=1`,
         data: {
           name,
           plan_chosen: body.plan,
