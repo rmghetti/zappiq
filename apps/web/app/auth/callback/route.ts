@@ -1,18 +1,28 @@
 /**
  * GET /auth/callback
  * --------------------------------------------------------------
- * Callback handler para Magic Link e OAuth Google.
- * Troca código de auth por sessão Supabase, atualiza signups.status='active',
+ * Callback handler para OAuth Google (PKCE flow).
+ * Troca code por sessão Supabase, cria/atualiza signup row,
  * redireciona pro próximo passo (default: /cadastro?verified=1).
+ *
+ * UPSERT do signup row (PR #90 hotfix):
+ * - Magic Link cria row em /api/signup ANTES do email — callback só atualiza
+ * - Google OAuth NÃO cria row antes — callback precisa criar com defaults
+ *
+ * Por isso fazemos SELECT + INSERT/UPDATE em vez de UPDATE direto.
  */
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import type { PlanId } from '@zappiq/shared';
+
+const VALID_PLANS: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS'];
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
   const next = url.searchParams.get('next') || '/cadastro?verified=1';
+  const planParam = url.searchParams.get('plan');
 
   if (!code) {
     return NextResponse.redirect(new URL('/cadastro?error=missing_code', url.origin));
@@ -28,26 +38,67 @@ export async function GET(req: Request) {
   const sb = createClient(supabaseUrl, anonKey);
   const { data, error } = await sb.auth.exchangeCodeForSession(code);
 
-  if (error || !data.user) {
+  if (error || !data.user || !data.user.email) {
     console.error('[auth/callback] Exchange error:', error);
     return NextResponse.redirect(new URL('/cadastro?error=auth_failed', url.origin));
   }
 
-  // Atualiza signup status com service role
+  // ─── UPSERT signup row ─────────────────────────────────────────
   try {
     const sbAdmin = createClient(supabaseUrl, serviceKey);
-    await sbAdmin
+    const email = data.user.email.toLowerCase();
+    const now = new Date();
+    const trialEnds = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+    const { data: existing } = await sbAdmin
       .from('signups')
-      .update({
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existing) {
+      // Magic Link path: row já existe, só atualiza confirmação
+      await sbAdmin
+        .from('signups')
+        .update({
+          status: 'active',
+          supabase_user_id: data.user.id,
+          confirmed_at: now.toISOString(),
+          updated_at: now.toISOString(),
+        })
+        .eq('id', existing.id);
+    } else {
+      // Google OAuth path: row não existe, cria com defaults
+      const plan: PlanId = (planParam && VALID_PLANS.includes(planParam as PlanId))
+        ? (planParam as PlanId)
+        : 'GROWTH';
+
+      const meta = data.user.user_metadata || {};
+      const name =
+        (meta.full_name as string | undefined) ||
+        (meta.name as string | undefined) ||
+        email.split('@')[0];
+
+      await sbAdmin.from('signups').insert({
+        email,
+        name,
+        plan_chosen: plan,
         status: 'active',
         supabase_user_id: data.user.id,
-        confirmed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('email', data.user.email);
+        confirmed_at: now.toISOString(),
+        trial_starts_at: now.toISOString(),
+        trial_ends_at: trialEnds.toISOString(),
+        card_required_at: trialEnds.toISOString(),
+        meta: {
+          source: 'oauth_google',
+          google_avatar_url: meta.avatar_url || null,
+          google_provider_id: meta.provider_id || null,
+        },
+      });
+    }
   } catch (err) {
-    console.error('[auth/callback] Signup update error:', err);
-    // Não bloqueia — usuário ainda está autenticado
+    console.error('[auth/callback] Signup upsert error:', err);
+    // Não bloqueia — usuário ainda está autenticado em auth.users
   }
 
   return NextResponse.redirect(new URL(next, url.origin));
