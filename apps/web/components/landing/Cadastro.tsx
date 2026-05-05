@@ -24,6 +24,7 @@ import {
   Users, Wrench, Loader2, AlertCircle, Sparkles,
 } from 'lucide-react';
 import { PLAN_CONFIG, type PlanId } from '@zappiq/shared';
+import { track } from '@/lib/analytics';
 
 type Step = 1 | 2 | 3;
 
@@ -57,6 +58,11 @@ export function Cadastro() {
     company: '',
   });
 
+  // Analytics: page view
+  useEffect(() => {
+    track('cadastro_view');
+  }, []);
+
   // Detecta retorno de magic link / OAuth callback
   useEffect(() => {
     const verified = search.get('verified');
@@ -87,6 +93,13 @@ export function Cadastro() {
     // Aceita Magic Link (type=signup) OU OAuth (provider_token presente)
     const isValidAuthFlow = type === 'signup' || providerToken !== null;
     if (!isValidAuthFlow) return;
+
+    // Analytics: confirm event (distingue Magic Link de OAuth)
+    if (providerToken !== null) {
+      track('signup_oauth_completed', { provider: 'google' });
+    } else {
+      track('signup_email_confirmed', { provider: 'email' });
+    }
 
     // Avança imediatamente pro step 3 (UX)
     setStep(3);
@@ -119,6 +132,14 @@ export function Cadastro() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    // Analytics: step 1 submit (props sanitizadas — sem PII direto)
+    track('signup_step_1_submit', {
+      plan: form.plan,
+      hasCnpj: form.cnpj.trim().length > 0,
+      hasCompany: form.company.trim().length > 0,
+    });
+
     try {
       const res = await fetch('/api/signup', {
         method: 'POST',
@@ -135,10 +156,14 @@ export function Cadastro() {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || 'Erro ao processar cadastro');
       }
+      // Analytics: magic link disparado com sucesso
+      track('signup_email_link_sent', { plan: form.plan });
       setStep(2);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao processar cadastro';
       setError(msg);
+      // Analytics: erro no step 1
+      track('signup_step_1_error', { plan: form.plan, error_message: msg.slice(0, 200) });
     } finally {
       setLoading(false);
     }
@@ -147,6 +172,10 @@ export function Cadastro() {
   // ─── Google OAuth ───
   const startGoogle = async () => {
     setLoading(true);
+
+    // Analytics: OAuth init
+    track('signup_oauth_started', { provider: 'google', plan: form.plan });
+
     try {
       const res = await fetch('/api/signup/google', {
         method: 'POST',
@@ -159,6 +188,7 @@ export function Cadastro() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro Google OAuth';
       setError(msg);
+      track('signup_oauth_error', { provider: 'google', error_message: msg.slice(0, 200) });
       setLoading(false);
     }
   };
@@ -395,6 +425,7 @@ export function Cadastro() {
               {/* Caminho A — Assistido */}
               <Link
                 href="/agendar"
+                onClick={() => track('signup_path_chosen', { path: 'assistido' })}
                 className="block bg-white border-2 border-accent rounded-[20px] p-6 lg:p-7 shadow-[var(--shadow-card)] hover:opacity-95 transition-all"
               >
                 <div className="flex items-start gap-4">
@@ -423,6 +454,7 @@ export function Cadastro() {
               {/* Caminho B — Self-service */}
               <Link
                 href="/onboarding"
+                onClick={() => track('signup_path_chosen', { path: 'self_service' })}
                 className="block bg-white border border-line rounded-[20px] p-6 lg:p-7 hover:border-accent/40 transition-all"
               >
                 <div className="flex items-start gap-4">
