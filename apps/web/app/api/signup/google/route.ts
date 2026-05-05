@@ -32,10 +32,11 @@ export async function POST(req: Request) {
       process.env.APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
 
+    const next = encodeURIComponent(`/cadastro?verified=1&plan=${plan}`);
     const { data, error } = await sb.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${baseUrl}/auth/callback?next=/cadastro?verified=1&plan=${plan}`,
+        redirectTo: `${baseUrl}/auth/callback?next=${next}`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',

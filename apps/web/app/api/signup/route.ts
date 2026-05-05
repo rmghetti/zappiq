@@ -124,10 +124,12 @@ export async function POST(req: Request) {
       process.env.APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
 
+    // URL-encode do `next` pra evitar ambiguidade com 2 `?` na URL
+    const next = encodeURIComponent('/cadastro?verified=1');
     const { error: otpErr } = await sb.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${baseUrl}/auth/callback?next=/cadastro?verified=1`,
+        emailRedirectTo: `${baseUrl}/auth/callback?next=${next}`,
         data: {
           name,
           plan_chosen: body.plan,
