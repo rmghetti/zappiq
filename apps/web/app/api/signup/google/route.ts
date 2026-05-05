@@ -20,8 +20,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Plano inválido' }, { status: 400 });
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY;
     if (!supabaseUrl || !anonKey) {
       return NextResponse.json({ error: 'Configuração indisponível' }, { status: 500 });
     }
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     const sb = createClient(supabaseUrl, anonKey);
 
     const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
 
     const { data, error } = await sb.auth.signInWithOAuth({
