@@ -3,16 +3,19 @@
 /* ══════════════════════════════════════════════════════════════════════════
  * Agendar — Design V4 (Chatbase-style · Geist + gradient g→b→p)
  * --------------------------------------------------------------------------
- * Embed da booking page Google Appointment Schedules da ZappIQ dentro da
- * landing. Lead agenda sem sair do domínio zappiq.com.br.
+ * CTA externo pra booking page Google Appointment Schedules.
  *
- * URL fonte (Google Workspace rodrigo.ghetti@zappiq.com.br /u/1/):
- *   https://calendar.google.com/calendar/u/0/appointments/schedules/AcZss...
+ * NOTA TÉCNICA: Google Appointment Schedules NÃO suporta embed iframe
+ * (X-Frame-Options: SAMEORIGIN). Padrão Google. Solução: CTA grande +
+ * preview visual dos próximos dias úteis + abre booking em nova aba.
  *
- * Fallback "Abrir em nova aba" pra browsers com restrição cookie 3rd-party.
+ * UX inferior a embed inline, mas funciona 100%. Mesma estratégia inicial
+ * de Calendly e HubSpot Meetings.
+ *
+ * Onda 1 (D+30): refazer com Google Calendar API + form custom no nosso
+ * site (slots via API, submit cria evento, branding 100% ZappIQ).
  * ══════════════════════════════════════════════════════════════════════════ */
 
-import { useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight, ExternalLink, CheckCircle2, Calendar,
@@ -22,8 +25,26 @@ import {
 const BOOKING_URL =
   'https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ34YUuDtykuvlBt8DEZxD0sFZOctNdeyIcl4nn7EOfEBBDm2W5wpjecxxxQlmwu9PQ_7QGJc5Yd';
 
-// Embed URL (Google força ?gv=true pro iframe)
-const EMBED_URL = `${BOOKING_URL}?gv=true`;
+// ─── Próximos 5 dias úteis (gerado client-side) ────────────────────
+function nextWeekdays(count = 5): Array<{ label: string; sub: string; full: string }> {
+  const days: Array<{ label: string; sub: string; full: string }> = [];
+  const date = new Date();
+  date.setDate(date.getDate() + 1); // começa amanhã
+  const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const monthNames = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  while (days.length < count) {
+    const dow = date.getDay();
+    if (dow !== 0 && dow !== 6) {
+      days.push({
+        label: weekdayNames[dow].toUpperCase(),
+        sub: String(date.getDate()).padStart(2, '0') + ' ' + monthNames[date.getMonth()],
+        full: `${weekdayNames[dow]}, ${date.getDate()} de ${monthNames[date.getMonth()]}`,
+      });
+    }
+    date.setDate(date.getDate() + 1);
+  }
+  return days;
+}
 
 // ─── O que esperar — 5 bullets ─────────────────────────────────────
 const ESPERAR = [
@@ -36,7 +57,7 @@ const ESPERAR = [
 
 // ═══════════════════════════════════════════════════════════════════
 export function Agendar() {
-  const [iframeLoaded, setIframeLoaded] = useState(false);
+  const days = nextWeekdays(5);
 
   return (
     <main>
@@ -66,34 +87,90 @@ export function Agendar() {
         </div>
       </section>
 
-      {/* ═══ EMBED + SIDEBAR ═══════════════════════════════════════ */}
+      {/* ═══ BIG CTA + SIDEBAR ═════════════════════════════════════ */}
       <section className="pb-20 lg:pb-28">
         <div className="zappiq-wrap max-w-7xl">
           <div className="grid lg:grid-cols-[1fr_320px] gap-8 lg:gap-12">
-            {/* Coluna principal — iframe embed */}
-            <div className="bg-white border border-line rounded-[24px] overflow-hidden shadow-[var(--shadow-card)]">
-              {!iframeLoaded && (
-                <div className="aspect-[4/5] lg:aspect-[16/13] flex items-center justify-center bg-bg-soft animate-pulse">
-                  <div className="text-center px-8">
-                    <Calendar size={32} className="text-accent mx-auto mb-3 animate-pulse" />
-                    <p className="text-[14px] text-muted">Carregando calendário...</p>
-                  </div>
-                </div>
-              )}
-              <iframe
-                src={EMBED_URL}
-                title="Agendamento Onboarding ZappIQ"
-                width="100%"
-                height="800"
-                style={{
-                  border: 0,
-                  display: iframeLoaded ? 'block' : 'none',
-                  minHeight: '700px',
-                }}
-                onLoad={() => setIframeLoaded(true)}
-                allow="camera; microphone; fullscreen"
-                loading="lazy"
+            {/* Coluna principal — preview dias + CTA */}
+            <div
+              className="relative bg-white border border-line rounded-[24px] p-8 lg:p-12 shadow-[var(--shadow-card)] overflow-hidden"
+            >
+              {/* Background gradient sutil */}
+              <div
+                className="absolute inset-0 opacity-50 pointer-events-none"
+                style={{ background: 'var(--grad-soft)' }}
+                aria-hidden
               />
+
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar size={18} className="text-accent" />
+                  <span className="eyebrow !mt-0">Selecione seu horário</span>
+                </div>
+                <h2 className="text-[28px] lg:text-[34px] font-medium text-ink leading-tight tracking-[-0.025em] mb-2">
+                  Vagas abertas <span className="text-grad">esta semana.</span>
+                </h2>
+                <p className="text-[14.5px] text-muted mb-8">
+                  Slots de 30 minutos, Seg-Sex 9h-17h. Confirme em segundos
+                  pelo calendário oficial.
+                </p>
+
+                {/* Preview dos próximos 5 dias úteis */}
+                <div className="grid grid-cols-5 gap-2 lg:gap-3 mb-8">
+                  {days.map((d, i) => (
+                    <div
+                      key={i}
+                      className="bg-white/80 backdrop-blur border border-line rounded-[14px] p-3 lg:p-4 text-center hover:border-accent hover:bg-white transition-all"
+                    >
+                      <div className="text-[10.5px] font-semibold text-accent uppercase tracking-[0.1em] mb-1">
+                        {d.label}
+                      </div>
+                      <div className="text-[15px] lg:text-[17px] font-semibold text-ink leading-tight tracking-tight">
+                        {d.sub}
+                      </div>
+                      <div className="mt-2 inline-flex items-center justify-center w-2 h-2 rounded-full bg-[#2FB57A]">
+                        <span className="sr-only">Disponível</span>
+                      </div>
+                      <div className="text-[10px] text-muted mt-1">disponível</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* BIG CTA */}
+                <a
+                  href={BOOKING_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group relative block w-full text-center bg-ink text-white rounded-[16px] px-8 py-5 hover:opacity-95 transition-all"
+                >
+                  <span className="inline-flex items-center justify-center gap-3 text-[17px] font-semibold">
+                    Abrir calendário e agendar
+                    <ArrowRight
+                      size={18}
+                      className="transition-transform group-hover:translate-x-1"
+                    />
+                  </span>
+                  <span className="block text-[12px] opacity-70 mt-1">
+                    Abre em nova aba · Confirma por e-mail · Sem cartão
+                  </span>
+                </a>
+
+                {/* Trust strip */}
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[12px] text-muted">
+                  <span className="inline-flex items-center gap-1.5">
+                    <CheckCircle2 size={13} className="text-[#2FB57A]" />
+                    Google Meet automático
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <CheckCircle2 size={13} className="text-[#2FB57A]" />
+                    Lembretes por e-mail
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <CheckCircle2 size={13} className="text-[#2FB57A]" />
+                    Reagende ou cancele com 1 clique
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Sidebar — O que esperar */}
@@ -136,24 +213,8 @@ export function Agendar() {
                   </li>
                 </ul>
               </div>
-
-              {/* Fallback */}
-              <a
-                href={BOOKING_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full text-[12.5px] text-muted hover:text-accent transition-colors py-2"
-              >
-                <ExternalLink size={13} />
-                Abrir calendário em nova aba
-              </a>
             </aside>
           </div>
-
-          {/* Helper text mobile */}
-          <p className="text-center text-[12.5px] text-muted-2 mt-8 lg:hidden">
-            Toque em um horário disponível acima para agendar.
-          </p>
         </div>
       </section>
 
