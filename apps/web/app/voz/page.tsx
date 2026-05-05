@@ -1,61 +1,87 @@
 import Link from 'next/link';
 import { PublicLayout } from '@/components/landing/PublicLayout';
 import {
-  Mic,
-  Headphones,
-  Volume2,
-  ArrowRight,
-  Star,
-  Sparkles,
-  MessageSquare,
-  Waves,
-  Check,
-  AlertCircle,
+  Mic, Headphones, Volume2, ArrowRight, Star, Sparkles,
+  MessageSquare, Waves, Check, AlertCircle, Zap, Crown,
 } from 'lucide-react';
+/* Voice add-on data inlinado aqui pra não depender do rebuild do pacote
+ * @zappiq/shared. Source-of-truth canônico permanece em
+ * packages/shared/src/planConfig.ts — ADDONS.VOICE_* + VOICE_ADDON_META.
+ * Se mudar pricing aqui, ATUALIZE planConfig.ts também.
+ */
+const VOICE_ADDON_DATA = {
+  VOICE_200:  { minutesIncluded: 200,  overagePerMinBrl: 0.35, trialMinutes: 30, priceBrl: 79.90 },
+  VOICE_400:  { minutesIncluded: 400,  overagePerMinBrl: 0.30, trialMinutes: 30, priceBrl: 137.90 },
+  VOICE_600:  { minutesIncluded: 600,  overagePerMinBrl: 0.28, trialMinutes: 0,  priceBrl: 184.90 },
+  VOICE_800:  { minutesIncluded: 800,  overagePerMinBrl: 0.25, trialMinutes: 0,  priceBrl: 224.90 },
+  VOICE_1500: { minutesIncluded: 1500, overagePerMinBrl: 0.22, trialMinutes: 0,  priceBrl: 379.90 },
+  VOICE_4000: { minutesIncluded: 4000, overagePerMinBrl: 0.20, trialMinutes: 0,  priceBrl: 929.90 },
+} as const;
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /voz — Voz Nativa ZappIQ V3.2
+ * /voz — Voz Nativa ZappIQ V4 (PR #73 · pricing real v4 LIVE no Stripe)
  * --------------------------------------------------------------------------
- * Inbound (recebimento de áudio do cliente): Whisper OpenAI, transcrição
- * automática, incluído em TODOS os planos, inclusive Starter. R$ 0 adicional.
+ * Inbound (Whisper STT): incluído em TODOS os planos. R$ 0 adicional.
  *
- * Outbound (IA responder por áudio): add-on opcional com 2 tiers:
- *   • Padrão  R$ 197/mês · OpenAI TTS     · 30 minutos/mês  · voz padrão
- *   • Premium R$ 597/mês · ElevenLabs     · 120 minutos/mês · voz clonada opcional
+ * Outbound (TTS Neural2-C pt-BR): 6 add-ons mensais.
+ *   200 min / R$ 79,90  · overage 0,35/min · trial 14d com 30 min
+ *   400 min / R$ 137,90 · overage 0,30/min · trial 14d com 30 min
+ *   600 min / R$ 184,90 · overage 0,28/min
+ *   800 min / R$ 224,90 · overage 0,25/min
+ * 1.500 min / R$ 379,90 · overage 0,22/min
+ * 4.000 min / R$ 929,90 · overage 0,20/min
  *
- * Excedente de minutos: cobrança por minuto adicional na mesma engine,
- * debitada no ciclo seguinte. Cliente é notificado ao atingir 80% e 100%.
+ * Source of truth: VOICE_ADDON_META + ADDONS de @zappiq/shared
+ * Stripe Prices LIVE desde 2026-05-04 (PR #72 v4 FINAL).
  * ══════════════════════════════════════════════════════════════════════════ */
 
 export const metadata = {
-  title: 'Voz Nativa — IA que fala no WhatsApp | ZappIQ V3.2',
+  title: 'Voz Nativa — IA que fala no WhatsApp | ZappIQ',
   description:
-    'Inbound (áudio do cliente transcrito por Whisper) incluído em todos os planos. Outbound (IA responde por áudio) a partir de R$ 197/mês com OpenAI TTS ou R$ 597/mês com ElevenLabs e voz clonada.',
+    'Inbound (cliente manda áudio, Whisper transcreve) incluído em todos os planos. Outbound (IA responde em voz pt-BR Neural2) a partir de R$ 79,90/mês com 200 minutos. 6 pacotes até 4.000 min.',
 };
+
+interface VoicePackage {
+  id: 'VOICE_200' | 'VOICE_400' | 'VOICE_600' | 'VOICE_800' | 'VOICE_1500' | 'VOICE_4000';
+  label: string;
+  minutes: number;
+  priceBrl: number;
+  overagePerMin: number;
+  ideal: string;
+  highlight?: boolean;
+  trialMinutes: number;
+}
+
+const PACKAGES: VoicePackage[] = (
+  ['VOICE_200', 'VOICE_400', 'VOICE_600', 'VOICE_800', 'VOICE_1500', 'VOICE_4000'] as const
+).map((id) => {
+  const data = VOICE_ADDON_DATA[id];
+  const minutesLabel = id === 'VOICE_1500' ? '1.500 min' : id === 'VOICE_4000' ? '4.000 min' : `${data.minutesIncluded} min`;
+  return {
+    id,
+    label: minutesLabel,
+    minutes: data.minutesIncluded,
+    priceBrl: data.priceBrl,
+    overagePerMin: data.overagePerMinBrl,
+    trialMinutes: data.trialMinutes,
+    ideal:
+      id === 'VOICE_200' ? 'Pequenas operações testando voz' :
+      id === 'VOICE_400' ? 'Atendimento ativo + lembretes' :
+      id === 'VOICE_600' ? 'Operações com escala média' :
+      id === 'VOICE_800' ? 'Volume alto recorrente' :
+      id === 'VOICE_1500' ? 'Multi-canais ou multi-unidades' :
+      'Operação enterprise / franquias',
+    highlight: id === 'VOICE_400',
+  };
+});
 
 const INBOUND_FEATURES = [
   'Recebimento de áudios do cliente no WhatsApp',
-  'Transcrição automática via Whisper (OpenAI) em português-BR',
+  'Transcrição automática via Whisper (OpenAI) em pt-BR',
   'IA entende contexto e responde igual a texto',
   'Suporte a sotaques regionais brasileiros',
   'Funciona em todos os planos — inclusive Starter R$ 197',
   'Zero cobrança adicional, zero configuração',
-];
-
-const OUTBOUND_PADRAO = [
-  '30 minutos de voz sintetizada por mês',
-  'Engine OpenAI TTS (voz pt-BR neutra)',
-  '3 vozes pré-configuradas (feminina, masculina, executiva)',
-  'Ideal para: atendimento 24/7, confirmação de agendamento, lembretes',
-  'Excedente: R$ 0,30/min na mesma engine',
-];
-
-const OUTBOUND_PREMIUM = [
-  '120 minutos de voz sintetizada por mês',
-  'Engine ElevenLabs (qualidade broadcast)',
-  'Voz clonada da sua marca (opcional, +R$ 500 setup único)',
-  'Ideal para: experiência premium, influencers, franquia com voz única',
-  'Excedente: R$ 1,20/min na mesma engine',
 ];
 
 const USE_CASES = [
@@ -63,125 +89,128 @@ const USE_CASES = [
     icon: MessageSquare,
     title: 'Cliente manda áudio reclamando',
     body:
-      'Whisper transcreve, Claude entende a reclamação, IA responde em texto ou áudio (se outbound ativo). Sem atendente ficar ouvindo áudio de 3 minutos.',
+      'Whisper transcreve, IA entende a reclamação, responde em texto ou áudio (se outbound ativo). Atendente não para 3 min ouvindo áudio.',
     tier: 'Inbound · R$ 0',
   },
   {
     icon: Volume2,
     title: 'Cliente prefere ouvir, não ler',
     body:
-      'Cliente pede confirmação de agendamento por áudio. IA responde em áudio com a voz padrão (Padrão) ou voz clonada da sua marca (Premium).',
-    tier: 'Outbound · R$ 197 ou R$ 597',
+      'Cliente pede confirmação por áudio. IA responde em áudio com voz natural pt-BR Neural2-C. Experiência humanizada, escala automática.',
+    tier: 'Outbound · a partir de R$ 79,90',
   },
   {
     icon: Headphones,
     title: 'Atendimento noturno / fora de horário',
     body:
-      'Cliente pede orçamento às 23h. IA responde em áudio com acolhimento natural — experiência premium sem precisar de atendente 24h.',
-    tier: 'Outbound · recomendado Premium',
+      'Cliente pede orçamento às 23h. IA responde em áudio com acolhimento natural — 24/7 sem precisar atendente humano de plantão.',
+    tier: 'Outbound · qualquer pacote',
   },
   {
     icon: Waves,
     title: 'Lembrete de consulta / aula / evento',
     body:
-      'IA manda áudio 24h antes do evento com voz da recepcionista digital da clínica. Cliente ouve, reconhece, responde. Presença aumenta.',
-    tier: 'Outbound · voz clonada Premium',
+      'IA manda áudio 24h antes do evento. Cliente ouve, reconhece, responde — taxa de comparecimento sobe vs lembrete em texto.',
+    tier: 'Outbound · 400+ recomendado',
   },
 ];
+
+function fmtBrl(n: number): string {
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 export default function VozPage() {
   return (
     <PublicLayout>
       {/* Hero */}
-      <section className="bg-gradient-to-br from-secondary-700 via-secondary-900 to-gray-900 pt-20 pb-24 text-white overflow-hidden relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_rgba(var(--color-secondary-500-rgb,168_85_247),0.18),_transparent_50%)]" />
-        <div className="max-w-7xl mx-auto px-6 relative">
-          <div className="inline-flex items-center gap-2 bg-secondary-400/10 border border-secondary-400/30 rounded-full px-4 py-1.5 mb-6">
-            <Mic size={14} className="text-secondary-300" />
-            <span className="text-xs font-semibold text-secondary-200 uppercase tracking-wider">
-              Voz Nativa · diferencial V3.2
+      <section className="relative overflow-hidden pt-32 pb-20 lg:pt-40 lg:pb-24 bg-gradient-to-br from-[#0F172A] via-[#1E1B4B] to-[#0F172A] text-white">
+        <div
+          className="absolute inset-0 -z-0 opacity-50"
+          style={{
+            background:
+              'radial-gradient(80% 60% at 30% 20%, rgba(124,58,237,0.25) 0%, rgba(37,211,102,0.12) 40%, transparent 75%)',
+          }}
+        />
+        <div className="zappiq-wrap relative z-10">
+          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 mb-6">
+            <Mic size={14} className="text-emerald-300" />
+            <span className="text-xs font-semibold text-emerald-200 uppercase tracking-wider">
+              Voz Nativa · Google Neural2-C pt-BR
             </span>
           </div>
-          <h1 className="font-display text-4xl lg:text-6xl font-extrabold mb-6 max-w-4xl leading-tight">
-            IA no WhatsApp que <span className="text-secondary-400">ouve, entende e responde</span> —
-            em texto ou áudio.
+          <h1 className="text-[44px] lg:text-[64px] font-medium leading-[1.05] tracking-[-0.03em] mb-6 max-w-4xl">
+            IA no WhatsApp que <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-300 to-violet-300">ouve, entende e responde</span> — em texto ou áudio.
           </h1>
-          <p className="text-lg lg:text-xl text-gray-300 max-w-3xl mb-8 leading-relaxed">
-            Inbound (cliente mandando áudio) já é padrão em todos os planos. Outbound (IA respondendo em
-            áudio) é add-on a partir de R$ 197/mês. Com opção de voz clonada da sua marca.
+          <p className="text-[17px] lg:text-[19px] text-white/70 max-w-3xl mb-10 leading-relaxed">
+            Cliente mandando áudio (inbound) já é padrão em todos os planos — sem custo extra. IA respondendo em áudio (outbound) é add-on com 6 pacotes a partir de <strong className="text-white">R$ 79,90/mês</strong>.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link
-              href="/register"
-              className="bg-secondary-400 text-gray-900 font-semibold px-7 py-4 rounded-xl hover:bg-secondary-300 transition-colors inline-flex items-center justify-center gap-2"
+              href="/cadastro"
+              className="bg-emerald-400 text-slate-900 font-semibold px-7 py-4 rounded-xl hover:bg-emerald-300 transition-colors inline-flex items-center justify-center gap-2"
             >
               Começar 14 dias grátis <ArrowRight size={18} />
             </Link>
             <Link
-              href="#planos"
+              href="#pacotes"
               className="border border-white/20 text-white font-semibold px-7 py-4 rounded-xl hover:bg-white/5 transition-colors inline-flex items-center justify-center gap-2"
             >
-              Comparar Padrão vs Premium
+              Ver os 6 pacotes
             </Link>
           </div>
         </div>
       </section>
 
       {/* Inbound — incluído */}
-      <section className="py-20 bg-white">
-        <div className="max-w-6xl mx-auto px-6">
+      <section className="py-20 lg:py-24 bg-white">
+        <div className="zappiq-wrap">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
-              <div className="inline-flex items-center gap-2 bg-primary-50 border border-primary-200 rounded-full px-4 py-1.5 mb-6">
-                <Check size={14} className="text-primary-600" />
-                <span className="text-xs font-semibold text-primary-700 uppercase tracking-wider">
+              <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-1.5 mb-6">
+                <Check size={14} className="text-emerald-700" />
+                <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">
                   Incluso em todos os planos
                 </span>
               </div>
-              <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900 mb-4">
+              <h2 className="text-[36px] lg:text-[44px] font-medium leading-[1.05] tracking-[-0.02em] text-ink mb-4">
                 Inbound — cliente manda áudio, IA entende.
               </h2>
-              <p className="text-gray-600 mb-6 leading-relaxed">
-                70% dos seus clientes preferem mandar áudio no WhatsApp. Antes, um atendente precisava parar,
-                ouvir o áudio inteiro, responder. Agora, o Whisper transcreve em segundos e a IA responde
-                com contexto — igual a uma mensagem de texto.
+              <p className="text-muted text-[15.5px] leading-relaxed mb-6">
+                70% dos clientes preferem mandar áudio no WhatsApp. Antes, atendente parava 3 min ouvindo. Agora Whisper transcreve em segundos e IA responde com contexto — igual a texto.
               </p>
               <ul className="space-y-3">
                 {INBOUND_FEATURES.map((f) => (
-                  <li key={f} className="flex items-start gap-3 text-sm text-gray-700">
-                    <Check size={16} className="text-primary-500 mt-0.5 flex-shrink-0" />
+                  <li key={f} className="flex items-start gap-3 text-[14px] text-ink-2">
+                    <Check size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
                     <span>{f}</span>
                   </li>
                 ))}
               </ul>
             </div>
-            <div className="bg-gradient-to-br from-primary-50 to-secondary-50 rounded-2xl p-8 border border-primary-100">
+            <div className="bg-gradient-to-br from-emerald-50 to-violet-50 rounded-2xl p-8 border border-emerald-100">
               <div className="space-y-3">
                 <div className="bg-white rounded-xl p-4 shadow-sm max-w-[80%]">
-                  <p className="text-xs text-gray-400 mb-1">Cliente · áudio 47s</p>
+                  <p className="text-[10px] text-gray-400 mb-1">Cliente · áudio 47s</p>
                   <div className="flex items-center gap-2 mb-2">
                     <Volume2 size={14} className="text-gray-400" />
                     <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div className="h-full w-3/4 bg-primary-500 rounded-full" />
+                      <div className="h-full w-3/4 bg-emerald-500 rounded-full" />
                     </div>
                     <span className="text-[11px] text-gray-400">47s</span>
                   </div>
                   <p className="text-[11px] italic text-gray-500">
-                    "Oi, queria saber se vocês fazem exame de sangue em jejum e se tem horário pra amanhã
-                    cedo, porque meu médico pediu urgente..."
+                    "Oi, queria saber se vocês fazem exame de sangue em jejum e se tem horário pra amanhã cedo, porque meu médico pediu urgente..."
                   </p>
-                  <p className="text-[10px] text-primary-600 mt-2 font-semibold">
-                    ← transcrito por Whisper
-                  </p>
+                  <p className="text-[10px] text-emerald-600 mt-2 font-semibold">← transcrito por Whisper em 1.6s</p>
                 </div>
-                <div className="bg-primary-500 text-white rounded-xl p-4 shadow-sm ml-auto max-w-[80%]">
-                  <p className="text-xs text-primary-100 mb-1">ZappIQ IA · 2s depois</p>
-                  <p className="text-sm">
-                    Oi! Sim, fazemos exame de sangue em jejum. Tenho vaga amanhã 7h30 e 8h15. Qual prefere? 🩺
+                <div className="bg-emerald-500 text-white rounded-xl p-4 shadow-sm ml-auto max-w-[80%]">
+                  <p className="text-[10px] text-emerald-100 mb-1">ZappIQ IA · 2s depois</p>
+                  <p className="text-[14px]">
+                    Oi! Sim, fazemos exame de sangue em jejum. Tenho 7h30 e 8h15 amanhã. Qual prefere? 🩺
                   </p>
                 </div>
                 <p className="text-[11px] text-gray-500 text-center mt-4">
-                  47s de áudio → transcrição + resposta em ~2 segundos. Zero handoff humano.
+                  47s de áudio → transcrição + resposta em ~2s. Zero handoff humano.
                 </p>
               </div>
             </div>
@@ -189,125 +218,133 @@ export default function VozPage() {
         </div>
       </section>
 
-      {/* Outbound — add-on */}
-      <section id="planos" className="py-20 bg-[#F8FAF9]">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-full px-4 py-1.5 mb-4">
-              <Sparkles size={14} className="text-amber-700" />
-              <span className="text-xs font-semibold text-amber-800 uppercase tracking-wider">
-                Add-on opcional
+      {/* Outbound — 6 pacotes v4 */}
+      <section id="pacotes" className="py-20 lg:py-28 bg-bg-soft">
+        <div className="zappiq-wrap">
+          <div className="text-center max-w-3xl mx-auto mb-14">
+            <div className="inline-flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-full px-4 py-1.5 mb-4">
+              <Sparkles size={14} className="text-violet-700" />
+              <span className="text-xs font-semibold text-violet-800 uppercase tracking-wider">
+                Add-on opcional · Google Neural2-C
               </span>
             </div>
-            <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900 mb-3">
-              Outbound — IA responde em áudio. Dois tiers.
+            <h2 className="text-[36px] lg:text-[48px] font-medium leading-[1.05] tracking-[-0.02em] text-ink mb-3">
+              Outbound — IA responde em áudio. <span className="text-grad">6 pacotes.</span>
             </h2>
-            <p className="text-gray-500 max-w-2xl mx-auto">
-              Duas engines, duas faixas de preço, mesmo padrão de qualidade ZappIQ. Escolha por uso
-              esperado e orçamento — pode trocar a qualquer momento.
+            <p className="text-[15.5px] text-muted">
+              Voz natural pt-BR (Google Neural2-C). Trocar de pacote a qualquer momento. Excedente cobrado por minuto.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-            {/* Padrão */}
-            <div className="bg-white rounded-2xl border-2 border-gray-200 p-8 flex flex-col">
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <Volume2 size={20} className="text-secondary-500" />
-                  <span className="text-xs font-bold text-secondary-700 uppercase tracking-wider">
-                    Padrão
-                  </span>
-                </div>
-                <h3 className="font-display text-2xl font-extrabold text-gray-900 mb-1">OpenAI TTS</h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-extrabold text-gray-900">R$ 197</span>
-                  <span className="text-sm text-gray-500">/mês</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Adicionado a qualquer plano</p>
-              </div>
-              <ul className="space-y-3 mb-6 flex-1">
-                {OUTBOUND_PADRAO.map((f) => (
-                  <li key={f} className="flex items-start gap-3 text-sm text-gray-700">
-                    <Check size={16} className="text-secondary-500 mt-0.5 flex-shrink-0" />
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="/register?voice=padrao"
-                className="block text-center bg-gray-900 hover:bg-gray-800 text-white font-semibold px-6 py-3 rounded-xl transition-colors"
+          {/* Cards 6 pacotes */}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            {PACKAGES.map((pkg) => (
+              <div
+                key={pkg.id}
+                className={`relative bg-white rounded-2xl border-2 p-6 flex flex-col ${
+                  pkg.highlight ? 'border-violet-400 shadow-[var(--shadow-card)]' : 'border-line'
+                }`}
               >
-                Começar com Padrão
-              </Link>
-            </div>
-
-            {/* Premium */}
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border-2 border-amber-300 p-8 flex flex-col relative">
-              <span className="absolute -top-3 right-6 inline-flex items-center gap-1 bg-amber-400 text-amber-900 text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-sm">
-                <Star size={10} fill="currentColor" /> Voz clonada disponível
-              </span>
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <Mic size={20} className="text-amber-700" />
-                  <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
-                    Premium
+                {pkg.highlight && (
+                  <span className="absolute -top-3 left-6 inline-flex items-center gap-1 bg-violet-500 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-sm">
+                    <Star size={10} fill="currentColor" /> Mais escolhido
                   </span>
+                )}
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Volume2 size={18} className={pkg.highlight ? 'text-violet-600' : 'text-emerald-600'} />
+                    <span className={`text-[11px] font-bold uppercase tracking-wider ${pkg.highlight ? 'text-violet-700' : 'text-emerald-700'}`}>
+                      Voice {pkg.minutes >= 1000 ? (pkg.minutes / 1000).toLocaleString('pt-BR') + 'k' : pkg.minutes}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5 mb-1">
+                    <span className="text-[14px] text-muted">R$</span>
+                    <span className="text-[36px] font-semibold text-ink leading-none tracking-[-0.02em]">{fmtBrl(pkg.priceBrl)}</span>
+                    <span className="text-[14px] text-muted">/mês</span>
+                  </div>
+                  <p className="text-[12px] text-muted">{pkg.label} inclusos</p>
                 </div>
-                <h3 className="font-display text-2xl font-extrabold text-gray-900 mb-1">ElevenLabs</h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-extrabold text-gray-900">R$ 597</span>
-                  <span className="text-sm text-gray-500">/mês</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Adicionado a qualquer plano</p>
-              </div>
-              <ul className="space-y-3 mb-6 flex-1">
-                {OUTBOUND_PREMIUM.map((f) => (
-                  <li key={f} className="flex items-start gap-3 text-sm text-gray-700">
-                    <Check size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
-                    <span>{f}</span>
+                <ul className="space-y-2.5 mb-5 flex-1">
+                  <li className="flex items-start gap-2.5 text-[13px] text-ink-2">
+                    <Check size={14} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                    <span><strong className="text-ink">{pkg.label}</strong> de TTS pt-BR Neural2-C</span>
                   </li>
-                ))}
-              </ul>
-              <Link
-                href="/register?voice=premium"
-                className="block text-center bg-amber-500 hover:bg-amber-600 text-white font-semibold px-6 py-3 rounded-xl transition-colors"
-              >
-                Começar com Premium
-              </Link>
-            </div>
+                  <li className="flex items-start gap-2.5 text-[13px] text-ink-2">
+                    <Check size={14} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                    <span>Excedente: <strong className="text-ink">R$ {fmtBrl(pkg.overagePerMin)}/min</strong></span>
+                  </li>
+                  {pkg.trialMinutes > 0 && (
+                    <li className="flex items-start gap-2.5 text-[13px] text-ink-2">
+                      <Check size={14} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                      <span>Trial 14 dias com <strong className="text-ink">{pkg.trialMinutes} min grátis</strong></span>
+                    </li>
+                  )}
+                  <li className="flex items-start gap-2.5 text-[13px] text-ink-2">
+                    <Check size={14} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                    <span className="text-muted italic">{pkg.ideal}</span>
+                  </li>
+                </ul>
+                <Link
+                  href={`/cadastro?addon=${pkg.id.toLowerCase()}`}
+                  className={`block text-center font-semibold px-5 py-3 rounded-xl transition-colors ${
+                    pkg.highlight
+                      ? 'bg-violet-600 text-white hover:bg-violet-700'
+                      : 'bg-ink text-white hover:bg-ink/90'
+                  }`}
+                >
+                  Ativar {pkg.label}
+                </Link>
+              </div>
+            ))}
           </div>
 
-          <p className="text-center text-xs text-gray-500 mt-8">
-            Enterprise: voz outbound (Padrão ou Premium) incluída na negociação, sem cobrança adicional.
-          </p>
+          {/* Helper escolha */}
+          <div className="bg-white rounded-2xl border border-line p-6 lg:p-8">
+            <h3 className="text-[18px] font-semibold text-ink mb-4 flex items-center gap-2">
+              <Zap size={18} className="text-violet-600" />
+              Não sabe qual pacote escolher?
+            </h3>
+            <div className="grid md:grid-cols-3 gap-4 text-[13.5px]">
+              <div className="p-4 bg-bg-soft rounded-xl">
+                <p className="font-semibold text-ink mb-1">Começando? <span className="text-violet-600">Voice 200</span></p>
+                <p className="text-muted leading-relaxed">14 dias com 30 min grátis pra testar antes de pagar. Ideal para validar uso de voz com seus clientes.</p>
+              </div>
+              <div className="p-4 bg-violet-50 border border-violet-200 rounded-xl">
+                <p className="font-semibold text-ink mb-1">Operação ativa? <span className="text-violet-600">Voice 400</span></p>
+                <p className="text-muted leading-relaxed">Sweet-spot. Atende lembretes, confirmações e respostas a áudios sem ficar contando minuto. Margem confortável.</p>
+              </div>
+              <div className="p-4 bg-bg-soft rounded-xl">
+                <p className="font-semibold text-ink mb-1">Volume alto? <span className="text-violet-600">Voice 1.500+</span></p>
+                <p className="text-muted leading-relaxed">Multi-unidade, franquia ou alto volume diário. R$/min cai pra R$ 0,25 — preço por minuto melhor.</p>
+              </div>
+            </div>
+            <p className="text-[12px] text-muted mt-5 italic">
+              Plano Enterprise: voz outbound entra na negociação sob consulta. <Link href="/enterprise" className="underline hover:text-ink">Falar com Enterprise</Link>.
+            </p>
+          </div>
         </div>
       </section>
 
       {/* Use cases */}
       <section className="py-20 bg-white">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
-            <p className="text-sm font-semibold text-secondary-600 uppercase tracking-wider mb-3">
-              Onde voz faz diferença de verdade
-            </p>
-            <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900">
+        <div className="zappiq-wrap">
+          <div className="text-center mb-14 max-w-2xl mx-auto">
+            <span className="eyebrow">Onde voz faz diferença</span>
+            <h2 className="text-[36px] lg:text-[44px] font-medium leading-[1.05] tracking-[-0.02em] text-ink">
               4 cenários reais
             </h2>
           </div>
           <div className="grid md:grid-cols-2 gap-5">
             {USE_CASES.map((u) => (
-              <div
-                key={u.title}
-                className="bg-gray-50 border border-gray-100 rounded-2xl p-7 hover:border-secondary-200 transition-colors"
-              >
+              <div key={u.title} className="bg-bg-soft border border-line rounded-2xl p-7 hover:border-violet-300 transition-colors">
                 <div className="flex items-start gap-4">
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-secondary-500 to-secondary-600 flex items-center justify-center flex-shrink-0">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center flex-shrink-0">
                     <u.icon size={20} className="text-white" />
                   </div>
                   <div>
-                    <h3 className="font-display text-base font-bold text-gray-900 mb-1">{u.title}</h3>
-                    <p className="text-sm text-gray-600 leading-relaxed mb-2">{u.body}</p>
-                    <span className="inline-block text-[11px] font-semibold text-secondary-700 bg-secondary-50 border border-secondary-200 rounded-full px-3 py-1">
+                    <h3 className="text-[15px] font-semibold text-ink mb-1">{u.title}</h3>
+                    <p className="text-[13.5px] text-muted leading-relaxed mb-2">{u.body}</p>
+                    <span className="inline-block text-[10px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded-full px-2.5 py-1 uppercase tracking-wider">
                       {u.tier}
                     </span>
                   </div>
@@ -318,44 +355,41 @@ export default function VozPage() {
         </div>
       </section>
 
-      {/* Fair use voz */}
+      {/* Fair use */}
       <section className="py-16 bg-amber-50/50 border-y border-amber-200/60">
-        <div className="max-w-4xl mx-auto px-6">
+        <div className="zappiq-wrap max-w-4xl mx-auto">
           <div className="flex items-start gap-3">
             <AlertCircle size={22} className="text-amber-700 mt-1 flex-shrink-0" />
             <div>
-              <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">
+              <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">
                 Fair-use · transparência técnica
               </p>
-              <h3 className="font-display text-xl font-extrabold text-gray-900 mb-4">
-                Limites técnicos e regras de uso
+              <h3 className="text-[20px] font-semibold text-ink mb-4">
+                Limites e regras de uso da voz
               </h3>
-              <ul className="space-y-2 text-sm text-gray-700 leading-relaxed">
+              <ul className="space-y-2.5 text-[14px] text-ink-2 leading-relaxed">
                 <li>
-                  <strong className="text-gray-900">Minutos não acumulam:</strong> minutos não usados no mês
-                  não rolam para o mês seguinte. Isso é padrão em TTS — o custo do provedor é fixo por mês.
+                  <strong className="text-ink">Minutos não acumulam:</strong> minutos não usados não rolam pro mês seguinte. Padrão TTS — custo do provedor é fixo por mês.
                 </li>
                 <li>
-                  <strong className="text-gray-900">Excedente é cobrado:</strong> quem ultrapassa os minutos
-                  incluídos paga R$ 0,30/min (Padrão) ou R$ 1,20/min (Premium), debitados no ciclo seguinte.
-                  Notificamos em 80% e 100% do pacote.
+                  <strong className="text-ink">Excedente cobrado:</strong> ultrapassou os minutos inclusos? Paga R$ 0,20 a R$ 0,35/min (depende do pacote — quanto maior, menor o R$/min). Notificamos em 80% e 100%.
                 </li>
                 <li>
-                  <strong className="text-gray-900">Voz clonada (Premium):</strong> setup único de R$ 500,
-                  requer 10 minutos de áudio limpo da pessoa e autorização por escrito (LGPD Art. 7º).
+                  <strong className="text-ink">Hard ceiling:</strong> 2× minutos inclusos. Acima disso, conversa Enterprise (não há cobrança automática infinita — você nunca leva susto na fatura).
                 </li>
                 <li>
-                  <strong className="text-gray-900">Conteúdo sensível:</strong> voz não é usada para cobrança
-                  imitando terceiros, golpes, deepfake político. Violação → suspensão imediata + 1 aviso.
+                  <strong className="text-ink">Conteúdo sensível:</strong> voz NÃO é usada pra cobrança imitando terceiros, golpes, deepfake. Violação → suspensão imediata + 1 aviso.
                 </li>
                 <li>
-                  <strong className="text-gray-900">Broadcast em massa por voz:</strong> requer aprovação
-                  prévia do ZappIQ para evitar violação de política Meta. Consulte CSM.
+                  <strong className="text-ink">Broadcast em massa por voz:</strong> requer aprovação prévia ZappIQ pra evitar violação de política Meta. Consulte CSM.
+                </li>
+                <li>
+                  <strong className="text-ink">Trial 14 dias:</strong> pacotes Voice 200 e Voice 400 incluem 30 min grátis pra testar antes de pagar. Pacotes maiores são pra clientes com volume conhecido.
                 </li>
               </ul>
               <Link
                 href="/legal/fair-use"
-                className="text-sm font-semibold text-amber-900 hover:text-amber-700 inline-flex items-center gap-1 mt-6"
+                className="text-[13.5px] font-semibold text-amber-900 hover:text-amber-700 inline-flex items-center gap-1 mt-6"
               >
                 Ler fair-use completo <ArrowRight size={14} />
               </Link>
@@ -366,25 +400,23 @@ export default function VozPage() {
 
       {/* CTA final */}
       <section className="py-20 bg-white">
-        <div className="max-w-4xl mx-auto px-6 text-center">
-          <h2 className="font-display text-3xl lg:text-5xl font-extrabold text-gray-900 mb-4">
-            Voz em produção em menos de 24h.
+        <div className="zappiq-wrap max-w-4xl mx-auto text-center">
+          <h2 className="text-[36px] lg:text-[52px] font-medium leading-[1.05] tracking-[-0.02em] text-ink mb-4">
+            Voz em produção em <span className="text-grad">menos de 24h</span>.
           </h2>
-          <p className="text-gray-600 max-w-2xl mx-auto mb-8">
-            Ative o add-on de voz no checkout ou depois, no painel. Premium com voz clonada leva até 48h
-            para calibrar. Zero setup fee, 14 dias grátis, sem fidelidade — ao fim do trial, você escolhe
-            a forma de pagamento.
+          <p className="text-[16px] text-muted max-w-2xl mx-auto mb-8 leading-relaxed">
+            Ative no checkout ou depois no painel. Trial 14 dias com 30 min grátis (pacotes Voice 200 e 400). Sem fidelidade.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
-              href="/register"
-              className="bg-secondary-500 hover:bg-secondary-600 text-white font-semibold px-8 py-4 rounded-xl transition-colors inline-flex items-center justify-center gap-2 shadow-lg shadow-secondary-500/25"
+              href="/cadastro"
+              className="bg-violet-600 hover:bg-violet-700 text-white font-semibold px-8 py-4 rounded-xl transition-colors inline-flex items-center justify-center gap-2 shadow-lg shadow-violet-500/25"
             >
               Começar 14 dias grátis <ArrowRight size={18} />
             </Link>
             <Link
               href="/demo"
-              className="border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold px-8 py-4 rounded-xl transition-colors inline-flex items-center justify-center gap-2"
+              className="border border-line text-ink hover:bg-bg-soft font-semibold px-8 py-4 rounded-xl transition-colors inline-flex items-center justify-center gap-2"
             >
               Ouvir demo das vozes
             </Link>
