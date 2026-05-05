@@ -3,5 +3,11 @@
   "buildCommand": "cd ../.. && pnpm turbo run build --filter=@zappiq/web",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "outputDirectory": ".next",
-  "regions": ["gru1"]
+  "regions": ["gru1"],
+  "crons": [
+    {
+      "path": "/api/cron/check-quotas",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
