@@ -225,8 +225,8 @@ export function PorQueZappIQ() {
               <p className="text-[13px] text-muted leading-relaxed">
                 Seu cliente é brasileiro, manda áudio. A Iza entende tudo
                 <span className="font-semibold text-ink"> sem custo extra</span>. Quer que ela
-                responda falando? Ativa voz por <span className="font-semibold text-ink">R$ 197</span>
-                ou <span className="font-semibold text-ink">R$ 597</span>/mês.
+                responda falando? Ativa voz a partir de <span className="font-semibold text-ink">R$ 79,90/mês</span>
+                {' '}— 6 pacotes de 200 a 4.000 minutos.
               </p>
             </div>
           </div>
