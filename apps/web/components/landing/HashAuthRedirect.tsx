@@ -2,16 +2,17 @@
 
 /**
  * HashAuthRedirect — Detecta tokens de auth Supabase no hash da URL
- * (implicit flow Confirm Signup, Magic Link, Password Recovery) e
+ * (implicit flow Confirm Signup, Magic Link, Password Recovery, OAuth) e
  * redireciona pra /cadastro?verified=1 mantendo o hash.
  *
- * NECESSIDADE TÉCNICA: Supabase Confirm Signup template IGNORA
- * `emailRedirectTo` passado em signInWithOtp e sempre redireciona pra
- * Site URL (raiz https://zappiq.com.br/). Esse handler é montado no
+ * NECESSIDADE TÉCNICA: Supabase Site URL hardcoded sobrescreve qualquer
+ * redirectTo customizado. Magic Link / Confirm Signup / OAuth caem todos
+ * em https://zappiq.com.br/#access_token=... Esse handler é montado no
  * layout root pra interceptar em qualquer página.
  *
- * Comportamento:
- * - Detecta `#access_token=...&type=signup|magiclink|recovery`
+ * Comportamento (PR #91 atualizado):
+ * - Detecta `#access_token=...&type=signup|magiclink|recovery` (Magic Link path)
+ * - Detecta `#access_token=...&provider_token=...` (OAuth path — Google etc)
  * - Se já está em /cadastro, NÃO redireciona (deixa Cadastro.tsx processar)
  * - Senão, redireciona pra /cadastro?verified=1#hash (preserva tokens)
  */
@@ -27,9 +28,15 @@ export function HashAuthRedirect() {
 
     const params = new URLSearchParams(hash.replace(/^#/, ''));
     const type = params.get('type');
+    const providerToken = params.get('provider_token');
 
-    // Só processa fluxos de auth conhecidos
-    if (!type || !['signup', 'magiclink', 'recovery'].includes(type)) return;
+    // Aceita 3 cenários auth conhecidos:
+    //  1. type=signup|magiclink|recovery (Confirm Signup, Magic Link, Recovery)
+    //  2. provider_token presente (OAuth implicit flow — Google etc)
+    const isKnownAuthFlow =
+      (type !== null && ['signup', 'magiclink', 'recovery'].includes(type)) ||
+      providerToken !== null;
+    if (!isKnownAuthFlow) return;
 
     // Se já está em /cadastro, deixa o componente local processar
     if (window.location.pathname.startsWith('/cadastro')) return;
