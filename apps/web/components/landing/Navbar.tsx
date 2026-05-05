@@ -185,7 +185,7 @@ export function Navbar() {
           >
             Entrar
           </Link>
-          <Link href="/register" className="btn btn-primary text-[14px]">
+          <Link href="/cadastro" className="btn btn-primary text-[14px]">
             Começar grátis
           </Link>
         </div>
