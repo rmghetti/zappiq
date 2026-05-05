@@ -24,7 +24,7 @@ import {
   Users, Wrench, Loader2, AlertCircle, Sparkles,
 } from 'lucide-react';
 import { PLAN_CONFIG, type PlanId } from '@zappiq/shared';
-import { track } from '@/lib/analytics';
+import { track, getUtm } from '@/lib/analytics';
 
 type Step = 1 | 2 | 3;
 
@@ -111,6 +111,10 @@ export function Cadastro() {
     // Lê plan da query string (passado pelo OAuth flow via /api/signup/google)
     const planFromQuery = search.get('plan') || undefined;
 
+    // UTM first-touch (PR #94) — pra OAuth path, pegamos do storage
+    // e mandamos pro confirm-signup que faz UPSERT incluindo as colunas.
+    const utm = getUtm();
+
     // Atualiza signup status no backend (fire-and-forget)
     // Backend faz UPSERT: cria row se OAuth (sem signup pré-criado),
     // atualiza se Magic Link (row já existe).
@@ -121,6 +125,9 @@ export function Cadastro() {
         access_token: accessToken,
         refresh_token: refreshToken,
         plan: planFromQuery,
+        utm_source: utm.utm_source || null,
+        utm_medium: utm.utm_medium || null,
+        utm_campaign: utm.utm_campaign || null,
       }),
     }).catch((err) => {
       console.error('[cadastro] Confirm signup background error:', err);
@@ -141,6 +148,7 @@ export function Cadastro() {
     });
 
     try {
+      const utm = getUtm();
       const res = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -150,6 +158,10 @@ export function Cadastro() {
           plan: form.plan,
           cnpj: form.cnpj.trim() || null,
           company: form.company.trim() || null,
+          // UTM first-touch attribution (PR #94)
+          utm_source: utm.utm_source || null,
+          utm_medium: utm.utm_medium || null,
+          utm_campaign: utm.utm_campaign || null,
         }),
       });
       if (!res.ok) {

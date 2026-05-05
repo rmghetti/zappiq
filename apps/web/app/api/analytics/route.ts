@@ -30,6 +30,12 @@ interface AnalyticsBody {
   session_id?: string;
   user_email?: string;
   page_url?: string;
+  // UTM attribution (PR #94)
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
 }
 
 const VALID_EVENT_REGEX = /^[a-z][a-z0-9_]{2,63}$/;
@@ -75,6 +81,12 @@ export async function POST(req: Request) {
       user_agent: userAgent?.slice(0, 512),
       referrer: referrer?.slice(0, 1024),
       page_url: body.page_url?.slice(0, 1024) || null,
+      // UTM attribution (PR #94)
+      utm_source: body.utm_source?.slice(0, 100) || null,
+      utm_medium: body.utm_medium?.slice(0, 100) || null,
+      utm_campaign: body.utm_campaign?.slice(0, 100) || null,
+      utm_content: body.utm_content?.slice(0, 100) || null,
+      utm_term: body.utm_term?.slice(0, 100) || null,
     });
 
     if (error) {

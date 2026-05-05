@@ -23,6 +23,10 @@ interface SignupBody {
   plan: PlanId;
   cnpj?: string | null;
   company?: string | null;
+  // UTM attribution first-touch (PR #94)
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
 }
 
 export async function POST(req: Request) {
@@ -108,6 +112,10 @@ export async function POST(req: Request) {
         trial_ends_at: trialEnds.toISOString(),
         card_required_at: trialEnds.toISOString(),
         status: 'pending_email',
+        // UTM first-touch (PR #94) — só persiste no INSERT, nunca sobrescreve
+        utm_source: body.utm_source?.slice(0, 100) || null,
+        utm_medium: body.utm_medium?.slice(0, 100) || null,
+        utm_campaign: body.utm_campaign?.slice(0, 100) || null,
         meta: {
           source: 'web_signup',
           user_agent: req.headers.get('user-agent') || null,
