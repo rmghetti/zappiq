@@ -24,6 +24,10 @@ interface Body {
   refresh_token?: string;
   // Plan opcional — Cadastro.tsx pode passar pra OAuth (vem da query string)
   plan?: string;
+  // UTM first-touch attribution (PR #94)
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
 }
 
 interface JwtPayload {
@@ -140,6 +144,10 @@ export async function POST(req: Request) {
         trial_starts_at: now.toISOString(),
         trial_ends_at: trialEnds.toISOString(),
         card_required_at: trialEnds.toISOString(),
+        // UTM first-touch (PR #94) — só persiste no INSERT, nunca sobrescreve
+        utm_source: body.utm_source?.slice(0, 100) || null,
+        utm_medium: body.utm_medium?.slice(0, 100) || null,
+        utm_campaign: body.utm_campaign?.slice(0, 100) || null,
         meta: {
           source: isOAuth ? `oauth_${provider}` : 'magiclink_implicit',
           provider,
@@ -155,6 +163,43 @@ export async function POST(req: Request) {
           warning: 'Sessão criada mas signup record não inserido.',
         });
       }
+    }
+
+    // ─── Slack notify (fire-and-forget) — PR #94 ─────────────────
+    // Re-fetch signup pra pegar dados completos pro notify
+    try {
+      const { data: signup } = await sb
+        .from('signups')
+        .select('email, name, plan_chosen, utm_source, utm_medium, utm_campaign, trial_ends_at, meta')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (signup) {
+        const baseUrl =
+          process.env.APP_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
+
+        // Fire-and-forget — não bloqueia
+        fetch(`${baseUrl}/api/internal/notify-signup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: signup.email,
+            name: signup.name,
+            plan: signup.plan_chosen,
+            provider,
+            utm_source: signup.utm_source,
+            utm_medium: signup.utm_medium,
+            utm_campaign: signup.utm_campaign,
+            trial_ends_at: signup.trial_ends_at,
+            source_meta: (signup.meta as { source?: string } | null)?.source,
+          }),
+        }).catch((err) => {
+          console.error('[confirm-signup] notify-signup fire failed:', err);
+        });
+      }
+    } catch (notifyErr) {
+      console.error('[confirm-signup] notify lookup error:', notifyErr);
     }
 
     return NextResponse.json({
