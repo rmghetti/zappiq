@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     }
 
     // ─── Supabase admin client (server-side) ────────────────────
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseUrl = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceKey) {
       console.error('[signup] Missing Supabase env vars');
@@ -121,7 +121,7 @@ export async function POST(req: Request) {
 
     // ─── Magic link via Supabase Auth ──────────────────────────
     const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
 
     const { error: otpErr } = await sb.auth.signInWithOtp({
