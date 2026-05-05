@@ -32,11 +32,14 @@ export async function POST(req: Request) {
       process.env.APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
 
+    // plan vai como query param TOP-LEVEL (não só dentro de next) pra
+    // /auth/callback ler facilmente e usar no UPSERT do signups row.
+    // (PR #90 hotfix Google OAuth signup creation)
     const next = encodeURIComponent(`/cadastro?verified=1&plan=${plan}`);
     const { data, error } = await sb.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${baseUrl}/auth/callback?next=${next}`,
+        redirectTo: `${baseUrl}/auth/callback?next=${next}&plan=${plan}`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
