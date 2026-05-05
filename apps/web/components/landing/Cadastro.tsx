@@ -65,11 +65,12 @@ export function Cadastro() {
     }
   }, [search]);
 
-  // Processa tokens do hash (implicit flow do Supabase Confirm Signup).
-  // O Supabase devolve `#access_token=...&refresh_token=...&type=signup`
-  // após o user clicar no magic link. Detectamos client-side, mandamos
-  // os tokens pro backend pra atualizar signup status, limpamos hash,
-  // e mostramos step 3.
+  // Processa tokens do hash (implicit flow do Supabase).
+  // 2 fluxos suportados (PR #92):
+  //   1. Magic Link Confirm Signup: `#access_token=...&type=signup`
+  //   2. OAuth Google: `#access_token=...&provider_token=...` (sem type)
+  // Em ambos casos: avança UX pro step 3, limpa hash, manda tokens pro
+  // backend que faz UPSERT em signups (cria se OAuth, atualiza se magic).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const hash = window.location.hash;
@@ -79,8 +80,13 @@ export function Cadastro() {
     const accessToken = params.get('access_token');
     const refreshToken = params.get('refresh_token');
     const type = params.get('type');
+    const providerToken = params.get('provider_token');
 
-    if (!accessToken || type !== 'signup') return;
+    if (!accessToken) return;
+
+    // Aceita Magic Link (type=signup) OU OAuth (provider_token presente)
+    const isValidAuthFlow = type === 'signup' || providerToken !== null;
+    if (!isValidAuthFlow) return;
 
     // Avança imediatamente pro step 3 (UX)
     setStep(3);
@@ -89,18 +95,24 @@ export function Cadastro() {
     const cleanUrl = window.location.pathname + window.location.search;
     window.history.replaceState({}, document.title, cleanUrl);
 
+    // Lê plan da query string (passado pelo OAuth flow via /api/signup/google)
+    const planFromQuery = search.get('plan') || undefined;
+
     // Atualiza signup status no backend (fire-and-forget)
+    // Backend faz UPSERT: cria row se OAuth (sem signup pré-criado),
+    // atualiza se Magic Link (row já existe).
     fetch('/api/auth/confirm-signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         access_token: accessToken,
         refresh_token: refreshToken,
+        plan: planFromQuery,
       }),
     }).catch((err) => {
       console.error('[cadastro] Confirm signup background error:', err);
     });
-  }, []);
+  }, [search]);
 
   // ─── Step 1 → submit ───
   const submitStep1 = async (e: React.FormEvent) => {
