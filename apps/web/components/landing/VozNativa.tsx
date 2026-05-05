@@ -1,11 +1,11 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * VozNativa — Design V4 (Chatbase-style · inbound/outbound TTS)
+ * VozNativa — Design V4 (PR #73 · pricing real v4 LIVE no Stripe)
  * --------------------------------------------------------------------------
- * Inbound (transcrição) incluso em todos os planos via Whisper.
- * Outbound (TTS) em 2 tiers: R$ 197 padrão (OpenAI) / R$ 597 premium (ElevenLabs).
- * Visual novo: 2 cards (inbound esquerda + outbound split direita).
+ * Inbound (Whisper STT) incluso em todos os planos. R$ 0.
+ * Outbound (TTS Neural2-C pt-BR) em 6 pacotes. Aqui a home mostra 3 destaque
+ *   (Voice 200, 400 highlight, 1500). CTA pra /voz pra ver os 6.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import Link from 'next/link';
@@ -18,19 +18,43 @@ const INBOUND_ITEMS = [
   'Zero custo adicional — já vem incluso em qualquer plano',
 ];
 
-const OUTBOUND_PADRAO = [
-  'Voz masculina ou feminina em PT-BR natural',
-  'Até 30 minutos de áudio respondido/mês',
-  'Perfeito pra saudações, confirmações e agendamentos',
-  'Ativa num clique, sem configurar nada',
+interface VoiceTeaserCard {
+  id: string;
+  label: string;
+  minutes: string;
+  priceBrl: number;
+  highlight?: boolean;
+  pitch: string;
+}
+
+const VOICE_TEASERS: VoiceTeaserCard[] = [
+  {
+    id: 'VOICE_200',
+    label: 'Voice 200',
+    minutes: '200 min/mês',
+    priceBrl: 79.9,
+    pitch: 'Trial 14 dias com 30 min grátis · pra começar',
+  },
+  {
+    id: 'VOICE_400',
+    label: 'Voice 400',
+    minutes: '400 min/mês',
+    priceBrl: 137.9,
+    highlight: true,
+    pitch: 'Sweet-spot da operação ativa · mais escolhido',
+  },
+  {
+    id: 'VOICE_1500',
+    label: 'Voice 1.500',
+    minutes: '1.500 min/mês',
+    priceBrl: 379.9,
+    pitch: 'Multi-canais ou multi-unidades · R$/min menor',
+  },
 ];
 
-const OUTBOUND_PREMIUM = [
-  'Voz com entonação natural, praticamente humana',
-  'Até 120 minutos de áudio respondido/mês',
-  'Pode clonar a voz do seu atendente humano',
-  'Personalidade controlável por agente',
-];
+function fmtBrl(n: number): string {
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 /* Mini-waveform estático (5 alturas que se repetem) */
 const WAVE_PATTERN = [8, 16, 12, 20, 14, 10, 18, 8, 16, 12, 20, 14, 8, 16, 12, 20, 14, 10];
@@ -92,65 +116,70 @@ export function VozNativa() {
             </ul>
           </div>
 
-          {/* Outbound — split 2 tiers */}
+          {/* Outbound — 6 pacotes (3 destaque na home, ver todos em /voz) */}
           <div className="card-soft overflow-hidden">
             <div
-              className="px-8 py-5 text-white flex items-center gap-3"
+              className="px-8 py-5 text-white flex items-center justify-between"
               style={{
                 background: 'linear-gradient(135deg, #2FB57A 0%, #2F7FB5 45%, #4A52D0 100%)',
               }}
             >
-              <Mic size={22} />
-              <div>
-                <h3 className="text-[20px] font-medium leading-tight tracking-tight">Sua IA responde em áudio</h3>
-                <p className="text-[12px] text-white/85">Ativa quando quiser · add-on opcional</p>
+              <div className="flex items-center gap-3">
+                <Mic size={22} />
+                <div>
+                  <h3 className="text-[20px] font-medium leading-tight tracking-tight">Sua IA responde em áudio</h3>
+                  <p className="text-[12px] text-white/85">6 pacotes · pt-BR Neural2-C</p>
+                </div>
               </div>
+              <span className="text-[11px] font-semibold bg-white/15 backdrop-blur px-2.5 py-1 rounded-full">
+                a partir de R$ 79,90
+              </span>
             </div>
 
-            <div className="grid sm:grid-cols-2 divide-x divide-line">
-              {/* Padrão */}
-              <div className="p-6">
-                <p className="text-[10.5px] text-muted font-semibold uppercase tracking-[0.12em] mb-2">Padrão</p>
-                <div className="flex items-baseline gap-1 mb-4">
-                  <span className="text-[26px] font-semibold text-ink leading-none tracking-tight">R$ 197</span>
-                  <span className="text-[12.5px] text-muted">/mês</span>
+            <div className="p-5 space-y-3">
+              {VOICE_TEASERS.map((pkg) => (
+                <div
+                  key={pkg.id}
+                  className={`flex items-center justify-between gap-3 p-3.5 rounded-[12px] border transition-colors ${
+                    pkg.highlight
+                      ? 'bg-violet-50 border-violet-300'
+                      : 'bg-bg-soft border-line hover:border-accent/40'
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[14px] font-semibold text-ink">{pkg.label}</span>
+                      {pkg.highlight && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-violet-700 bg-violet-200 px-1.5 py-0.5 rounded-full">
+                          <Star size={8} fill="currentColor" /> Mais escolhido
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11.5px] text-muted">{pkg.pitch}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="flex items-baseline gap-1 justify-end">
+                      <span className="text-[10px] text-muted">R$</span>
+                      <span className="text-[20px] font-semibold text-ink leading-none tracking-tight">
+                        {fmtBrl(pkg.priceBrl)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted">{pkg.minutes}</p>
+                  </div>
                 </div>
-                <ul className="space-y-2">
-                  {OUTBOUND_PADRAO.map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-[12px] text-muted">
-                      <Check size={11} className="text-accent flex-shrink-0 mt-0.5" strokeWidth={2.5} />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Premium */}
-              <div className="p-6 bg-bg-soft relative">
-                <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-ink text-white text-[9.5px] font-semibold tracking-wide flex items-center gap-1">
-                  <Star size={9} /> Premium
-                </div>
-                <p className="text-[10.5px] text-accent font-semibold uppercase tracking-[0.12em] mb-2">Premium</p>
-                <div className="flex items-baseline gap-1 mb-4">
-                  <span className="text-[26px] font-semibold text-ink leading-none tracking-tight">R$ 597</span>
-                  <span className="text-[12.5px] text-muted">/mês</span>
-                </div>
-                <ul className="space-y-2">
-                  {OUTBOUND_PREMIUM.map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-[12px] text-muted">
-                      <Check size={11} className="text-accent flex-shrink-0 mt-0.5" strokeWidth={2.5} />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              ))}
             </div>
 
-            <div className="bg-bg-soft px-6 py-4 border-t border-line">
+            <div className="bg-bg-soft px-6 py-3 border-t border-line flex items-center justify-between gap-3">
               <p className="text-[11.5px] text-muted">
-                Você ativa e desativa quando quiser — sem ligar pra comercial.
-                Acompanha o uso em tempo real no painel.
+                + 3 pacotes (Voice 600, 800 e 4.000) pra volumes maiores.
               </p>
+              <Link
+                href="/voz#pacotes"
+                className="inline-flex items-center gap-1 text-[12px] font-semibold text-accent hover:underline whitespace-nowrap"
+              >
+                Ver os 6 <ArrowRight size={11} />
+              </Link>
             </div>
           </div>
         </div>
