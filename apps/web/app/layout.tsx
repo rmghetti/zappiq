@@ -5,6 +5,7 @@ import './globals.css';
 import '@/lib/sentry';
 import { OrganizationJsonLd } from '@/components/seo/OrganizationJsonLd';
 import { CookieBanner } from '@/components/shared/CookieBanner';
+import { HashAuthRedirect } from '@/components/landing/HashAuthRedirect';
 
 /* ═══════════════════════════════════════════════════════════════════
  * Design V4 · fontes Geist (substitui Inter + Plus Jakarta)
@@ -102,6 +103,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased bg-bg text-ink`}>
         <OrganizationJsonLd />
+        <HashAuthRedirect />
         {children}
         <CookieBanner />
       </body>
