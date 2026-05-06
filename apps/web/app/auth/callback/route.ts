@@ -21,7 +21,9 @@ const VALID_PLANS: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS'];
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
-  const next = url.searchParams.get('next') || '/cadastro?verified=1';
+  // PR #101 (Onda 2A) — P0 #2 Signup duplicado: callback redirect direto
+  // pra /onboarding (não mais /cadastro?verified=1 que mandava pra /register).
+  const next = url.searchParams.get('next') || '/onboarding?step=0&from=auth_callback';
   const planParam = url.searchParams.get('plan');
 
   if (!code) {

@@ -284,11 +284,11 @@ export function Hero() {
             </p>
 
             <div className="flex flex-wrap gap-3 mb-8">
-              <Link href="/register" className="btn btn-accent btn-lg">
-                Começar grátis <span aria-hidden>→</span>
+              <Link href="/cadastro" className="btn btn-accent btn-lg">
+                Começar 14 dias grátis <span aria-hidden>→</span>
               </Link>
-              <a href="#demo" className="btn btn-line btn-lg">
-                Agendar demo
+              <a href="/agendar" className="btn btn-line btn-lg">
+                Agendar conversa
               </a>
             </div>
 

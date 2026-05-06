@@ -292,7 +292,7 @@ export function SelfServiceTraining() {
         {/* CTA */}
         <div className="text-center">
           <Link
-            href="/register"
+            href="/cadastro"
             className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-8 py-4 rounded-xl text-base transition-all shadow-lg shadow-primary-500/25 hover:shadow-xl hover:-translate-y-0.5"
           >
             Treinar minha IA agora — grátis por 14 dias <ArrowRight size={18} />

@@ -35,49 +35,31 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   isAuthenticated: false,
 
+  // ── PR #101 (Onda 2A) — P0 #3 AUTH BYPASS KILL ──────────────────────────
+  // Mock fallback REMOVIDO. authStore agora propaga erro real do backend
+  // /api/auth/login (e /register) pra UI. Antes: qualquer credencial fake
+  // logava com role ADMIN via mock — vulnerabilidade crítica de segurança.
+  // Backend já existe e está completo (apps/api/src/routes/auth.ts) com
+  // bcrypt + JWT + Prisma. Se /api/auth/login falhar (rede/server), erro
+  // propaga e UI mostra ErrorBanner — NÃO loga user fake.
   login: async (email, password) => {
-    try {
-      const res = await api.post('/api/auth/login', { email, password });
-      localStorage.setItem('zappiq_token', res.token);
-      localStorage.setItem('zappiq_refresh_token', res.refreshToken);
-      set({ user: res.user, isAuthenticated: true, isLoading: false });
-    } catch {
-      // Fallback: mock local enquanto o backend não está conectado
-      const mockUser: User = {
-        id: 'usr_' + Math.random().toString(36).slice(2, 10),
-        email,
-        name: email.split('@')[0],
-        role: 'ADMIN',
-        organizationId: 'org_' + Math.random().toString(36).slice(2, 10),
-      };
-      const mockToken = 'mock_token_' + Date.now();
-      localStorage.setItem('zappiq_token', mockToken);
-      localStorage.setItem('zappiq_user', JSON.stringify(mockUser));
-      set({ user: mockUser, isAuthenticated: true, isLoading: false });
+    const res = await api.post('/api/auth/login', { email, password });
+    if (!res?.token || !res?.user) {
+      throw new Error('Resposta inválida do servidor de autenticação');
     }
+    localStorage.setItem('zappiq_token', res.token);
+    if (res.refreshToken) localStorage.setItem('zappiq_refresh_token', res.refreshToken);
+    set({ user: res.user, isAuthenticated: true, isLoading: false });
   },
 
   register: async (data) => {
-    try {
-      const res = await api.post('/api/auth/register', data);
-      localStorage.setItem('zappiq_token', res.token);
-      localStorage.setItem('zappiq_refresh_token', res.refreshToken);
-      set({ user: res.user, isAuthenticated: true, isLoading: false });
-    } catch {
-      // Fallback: mock local enquanto o backend não está conectado
-      const mockUser: User = {
-        id: 'usr_' + Math.random().toString(36).slice(2, 10),
-        email: data.email,
-        name: data.name,
-        role: 'ADMIN',
-        organizationId: 'org_' + Math.random().toString(36).slice(2, 10),
-      };
-      const mockToken = 'mock_token_' + Date.now();
-      localStorage.setItem('zappiq_token', mockToken);
-      localStorage.setItem('zappiq_user', JSON.stringify(mockUser));
-      localStorage.setItem('zappiq_org_name', data.organizationName);
-      set({ user: mockUser, isAuthenticated: true, isLoading: false });
+    const res = await api.post('/api/auth/register', data);
+    if (!res?.token || !res?.user) {
+      throw new Error('Resposta inválida do servidor de cadastro');
     }
+    localStorage.setItem('zappiq_token', res.token);
+    if (res.refreshToken) localStorage.setItem('zappiq_refresh_token', res.refreshToken);
+    set({ user: res.user, isAuthenticated: true, isLoading: false });
   },
 
   logout: () => {
@@ -88,6 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     window.location.href = '/login';
   },
 
+  // PR #101 — fetchMe sem mock fallback. Se backend down, deslogar.
   fetchMe: async () => {
     try {
       const token = localStorage.getItem('zappiq_token');
@@ -96,43 +79,16 @@ export const useAuthStore = create<AuthState>((set) => ({
         return;
       }
 
-      // Verificar se existe usuário mock no localStorage (para quando o backend não está rodando)
-      const mockUserStr = localStorage.getItem('zappiq_user');
-      let mockUser: User | null = null;
-      if (mockUserStr) {
-        try {
-          mockUser = JSON.parse(mockUserStr);
-        } catch {
-          // JSON inválido, ignorar
-        }
-      }
+      // Limpar resíduos do mock antigo (caso ainda existam de sessão pré-PR #101)
+      localStorage.removeItem('zappiq_user');
+      localStorage.removeItem('zappiq_org_name');
 
-      // Tentar chamada real à API
-      try {
-        const res = await api.get('/api/auth/me');
-        set({ user: res.user, organization: res.organization, isAuthenticated: true, isLoading: false });
-        return;
-      } catch {
-        // API falhou — se temos dados mock, usar como fallback
-        if (mockUser) {
-          const orgName = localStorage.getItem('zappiq_org_name');
-          const mockOrg: Organization | null = orgName
-            ? {
-                id: mockUser.organizationId,
-                name: orgName,
-                slug: orgName.toLowerCase().replace(/\s+/g, '-'),
-                plan: 'starter',
-                settings: {},
-              }
-            : null;
-          set({ user: mockUser, organization: mockOrg, isAuthenticated: true, isLoading: false });
-          return;
-        }
-
-        // Sem mock e sem API — deslogar
-        set({ user: null, organization: null, isAuthenticated: false, isLoading: false });
-      }
+      const res = await api.get('/api/auth/me');
+      set({ user: res.user, organization: res.organization, isAuthenticated: true, isLoading: false });
     } catch {
+      // Backend down ou token inválido — deslogar (não criar mock).
+      localStorage.removeItem('zappiq_token');
+      localStorage.removeItem('zappiq_refresh_token');
       set({ user: null, organization: null, isAuthenticated: false, isLoading: false });
     }
   },
