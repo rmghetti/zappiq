@@ -162,7 +162,7 @@ export function HeroVariantC() {
             </p>
 
             <div className="flex flex-wrap gap-4 mb-6">
-              <Link href="/register" className="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold px-7 py-3.5 rounded-xl text-base transition-all shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5">
+              <Link href="/cadastro" className="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold px-7 py-3.5 rounded-xl text-base transition-all shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5">
                 Começar em 30 minutos <ArrowRight size={18} />
               </Link>
               <a href="#roi-calculator" className="inline-flex items-center gap-2 border border-blue-300 hover:border-blue-500 text-blue-600 hover:text-blue-700 font-semibold px-7 py-3.5 rounded-xl text-base transition-all bg-white hover:bg-blue-50">

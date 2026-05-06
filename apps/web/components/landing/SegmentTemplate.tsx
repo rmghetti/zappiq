@@ -84,7 +84,7 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
             </h1>
             <p className="text-lg text-gray-500 leading-relaxed mb-8">{data.heroSubtitle}</p>
             <div className="flex flex-wrap gap-4">
-              <Link href="/register" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-7 py-3.5 rounded-xl transition-all shadow-lg shadow-primary-500/25">
+              <Link href="/cadastro" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-7 py-3.5 rounded-xl transition-all shadow-lg shadow-primary-500/25">
                 Treinar minha IA agora <ArrowRight size={18} />
               </Link>
               <Link href="/demo" className="inline-flex items-center gap-2 border border-primary-300 hover:border-primary-500 text-primary-600 font-semibold px-7 py-3.5 rounded-xl transition-all bg-white hover:bg-primary-50">
@@ -185,7 +185,7 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
             </div>
 
             <div className="mt-10 flex items-center justify-center gap-3 flex-wrap">
-              <Link href="/register" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-400 text-white font-semibold px-7 py-3.5 rounded-xl transition-colors shadow-lg shadow-primary-500/30">
+              <Link href="/cadastro" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-400 text-white font-semibold px-7 py-3.5 rounded-xl transition-colors shadow-lg shadow-primary-500/30">
                 Começar agora — 14 dias grátis <ArrowRight size={18} />
               </Link>
               <Link href="/comparativo" className="inline-flex items-center gap-2 text-white/70 hover:text-white font-semibold px-5 py-3.5 transition-colors">
@@ -237,7 +237,7 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
             14 dias grátis. Zero setup fee. Você treina a IA com seus próprios documentos — sem esperar consultor.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register" className="inline-flex items-center justify-center gap-2 bg-primary-500 hover:bg-primary-400 text-white font-semibold px-8 py-4 rounded-xl transition-colors shadow-lg shadow-primary-500/30">
+            <Link href="/cadastro" className="inline-flex items-center justify-center gap-2 bg-primary-500 hover:bg-primary-400 text-white font-semibold px-8 py-4 rounded-xl transition-colors shadow-lg shadow-primary-500/30">
               Treinar minha IA agora <ArrowRight size={18} />
             </Link>
             <Link href="/comparativo" className="inline-flex items-center justify-center gap-2 border border-white/20 text-white font-semibold px-8 py-4 rounded-xl transition-colors hover:bg-white/5">

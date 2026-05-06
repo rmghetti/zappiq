@@ -200,7 +200,7 @@ export function Navbar() {
             Entrar
           </Link>
           <Link href="/cadastro" className="btn btn-primary text-[14px]">
-            Começar grátis
+            Começar 14 dias grátis
           </Link>
         </div>
 
@@ -279,11 +279,11 @@ export function Navbar() {
               Entrar
             </Link>
             <Link
-              href="/register"
+              href="/cadastro"
               onClick={() => setMobileOpen(false)}
               className="btn btn-primary w-full justify-center"
             >
-              Começar grátis
+              Começar 14 dias grátis
             </Link>
           </div>
         </div>
