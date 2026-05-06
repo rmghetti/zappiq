@@ -24,6 +24,19 @@ export const categories = ['Todos', 'Vendas', 'Saúde', 'Tecnologia', 'E-commerc
 
 export const articles: BlogArticle[] = [
   {
+    slug: 'meta-ads-ai-connectors-zappiq',
+    title: 'Meta Ads AI Connectors + ZappIQ: a primeira integração ponta-a-ponta da América Latina',
+    excerpt:
+      'A Meta lançou Ads AI Connectors em 29/04/2026 — o gerador de leads agora é AI-driven. Mas ela deixou um gap proposital: receber e converter o lead. ZappIQ é a primeira plataforma da LATAM a fechar essa ponte. 6 business cases reais por vertical com ROI calculado.',
+    category: 'Tecnologia',
+    date: '2026-05-05',
+    readingTime: '9 min',
+    author: { name: 'Rodrigo Ghetti', initials: 'RG' },
+    relatedSlugs: ['como-recuperar-leads-perdidos-whatsapp', 'roi-chatbots-ia-como-calcular'],
+    /* Página dedicada em app/blog/meta-ads-ai-connectors-zappiq/page.tsx */
+    content: `<p>Lançamento Meta Ads AI Connectors + ZappIQ Iza = primeiro funil 100% AI-driven da LATAM. <a href="/blog/meta-ads-ai-connectors-zappiq">Ler análise completa</a>.</p>`,
+  },
+  {
     slug: 'como-recuperar-leads-perdidos-whatsapp',
     title: 'Como Recuperar Leads Perdidos no WhatsApp: Guia Completo 2026',
     excerpt: 'Descubra estratégias comprovadas para reengajar leads que deixaram de responder no WhatsApp e transforme oportunidades perdidas em vendas concretas.',
