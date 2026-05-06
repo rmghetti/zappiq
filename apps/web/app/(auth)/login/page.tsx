@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuthStore } from '../../../stores/authStore';
 import { Logo } from '../../../components/Logo';
 
@@ -32,7 +33,22 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-3"><Logo variant="positivo" height={48} /></div>
+          {/* Cobrand ZappIQ + Patch MACHIA (mesmo padrão Navbar/Sidebar) */}
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center gap-2 lg:gap-2.5 mb-3"
+            aria-label="ZappIQ — uma plataforma da MACHIA"
+          >
+            <Logo variant="positivo" height={48} />
+            <Image
+              src="/partners/machia/patch-machia.svg"
+              alt="A Platform MACHIA Company"
+              width={48}
+              height={52}
+              priority
+              className="h-12 w-auto"
+            />
+          </Link>
           <p className="text-text-secondary mt-2">Acesse sua plataforma de atendimento inteligente</p>
         </div>
 
