@@ -54,7 +54,7 @@ export function Sidebar() {
             <Logo variant="positivo" height={32} />
             <span className="h-6 w-px bg-gray-200" aria-hidden />
             <Image
-              src="/partners/machia/machia-platform-badge-dark-black.svg"
+              src="/partners/machia/patch-machia.svg"
               alt="A Platform MACHIA Company"
               width={36}
               height={39}
