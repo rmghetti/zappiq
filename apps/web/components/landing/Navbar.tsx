@@ -79,11 +79,12 @@ export function Navbar() {
 
   return (
     <nav
-      className={`fixed left-0 right-0 top-0 z-50 transition-all duration-300 ${
+      className={`fixed left-0 right-0 z-50 transition-all duration-300 ${
         scrolled
           ? 'bg-[rgba(250,250,250,0.85)] backdrop-blur-xl border-b border-line'
           : 'bg-transparent'
       }`}
+      style={{ top: 'var(--zappiq-banner-h, 0px)' }}
     >
       <div className="zappiq-wrap flex items-center justify-between h-[68px]">
         {/* Logo (SVG real · /public/logo-positivo.svg) */}
