@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Logo } from './Logo';
 import {
@@ -42,10 +43,24 @@ export function Sidebar() {
 
   return (
     <aside className={`flex flex-col h-screen bg-white border-r border-gray-200 transition-all duration-300 ${sidebarCollapsed ? 'w-[68px]' : 'w-[260px]'}`}>
-      {/* Logo */}
+      {/* Logo ZappIQ + Patch MACHIA (sidebar não-colapsada) */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-gray-100">
         {!sidebarCollapsed ? (
-          <Link href="/"><Logo variant="positivo" height={32} /></Link>
+          <Link
+            href="/"
+            className="flex items-center gap-2.5"
+            aria-label="ZappIQ — uma plataforma da MACHIA"
+          >
+            <Logo variant="positivo" height={32} />
+            <span className="h-6 w-px bg-gray-200" aria-hidden />
+            <Image
+              src="/partners/machia/machia-platform-badge-dark-black.svg"
+              alt="A Platform MACHIA Company"
+              width={36}
+              height={39}
+              className="h-9 w-auto"
+            />
+          </Link>
         ) : (
           <Link href="/"><Logo variant="icon" height={28} /></Link>
         )}

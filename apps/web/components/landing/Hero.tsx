@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 /* ── Tipos do scenario ── */
 type ChatMsg =
@@ -267,9 +268,16 @@ export function Hero() {
         <div className="grid lg:grid-cols-[1.05fr_.95fr] gap-12 lg:gap-20 items-center">
           {/* Coluna esquerda: copy */}
           <div className="animate-slide-up">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-soft border border-line text-[12px] text-muted mb-6">
-              <span className="w-2 h-2 rounded-full bg-grad" />
-              Integração oficial WhatsApp · dados no Brasil · sem fidelidade
+            {/* Meta Business Partner badge — ZappIQ é parceira oficial Meta */}
+            <div className="inline-flex items-center mb-6">
+              <Image
+                src="/partners/meta-business-partner-badge.svg"
+                alt="Meta Business Partner"
+                width={170}
+                height={94}
+                priority
+                className="h-[60px] w-auto"
+              />
             </div>
 
             <h1 className="text-[44px] sm:text-[56px] lg:text-[72px] leading-[1.0] tracking-[-0.045em] font-semibold text-ink mb-6">
