@@ -28,6 +28,7 @@
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { Navbar } from './Navbar';
+import { AnnouncementBanner } from './AnnouncementBanner';
 import { Hero } from './Hero';
 import { SocialProof } from './SocialProof';
 import { PorQueZappIQ } from './PorQueZappIQ';
@@ -49,6 +50,7 @@ import { SocialProofToast } from './SocialProofToast';
 export function LandingPage() {
   return (
     <div className="overflow-hidden">
+      <AnnouncementBanner />
       <Navbar />
       <Hero />
       <SocialProof />
