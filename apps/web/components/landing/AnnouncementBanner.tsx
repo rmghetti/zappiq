@@ -9,7 +9,7 @@
  * ZappIQ first-mover na LATAM (afirmação aprovada por Rodrigo Ghetti).
  * ══════════════════════════════════════════════════════════════════════════ */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Sparkles, ArrowRight, X } from 'lucide-react';
 
@@ -17,6 +17,7 @@ const STORAGE_KEY = 'zappiq_meta_ai_banner_dismissed_v1';
 
 export function AnnouncementBanner() {
   const [visible, setVisible] = useState(false);
+  const bannerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -27,6 +28,30 @@ export function AnnouncementBanner() {
       setVisible(true);
     }
   }, []);
+
+  /* ── Emite CSS var --zappiq-banner-h pra Navbar ajustar offset top dinamicamente.
+       Usa ResizeObserver pra adaptar quando texto quebra em 2 linhas (mobile). ── */
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    if (!visible) {
+      root.style.setProperty('--zappiq-banner-h', '0px');
+      return;
+    }
+    const setH = () => {
+      const h = bannerRef.current?.getBoundingClientRect().height ?? 42;
+      root.style.setProperty('--zappiq-banner-h', `${Math.round(h)}px`);
+    };
+    setH();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(setH) : null;
+    if (ro && bannerRef.current) ro.observe(bannerRef.current);
+    window.addEventListener('resize', setH);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', setH);
+      root.style.setProperty('--zappiq-banner-h', '0px');
+    };
+  }, [visible]);
 
   const handleDismiss = () => {
     setVisible(false);
@@ -41,7 +66,8 @@ export function AnnouncementBanner() {
 
   return (
     <div
-      className="relative w-full text-white"
+      ref={bannerRef}
+      className="fixed top-0 left-0 right-0 z-[60] w-full text-white"
       style={{
         background: 'linear-gradient(135deg, #0F172A 0%, #1E1B4B 35%, #4C1D95 70%, #2FB57A 110%)',
       }}
