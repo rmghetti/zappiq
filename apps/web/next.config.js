@@ -52,6 +52,21 @@ const nextConfig = {
       },
     ];
   },
+
+  // ── Redirects ──────────────────────────────────────────
+  // /home foi rota interna usada durante o periodo prelaunch (LAUNCH_MODE=prelaunch)
+  // pra preview da landing principal enquanto / mostrava PrelaunchPage. Pos-flip
+  // pra LAUNCH_MODE=live (2026-05-05), /home ficou redundante com / e gerava
+  // duplicate-content pra SEO. Redirect 308 (permanent + preserva metodo) consolida.
+  async redirects() {
+    return [
+      {
+        source: '/home',
+        destination: '/',
+        permanent: true,
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

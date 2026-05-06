@@ -80,7 +80,8 @@ export function AnnouncementBanner() {
 
           <p className="text-[12.5px] lg:text-[14px] font-medium leading-snug">
             <span className="hidden sm:inline">ZappIQ </span>
-            <strong className="text-white">já é a primeira plataforma da América Latina</strong>
+            <strong className="text-white uppercase tracking-wide">É A PRIMEIRA</strong>{' '}
+            <strong className="text-white">plataforma da América Latina</strong>
             <span className="hidden md:inline"> com integração ponta-a-ponta</span>
             {' '}<span className="text-emerald-300">Meta Ads AI Connectors</span>
             <span className="hidden lg:inline"> — Meta gera, Iza qualifica, você fecha</span>

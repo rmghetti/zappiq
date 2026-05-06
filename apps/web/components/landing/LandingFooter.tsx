@@ -9,6 +9,7 @@
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { Logo } from '../Logo';
 import { Shield, Lock, Server, Activity, Radar } from 'lucide-react';
 
@@ -138,9 +139,16 @@ export function Footer() {
             <p className="text-[12.5px] text-white/55 leading-relaxed">
               Inteligência conversacional para PMEs brasileiras via WhatsApp.
             </p>
-            <p className="text-[11px] text-white/35 leading-relaxed mt-3">
-              V4 · Onboarding Zero · Voz Nativa · 14 dias grátis
-            </p>
+            {/* Patch MACHIA — selo "A Platform MACHIA Company" (variante dark + white border) */}
+            <div className="mt-5">
+              <Image
+                src="/partners/machia/machia-platform-badge-dark-white.svg"
+                alt="A Platform MACHIA Company"
+                width={220}
+                height={92}
+                className="h-auto w-[180px] lg:w-[200px]"
+              />
+            </div>
           </div>
 
           {COLUMNS.map((col) => (
@@ -186,7 +194,7 @@ export function Footer() {
         <div className="border-t border-white/8 pt-8 space-y-5">
           <div className="text-[11.5px] text-white/45 leading-relaxed text-center sm:text-left">
             <p className="font-semibold text-white/70">
-              ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA{' '}
+              MACHIA TECNOLOGIA DISRUPTIVA LTDA{' '}
               <span className="text-white/40 font-normal">(d.b.a. ZappIQ)</span>
             </p>
             <p>CNPJ 46.788.145/0001-08 — detentora da marca ZappIQ</p>

@@ -87,8 +87,12 @@ export function Navbar() {
       style={{ top: 'var(--zappiq-banner-h, 0px)' }}
     >
       <div className="zappiq-wrap flex items-center justify-between h-[68px]">
-        {/* Logo (SVG real · /public/logo-positivo.svg) */}
-        <Link href="/" className="flex items-center" aria-label="ZappIQ home">
+        {/* Logo ZappIQ + Patch MACHIA (selo "A Platform MACHIA Company" — dark variant com borda preta) */}
+        <Link
+          href="/"
+          className="flex items-center gap-3 lg:gap-4"
+          aria-label="ZappIQ — uma plataforma da MACHIA"
+        >
           <Image
             src="/logo-positivo.svg"
             alt="ZappIQ"
@@ -96,6 +100,15 @@ export function Navbar() {
             height={40}
             priority
             className="h-10 w-auto"
+          />
+          <span className="hidden sm:block h-7 w-px bg-line/80" aria-hidden />
+          <Image
+            src="/partners/machia/machia-platform-badge-dark-black.svg"
+            alt="A Platform MACHIA Company"
+            width={104}
+            height={50}
+            priority
+            className="hidden sm:block h-9 w-auto"
           />
         </Link>
 
