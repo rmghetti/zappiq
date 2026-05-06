@@ -87,10 +87,11 @@ export function Navbar() {
       style={{ top: 'var(--zappiq-banner-h, 0px)' }}
     >
       <div className="zappiq-wrap flex items-center justify-between h-[68px]">
-        {/* Logo ZappIQ + Patch MACHIA (selo "A Platform MACHIA Company" — dark variant com borda preta) */}
+        {/* Logo ZappIQ + Patch MACHIA (selo "A Platform MACHIA Company" — dark variant com borda preta).
+            Gap reduzido (8-10px) sem divider pra cobrand mais coeso e harmonico. */}
         <Link
           href="/"
-          className="flex items-center gap-3 lg:gap-4"
+          className="flex items-center gap-2 lg:gap-2.5"
           aria-label="ZappIQ — uma plataforma da MACHIA"
         >
           <Image
@@ -101,9 +102,8 @@ export function Navbar() {
             priority
             className="h-10 w-auto"
           />
-          <span className="hidden sm:block h-7 w-px bg-line/80" aria-hidden />
           <Image
-            src="/partners/machia/machia-platform-badge-dark-black.svg"
+            src="/partners/machia/patch-machia.svg"
             alt="A Platform MACHIA Company"
             width={104}
             height={50}
