@@ -333,23 +333,33 @@ export default function OnboardingPage() {
   useEffect(() => {
     setMounted(true);
     try {
-      // Caminho A — Veio do callback OAuth/Magic Link (URL params)
+      // PR #101.3 — Detection robusta multi-source pra skip Step 0.
+      // Caminho A: URL ?from=auth_callback&email=...&name=... (route.ts callback)
+      // Caminho B: localStorage zappiq_oauth_email (Cadastro.tsx hash detection)
+      // Caminho C: localStorage zappiq_token legacy (apps/api JWT)
       const sp = new URLSearchParams(window.location.search);
       const fromCallback = sp.get('from') === 'auth_callback';
       const urlEmail = sp.get('email') || '';
       const urlName = sp.get('name') || '';
 
-      if (fromCallback && urlEmail) {
+      // localStorage fallback (Cadastro.tsx salva email/name após decode JWT)
+      const oauthEmail = localStorage.getItem('zappiq_oauth_email') || '';
+      const oauthName = localStorage.getItem('zappiq_oauth_name') || '';
+
+      const detectedEmail = urlEmail || oauthEmail;
+      const detectedName = urlName || oauthName;
+
+      if (detectedEmail || fromCallback) {
         // Senha randômica forte — Supabase Auth controla autenticação real,
         // backend Prisma só precisa de password pra schema (user pode trocar
-        // depois via /esqueci-senha). 32 chars [a-zA-Z0-9_-] = ~190 bits entropia.
+        // via /esqueci-senha). 32 chars [a-zA-Z0-9_-] = ~190 bits entropia.
         const randomPassword = generateRandomPassword(32);
         const orgName = localStorage.getItem('zappiq_org_name') || '';
 
         setForm((prev) => ({
           ...prev,
-          name: urlName || prev.name,
-          email: urlEmail,
+          name: detectedName || prev.name,
+          email: detectedEmail || prev.email,
           businessName: orgName || prev.businessName,
           password: randomPassword,
         }));
@@ -357,7 +367,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      // Caminho B — Legacy: detectar zappiq_token (apps/api JWT)
+      // Caminho C — Legacy: detectar zappiq_token (apps/api JWT)
       const token = localStorage.getItem('zappiq_token');
       if (token) {
         setStep(1);
