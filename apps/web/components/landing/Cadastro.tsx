@@ -94,6 +94,23 @@ export function Cadastro() {
     const isValidAuthFlow = type === 'signup' || providerToken !== null;
     if (!isValidAuthFlow) return;
 
+    // PR #101.3 — Decodifica JWT Supabase pra extrair email/name e salvar
+    // em localStorage. /onboarding useEffect lê e pula Step 0 ("Crie sua conta")
+    // pre-populando os dados — elimina P0 #2 do audit (signup duplicado).
+    try {
+      const jwtPayload = JSON.parse(atob(accessToken.split('.')[1]));
+      const sbEmail = jwtPayload.email || '';
+      const meta = jwtPayload.user_metadata || {};
+      const sbName = meta.full_name || meta.name || (sbEmail ? sbEmail.split('@')[0] : '');
+      if (sbEmail) {
+        localStorage.setItem('zappiq_oauth_email', sbEmail);
+        localStorage.setItem('zappiq_oauth_name', sbName);
+        localStorage.setItem('zappiq_oauth_provider', providerToken !== null ? 'google' : 'magic_link');
+      }
+    } catch (err) {
+      console.error('[cadastro] JWT decode failed:', err);
+    }
+
     // Analytics: confirm event (distingue Magic Link de OAuth)
     if (providerToken !== null) {
       track('signup_oauth_completed', { provider: 'google' });
