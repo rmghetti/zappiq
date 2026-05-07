@@ -323,13 +323,44 @@ export default function OnboardingPage() {
       businessHours: Object.fromEntries(DAYS_OF_WEEK.map((d) => [d, { open: '', close: '', closed: d === 'Domingo' }])) as Record<string, { open: string; close: string; closed: boolean }>,
   });
 
-  // Inicializar com localStorage APÓS mount (evita hydration mismatch)
+  // PR #101.2 — Pré-popular form quando user vem do callback OAuth/Magic Link
+  // (P0 #2 Signup duplicado). Eliminamos a tela "Crie sua conta" pedindo email/senha
+  // de novo. Em vez disso, callback redirecciona para /onboarding com:
+  //   ?from=auth_callback&email=user@email.com&name=John%20Doe
+  // Frontend lê esses params, gera senha randômica forte (Supabase Auth controla
+  // login real), pré-popula businessName se houver no localStorage do /cadastro,
+  // e pula direto para Step 1 (Segmento).
   useEffect(() => {
     setMounted(true);
     try {
+      // Caminho A — Veio do callback OAuth/Magic Link (URL params)
+      const sp = new URLSearchParams(window.location.search);
+      const fromCallback = sp.get('from') === 'auth_callback';
+      const urlEmail = sp.get('email') || '';
+      const urlName = sp.get('name') || '';
+
+      if (fromCallback && urlEmail) {
+        // Senha randômica forte — Supabase Auth controla autenticação real,
+        // backend Prisma só precisa de password pra schema (user pode trocar
+        // depois via /esqueci-senha). 32 chars [a-zA-Z0-9_-] = ~190 bits entropia.
+        const randomPassword = generateRandomPassword(32);
+        const orgName = localStorage.getItem('zappiq_org_name') || '';
+
+        setForm((prev) => ({
+          ...prev,
+          name: urlName || prev.name,
+          email: urlEmail,
+          businessName: orgName || prev.businessName,
+          password: randomPassword,
+        }));
+        setStep(1); // Pula Step 0 (conta) — já temos os dados
+        return;
+      }
+
+      // Caminho B — Legacy: detectar zappiq_token (apps/api JWT)
       const token = localStorage.getItem('zappiq_token');
       if (token) {
-        setStep(1); // Pula step 0 (conta) se já registrou
+        setStep(1);
         const user = JSON.parse(localStorage.getItem('zappiq_user') || '{}');
         const orgName = localStorage.getItem('zappiq_org_name') || '';
         setForm((prev) => ({
@@ -342,6 +373,14 @@ export default function OnboardingPage() {
       }
     } catch { /* sem dados salvos */ }
   }, []);
+
+  // Gera senha randômica forte usando crypto.getRandomValues (browser-native).
+  function generateRandomPassword(len: number): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const arr = new Uint32Array(len);
+    crypto.getRandomValues(arr);
+    return Array.from(arr).map((n) => chars[n % chars.length]).join('');
+  }
 
   // Accordion state para blocos globais (Step 3)
   const [openBlocks, setOpenBlocks] = useState<Record<string, boolean>>({ identidade_empresa: true });
@@ -430,16 +469,70 @@ export default function OnboardingPage() {
     }
   }
 
+  // PR #101.2 — Wire backend real. Cria Organization + User + Agent default
+  // + Knowledge Base + RAG ingestion do survey. Antes era só localStorage mock.
   async function handleSubmit() {
     setLoading(true);
     setError('');
     try {
-      // Salvar localmente
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://zappiq-api.fly.dev';
+
+      // Consolida survey answers do formulário (3 níveis: global + segment + subsegment)
+      const surveyAnswers: Record<string, any> = {
+        identidade_empresa: form.globalAnswers,
+        segmento: form.segmentAnswers,
+        subsegmentos: form.subsegmentAnswers,
+      };
+
+      const businessHoursMap: Record<string, string> = {};
+      for (const [day, h] of Object.entries(form.businessHours)) {
+        businessHoursMap[day] = h.closed ? 'fechado' : `${h.open || '08:00'}-${h.close || '18:00'}`;
+      }
+
+      const payload = {
+        name: form.name,
+        businessName: form.businessName,
+        email: form.email,
+        password: form.password === 'already_set' ? generateRandomPassword(32) : form.password,
+        phone: form.phone || undefined,
+        niche: form.segment || form.subsegments[0] || 'geral',
+        agentName: form.agentName,
+        tone: form.tone,
+        businessHours: businessHoursMap,
+        greetingMessage: form.greetingMessage || undefined,
+        handoffMessage: form.handoffMessage || undefined,
+        surveyAnswers,
+      };
+
+      const res = await fetch(`${apiUrl}/api/onboarding/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          // Email já registrado — provável retomada de onboarding interrompido
+          // Salva localmente e segue pro dashboard (user já existe)
+          localStorage.setItem('zappiq_onboarding', JSON.stringify(form));
+          router.push('/dashboard');
+          return;
+        }
+        throw new Error(data?.error || `Erro ${res.status} ao finalizar onboarding`);
+      }
+
+      const data = await res.json();
+      // Persiste token JWT do backend Prisma — autenticação dashboard
+      if (data.token) localStorage.setItem('zappiq_token', data.token);
+      if (data.refreshToken) localStorage.setItem('zappiq_refresh_token', data.refreshToken);
+      if (data.organization?.name) localStorage.setItem('zappiq_org_name', data.organization.name);
+      // Backup do form completo (debug + retomada se algo falhar)
       localStorage.setItem('zappiq_onboarding', JSON.stringify(form));
-      // Redirecionar
+
       router.push('/dashboard');
-    } catch {
-      setError('Erro ao salvar configurações. Tente novamente.');
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao salvar configurações. Tente novamente.');
     } finally {
       setLoading(false);
     }
