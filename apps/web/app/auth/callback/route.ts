@@ -103,5 +103,23 @@ export async function GET(req: Request) {
     // Não bloqueia — usuário ainda está autenticado em auth.users
   }
 
-  return NextResponse.redirect(new URL(next, url.origin));
+  // PR #101.2 — Pré-popular dados do user em /onboarding pra evitar
+  // pedir email/senha de novo (P0 #2 Signup Duplicado).
+  // Email e name vão por query string (email não é segredo + name é público).
+  const meta = data.user.user_metadata || {};
+  const fullName =
+    (meta.full_name as string | undefined) ||
+    (meta.name as string | undefined) ||
+    data.user.email.split('@')[0];
+
+  const redirectUrl = new URL(next, url.origin);
+  // Só anexa se a URL ainda não tiver email/name (preserva customizações)
+  if (!redirectUrl.searchParams.has('email')) {
+    redirectUrl.searchParams.set('email', data.user.email.toLowerCase());
+  }
+  if (!redirectUrl.searchParams.has('name')) {
+    redirectUrl.searchParams.set('name', fullName);
+  }
+
+  return NextResponse.redirect(redirectUrl);
 }
