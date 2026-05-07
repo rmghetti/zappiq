@@ -91,7 +91,12 @@ function geminiOk(text: string, promptTok = 100, candidatesTok = 50): Response {
 }
 
 describe('LLMRouter', () => {
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  // PR #102 hotfix — vi.spyOn em globalThis.fetch retorna MockInstance com
+  // generic params que não bate com `ReturnType<typeof vi.spyOn>` default
+  // (que assume args genéricos `unknown[]`). Cast pra `any` no spy é o jeito
+  // pragmático em arquivos de teste — TS strict não casa com fetch overloads.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let fetchSpy: any;
 
   beforeEach(() => {
     __resetBreakersForTest();
