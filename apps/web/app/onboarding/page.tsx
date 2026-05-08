@@ -363,7 +363,18 @@ export default function OnboardingPage() {
           businessName: orgName || prev.businessName,
           password: randomPassword,
         }));
-        setStep(1); // Pula Step 0 (conta) — já temos os dados
+        // PR #103.3 — Só pula Step 0 se TODOS os campos exigidos pelo backend
+        // já estiverem preenchidos. businessName vazio (Google OAuth sem
+        // /cadastro prévio) faz Zod rejeitar `businessName: too small` no
+        // Step 8. Melhor manter Step 0 visível com email/name read-only e
+        // user preenche o nome da empresa antes de seguir.
+        const hasName = (detectedName || '').trim().length >= 2;
+        const hasOrgName = orgName.trim().length >= 2;
+        if (hasName && hasOrgName) {
+          setStep(1); // Pula Step 0 (conta) — já temos todos dados
+        } else {
+          setStep(0); // Mantém Step 0 — cliente completa name/businessName
+        }
         return;
       }
 
