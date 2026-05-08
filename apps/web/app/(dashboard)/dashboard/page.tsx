@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { MessageSquare, Users, Bot, CalendarCheck, TrendingUp, Clock, Sparkles, Upload, BookOpen, Settings, ArrowRight } from 'lucide-react';
+import { MessageSquare, Users, Bot, CalendarCheck, TrendingUp, Clock } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { AgentTrainingWidget } from '../../../components/dashboard/AgentTrainingWidget';
 
 interface OverviewData {
   totalMessages: number;
@@ -16,20 +16,10 @@ interface OverviewData {
   csat: number;
 }
 
-interface OnboardingData {
-  segment?: string;
-  agentName?: string;
-  businessName?: string;
-}
-
 export default function DashboardPage() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('7d');
-  // PR #101.4 — Widget boas-vindas pós-onboarding (P0 #4 do audit).
-  // Mostra dados reais do que o cliente preencheu + atalhos pras features.
-  const [onboarding, setOnboarding] = useState<OnboardingData | null>(null);
-  const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -37,27 +27,7 @@ export default function DashboardPage() {
       .then((res) => setData(res.data || res))
       .catch(() => setData(null))
       .finally(() => setLoading(false));
-
-    // Carrega snapshot do onboarding pra widget boas-vindas (apenas uma vez)
-    try {
-      const raw = localStorage.getItem('zappiq_onboarding');
-      const dismissed = localStorage.getItem('zappiq_welcome_dismissed_v1');
-      if (raw && !dismissed) {
-        const parsed = JSON.parse(raw);
-        setOnboarding({
-          segment: parsed.segment,
-          agentName: parsed.agentName || 'Iza',
-          businessName: parsed.businessName,
-        });
-        setShowWelcome(true);
-      }
-    } catch { /* ignore */ }
   }, [period]);
-
-  function dismissWelcome() {
-    try { localStorage.setItem('zappiq_welcome_dismissed_v1', '1'); } catch {}
-    setShowWelcome(false);
-  }
 
   const kpis = data ? [
     { label: 'Mensagens', value: data.totalMessages, icon: MessageSquare, color: 'text-blue-600 bg-blue-50' },
@@ -70,68 +40,11 @@ export default function DashboardPage() {
 
   return (
     <div>
-      {/* PR #101.4 — Widget boas-vindas pós-onboarding (visível 1x até dismiss) */}
-      {showWelcome && onboarding && (
-        <div className="mb-6 rounded-2xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-violet-50 p-6 shadow-sm relative">
-          <button
-            onClick={dismissWelcome}
-            aria-label="Fechar"
-            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-sm font-medium"
-          >
-            ✕
-          </button>
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-violet-600 text-white flex items-center justify-center flex-shrink-0">
-              <Sparkles size={22} />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-bold text-gray-900 mb-1">
-                Bem-vindo{onboarding.businessName ? `, ${onboarding.businessName}` : ''}!
-              </h2>
-              <p className="text-sm text-gray-700 mb-3">
-                Sua agente <strong className="text-emerald-700">{onboarding.agentName || 'Iza'}</strong>
-                {onboarding.segment && <> foi configurada para o segmento <strong>{onboarding.segment}</strong></>}.
-                Próximos passos pra ela atender 24/7:
-              </p>
-              <div className="grid sm:grid-cols-3 gap-3">
-                <Link
-                  href="/knowledge-base"
-                  className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-emerald-400 hover:shadow-sm transition-all group"
-                >
-                  <Upload size={18} className="text-emerald-600 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-gray-900">Alimentar Iza</div>
-                    <div className="text-xs text-gray-500">Upload docs + URLs</div>
-                  </div>
-                  <ArrowRight size={14} className="text-gray-400 group-hover:text-emerald-600" />
-                </Link>
-                <Link
-                  href="/ai-training"
-                  className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-violet-400 hover:shadow-sm transition-all group"
-                >
-                  <BookOpen size={18} className="text-violet-600 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-gray-900">Treinar Iza</div>
-                    <div className="text-xs text-gray-500">Q&A + tom de voz</div>
-                  </div>
-                  <ArrowRight size={14} className="text-gray-400 group-hover:text-violet-600" />
-                </Link>
-                <Link
-                  href="/settings"
-                  className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-blue-400 hover:shadow-sm transition-all group"
-                >
-                  <Settings size={18} className="text-blue-600 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-gray-900">Configurar</div>
-                    <div className="text-xs text-gray-500">WhatsApp + plano</div>
-                  </div>
-                  <ArrowRight size={14} className="text-gray-400 group-hover:text-blue-600" />
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* PR #106 — AgentTrainingWidget substitui Welcome widget hardcoded.
+          Lê /api/ai-training/status (não localStorage) → dados sempre frescos
+          do DB. Renderiza ${agent.name} dinâmico. Mostra nextActions proativas
+          do backend. Aparece enquanto agente não atinge level=expert. */}
+      <AgentTrainingWidget />
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
