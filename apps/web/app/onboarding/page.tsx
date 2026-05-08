@@ -332,7 +332,39 @@ export default function OnboardingPage() {
   // e pula direto para Step 1 (Segmento).
   useEffect(() => {
     setMounted(true);
+    void detectAndPrefillForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function detectAndPrefillForm() {
     try {
+      // PR #103.5 — Skip onboarding inteiro se cliente JA tem JWT valido
+      // (User Prisma + Org existe). Antes esse cliente passava pelos 8 steps,
+      // backend retornava 409, caia em loop /login (fix 103.4 deu workaround
+      // com banner azul, mas UX continua ruim — preencher 8 steps em vao).
+      //
+      // Agora: detecta zappiq_token, valida via /api/auth/me, se 200 -> direto
+      // pro /dashboard. Cliente NUNCA mais ve /onboarding se ja tem org.
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://zappiq-api.fly.dev';
+        const token = localStorage.getItem('zappiq_token');
+        if (token) {
+          const meRes = await fetch(`${apiUrl}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (meRes.ok) {
+            const me = await meRes.json();
+            // Se tem organization, onboarding ja esta completo
+            if (me?.organization?.id) {
+              router.replace('/dashboard');
+              return;
+            }
+          }
+        }
+      } catch {
+        // Ignora — continua flow normal de onboarding
+      }
+
       // PR #101.3 — Detection robusta multi-source pra skip Step 0.
       // Caminho A: URL ?from=auth_callback&email=...&name=... (route.ts callback)
       // Caminho B: localStorage zappiq_oauth_email (Cadastro.tsx hash detection)
@@ -393,7 +425,7 @@ export default function OnboardingPage() {
         }));
       }
     } catch { /* sem dados salvos */ }
-  }, []);
+  }
 
   // Gera senha randômica forte usando crypto.getRandomValues (browser-native).
   function generateRandomPassword(len: number): string {
