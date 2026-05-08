@@ -47,10 +47,33 @@ const httpServer = createServer(app);
 // Trust first proxy (Fly.io) -- required for express-rate-limit behind reverse proxy
 app.set('trust proxy', 1);
 
+// ── CORS allowlist ──────────────────────────────────────
+// Permite producao (NEXT_PUBLIC_APP_URL) + Vercel Previews (qualquer subdomain
+// que combine com o padrao zappiq-*-zappiq.vercel.app ou zappiq-git-*.vercel.app).
+// Sem isso, smoke E2E em Preview falha com "Failed to fetch" (CORS rejection).
+const ALLOWED_ORIGIN_PATTERNS: Array<string | RegExp> = [
+  env.NEXT_PUBLIC_APP_URL,
+  /^https:\/\/zappiq-git-[a-z0-9-]+-zappiq\.vercel\.app$/, // branch alias previews
+  /^https:\/\/zappiq-[a-z0-9]+-zappiq\.vercel\.app$/, // deployment hash previews
+];
+
+function corsOriginCheck(
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void,
+): void {
+  // Server-to-server, healthchecks, curl sem Origin: permitir.
+  if (!origin) return callback(null, true);
+  const ok = ALLOWED_ORIGIN_PATTERNS.some((p) =>
+    typeof p === 'string' ? p === origin : p.test(origin),
+  );
+  if (ok) return callback(null, true);
+  callback(new Error(`CORS: origin ${origin} not allowed`));
+}
+
 // ── Socket.io ───────────────────────────────────
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: env.NEXT_PUBLIC_APP_URL,
+    origin: corsOriginCheck,
     methods: ['GET', 'POST'],
   },
 });
@@ -116,7 +139,7 @@ app.use('/api/webhook/whatsapp', express.raw({ type: 'application/json', limit: 
 
 // ── Global Middleware ────────────────────────────
 app.use(helmet());
-app.use(cors({ origin: env.NEXT_PUBLIC_APP_URL, credentials: true }));
+app.use(cors({ origin: corsOriginCheck, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('short', { stream: { write: (msg: string) => logger.info(msg.trim()) } }));
 

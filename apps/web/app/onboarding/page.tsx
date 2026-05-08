@@ -332,7 +332,39 @@ export default function OnboardingPage() {
   // e pula direto para Step 1 (Segmento).
   useEffect(() => {
     setMounted(true);
+    void detectAndPrefillForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function detectAndPrefillForm() {
     try {
+      // PR #103.5 — Skip onboarding inteiro se cliente JA tem JWT valido
+      // (User Prisma + Org existe). Antes esse cliente passava pelos 8 steps,
+      // backend retornava 409, caia em loop /login (fix 103.4 deu workaround
+      // com banner azul, mas UX continua ruim — preencher 8 steps em vao).
+      //
+      // Agora: detecta zappiq_token, valida via /api/auth/me, se 200 -> direto
+      // pro /dashboard. Cliente NUNCA mais ve /onboarding se ja tem org.
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://zappiq-api.fly.dev';
+        const token = localStorage.getItem('zappiq_token');
+        if (token) {
+          const meRes = await fetch(`${apiUrl}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (meRes.ok) {
+            const me = await meRes.json();
+            // Se tem organization, onboarding ja esta completo
+            if (me?.organization?.id) {
+              router.replace('/dashboard');
+              return;
+            }
+          }
+        }
+      } catch {
+        // Ignora — continua flow normal de onboarding
+      }
+
       // PR #101.3 — Detection robusta multi-source pra skip Step 0.
       // Caminho A: URL ?from=auth_callback&email=...&name=... (route.ts callback)
       // Caminho B: localStorage zappiq_oauth_email (Cadastro.tsx hash detection)
@@ -363,7 +395,18 @@ export default function OnboardingPage() {
           businessName: orgName || prev.businessName,
           password: randomPassword,
         }));
-        setStep(1); // Pula Step 0 (conta) — já temos os dados
+        // PR #103.3 — Só pula Step 0 se TODOS os campos exigidos pelo backend
+        // já estiverem preenchidos. businessName vazio (Google OAuth sem
+        // /cadastro prévio) faz Zod rejeitar `businessName: too small` no
+        // Step 8. Melhor manter Step 0 visível com email/name read-only e
+        // user preenche o nome da empresa antes de seguir.
+        const hasName = (detectedName || '').trim().length >= 2;
+        const hasOrgName = orgName.trim().length >= 2;
+        if (hasName && hasOrgName) {
+          setStep(1); // Pula Step 0 (conta) — já temos todos dados
+        } else {
+          setStep(0); // Mantém Step 0 — cliente completa name/businessName
+        }
         return;
       }
 
@@ -382,7 +425,7 @@ export default function OnboardingPage() {
         }));
       }
     } catch { /* sem dados salvos */ }
-  }, []);
+  }
 
   // Gera senha randômica forte usando crypto.getRandomValues (browser-native).
   function generateRandomPassword(len: number): string {
@@ -523,11 +566,28 @@ export default function OnboardingPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         if (res.status === 409) {
-          // Email já registrado — provável retomada de onboarding interrompido
-          // Salva localmente e segue pro dashboard (user já existe)
+          // PR #103.4 — Email ja registrado: cliente JA tem User no Prisma
+          // (provavelmente fez signup/onboarding antes via Magic Link ou OAuth).
+          // ANTES esse branch redirecionava pra /dashboard SEM JWT, e /dashboard
+          // rejeitava por falta de token, mandando o cliente pra /login. Loop.
+          //
+          // FIX: redireciona pra /login com flag explicando o motivo. La cliente
+          // entra via Google/Magic Link, /auth/login-callback faz passwordless
+          // exchange (existe User Prisma -> 200 com JWT), e cai em /dashboard.
           localStorage.setItem('zappiq_onboarding', JSON.stringify(form));
-          router.push('/dashboard');
+          router.push('/login?reason=already_registered');
           return;
+        }
+        // PR #103.2 — Mostra detalhes da validação Zod pro user (e log no console
+        // pra debug). Antes só mostrava "Validation failed" genérico, sem dizer
+        // qual campo falhou — frustrante quando o erro é trivial (ex: name vazio
+        // por OAuth Google sem scope completo).
+        if (res.status === 400 && Array.isArray(data?.details) && data.details.length > 0) {
+          const fieldErrors = data.details
+            .map((d: { field: string; message: string }) => `${d.field}: ${d.message}`)
+            .join(' · ');
+          console.error('[onboarding] Validation failed:', data.details, 'Payload:', payload);
+          throw new Error(`Faltou preencher: ${fieldErrors}`);
         }
         throw new Error(data?.error || `Erro ${res.status} ao finalizar onboarding`);
       }
