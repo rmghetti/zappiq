@@ -29,6 +29,7 @@ import campaignsRoutes from './routes/campaigns.js';
 import analyticsRoutes from './routes/analytics.js';
 import flowsRoutes from './routes/flows.js';
 import knowledgeBaseRoutes from './routes/knowledgeBase.js';
+import aiTrainingRoutes from './routes/aiTraining.js'; // PR #106.1 — readiness score + KB upload + Q&A + identity
 import templatesRoutes from './routes/templates.js';
 import dealsRoutes from './routes/deals.js';
 import billingRoutes from './routes/billing.js';
@@ -225,6 +226,7 @@ app.use('/api/campaigns', authMiddleware, rlsTenantMiddleware, campaignsRoutes);
 app.use('/api/analytics', authMiddleware, rlsTenantMiddleware, analyticsRoutes);
 app.use('/api/flows', authMiddleware, rlsTenantMiddleware, flowsRoutes);
 app.use('/api/kb', authMiddleware, rlsTenantMiddleware, knowledgeBaseRoutes);
+app.use('/api/ai-training', authMiddleware, rlsTenantMiddleware, aiTrainingRoutes); // PR #106.1
 app.use('/api/templates', authMiddleware, rlsTenantMiddleware, templatesRoutes);
 app.use('/api/deals', authMiddleware, rlsTenantMiddleware, dealsRoutes);
 app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes);
