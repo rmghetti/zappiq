@@ -16,24 +16,35 @@
  *   - "Esqueci minha senha" → /recuperar-senha (rota nova nesta PR)
  * ══════════════════════════════════════════════════════════════════════════ */
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Loader2, Mail, Lock, ChevronDown, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Loader2, Mail, Lock, ChevronDown, AlertCircle, CheckCircle2, ArrowRight, Info } from 'lucide-react';
 import { useAuthStore } from '../../../stores/authStore';
 import { Logo } from '../../../components/Logo';
 
 type Mode = 'choose' | 'magic_sent' | 'password_form';
 
-export default function LoginPage() {
+function LoginInner() {
   const router = useRouter();
+  const search = useSearchParams();
   const { login } = useAuthStore();
   const [mode, setMode] = useState<Mode>('choose');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // PR #103.4 — Banner explicativo quando vem do /onboarding com 409
+  // (cliente JA tinha conta e tentou completar onboarding de novo).
+  useEffect(() => {
+    const reason = search.get('reason');
+    if (reason === 'already_registered') {
+      setInfo('Você já tem conta no ZappIQ. Entre com Google ou link mágico pra acessar seu dashboard.');
+    }
+  }, [search]);
 
   // ─── Google OAuth login ──────────────────────────────────────────
   async function handleGoogle() {
@@ -162,6 +173,12 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg p-8 space-y-4">
+          {info && (
+            <div className="flex items-start gap-2 bg-blue-50 text-blue-800 px-4 py-3 rounded-lg text-sm border border-blue-200">
+              <Info size={16} className="mt-0.5 flex-shrink-0" />
+              <span>{info}</span>
+            </div>
+          )}
           {error && (
             <div className="flex items-start gap-2 bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">
               <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
@@ -280,5 +297,19 @@ export default function LoginPage() {
         <p className="text-center text-xs text-gray-400 mt-6">ZappIQ © 2026 · uma plataforma MACHIA 🇧🇷</p>
       </div>
     </div>
+  );
+}
+
+// PR #103.4 — Suspense boundary obrigatório porque LoginInner usa useSearchParams.
+// Mesmo padrão do /auth/login-callback — Next.js 14 App Router exige.
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 size={28} className="animate-spin text-primary-500" />
+      </div>
+    }>
+      <LoginInner />
+    </Suspense>
   );
 }

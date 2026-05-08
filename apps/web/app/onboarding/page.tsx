@@ -534,10 +534,16 @@ export default function OnboardingPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         if (res.status === 409) {
-          // Email já registrado — provável retomada de onboarding interrompido
-          // Salva localmente e segue pro dashboard (user já existe)
+          // PR #103.4 — Email ja registrado: cliente JA tem User no Prisma
+          // (provavelmente fez signup/onboarding antes via Magic Link ou OAuth).
+          // ANTES esse branch redirecionava pra /dashboard SEM JWT, e /dashboard
+          // rejeitava por falta de token, mandando o cliente pra /login. Loop.
+          //
+          // FIX: redireciona pra /login com flag explicando o motivo. La cliente
+          // entra via Google/Magic Link, /auth/login-callback faz passwordless
+          // exchange (existe User Prisma -> 200 com JWT), e cai em /dashboard.
           localStorage.setItem('zappiq_onboarding', JSON.stringify(form));
-          router.push('/dashboard');
+          router.push('/login?reason=already_registered');
           return;
         }
         // PR #103.2 — Mostra detalhes da validação Zod pro user (e log no console
