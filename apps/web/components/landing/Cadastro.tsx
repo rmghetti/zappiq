@@ -118,37 +118,74 @@ export function Cadastro() {
       track('signup_email_confirmed', { provider: 'email' });
     }
 
-    // Avança imediatamente pro step 3 (UX)
-    setStep(3);
+    // PR #105 — Tentativa LOGIN RETORNO antes de signup flow.
+    // Quando cliente já tem conta (User + Org Prisma), Supabase OAuth retorna
+    // pra /cadastro?verified=1 mesmo sendo login (bug arquitetural com user
+    // existente). Fix: chama passwordless-exchange ANTES de setStep(3).
+    // Se 200 → cliente já existe → salva JWT + redirect /dashboard.
+    // Se 404 → no_account → segue flow signup atual.
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://zappiq-api.fly.dev';
+    void (async () => {
+      try {
+        const exchangeRes = await fetch(`${API_BASE}/api/auth/passwordless-exchange`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken }),
+        });
+        if (exchangeRes.ok) {
+          const ex = await exchangeRes.json();
+          if (ex.token && ex.user) {
+            localStorage.setItem('zappiq_token', ex.token);
+            if (ex.refreshToken) {
+              localStorage.setItem('zappiq_refresh_token', ex.refreshToken);
+            }
+            // Limpa hash + redireciona pro dashboard
+            const cleanUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+            window.location.replace('/dashboard');
+            return;
+          }
+        }
+        // 404 ou outro erro: fallback pro signup flow
+        if (exchangeRes.status !== 404) {
+          console.warn('[cadastro] passwordless-exchange unexpected status:', exchangeRes.status);
+        }
+      } catch (err) {
+        console.warn('[cadastro] passwordless-exchange failed, falling back to signup:', err);
+      }
 
-    // Limpa hash da URL pra não vazar tokens em logs/screenshots
-    const cleanUrl = window.location.pathname + window.location.search;
-    window.history.replaceState({}, document.title, cleanUrl);
+      // FALLBACK — flow signup atual (cliente novo)
+      setStep(3);
 
-    // Lê plan da query string (passado pelo OAuth flow via /api/signup/google)
-    const planFromQuery = search.get('plan') || undefined;
+      // Limpa hash da URL pra não vazar tokens em logs/screenshots
+      const cleanUrl = window.location.pathname + window.location.search;
+      window.history.replaceState({}, document.title, cleanUrl);
 
-    // UTM first-touch (PR #94) — pra OAuth path, pegamos do storage
-    // e mandamos pro confirm-signup que faz UPSERT incluindo as colunas.
-    const utm = getUtm();
+      // Lê plan da query string (passado pelo OAuth flow via /api/signup/google)
+      const planFromQuery = search.get('plan') || undefined;
 
-    // Atualiza signup status no backend (fire-and-forget)
-    // Backend faz UPSERT: cria row se OAuth (sem signup pré-criado),
-    // atualiza se Magic Link (row já existe).
-    fetch('/api/auth/confirm-signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        plan: planFromQuery,
-        utm_source: utm.utm_source || null,
-        utm_medium: utm.utm_medium || null,
-        utm_campaign: utm.utm_campaign || null,
-      }),
-    }).catch((err) => {
-      console.error('[cadastro] Confirm signup background error:', err);
-    });
+      // UTM first-touch (PR #94) — pra OAuth path, pegamos do storage
+      // e mandamos pro confirm-signup que faz UPSERT incluindo as colunas.
+      const utm = getUtm();
+
+      // Atualiza signup status no backend (fire-and-forget)
+      // Backend faz UPSERT: cria row se OAuth (sem signup pré-criado),
+      // atualiza se Magic Link (row já existe).
+      fetch('/api/auth/confirm-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          plan: planFromQuery,
+          utm_source: utm.utm_source || null,
+          utm_medium: utm.utm_medium || null,
+          utm_campaign: utm.utm_campaign || null,
+        }),
+      }).catch((err) => {
+        console.error('[cadastro] Confirm signup background error:', err);
+      });
+    })();
   }, [search]);
 
   // ─── Step 1 → submit ───
