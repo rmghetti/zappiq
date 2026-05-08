@@ -529,6 +529,17 @@ export default function OnboardingPage() {
           router.push('/dashboard');
           return;
         }
+        // PR #103.2 — Mostra detalhes da validação Zod pro user (e log no console
+        // pra debug). Antes só mostrava "Validation failed" genérico, sem dizer
+        // qual campo falhou — frustrante quando o erro é trivial (ex: name vazio
+        // por OAuth Google sem scope completo).
+        if (res.status === 400 && Array.isArray(data?.details) && data.details.length > 0) {
+          const fieldErrors = data.details
+            .map((d: { field: string; message: string }) => `${d.field}: ${d.message}`)
+            .join(' · ');
+          console.error('[onboarding] Validation failed:', data.details, 'Payload:', payload);
+          throw new Error(`Faltou preencher: ${fieldErrors}`);
+        }
         throw new Error(data?.error || `Erro ${res.status} ao finalizar onboarding`);
       }
 
