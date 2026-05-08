@@ -11,7 +11,7 @@
  *  - analyzeSentiment retorna enum normalizado
  * ══════════════════════════════════════════════════════════════════════ */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 
 // Mock LLMRouter inteiro
 vi.mock('./LLMRouter.js', () => {
@@ -23,9 +23,16 @@ vi.mock('./LLMRouter.js', () => {
 });
 
 import { chatCompletion, classify, analyzeSentiment } from './langchainClient.js';
-// Recupera o spy do mock
-const { llmRouter } = await import('./LLMRouter.js');
-const mockComplete = (llmRouter as any).complete as ReturnType<typeof vi.fn>;
+
+// PR #102 hotfix — top-level await quebra em CommonJS module compilation.
+// Movendo o dynamic import pra beforeAll (async function) resolve o erro
+// TS1309: "current file is a CommonJS module and cannot use 'await' at the top level".
+let mockComplete: ReturnType<typeof vi.fn>;
+
+beforeAll(async () => {
+  const mod = await import('./LLMRouter.js');
+  mockComplete = (mod.llmRouter as unknown as { complete: ReturnType<typeof vi.fn> }).complete;
+});
 
 beforeEach(() => {
   mockComplete.mockReset();
