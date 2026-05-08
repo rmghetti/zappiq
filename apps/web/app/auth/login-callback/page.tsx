@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /auth/login-callback — PR #102
+ * /auth/login-callback — PR #102 (v2 com Suspense)
  * --------------------------------------------------------------------------
  * Page client-side que recebe redirect pós-Google OAuth ou pós-Magic Link.
  *
@@ -15,11 +15,12 @@
  *   - Backend valida JWT, busca User Prisma pelo email, retorna JWT nosso
  *   - Frontend salva JWT nosso em localStorage e vai pra /dashboard
  *
- * Se user não existe no Prisma (Supabase user OK mas onboarding incompleto),
- * redireciona pra /onboarding. Se erro de rede/server, mostra erro + retry.
+ * Hotfix v2 (PR #102 build fail): useSearchParams() no App Router exige
+ * Suspense boundary pra prerender. Solução: separar inner component que
+ * usa useSearchParams + envolver em <Suspense> no default export.
  * ══════════════════════════════════════════════════════════════════════════ */
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -29,7 +30,7 @@ import { Logo } from '../../../components/Logo';
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || 'https://zappiq-api.fly.dev';
 
-export default function LoginCallbackPage() {
+function LoginCallbackInner() {
   const router = useRouter();
   const search = useSearchParams();
   const [status, setStatus] = useState<'processing' | 'error' | 'no_account'>('processing');
@@ -114,6 +115,73 @@ export default function LoginCallbackPage() {
     }
   }
 
+  if (status === 'processing') {
+    return (
+      <>
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-50 mb-5">
+          <Loader2 size={28} className="text-primary-500 animate-spin" />
+        </div>
+        <h2 className="text-xl font-semibold text-text-primary mb-2">Entrando...</h2>
+        <p className="text-sm text-text-secondary">Validando sessão e abrindo seu dashboard.</p>
+      </>
+    );
+  }
+
+  if (status === 'no_account') {
+    return (
+      <>
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-yellow-50 mb-5">
+          <AlertCircle size={28} className="text-yellow-600" />
+        </div>
+        <h2 className="text-xl font-semibold text-text-primary mb-2">Onboarding incompleto</h2>
+        <p className="text-sm text-text-secondary leading-relaxed mb-6">
+          Sua conta foi criada, mas o onboarding ainda não foi finalizado. Vamos te levar pra lá.
+        </p>
+        <button
+          onClick={() => router.push('/onboarding?from=login_callback')}
+          className="w-full bg-primary-500 text-white py-2.5 rounded-lg font-medium hover:bg-primary-600 transition-colors"
+        >
+          Continuar onboarding
+        </button>
+      </>
+    );
+  }
+
+  // status === 'error'
+  return (
+    <>
+      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-50 mb-5">
+        <AlertCircle size={28} className="text-red-600" />
+      </div>
+      <h2 className="text-xl font-semibold text-text-primary mb-2">Não conseguimos entrar</h2>
+      <p className="text-sm text-text-secondary leading-relaxed mb-2">
+        {errorMsg || 'Erro inesperado'}
+      </p>
+      <p className="text-xs text-text-secondary/70 mb-6">
+        O link pode ter expirado ou já ter sido usado. Tente entrar novamente.
+      </p>
+      <Link
+        href="/login"
+        className="block w-full bg-primary-500 text-white py-2.5 rounded-lg font-medium hover:bg-primary-600 transition-colors"
+      >
+        Voltar ao login
+      </Link>
+    </>
+  );
+}
+
+function FallbackLoading() {
+  return (
+    <>
+      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-50 mb-5">
+        <Loader2 size={28} className="text-primary-500 animate-spin" />
+      </div>
+      <h2 className="text-xl font-semibold text-text-primary mb-2">Carregando...</h2>
+    </>
+  );
+}
+
+export default function LoginCallbackPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
@@ -125,54 +193,9 @@ export default function LoginCallbackPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-          {status === 'processing' && (
-            <>
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-50 mb-5">
-                <Loader2 size={28} className="text-primary-500 animate-spin" />
-              </div>
-              <h2 className="text-xl font-semibold text-text-primary mb-2">Entrando...</h2>
-              <p className="text-sm text-text-secondary">Validando sessão e abrindo seu dashboard.</p>
-            </>
-          )}
-
-          {status === 'no_account' && (
-            <>
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-yellow-50 mb-5">
-                <AlertCircle size={28} className="text-yellow-600" />
-              </div>
-              <h2 className="text-xl font-semibold text-text-primary mb-2">Onboarding incompleto</h2>
-              <p className="text-sm text-text-secondary leading-relaxed mb-6">
-                Sua conta foi criada, mas o onboarding ainda não foi finalizado. Vamos te levar pra lá.
-              </p>
-              <button
-                onClick={() => router.push('/onboarding?from=login_callback')}
-                className="w-full bg-primary-500 text-white py-2.5 rounded-lg font-medium hover:bg-primary-600 transition-colors"
-              >
-                Continuar onboarding
-              </button>
-            </>
-          )}
-
-          {status === 'error' && (
-            <>
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-50 mb-5">
-                <AlertCircle size={28} className="text-red-600" />
-              </div>
-              <h2 className="text-xl font-semibold text-text-primary mb-2">Não conseguimos entrar</h2>
-              <p className="text-sm text-text-secondary leading-relaxed mb-2">
-                {errorMsg || 'Erro inesperado'}
-              </p>
-              <p className="text-xs text-text-secondary/70 mb-6">
-                O link pode ter expirado ou já ter sido usado. Tente entrar novamente.
-              </p>
-              <Link
-                href="/login"
-                className="block w-full bg-primary-500 text-white py-2.5 rounded-lg font-medium hover:bg-primary-600 transition-colors"
-              >
-                Voltar ao login
-              </Link>
-            </>
-          )}
+          <Suspense fallback={<FallbackLoading />}>
+            <LoginCallbackInner />
+          </Suspense>
         </div>
       </div>
     </div>
