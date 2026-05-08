@@ -53,16 +53,16 @@ export async function POST(req: Request) {
       },
     });
 
-    // Em caso de erro "User not found", devolvemos 200 pra evitar enumeração.
-    // Cliente vê mesma mensagem; quem realmente tem conta recebe email.
+    // PR #102.1 hotfix: anti-enumeração robusta.
+    // shouldCreateUser:false faz Supabase retornar erros variados pra emails
+    // inexistentes ("Signups not allowed for this instance", "User not found",
+    // "Invalid email", rate-limits, etc). Listar cada um vira jogo de gato e
+    // rato. Solução: SEMPRE 200 OK pro cliente. Log do erro server-side.
+    //
+    // Tradeoff conhecido: se SMTP cair, cliente acha que enviou mas nada chega.
+    // Aceitável pra MVP — segue padrão de Auth0, Clerk, Stytch.
     if (otpErr) {
-      const errMsg = otpErr.message?.toLowerCase() || '';
-      if (errMsg.includes('not found') || errMsg.includes('user not')) {
-        // Resposta genérica — não revela se email existe ou não
-        return NextResponse.json({ ok: true });
-      }
-      console.error('[login/magic] OTP error:', otpErr);
-      return NextResponse.json({ error: 'Erro ao enviar link' }, { status: 500 });
+      console.warn('[login/magic] OTP non-fatal error:', otpErr.message);
     }
 
     return NextResponse.json({ ok: true });
