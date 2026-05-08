@@ -17,6 +17,17 @@ interface Body {
   email: string;
 }
 
+// PR #105 — Helper pra resolver baseUrl do emailRedirectTo.
+// Em prod: hardcoded zappiq.com.br (custom domain, sem Vercel Auth).
+// Em preview: deriva do host do request.
+function getBaseUrl(req: Request): string {
+  if (process.env.VERCEL_ENV === 'production') {
+    return 'https://zappiq.com.br';
+  }
+  const url = new URL(req.url);
+  return `${url.protocol}//${url.host}`;
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Body;
@@ -37,9 +48,10 @@ export async function POST(req: Request) {
     }
     const sb = createClient(supabaseUrl, anonKey);
 
-    const baseUrl =
-      process.env.APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
+    // PR #105 — em prod SEMPRE zappiq.com.br (custom domain sem Vercel Auth).
+    // VERCEL_URL aponta pra hash deployment URL que tem Deployment Protection
+    // ligado, exigindo login Vercel — quebrava o callback do Magic Link.
+    const baseUrl = getBaseUrl(req);
 
     const email = body.email.trim().toLowerCase();
 

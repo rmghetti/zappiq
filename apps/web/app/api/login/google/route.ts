@@ -11,7 +11,18 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export async function POST() {
+// PR #105 — Helper pra resolver o baseUrl do redirect_to OAuth.
+// Em prod: hardcoded zappiq.com.br (custom domain, sem Vercel Auth).
+// Em preview: deriva do host do request (branch alias).
+function getBaseUrl(req: Request): string {
+  if (process.env.VERCEL_ENV === 'production') {
+    return 'https://zappiq.com.br';
+  }
+  const url = new URL(req.url);
+  return `${url.protocol}//${url.host}`;
+}
+
+export async function POST(req: Request) {
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
     const anonKey = process.env.SUPABASE_ANON_KEY;
@@ -28,9 +39,10 @@ export async function POST() {
       auth: { flowType: 'implicit', persistSession: false },
     });
 
-    const baseUrl =
-      process.env.APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
+    // PR #105 — em prod SEMPRE zappiq.com.br (custom domain sem Vercel Auth).
+    // VERCEL_URL aponta pra hash deployment URL que tem Deployment Protection
+    // ligado, exigindo login Vercel — quebrava o callback OAuth.
+    const baseUrl = getBaseUrl(req);
 
     // login-callback é page client-side que detecta tokens e troca por JWT nosso
     const { data, error } = await sb.auth.signInWithOAuth({

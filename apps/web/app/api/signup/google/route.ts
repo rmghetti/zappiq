@@ -12,6 +12,17 @@ import type { PlanId } from '@zappiq/shared';
 
 const VALID_PLANS: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS'];
 
+// PR #105 — Helper pra resolver baseUrl do redirectTo.
+// Em prod: hardcoded zappiq.com.br (custom domain, sem Vercel Auth).
+// Em preview: deriva do host do request.
+function getBaseUrl(req: Request): string {
+  if (process.env.VERCEL_ENV === 'production') {
+    return 'https://zappiq.com.br';
+  }
+  const url = new URL(req.url);
+  return `${url.protocol}//${url.host}`;
+}
+
 export async function POST(req: Request) {
   try {
     const { plan } = (await req.json()) as { plan: PlanId };
@@ -28,9 +39,8 @@ export async function POST(req: Request) {
 
     const sb = createClient(supabaseUrl, anonKey);
 
-    const baseUrl =
-      process.env.APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
+    // PR #105 — em prod SEMPRE zappiq.com.br (custom domain sem Vercel Auth).
+    const baseUrl = getBaseUrl(req);
 
     // plan vai como query param TOP-LEVEL (não só dentro de next) pra
     // /auth/callback ler facilmente e usar no UPSERT do signups row.
