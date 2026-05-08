@@ -4,6 +4,7 @@ import { Bell, Search, Menu } from 'lucide-react';
 import { useUiStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { ModuleLogo } from './ModuleLogo';
+import { AgentHealthChip } from './dashboard/AgentHealthChip';
 
 export function Header() {
   const { toggleSidebar } = useUiStore();
@@ -33,8 +34,10 @@ export function Header() {
         </div>
       </div>
 
-      {/* Direita: org info + notificações */}
-      <div className="flex items-center gap-4">
+      {/* Direita: agente health chip + org info + notificações */}
+      <div className="flex items-center gap-3">
+        {/* PR #106 — Health Chip do agente: chip persistente com score + level */}
+        <AgentHealthChip />
         {organization && (
           <span className="text-sm text-gray-500 hidden md:block">
             {organization.name} · <span className="font-medium text-primary-600">{organization.plan}</span>

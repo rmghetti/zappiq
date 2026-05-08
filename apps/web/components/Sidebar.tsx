@@ -7,7 +7,7 @@ import { Logo } from './Logo';
 import {
   LayoutDashboard, MessageSquare, Users, Megaphone, BarChart3,
   GitBranch, BookOpen, Settings, CreditCard, Target, LogOut, ChevronLeft, ChevronRight,
-  ShieldCheck, FileLock,
+  ShieldCheck, FileLock, Sparkles,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
@@ -21,6 +21,8 @@ const navItems = [
   { href: '/flows', label: 'Fluxos', icon: GitBranch },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/knowledge-base', label: 'Base de Conhecimento', icon: BookOpen },
+  // PR #106 — Treinar IA destacado: principal entry point pra evolução contínua do agente.
+  { href: '/ai-training', label: 'Treinar IA', icon: Sparkles, highlight: true },
 ];
 
 // Itens restritos a ADMIN / AUDITOR — compliance e governança LGPD
@@ -74,21 +76,30 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map(({ href, label, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              isActive(href)
-                ? 'bg-primary-50 text-primary-700'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            }`}
-            title={sidebarCollapsed ? label : undefined}
-          >
-            <Icon size={20} className="flex-shrink-0" />
-            {!sidebarCollapsed && <span>{label}</span>}
-          </Link>
-        ))}
+        {navItems.map(({ href, label, icon: Icon, highlight }) => {
+          const active = isActive(href);
+          const baseClass = 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors';
+          let className = baseClass;
+          if (active) {
+            className += ' bg-primary-50 text-primary-700';
+          } else if (highlight) {
+            // Treinar IA destacado: gradiente suave + sparkle pra puxar o olho.
+            className += ' bg-gradient-to-r from-emerald-50 to-violet-50 text-violet-700 hover:from-emerald-100 hover:to-violet-100';
+          } else {
+            className += ' text-gray-600 hover:bg-gray-50 hover:text-gray-900';
+          }
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={className}
+              title={sidebarCollapsed ? label : undefined}
+            >
+              <Icon size={20} className={`flex-shrink-0 ${highlight && !active ? 'text-violet-600' : ''}`} />
+              {!sidebarCollapsed && <span>{label}</span>}
+            </Link>
+          );
+        })}
 
         {/* Seção Compliance/LGPD — visível apenas para ADMIN/AUDITOR */}
         {complianceItems.some(i => i.roles.includes(user?.role ?? '')) && (

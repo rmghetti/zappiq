@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { Sidebar } from '../../components/Sidebar';
 import { Header } from '../../components/Header';
 import { AuthGuard } from '../../components/AuthGuard';
+import { TreinarAgenteFAB } from '../../components/dashboard/TreinarAgenteFAB';
 import { useAuthStore } from '../../stores/authStore';
 import { connectSocket, disconnectSocket } from '../../lib/socket';
 
@@ -27,6 +28,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {children}
           </main>
         </div>
+        {/* PR #106 — FAB persistente "Treinar ${agentName}" em todas rotas */}
+        <TreinarAgenteFAB />
       </div>
     </AuthGuard>
   );
