@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { MessageSquare, Send, Search, Phone, Bot, User, Clock, ChevronDown } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { getSocket } from '../../../lib/socket';
+import { AgentMessageActions } from '../../../components/conversations/AgentMessageActions';
 
 interface Conversation {
   id: string;
@@ -174,31 +175,47 @@ export default function ConversationsPage() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-5 py-4 bg-[#ECE5DD] space-y-2">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.direction === 'INBOUND' ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`max-w-[70%] px-3 py-2 rounded-lg text-sm leading-relaxed ${
-                    msg.direction === 'INBOUND'
-                      ? 'bg-white text-gray-800 rounded-tl-none'
-                      : 'bg-[#D9FDD3] text-gray-800 rounded-tr-none'
-                  }`}>
-                    {msg.isFromBot && (
-                      <div className="flex items-center gap-1 text-[10px] text-accent-500 font-semibold mb-1">
-                        <Bot size={10} /> ZappIQ IA
+              {messages.map((msg, idx) => {
+                // Última mensagem INBOUND antes dessa OUTBOUND/Bot — usado no
+                // mecanismo "Corrigir resposta" pra mostrar pergunta original.
+                const previousInbound = msg.isFromBot
+                  ? [...messages.slice(0, idx)].reverse().find((m) => m.direction === 'INBOUND')?.content || ''
+                  : '';
+                return (
+                  <div key={msg.id} className={`flex ${msg.direction === 'INBOUND' ? 'justify-start' : 'justify-end'}`}>
+                    <div className={`group max-w-[70%] px-3 py-2 rounded-lg text-sm leading-relaxed ${
+                      msg.direction === 'INBOUND'
+                        ? 'bg-white text-gray-800 rounded-tl-none'
+                        : 'bg-[#D9FDD3] text-gray-800 rounded-tr-none'
+                    }`}>
+                      {msg.isFromBot && (
+                        <div className="flex items-center gap-1 text-[10px] text-accent-500 font-semibold mb-1">
+                          <Bot size={10} /> Agente IA
+                        </div>
+                      )}
+                      {!msg.isFromBot && msg.direction === 'OUTBOUND' && msg.sender && (
+                        <div className="flex items-center gap-1 text-[10px] text-blue-600 font-semibold mb-1">
+                          <User size={10} /> {msg.sender.name}
+                        </div>
+                      )}
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      <div className="flex items-center justify-end gap-1 mt-1">
+                        <span className="text-[10px] text-gray-400">{formatTime(msg.createdAt)}</span>
+                        {msg.direction === 'OUTBOUND' && <span className="text-[10px] text-blue-500">✓✓</span>}
                       </div>
-                    )}
-                    {!msg.isFromBot && msg.direction === 'OUTBOUND' && msg.sender && (
-                      <div className="flex items-center gap-1 text-[10px] text-blue-600 font-semibold mb-1">
-                        <User size={10} /> {msg.sender.name}
-                      </div>
-                    )}
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                    <div className="flex items-center justify-end gap-1 mt-1">
-                      <span className="text-[10px] text-gray-400">{formatTime(msg.createdAt)}</span>
-                      {msg.direction === 'OUTBOUND' && <span className="text-[10px] text-blue-500">✓✓</span>}
+                      {/* PR #107 — treinamento inline. Aparece on hover em
+                          bolhas isFromBot. Cliente corrige resposta ruim sem
+                          sair do contexto. Vira Q&A ativa na próxima mensagem. */}
+                      {msg.isFromBot && (
+                        <AgentMessageActions
+                          question={previousInbound}
+                          agentAnswer={msg.content}
+                        />
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div ref={messagesEndRef} />
             </div>
 
