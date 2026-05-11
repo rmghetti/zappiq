@@ -34,6 +34,9 @@ import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { llmRouter } from '../services/llm/LLMRouter.js';
 import { prisma } from '@zappiq/database';
+// PR #135-alt: novo endpoint paralelo /llm-health protegido por JWT+SUPERADMIN
+// pra dashboard frontend consumir sem expor META_APP_SECRET ao browser.
+import { authMiddleware, requireRole } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -104,5 +107,72 @@ router.get('/llm-status', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'erro ao consultar status' });
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// PR #135-alt — GET /api/admin/llm-health
+// --------------------------------------------------------------------------
+// Versão JWT-protegida do /llm-status pra o painel admin frontend consumir
+// sem expor META_APP_SECRET ao browser. Mesma resposta, auth diferente.
+//
+// Uso:
+//   curl https://zappiq-api.fly.dev/api/admin/llm-health \
+//        -H "Authorization: Bearer <JWT>"
+//
+// Auth: authMiddleware + requireRole('SUPERADMIN'). Outros tiers de user
+// recebem 403. Padrão alinhado com /api/admin/tenant-usage/*.
+// ══════════════════════════════════════════════════════════════════════════
+async function llmHealthHandler(req: Request, res: Response) {
+  try {
+    const providers = await llmRouter.getStatus();
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [stats, byProviderRaw, fallbacks] = await Promise.all([
+      prisma.lLMCallLog.aggregate({
+        where: { createdAt: { gte: since } },
+        _count: { _all: true },
+        _sum: { costUsdEstimate: true },
+        _avg: { latencyMs: true },
+      }),
+      prisma.lLMCallLog.groupBy({
+        by: ['provider'],
+        where: { createdAt: { gte: since } },
+        _count: { _all: true },
+      }),
+      prisma.lLMCallLog.count({
+        where: { createdAt: { gte: since }, fallbackTriggered: true },
+      }),
+    ]);
+
+    const totalCalls = stats._count._all ?? 0;
+    const fallbackRate = totalCalls > 0 ? fallbacks / totalCalls : 0;
+    const byProvider: Record<string, number> = {};
+    for (const row of byProviderRaw) {
+      byProvider[row.provider] = row._count._all;
+    }
+
+    res.json({
+      providers,
+      last24h: {
+        totalCalls,
+        totalCostUsd: stats._sum.costUsdEstimate?.toString() ?? '0',
+        avgLatencyMs: Math.round(stats._avg.latencyMs ?? 0),
+        fallbackRate: Number(fallbackRate.toFixed(4)),
+        byProvider,
+      },
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.error('[admin/llm-health] erro:', err);
+    res.status(500).json({ error: 'erro ao consultar saúde dos providers' });
+  }
+}
+
+// Auth chain: authMiddleware extrai JWT, requireRole valida SUPERADMIN.
+router.get(
+  '/llm-health',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  llmHealthHandler,
+);
 
 export default router;
