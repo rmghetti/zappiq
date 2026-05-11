@@ -41,6 +41,8 @@ import dsrRoutes from './routes/dataSubjectRequests.js';
 import adminWhatsappRoutes from './routes/adminWhatsapp.js';
 import adminLlmRoutes from './routes/adminLlm.js'; // V2-025 Observability DAY 1
 import { initRetentionJob } from './services/retentionService.js';
+import { initTenantUsageJob } from './services/tenantUsageService.js'; // PR #149 — H10 unit economics
+import { initUsageReconciliationJob } from './services/usageReconciliationService.js'; // PR #149 — Quota Mgmt #6 audit-only
 
 const app = express();
 const httpServer = createServer(app);
@@ -247,6 +249,16 @@ initRetentionJob().catch((err) => {
   logger.error('[Server] Failed to initialize retention job:', err);
 });
 
+// ── PR #149: H10 unit economics (03:10 UTC) — estava órfão, wire-up agora ──
+initTenantUsageJob().catch((err) => {
+  logger.error('[Server] Failed to initialize tenant usage job:', err);
+});
+
+// ── PR #149: Quota Mgmt #6 reconciliação (04:00 UTC, audit-only Fase 1) ──
+initUsageReconciliationJob().catch((err) => {
+  logger.error('[Server] Failed to initialize usage reconciliation job:', err);
+});
+
 // ── Error Handler (must be last) ────────────────
 app.use(errorHandler);
 
@@ -283,6 +295,16 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
     // 3) Drena workers/queues BullMQ
     await closeQueues();
+
+    // 3b) Fecha workers/queues PR #149 (tenant usage + reconciliação)
+    try {
+      const { closeTenantUsageJob } = await import('./services/tenantUsageService.js');
+      const { closeUsageReconciliationJob } = await import('./services/usageReconciliationService.js');
+      await Promise.all([closeTenantUsageJob(), closeUsageReconciliationJob()]);
+      logger.info('[Server] PR #149 jobs closed');
+    } catch (err) {
+      logger.warn('[Server] PR #149 jobs close error:', err);
+    }
 
     // 4) Fecha Prisma
     try {
