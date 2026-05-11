@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Target, Plus, DollarSign, User } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { DealFormModal } from '../../../components/crm/DealFormModal';
 
 interface Deal {
   id: string;
@@ -25,13 +26,25 @@ const STAGES = [
 export default function CrmPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [initialStage, setInitialStage] = useState('new');
 
-  useEffect(() => {
+  const fetchDeals = useCallback(() => {
+    setLoading(true);
     api.get('/api/deals')
       .then((res) => setDeals(res.data || []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchDeals();
+  }, [fetchDeals]);
+
+  function openCreate(stage = 'new') {
+    setInitialStage(stage);
+    setModalOpen(true);
+  }
 
   async function moveStage(dealId: string, newStage: string) {
     try {
@@ -50,7 +63,10 @@ export default function CrmPage() {
           <h1 className="text-2xl font-bold text-gray-900">Pipeline de Vendas</h1>
           <p className="text-sm text-gray-500 mt-1">{deals.length} deals no pipeline</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600">
+        <button
+          onClick={() => openCreate('new')}
+          className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600"
+        >
           <Plus size={16} /> Novo Deal
         </button>
       </div>
@@ -63,6 +79,13 @@ export default function CrmPage() {
                 <h3 className="text-sm font-semibold text-gray-700">{stage.label}</h3>
                 <p className="text-xs text-gray-400 mt-0.5">{dealsByStage(stage.key).length} deals · R$ {stageTotal(stage.key).toLocaleString('pt-BR')}</p>
               </div>
+              <button
+                onClick={() => openCreate(stage.key)}
+                className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-700"
+                title={`Criar deal em ${stage.label}`}
+              >
+                <Plus size={14} />
+              </button>
             </div>
 
             <div className="px-3 pb-3 space-y-2 min-h-[200px]">
@@ -103,6 +126,14 @@ export default function CrmPage() {
           </div>
         ))}
       </div>
+
+      {/* PR #109 — Modal Novo Deal */}
+      <DealFormModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSaved={fetchDeals}
+        initialStage={initialStage}
+      />
     </div>
   );
 }
