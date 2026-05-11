@@ -147,4 +147,63 @@ class LLMHealthApi {
 
 export const llmHealthApi = new LLMHealthApi();
 
+// ─── Quota Watch (Onda 6 — audit-only operational view) ───────────────
+
+export interface QuotaWatchRow {
+  organizationId: string;
+  organizationName: string;
+  plan: string;
+  isTrialActive: boolean;
+  subscriptionStatus: string;
+  createdAt: string;
+  consumption: {
+    aiMessagesProcessed: number;
+    aiMessagesLimit: number | null; // null = ilimitado
+    usagePercent: number | null;
+    llmCostUsd: number;
+    lastComputedAt: string | null;
+  };
+  billing: {
+    autoOverage: boolean;
+    hardCeilingBrl: number | null;
+    notifyAtPercent: number;
+  };
+  reconciliation: {
+    lastRunAt: string | null;
+    lastAction: string | null;
+    usagePercentAtLastRun: number | null;
+    notifiedAt50: string | null;
+    notifiedAt80: string | null;
+    notifiedAt100: string | null;
+  };
+}
+
+export interface QuotaWatchResponse {
+  period: string;
+  summary: {
+    totalOrgs: number;
+    orgsAt50Percent: number;
+    orgsAt80Percent: number;
+    orgsAt100Percent: number;
+    orgsWithAutoOverage: number;
+    orgsTrialing: number;
+  };
+  rows: QuotaWatchRow[];
+  generatedAt: string;
+}
+
+class QuotaWatchApi {
+  /**
+   * GET /api/admin/quota-watch
+   * Painel humano do audit-only do PR #149: lista todas as orgs com plano,
+   * consumo do mês, %limite, settings.billing e estado de reconciliação.
+   * Requer role SUPERADMIN.
+   */
+  async getWatch(): Promise<QuotaWatchResponse> {
+    return api.get<QuotaWatchResponse>('/api/admin/quota-watch');
+  }
+}
+
+export const quotaWatchApi = new QuotaWatchApi();
+
 export const adminApi = new AdminApi();
