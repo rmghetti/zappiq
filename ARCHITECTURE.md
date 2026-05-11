@@ -367,9 +367,66 @@ process.on('SIGTERM', async () => {
 
 Timeout: 30 segundos (configurável em Fly).
 
-### Circuit Breaker (Futuro)
+### Circuit Breaker (Implementado — V4-003, 2026-05-11)
 
-Integração com bibliotecas como `opossum` para LLM/WhatsApp calls, fallback automático.
+Circuit breaker **Redis-backed** em produção desde PR #134 (V4-003). Substituiu a versão in-memory inicial (V2-018) que sofria de inconsistência multi-instância.
+
+**Threshold operacional:** 3 falhas consecutivas em janela de 60s abrem o breaker por 120s. Após expirar, próxima request entra em "half-open" natural (TTL Redis expirou).
+
+**Chaves Redis:**
+
+```
+zappiq:breaker:{providerId}:failures        # counter (TTL 60s)
+zappiq:breaker:{providerId}:open_until      # epoch ms (TTL 120s)
+zappiq:breaker:{providerId}:last_failure_at # epoch ms (TTL 60s)
+```
+
+**Coordenação multi-instância:** estado em Redis garante que se a instância A detecta provider quebrado, a instância B também pula imediatamente (em vez de continuar tentando). Fly rolling deploys preservam o estado entre restart.
+
+**Resiliência ao Redis cair:** `breakerIsOpen()` retorna `false` em erro de Redis (fail-OPEN). Razão: prefere servir a bloquear. Pipeline LLM degrada de forma graciosa em vez de cair junto com Redis. Mesmo padrão usado em `planLimits.ts`.
+
+**Falhas que contam:** `timeout`, `5xx`, `429`, `quota`. Falhas `client` (4xx de input inválido) **não** contam — problema do caller, não do provider.
+
+**Observabilidade:** `GET /api/admin/llm-health` (PR #135-alt) expõe estado atual + métricas 24h. Painel `/admin/llm-health` no dashboard SUPERADMIN com auto-refresh 30s.
+
+Implementação: `apps/api/src/services/llm/redisBreaker.ts`.
+
+---
+
+### Quota Management — Audit-Only Fase 1 (Onda 6, 2026-05-11)
+
+Reconciliação diária de consumo IA por organização cruzando 3 fontes:
+
+1. **Consumo real:** `TenantUsageMonthly` (aiMessagesProcessed do mês corrente, populado por `tenant-usage-aggregation` cron 03:10 UTC).
+2. **Limite contratual:** `PLAN_CONFIG.aiMessagesPerMonth` por tier.
+3. **Preferência do cliente:** `organization.settings.billing` declarado via aba `/settings → Cobrança & Limites` (PR #111).
+
+**Job:** `usage-reconciliation` BullMQ cron 04:00 UTC daily (20 min depois do tenant-usage). Pra cada org ativa:
+
+- Calcula `usagePercent` e `overageMessages`
+- Decide ação (sem executar): `no_action | notify_only | would_pause | would_charge_overage | over_ceiling`
+- Persiste estado em Redis (`zappiq:reconcil:{orgId}:{YYYY-MM}`, TTL 60d)
+- Dispara Slack alert quando cruza threshold (50%/80%/100%), idempotente por mês
+
+**Fase atual:** **AUDIT-ONLY**. Cron observa, calcula, alerta. **Não pausa agente, não cria Stripe usage record.** Razão: capturar 2 semanas de dados reais antes de mexer em invoice de cliente.
+
+**Roadmap downstream:**
+- PR #149.1 → ativar pausa quando `autoOverage: false` e atingiu 100%
+- PR #149.2 → Stripe usage records quando `autoOverage: true` (respeita `hardCeilingBrl`)
+
+Implementação: `apps/api/src/services/usageReconciliationService.ts` + `slackNotifier.ts`.
+
+---
+
+### Tool/Function Calling (V4-006 PoC, 2026-05-11)
+
+`LLMRouter` aceita `tools?: ToolDefinition[]` em `LLMCompletionRequest`. Suportado em Anthropic (`tool_use` blocks) e OpenAI (`tool_calls` em `message`). Gemini ignora silenciosamente (TODO V4-006.1) — graceful degrade durante cascade.
+
+**Registry:** `apps/api/src/services/llm/tools.ts` cataloga tools com schema + handler + flags. Atual: 1 tool concreta `get_org_billing_summary` (read-only, retorna plano + uso + limites + preferências billing).
+
+**Fluxo:** caller passa tools → modelo decide chamar (response tem `toolCalls`) → caller executa via `executeToolCall(name, input, ctx)` → resposta volta no próximo turno como `tool_result`.
+
+**Estado atual:** passivo. `agentOrchestrator` não passa tools no `complete()` ainda. Pipeline atual continua idêntico. Próximo PR ativa via feature flag por org.
 
 ---
 
@@ -415,8 +472,23 @@ Vide `MIGRATION.md` para checklist detalhado e estimativas de custo.
 
 ## Próximos Passos
 
-1. **RAG Service:** refinar embeddings, otimizar chunk size
-2. **Observabilidade:** implementar traces end-to-end
-3. **Cache Distribuído:** Redis patterns para escalabilidade
-4. **Load Testing:** Apache JMeter, k6 para capacidade
+Status atualizado em 2026-05-11 (pós Onda 6 + V4-003/V4-006).
+
+### V4 — Roadmap pendente
+
+1. **V4-005 (cloud-agnostic abstrações)** — `IStorage`, `ICache`, `IAuth`. **Skip estratégico** até haver sinal de migração de Fly. Avaliar quando custo Fly justificar mudança ou cliente exigir região GCP/AWS.
+
+2. **V4-006.1 (Gemini tools)** — Estender tool calling pra GoogleProvider. Schema diferente do Anthropic/OpenAI. ~2h. Reativar quando volume Starter/Growth (que usa Gemini) for relevante o suficiente.
+
+3. **Quota Mgmt #4 / Stripe overage automation** — Ativar após 2 semanas de audit-only validado (≥ 2026-05-25). Implementação concreta: PR #149.1 (pause real quando `autoOverage:false`) + PR #149.2 (Stripe usage records quando `autoOverage:true`).
+
+4. **Self-Signup limit choice (Quota Mgmt #7)** — DEFERRED. Reativar SE primeiro cliente Business pagante pedir pré-declarar tolerância a overage no contrato.
+
+### Operacional pendente
+
+1. **RAG Service:** refinar embeddings, otimizar chunk size, validar latência sob carga.
+2. **Tool calling em produção:** ativar `getToolsForContext()` no `agentOrchestrator` com feature flag por org. Caso piloto: Iza (dogfood).
+3. **Reconciliation Phase 2:** transformar logs estruturados de audit-only em séries temporais Grafana (% orgs aproximando limite, distribuição de `usagePercent` por tier).
+4. **Tabela `tool_call_logs`:** auditoria forense de tool calls executados (quando ativar em prod).
+5. **Cobertura de testes:** integration tests pro `redisBreaker` com Redis real (testcontainers) — hoje só mocked.
 5. **Disaster Recovery:** RPO/RTO, backup cross-region

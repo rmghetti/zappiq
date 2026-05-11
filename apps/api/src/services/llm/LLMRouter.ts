@@ -102,6 +102,42 @@ export type LLMCompletionRequest = {
   conversationId?: string | null;
   /** Operação semântica — vai pra audit. */
   operation?: LLMOperation;
+  /**
+   * Tools/function calling (V4-006). Quando setado, o modelo pode optar por
+   * chamar uma das tools em vez de gerar texto. O caller é responsável por
+   * executar a tool e enviar o resultado de volta numa próxima iteração do
+   * loop (formato segue Anthropic Messages API: tool_use → tool_result).
+   *
+   * Por enquanto suportado em providers Anthropic e OpenAI. Gemini ignora
+   * silenciosamente (TODO: V4-006.1). Se o request tem tools e cai num
+   * Gemini, ainda funciona mas o modelo vê só o texto — útil pra graceful
+   * degrade durante cascade.
+   */
+  tools?: ToolDefinition[];
+};
+
+/**
+ * Schema de uma tool exposta ao modelo (V4-006).
+ * Compatível com Anthropic + OpenAI (JSON Schema simplificado).
+ */
+export type ToolDefinition = {
+  /** Nome único da tool (snake_case recomendado, ex: 'get_org_billing'). */
+  name: string;
+  /** Descrição em linguagem natural — o modelo lê isso pra decidir quando chamar. */
+  description: string;
+  /** JSON Schema dos parâmetros. Use `type: 'object'` no root. */
+  inputSchema: Record<string, unknown>;
+};
+
+/**
+ * Chamada de tool feita pelo modelo (V4-006).
+ * O caller deve executar com base no `name` + `input` e enviar tool_result
+ * numa próxima iteração.
+ */
+export type ToolCall = {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
 };
 
 export type LLMCompletionResponse = {
@@ -112,6 +148,16 @@ export type LLMCompletionResponse = {
   usage?: { inputTokens?: number; outputTokens?: number };
   /** 1 = primário; 2 = fallback 1; 3 = fallback 2. */
   attempt: number;
+  /**
+   * V4-006: tool calls que o modelo decidiu fazer neste turn. Quando preenchido,
+   * `text` pode estar vazio ou ter conteúdo parcial. Caller decide se executa.
+   */
+  toolCalls?: ToolCall[];
+  /**
+   * V4-006: razão de stop do modelo. 'tool_use' indica que o modelo quer
+   * chamar tool(s); 'end_turn' = conversa pronta; 'max_tokens' = truncado.
+   */
+  stopReason?: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'unknown';
 };
 
 export type LLMProviderId =
@@ -187,6 +233,24 @@ class AnthropicProvider implements LLMProvider {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new ProviderError('missing ANTHROPIC_API_KEY', 'client');
     const t0 = Date.now();
+
+    // V4-006: tools support. Anthropic aceita `tools` no body; formato:
+    // [{ name, description, input_schema }]. Mapeamos do nosso ToolDefinition.
+    const body: any = {
+      model: this.model,
+      max_tokens: req.maxTokens ?? 1024,
+      temperature: req.temperature ?? 0.3,
+      system: req.system,
+      messages: req.messages.filter((m) => m.role !== 'system'),
+    };
+    if (req.tools && req.tools.length > 0) {
+      body.tools = req.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.inputSchema,
+      }));
+    }
+
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -194,13 +258,7 @@ class AnthropicProvider implements LLMProvider {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: req.maxTokens ?? 1024,
-        temperature: req.temperature ?? 0.3,
-        system: req.system,
-        messages: req.messages.filter((m) => m.role !== 'system'),
-      }),
+      body: JSON.stringify(body),
     });
     const latencyMs = Date.now() - t0;
     if (!res.ok) {
@@ -208,7 +266,27 @@ class AnthropicProvider implements LLMProvider {
       throw new ProviderError(`Anthropic ${res.status}`, kind, latencyMs);
     }
     const data: any = await res.json();
-    const text = data?.content?.[0]?.text ?? '';
+
+    // V4-006: extrair texto + tool_use blocks da response.
+    // Anthropic retorna content[] com mix de { type: 'text', text } e
+    // { type: 'tool_use', id, name, input }. Concatenamos texto e listamos
+    // tool calls.
+    let text = '';
+    const toolCalls: ToolCall[] = [];
+    if (Array.isArray(data?.content)) {
+      for (const block of data.content) {
+        if (block?.type === 'text' && typeof block.text === 'string') {
+          text += block.text;
+        } else if (block?.type === 'tool_use' && block?.name) {
+          toolCalls.push({
+            id: block.id,
+            name: block.name,
+            input: block.input || {},
+          });
+        }
+      }
+    }
+
     return {
       text,
       provider: this.id,
@@ -219,8 +297,17 @@ class AnthropicProvider implements LLMProvider {
         outputTokens: data?.usage?.output_tokens,
       },
       attempt: 0,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      stopReason: mapAnthropicStopReason(data?.stop_reason),
     };
   }
+}
+
+function mapAnthropicStopReason(reason: any): LLMCompletionResponse['stopReason'] {
+  if (reason === 'end_turn' || reason === 'tool_use' || reason === 'max_tokens' || reason === 'stop_sequence') {
+    return reason;
+  }
+  return 'unknown';
 }
 
 /**
@@ -296,18 +383,33 @@ class OpenAIProvider implements LLMProvider {
     const openaiMessages: any[] = [];
     if (req.system) openaiMessages.push({ role: 'system', content: req.system });
     openaiMessages.push(...req.messages);
+
+    // V4-006: tools support. OpenAI usa formato function wrapper:
+    // [{ type: 'function', function: { name, description, parameters } }]
+    const body: any = {
+      model: this.model,
+      messages: openaiMessages,
+      max_tokens: req.maxTokens ?? 1024,
+      temperature: req.temperature ?? 0.3,
+    };
+    if (req.tools && req.tools.length > 0) {
+      body.tools = req.tools.map((t) => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.inputSchema,
+        },
+      }));
+    }
+
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: this.model,
-        messages: openaiMessages,
-        max_tokens: req.maxTokens ?? 1024,
-        temperature: req.temperature ?? 0.3,
-      }),
+      body: JSON.stringify(body),
     });
     const latencyMs = Date.now() - t0;
     if (!res.ok) {
@@ -315,7 +417,38 @@ class OpenAIProvider implements LLMProvider {
       throw new ProviderError(`OpenAI ${res.status}`, kind, latencyMs);
     }
     const data: any = await res.json();
-    const text = data?.choices?.[0]?.message?.content ?? '';
+    const choice = data?.choices?.[0];
+    const text = choice?.message?.content ?? '';
+
+    // V4-006: extrair tool_calls (estrutura OpenAI difere: cada tool_call tem
+    // function.name + function.arguments como string JSON).
+    const toolCalls: ToolCall[] = [];
+    if (Array.isArray(choice?.message?.tool_calls)) {
+      for (const tc of choice.message.tool_calls) {
+        if (tc?.function?.name) {
+          let parsed: Record<string, unknown> = {};
+          try {
+            parsed = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
+          } catch {
+            // Argumentos malformados — passa string raw como `_raw`
+            parsed = { _raw: tc.function.arguments };
+          }
+          toolCalls.push({
+            id: tc.id || `call_${Date.now()}_${toolCalls.length}`,
+            name: tc.function.name,
+            input: parsed,
+          });
+        }
+      }
+    }
+
+    const finishReason = choice?.finish_reason;
+    const stopReason: LLMCompletionResponse['stopReason'] =
+      finishReason === 'tool_calls' ? 'tool_use' :
+      finishReason === 'stop' ? 'end_turn' :
+      finishReason === 'length' ? 'max_tokens' :
+      'unknown';
+
     return {
       text,
       provider: this.id,
@@ -326,6 +459,8 @@ class OpenAIProvider implements LLMProvider {
         outputTokens: data?.usage?.completion_tokens,
       },
       attempt: 0,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      stopReason,
     };
   }
 }
