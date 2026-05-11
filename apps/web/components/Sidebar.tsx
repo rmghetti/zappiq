@@ -8,6 +8,8 @@ import {
   LayoutDashboard, MessageSquare, Users, Megaphone, BarChart3,
   GitBranch, BookOpen, Settings, CreditCard, Target, LogOut, ChevronLeft, ChevronRight,
   ShieldCheck, FileLock, Sparkles,
+  // Admin Plataforma (SUPERADMIN) icons
+  Activity, TrendingUp, Bot, UserCheck, DollarSign,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
@@ -27,8 +29,19 @@ const navItems = [
 
 // Itens restritos a ADMIN / AUDITOR — compliance e governança LGPD
 const complianceItems = [
-  { href: '/audit-logs', label: 'Auditoria', icon: ShieldCheck, roles: ['ADMIN', 'AUDITOR'] },
-  { href: '/dsr', label: 'Requisições LGPD', icon: FileLock, roles: ['ADMIN', 'AUDITOR'] },
+  { href: '/audit-logs', label: 'Auditoria', icon: ShieldCheck, roles: ['ADMIN', 'AUDITOR', 'SUPERADMIN'] },
+  { href: '/dsr', label: 'Requisições LGPD', icon: FileLock, roles: ['ADMIN', 'AUDITOR', 'SUPERADMIN'] },
+];
+
+// Itens SUPERADMIN — visibilidade CROSS-TENANT da plataforma toda.
+// Não confundir com `complianceItems` (admin do tenant). Aqui é admin da
+// PLATAFORMA inteira — Rodrigo CEO vê dados de todos os clientes.
+const platformAdminItems = [
+  { href: '/admin/leads', label: 'Leads & Signups', icon: UserCheck },
+  { href: '/admin/quota-watch', label: 'Quota Watch', icon: Activity },
+  { href: '/admin/llm-health', label: 'LLM Health', icon: Bot },
+  { href: '/admin/iza-conversations', label: 'Conversas Iza', icon: MessageSquare },
+  { href: '/admin/unit-economics', label: 'Unit Economics', icon: DollarSign },
 ];
 
 const bottomItems = [
@@ -124,6 +137,33 @@ export function Sidebar() {
                   {!sidebarCollapsed && <span>{label}</span>}
                 </Link>
               ))}
+          </div>
+        )}
+
+        {/* Seção ADMIN PLATAFORMA — só SUPERADMIN (Rodrigo CEO + futuros) */}
+        {user?.role === 'SUPERADMIN' && (
+          <div className="pt-4 mt-4 border-t border-amber-100">
+            {!sidebarCollapsed && (
+              <p className="px-3 mb-2 text-xs font-semibold text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
+                <TrendingUp size={11} />
+                Admin Plataforma
+              </p>
+            )}
+            {platformAdminItems.map(({ href, label, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive(href)
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'text-gray-600 hover:bg-amber-50 hover:text-amber-700'
+                }`}
+                title={sidebarCollapsed ? label : undefined}
+              >
+                <Icon size={20} className="flex-shrink-0" />
+                {!sidebarCollapsed && <span>{label}</span>}
+              </Link>
+            ))}
           </div>
         )}
       </nav>

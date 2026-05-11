@@ -280,6 +280,21 @@ async function quotaWatchHandler(req: Request, res: Response) {
       ? orgs.filter((o) => !stagingOrgIds.has(o.id))
       : orgs;
 
+    // 1.6) Carrega owner (primeiro user ADMIN/SUPERADMIN) de cada org
+    //      Útil pra Rodrigo contatar leads parados sem precisar de SQL.
+    const ownerRows = (await prisma.$queryRawUnsafe(`
+      SELECT DISTINCT ON ("organizationId") "organizationId", name, email
+      FROM users
+      WHERE "organizationId" = ANY($1::text[])
+      AND role IN ('ADMIN', 'SUPERADMIN', 'OWNER')
+      ORDER BY "organizationId", "createdAt" ASC
+    `, filteredOrgs.map((o) => o.id))) as Array<{
+      organizationId: string;
+      name: string;
+      email: string;
+    }>;
+    const ownerByOrgId = new Map(ownerRows.map((r) => [r.organizationId, r]));
+
     // 2) Carrega usage do mês corrente em batch
     const usageRows = (await (prisma as any).TenantUsageMonthly.findMany({
       where: { periodYearMonth },
@@ -320,6 +335,7 @@ async function quotaWatchHandler(req: Request, res: Response) {
 
       const billing = o.settings?.billing || {};
       const reconcil = reconcilByOrgId.get(o.id) || {};
+      const owner = ownerByOrgId.get(o.id);
 
       return {
         organizationId: o.id,
@@ -328,6 +344,7 @@ async function quotaWatchHandler(req: Request, res: Response) {
         isTrialActive: o.isTrialActive,
         subscriptionStatus: o.subscriptionStatus,
         createdAt: o.createdAt.toISOString(),
+        owner: owner ? { name: owner.name, email: owner.email } : null,
         consumption: {
           aiMessagesProcessed: actual,
           aiMessagesLimit: limit === -1 ? null : limit, // null = ilimitado
