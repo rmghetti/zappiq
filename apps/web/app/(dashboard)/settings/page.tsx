@@ -16,12 +16,18 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Users, Smartphone, Brain, Plus, Trash2,
-  CheckCircle2, AlertCircle, Loader2,
+  CheckCircle2, AlertCircle, Loader2, CreditCard,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 
-type Tab = 'general' | 'team' | 'whatsapp' | 'ai';
+type Tab = 'general' | 'team' | 'whatsapp' | 'ai' | 'billing';
+
+interface BillingSettings {
+  autoOverage?: boolean;
+  hardCeilingBrl?: number | null;
+  notifyAtPercent?: number; // % do limite a notificar (default 80)
+}
 
 interface TeamMember {
   id: string;
@@ -108,6 +114,12 @@ export default function SettingsPage() {
   );
   const [savingAI, setSavingAI] = useState(false);
 
+  // Billing tab (Onda 6 — Quota Mgmt #4 + #5)
+  const [autoOverage, setAutoOverage] = useState(false);
+  const [hardCeilingBrl, setHardCeilingBrl] = useState<string>('');
+  const [notifyAtPercent, setNotifyAtPercent] = useState<number>(80);
+  const [savingBilling, setSavingBilling] = useState(false);
+
   // Invite form (Team tab)
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
@@ -144,6 +156,18 @@ export default function SettingsPage() {
           setAgentHandoff(
             agent.handoffMessage ||
               'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido!'
+          );
+        }
+
+        // PR #111 — billing (Quota Mgmt #4 + #5)
+        const billing = (orgRes.data.settings as { billing?: BillingSettings } | null | undefined)?.billing;
+        if (billing) {
+          setAutoOverage(Boolean(billing.autoOverage));
+          setHardCeilingBrl(
+            billing.hardCeilingBrl != null ? String(billing.hardCeilingBrl) : ''
+          );
+          setNotifyAtPercent(
+            typeof billing.notifyAtPercent === 'number' ? billing.notifyAtPercent : 80
           );
         }
       }
@@ -223,6 +247,39 @@ export default function SettingsPage() {
     }
   }
 
+  // ─── Billing (PR #111 — Quota Mgmt #4 + #5) ───────────────────
+  async function handleSaveBilling() {
+    // Validações
+    const ceilingNum = hardCeilingBrl.trim() === '' ? null : Number(hardCeilingBrl);
+    if (ceilingNum != null && (!Number.isFinite(ceilingNum) || ceilingNum < 0)) {
+      showToast('error', 'Teto de gasto inválido. Use número positivo ou deixe vazio.');
+      return;
+    }
+    if (notifyAtPercent < 50 || notifyAtPercent > 100) {
+      showToast('error', 'Notificação deve estar entre 50% e 100%.');
+      return;
+    }
+    setSavingBilling(true);
+    try {
+      const mergedSettings: OrgSettings = {
+        ...(org?.settings || {}),
+        billing: {
+          autoOverage,
+          hardCeilingBrl: ceilingNum,
+          notifyAtPercent,
+        } as BillingSettings,
+      };
+      const res = await api.put<{ data: Organization }>('/api/settings', { settings: mergedSettings });
+      if (res.data) setOrg(res.data);
+      showToast('success', 'Preferências de cobrança salvas');
+    } catch (err) {
+      const msg = (err as { message?: string })?.message || 'Erro ao salvar';
+      showToast('error', msg);
+    } finally {
+      setSavingBilling(false);
+    }
+  }
+
   // ─── Team handlers ────────────────────────────────────────────
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -277,6 +334,7 @@ export default function SettingsPage() {
     { key: 'team', label: 'Equipe', icon: Users },
     { key: 'whatsapp', label: 'WhatsApp', icon: Smartphone },
     { key: 'ai', label: 'IA / Agente', icon: Brain },
+    { key: 'billing', label: 'Cobrança & Limites', icon: CreditCard },
   ];
 
   if (loading) {
@@ -561,6 +619,110 @@ export default function SettingsPage() {
             {savingAI && <Loader2 size={14} className="animate-spin" />}
             {savingAI ? 'Salvando...' : 'Salvar configurações'}
           </button>
+        </div>
+      )}
+
+      {/* Billing & Limites (PR #111 — Quota Mgmt #4 + #5) */}
+      {tab === 'billing' && (
+        <div className="bg-white rounded-xl border border-gray-100 p-6 max-w-2xl space-y-6">
+          <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <CreditCard className="text-blue-600 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="text-sm font-semibold text-blue-900">Controle de gastos do plano</p>
+              <p className="text-xs text-blue-700 mt-0.5">
+                Defina como sua conta deve se comportar quando o limite de mensagens IA do plano for atingido.
+                Você está no plano <span className="font-semibold">{org?.plan || '—'}</span>.
+              </p>
+            </div>
+          </div>
+
+          {/* Auto-overage toggle */}
+          <div className="flex items-start justify-between gap-4 p-4 border border-gray-200 rounded-lg">
+            <div className="flex-1">
+              <label className="block text-sm font-semibold text-gray-900">
+                Auto-overage (continuar atendendo após limite)
+              </label>
+              <p className="text-xs text-gray-500 mt-1">
+                Quando ativo, a IA continua respondendo mesmo após o limite mensal — você paga apenas pelo excedente.
+                Quando inativo, conversas extras são pausadas até o próximo ciclo ou upgrade.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoOverage}
+              onClick={() => setAutoOverage((v) => !v)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                autoOverage ? 'bg-primary-500' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  autoOverage ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Hard ceiling */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Teto de gasto mensal em overage (R$)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="10"
+              value={hardCeilingBrl}
+              onChange={(e) => setHardCeilingBrl(e.target.value)}
+              disabled={!autoOverage}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+              placeholder="Ex: 200 (deixe vazio = sem teto)"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Ao atingir esse valor de gasto extra no mês, a IA é pausada automaticamente. Vazio = sem teto (ilimitado).
+            </p>
+          </div>
+
+          {/* Notify at % */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Notificar ao atingir <span className="font-semibold text-primary-600">{notifyAtPercent}%</span> do limite do plano
+            </label>
+            <input
+              type="range"
+              min="50"
+              max="100"
+              step="5"
+              value={notifyAtPercent}
+              onChange={(e) => setNotifyAtPercent(Number(e.target.value))}
+              className="w-full accent-primary-500"
+            />
+            <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+              <span>50%</span>
+              <span>75%</span>
+              <span>100%</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Enviamos um aviso por e-mail ao admin quando o consumo IA do mês atingir esse percentual.
+            </p>
+          </div>
+
+          {/* Save */}
+          <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+            <p className="text-xs text-gray-400">
+              Faturas, planos e método de pagamento são gerenciados via Stripe (em breve dentro do dashboard).
+            </p>
+            <button
+              onClick={handleSaveBilling}
+              disabled={savingBilling}
+              className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 disabled:opacity-50 flex items-center gap-2"
+            >
+              {savingBilling && <Loader2 size={14} className="animate-spin" />}
+              {savingBilling ? 'Salvando...' : 'Salvar preferências'}
+            </button>
+          </div>
         </div>
       )}
     </div>
