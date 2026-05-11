@@ -111,4 +111,40 @@ class AdminApi {
   }
 }
 
+// ─── PR #135-alt — LLM Health (V4-003 dashboard) ──────────────────────
+
+export interface LLMProviderStatus {
+  id: string;
+  label: string;
+  model: string;
+  breakerOpen: boolean;
+  failures: number;
+  openUntil: number | null;
+}
+
+export interface LLMHealthResponse {
+  providers: LLMProviderStatus[];
+  last24h: {
+    totalCalls: number;
+    totalCostUsd: string;
+    avgLatencyMs: number;
+    fallbackRate: number;
+    byProvider: Record<string, number>;
+  };
+  generatedAt: string;
+}
+
+class LLMHealthApi {
+  /**
+   * GET /api/admin/llm-health
+   * Estado em tempo real dos circuit breakers (Redis-backed) + métricas 24h.
+   * Requer role SUPERADMIN.
+   */
+  async getHealth(): Promise<LLMHealthResponse> {
+    return api.get<LLMHealthResponse>('/api/admin/llm-health');
+  }
+}
+
+export const llmHealthApi = new LLMHealthApi();
+
 export const adminApi = new AdminApi();
