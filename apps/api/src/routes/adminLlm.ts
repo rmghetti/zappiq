@@ -37,6 +37,9 @@ import { prisma } from '@zappiq/database';
 // PR #135-alt: novo endpoint paralelo /llm-health protegido por JWT+SUPERADMIN
 // pra dashboard frontend consumir sem expor META_APP_SECRET ao browser.
 import { authMiddleware, requireRole } from '../middleware/auth.js';
+// PR #160-cron-trigger: imports pra forçar execução manual dos crons (debug + validação pós-deploy)
+import { runTenantUsageCycle } from '../services/tenantUsageService.js';
+import { runUsageReconciliationCycle } from '../services/usageReconciliationService.js';
 
 const router = Router();
 
@@ -174,5 +177,73 @@ router.get(
   requireRole('SUPERADMIN') as any,
   llmHealthHandler,
 );
+
+// ══════════════════════════════════════════════════════════════════════════
+// PR cron-trigger — POST /api/admin/cron/run
+// --------------------------------------------------------------------------
+// Dispara MANUALMENTE a execução de um cron específico sem esperar o horário
+// agendado. Útil pra validação pós-deploy (cron 04:00 UTC pode ser daqui
+// horas — vc quer ver agora) ou disaster recovery (cron falhou silenciosamente
+// numa execução, rodar de novo).
+//
+// Auth: X-Admin-Secret == env.META_APP_SECRET (mesmo do /llm-status).
+// Trabalha como /llm-status — proteção por header secret. NÃO precisa JWT.
+//
+// Uso operacional (de dentro do container Fly):
+//   curl -X POST -H "X-Admin-Secret: $META_APP_SECRET" \
+//        -H "Content-Type: application/json" \
+//        -d '{"job":"tenant-usage"}' \
+//        http://localhost:3001/api/admin/cron/run
+//
+// Jobs suportados:
+//   - tenant-usage          → runTenantUsageCycle()
+//   - usage-reconciliation  → runUsageReconciliationCycle()
+//
+// Idempotência: ambos os ciclos são idempotentes (upsert/Redis hash). Rodar
+// 2x não causa double-counting. Mas evite rodar enquanto o cron agendado
+// está rodando (race em writes).
+// ══════════════════════════════════════════════════════════════════════════
+router.post('/cron/run', async (req: Request, res: Response) => {
+  if (!requireAdminAuth(req, res)) return;
+
+  const job = req.body?.job;
+  if (typeof job !== 'string') {
+    res.status(400).json({ error: 'body { job: "tenant-usage" | "usage-reconciliation" } obrigatório' });
+    return;
+  }
+
+  const t0 = Date.now();
+  try {
+    let result: unknown;
+    if (job === 'tenant-usage') {
+      logger.info('[admin/cron/run] tenant-usage manual trigger iniciado');
+      result = await runTenantUsageCycle();
+    } else if (job === 'usage-reconciliation') {
+      logger.info('[admin/cron/run] usage-reconciliation manual trigger iniciado');
+      result = await runUsageReconciliationCycle();
+    } else {
+      res.status(400).json({
+        error: `job desconhecido: ${job}`,
+        supported: ['tenant-usage', 'usage-reconciliation'],
+      });
+      return;
+    }
+    const totalMs = Date.now() - t0;
+    res.json({
+      ok: true,
+      job,
+      totalMs,
+      result,
+    });
+  } catch (err: any) {
+    logger.error('[admin/cron/run] erro:', err);
+    res.status(500).json({
+      ok: false,
+      job,
+      error: err?.message || 'erro desconhecido',
+      totalMs: Date.now() - t0,
+    });
+  }
+});
 
 export default router;
