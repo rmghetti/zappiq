@@ -78,7 +78,7 @@ async function leadsHandler(req: Request, res: Response) {
       LEFT JOIN LATERAL (
         SELECT name, email FROM users
         WHERE "organizationId" = o.id
-        AND role IN ('ADMIN', 'SUPERADMIN', 'OWNER')
+        AND role IN ('SUPERADMIN', 'ADMIN')
         ORDER BY "createdAt" ASC
         LIMIT 1
       ) u ON true
