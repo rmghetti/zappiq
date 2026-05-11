@@ -3,6 +3,36 @@
 All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Live] — 2026-05-11 — Onda 6 Quota Management + V4-003/V4-006
+
+### Added — Quota Management (Audit-Only Fase 1)
+- **PR #111** `feat(web)`: aba "Cobrança & Limites" em `/settings` — toggle `autoOverage`, input teto BRL, slider `notifyAtPercent` (50-100). Persiste em `organization.settings.billing` JSON. Sem mudança em schema.
+- **PR #149** `feat(api)`: cron BullMQ `usage-reconciliation` diário 04:00 UTC cruzando `TenantUsageMonthly × PLAN_CONFIG × settings.billing`. Decide ação por org (`no_action | notify_only | would_pause | would_charge_overage | over_ceiling`) sem executar. Estado em Redis hash (`zappiq:reconcil:{orgId}:{YYYY-MM}`, TTL 60d). Notificação Slack idempotente por threshold.
+- **PR #149** `feat(api)`: `apps/api/src/services/slackNotifier.ts` — webhook helper com Block Kit + fail-soft. Env `SLACK_WEBHOOK_QUOTA_ALERTS`.
+- **PR #149** `fix(api)`: wire-up de `initTenantUsageJob` (H10 unit economics) que estava órfão em `server.ts`. Cron 03:10 UTC agora rodando em prod pela primeira vez.
+
+### Added — V4 LLM Infrastructure
+- **PR #134 / V4-003** `feat(api)`: `apps/api/src/services/llm/redisBreaker.ts` — circuit breaker Redis-backed substituindo o Map in-memory. Chaves `zappiq:breaker:{providerId}:{failures|open_until|last_failure_at}` com TTLs naturais. Coordenação multi-instância Fly + sobrevive a restart. Fail-OPEN graceful em erro de Redis.
+- **PR #137 / V4-006** `feat(api)`: tool/function calling no LLMRouter. Tipos `ToolDefinition`, `ToolCall`, `stopReason` em `LLMCompletionResponse`. AnthropicProvider + OpenAIProvider passam tools e extraem tool_calls. GoogleProvider ignora silenciosamente (TODO V4-006.1). Novo módulo `apps/api/src/services/llm/tools.ts` com registry + 1 tool PoC `get_org_billing_summary`. Passivo — agentOrchestrator não usa tools ainda.
+- **PR #135-alt** `feat(web+api)`: endpoint `GET /api/admin/llm-health` (JWT + SUPERADMIN) + página `/admin/llm-health` com cards visuais dos providers + auto-refresh 30s. Independente de Grafana.
+
+### Added — Landing / Marketing
+- **PR #158** `feat(web)`: tier Business adicionado à tabela `/sla` com mesmos termos do Enterprise (99,9% contratual, RPO 1h, RTO 4h). CTAs finais agora duplos (Business + Enterprise). Copy ajustada pra plural.
+
+### Changed
+- **PR #134** `refactor(api)`: `LLMRouter.complete()` e `getStatus()` ficaram async. `recordFailure` no error path é fire-and-forget pra não bloquear cascade. `recordSuccess` aguarda Redis pra garantir consistência entre instâncias antes de retornar.
+- **PR #134** `refactor(api)`: `apps/api/src/routes/adminLlm.ts` — `llmRouter.getStatus()` virou `await`. Mantida rota `/llm-status` com X-Admin-Secret pra curl operacional; nova rota `/llm-health` para frontend JWT.
+- **`ARCHITECTURE.md`**: seção "Circuit Breaker (Futuro)" reescrita como "Circuit Breaker (Implementado — V4-003)". Adicionadas seções "Quota Management — Audit-Only Fase 1" e "Tool/Function Calling (V4-006 PoC)". Próximos Passos reescrito refletindo entregas reais e descopos estratégicos.
+
+### Deferred — não fazer agora
+- **PR #135 V4-004 (LLM streaming opt-in):** SKIPPED. WhatsApp não suporta streaming. ROI restrito a dashboard interno. Substituído por PR #135-alt.
+- **PR #136 V4-005 (cloud-agnostic abstrações):** PENDENTE. Skip até sinal de migração de Fly.
+- **PR #150 Quota Mgmt #7 (Self-Signup limit choice):** DEFERRED estratégico. Reativar SE primeiro cliente Business pagante pedir pré-declarar tolerância a overage no contrato.
+- **PR #147 Quota Mgmt #4 (Stripe overage automation):** adiar pra ≥ 2026-05-25 (após 2 semanas de audit-only validado em prod).
+
+### Fixed (drift descoberto durante exploração)
+- Identificado: tasks #144 #146 #177 marcadas como completed em sprints anteriores não tinham código real (`UsageAlert` schema, Slack helper, wire-up do tenant-usage cron). PR #149 resolve o gap do cron órfão como bonus.
+
 ## [Pre-launch] — 2026-04-30 — Onda V2 · Dossiê Cru (52 gaps)
 
 ### Added — Conformidade & institucional
