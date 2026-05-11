@@ -46,6 +46,16 @@
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
 import { logLLMCall } from './llmCallAudit.js';
+// PR #V4-003: circuit breaker migrado de Map in-memory pra Redis-backed.
+// Coordena estado entre instâncias Fly + sobrevive a restart. Fail-open
+// graceful: Redis down => breaker reporta closed (prefere servir a bloquear).
+import {
+  breakerIsOpen as breakerIsOpenRedis,
+  recordSuccess as recordSuccessRedis,
+  recordFailure as recordFailureRedis,
+  getBreakerState as getBreakerStateRedis,
+  __resetBreakersForTest as __resetBreakersForTestRedis,
+} from './redisBreaker.js';
 
 export type LLMMessage = { role: 'user' | 'assistant' | 'system'; content: string };
 
@@ -118,65 +128,43 @@ interface LLMProvider {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// Circuit breaker
-// ══════════════════════════════════════════════════════════════════
+// Circuit breaker (PR #V4-003 — Redis-backed, multi-instância)
+// ──────────────────────────────────────────────────────────────────
+// Estado movido pra Redis (apps/api/src/services/llm/redisBreaker.ts).
+// Comentário V2-018/Sprint 0 "Estado em memória por instância (aceitável
+// pra Sprint 0...)" — gap fechado neste PR. Coordenação entre instâncias
+// Fly + sobrevive a restart. Thresholds preservados: 3 falhas em 60s
+// abrem por 120s.
+//
+// As 4 funções abaixo são thin adapters async que delegam ao Redis
+// helpers, mantendo a assinatura conceitual usada em `complete()`.
+// Funções assíncronas — call sites passaram a usar `await`.
 
-interface BreakerState {
-  failures: number;
-  openUntil: number | null;
-  lastFailureAt: number | null;
+// Thresholds (3 falhas em 60s abre por 120s) ficam em redisBreaker.ts.
+
+async function breakerIsOpen(id: LLMProviderId): Promise<boolean> {
+  return breakerIsOpenRedis(id);
 }
 
-const BREAKER_FAIL_THRESHOLD = 3;
-const BREAKER_FAIL_WINDOW_MS = 60 * 1000;
-const BREAKER_OPEN_DURATION_MS = 120 * 1000;
-
-const breakers = new Map<LLMProviderId, BreakerState>();
-
-function getBreaker(id: LLMProviderId): BreakerState {
-  let b = breakers.get(id);
-  if (!b) {
-    b = { failures: 0, openUntil: null, lastFailureAt: null };
-    breakers.set(id, b);
-  }
-  return b;
+async function recordSuccess(id: LLMProviderId): Promise<void> {
+  await recordSuccessRedis(id);
 }
 
-function breakerIsOpen(id: LLMProviderId): boolean {
-  const b = getBreaker(id);
-  if (b.openUntil && Date.now() < b.openUntil) return true;
-  if (b.openUntil && Date.now() >= b.openUntil) {
-    // Half-open: zera e dá uma chance
-    b.openUntil = null;
-    b.failures = 0;
-  }
-  return false;
-}
-
-function recordSuccess(id: LLMProviderId) {
-  const b = getBreaker(id);
-  b.failures = 0;
-  b.lastFailureAt = null;
-}
-
-function recordFailure(id: LLMProviderId, kind: 'timeout' | '5xx' | '429' | 'quota' | 'client') {
-  if (kind === 'client') return;
-  const b = getBreaker(id);
-  const now = Date.now();
-  if (b.lastFailureAt && now - b.lastFailureAt > BREAKER_FAIL_WINDOW_MS) {
-    b.failures = 0;
-  }
-  b.failures += 1;
-  b.lastFailureAt = now;
-  if (b.failures >= BREAKER_FAIL_THRESHOLD) {
-    b.openUntil = now + BREAKER_OPEN_DURATION_MS;
-    logger.warn(`[LLMRouter] breaker OPEN for ${id} (${b.failures} failures)`);
-  }
+async function recordFailure(
+  id: LLMProviderId,
+  kind: 'timeout' | '5xx' | '429' | 'quota' | 'client',
+): Promise<void> {
+  await recordFailureRedis(id, kind);
 }
 
 /** Hook de teste: zera todos os breakers (uso restrito a Vitest). */
-export function __resetBreakersForTest() {
-  breakers.clear();
+export async function __resetBreakersForTest(): Promise<void> {
+  await __resetBreakersForTestRedis([
+    'anthropic-sonnet',
+    'anthropic-haiku',
+    'openai-mini',
+    'google-gemini-flash',
+  ]);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -449,13 +437,16 @@ export class LLMRouter {
 
     for (const provider of chain) {
       attempt += 1;
-      if (breakerIsOpen(provider.id)) {
+      // PR #V4-003: breakerIsOpen agora consulta Redis (async)
+      if (await breakerIsOpen(provider.id)) {
         logger.info(`[LLMRouter] skipping ${provider.id} (breaker open)`);
         continue;
       }
       try {
         const resp = await provider.invoke(req);
-        recordSuccess(provider.id);
+        // Sucesso: limpa estado do breaker no Redis (await pra garantir
+        // consistência entre instâncias antes de devolver a resposta).
+        await recordSuccess(provider.id);
         const totalLatency = Date.now() - startCascade;
 
         // Audit (fail-soft) — não bloqueia resposta
@@ -476,7 +467,10 @@ export class LLMRouter {
       } catch (err) {
         lastErr = err as Error;
         if (err instanceof ProviderError) {
-          recordFailure(provider.id, err.kind);
+          // Fire-and-forget no error path: NÃO bloqueamos o fallback pro
+          // próximo provider esperando o Redis. Falhas de Redis no
+          // recordFailure já são fail-soft (só logam WARN).
+          recordFailure(provider.id, err.kind).catch(() => {});
           logger.warn(`[LLMRouter] ${provider.id} failed: ${err.message}`, { kind: err.kind });
           if (err.kind === 'client') {
             // 4xx do cliente: devolve direto, não tenta próximo
@@ -494,7 +488,7 @@ export class LLMRouter {
             throw err;
           }
         } else {
-          recordFailure(provider.id, 'timeout');
+          recordFailure(provider.id, 'timeout').catch(() => {});
           logger.warn(`[LLMRouter] ${provider.id} unknown error`, { err });
         }
       }
@@ -517,14 +511,23 @@ export class LLMRouter {
     throw lastErr ?? new Error('LLMRouter: all providers exhausted');
   }
 
-  /** Exposto pra healthcheck /api/admin/llm-status. Lista todos os providers do pool. */
-  getStatus() {
-    return Object.values(this.providers).map((p) => ({
+  /**
+   * Exposto pra healthcheck /api/admin/llm-status. Lista todos os providers
+   * do pool com estado atual do breaker. Agora async — agrega estado do
+   * Redis em paralelo (PR #V4-003).
+   */
+  async getStatus() {
+    const providers = Object.values(this.providers);
+    const states = await Promise.all(
+      providers.map((p) => getBreakerStateRedis(p.id)),
+    );
+    return providers.map((p, i) => ({
       id: p.id,
       label: p.label,
       model: p.model,
-      breakerOpen: breakerIsOpen(p.id),
-      failures: getBreaker(p.id).failures,
+      breakerOpen: states[i].isOpen,
+      failures: states[i].failures,
+      openUntil: states[i].openUntil,
     }));
   }
 }

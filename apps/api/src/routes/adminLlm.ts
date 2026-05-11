@@ -55,7 +55,8 @@ router.get('/llm-status', async (req: Request, res: Response) => {
   if (!requireAdminAuth(req, res)) return;
 
   try {
-    const providers = llmRouter.getStatus();
+    // PR #V4-003: getStatus virou async (consulta Redis pro estado do breaker)
+    const providers = await llmRouter.getStatus();
 
     // Agregação 24h via llm_call_logs (tabela criada no Blocker 1)
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
