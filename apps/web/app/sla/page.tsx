@@ -4,13 +4,17 @@ import { Activity, Clock, Shield, TrendingDown, Zap, FileText, ArrowRight, Check
 
 export const metadata = {
   title: 'SLA — Disponibilidade e Garantias Contratuais | ZappIQ',
-  description: 'SLA formal 99,9% de uptime no plano Enterprise. Créditos automáticos por descumprimento. RPO 1h, RTO 4h. Transparência total de disponibilidade.',
+  description: 'SLA formal 99,9% de uptime nos planos Business e Enterprise. Créditos automáticos por descumprimento. RPO 1h, RTO 4h. Transparência total de disponibilidade.',
 };
 
+// PR #158: tier Business adicionado entre Scale e Enterprise. Business já tem
+// SLA contratual 99,9% + créditos automáticos (definido em planConfig.ts:
+// features.slaContractual=true), mas a tabela pública só listava Enterprise.
 const SLA_TABLE = [
   { plan: 'Starter', uptime: 'Best effort', credits: '—', rpo: '24h', rto: '24h' },
   { plan: 'Growth', uptime: 'Best effort', credits: '—', rpo: '24h', rto: '24h' },
   { plan: 'Scale', uptime: '99,5% alvo', credits: '—', rpo: '4h', rto: '8h' },
+  { plan: 'Business', uptime: '99,9% contratual', credits: 'Sim', rpo: '1h', rto: '4h' },
   { plan: 'Enterprise', uptime: '99,9% contratual', credits: 'Sim', rpo: '1h', rto: '4h' },
 ];
 
@@ -43,7 +47,7 @@ export default function SLAPage() {
             <span className="text-amber-400">99,9%</span> de uptime, formalmente contratado.
           </h1>
           <p className="text-lg lg:text-xl text-gray-300 max-w-3xl mb-8 leading-relaxed">
-            No plano Enterprise, nosso SLA é contratual, não promessa de marketing. Uptime mensurado em tempo real, relatório público mensal e créditos automáticos em caso de descumprimento. Transparência total.
+            Nos planos Business e Enterprise, nosso SLA é contratual, não promessa de marketing. Uptime mensurado em tempo real, relatório público mensal e créditos automáticos em caso de descumprimento. Transparência total.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link href="#termos"
@@ -59,7 +63,7 @@ export default function SLAPage() {
           {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-14 pt-10 border-t border-white/10">
             {[
-              { value: '99,9%', label: 'Uptime Enterprise' },
+              { value: '99,9%', label: 'Uptime Business/Enterprise' },
               { value: '1h', label: 'RPO — Recovery Point' },
               { value: '4h', label: 'RTO — Recovery Time' },
               { value: '72h', label: 'Notificação de incidente' },
@@ -85,14 +89,14 @@ export default function SLAPage() {
               <strong>99,9% de disponibilidade</strong> significa no máximo <strong>~43 minutos de indisponibilidade por mês</strong>. Parece pouco? Para uma operação enxuta, é aceitável. Para uma operação onde WhatsApp é canal crítico de vendas e atendimento, pode ser caro.
             </p>
             <p>
-              Por isso o SLA Enterprise é contratual: se a gente passar desses 43 minutos, você recebe crédito proporcional automaticamente, sem precisar abrir ticket nem negociar.
+              Por isso o SLA Business e Enterprise é contratual: se a gente passar desses 43 minutos, você recebe crédito proporcional automaticamente, sem precisar abrir ticket nem negociar.
             </p>
             <div className="bg-amber-50 border-l-4 border-amber-400 p-5 rounded">
               <p className="font-semibold text-amber-900 mb-2">RPO e RTO — o que ninguém te conta</p>
               <p className="text-amber-900 text-sm">
-                <strong>RPO (Recovery Point Objective):</strong> quanto de dado sua empresa pode perder em um disaster recovery. No Enterprise, no máximo 1h. Traduzindo: se acontecer o pior, você perde no máximo 1 hora de conversas.
+                <strong>RPO (Recovery Point Objective):</strong> quanto de dado sua empresa pode perder em um disaster recovery. No Business e Enterprise, no máximo 1h. Traduzindo: se acontecer o pior, você perde no máximo 1 hora de conversas.
                 <br /><br />
-                <strong>RTO (Recovery Time Objective):</strong> em quanto tempo voltamos ao ar. No Enterprise, 4h. Comparação: a maioria dos concorrentes promete SLA mas não documenta RPO/RTO — e isso é o que realmente importa em incidente.
+                <strong>RTO (Recovery Time Objective):</strong> em quanto tempo voltamos ao ar. No Business e Enterprise, 4h. Comparação: a maioria dos concorrentes promete SLA mas não documenta RPO/RTO — e isso é o que realmente importa em incidente.
               </p>
             </div>
           </div>
@@ -117,11 +121,13 @@ export default function SLAPage() {
               <div className="col-span-2">RPO</div>
               <div className="col-span-2">RTO</div>
             </div>
-            {SLA_TABLE.map((row, i) => (
-              <div key={row.plan} className={`grid grid-cols-12 px-6 py-5 items-center border-b border-gray-100 last:border-b-0 ${row.plan === 'Enterprise' ? 'bg-gradient-to-r from-amber-50 to-orange-50' : ''}`}>
+            {SLA_TABLE.map((row, i) => {
+              const isContratual = row.plan === 'Business' || row.plan === 'Enterprise';
+              return (
+              <div key={row.plan} className={`grid grid-cols-12 px-6 py-5 items-center border-b border-gray-100 last:border-b-0 ${isContratual ? 'bg-gradient-to-r from-amber-50 to-orange-50' : ''}`}>
                 <div className="col-span-3 font-semibold text-gray-900 flex items-center gap-2">
                   {row.plan}
-                  {row.plan === 'Enterprise' && (
+                  {isContratual && (
                     <span className="bg-amber-400 text-gray-900 text-xs font-bold px-2 py-0.5 rounded-full">Contratual</span>
                   )}
                 </div>
@@ -130,7 +136,8 @@ export default function SLAPage() {
                 <div className="col-span-2 text-sm text-gray-700">{row.rpo}</div>
                 <div className="col-span-2 text-sm text-gray-700">{row.rto}</div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -139,7 +146,7 @@ export default function SLAPage() {
       <section className="py-20 bg-white">
         <div className="max-w-4xl mx-auto px-6">
           <div className="text-center mb-10">
-            <p className="text-sm font-semibold text-amber-600 uppercase tracking-wider mb-3">Créditos (Enterprise)</p>
+            <p className="text-sm font-semibold text-amber-600 uppercase tracking-wider mb-3">Créditos (Business e Enterprise)</p>
             <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900 mb-4">
               Se a gente falhar, paga
             </h2>
@@ -234,12 +241,18 @@ export default function SLAPage() {
             Operação crítica exige SLA crítico
           </h2>
           <p className="text-gray-300 mb-8 max-w-2xl mx-auto">
-            SLA contratual é parte do plano Enterprise. Falar com especialista leva 30 minutos e não custa nada.
+            SLA contratual é parte dos planos Business e Enterprise. Falar com especialista leva 30 minutos e não custa nada.
           </p>
-          <Link href="/enterprise"
-            className="bg-amber-400 text-gray-900 font-semibold px-7 py-4 rounded-xl hover:bg-amber-300 transition-colors inline-flex items-center gap-2">
-            Conhecer plano Enterprise <ArrowRight size={18} />
-          </Link>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link href="/precos#business"
+              className="bg-amber-400 text-gray-900 font-semibold px-7 py-4 rounded-xl hover:bg-amber-300 transition-colors inline-flex items-center justify-center gap-2">
+              Conhecer plano Business <ArrowRight size={18} />
+            </Link>
+            <Link href="/enterprise"
+              className="border border-white/20 text-white font-semibold px-7 py-4 rounded-xl hover:bg-white/5 transition-colors inline-flex items-center justify-center gap-2">
+              Conhecer plano Enterprise
+            </Link>
+          </div>
         </div>
       </section>
     </PublicLayout>
