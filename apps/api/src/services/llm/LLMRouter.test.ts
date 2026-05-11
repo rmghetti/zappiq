@@ -50,6 +50,50 @@ vi.mock('../../config/env.js', () => ({
   },
 }));
 
+// PR #V4-003: mock do redisBreaker (in-memory) pra rodar tests sem Redis real.
+// Reproduz o comportamento do breaker original (3 falhas em 60s abre por 120s),
+// mas mantém estado em Map local — testes focam na lógica do Router, não no
+// Redis em si (o Redis tem testes próprios de integração).
+vi.mock('./redisBreaker.js', () => {
+  interface State { failures: number; openUntil: number | null; lastFailureAt: number | null }
+  const FAIL_THRESHOLD = 3;
+  const FAIL_WINDOW_MS = 60_000;
+  const OPEN_DURATION_MS = 120_000;
+  const state = new Map<string, State>();
+  function get(id: string): State {
+    let s = state.get(id);
+    if (!s) { s = { failures: 0, openUntil: null, lastFailureAt: null }; state.set(id, s); }
+    return s;
+  }
+  return {
+    breakerIsOpen: vi.fn(async (id: string) => {
+      const s = get(id);
+      if (s.openUntil && Date.now() < s.openUntil) return true;
+      if (s.openUntil && Date.now() >= s.openUntil) { s.openUntil = null; s.failures = 0; }
+      return false;
+    }),
+    recordSuccess: vi.fn(async (id: string) => {
+      const s = get(id); s.failures = 0; s.lastFailureAt = null; s.openUntil = null;
+    }),
+    recordFailure: vi.fn(async (id: string, kind: string) => {
+      if (kind === 'client') return;
+      const s = get(id); const now = Date.now();
+      if (s.lastFailureAt && now - s.lastFailureAt > FAIL_WINDOW_MS) s.failures = 0;
+      s.failures += 1; s.lastFailureAt = now;
+      if (s.failures >= FAIL_THRESHOLD) s.openUntil = now + OPEN_DURATION_MS;
+    }),
+    getBreakerState: vi.fn(async (id: string) => {
+      const s = get(id);
+      return {
+        failures: s.failures,
+        openUntil: s.openUntil,
+        isOpen: s.openUntil != null && Date.now() < s.openUntil,
+      };
+    }),
+    __resetBreakersForTest: vi.fn(async () => { state.clear(); }),
+  };
+});
+
 import { LLMRouter, __resetBreakersForTest, ProviderError } from './LLMRouter.js';
 import { logLLMCall } from './llmCallAudit.js';
 
@@ -98,8 +142,8 @@ describe('LLMRouter', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let fetchSpy: any;
 
-  beforeEach(() => {
-    __resetBreakersForTest();
+  beforeEach(async () => {
+    await __resetBreakersForTest();
     vi.clearAllMocks();
     // Mock global fetch
     fetchSpy = vi.spyOn(globalThis, 'fetch');
@@ -271,7 +315,7 @@ describe('LLMRouter', () => {
       await router.complete({ messages: [{ role: 'user', content: 'b' }] });
       await router.complete({ messages: [{ role: 'user', content: 'c' }] });
       // Breaker NÃO abriu — Sonnet recuperou no meio
-      const status = router.getStatus();
+      const status = await router.getStatus();
       expect(status[0].breakerOpen).toBe(false);
     });
 
@@ -283,7 +327,7 @@ describe('LLMRouter', () => {
       await expect(
         router.complete({ messages: [{ role: 'user', content: 'a' }] }),
       ).rejects.toThrow();
-      const status = router.getStatus();
+      const status = await router.getStatus();
       expect(status[0].failures).toBe(0);
     });
   });
@@ -503,7 +547,7 @@ describe('LLMRouter', () => {
   describe('V4 #V4-001 — getStatus inclui Gemini', () => {
     it('lista 4 providers (Gemini + Sonnet + Haiku + OpenAI)', () => {
       const router = new LLMRouter();
-      const status = router.getStatus();
+      const status = await router.getStatus();
       const ids = status.map((s) => s.id).sort();
       expect(ids).toEqual([
         'anthropic-haiku',
