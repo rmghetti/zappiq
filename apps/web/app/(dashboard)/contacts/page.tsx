@@ -1,24 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Users, Search, Plus, Download, Filter, ChevronLeft, ChevronRight, Mail, Phone } from 'lucide-react';
 import { api } from '../../../lib/api';
-import { PhoneInput, DocumentInput } from '../../../components/MaskedInputs';
-import type { PersonType } from '../../../lib/masks';
-// MaskedInputs ready for use when contact edit modal is implemented
-
-interface Contact {
-  id: string;
-  name: string;
-  phone: string;
-  email?: string;
-  company?: string;
-  leadStatus: string;
-  leadScore: number;
-  tags: string[];
-  lastInteractionAt: string;
-  createdAt: string;
-}
+import { ContactFormModal, type Contact } from '../../../components/contacts/ContactFormModal';
 
 const STATUS_COLORS: Record<string, string> = {
   NEW: 'bg-blue-100 text-blue-700',
@@ -35,9 +20,11 @@ export default function ContactsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const limit = 20;
 
-  useEffect(() => {
+  const fetchContacts = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
     if (search) params.append('search', search);
@@ -48,6 +35,20 @@ export default function ContactsPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [page, search, statusFilter]);
+
+  useEffect(() => {
+    fetchContacts();
+  }, [fetchContacts]);
+
+  function openCreate() {
+    setEditingContact(null);
+    setModalOpen(true);
+  }
+
+  function openEdit(contact: Contact) {
+    setEditingContact(contact);
+    setModalOpen(true);
+  }
 
   const totalPages = Math.ceil(total / limit);
 
@@ -63,7 +64,10 @@ export default function ContactsPage() {
           <a href="/api/contacts/export" className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
             <Download size={16} /> Exportar
           </a>
-          <button className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600">
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600"
+          >
             <Plus size={16} /> Novo Contato
           </button>
         </div>
@@ -118,7 +122,11 @@ export default function ContactsPage() {
               <tr><td colSpan={6} className="px-5 py-12 text-center text-sm text-gray-400">Nenhum contato encontrado</td></tr>
             ) : (
               contacts.map((c) => (
-                <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors">
+                <tr
+                  key={c.id}
+                  onClick={() => openEdit(c)}
+                  className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+                >
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 text-xs font-bold">
@@ -177,6 +185,14 @@ export default function ContactsPage() {
           </div>
         )}
       </div>
+
+      {/* PR #108 — Modal CRUD (criar/editar/deletar) */}
+      <ContactFormModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSaved={fetchContacts}
+        contact={editingContact}
+      />
     </div>
   );
 }
