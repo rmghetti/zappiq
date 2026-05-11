@@ -189,6 +189,8 @@ export interface QuotaWatchResponse {
     orgsTrialing: number;
   };
   rows: QuotaWatchRow[];
+  excludeStaging?: boolean;
+  stagingFilteredCount?: number;
   generatedAt: string;
 }
 

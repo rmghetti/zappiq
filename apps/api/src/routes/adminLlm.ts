@@ -223,12 +223,21 @@ router.get(
 // Hoje (2026-05-11) são 15 orgs → ~30ms total no Redis. Sem otimização
 // prematura.
 // ══════════════════════════════════════════════════════════════════════════
-async function quotaWatchHandler(_req: Request, res: Response) {
+async function quotaWatchHandler(req: Request, res: Response) {
   try {
     const now = new Date();
     const periodYearMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 
-    // 1) Carrega todas as orgs (sem filtro — vc quer ver tudo, inclusive trial)
+    // ?excludeStaging=true (default) filtra orgs cujos users TODOS são
+    // seed data (email @exemplo-staging.zappiq.com.br). Investigado em
+    // 2026-05-11: 10 orgs "-STAGING" criadas em 16/04 com pattern
+    // owner/agent1/agent2@exemplo-staging.zappiq.com.br. São fixtures de
+    // teste — diluem sinal real do audit-only.
+    // Use ?excludeStaging=false pra ver TUDO.
+    const excludeStaging = req.query.excludeStaging !== 'false';
+
+    // 1) Carrega todas as orgs (filtro de staging aplicado depois via SQL extra
+    //    pra evitar JOIN complexo aqui).
     const orgs = (await prisma.organization.findMany({
       select: {
         id: true,
@@ -250,6 +259,27 @@ async function quotaWatchHandler(_req: Request, res: Response) {
       createdAt: Date;
     }>;
 
+    // 1.5) Identificar orgs "staging" (todos users com domain @exemplo-staging.zappiq.com.br)
+    let stagingOrgIds = new Set<string>();
+    if (excludeStaging) {
+      const stagingRows = (await prisma.$queryRawUnsafe(`
+        SELECT o.id
+        FROM organizations o
+        WHERE NOT EXISTS (
+          SELECT 1 FROM users u
+          WHERE u."organizationId" = o.id
+          AND u.email NOT LIKE '%@exemplo-staging.zappiq.com.br'
+        )
+        AND EXISTS (
+          SELECT 1 FROM users u WHERE u."organizationId" = o.id
+        )
+      `)) as Array<{ id: string }>;
+      stagingOrgIds = new Set(stagingRows.map((r) => r.id));
+    }
+    const filteredOrgs = excludeStaging
+      ? orgs.filter((o) => !stagingOrgIds.has(o.id))
+      : orgs;
+
     // 2) Carrega usage do mês corrente em batch
     const usageRows = (await (prisma as any).TenantUsageMonthly.findMany({
       where: { periodYearMonth },
@@ -269,7 +299,7 @@ async function quotaWatchHandler(_req: Request, res: Response) {
 
     // 3) Carrega estado de reconciliação do Redis (paralelo, fail-soft)
     const reconcilStates = await Promise.all(
-      orgs.map(async (o) => {
+      filteredOrgs.map(async (o) => {
         try {
           const raw = (await redis.hgetall(`zappiq:reconcil:${o.id}:${periodYearMonth}`)) || {};
           return { orgId: o.id, hash: raw as Record<string, string> };
@@ -281,7 +311,7 @@ async function quotaWatchHandler(_req: Request, res: Response) {
     const reconcilByOrgId = new Map(reconcilStates.map((r) => [r.orgId, r.hash]));
 
     // 4) Combina tudo
-    const rows = orgs.map((o) => {
+    const rows = filteredOrgs.map((o) => {
       const usage = usageByOrgId.get(o.id);
       const cfg = (PLAN_CONFIG as Record<string, PlanConfig>)[o.plan];
       const limit = cfg?.limits?.aiMessagesPerMonth ?? 0;
@@ -335,6 +365,8 @@ async function quotaWatchHandler(_req: Request, res: Response) {
       period: periodYearMonth,
       summary,
       rows,
+      excludeStaging,
+      stagingFilteredCount: stagingOrgIds.size,
       generatedAt: new Date().toISOString(),
     });
   } catch (err: any) {
