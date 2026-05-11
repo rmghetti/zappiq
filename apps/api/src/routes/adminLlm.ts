@@ -34,6 +34,8 @@ import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { llmRouter } from '../services/llm/LLMRouter.js';
 import { prisma } from '@zappiq/database';
+import redis from '../utils/redis.js';
+import { PLAN_CONFIG, type PlanConfig } from '@zappiq/shared';
 // PR #135-alt: novo endpoint paralelo /llm-health protegido por JWT+SUPERADMIN
 // pra dashboard frontend consumir sem expor META_APP_SECRET ao browser.
 import { authMiddleware, requireRole } from '../middleware/auth.js';
@@ -203,6 +205,151 @@ router.get(
 // 2x não causa double-counting. Mas evite rodar enquanto o cron agendado
 // está rodando (race em writes).
 // ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
+// PR quota-watch — GET /api/admin/quota-watch
+// --------------------------------------------------------------------------
+// Painel humano pro audit-only do PR #149. Lista todas as organizações
+// ativas com:
+//   - plan + isTrialActive
+//   - consumo mês corrente (aiMessagesProcessed) vs limite do plano
+//   - usagePercent calculado
+//   - settings.billing (autoOverage, hardCeilingBrl, notifyAtPercent)
+//   - estado do Redis hash de reconciliação (last_run, last_action, notify_pct_*)
+//
+// Auth: JWT + SUPERADMIN (mesmo padrão de /admin/llm-health).
+//
+// Trade-off de performance: faz N+1 round trips ao Redis (1 hgetall por org).
+// Aceitável até ~500 orgs. Pra escala >500: pipelinear ou usar MGET.
+// Hoje (2026-05-11) são 15 orgs → ~30ms total no Redis. Sem otimização
+// prematura.
+// ══════════════════════════════════════════════════════════════════════════
+async function quotaWatchHandler(_req: Request, res: Response) {
+  try {
+    const now = new Date();
+    const periodYearMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+
+    // 1) Carrega todas as orgs (sem filtro — vc quer ver tudo, inclusive trial)
+    const orgs = (await prisma.organization.findMany({
+      select: {
+        id: true,
+        name: true,
+        plan: true,
+        subscriptionStatus: true,
+        isTrialActive: true,
+        settings: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    })) as Array<{
+      id: string;
+      name: string;
+      plan: string;
+      subscriptionStatus: string;
+      isTrialActive: boolean;
+      settings: any;
+      createdAt: Date;
+    }>;
+
+    // 2) Carrega usage do mês corrente em batch
+    const usageRows = (await (prisma as any).TenantUsageMonthly.findMany({
+      where: { periodYearMonth },
+      select: {
+        organizationId: true,
+        aiMessagesProcessed: true,
+        llmCostUsd: true,
+        computedAt: true,
+      },
+    })) as Array<{
+      organizationId: string;
+      aiMessagesProcessed: number;
+      llmCostUsd: number;
+      computedAt: Date;
+    }>;
+    const usageByOrgId = new Map(usageRows.map((u) => [u.organizationId, u]));
+
+    // 3) Carrega estado de reconciliação do Redis (paralelo, fail-soft)
+    const reconcilStates = await Promise.all(
+      orgs.map(async (o) => {
+        try {
+          const raw = (await redis.hgetall(`zappiq:reconcil:${o.id}:${periodYearMonth}`)) || {};
+          return { orgId: o.id, hash: raw as Record<string, string> };
+        } catch {
+          return { orgId: o.id, hash: {} as Record<string, string> };
+        }
+      }),
+    );
+    const reconcilByOrgId = new Map(reconcilStates.map((r) => [r.orgId, r.hash]));
+
+    // 4) Combina tudo
+    const rows = orgs.map((o) => {
+      const usage = usageByOrgId.get(o.id);
+      const cfg = (PLAN_CONFIG as Record<string, PlanConfig>)[o.plan];
+      const limit = cfg?.limits?.aiMessagesPerMonth ?? 0;
+      const actual = usage?.aiMessagesProcessed ?? 0;
+      const usagePercent = limit > 0 ? (actual / limit) * 100 : 0;
+
+      const billing = o.settings?.billing || {};
+      const reconcil = reconcilByOrgId.get(o.id) || {};
+
+      return {
+        organizationId: o.id,
+        organizationName: o.name,
+        plan: o.plan,
+        isTrialActive: o.isTrialActive,
+        subscriptionStatus: o.subscriptionStatus,
+        createdAt: o.createdAt.toISOString(),
+        consumption: {
+          aiMessagesProcessed: actual,
+          aiMessagesLimit: limit === -1 ? null : limit, // null = ilimitado
+          usagePercent: limit > 0 ? Number(usagePercent.toFixed(2)) : null,
+          llmCostUsd: usage?.llmCostUsd ?? 0,
+          lastComputedAt: usage?.computedAt?.toISOString() ?? null,
+        },
+        billing: {
+          autoOverage: Boolean(billing.autoOverage),
+          hardCeilingBrl: billing.hardCeilingBrl ?? null,
+          notifyAtPercent: typeof billing.notifyAtPercent === 'number' ? billing.notifyAtPercent : 80,
+        },
+        reconciliation: {
+          lastRunAt: reconcil.last_run_at ?? null,
+          lastAction: reconcil.last_action ?? null,
+          usagePercentAtLastRun: reconcil.usage_percent ? Number(reconcil.usage_percent) : null,
+          notifiedAt50: reconcil.notify_pct_50 ?? null,
+          notifiedAt80: reconcil.notify_pct_80 ?? null,
+          notifiedAt100: reconcil.notify_pct_100 ?? null,
+        },
+      };
+    });
+
+    // 5) Summary agregado
+    const summary = {
+      totalOrgs: rows.length,
+      orgsAt50Percent: rows.filter((r) => r.consumption.usagePercent !== null && r.consumption.usagePercent >= 50 && r.consumption.usagePercent < 80).length,
+      orgsAt80Percent: rows.filter((r) => r.consumption.usagePercent !== null && r.consumption.usagePercent >= 80 && r.consumption.usagePercent < 100).length,
+      orgsAt100Percent: rows.filter((r) => r.consumption.usagePercent !== null && r.consumption.usagePercent >= 100).length,
+      orgsWithAutoOverage: rows.filter((r) => r.billing.autoOverage).length,
+      orgsTrialing: rows.filter((r) => r.isTrialActive).length,
+    };
+
+    res.json({
+      period: periodYearMonth,
+      summary,
+      rows,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    logger.error('[admin/quota-watch] erro:', err);
+    res.status(500).json({ error: 'erro ao consultar quota-watch', message: err?.message });
+  }
+}
+
+router.get(
+  '/quota-watch',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  quotaWatchHandler,
+);
+
 router.post('/cron/run', async (req: Request, res: Response) => {
   if (!requireAdminAuth(req, res)) return;
 
