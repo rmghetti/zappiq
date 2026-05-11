@@ -122,7 +122,12 @@ export default function QuotaWatchPage() {
             Quota Watch
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Painel operacional do audit-only (PR #149) — todas as orgs, consumo do mês, estado de reconciliação
+            Painel operacional do audit-only (PR #149) — orgs reais, consumo do mês, estado de reconciliação
+            {data?.excludeStaging && data?.stagingFilteredCount ? (
+              <span className="ml-2 inline-flex items-center text-[10px] font-semibold bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                {data.stagingFilteredCount} orgs staging ocultas
+              </span>
+            ) : null}
           </p>
         </div>
         <button
