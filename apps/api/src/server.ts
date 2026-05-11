@@ -40,6 +40,7 @@ import auditLogsRoutes from './routes/auditLogs.js';
 import dsrRoutes from './routes/dataSubjectRequests.js';
 import adminWhatsappRoutes from './routes/adminWhatsapp.js';
 import adminLlmRoutes from './routes/adminLlm.js'; // V2-025 Observability DAY 1
+import adminLeadsIzaRoutes from './routes/adminLeadsIza.js'; // 2026-05-11 leads + iza-conversations
 import { initRetentionJob } from './services/retentionService.js';
 import { initTenantUsageJob } from './services/tenantUsageService.js'; // PR #149 — H10 unit economics
 import { initUsageReconciliationJob } from './services/usageReconciliationService.js'; // PR #149 — Quota Mgmt #6 audit-only
@@ -219,6 +220,7 @@ app.use('/api/onboarding', onboardingRoutes);
 // ── Admin diagnostics (auth via header X-Admin-Secret == META_APP_SECRET) ─
 app.use('/api/admin/whatsapp', adminWhatsappRoutes);
 app.use('/api/admin', adminLlmRoutes); // V2-025: GET /api/admin/llm-status
+app.use('/api/admin', adminLeadsIzaRoutes); // 2026-05-11: /admin/leads + /admin/iza-conversations
 
 // ── Protected Routes (auth + RLS tenant isolation) ─
 app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, contactsRoutes);

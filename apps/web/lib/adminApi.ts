@@ -156,6 +156,7 @@ export interface QuotaWatchRow {
   isTrialActive: boolean;
   subscriptionStatus: string;
   createdAt: string;
+  owner: { name: string; email: string } | null;
   consumption: {
     aiMessagesProcessed: number;
     aiMessagesLimit: number | null; // null = ilimitado
@@ -207,5 +208,120 @@ class QuotaWatchApi {
 }
 
 export const quotaWatchApi = new QuotaWatchApi();
+
+// ─── Leads (signups + orgs unificados) ────────────────────────────────
+
+export type LeadStatus = 'signup_only' | 'cadastrado' | 'ativo';
+export type LeadKind = 'organization' | 'signup';
+
+export interface LeadRow {
+  kind: LeadKind;
+  id: string;
+  name: string;
+  ownerName: string | null;
+  ownerEmail: string | null;
+  plan: string;
+  isTrialActive: boolean;
+  subscriptionStatus: string;
+  company: string | null;
+  cnpj: string | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  conversationsCount: number;
+  messagesCount: number;
+  status: LeadStatus;
+  createdAt: string;
+  confirmedAt: string | null;
+}
+
+export interface LeadsResponse {
+  summary: {
+    totalLeads: number;
+    signupOnly: number;
+    cadastrado: number;
+    ativo: number;
+    stagingFilteredCount: number;
+    periodDays: number;
+  };
+  rows: LeadRow[];
+  includeStaging: boolean;
+  generatedAt: string;
+}
+
+class LeadsApi {
+  async getLeads(opts: { days?: number; includeStaging?: boolean } = {}): Promise<LeadsResponse> {
+    const params = new URLSearchParams();
+    if (opts.days) params.set('days', String(opts.days));
+    if (opts.includeStaging) params.set('includeStaging', 'true');
+    const qs = params.toString();
+    return api.get<LeadsResponse>(`/api/admin/leads${qs ? '?' + qs : ''}`);
+  }
+}
+
+export const leadsApi = new LeadsApi();
+
+// ─── Iza Conversations (espião SUPERADMIN) ────────────────────────────
+
+export interface IzaConversationRow {
+  id: string;
+  status: string;
+  channel: string;
+  summary: string | null;
+  csatScore: number | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  msgCount: number;
+  lastMsg: string | null;
+  lastMsgAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+}
+
+export interface IzaConversationsResponse {
+  izaOrgId: string;
+  total: number;
+  rows: IzaConversationRow[];
+  generatedAt: string;
+}
+
+export interface IzaConversationMessage {
+  id: string;
+  content: string;
+  direction: 'INBOUND' | 'OUTBOUND';
+  isFromBot: boolean;
+  status: string | null;
+  messageType: string | null;
+  createdAt: string;
+}
+
+export interface IzaConversationDetailResponse {
+  conversation: {
+    id: string;
+    status: string;
+    channel: string;
+    summary: string | null;
+    csatScore: number | null;
+    contactName: string | null;
+    contactPhone: string | null;
+    createdAt: string;
+    updatedAt: string;
+    closedAt: string | null;
+  };
+  messages: IzaConversationMessage[];
+  generatedAt: string;
+}
+
+class IzaApi {
+  async getConversations(): Promise<IzaConversationsResponse> {
+    return api.get<IzaConversationsResponse>('/api/admin/iza-conversations');
+  }
+  async getConversationDetail(id: string): Promise<IzaConversationDetailResponse> {
+    return api.get<IzaConversationDetailResponse>(`/api/admin/iza-conversations/${encodeURIComponent(id)}`);
+  }
+}
+
+export const izaApi = new IzaApi();
 
 export const adminApi = new AdminApi();

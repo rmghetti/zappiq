@@ -103,12 +103,15 @@ export default function QuotaWatchPage() {
 
   if (user?.role !== 'SUPERADMIN') return null;
 
-  // Ordena: maior usagePercent primeiro (mais críticos no topo)
+  // Ordena: maior usagePercent primeiro (mais críticos no topo).
+  // Tie-breaker: createdAt desc (signups recentes ganham — útil pra
+  // identificar leads parados sem ter mexido na conta).
   const sortedRows = data
     ? [...data.rows].sort((a, b) => {
         const pa = a.consumption.usagePercent ?? -1;
         const pb = b.consumption.usagePercent ?? -1;
-        return pb - pa;
+        if (pa !== pb) return pb - pa;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       })
     : [];
 
@@ -191,7 +194,7 @@ export default function QuotaWatchPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
                   <tr>
-                    <th className="px-4 py-2.5 text-left font-semibold">Org</th>
+                    <th className="px-4 py-2.5 text-left font-semibold">Org / Owner</th>
                     <th className="px-4 py-2.5 text-left font-semibold">Plano</th>
                     <th className="px-4 py-2.5 text-right font-semibold">Consumo</th>
                     <th className="px-4 py-2.5 text-right font-semibold">% Uso</th>
@@ -289,7 +292,20 @@ function OrgRow({ row }: { row: QuotaWatchRow }) {
       <td className="px-4 py-3">
         <div className="flex flex-col">
           <span className="font-semibold text-gray-900 text-[13px]">{row.organizationName}</span>
-          <span className="text-[10px] text-gray-400 font-mono">{row.organizationId.slice(0, 12)}…</span>
+          {row.owner ? (
+            <span className="text-[11px] text-gray-500">
+              {row.owner.name} ·{' '}
+              <a
+                href={`mailto:${row.owner.email}`}
+                className="text-primary-600 hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {row.owner.email}
+              </a>
+            </span>
+          ) : (
+            <span className="text-[10px] text-gray-400 font-mono">{row.organizationId.slice(0, 12)}…</span>
+          )}
         </div>
       </td>
       <td className="px-4 py-3">
