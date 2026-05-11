@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Megaphone, Plus, Send, BarChart2, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { CampaignFormModal } from '../../../components/campaigns/CampaignFormModal';
 
 interface Campaign {
   id: string;
@@ -29,13 +30,19 @@ const STATUS_BADGE: Record<string, { bg: string; icon: any }> = {
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
 
-  useEffect(() => {
+  const fetchCampaigns = useCallback(() => {
+    setLoading(true);
     api.get('/api/campaigns')
       .then((res) => setCampaigns(res.data || []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchCampaigns();
+  }, [fetchCampaigns]);
 
   return (
     <div>
@@ -44,7 +51,10 @@ export default function CampaignsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Campanhas</h1>
           <p className="text-sm text-gray-500 mt-1">Disparos em massa via WhatsApp</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600">
+        <button
+          onClick={() => setModalOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600"
+        >
           <Plus size={16} /> Nova Campanha
         </button>
       </div>
@@ -105,6 +115,13 @@ export default function CampaignsPage() {
           })
         )}
       </div>
+
+      {/* PR #110 — Modal Nova Campanha */}
+      <CampaignFormModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSaved={fetchCampaigns}
+      />
     </div>
   );
 }
