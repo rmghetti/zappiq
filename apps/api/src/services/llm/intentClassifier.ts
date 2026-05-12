@@ -1,11 +1,16 @@
 /* ══════════════════════════════════════════════════════════════════════
  * V4 #143 · Intent classifier (escala pra Sonnet em casos críticos)
+ * P0 fix 2026-05-12 (task #233): adicionado 'purchase_intent' — Iza
+ * falhou em conversão real (lead disse "Quero" pós-CTA, Iza despejou
+ * catálogo). Aceitação de oferta agora classifica como purchase_intent
+ * → escala Sonnet → system prompt avança o funil em vez de info dump.
  * --------------------------------------------------------------------
- * Classifica a intent da última mensagem do cliente em uma de 4 categorias:
- *   - handoff:    cliente pede explicitamente falar com humano
- *   - objection:  objeção de preço, dúvida séria, comparação concorrente
- *   - enterprise: volume alto (>500/dia), C-level, escala enterprise
- *   - normal:     tudo mais (saudação, dúvida simples, info request)
+ * Classifica a intent da última mensagem do cliente em uma de 5 categorias:
+ *   - handoff:         cliente pede explicitamente falar com humano
+ *   - objection:       objeção de preço, dúvida séria, comparação concorrente
+ *   - enterprise:      volume alto (>500/dia), C-level, escala enterprise
+ *   - purchase_intent: aceita oferta concreta (trial, demo, link, plano)
+ *   - normal:          tudo mais (saudação, dúvida simples, info request)
  *
  * Política de uso (V4 routing):
  *   - intent ≠ 'normal' → forçar provider Sonnet 4.6 (mesmo em tier Gemini)
@@ -14,7 +19,9 @@
  * Por quê?
  *   Gate 1 mostrou que Gemini falha em handoff (insiste em conversa) e
  *   tende a respostas rasas em objeção complexa. Sonnet é mais consultivo.
- *   Custo extra: ~10% dos turnos disparam classify Sonnet — margem aceitável.
+ *   Lead aceitando oferta vai pra Sonnet pq esse turno é receita potencial —
+ *   não pode ser truncado por mensagem rasa do Gemini.
+ *   Custo extra: ~10-15% dos turnos disparam classify Sonnet — margem aceitável.
  *
  * Custo do classifier em si:
  *   - Provider: Haiku 4.5 (rápido + barato, $1/$5 por 1M tokens)
@@ -29,12 +36,13 @@
 import { llmRouter, type LLMMessage } from './LLMRouter.js';
 import { logger } from '../../utils/logger.js';
 
-export type IzaIntent = 'handoff' | 'objection' | 'enterprise' | 'normal';
+export type IzaIntent = 'handoff' | 'objection' | 'enterprise' | 'purchase_intent' | 'normal';
 
 const VALID_INTENTS: ReadonlySet<IzaIntent> = new Set([
   'handoff',
   'objection',
   'enterprise',
+  'purchase_intent',
   'normal',
 ]);
 
@@ -50,9 +58,10 @@ Classifique a ÚLTIMA mensagem do cliente em UMA das categorias:
 - handoff: cliente pede explicitamente falar com humano (ex: "quero falar com gente", "prefiro humano", "não quero bot", "humano por favor")
 - objection: cliente está negociando preço de forma séria, levantando dúvida técnica complexa, ou comparando concorrente específico (ex: "tá caro", "qual a diferença pra Take Blip?", "esse preço é negociável?")
 - enterprise: cliente menciona volume alto (>500 mensagens/dia), cargo C-level (CEO, CTO, Diretor), escala enterprise, ou pede demo customizada (ex: "sou CEO", "1500 atendimentos/dia", "preciso falar com fundador")
-- normal: TUDO mais (saudação simples, pergunta de preço genérica, dúvida sobre features, descoberta de necessidade)
+- purchase_intent: cliente ACEITA uma oferta concreta que a Iza ACABOU DE FAZER (trial, demo, plano específico, link). Exemplos: "Quero", "Quero sim", "Vou começar", "OK manda", "Pode mandar", "Fechado", "Bora", "Vamos lá", "Aceito", "Sim quero". IMPORTANTE: olha o histórico — só vale purchase_intent se a Iza acabou de oferecer algo concreto. Aceitação genérica sem CTA prévio = normal.
+- normal: TUDO mais (saudação simples, pergunta de preço genérica, dúvida sobre features, descoberta de necessidade, "sim" sem contexto de aceitação)
 
-Responda APENAS UMA PALAVRA: handoff, objection, enterprise, ou normal.
+Responda APENAS UMA PALAVRA: handoff, objection, enterprise, purchase_intent, ou normal.
 Sem pontuação, sem explicação, sem prefixo. APENAS a palavra.`;
 
 export interface ClassifyContext {
@@ -103,7 +112,9 @@ export async function classifyIntent(
     // Procura uma das intents válidas em QUALQUER posição (word boundary).
     // Cobre casos: "handoff", "Intent: handoff", "objection.", "  HANDOFF\n",
     // "intent é objection", etc. A primeira ocorrência vence.
-    const match = raw.match(/\b(handoff|objection|enterprise|normal)\b/);
+    // Ordem importa: purchase_intent antes pra evitar 'normal' contaminação
+    // em respostas tipo "purchase_intent — mas se for normal..." (raro).
+    const match = raw.match(/\b(handoff|objection|enterprise|purchase_intent|normal)\b/);
     if (match) {
       return match[1] as IzaIntent;
     }
