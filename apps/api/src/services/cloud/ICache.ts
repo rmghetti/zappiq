@@ -1,0 +1,54 @@
+/**
+ * ICache — interface cloud-agnostic pra cache key-value.
+ *
+ * Backends suportados (hoje + futuro):
+ *   - Redis (Upstash) — `RedisCacheProvider`
+ *   - GCP Memorystore — TODO
+ *   - AWS ElastiCache — TODO
+ *   - In-memory (testes) — TODO
+ *
+ * Operações cobrem 90% do uso atual em ZappIQ (rate limit, circuit breaker,
+ * dedup webhook, rag cache, planLimits quota). Operações exóticas
+ * (HSET, LIST, ZSET) NÃO entram nessa interface — quem precisar usa o
+ * backend nativo diretamente e fica explicitamente cloud-specific.
+ *
+ * Fail-soft semantics: todos os adapters retornam null/false em caso de
+ * erro de backend ao invés de throw — preserva graceful degrade do produto.
+ */
+export interface ICache {
+  /** Retorna valor ou null se não existe. Erros de backend → null + log. */
+  get(key: string): Promise<string | null>;
+
+  /**
+   * Seta valor com TTL opcional em segundos. Sem TTL = sem expiração.
+   * Erros de backend → false + log (não throw).
+   */
+  set(key: string, value: string, ttlSeconds?: number): Promise<boolean>;
+
+  /** Remove a key. Idempotente — null/inexistente não é erro. */
+  del(key: string): Promise<boolean>;
+
+  /**
+   * INCR atômico. Útil pra contadores (quota, rate limit).
+   * Retorna valor pós-incremento; null em erro de backend.
+   */
+  incr(key: string): Promise<number | null>;
+
+  /**
+   * EXPIRE key — seta TTL em segundos numa key já existente.
+   * Útil em conjunto com INCR (incr + expire pattern).
+   */
+  expire(key: string, ttlSeconds: number): Promise<boolean>;
+
+  /**
+   * Lê várias keys em batch. null pras inexistentes.
+   * Não é transaction — só round-trip menor.
+   */
+  mget(keys: string[]): Promise<(string | null)[]>;
+
+  /**
+   * Healthcheck — retorna true se backend responde em <500ms.
+   * Usado pelo /api/health e pelo circuit breaker do próprio cache layer.
+   */
+  ping(): Promise<boolean>;
+}
