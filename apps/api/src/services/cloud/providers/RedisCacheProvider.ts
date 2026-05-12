@@ -91,4 +91,19 @@ export class RedisCacheProvider implements ICache {
       return false;
     }
   }
+
+  /**
+   * SET key value EX ttl NX — atomic via ioredis.
+   * ioredis retorna 'OK' se criou, null se já existia.
+   */
+  async setNX(key: string, value: string, ttlSeconds: number): Promise<boolean | null> {
+    try {
+      const result = await redis.set(key, value, 'EX', ttlSeconds, 'NX');
+      // 'OK' = criou; null = key já existia
+      return result === 'OK';
+    } catch (err: any) {
+      logger.warn('[RedisCacheProvider.setNX] failed', { key, err: err?.message });
+      return null;
+    }
+  }
 }

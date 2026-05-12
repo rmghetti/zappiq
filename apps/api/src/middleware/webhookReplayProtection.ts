@@ -4,50 +4,32 @@
 /* Protege POST /api/webhook/whatsapp contra:                          */
 /*   (1) Replay de payload antigo — janela ±5 min no X-Hub-Timestamp   */
 /*       (quando presente) ou Date header.                             */
-/*   (2) Reprocessamento duplicado — cache de messageId no Redis com   */
-/*       TTL 24h via pattern SETNX. Duplicatas são respondidas com     */
-/*       200 mas não disparam side-effects (Meta exige 200 para não    */
-/*       retry agressivo).                                             */
+/*   (2) Reprocessamento duplicado — cache de messageId via cache.setNX*/
+/*       (TTL 24h). Duplicatas são respondidas com 200 mas não         */
+/*       disparam side-effects (Meta exige 200 para não retry          */
+/*       agressivo).                                                   */
+/*                                                                     */
+/* PR #V4-005.2 (2026-05-12): migrado de import direto de ioredis para */
+/* abstração cloud-agnostic via cache.setNX(). Removida a lazy-load do */
+/* ioredis (cache é singleton no boot). Fallback in-memory preservado  */
+/* PRA QUANDO setNX retorna null (erro de backend) — bloco que antes   */
+/* ficava só pra "sem REDIS_URL" agora é fallback universal de falha.  */
 /*                                                                     */
 /* Plugado em apps/api/src/server.ts antes da rota whatsapp:           */
 /*     app.use('/api/webhook/whatsapp', webhookReplayProtection());    */
 /*                                                                     */
-/* Fallback sem Redis: em dev/test degrada para Set in-memory com TTL  */
-/* auto-purge a cada 60s. Nunca falha aberto em produção — se Redis    */
-/* estiver indisponível, middleware loga ERROR e deixa passar (porque  */
-/* perder um webhook é pior que aceitar replay raro).                  */
+/* Semântica fail-open em erro de cache (preservada): se backend cai,  */
+/* aceita o webhook em vez de bloquear (Meta penaliza não-ack).        */
 /* ------------------------------------------------------------------ */
 
 import type { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger.js';
+import { cache } from '../services/cloud/index.js';
 
 const REPLAY_WINDOW_SECONDS = 5 * 60; // ±5 min
 const DEDUP_TTL_SECONDS = 24 * 60 * 60; // 24h
 
-// ── Redis (opcional) ──
-let redisClient: any = null;
-async function getRedis() {
-  if (redisClient !== null) return redisClient;
-  try {
-    // Lazy import — evita import circular no boot
-    const mod = await import('ioredis');
-    const url = process.env.REDIS_URL;
-    if (!url) {
-      redisClient = false;
-      return false;
-    }
-    const RedisCls = (mod.default ?? mod) as any;
-    redisClient = new RedisCls(url, { maxRetriesPerRequest: 2, lazyConnect: true });
-    await redisClient.connect().catch(() => {});
-    return redisClient;
-  } catch (err) {
-    logger.warn('[ReplayProtection] Redis not available — falling back to in-memory dedup', { err });
-    redisClient = false;
-    return false;
-  }
-}
-
-// ── In-memory fallback ──
+// ── In-memory fallback (usado SÓ quando cache.setNX retorna null = erro) ──
 const memoryCache = new Map<string, number>();
 function memoryHasSeen(key: string): boolean {
   const now = Date.now() / 1000;
@@ -91,21 +73,21 @@ export function extractMessageId(body: any): string | null {
   }
 }
 
-// ── Seen-cache check (Redis ou fallback) ──
+// ── Seen-cache check (cache.setNX ou fallback in-memory) ──
 async function alreadyProcessed(messageId: string): Promise<boolean> {
   const key = `webhook:seen:${messageId}`;
-  const r = await getRedis();
-  if (r && r !== false) {
-    try {
-      // SET key 1 NX EX 24*3600 — retorna "OK" se criou, null se já existia
-      const result = await r.set(key, '1', 'EX', DEDUP_TTL_SECONDS, 'NX');
-      return result === null;
-    } catch (err) {
-      logger.error('[ReplayProtection] Redis SET failed — fail-open', { err });
-      return false;
-    }
+  const result = await cache.setNX(key, '1', DEDUP_TTL_SECONDS);
+
+  if (result === true) {
+    // Criou agora — não é duplicado
+    return false;
   }
-  // Fallback in-memory
+  if (result === false) {
+    // Já existia — é duplicado
+    return true;
+  }
+  // result === null → erro de backend (cache.setNX já logou warning).
+  // Fallback in-memory preserva dedup mesmo com Redis down.
   if (memoryHasSeen(key)) return true;
   memorySetSeen(key, DEDUP_TTL_SECONDS);
   return false;
