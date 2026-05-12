@@ -46,6 +46,9 @@
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
 import { logLLMCall } from './llmCallAudit.js';
+// PR #V4-004: streaming opt-in. Parser SSE + tipo de chunk em arquivo separado
+// pra manter LLMRouter.ts focado em routing/cascade.
+import { parseAnthropicSSE, type LLMStreamChunk } from './LLMStream.js';
 // PR #V4-003: circuit breaker migrado de Map in-memory pra Redis-backed.
 // Coordena estado entre instâncias Fly + sobrevive a restart. Fail-open
 // graceful: Redis down => breaker reporta closed (prefere servir a bloquear).
@@ -171,7 +174,16 @@ interface LLMProvider {
   label: string;
   model: string;
   invoke(req: LLMCompletionRequest): Promise<LLMCompletionResponse>;
+  /**
+   * PR #V4-004: streaming opt-in. Providers que suportam SSE retornam
+   * AsyncIterable<LLMStreamChunk>; quem não suporta deixa undefined e
+   * cai no fallback no-stream (ou skip pelo router em modo streaming-only).
+   */
+  invokeStream?(req: LLMCompletionRequest): AsyncIterable<LLMStreamChunk>;
 }
+
+// Re-export pra callers (rotas /api/admin/llm-stream-test, etc).
+export type { LLMStreamChunk };
 
 // ══════════════════════════════════════════════════════════════════
 // Circuit breaker (PR #V4-003 — Redis-backed, multi-instância)
@@ -300,6 +312,51 @@ class AnthropicProvider implements LLMProvider {
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       stopReason: mapAnthropicStopReason(data?.stop_reason),
     };
+  }
+
+  /**
+   * PR #V4-004 — streaming via Anthropic Messages API (SSE).
+   * Parser de chunks em LLMStream.ts. Cascade no LLMRouter trata erros
+   * transientes; aqui só fazemos throw cedo e deixamos o parser yield
+   * 'error' final se a conexão cair no meio do stream.
+   */
+  async *invokeStream(req: LLMCompletionRequest): AsyncIterable<LLMStreamChunk> {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new ProviderError('missing ANTHROPIC_API_KEY', 'client');
+    const t0 = Date.now();
+
+    const body: any = {
+      model: this.model,
+      max_tokens: req.maxTokens ?? 1024,
+      temperature: req.temperature ?? 0.3,
+      system: req.system,
+      messages: req.messages.filter((m) => m.role !== 'system'),
+      stream: true,
+    };
+    if (req.tools && req.tools.length > 0) {
+      body.tools = req.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.inputSchema,
+      }));
+    }
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok || !res.body) {
+      const latencyMs = Date.now() - t0;
+      const kind = res.status === 429 ? '429' : res.status >= 500 ? '5xx' : 'client';
+      throw new ProviderError(`Anthropic stream ${res.status}`, kind, latencyMs);
+    }
+    yield* parseAnthropicSSE(res.body, this.id, this.model, t0);
   }
 }
 
@@ -644,6 +701,94 @@ export class LLMRouter {
     });
 
     throw lastErr ?? new Error('LLMRouter: all providers exhausted');
+  }
+
+  /**
+   * PR #V4-004 — streaming opt-in.
+   *
+   * Cascade conservadora: tenta cada provider na cadeia que IMPLEMENTA
+   * `invokeStream`. Quem não suporta é skipado (próximo PR adiciona OpenAI
+   * + Gemini). Falha hard no primeiro provider streaming-capable também
+   * NÃO faz fallback no-stream — o caller que pediu streaming espera SSE,
+   * cair pra `complete()` quebraria o contrato de chunks. Em vez disso,
+   * yieldamos { type: 'error' } e o caller decide se faz retry sem stream.
+   *
+   * Auditoria: log no chunk 'done' (sucesso) ou 'error' (falha). Latência
+   * mede do início do request até chunk 'done'.
+   */
+  async *completeStream(req: LLMCompletionRequest): AsyncIterable<LLMStreamChunk> {
+    const startCascade = Date.now();
+    const chain = this.buildChain(req);
+    let attempt = 0;
+
+    for (const provider of chain) {
+      if (!provider.invokeStream) {
+        logger.info(`[LLMRouter.stream] skipping ${provider.id} (no stream support)`);
+        continue;
+      }
+      attempt += 1;
+      if (await breakerIsOpen(provider.id)) {
+        logger.info(`[LLMRouter.stream] skipping ${provider.id} (breaker open)`);
+        continue;
+      }
+
+      try {
+        let lastFinal: LLMCompletionResponse | null = null;
+        for await (const chunk of provider.invokeStream(req)) {
+          if (chunk.type === 'done') {
+            lastFinal = chunk.final;
+            const totalLatency = Date.now() - startCascade;
+            const finalWithAttempt: LLMCompletionResponse = {
+              ...chunk.final,
+              attempt,
+              latencyMs: totalLatency,
+            };
+            // Audit fail-soft
+            logLLMCall({
+              organizationId: req.orgId ?? null,
+              conversationId: req.conversationId ?? null,
+              provider: provider.id,
+              model: provider.model,
+              operation: req.operation ?? 'chat',
+              inputTokens: chunk.final.usage?.inputTokens ?? null,
+              outputTokens: chunk.final.usage?.outputTokens ?? null,
+              latencyMs: totalLatency,
+              fallbackTriggered: attempt > 1,
+              attemptCount: attempt,
+            }).catch(() => {});
+            yield { type: 'done', final: finalWithAttempt };
+          } else {
+            yield chunk;
+          }
+        }
+        if (lastFinal) {
+          recordSuccess(provider.id).catch(() => {});
+          return;
+        }
+        // Stream terminou sem 'done' — trata como erro
+        throw new Error(`stream completed without 'done' chunk (${provider.id})`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.warn(`[LLMRouter.stream] ${provider.id} failed: ${msg}`);
+        if (err instanceof ProviderError) {
+          recordFailure(provider.id, err.kind).catch(() => {});
+          if (err.kind === 'client') {
+            yield { type: 'error', error: msg, provider: provider.id };
+            return;
+          }
+        } else {
+          recordFailure(provider.id, 'timeout').catch(() => {});
+        }
+        // Continua pro próximo provider streaming-capable
+      }
+    }
+
+    // Cascade streaming exhausted
+    yield {
+      type: 'error',
+      error: 'streaming cascade exhausted — nenhum provider streaming-capable disponível',
+      provider: chain[0]?.id ?? 'anthropic-sonnet',
+    };
   }
 
   /**
