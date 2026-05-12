@@ -1,7 +1,10 @@
 import axios from 'axios';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
-import redis from '../utils/redis.js';
+// PR #V4-005.1: migrado de import direto de Redis para abstração cloud-agnostic.
+// Comportamento idêntico (RedisCacheProvider wrappa o mesmo ioredis), mas agora
+// passa por ICache — habilita troca de backend via env CLOUD_CACHE_PROVIDER.
+import { cache } from './cloud/index.js';
 
 const ragClient = axios.create({
   baseURL: env.RAG_SERVICE_URL,
@@ -15,10 +18,10 @@ const ragClient = axios.create({
 export async function search(organizationId: string, query: string, topK = 5): Promise<string> {
   const cacheKey = `rag:${organizationId}:${Buffer.from(query).toString('base64').slice(0, 40)}`;
 
-  try {
-    const cached = await redis.get(cacheKey);
-    if (cached) return cached;
-  } catch {}
+  // cache.get() é fail-soft por contrato (retorna null em erro, não throw),
+  // então não precisamos do try/catch defensivo do código antigo.
+  const cached = await cache.get(cacheKey);
+  if (cached) return cached;
 
   try {
     const { data } = await ragClient.post('/search', {
@@ -31,7 +34,8 @@ export async function search(organizationId: string, query: string, topK = 5): P
       .map((r: any) => r.content)
       .join('\n\n---\n\n');
 
-    try { await redis.setex(cacheKey, 120, context); } catch {}
+    // cache.set() é fail-soft (retorna false em erro, não throw). TTL em segundos.
+    await cache.set(cacheKey, context, 120);
 
     return context;
   } catch (err: any) {
