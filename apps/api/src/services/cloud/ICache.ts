@@ -51,4 +51,20 @@ export interface ICache {
    * Usado pelo /api/health e pelo circuit breaker do próprio cache layer.
    */
   ping(): Promise<boolean>;
+
+  /**
+   * SET key value EX ttl NX — atomic set-if-not-exists com TTL.
+   * Útil pra dedup (webhook replay protection, idempotency keys).
+   *
+   * Retorno tri-estado:
+   *   - `true`  → criou (key não existia, agora existe com TTL)
+   *   - `false` → não criou (key já existia)
+   *   - `null`  → erro de backend (caller decide fail-open/closed)
+   *
+   * Por que tri-estado: em dedup, `false` (já existia) e `null` (erro)
+   * têm consequências MUITO diferentes — o primeiro deve bloquear o
+   * webhook, o segundo deve fail-open pra não perder eventos. Adapters
+   * concretos (Redis, Memorystore) DEVEM distinguir esses casos.
+   */
+  setNX(key: string, value: string, ttlSeconds: number): Promise<boolean | null>;
 }
