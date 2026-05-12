@@ -29,10 +29,18 @@ export interface ICache {
   del(key: string): Promise<boolean>;
 
   /**
-   * INCR atômico. Útil pra contadores (quota, rate limit).
+   * INCRBY atômico. Útil pra contadores (quota, rate limit).
+   * `amount` default 1 (equivale ao Redis INCR). Retorna valor pós-incremento;
+   * null em erro de backend.
+   */
+  incrby(key: string, amount?: number): Promise<number | null>;
+
+  /**
+   * INCRBYFLOAT atômico. Usado pra acumular valores monetários (trial cost,
+   * billing). Precisão limitada pelo backend — Redis usa long double.
    * Retorna valor pós-incremento; null em erro de backend.
    */
-  incr(key: string): Promise<number | null>;
+  incrbyfloat(key: string, amount: number): Promise<number | null>;
 
   /**
    * EXPIRE key — seta TTL em segundos numa key já existente.

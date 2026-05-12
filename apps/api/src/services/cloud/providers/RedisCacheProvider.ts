@@ -53,11 +53,24 @@ export class RedisCacheProvider implements ICache {
     }
   }
 
-  async incr(key: string): Promise<number | null> {
+  async incrby(key: string, amount: number = 1): Promise<number | null> {
     try {
-      return await redis.incr(key);
+      // Redis INCRBY com amount=1 = INCR. Não tem perda de perf.
+      return await redis.incrby(key, amount);
     } catch (err: any) {
-      logger.warn('[RedisCacheProvider.incr] failed', { key, err: err?.message });
+      logger.warn('[RedisCacheProvider.incrby] failed', { key, amount, err: err?.message });
+      return null;
+    }
+  }
+
+  async incrbyfloat(key: string, amount: number): Promise<number | null> {
+    try {
+      // Redis INCRBYFLOAT retorna string (ex: "1.5"). Convertemos pra number.
+      const result = await redis.incrbyfloat(key, amount);
+      const parsed = typeof result === 'string' ? parseFloat(result) : Number(result);
+      return Number.isFinite(parsed) ? parsed : null;
+    } catch (err: any) {
+      logger.warn('[RedisCacheProvider.incrbyfloat] failed', { key, amount, err: err?.message });
       return null;
     }
   }
