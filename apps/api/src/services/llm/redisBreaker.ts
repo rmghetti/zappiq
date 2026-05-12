@@ -54,7 +54,11 @@
  *   counter). Se passar, recordSuccess limpa as chaves. Simples e correto.
  */
 
-import { redis } from '../../utils/redis.js';
+// PR #V4-005.5: migrado de import direto de Redis pra abstração cache.
+// Comportamento idêntico — RedisCacheProvider wrappa o mesmo ioredis singleton.
+// Fail-open semantics preservada: erros de backend retornam null/false (não throw),
+// breakerIsOpen retorna false em ambos os casos = pipeline LLM segue tentando.
+import { cache } from '../cloud/index.js';
 import { logger } from '../../utils/logger.js';
 
 export type FailureKind = 'timeout' | '5xx' | '429' | 'quota' | 'client';
@@ -89,16 +93,13 @@ function lastFailureKey(id: string): string {
  * Fail-OPEN: erro de Redis ⇒ retorna `false` (não bloqueia).
  */
 export async function breakerIsOpen(id: string): Promise<boolean> {
-  try {
-    const raw = await redis.get(openUntilKey(id));
-    if (!raw) return false;
-    const openUntil = Number(raw);
-    if (!Number.isFinite(openUntil)) return false;
-    return Date.now() < openUntil;
-  } catch (err: any) {
-    logger.warn(`[redisBreaker] breakerIsOpen Redis falhou (fail-open): ${err.message}`);
-    return false;
-  }
+  // cache.get é fail-soft (retorna null em erro de backend). Tanto "não existe"
+  // quanto "erro" levam a return false = fail-open (não bloqueia pipeline LLM).
+  const raw = await cache.get(openUntilKey(id));
+  if (!raw) return false;
+  const openUntil = Number(raw);
+  if (!Number.isFinite(openUntil)) return false;
+  return Date.now() < openUntil;
 }
 
 /**
@@ -106,11 +107,14 @@ export async function breakerIsOpen(id: string): Promise<boolean> {
  * Fail-soft: erro de Redis só loga WARN.
  */
 export async function recordSuccess(id: string): Promise<void> {
-  try {
-    await redis.del(failuresKey(id), openUntilKey(id), lastFailureKey(id));
-  } catch (err: any) {
-    logger.warn(`[redisBreaker] recordSuccess Redis falhou: ${err.message}`);
-  }
+  // cache.del é singular — loop pras 3 keys. cache.del é fail-soft (log.warn
+  // interno em erro, sem throw); paralelizamos pra mesma latência do DEL atômico
+  // antigo (ioredis DEL multi-key fazia 1 round-trip; aqui são 3 paralelos).
+  await Promise.all([
+    cache.del(failuresKey(id)),
+    cache.del(openUntilKey(id)),
+    cache.del(lastFailureKey(id)),
+  ]);
 }
 
 /**
@@ -129,31 +133,33 @@ export async function recordFailure(id: string, kind: FailureKind): Promise<void
   if (kind === 'client') return;
 
   const now = Date.now();
-  try {
-    // Atomic increment
-    const failures = await redis.incr(failuresKey(id));
+  // cache.incrby (amount=1 default) é fail-soft: retorna null em erro.
+  const failures = await cache.incrby(failuresKey(id));
+  if (failures === null) {
+    // Backend de cache caiu — fail-soft. Não conta a falha, mas o LLMRouter
+    // segue o cascade. Em outage de Redis prolongado, breaker fica inativo
+    // (degradação parcial preferível a queda total).
+    return;
+  }
 
-    // TTL: se primeiro incremento OU expirou, seta janela
-    if (failures === 1) {
-      await redis.expire(failuresKey(id), FAIL_WINDOW_SEC);
-    }
+  // TTL: se primeiro incremento, seta janela
+  if (failures === 1) {
+    await cache.expire(failuresKey(id), FAIL_WINDOW_SEC);
+  }
 
-    // Atualiza last_failure (informativo + debugging)
-    await redis.set(lastFailureKey(id), String(now), 'EX', FAIL_WINDOW_SEC);
+  // Atualiza last_failure (informativo + debugging)
+  await cache.set(lastFailureKey(id), String(now), FAIL_WINDOW_SEC);
 
-    if (failures >= FAIL_THRESHOLD) {
-      const openUntil = now + OPEN_DURATION_MS;
-      await redis.set(openUntilKey(id), String(openUntil), 'EX', OPEN_DURATION_SEC);
-      logger.warn(
-        `[redisBreaker] BREAKER OPEN provider=${id} failures=${failures} kind=${kind} openUntil=${new Date(openUntil).toISOString()}`,
-      );
-    } else {
-      logger.info(
-        `[redisBreaker] failure recorded provider=${id} failures=${failures}/${FAIL_THRESHOLD} kind=${kind}`,
-      );
-    }
-  } catch (err: any) {
-    logger.warn(`[redisBreaker] recordFailure Redis falhou: ${err.message}`);
+  if (failures >= FAIL_THRESHOLD) {
+    const openUntil = now + OPEN_DURATION_MS;
+    await cache.set(openUntilKey(id), String(openUntil), OPEN_DURATION_SEC);
+    logger.warn(
+      `[redisBreaker] BREAKER OPEN provider=${id} failures=${failures} kind=${kind} openUntil=${new Date(openUntil).toISOString()}`,
+    );
+  } else {
+    logger.info(
+      `[redisBreaker] failure recorded provider=${id} failures=${failures}/${FAIL_THRESHOLD} kind=${kind}`,
+    );
   }
 }
 
@@ -166,19 +172,13 @@ export async function getBreakerState(id: string): Promise<{
   openUntil: number | null;
   isOpen: boolean;
 }> {
-  try {
-    const [failuresRaw, openUntilRaw] = await Promise.all([
-      redis.get(failuresKey(id)),
-      redis.get(openUntilKey(id)),
-    ]);
-    const failures = failuresRaw ? Number(failuresRaw) || 0 : 0;
-    const openUntil = openUntilRaw ? Number(openUntilRaw) || null : null;
-    const isOpen = openUntil != null && Date.now() < openUntil;
-    return { failures, openUntil, isOpen };
-  } catch (err: any) {
-    logger.warn(`[redisBreaker] getBreakerState Redis falhou: ${err.message}`);
-    return { failures: 0, openUntil: null, isOpen: false };
-  }
+  // cache.mget faz 1 round-trip pra ambas as keys (otimização vs 2 gets).
+  // Fail-soft: retorna [null, null] em erro de backend → state default.
+  const [failuresRaw, openUntilRaw] = await cache.mget([failuresKey(id), openUntilKey(id)]);
+  const failures = failuresRaw ? Number(failuresRaw) || 0 : 0;
+  const openUntil = openUntilRaw ? Number(openUntilRaw) || null : null;
+  const isOpen = openUntil != null && Date.now() < openUntil;
+  return { failures, openUntil, isOpen };
 }
 
 /**
@@ -189,16 +189,12 @@ export async function getBreakerState(id: string): Promise<{
  * em produção acidental.
  */
 export async function __resetBreakersForTest(providerIds: string[]): Promise<void> {
-  try {
-    const keys = providerIds.flatMap((id) => [
-      failuresKey(id),
-      openUntilKey(id),
-      lastFailureKey(id),
-    ]);
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
-  } catch (err: any) {
-    logger.warn(`[redisBreaker] resetForTest falhou: ${err.message}`);
-  }
+  // cache.del é singular — gera 1 promise por key e paraleliza. Para uso em
+  // tests com poucos providers, custo idêntico ao multi-key DEL original.
+  const keys = providerIds.flatMap((id) => [
+    failuresKey(id),
+    openUntilKey(id),
+    lastFailureKey(id),
+  ]);
+  await Promise.all(keys.map((k) => cache.del(k)));
 }
