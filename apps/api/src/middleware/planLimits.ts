@@ -1,8 +1,12 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '@zappiq/database';
 import { PLAN_CONFIG, type PlanId, type PlanLimits } from '@zappiq/shared';
-import redis from '../utils/redis.js';
+import { cache } from '../services/cloud/index.js';
 import { logger } from '../utils/logger.js';
+
+// PR #V4-005.3: migrado de redis direto pra abstração cloud-agnostic (cache).
+// cache.incrby / cache.incrbyfloat / cache.get / cache.expire são fail-soft
+// por contrato — null/false em erro de backend, não throw.
 
 /*
  * ═════════════════════════════════════════════════════════════════
@@ -46,28 +50,22 @@ export async function incrementUsage(
   kind: LimitKind,
   amount = 1,
 ): Promise<number> {
-  try {
-    const key = usageKey(orgId, kind);
-    const current = await redis.incrby(key, amount);
-    // Set TTL apenas na primeira criação (se o contador for igual ao increment, é novo).
-    if (current === amount) {
-      await redis.expire(key, TTL_SECONDS);
-    }
-    return current;
-  } catch (err: any) {
-    logger.warn(`[planLimits] Redis increment failed: ${err.message}`);
-    // Graceful: se Redis cair, não bloqueia a operação (prefere servir a bloquear).
+  const key = usageKey(orgId, kind);
+  const current = await cache.incrby(key, amount);
+  if (current === null) {
+    // cache.incrby já logou warning. Fail-soft: prefere servir a bloquear.
     return 0;
   }
+  // Set TTL apenas na primeira criação (contador igual ao increment = novo).
+  if (current === amount) {
+    await cache.expire(key, TTL_SECONDS);
+  }
+  return current;
 }
 
 export async function getUsage(orgId: string, kind: LimitKind): Promise<number> {
-  try {
-    const raw = await redis.get(usageKey(orgId, kind));
-    return raw ? parseInt(raw, 10) : 0;
-  } catch {
-    return 0;
-  }
+  const raw = await cache.get(usageKey(orgId, kind));
+  return raw ? parseInt(raw, 10) : 0;
 }
 
 /**
@@ -214,13 +212,10 @@ export async function assertTrialCostCap(
     return { allowed: true, spentUsd: 0, capUsd: trialCostCapUsd };
   }
 
-  // Consulta custo acumulado via Redis (populado pelo metrics.ts).
+  // Consulta custo acumulado via cache (populado pelo metrics.ts).
   const costKey = `zappiq:trial_cost_usd:${orgId}`;
-  let spentUsd = 0;
-  try {
-    const raw = await redis.get(costKey);
-    spentUsd = raw ? parseFloat(raw) : 0;
-  } catch {}
+  const raw = await cache.get(costKey);
+  const spentUsd = raw ? parseFloat(raw) : 0;
 
   if (spentUsd + additionalUsdEstimate > trialCostCapUsd) {
     return {
@@ -238,12 +233,12 @@ export async function assertTrialCostCap(
  * Incrementa custo acumulado do trial (chamado após cada chamada LLM).
  */
 export async function recordTrialCost(orgId: string, costUsd: number): Promise<void> {
-  try {
-    const key = `zappiq:trial_cost_usd:${orgId}`;
-    // Usamos incrbyfloat para precisão. TTL alinhado com janela de trial + grace (60 dias).
-    await redis.incrbyfloat(key, costUsd);
-    await redis.expire(key, 60 * 24 * 3600);
-  } catch (err: any) {
-    logger.warn(`[planLimits] recordTrialCost failed: ${err.message}`);
+  const key = `zappiq:trial_cost_usd:${orgId}`;
+  // incrbyfloat pra precisão monetária. TTL = janela trial + grace (60 dias).
+  // Fail-soft: cache.incrbyfloat já loga warning em erro; spentUsd só fica
+  // momentaneamente desatualizado.
+  const result = await cache.incrbyfloat(key, costUsd);
+  if (result !== null) {
+    await cache.expire(key, 60 * 24 * 3600);
   }
 }
