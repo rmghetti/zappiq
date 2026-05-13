@@ -19,7 +19,10 @@ CREATE UNIQUE INDEX "onboarding_journey_state_organization_id_stage_key"
 CREATE INDEX "onboarding_journey_state_sent_at_idx"
   ON "onboarding_journey_state"("sent_at" DESC);
 
+-- FK aponta pra tabela "organizations" (Prisma model Organization tem
+-- @@map("organizations") — snake_case plural em prod). Validei via
+-- packages/database/prisma/schema.prisma linha 197.
 ALTER TABLE "onboarding_journey_state"
   ADD CONSTRAINT "onboarding_journey_state_organization_id_fkey"
-  FOREIGN KEY ("organization_id") REFERENCES "Organization"("id")
+  FOREIGN KEY ("organization_id") REFERENCES "organizations"("id")
   ON DELETE CASCADE ON UPDATE CASCADE;
