@@ -31,7 +31,7 @@ import { prisma } from '@zappiq/database';
 import { llmRouter } from '../services/llm/LLMRouter.js';
 import { logger } from '../utils/logger.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
-import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
+import { CORE_AGENT_RULES_V1, CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
 import {
   AGENT_EVAL_SET,
   EVAL_SET_VERSION,
@@ -292,16 +292,81 @@ router.get(
   },
 );
 
+// ─── Filtro de cenários (helper compartilhado pelos 2 endpoints) ────
+
+function filterScenarios(opts: {
+  scenarioIds?: string[];
+  category?: string;
+  criticalOnly?: boolean;
+}): EvalScenario[] {
+  if (opts.scenarioIds && opts.scenarioIds.length > 0) {
+    return AGENT_EVAL_SET.filter((s) => opts.scenarioIds!.includes(s.id));
+  }
+  if (opts.criticalOnly) return getCriticalScenarios();
+  if (opts.category) return getScenariosByCategory(opts.category as any);
+  return AGENT_EVAL_SET;
+}
+
+// ─── Loop execução (compartilhado entre sync e async) ───────────────
+
+async function executeRunLoop(
+  scenarios: EvalScenario[],
+  agent: { id: string; name: string; systemPrompt: string | null },
+): Promise<{ results: ScenarioResult[]; durationMs: number }> {
+  const t0 = Date.now();
+  const results: ScenarioResult[] = [];
+  // V3.1: throttle 1.5s entre cenários (rate limit Anthropic).
+  const THROTTLE_BETWEEN_SCENARIOS_MS = 1500;
+  let isFirst = true;
+  for (const s of scenarios) {
+    if (!isFirst) await new Promise((resolve) => setTimeout(resolve, THROTTLE_BETWEEN_SCENARIOS_MS));
+    isFirst = false;
+    try {
+      const r = await runScenario(s, agent);
+      results.push(r);
+    } catch (err: any) {
+      logger.warn(`[agentEval] scenario ${s.id} falhou`, { err: err?.message });
+      results.push({
+        scenarioId: s.id,
+        category: s.category,
+        severity: s.severity,
+        description: s.description,
+        response: '',
+        responseLatencyMs: 0,
+        responseTokens: {},
+        deterministic: { passed: false, failedPatterns: [], missingPatterns: [] },
+        judge: { passed: false, confidence: 0, reason: `Scenario crashed: ${err?.message}` },
+        combined: 'fail',
+      });
+    }
+  }
+  return { results, durationMs: Date.now() - t0 };
+}
+
+function computeSummary(results: ScenarioResult[]) {
+  const passed = results.filter((r) => r.combined === 'pass').length;
+  const partial = results.filter((r) => r.combined === 'partial').length;
+  const failed = results.filter((r) => r.combined === 'fail').length;
+  const criticalFailed = results.filter(
+    (r) => r.combined === 'fail' && r.severity === 'critical',
+  ).length;
+  return {
+    passed,
+    partial,
+    failed,
+    criticalFailed,
+    scorePercent: results.length > 0 ? Math.round((passed / results.length) * 100) : 0,
+  };
+}
+
+// ─── POST /run (sync — backwards compat) ────────────────────────────
+
 router.post(
   '/run',
   authMiddleware as any,
   requireRole('SUPERADMIN') as any,
   async (req: Request, res: Response) => {
     const agentId = String(req.body?.agentId || '');
-    const scenarioIds: string[] = Array.isArray(req.body?.scenarios) ? req.body.scenarios : [];
-    const category: string | undefined = req.body?.category;
-    const criticalOnly: boolean = req.body?.criticalOnly === true;
-
     if (!agentId) {
       res.status(400).json({ error: 'agentId obrigatório' });
       return;
@@ -317,79 +382,216 @@ router.post(
         return;
       }
 
-      // Filtra scenarios por criterio
-      let scenarios: EvalScenario[];
-      if (scenarioIds.length > 0) {
-        scenarios = AGENT_EVAL_SET.filter((s) => scenarioIds.includes(s.id));
-      } else if (criticalOnly) {
-        scenarios = getCriticalScenarios();
-      } else if (category) {
-        scenarios = getScenariosByCategory(category as any);
-      } else {
-        scenarios = AGENT_EVAL_SET;
-      }
-
+      const scenarios = filterScenarios({
+        scenarioIds: Array.isArray(req.body?.scenarios) ? req.body.scenarios : undefined,
+        category: req.body?.category,
+        criticalOnly: req.body?.criticalOnly === true,
+      });
       if (scenarios.length === 0) {
         res.status(400).json({ error: 'nenhum scenario corresponde ao filtro' });
         return;
       }
 
-      logger.info(`[agentEval] run iniciado agentId=${agentId} scenarios=${scenarios.length}`);
-      const t0 = Date.now();
-      const results: ScenarioResult[] = [];
-      // V3.1: throttle 1.5s entre cenários pra evitar burst de calls que
-      // estoura rate limit Anthropic (50 RPM tier 1). Custo de latência
-      // ~37s extras pra 25 cenários — aceitável vs 429 cascateado.
-      const THROTTLE_BETWEEN_SCENARIOS_MS = 1500;
-      let isFirst = true;
-      for (const s of scenarios) {
-        if (!isFirst) await new Promise((resolve) => setTimeout(resolve, THROTTLE_BETWEEN_SCENARIOS_MS));
-        isFirst = false;
-        try {
-          const r = await runScenario(s, agent);
-          results.push(r);
-        } catch (err: any) {
-          logger.warn(`[agentEval] scenario ${s.id} falhou`, { err: err?.message });
-          results.push({
-            scenarioId: s.id,
-            category: s.category,
-            severity: s.severity,
-            description: s.description,
-            response: '',
-            responseLatencyMs: 0,
-            responseTokens: {},
-            deterministic: { passed: false, failedPatterns: [], missingPatterns: [] },
-            judge: { passed: false, confidence: 0, reason: `Scenario crashed: ${err?.message}` },
-            combined: 'fail',
-          });
-        }
-      }
-      const totalMs = Date.now() - t0;
-
-      const passed = results.filter((r) => r.combined === 'pass').length;
-      const partial = results.filter((r) => r.combined === 'partial').length;
-      const failed = results.filter((r) => r.combined === 'fail').length;
-      const criticalFailed = results.filter(
-        (r) => r.combined === 'fail' && r.severity === 'critical',
-      ).length;
+      logger.info(`[agentEval] sync run iniciado agentId=${agentId} scenarios=${scenarios.length}`);
+      const { results, durationMs } = await executeRunLoop(scenarios, agent);
+      const summary = computeSummary(results);
 
       res.json({
         version: EVAL_SET_VERSION,
         agentId,
         agentName: agent.name,
-        totalMs,
+        totalMs: durationMs,
         total: results.length,
-        passed,
-        partial,
-        failed,
-        criticalFailed,
-        scorePercent: Math.round((passed / results.length) * 100),
+        ...summary,
         results,
         generatedAt: new Date().toISOString(),
       });
     } catch (err: any) {
       logger.error('[agentEval] erro:', err);
       res.status(500).json({ error: 'erro ao executar eval', message: err?.message });
+    }
+  },
+);
+
+// ─── POST /run-async (V3.2 — persistido, retorna runId pra polling) ─
+
+router.post(
+  '/run-async',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    const agentId = String(req.body?.agentId || '');
+    if (!agentId) {
+      res.status(400).json({ error: 'agentId obrigatório' });
+      return;
+    }
+
+    try {
+      const agent = await prisma.agent.findUnique({
+        where: { id: agentId },
+        select: { id: true, name: true, systemPrompt: true },
+      });
+      if (!agent) {
+        res.status(404).json({ error: `agent ${agentId} não encontrado` });
+        return;
+      }
+
+      const scenarioIds = Array.isArray(req.body?.scenarios) ? req.body.scenarios : undefined;
+      const category = req.body?.category;
+      const criticalOnly = req.body?.criticalOnly === true;
+      const triggeredBy = String(req.body?.triggeredBy || 'manual'); // 'manual' | 'cron' | 'pre_release'
+
+      const scenarios = filterScenarios({ scenarioIds, category, criticalOnly });
+      if (scenarios.length === 0) {
+        res.status(400).json({ error: 'nenhum scenario corresponde ao filtro' });
+        return;
+      }
+
+      // Cria row pending em DB
+      const run = await prisma.agentEvalRun.create({
+        data: {
+          agentId,
+          status: 'pending',
+          evalSetVersion: EVAL_SET_VERSION,
+          coreRulesVersion: CORE_RULES_VERSION,
+          triggeredBy,
+          scenarioFilter: { scenarioIds, category, criticalOnly } as any,
+          totalScenarios: scenarios.length,
+        },
+        select: { id: true, startedAt: true },
+      });
+
+      // Dispara execução em background (setImmediate libera response imediato)
+      setImmediate(async () => {
+        try {
+          await prisma.agentEvalRun.update({
+            where: { id: run.id },
+            data: { status: 'running' },
+          });
+          logger.info(`[agentEval] async run iniciado runId=${run.id} agentId=${agentId} scenarios=${scenarios.length}`);
+
+          const { results, durationMs } = await executeRunLoop(scenarios, agent);
+          const summary = computeSummary(results);
+
+          await prisma.agentEvalRun.update({
+            where: { id: run.id },
+            data: {
+              status: 'completed',
+              ...summary,
+              results: results as any,
+              completedAt: new Date(),
+              durationMs,
+            },
+          });
+          logger.info(`[agentEval] async run completed runId=${run.id} score=${summary.scorePercent}%`);
+        } catch (err: any) {
+          logger.error(`[agentEval] async run failed runId=${run.id}`, { err: err?.message });
+          await prisma.agentEvalRun.update({
+            where: { id: run.id },
+            data: {
+              status: 'failed',
+              error: String(err?.message || 'unknown'),
+              completedAt: new Date(),
+            },
+          }).catch(() => {});
+        }
+      });
+
+      res.status(202).json({
+        runId: run.id,
+        status: 'pending',
+        agentId,
+        agentName: agent.name,
+        totalScenarios: scenarios.length,
+        evalSetVersion: EVAL_SET_VERSION,
+        coreRulesVersion: CORE_RULES_VERSION,
+        startedAt: run.startedAt,
+        pollUrl: `/api/admin/agent-eval/runs/${run.id}`,
+      });
+    } catch (err: any) {
+      logger.error('[agentEval] run-async erro:', err);
+      res.status(500).json({ error: 'erro ao criar run', message: err?.message });
+    }
+  },
+);
+
+// ─── GET /runs/:id (polling de status) ──────────────────────────────
+
+router.get(
+  '/runs/:id',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    try {
+      const includeResults = req.query.includeResults === 'true';
+      const run = await prisma.agentEvalRun.findUnique({
+        where: { id: req.params.id },
+        include: {
+          agent: { select: { id: true, name: true, organizationId: true } },
+        },
+      });
+      if (!run) {
+        res.status(404).json({ error: 'run não encontrada' });
+        return;
+      }
+      // Omite results por padrão (pode ser MB) — frontend pede explicitamente
+      const { results, ...rest } = run as any;
+      res.json({
+        ...rest,
+        results: includeResults ? results : undefined,
+        hasResults: results != null,
+      });
+    } catch (err: any) {
+      logger.error('[agentEval] runs/:id erro:', err);
+      res.status(500).json({ error: 'erro ao buscar run', message: err?.message });
+    }
+  },
+);
+
+// ─── GET /runs (histórico por agent) ────────────────────────────────
+
+router.get(
+  '/runs',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    try {
+      const agentId = req.query.agentId ? String(req.query.agentId) : undefined;
+      const limit = Math.min(Number(req.query.limit) || 20, 100);
+      const status = req.query.status ? String(req.query.status) : undefined;
+
+      const where: any = {};
+      if (agentId) where.agentId = agentId;
+      if (status) where.status = status;
+
+      const runs = await prisma.agentEvalRun.findMany({
+        where,
+        orderBy: { startedAt: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          agentId: true,
+          status: true,
+          evalSetVersion: true,
+          coreRulesVersion: true,
+          triggeredBy: true,
+          totalScenarios: true,
+          passed: true,
+          partial: true,
+          failed: true,
+          criticalFailed: true,
+          scorePercent: true,
+          startedAt: true,
+          completedAt: true,
+          durationMs: true,
+          error: true,
+          agent: { select: { name: true } },
+        },
+      });
+      res.json({ total: runs.length, runs });
+    } catch (err: any) {
+      logger.error('[agentEval] runs (list) erro:', err);
+      res.status(500).json({ error: 'erro ao listar runs', message: err?.message });
     }
   },
 );
