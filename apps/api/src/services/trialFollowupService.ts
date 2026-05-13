@@ -106,7 +106,10 @@ async function markSent(
         stage,
         templateId,
         emailProviderId,
-        orgSnapshot,
+        // Prisma JSON field exige InputJsonValue (recursivo). Cast pra any
+        // é seguro aqui — orgSnapshot é shape simples (strings/numbers) e
+        // o DB faz a serialização JSONB nativamente.
+        orgSnapshot: orgSnapshot as any,
       },
     });
   } catch (err: any) {
