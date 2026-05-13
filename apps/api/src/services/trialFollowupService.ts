@@ -1,17 +1,22 @@
 /**
  * Trial Followup Service · BullMQ
  *
- * Cria uma fila `trial-followup` que dispara e-mails de trial em momentos
- * específicos (D+3, D+10, último dia) e ao converter.
+ * FASE 1.B task #240 (2026-05-13): refatorado pra D+1/D+3/D+7 (era D+3/D+10/lastDay).
+ * Razão: diagnóstico de ativação V5.3 mostrou 0% conversão de trials externos.
+ * Ataca cedo (D+1), reforça (D+3), última chance (D+7) — ao invés de esperar
+ * trial quase acabar.
  *
- * Scheduler diário (14:00 UTC = 11h BRT) verifica all orgs com `isTrialActive=true`
- * e enfileira jobs conforme `daysRemaining`. Deduplicação por jobId determinístico.
+ * Scheduler diário (14:00 UTC = 11h BRT) varre orgs com isTrialActive=true,
+ * calcula daysSinceCreated, e enfileira jobs por stage. Dedup tripla:
+ *   1. BullMQ jobId determinístico (orgId:stage:today)
+ *   2. onboarding_journey_state UNIQUE (orgId, stage) — audit + idempotency
+ *   3. Worker checa onboarding_journey_state antes de enviar (safety net)
  *
  * Job types:
- *   - trial:D3        → renderTrialSavingsFollowupEmail (D+3, 18 dias restantes)
- *   - trial:D10       → renderTrialMidwayEmail (D+10, 11 dias restantes)
- *   - trial:lastDay   → renderTrialLastDayEmail (último dia, 1 dia restante)
- *   - trial:converted → renderTrialConvertedEmail (ao converter, chamado via stripe webhook)
+ *   - trial:D1        → renderTrialMidwayEmail (D+1, lembrete config WA)
+ *   - trial:D3        → renderTrialSavingsFollowupEmail (D+3, oferta call 1:1)
+ *   - trial:D7        → renderTrialLastDayEmail (D+7, último toque)
+ *   - trial:converted → renderTrialConvertedEmail (Stripe webhook trigger)
  */
 
 import { Queue, Worker } from 'bullmq';
@@ -50,19 +55,67 @@ export const trialFollowupQueue = new Queue('trial-followup', {
 let trialFollowupWorker: Worker | null = null;
 
 // ── Job payload types ──────────────────────────────
+// FASE 1.B (#240): renomeado de D3/D10/lastDay pra D1/D3/D7 (mais cedo).
+export type TrialStage = 'D1' | 'D3' | 'D7';
+
 export interface TrialFollowupJobData {
   orgId: string;
   userId: string;
-  type: 'trial:D3' | 'trial:D10' | 'trial:lastDay' | 'trial:converted';
+  type: 'trial:D1' | 'trial:D3' | 'trial:D7' | 'trial:converted';
   // Extras para trial:converted
   tierLabel?: string;
   monthlyBrl?: number;
 }
 
 // ── Helpers ────────────────────────────────────────
+function daysSinceCreated(createdAt: Date): number {
+  return Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 function daysUntilTrialEnds(trialEndsAt: Date | null): number {
-  if (!trialEndsAt) return 14; // default fallback
+  if (!trialEndsAt) return 14;
   return Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+}
+
+/**
+ * Verifica se um stage já foi enviado pra essa org via tabela audit.
+ * Garante idempotência mesmo se BullMQ jobId expirou (>30 jobs no histórico).
+ */
+async function alreadySent(orgId: string, stage: TrialStage): Promise<boolean> {
+  const existing = await prisma.onboardingJourneyState.findUnique({
+    where: { organizationId_stage: { organizationId: orgId, stage } },
+    select: { id: true },
+  });
+  return existing !== null;
+}
+
+/**
+ * Marca um stage como enviado. Idempotente (UNIQUE constraint).
+ */
+async function markSent(
+  orgId: string,
+  stage: TrialStage,
+  templateId: string,
+  emailProviderId: string | undefined,
+  orgSnapshot: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await prisma.onboardingJourneyState.create({
+      data: {
+        organizationId: orgId,
+        stage,
+        templateId,
+        emailProviderId,
+        orgSnapshot,
+      },
+    });
+  } catch (err: any) {
+    // P2002 = unique constraint violation — significa que já foi marcado
+    // (race condition entre 2 workers). Silently ignore.
+    if (err?.code !== 'P2002') {
+      logger.warn({ msg: 'mark_sent_failed', orgId, stage, err: String(err) });
+    }
+  }
 }
 
 // Placeholder: computar AI Readiness Score (se existir)
@@ -89,6 +142,15 @@ async function getEstimatedSavings(orgId: string): Promise<number> {
 
 // ── Worker ─────────────────────────────────────────
 async function processTrialFollowupJob(job: any): Promise<void> {
+  // FASE 1.B: job 'trial-followup-scheduler' (repeatable diário) chama o
+  // varredor que enfileira jobs individuais por org. Jobs individuais têm
+  // payload TrialFollowupJobData e renderizam/enviam email.
+  if (job.name === 'trial-followup-scheduler' || job.data?.scheduler === true) {
+    logger.info({ msg: 'trial_followup_scheduler_tick', jobId: job.id });
+    await runTrialFollowupScheduler();
+    return;
+  }
+
   const jobData = job.data as TrialFollowupJobData;
   const { orgId, userId, type } = jobData;
 
@@ -124,11 +186,42 @@ async function processTrialFollowupJob(job: any): Promise<void> {
     let subject = '';
     let html = '';
     let text = '';
+    let stage: TrialStage | null = null;
+    let templateId = '';
 
-    // D+3 · trial:D3
-    if (type === 'trial:D3') {
+    // D+1 · trial:D1 — lembrete configurar WA (24h após cadastro)
+    // Reusa template trialMidway (mais próximo do tom "vamos lá, configura aí").
+    if (type === 'trial:D1') {
+      stage = 'D1';
+      templateId = 'trialMidway';
+      if (await alreadySent(orgId, stage)) {
+        logger.info({ msg: 'trial_followup_already_sent_skip', orgId, stage });
+        return;
+      }
       const readiness = await getAIReadinessScore(orgId);
       const savings = await getEstimatedSavings(orgId);
+
+      const rendered = renderTrialMidwayEmail({
+        firstName,
+        daysRemaining: 13,
+        aiReadinessScore: readiness,
+        savings,
+        ctaUrl: `${appUrl}/onboarding?utm_source=email&utm_campaign=trial_d1`,
+      });
+      subject = rendered.subject;
+      html = rendered.html;
+      text = rendered.text;
+    }
+
+    // D+3 · trial:D3 — oferta de call 1:1 (ainda dá tempo de salvar)
+    else if (type === 'trial:D3') {
+      stage = 'D3';
+      templateId = 'trialSavingsFollowup';
+      if (await alreadySent(orgId, stage)) {
+        logger.info({ msg: 'trial_followup_already_sent_skip', orgId, stage });
+        return;
+      }
+      const readiness = await getAIReadinessScore(orgId);
 
       const rendered = renderTrialSavingsFollowupEmail({
         firstName,
@@ -143,25 +236,14 @@ async function processTrialFollowupJob(job: any): Promise<void> {
       text = rendered.text;
     }
 
-    // D+10 · trial:D10
-    else if (type === 'trial:D10') {
-      const readiness = await getAIReadinessScore(orgId);
-      const savings = await getEstimatedSavings(orgId);
-
-      const rendered = renderTrialMidwayEmail({
-        firstName,
-        daysRemaining: 4,
-        aiReadinessScore: readiness,
-        savings,
-        ctaUrl: `${appUrl}/billing?coupon=TRIAL14&utm_source=email&utm_campaign=trial_d10`,
-      });
-      subject = rendered.subject;
-      html = rendered.html;
-      text = rendered.text;
-    }
-
-    // Último dia
-    else if (type === 'trial:lastDay') {
+    // D+7 · trial:D7 — último toque (ativação ou churn iminente)
+    else if (type === 'trial:D7') {
+      stage = 'D7';
+      templateId = 'trialLastDay';
+      if (await alreadySent(orgId, stage)) {
+        logger.info({ msg: 'trial_followup_already_sent_skip', orgId, stage });
+        return;
+      }
       const readiness = await getAIReadinessScore(orgId);
       const savings = await getEstimatedSavings(orgId);
 
@@ -169,7 +251,7 @@ async function processTrialFollowupJob(job: any): Promise<void> {
         firstName,
         aiReadinessScore: readiness,
         savings,
-        ctaUrl: `${appUrl}/billing?coupon=LASTDAY14&utm_source=email&utm_campaign=trial_lastday`,
+        ctaUrl: `${appUrl}/billing?coupon=LASTDAY14&utm_source=email&utm_campaign=trial_d7`,
       });
       subject = rendered.subject;
       html = rendered.html;
@@ -194,7 +276,7 @@ async function processTrialFollowupJob(job: any): Promise<void> {
 
     // Dispara e-mail
     if (subject && html && text) {
-      await sendEmail({
+      const sendResult = await sendEmail({
         to: user.email,
         subject,
         html,
@@ -202,13 +284,27 @@ async function processTrialFollowupJob(job: any): Promise<void> {
         tags: ['trial_followup', `type:${type}`, `org:${orgId}`],
       });
 
+      // FASE 1.B: persiste audit em onboarding_journey_state pra idempotência
+      // cruzada (BullMQ + DB) e visibilidade no admin dashboard.
+      if (stage) {
+        await markSent(orgId, stage, templateId, (sendResult as any)?.id, {
+          orgName: org.name,
+          plan: org.plan,
+          daysSinceCreated: daysSinceCreated(org.createdAt),
+          userEmail: user.email,
+          firstName,
+        });
+      }
+
       logger.info({
         msg: 'trial_followup_sent',
         orgId,
         userId,
         type,
+        stage,
         to: user.email,
         subject,
+        emailProviderId: (sendResult as any)?.id,
       });
     }
   } catch (err) {
@@ -339,7 +435,9 @@ export async function runTrialFollowupScheduler(): Promise<void> {
     });
 
     for (const org of orgs) {
-      const daysRemaining = daysUntilTrialEnds((org as any).trialEndsAt);
+      // FASE 1.B: D+1/D+3/D+7 baseado em daysSinceCreated (mais previsível
+      // que daysRemaining, que depende de trialEndsAt nem sempre setado).
+      const dsc = daysSinceCreated(org.createdAt);
       const adminUser = (org as any).users[0];
 
       if (!adminUser) {
@@ -350,19 +448,19 @@ export async function runTrialFollowupScheduler(): Promise<void> {
         continue;
       }
 
-      // D+3 (18 dias restantes)
-      if (daysRemaining === 18) {
+      // D+1 — primeiro lembrete (24h após cadastro)
+      if (dsc === 1) {
+        await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D1');
+      }
+
+      // D+3 — oferta call 1:1
+      if (dsc === 3) {
         await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D3');
       }
 
-      // D+10 (11 dias restantes)
-      if (daysRemaining === 11) {
-        await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D10');
-      }
-
-      // Último dia (1 dia restante)
-      if (daysRemaining === 1) {
-        await enqueueTrialFollowup(org.id, adminUser.id, 'trial:lastDay');
+      // D+7 — último toque (próximo do meio do trial)
+      if (dsc === 7) {
+        await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D7');
       }
     }
 

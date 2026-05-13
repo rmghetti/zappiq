@@ -43,9 +43,11 @@ import adminLlmRoutes from './routes/adminLlm.js'; // V2-025 Observability DAY 1
 import adminLeadsIzaRoutes from './routes/adminLeadsIza.js'; // 2026-05-11 leads + iza-conversations
 import adminLlmStreamRoutes from './routes/adminLlmStream.js'; // PR #V4-004 streaming SSE test
 import adminAgentEvalRoutes from './routes/adminAgentEval.js'; // V3 #235 agent eval contínuo
+import adminOnboardingJourneyRoutes from './routes/adminOnboardingJourney.js'; // FASE 1.B #240 onboarding D+1/D+3/D+7
 import { initRetentionJob } from './services/retentionService.js';
 import { initTenantUsageJob } from './services/tenantUsageService.js'; // PR #149 — H10 unit economics
 import { initUsageReconciliationJob } from './services/usageReconciliationService.js'; // PR #149 — Quota Mgmt #6 audit-only
+import { initTrialFollowupJob } from './services/trialFollowupService.js'; // FASE 1.B #240 — onboarding D+1/D+3/D+7
 
 const app = express();
 const httpServer = createServer(app);
@@ -225,6 +227,7 @@ app.use('/api/admin', adminLlmRoutes); // V2-025: GET /api/admin/llm-status
 app.use('/api/admin', adminLeadsIzaRoutes); // 2026-05-11: /admin/leads + /admin/iza-conversations
 app.use('/api/admin', adminLlmStreamRoutes); // PR #V4-004: /admin/llm-stream-test (SSE)
 app.use('/api/admin/agent-eval', adminAgentEvalRoutes); // V3 #235: golden set + judge
+app.use('/api/admin/onboarding-journey', adminOnboardingJourneyRoutes); // FASE 1.B #240: trigger + state
 
 // ── Protected Routes (auth + RLS tenant isolation) ─
 app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, contactsRoutes);
@@ -263,6 +266,11 @@ initTenantUsageJob().catch((err) => {
 // ── PR #149: Quota Mgmt #6 reconciliação (04:00 UTC, audit-only Fase 1) ──
 initUsageReconciliationJob().catch((err) => {
   logger.error('[Server] Failed to initialize usage reconciliation job:', err);
+});
+
+// ── FASE 1.B #240: trial onboarding journey D+1/D+3/D+7 (14:00 UTC daily) ──
+initTrialFollowupJob().catch((err) => {
+  logger.error('[Server] Failed to initialize trial followup job:', err);
 });
 
 // ── Error Handler (must be last) ────────────────
