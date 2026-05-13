@@ -181,6 +181,7 @@ model Organization {
   dataSubjectRequests DataSubjectRequest[]
   tenantUsageMonthly TenantUsageMonthly[]
   qaPairs            QAPair[]
+  onboardingJourneyStates OnboardingJourneyState[]  // FASE 1.B task #240
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
@@ -604,6 +605,26 @@ model Agent {
 
   @@index([organizationId, role, status])
   @@map("agents")
+}
+
+// FASE 1.B task #240 — Onboarding journey D+1/D+3/D+7 state.
+// Idempotência: 1 row por (org, stage). Reusa templates existentes
+// (trialSavingsFollowup, trialMidway, trialLastDay) wireados via
+// onboardingJourneyService.ts. Cron horário no boot do server.
+model OnboardingJourneyState {
+  id              String       @id @default(uuid()) @db.Text
+  organizationId  String       @map("organization_id")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stage           String       // 'D1' | 'D3' | 'D7'
+  sentAt          DateTime     @default(now()) @map("sent_at")
+  emailProviderId String?      @map("email_provider_id") // Resend ID ou 'log:...'
+  templateId      String       @map("template_id")
+  // Snapshot da org no momento do send (debug)
+  orgSnapshot     Json?        @map("org_snapshot")
+
+  @@unique([organizationId, stage])
+  @@index([sentAt])
+  @@map("onboarding_journey_state")
 }
 
 // V3.2 task #237 — Persistência de eval runs (golden set scoring).
