@@ -61,7 +61,7 @@ router.get(
       // Resumo agregado por org/stage (útil pro dashboard)
       const summary = {
         total: states.length,
-        byStage: states.reduce((acc, s) => {
+        byStage: states.reduce((acc: Record<string, number>, s: { stage: string }) => {
           acc[s.stage] = (acc[s.stage] || 0) + 1;
           return acc;
         }, {} as Record<string, number>),

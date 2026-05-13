@@ -324,4 +324,101 @@ class IzaApi {
 
 export const izaApi = new IzaApi();
 
+// ─── FASE 2 / V4 — Agent Quality (eval runs dashboard) ─────────────────
+
+export interface AgentEvalRunRow {
+  id: string;
+  agentId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  evalSetVersion: string;
+  coreRulesVersion: string;
+  triggeredBy: string;
+  totalScenarios: number;
+  passed: number | null;
+  partial: number | null;
+  failed: number | null;
+  criticalFailed: number | null;
+  scorePercent: number | null;
+  startedAt: string;
+  completedAt: string | null;
+  durationMs: number | null;
+  error: string | null;
+  agent?: { name: string };
+}
+
+export interface AgentEvalRunsResponse {
+  total: number;
+  runs: AgentEvalRunRow[];
+}
+
+export interface AgentEvalRunDetailScenario {
+  scenarioId: string;
+  category: string;
+  severity: string;
+  description: string;
+  response: string;
+  combined: 'pass' | 'partial' | 'fail';
+  deterministic: { passed: boolean; failedPatterns: string[]; missingPatterns: string[] };
+  judge: { passed: boolean; confidence: number; reason: string };
+}
+
+export interface AgentEvalRunDetail extends AgentEvalRunRow {
+  hasResults: boolean;
+  results?: AgentEvalRunDetailScenario[];
+  agent?: { id: string; name: string; organizationId: string };
+}
+
+export interface AgentLite {
+  id: string;
+  name: string;
+  organizationName: string;
+}
+
+class AgentQualityApi {
+  /**
+   * GET /api/admin/agent-eval/runs?agentId=&limit=&status=
+   * Lista histórico de runs (paginado, sem `results` jsonb).
+   */
+  async getRuns(opts: {
+    agentId?: string;
+    limit?: number;
+    status?: 'completed' | 'failed' | 'running' | 'pending';
+  } = {}): Promise<AgentEvalRunsResponse> {
+    const qs = new URLSearchParams();
+    if (opts.agentId) qs.set('agentId', opts.agentId);
+    if (opts.limit) qs.set('limit', String(opts.limit));
+    if (opts.status) qs.set('status', opts.status);
+    const q = qs.toString();
+    return api.get<AgentEvalRunsResponse>(`/api/admin/agent-eval/runs${q ? '?' + q : ''}`);
+  }
+
+  /**
+   * GET /api/admin/agent-eval/runs/:id?includeResults=true
+   * Detalhe de uma run específica. `includeResults=true` traz o jsonb completo
+   * com todas as respostas e diagnóstico por cenário.
+   */
+  async getRunDetail(runId: string, includeResults: boolean = true): Promise<AgentEvalRunDetail> {
+    return api.get<AgentEvalRunDetail>(
+      `/api/admin/agent-eval/runs/${encodeURIComponent(runId)}${includeResults ? '?includeResults=true' : ''}`,
+    );
+  }
+
+  /**
+   * POST /api/admin/agent-eval/run-async
+   * Dispara um run novo. Retorna runId pra polling.
+   */
+  async triggerRun(agentId: string, opts: {
+    criticalOnly?: boolean;
+    category?: string;
+    triggeredBy?: 'manual' | 'pre_release';
+  } = {}): Promise<{ runId: string; status: string; pollUrl: string }> {
+    return api.post<{ runId: string; status: string; pollUrl: string }>(
+      '/api/admin/agent-eval/run-async',
+      { agentId, ...opts },
+    );
+  }
+}
+
+export const agentQualityApi = new AgentQualityApi();
+
 export const adminApi = new AdminApi();

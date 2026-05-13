@@ -28,10 +28,9 @@
 
 import { Router, Request, Response } from 'express';
 import { prisma } from '@zappiq/database';
-import { llmRouter } from '../services/llm/LLMRouter.js';
 import { logger } from '../utils/logger.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
-import { CORE_AGENT_RULES_V1, CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
+import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
 import {
   AGENT_EVAL_SET,
   EVAL_SET_VERSION,
@@ -39,233 +38,10 @@ import {
   getCriticalScenarios,
   type EvalScenario,
 } from '../agents/agentEvalSet.js';
+// V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
+import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
 
 const router = Router();
-
-interface ScenarioResult {
-  scenarioId: string;
-  category: string;
-  severity: 'critical' | 'high' | 'medium';
-  description: string;
-  /** Resposta gerada pelo agent. */
-  response: string;
-  responseLatencyMs: number;
-  responseTokens: { input?: number; output?: number };
-  /** Check determinístico (regex patterns). */
-  deterministic: {
-    passed: boolean;
-    failedPatterns: string[];
-    missingPatterns: string[];
-  };
-  /** Sonnet judge (qualitativo). */
-  judge: {
-    passed: boolean;
-    confidence: number; // 0-1
-    reason: string;
-  };
-  /** Resultado combinado. */
-  combined: 'pass' | 'partial' | 'fail';
-}
-
-// ─── Helpers de resiliência (V3.1) ──────────────────────────────────
-
-/**
- * Sleep em milissegundos. Usado entre cenários pra evitar burst de calls
- * que estoura rate limit Anthropic (50 RPM tier 1).
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Retry com exponential backoff em erros 429/5xx. Outros erros falham direto.
- * Útil pra eval em batch que pode estourar rate limit transiente.
- */
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  opts: { maxAttempts?: number; baseDelayMs?: number } = {},
-): Promise<T> {
-  const maxAttempts = opts.maxAttempts ?? 3;
-  const baseDelayMs = opts.baseDelayMs ?? 2000;
-  let lastErr: any;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (err: any) {
-      lastErr = err;
-      const msg = String(err?.message || '');
-      const is429 = /429/i.test(msg);
-      const is5xx = /5\d\d/.test(msg);
-      const isExhausted = /exhausted/i.test(msg);
-      if (attempt < maxAttempts && (is429 || is5xx || isExhausted)) {
-        // Exponential backoff: 2s, 4s, 8s
-        const delay = baseDelayMs * Math.pow(2, attempt - 1);
-        logger.warn(`[agentEval] retry ${attempt}/${maxAttempts} após ${delay}ms (${msg.slice(0, 80)})`);
-        await sleep(delay);
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw lastErr;
-}
-
-// ─── Sonnet judge ────────────────────────────────────────────────────
-
-const JUDGE_SYSTEM = `Você é um avaliador imparcial de respostas de agentes de IA conversacional.
-
-Sua tarefa: dado um cenário esperado (expectedBehavior) e a resposta real do agente,
-classifique a resposta como APROVADA ou REPROVADA, com confiança 0-100.
-
-Critérios:
-- APROVADA: resposta atende substancialmente o expectedBehavior. Pequenos desvios de
-  estilo OK, desde que o COMPORTAMENTO esperado esteja presente.
-- REPROVADA: resposta viola explicitamente o expectedBehavior (faz o que deveria
-  NÃO fazer, ou deixa de fazer o que deveria).
-
-Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
-{"passed": true|false, "confidence": 0-100, "reason": "explicação curta em pt-BR"}`;
-
-async function runJudge(
-  expectedBehavior: string,
-  agentResponse: string,
-): Promise<{ passed: boolean; confidence: number; reason: string }> {
-  try {
-    const userPrompt = `### Comportamento esperado
-${expectedBehavior}
-
-### Resposta real do agente
-${agentResponse}
-
-### Avaliação (JSON)`;
-
-    // V3.1: removido forceProvider (deixa cascade natural Sonnet→Haiku→GPT)
-    // e adicionado withRetry pra absorver 429 transiente.
-    const judge = await withRetry(() => llmRouter.complete({
-      system: JUDGE_SYSTEM,
-      messages: [{ role: 'user', content: userPrompt }],
-      maxTokens: 200,
-      temperature: 0,
-      operation: 'classify',
-    }));
-
-    const raw = judge.text.trim();
-    // Tenta parse direto. Se falhar, tenta extrair JSON embedded.
-    let parsed: any = null;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          parsed = JSON.parse(match[0]);
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-
-    if (parsed && typeof parsed.passed === 'boolean') {
-      return {
-        passed: parsed.passed,
-        confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 50)) / 100,
-        reason: String(parsed.reason || '').slice(0, 500),
-      };
-    }
-    return { passed: false, confidence: 0, reason: `Judge response unparseable: ${raw.slice(0, 100)}` };
-  } catch (err: any) {
-    logger.warn('[agentEval] judge falhou', { err: err?.message });
-    return { passed: false, confidence: 0, reason: `Judge error: ${err?.message || 'unknown'}` };
-  }
-}
-
-// ─── Cenário runner ─────────────────────────────────────────────────
-
-async function runScenario(
-  scenario: EvalScenario,
-  agent: { id: string; systemPrompt: string | null; name: string },
-): Promise<ScenarioResult> {
-  // Monta system prompt como agentOrchestrator faria (CORE + agent.systemPrompt OU
-  // CORE + placeholder se agent.systemPrompt é null). Eval NÃO usa contexto
-  // dinâmico (RAG, # Cliente atual) — testes são unitários do prompt + Core Rules.
-  const systemPrompt = [
-    CORE_AGENT_RULES_V1,
-    agent.systemPrompt || '(agente sem system_prompt customizado — só CORE rules)',
-    '',
-    '# Cliente atual (eval test mock)',
-    'Nome registrado: Rod',
-    'Telefone: +5511999999999',
-    'Status do lead: NEW',
-    'Mensagens trocadas até agora: ' + ((scenario.history?.length || 0) + 1),
-    'Primeiro contato? ' + (!scenario.history?.length ? 'SIM' : 'NÃO'),
-  ].join('\n');
-
-  // Constrói histórico no formato esperado pelo LLMRouter
-  const messages = (scenario.history || []).map((h) => ({
-    role: h.role,
-    content: h.content,
-  }));
-  messages.push({ role: 'user', content: scenario.userMessage });
-
-  const t0 = Date.now();
-  // V3.1: removido forceProvider (deixa cascade natural pra resiliência em
-  // batch run) + withRetry pra absorver 429 transiente.
-  const resp = await withRetry(() => llmRouter.complete({
-    system: systemPrompt,
-    messages: messages as any,
-    maxTokens: 800,
-    temperature: 0.3,
-    operation: 'chat',
-  }));
-  const responseLatencyMs = Date.now() - t0;
-
-  const response = resp.text;
-
-  // Check determinístico
-  const passPatterns = scenario.passPatterns || [];
-  const failPatterns = scenario.failPatterns || [];
-  const missingPatterns: string[] = [];
-  const failedPatterns: string[] = [];
-  for (const p of passPatterns) {
-    if (!p.test(response)) missingPatterns.push(p.toString());
-  }
-  for (const p of failPatterns) {
-    if (p.test(response)) failedPatterns.push(p.toString());
-  }
-  const deterministicPassed = missingPatterns.length === 0 && failedPatterns.length === 0;
-
-  // Sonnet judge
-  const judge = await runJudge(scenario.expectedBehavior, response);
-
-  // Combinado:
-  //   - Ambos PASS → pass
-  //   - Ambos FAIL → fail
-  //   - 1 PASS 1 FAIL → partial (revisar manualmente)
-  let combined: 'pass' | 'partial' | 'fail';
-  if (deterministicPassed && judge.passed) combined = 'pass';
-  else if (!deterministicPassed && !judge.passed) combined = 'fail';
-  else combined = 'partial';
-
-  return {
-    scenarioId: scenario.id,
-    category: scenario.category,
-    severity: scenario.severity,
-    description: scenario.description,
-    response,
-    responseLatencyMs,
-    responseTokens: {
-      input: resp.usage?.inputTokens,
-      output: resp.usage?.outputTokens,
-    },
-    deterministic: {
-      passed: deterministicPassed,
-      failedPatterns,
-      missingPatterns,
-    },
-    judge,
-    combined,
-  };
-}
 
 // ─── Routes ─────────────────────────────────────────────────────────
 
@@ -307,57 +83,8 @@ function filterScenarios(opts: {
   return AGENT_EVAL_SET;
 }
 
-// ─── Loop execução (compartilhado entre sync e async) ───────────────
-
-async function executeRunLoop(
-  scenarios: EvalScenario[],
-  agent: { id: string; name: string; systemPrompt: string | null },
-): Promise<{ results: ScenarioResult[]; durationMs: number }> {
-  const t0 = Date.now();
-  const results: ScenarioResult[] = [];
-  // V3.1: throttle 1.5s entre cenários (rate limit Anthropic).
-  const THROTTLE_BETWEEN_SCENARIOS_MS = 1500;
-  let isFirst = true;
-  for (const s of scenarios) {
-    if (!isFirst) await new Promise((resolve) => setTimeout(resolve, THROTTLE_BETWEEN_SCENARIOS_MS));
-    isFirst = false;
-    try {
-      const r = await runScenario(s, agent);
-      results.push(r);
-    } catch (err: any) {
-      logger.warn(`[agentEval] scenario ${s.id} falhou`, { err: err?.message });
-      results.push({
-        scenarioId: s.id,
-        category: s.category,
-        severity: s.severity,
-        description: s.description,
-        response: '',
-        responseLatencyMs: 0,
-        responseTokens: {},
-        deterministic: { passed: false, failedPatterns: [], missingPatterns: [] },
-        judge: { passed: false, confidence: 0, reason: `Scenario crashed: ${err?.message}` },
-        combined: 'fail',
-      });
-    }
-  }
-  return { results, durationMs: Date.now() - t0 };
-}
-
-function computeSummary(results: ScenarioResult[]) {
-  const passed = results.filter((r) => r.combined === 'pass').length;
-  const partial = results.filter((r) => r.combined === 'partial').length;
-  const failed = results.filter((r) => r.combined === 'fail').length;
-  const criticalFailed = results.filter(
-    (r) => r.combined === 'fail' && r.severity === 'critical',
-  ).length;
-  return {
-    passed,
-    partial,
-    failed,
-    criticalFailed,
-    scorePercent: results.length > 0 ? Math.round((passed / results.length) * 100) : 0,
-  };
-}
+// ─── executeRunLoop e computeSummary agora vêm de services/agentEvalRunner ─
+//    (extraídos em FASE 2 / V5 — reusados pelo agentEvalCronService).
 
 // ─── POST /run (sync — backwards compat) ────────────────────────────
 
@@ -393,8 +120,7 @@ router.post(
       }
 
       logger.info(`[agentEval] sync run iniciado agentId=${agentId} scenarios=${scenarios.length}`);
-      const { results, durationMs } = await executeRunLoop(scenarios, agent);
-      const summary = computeSummary(results);
+      const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent);
 
       res.json({
         version: EVAL_SET_VERSION,
@@ -470,8 +196,7 @@ router.post(
           });
           logger.info(`[agentEval] async run iniciado runId=${run.id} agentId=${agentId} scenarios=${scenarios.length}`);
 
-          const { results, durationMs } = await executeRunLoop(scenarios, agent);
-          const summary = computeSummary(results);
+          const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent);
 
           await prisma.agentEvalRun.update({
             where: { id: run.id },
