@@ -1,6 +1,8 @@
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
-import redis from '../utils/redis.js';
+// PR #V4-005.6: migrado de redis direto pra cache cloud-agnostic.
+// cache.get/set/del são fail-soft por contrato — null/false em erro de backend.
+import { cache } from '../services/cloud/index.js';
 import * as waService from '../services/whatsappService.js';
 import * as ragService from '../services/ragService.js';
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
@@ -8,6 +10,7 @@ import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
 import type { LLMTier, LLMProviderId } from '../services/llm/LLMRouter.js';
 import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
+import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
 export interface ProcessMessageInput {
@@ -63,7 +66,8 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         // Pausa AI pra esse contato — proximas mensagens nao geram autoreply
         // de novo, ficam aguardando atendimento humano.
         const pauseKey = `ai_paused:${organizationId}:${contactPhone}`;
-        await redis.set(pauseKey, 'autoreply', 'EX', 60 * 60 * 24 * 7).catch(() => {});
+        // cache.set já é fail-soft (false em erro). Removido .catch redundante.
+        await cache.set(pauseKey, 'autoreply', 60 * 60 * 24 * 7);
       } catch (err) {
         logger.error('[Agent] Autoreply send failed:', err);
       }
@@ -75,12 +79,12 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // Plan B (já removido). Quando Plan B foi desligado, pause keys ativas
     // continuaram bloqueando V4. Detecção + cleanup automático.
     const pauseKey = `ai_paused:${organizationId}:${contactPhone}`;
-    const pauseValue = await redis.get(pauseKey).catch(() => null);
+    const pauseValue = await cache.get(pauseKey);
     if (pauseValue) {
       if (pauseValue === 'autoreply') {
         // Legacy Plan B — limpa silenciosamente e segue
         logger.info(`[Agent] Limpando pause key legacy Plan B para ${contactPhone}`);
-        await redis.del(pauseKey).catch(() => {});
+        await cache.del(pauseKey);
         // continua processamento normal abaixo
       } else {
         // Pause real (handoff humano ativo) — respeita
@@ -439,10 +443,9 @@ async function pickTierAndOverride(orgId: string): Promise<{
 async function classifyIntent(text: string, ctx?: LLMContext): Promise<string> {
   const cacheKey = `intent:${Buffer.from(text).toString('base64').slice(0, 32)}`;
 
-  try {
-    const cached = await redis.get(cacheKey);
-    if (cached) return cached;
-  } catch {}
+  // cache.get é fail-soft (null em erro). Sem try/catch defensivo.
+  const cached = await cache.get(cacheKey);
+  if (cached) return cached;
 
   // V4 #156 (2026-05-03) — calibração conservadora pra request_human.
   // Bug observado smoke test 03/05: cliente perguntou "responde por voz?"
@@ -480,7 +483,8 @@ Respond with ONLY the intent word, nothing else.`;
   // pra cascade completa se Haiku cair). Audit por turn em llm_call_logs.
   const intent = await classify(prompt, ctx);
 
-  try { await redis.setex(cacheKey, 300, intent); } catch {}
+  // cache.set é fail-soft (false em erro). TTL idêntico (300s = 5min).
+  await cache.set(cacheKey, intent, 300);
 
   return intent;
 }
@@ -644,7 +648,7 @@ async function handleHandoff(
   logger.info(`[Agent] Handoff triggered for ${contactPhone}`, { organizationId });
 
   // Pause AI for 1 hour
-  await redis.set(`ai_paused:${organizationId}:${contactPhone}`, '1', 'EX', 3600);
+  await cache.set(`ai_paused:${organizationId}:${contactPhone}`, '1', 3600);
 
   // Update conversation status
   await prisma.conversation.updateMany({
@@ -761,10 +765,14 @@ async function buildSystemPromptForContact(input: {
       orderBy: { createdAt: 'desc' }, // se houver múltiplos, pega o mais recente
     });
     if (agent?.systemPrompt) {
-      // Apêndices A.1/A.2 do Plano: prompts já contêm regras estruturais.
-      // Anexamos contexto dinâmico: cliente atual + RAG + agora.
+      // V4 task #234 (2026-05-13): Universal Core Rules V1 prependado.
+      // Cliente customiza agent.systemPrompt livremente, mas comportamento
+      // crítico (purchase_intent, handoff, anti-padrões, dados sensíveis)
+      // é IMUTÁVEL. Reduz risco de bug silencioso em agentes de clientes
+      // externos que não saberiam reportar gap de calibração.
       const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
       return [
+        CORE_AGENT_RULES_V1,
         agent.systemPrompt,
         '',
         clienteBlock,
@@ -780,7 +788,8 @@ async function buildSystemPromptForContact(input: {
     logger.warn('[Agent] buildSystemPromptForContact: lookup agent falhou — fallback promptEngine', { err });
   }
 
-  // 3. Fallback (orgs sem seed): promptEngine antigo + cliente block
+  // 3. Fallback (orgs sem seed): CORE rules + promptEngine antigo + cliente block.
+  // CORE rules são SEMPRE prependadas independente do path (DB ou promptEngine).
   const fallback = getSystemPrompt({
     niche: orgSettings.niche || 'generic',
     agentName: orgSettings.agentName || 'Assistente',
@@ -790,5 +799,5 @@ async function buildSystemPromptForContact(input: {
     ragContext,
     currentDateTime: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
   });
-  return `${fallback}\n\n${clienteBlock}`;
+  return `${CORE_AGENT_RULES_V1}${fallback}\n\n${clienteBlock}`;
 }
