@@ -48,6 +48,7 @@ import { initRetentionJob } from './services/retentionService.js';
 import { initTenantUsageJob } from './services/tenantUsageService.js'; // PR #149 — H10 unit economics
 import { initUsageReconciliationJob } from './services/usageReconciliationService.js'; // PR #149 — Quota Mgmt #6 audit-only
 import { initTrialFollowupJob } from './services/trialFollowupService.js'; // FASE 1.B #240 — onboarding D+1/D+3/D+7
+import { initAgentEvalCronJob } from './services/agentEvalCronService.js'; // FASE 2 / V5 #241 — eval diário + Slack alert
 
 const app = express();
 const httpServer = createServer(app);
@@ -271,6 +272,11 @@ initUsageReconciliationJob().catch((err) => {
 // ── FASE 1.B #240: trial onboarding journey D+1/D+3/D+7 (14:00 UTC daily) ──
 initTrialFollowupJob().catch((err) => {
   logger.error('[Server] Failed to initialize trial followup job:', err);
+});
+
+// ── FASE 2 / V5 #241: agent eval cron diário + Slack alert (04:30 UTC daily) ──
+initAgentEvalCronJob().catch((err) => {
+  logger.error('[Server] Failed to initialize agent eval cron job:', err);
 });
 
 // ── Error Handler (must be last) ────────────────

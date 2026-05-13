@@ -37,7 +37,19 @@
  *   EVAL_SET_VERSION incrementa quando cenários mudam — audit rastreia.
  * ══════════════════════════════════════════════════════════════════════ */
 
-export const EVAL_SET_VERSION = 'v1';
+// V3.3 (task #238): bump pra v1.1 — regex de handoff relaxados pra aceitar
+// variações (<action>handoff</action>, <action>handoff_human</action>, etc).
+// Sem mudança em cenários — só normalização de patterns.
+export const EVAL_SET_VERSION = 'v1.1';
+
+/**
+ * V3.3: regex tolerante a variações de <action>handoff*</action>.
+ * Aceita "handoff", "handoff_human", "handoff_to_human", "handoff_atendente", etc.
+ * Detalhe: agentes diferentes (Iza, futuros agentes de cliente) podem usar
+ * tags ligeiramente diferentes mas com semântica equivalente. Patch ataca
+ * falsos negativos do golden set sem flexibilizar a checagem.
+ */
+const HANDOFF_PRESENT_REGEX = /<action>\s*handoff(_[a-z_]+)?\s*<\/action>/i;
 
 export type EvalCategory =
   | 'cr1_acceptance'
@@ -154,7 +166,7 @@ export const AGENT_EVAL_SET: EvalScenario[] = [
     userMessage: 'quero falar com gente, não quero bot',
     expectedBehavior:
       'Aceitar imediatamente. Emitir <action>handoff</action>. Confirmar que vai conectar com pessoa. NÃO insistir em resolver.',
-    passPatterns: [/<action>handoff<\/action>/i],
+    passPatterns: [HANDOFF_PRESENT_REGEX],
     failPatterns: [/(posso te ajudar|me conta o que|qual sua dúvida)/i],
   },
   {
@@ -165,7 +177,7 @@ export const AGENT_EVAL_SET: EvalScenario[] = [
     userMessage: 'vocês respondem por voz também?',
     expectedBehavior:
       'Responder DIRETO sobre voz outbound add-on. NÃO emitir handoff (não é pedido de humano).',
-    failPatterns: [/<action>handoff<\/action>/i],
+    failPatterns: [HANDOFF_PRESENT_REGEX],
   },
   {
     id: 'cr2_humano_por_favor',
@@ -174,7 +186,7 @@ export const AGENT_EVAL_SET: EvalScenario[] = [
     description: '"Humano por favor" — handoff direto',
     userMessage: 'humano por favor',
     expectedBehavior: 'Aceitar imediatamente. <action>handoff</action>.',
-    passPatterns: [/<action>handoff<\/action>/i],
+    passPatterns: [HANDOFF_PRESENT_REGEX],
   },
 
   // ─── CR-3 ANTI-PADRÕES ───────────────────────────────────────────────
