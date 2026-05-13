@@ -40,7 +40,7 @@ const platformAdminItems = [
   { href: '/admin/leads', label: 'Leads & Signups', icon: UserCheck },
   { href: '/admin/quota-watch', label: 'Quota Watch', icon: Activity },
   { href: '/admin/llm-health', label: 'LLM Health', icon: Bot },
-  { href: '/admin/agent-quality', label: 'Agent Quality', icon: Activity }, // FASE 2 / V4
+  { href: '/admin/agent-quality', label: 'Qualidade do Agente', icon: Activity }, // FASE 2 / V4
   { href: '/admin/iza-conversations', label: 'Conversas Iza', icon: MessageSquare },
   { href: '/admin/unit-economics', label: 'Unit Economics', icon: DollarSign },
 ];
