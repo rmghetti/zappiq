@@ -67,6 +67,49 @@ interface ScenarioResult {
   combined: 'pass' | 'partial' | 'fail';
 }
 
+// ─── Helpers de resiliência (V3.1) ──────────────────────────────────
+
+/**
+ * Sleep em milissegundos. Usado entre cenários pra evitar burst de calls
+ * que estoura rate limit Anthropic (50 RPM tier 1).
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Retry com exponential backoff em erros 429/5xx. Outros erros falham direto.
+ * Útil pra eval em batch que pode estourar rate limit transiente.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  opts: { maxAttempts?: number; baseDelayMs?: number } = {},
+): Promise<T> {
+  const maxAttempts = opts.maxAttempts ?? 3;
+  const baseDelayMs = opts.baseDelayMs ?? 2000;
+  let lastErr: any;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastErr = err;
+      const msg = String(err?.message || '');
+      const is429 = /429/i.test(msg);
+      const is5xx = /5\d\d/.test(msg);
+      const isExhausted = /exhausted/i.test(msg);
+      if (attempt < maxAttempts && (is429 || is5xx || isExhausted)) {
+        // Exponential backoff: 2s, 4s, 8s
+        const delay = baseDelayMs * Math.pow(2, attempt - 1);
+        logger.warn(`[agentEval] retry ${attempt}/${maxAttempts} após ${delay}ms (${msg.slice(0, 80)})`);
+        await sleep(delay);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
 // ─── Sonnet judge ────────────────────────────────────────────────────
 
 const JUDGE_SYSTEM = `Você é um avaliador imparcial de respostas de agentes de IA conversacional.
@@ -96,14 +139,15 @@ ${agentResponse}
 
 ### Avaliação (JSON)`;
 
-    const judge = await llmRouter.complete({
+    // V3.1: removido forceProvider (deixa cascade natural Sonnet→Haiku→GPT)
+    // e adicionado withRetry pra absorver 429 transiente.
+    const judge = await withRetry(() => llmRouter.complete({
       system: JUDGE_SYSTEM,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 200,
       temperature: 0,
-      forceProvider: 'anthropic-sonnet',
       operation: 'classify',
-    });
+    }));
 
     const raw = judge.text.trim();
     // Tenta parse direto. Se falhar, tenta extrair JSON embedded.
@@ -164,14 +208,15 @@ async function runScenario(
   messages.push({ role: 'user', content: scenario.userMessage });
 
   const t0 = Date.now();
-  const resp = await llmRouter.complete({
+  // V3.1: removido forceProvider (deixa cascade natural pra resiliência em
+  // batch run) + withRetry pra absorver 429 transiente.
+  const resp = await withRetry(() => llmRouter.complete({
     system: systemPrompt,
     messages: messages as any,
     maxTokens: 800,
     temperature: 0.3,
-    forceProvider: 'anthropic-sonnet',
     operation: 'chat',
-  });
+  }));
   const responseLatencyMs = Date.now() - t0;
 
   const response = resp.text;
@@ -292,7 +337,14 @@ router.post(
       logger.info(`[agentEval] run iniciado agentId=${agentId} scenarios=${scenarios.length}`);
       const t0 = Date.now();
       const results: ScenarioResult[] = [];
+      // V3.1: throttle 1.5s entre cenários pra evitar burst de calls que
+      // estoura rate limit Anthropic (50 RPM tier 1). Custo de latência
+      // ~37s extras pra 25 cenários — aceitável vs 429 cascateado.
+      const THROTTLE_BETWEEN_SCENARIOS_MS = 1500;
+      let isFirst = true;
       for (const s of scenarios) {
+        if (!isFirst) await new Promise((resolve) => setTimeout(resolve, THROTTLE_BETWEEN_SCENARIOS_MS));
+        isFirst = false;
         try {
           const r = await runScenario(s, agent);
           results.push(r);
