@@ -600,9 +600,48 @@ model Agent {
   voiceConfig     Json?           @map("voice_config") // null até voz voltar Q3
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
+  evalRuns        AgentEvalRun[]
 
   @@index([organizationId, role, status])
   @@map("agents")
+}
+
+// V3.2 task #237 — Persistência de eval runs (golden set scoring).
+// Roda sob demanda (manual via API) ou via cron diário (V3.3 futuro).
+// Permite histórico de score por agent + alerta se degrada.
+model AgentEvalRun {
+  id                String    @id @default(uuid()) @db.Text
+  agentId           String    @map("agent_id")
+  agent             Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  // 'pending' (criada, ainda não rodou) | 'running' | 'completed' | 'failed'
+  status            String    @default("pending")
+  // Versão do eval set usada (ex: 'v1') — pra rastrear quando set muda
+  evalSetVersion    String    @map("eval_set_version")
+  // Versão do CORE rules usada (ex: 'v1') — pra rastrear quando CORE muda
+  coreRulesVersion  String?   @map("core_rules_version")
+  // Trigger: 'manual' | 'cron' | 'pre_release'
+  triggeredBy       String    @default("manual") @map("triggered_by")
+  // Scenarios rodados (subset filter aplicado) — null = todos
+  scenarioFilter    Json?     @map("scenario_filter")
+  // Métricas agregadas
+  totalScenarios    Int?      @map("total_scenarios")
+  passed            Int?
+  partial           Int?
+  failed            Int?
+  criticalFailed    Int?      @map("critical_failed")
+  scorePercent      Int?      @map("score_percent")
+  // Resultado completo (todos os ScenarioResult em JSON)
+  results           Json?
+  // Erro (se status=failed)
+  error             String?   @db.Text
+  // Timing
+  startedAt         DateTime  @default(now()) @map("started_at")
+  completedAt       DateTime? @map("completed_at")
+  durationMs        Int?      @map("duration_ms")
+
+  @@index([agentId, startedAt])
+  @@index([status])
+  @@map("agent_eval_runs")
 }
 
 // V2-018 · llm_call_logs (Sprint 0 Blocker 1)
