@@ -40,6 +40,12 @@ import {
 } from '../agents/agentEvalSet.js';
 // V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
 import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
+// FASE 2.1 (#241): Slack notify reusável entre cron e route manual.
+import {
+  notifySlackQualityIssue,
+  shouldAlertQuality,
+} from '../services/agentEvalCronService.js';
+import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services/slackNotifier.js';
 
 const router = Router();
 
@@ -209,6 +215,48 @@ router.post(
             },
           });
           logger.info(`[agentEval] async run completed runId=${run.id} score=${summary.scorePercent}%`);
+
+          // FASE 2.1 (#241): Slack alert também em runs manuais (não só cron).
+          // Bug original: notifySlackQualityIssue só era chamado dentro do cron
+          // → runs manuais via dashboard nunca notificavam, mesmo abaixo do
+          // threshold. Agora qualquer run completed dispara alert se aplicável.
+          if (shouldAlertQuality(summary)) {
+            try {
+              const topFails = (results as any[])
+                .filter((r) => r.combined === 'fail')
+                .map((r) => ({
+                  scenarioId: r.scenarioId,
+                  category: r.category,
+                  severity: r.severity,
+                }));
+
+              const orgInfo = await prisma.agent.findUnique({
+                where: { id: agentId },
+                select: { organization: { select: { name: true } } },
+              });
+
+              await notifySlackQualityIssue({
+                agentId,
+                agentName: agent.name,
+                organizationName: orgInfo?.organization?.name || '—',
+                runId: run.id,
+                scorePercent: summary.scorePercent,
+                passed: summary.passed,
+                partial: summary.partial,
+                failed: summary.failed,
+                criticalFailed: summary.criticalFailed,
+                totalScenarios: scenarios.length,
+                durationMs,
+                topFails,
+              });
+              logger.info(`[agentEval] Slack alert disparado runId=${run.id}`);
+            } catch (slackErr: any) {
+              logger.warn(`[agentEval] Slack alert falhou (não bloqueia run)`, {
+                err: slackErr?.message,
+                runId: run.id,
+              });
+            }
+          }
         } catch (err: any) {
           logger.error(`[agentEval] async run failed runId=${run.id}`, { err: err?.message });
           await prisma.agentEvalRun.update({
@@ -317,6 +365,66 @@ router.get(
     } catch (err: any) {
       logger.error('[agentEval] runs (list) erro:', err);
       res.status(500).json({ error: 'erro ao listar runs', message: err?.message });
+    }
+  },
+);
+
+// ─── POST /test-slack (FASE 2.1 — diagnóstico de webhook) ──────
+// Dispara uma mensagem fake de quality alert pra validar se o webhook
+// Slack está configurado e funcionando. Retorna sucesso/falha + qual
+// env var foi usada. Sem efeito persistente (não cria run no DB).
+router.post(
+  '/test-slack',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (_req: Request, res: Response) => {
+    const webhookDedicated = process.env.SLACK_WEBHOOK_AGENT_QUALITY;
+    const webhookFallback = process.env.SLACK_WEBHOOK_QUOTA_ALERTS;
+    const webhook = webhookDedicated || webhookFallback;
+    const which = webhookDedicated
+      ? 'SLACK_WEBHOOK_AGENT_QUALITY (dedicado)'
+      : webhookFallback
+        ? 'SLACK_WEBHOOK_QUOTA_ALERTS (fallback)'
+        : null;
+
+    if (!webhook) {
+      res.status(400).json({
+        ok: false,
+        configured: false,
+        message:
+          'Nenhum webhook Slack configurado. Configure SLACK_WEBHOOK_AGENT_QUALITY (preferido) ou SLACK_WEBHOOK_QUOTA_ALERTS (fallback) via flyctl secrets set --app zappiq-api',
+      });
+      return;
+    }
+
+    try {
+      const ok = await sendSlackAlert({
+        webhook,
+        text: '🧪 Teste de webhook · Qualidade do Agente ZappIQ',
+        blocks: [
+          buildHeaderBlock('🧪 Teste de webhook — Qualidade do Agente'),
+          buildSectionBlock(
+            `*Webhook usado:* \`${which}\`\n*Disparado por:* SUPERADMIN via /admin/agent-quality\n\nSe você está vendo esta mensagem, o alerta automático funciona. Próxima execução abaixo de 90% vai notificar aqui.`,
+          ),
+        ],
+        username: 'ZappIQ QA Bot',
+        iconEmoji: ':test_tube:',
+      });
+      res.json({
+        ok,
+        configured: true,
+        webhookUsed: which,
+        message: ok
+          ? 'Mensagem enviada. Verifique o canal configurado no webhook.'
+          : 'Webhook configurado mas envio falhou. Cheque URL/token.',
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        ok: false,
+        configured: true,
+        webhookUsed: which,
+        message: err?.message || 'erro inesperado',
+      });
     }
   },
 );

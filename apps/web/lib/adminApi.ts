@@ -360,6 +360,12 @@ export interface AgentEvalRunDetailScenario {
   combined: 'pass' | 'partial' | 'fail';
   deterministic: { passed: boolean; failedPatterns: string[]; missingPatterns: string[] };
   judge: { passed: boolean; confidence: number; reason: string };
+  /** Nível 1 auto-suggest — gerado quando combined='fail'. */
+  suggestedFix?: {
+    summary: string;
+    patches: Array<{ where: string; diff: string }>;
+    confidence: number;
+  };
 }
 
 export interface AgentEvalRunDetail extends AgentEvalRunRow {
@@ -416,6 +422,24 @@ class AgentQualityApi {
       '/api/admin/agent-eval/run-async',
       { agentId, ...opts },
     );
+  }
+
+  /**
+   * POST /api/admin/agent-eval/test-slack
+   * Diagnóstico: dispara mensagem fake pra validar webhook configurado.
+   */
+  async testSlack(): Promise<{
+    ok: boolean;
+    configured: boolean;
+    webhookUsed?: string | null;
+    message: string;
+  }> {
+    return api.post<{
+      ok: boolean;
+      configured: boolean;
+      webhookUsed?: string | null;
+      message: string;
+    }>('/api/admin/agent-eval/test-slack', {});
   }
 }
 

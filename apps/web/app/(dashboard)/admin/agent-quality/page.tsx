@@ -73,6 +73,17 @@ export default function AgentQualityPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [triggering, setTriggering] = useState(false);
+  // FASE 2.1: auto-carrega detail da última run pra mostrar sugestões
+  // sem precisar abrir modal.
+  const [latestDetail, setLatestDetail] = useState<AgentEvalRunDetail | null>(null);
+  // Diagnóstico Slack.
+  const [slackTesting, setSlackTesting] = useState(false);
+  const [slackResult, setSlackResult] = useState<{
+    ok: boolean;
+    configured: boolean;
+    message: string;
+    webhookUsed?: string | null;
+  } | null>(null);
 
   // Guard de role
   useEffect(() => {
@@ -101,6 +112,39 @@ export default function AgentQualityPage() {
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // FASE 2.1: auto-load detail da última run completed (com results)
+  // pra renderizar painel "Correções sugeridas" sem precisar abrir modal.
+  useEffect(() => {
+    const latestCompleted = runs.find((r) => r.status === 'completed');
+    if (!latestCompleted) {
+      setLatestDetail(null);
+      return;
+    }
+    if (latestDetail?.id === latestCompleted.id) return; // já carregado
+    agentQualityApi
+      .getRunDetail(latestCompleted.id, true)
+      .then(setLatestDetail)
+      .catch(() => setLatestDetail(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runs]);
+
+  const testSlack = async () => {
+    setSlackTesting(true);
+    setSlackResult(null);
+    try {
+      const result = await agentQualityApi.testSlack();
+      setSlackResult(result);
+    } catch (err: any) {
+      setSlackResult({
+        ok: false,
+        configured: false,
+        message: err?.message || 'Erro ao testar webhook',
+      });
+    } finally {
+      setSlackTesting(false);
+    }
+  };
 
   const openRunDetail = async (runId: string) => {
     setLoadingDetail(true);
@@ -139,7 +183,14 @@ export default function AgentQualityPage() {
   );
 
   const latestRun = completedRuns[0];
-  const previousRun = completedRuns[1];
+  // FASE 2.1 fix: tendência só faz sentido entre runs do MESMO tamanho.
+  // Comparar 25 cenários vs 3 cenários produz delta falso. Agora pegamos
+  // a próxima run anterior que rodou o mesmo `totalScenarios`. Se não
+  // existe, tendência fica vazia ('—' no UI).
+  const previousRun =
+    latestRun
+      ? completedRuns.slice(1).find((r) => r.totalScenarios === latestRun.totalScenarios) || null
+      : null;
 
   const scoreSeries = useMemo(
     () =>
@@ -194,8 +245,53 @@ export default function AgentQualityPage() {
               <RefreshCw className="w-4 h-4" />
               Atualizar
             </button>
+            <button
+              onClick={testSlack}
+              disabled={slackTesting}
+              title="Testa se o webhook do Slack está funcionando"
+              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-neutral-100 text-neutral-700 rounded-lg text-sm font-medium transition-colors border border-neutral-200 shadow-sm disabled:opacity-50"
+            >
+              {slackTesting ? 'Testando…' : 'Testar Slack'}
+            </button>
           </div>
         </div>
+
+        {/* Feedback do teste Slack */}
+        {slackResult && (
+          <div
+            className={`rounded-lg p-4 border ${
+              slackResult.ok
+                ? 'bg-green-50 border-green-200'
+                : slackResult.configured
+                  ? 'bg-orange-50 border-orange-200'
+                  : 'bg-red-50 border-red-200'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-sm">
+                <strong>
+                  {slackResult.ok
+                    ? '✅ Slack OK'
+                    : slackResult.configured
+                      ? '⚠️ Webhook configurado mas envio falhou'
+                      : '❌ Slack não configurado'}
+                </strong>
+                <div className="mt-1 text-neutral-700">{slackResult.message}</div>
+                {slackResult.webhookUsed && (
+                  <div className="mt-1 text-xs text-neutral-500">
+                    Webhook usado: <code>{slackResult.webhookUsed}</code>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setSlackResult(null)}
+                className="text-neutral-500 hover:text-neutral-800"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
@@ -313,6 +409,118 @@ export default function AgentQualityPage() {
             </ResponsiveContainer>
           )}
         </div>
+
+        {/* FASE 2.1 — Painel "Correções sugeridas" (visível sem abrir modal) */}
+        {latestDetail && latestDetail.results && (
+          (() => {
+            const failedWithSuggestion = latestDetail.results.filter(
+              (r) => r.combined === 'fail' && r.suggestedFix && r.suggestedFix.patches.length > 0,
+            );
+            const allFailed = latestDetail.results.filter((r) => r.combined === 'fail');
+            const allPartial = latestDetail.results.filter((r) => r.combined === 'partial');
+
+            if (allFailed.length === 0 && allPartial.length === 0) {
+              return (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="w-6 h-6 text-green-700" />
+                    <div>
+                      <h2 className="text-lg font-semibold text-green-900">
+                        Nenhuma correção necessária
+                      </h2>
+                      <p className="text-sm text-green-800 mt-0.5">
+                        Última execução passou em todos os {latestDetail.totalScenarios} cenários.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-neutral-200 bg-blue-50">
+                  <h2 className="text-lg font-semibold text-neutral-900">
+                    Correções sugeridas pela IA · última execução
+                  </h2>
+                  <p className="text-xs text-neutral-600 mt-1">
+                    {allFailed.length} reprovação{allFailed.length === 1 ? '' : 'ões'} e{' '}
+                    {allPartial.length} parcia{allPartial.length === 1 ? 'l' : 'is'} detectada
+                    {allFailed.length + allPartial.length === 1 ? '' : 's'}. Sugestões geradas por
+                    IA — revise antes de aplicar manualmente no system prompt do agente.
+                  </p>
+                </div>
+                <div className="divide-y divide-neutral-100">
+                  {allFailed.concat(allPartial).map((r) => (
+                    <details
+                      key={r.scenarioId}
+                      className="group"
+                      open={r.combined === 'fail' && r.severity === 'critical'}
+                    >
+                      <summary className="cursor-pointer p-4 hover:bg-neutral-50 flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <ResultBadge combined={r.combined} severity={r.severity} />
+                            <code className="text-xs text-neutral-700">{r.scenarioId}</code>
+                          </div>
+                          <div className="text-sm text-neutral-800 mt-1">{r.description}</div>
+                          <div className="text-xs text-neutral-600 mt-1.5">
+                            <strong>Problema:</strong> {r.judge.reason}
+                          </div>
+                        </div>
+                        <span className="text-xs text-blue-600 hover:underline self-center flex-shrink-0">
+                          ver patch ▾
+                        </span>
+                      </summary>
+                      <div className="px-4 pb-4 pt-1 bg-neutral-50">
+                        {r.suggestedFix && r.suggestedFix.patches.length > 0 ? (
+                          <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <strong className="text-xs text-blue-900">
+                                💡 Sugestão de correção (IA)
+                              </strong>
+                              <span className="text-[10px] text-blue-700">
+                                confiança {(r.suggestedFix.confidence * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                            <div className="text-sm text-blue-900 mb-2">
+                              {r.suggestedFix.summary}
+                            </div>
+                            <div className="space-y-2">
+                              {r.suggestedFix.patches.map((p, i) => (
+                                <div
+                                  key={i}
+                                  className="text-xs bg-white border border-blue-200 rounded p-2"
+                                >
+                                  <div className="text-blue-700 font-medium mb-1">
+                                    Onde aplicar: {p.where}
+                                  </div>
+                                  <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 leading-relaxed">
+                                    {p.diff}
+                                  </pre>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="text-[10px] text-blue-600 mt-2 italic">
+                              Aplique manualmente no system_prompt do agente via SQL no Supabase ou
+                              UI futura. Após aplicar, clique em "Executar agora" pra validar.
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-neutral-500 italic">
+                            {r.combined === 'partial'
+                              ? 'Desvio menor — sem sugestão automática (sugestões só pra reprovações).'
+                              : 'Sugestão não gerada (Sonnet pode ter falhado nesta execução).'}
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </div>
+            );
+          })()
+        )}
 
         {/* Tabela de execuções */}
         <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm">
@@ -499,6 +707,38 @@ export default function AgentQualityPage() {
                                   <code className="text-xs">
                                     {r.deterministic.missingPatterns.join(', ')}
                                   </code>
+                                </div>
+                              )}
+                              {/* Nível 1 auto-suggest */}
+                              {r.suggestedFix && r.suggestedFix.patches.length > 0 && (
+                                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <strong className="text-xs text-blue-900">
+                                      💡 Sugestão de correção (IA)
+                                    </strong>
+                                    <span className="text-[10px] text-blue-700">
+                                      confiança {(r.suggestedFix.confidence * 100).toFixed(0)}%
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-blue-900 mt-1">
+                                    {r.suggestedFix.summary}
+                                  </div>
+                                  <div className="mt-2 space-y-2">
+                                    {r.suggestedFix.patches.map((p, i) => (
+                                      <div key={i} className="text-xs bg-white border border-blue-200 rounded p-2">
+                                        <div className="text-blue-700 font-medium mb-1">
+                                          Onde aplicar: {p.where}
+                                        </div>
+                                        <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800">
+                                          {p.diff}
+                                        </pre>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="text-[10px] text-blue-600 mt-2 italic">
+                                    Sugestão gerada por IA. Revise antes de aplicar manualmente
+                                    no system_prompt do agente.
+                                  </div>
                                 </div>
                               )}
                             </div>

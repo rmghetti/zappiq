@@ -34,6 +34,20 @@ export interface ScenarioResult {
     reason: string;
   };
   combined: 'pass' | 'partial' | 'fail';
+  /**
+   * Nível 1 auto-suggest (FASE 2.1 hotfix, 2026-05-13):
+   * Quando combined=fail/partial, runner dispara Sonnet pra propor 1-3 patches
+   * no system prompt que corrigiriam esse cenário. Custo: ~$0.05/fail.
+   * Cliente/admin revisa e aplica manualmente — sem aplicar em prod sozinho.
+   */
+  suggestedFix?: {
+    summary: string; // 1 linha executiva
+    patches: Array<{
+      where: string; // ex: "REGRA 13 (uso de nome)"
+      diff: string; // patch em markdown
+    }>;
+    confidence: number; // 0-1
+  };
 }
 
 export interface RunSummary {
@@ -144,18 +158,107 @@ ${agentResponse}
   }
 }
 
+// ─── Sugestão automática (Nível 1) ─────────────────────────────────
+
+const SUGGEST_SYSTEM = `Você é um engenheiro de prompts especialista. Vai analisar
+um cenário de teste que FALHOU num agente de IA conversacional e propor 1-3
+ajustes específicos no system prompt que corrigiriam SÓ esse cenário sem
+quebrar outros.
+
+Critérios:
+- Patches devem ser CIRÚRGICOS (uma frase ou regra, não reescrever bloco).
+- Indicar ONDE aplicar (qual regra, qual seção).
+- Diff em markdown legível.
+- Confiança 0-100: quão certo está que o patch resolve E não regride.
+
+Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
+{"summary": "1 linha executiva", "patches": [{"where": "REGRA 13", "diff": "+ ..."}], "confidence": 0-100}`;
+
+async function suggestFix(
+  scenarioId: string,
+  expectedBehavior: string,
+  agentResponse: string,
+  judgeReason: string,
+  systemPromptExcerpt: string,
+): Promise<ScenarioResult['suggestedFix']> {
+  try {
+    const userPrompt = `### Cenário: ${scenarioId}
+
+### Comportamento esperado
+${expectedBehavior}
+
+### Resposta real (FALHOU)
+${agentResponse.slice(0, 1200)}
+
+### Diagnóstico do juiz
+${judgeReason}
+
+### Trecho relevante do system prompt atual
+${systemPromptExcerpt.slice(0, 2000)}
+
+### Patches sugeridos (JSON)`;
+
+    const out = await withRetry(() =>
+      llmRouter.complete({
+        system: SUGGEST_SYSTEM,
+        messages: [{ role: 'user', content: userPrompt }],
+        maxTokens: 600,
+        temperature: 0.2,
+        operation: 'classify',
+      }),
+    );
+
+    const raw = out.text.trim();
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          parsed = JSON.parse(match[0]);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    if (parsed && Array.isArray(parsed.patches)) {
+      return {
+        summary: String(parsed.summary || '').slice(0, 200),
+        patches: parsed.patches.slice(0, 3).map((p: any) => ({
+          where: String(p.where || '').slice(0, 100),
+          diff: String(p.diff || '').slice(0, 600),
+        })),
+        confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 50)) / 100,
+      };
+    }
+    return undefined;
+  } catch (err: any) {
+    logger.warn('[agentEvalRunner] suggestFix falhou', { err: err?.message, scenarioId });
+    return undefined;
+  }
+}
+
 // ─── Cenário runner ────────────────────────────────────────────────
 
 async function runScenario(
   scenario: EvalScenario,
   agent: { id: string; systemPrompt: string | null; name: string },
 ): Promise<ScenarioResult> {
+  // FASE 2.1 fix (2026-05-13): mock condicional do bloco "Cliente atual".
+  // Cenários cr5_nome_ausente_* testam o comportamento de PERGUNTAR nome —
+  // injetar "Nome registrado: Rod" forçava o agent a usar o nome (falso pass)
+  // e quebrava esses cenários (falso fail). Solução: se scenarioId contém
+  // 'nome_ausente', mock omite o nome.
+  const nameMockEnabled = !scenario.id.includes('nome_ausente');
+
   const systemPrompt = [
     CORE_AGENT_RULES_V1,
     agent.systemPrompt || '(agente sem system_prompt customizado — só CORE rules)',
     '',
     '# Cliente atual (eval test mock)',
-    'Nome registrado: Rod',
+    nameMockEnabled ? 'Nome registrado: Rod' : 'Nome registrado: (não informado)',
     'Telefone: +5511999999999',
     'Status do lead: NEW',
     'Mensagens trocadas até agora: ' + ((scenario.history?.length || 0) + 1),
@@ -199,6 +302,20 @@ async function runScenario(
   else if (!deterministicPassed && !judge.passed) combined = 'fail';
   else combined = 'partial';
 
+  // Nível 1 auto-suggest: gera sugestão SÓ pra fails (não pra partials,
+  // pra economizar custo — partials são desvios menores e raramente exigem
+  // patch). Sugestão é metadata informativa; humano aplica manualmente.
+  let suggestedFix: ScenarioResult['suggestedFix'] = undefined;
+  if (combined === 'fail') {
+    suggestedFix = await suggestFix(
+      scenario.id,
+      scenario.expectedBehavior,
+      response,
+      judge.reason,
+      agent.systemPrompt || '(sem prompt customizado)',
+    );
+  }
+
   return {
     scenarioId: scenario.id,
     category: scenario.category,
@@ -210,6 +327,7 @@ async function runScenario(
       input: resp.usage?.inputTokens,
       output: resp.usage?.outputTokens,
     },
+    suggestedFix,
     deterministic: {
       passed: deterministicPassed,
       failedPatterns,
