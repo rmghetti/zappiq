@@ -22,6 +22,8 @@ import { prisma } from '@zappiq/database';
 // Routes
 import authRoutes from './routes/auth.js';
 import webhookRoutes from './routes/webhook.js';
+// FASE 4 (#251) — Instagram Direct webhook (mesma estrutura do WhatsApp)
+import webhookInstagramRoutes from './routes/webhookInstagram.js';
 import contactsRoutes from './routes/contacts.js';
 import conversationsRoutes from './routes/conversations.js';
 import messagesRoutes from './routes/messages.js';
@@ -141,6 +143,10 @@ initQueues().catch((err) => {
 // ── Stripe Webhook (raw body, must be before express.json) ──
 app.use('/api/stripe-webhook', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
 
+// ── Instagram Webhook POST (raw body, must be before express.json) ──
+// FASE 4 (#251): mesma assinatura HMAC da Meta — precisa de raw body pra validar
+app.use('/api/webhook/instagram', express.raw({ type: 'application/json', limit: '10mb' }));
+
 // ── WhatsApp Webhook POST (raw body, must be before express.json) ──
 // Necessario para validar HMAC X-Hub-Signature-256 byte-a-byte com o payload
 // original que a Meta assinou. Se for parseado pelo express.json, JSON.stringify
@@ -221,6 +227,9 @@ app.get('/ready', async (_req, res) => {
 // ── Public Routes ───────────────────────────────
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/webhook', webhookRoutes);
+// FASE 4 (#251): Instagram Direct webhook montado na MESMA path mãe; o Express
+// resolve por sub-path (/whatsapp vs /instagram).
+app.use('/api/webhook', webhookInstagramRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 
 // ── Admin diagnostics (auth via header X-Admin-Secret == META_APP_SECRET) ─

@@ -268,13 +268,20 @@ export async function initQueues(): Promise<void> {
         contactName: string;
         messageContent: string;
         messageType: string;
-        whatsappMessageId: string;
+        whatsappMessageId?: string;
+        // FASE 4 (#251) — channel-aware. Default 'whatsapp' pra retro compat.
+        channel?: 'whatsapp' | 'instagram' | 'web';
+        // FASE 4 — externalMessageId polimórfico (IG mid, web msg id, etc).
+        // whatsappMessageId continua válido pra retro compat dos jobs existentes.
+        externalMessageId?: string;
+        instagramScopedId?: string;
         orgSettings: any;
         // V4 #156 — mediaId pra Whisper STT (audio inbound)
         mediaId?: string | null;
       };
 
-      logger.info(`[Queue:AIProcess] Processing wamid=${data.whatsappMessageId} attempt=${job.attemptsMade + 1}`);
+      const messageRef = data.whatsappMessageId || data.externalMessageId || 'unknown';
+      logger.info(`[Queue:AIProcess] Processing channel=${data.channel || 'whatsapp'} mid=${messageRef} attempt=${job.attemptsMade + 1}`);
       const t0 = Date.now();
 
       try {
@@ -292,18 +299,21 @@ export async function initQueues(): Promise<void> {
           contactName: data.contactName,
           messageContent: data.messageContent,
           messageType: data.messageType,
-          whatsappMessageId: data.whatsappMessageId,
+          // FASE 4: ambos compatíveis. WhatsApp passa whatsappMessageId,
+          // Instagram passa externalMessageId — orchestrator usa o que tiver.
+          whatsappMessageId: data.whatsappMessageId || data.externalMessageId || '',
+          channel: data.channel || 'whatsapp',
           orgSettings: data.orgSettings,
           mediaId: data.mediaId ?? null, // V4 #156
           io: undefined,
         });
 
         const elapsed = Date.now() - t0;
-        logger.info(`[Queue:AIProcess] Completed wamid=${data.whatsappMessageId} in ${elapsed}ms`);
-        return { success: true, conversationId: data.conversationId, latencyMs: elapsed };
+        logger.info(`[Queue:AIProcess] Completed channel=${data.channel || 'whatsapp'} mid=${messageRef} in ${elapsed}ms`);
+        return { success: true, conversationId: data.conversationId, latencyMs: elapsed, channel: data.channel || 'whatsapp' };
       } catch (error) {
         const elapsed = Date.now() - t0;
-        logger.error(`[Queue:AIProcess] Failed wamid=${data.whatsappMessageId} attempt=${job.attemptsMade + 1} after ${elapsed}ms:`, error);
+        logger.error(`[Queue:AIProcess] Failed channel=${data.channel || 'whatsapp'} mid=${messageRef} attempt=${job.attemptsMade + 1} after ${elapsed}ms:`, error);
         throw error; // BullMQ retry kicks in (3 tentativas com backoff exponencial)
       }
     },

@@ -145,6 +145,13 @@ model Organization {
   whatsappPhoneNumberId     String?
   whatsappBusinessAccountId String?
   whatsappAccessToken       String?
+  // FASE 4 (#251) — Instagram Direct Messaging via Meta Graph API.
+  // instagramAccountId: ID da IG Business Account (ex: 17841...)
+  // instagramPageId: Facebook Page ID linkada à conta IG (necessária pelo Meta)
+  // instagramAccessToken: Page Access Token de longa duração (60 dias, renovável)
+  instagramAccountId     String? @map("instagram_account_id")
+  instagramPageId        String? @map("instagram_page_id")
+  instagramAccessToken   String? @map("instagram_access_token") @db.Text
   settings                  Json     @default("{}")
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
@@ -257,6 +264,10 @@ model User {
 model Contact {
   id                 String     @id @default(cuid())
   whatsappId         String
+  // FASE 4 (#251): IGSID — Instagram-Scoped ID que Meta retorna na DM.
+  // É um ID estável por usuário POR conta IG Business (não global).
+  // Permite identificar/dedup contato que mandou DM sem precisar do username.
+  instagramScopedId  String?    @map("instagram_scoped_id")
   phone              String
   name               String?
   email              String?
@@ -279,6 +290,7 @@ model Contact {
   updatedAt          DateTime @updatedAt
 
   @@unique([whatsappId, organizationId])
+  @@unique([instagramScopedId, organizationId], name: "instagramScopedId_organizationId")
   @@index([organizationId])
   @@index([phone])
   @@index([leadStatus])
@@ -322,6 +334,10 @@ model Conversation {
 model Message {
   id                String           @id @default(cuid())
   whatsappMessageId String?          @unique
+  // FASE 4 (#251): ID externo do canal (Instagram, futuramente outros).
+  // Permite dedup de inbound + correlação de status callbacks.
+  // Polimórfico: vale pra IG hoje, web chat session-msg amanhã.
+  externalMessageId String?          @unique @map("external_message_id")
   direction         MessageDirection
   type              MessageType      @default(TEXT)
   content           String

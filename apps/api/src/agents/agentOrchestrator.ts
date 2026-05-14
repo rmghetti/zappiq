@@ -4,6 +4,8 @@ import { logger } from '../utils/logger.js';
 // cache.get/set/del são fail-soft por contrato — null/false em erro de backend.
 import { cache } from '../services/cloud/index.js';
 import * as waService from '../services/whatsappService.js';
+// FASE 4 (#251): channel-aware dispatcher — roteia send pra WA ou IG conforme conversation.channel
+import { sendReplyText, markIncomingAsRead } from '../services/channelDispatcher.js';
 import * as ragService from '../services/ragService.js';
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
@@ -26,6 +28,12 @@ export interface ProcessMessageInput {
   io?: SocketIOServer;
   /** V4 #156 — mediaId Meta CDN (presente quando type=audio/image/document/video) */
   mediaId?: string | null;
+  /**
+   * FASE 4 (#251) — canal de origem da mensagem.
+   * Default 'whatsapp' pra retro compat. Quando 'instagram', orchestrator
+   * roteia outbound via instagramService (channelDispatcher.sendReplyText).
+   */
+  channel?: 'whatsapp' | 'instagram' | 'web';
 }
 
 export async function processIncomingMessage(input: ProcessMessageInput): Promise<void> {
@@ -40,7 +48,12 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
   try {
     // ── 0. Mark message as read ─────────────────────────
-    await waService.markAsRead(whatsappMessageId).catch(() => {});
+    // FASE 4 (#251): channel-aware. Em IG, faz mark_seen via Graph API.
+    await markIncomingAsRead({
+      organizationId,
+      conversationId,
+      externalMessageId: whatsappMessageId,
+    }).catch(() => {});
 
     // ── 0.5. AUTOREPLY MODE (Plano B pre-Go-Live) ───────
     // Quando IZA_AUTOREPLY_TEMPLATE estiver setado em env, responder
@@ -226,7 +239,12 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         organizationId,
         snippet: turnResult.matchedSnippet,
       });
-      await waService.sendText(contactPhone, turnResult.response);
+      // FASE 4 (#251): channel-aware. WhatsApp e Instagram convergem aqui.
+      await sendReplyText({
+        organizationId,
+        conversationId,
+        content: turnResult.response,
+      });
       await prisma.message.create({
         data: {
           direction: 'OUTBOUND',
