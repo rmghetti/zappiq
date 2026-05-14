@@ -20,6 +20,12 @@ export interface ScenarioResult {
   category: string;
   severity: 'critical' | 'high' | 'medium';
   description: string;
+  /**
+   * FASE 2.2c (#246): mensagem que foi enviada ao agente. Antes ficava
+   * só no AGENT_EVAL_SET em memória — agora persiste em results JSONB
+   * pra UI mostrar contexto completo (pergunta + resposta).
+   */
+  userMessage: string;
   response: string;
   responseLatencyMs: number;
   responseTokens: { input?: number; output?: number };
@@ -321,6 +327,7 @@ async function runScenario(
     category: scenario.category,
     severity: scenario.severity,
     description: scenario.description,
+    userMessage: scenario.userMessage,
     response,
     responseLatencyMs,
     responseTokens: {

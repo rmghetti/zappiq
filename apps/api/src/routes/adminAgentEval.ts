@@ -47,7 +47,8 @@ import {
 } from '../services/agentEvalCronService.js';
 import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services/slackNotifier.js';
 // FASE 2.2a (#243): aplicação cirúrgica de patches no system_prompt.
-import { applyPatch } from '../services/agentPromptPatcher.js';
+// FASE 2.2c (#246): DuplicatePatchError pra rejeitar sugestão IA repetida.
+import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
 
 const router = Router();
 
@@ -461,6 +462,46 @@ router.post(
   },
 );
 
+// ─── POST /test-real-alert (FASE 2.2c #246 — diagnose Slack regression) ──
+// /test-slack chega no canal; notifySlackQualityIssue não. Esse endpoint
+// chama a FUNÇÃO REAL com dados fake — se chegar, payload simplificado
+// resolveu. Se não, é canal/permissão e precisa nova investigação.
+router.post(
+  '/test-real-alert',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (_req: Request, res: Response) => {
+    try {
+      const sent = await notifySlackQualityIssue({
+        agentId: 'test-agent-id',
+        agentName: 'Iza (teste)',
+        organizationName: 'ZappIQ Diagnose',
+        runId: `test-${Date.now()}`,
+        scorePercent: 72,
+        passed: 18,
+        partial: 4,
+        failed: 3,
+        criticalFailed: 1,
+        totalScenarios: 25,
+        durationMs: 180_000,
+        topFails: [
+          { scenarioId: 'cr5_nome_disponivel_usar', category: 'core_rules', severity: 'high' },
+          { scenarioId: 'zappiq_trial_lead_morno', category: 'sales', severity: 'critical' },
+          { scenarioId: 'handoff_objection', category: 'handoff', severity: 'high' },
+        ],
+      });
+      res.json({
+        ok: sent,
+        message: sent
+          ? 'Mensagem enviada via notifyQualityIssue. Confira o canal Slack.'
+          : 'sendSlackAlert retornou false — webhook não configurado ou retornou 4xx/5xx.',
+      });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, message: err?.message || 'erro inesperado' });
+    }
+  },
+);
+
 // ════════════════════════════════════════════════════════════════════
 // FASE 2.2a (#243) — Apply / Reject / Revert sugestões IA
 // ════════════════════════════════════════════════════════════════════
@@ -470,6 +511,8 @@ router.post(
  * Garante que histórico fica completo mesmo se user for deletado depois.
  */
 async function getActorSnapshot(userId: string | undefined) {
+  // FASE 2.2b fix: JwtPayload define `userId` (não `id`). Callers passam
+  // `req.user?.userId`. Aceitamos null/undefined defensivo.
   if (!userId) return { id: null, email: '—', name: null, role: null };
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -522,7 +565,7 @@ router.post(
     const { runId, scenarioId } = req.params;
     const finalDiff = req.body?.finalDiff ? String(req.body.finalDiff) : undefined;
     const notes = req.body?.notes ? String(req.body.notes).slice(0, 1000) : undefined;
-    const actorUserId = (req as any).user?.id as string | undefined;
+    const actorUserId = (req as any).user?.userId as string | undefined;
 
     try {
       // Carrega run + agent
@@ -627,6 +670,18 @@ router.post(
         promptLengthAfter: result.promptAfter.length,
       });
     } catch (err: any) {
+      // FASE 2.2c (#246): dedup — patch duplicado vira 409 com mensagem clara
+      if (err instanceof DuplicatePatchError) {
+        logger.warn('[agentEval] apply-fix rejeitado (DUPLICATE_PATCH)', {
+          runId, scenarioId, excerpt: err.existingExcerpt.slice(0, 100),
+        });
+        res.status(409).json({
+          error: 'DUPLICATE_PATCH',
+          message: err.message,
+          existingExcerpt: err.existingExcerpt,
+        });
+        return;
+      }
       logger.error('[agentEval] apply-fix erro:', err);
       res.status(500).json({ error: 'erro ao aplicar sugestão', message: err?.message });
     }
@@ -646,7 +701,7 @@ router.post(
   async (req: Request, res: Response) => {
     const { runId, scenarioId } = req.params;
     const reason = req.body?.reason ? String(req.body.reason).slice(0, 1000) : undefined;
-    const actorUserId = (req as any).user?.id as string | undefined;
+    const actorUserId = (req as any).user?.userId as string | undefined;
 
     try {
       const run = await prisma.agentEvalRun.findUnique({
@@ -717,7 +772,7 @@ router.post(
   async (req: Request, res: Response) => {
     const { decisionId } = req.params;
     const reason = req.body?.reason ? String(req.body.reason).slice(0, 1000) : undefined;
-    const actorUserId = (req as any).user?.id as string | undefined;
+    const actorUserId = (req as any).user?.userId as string | undefined;
 
     try {
       const original = await prisma.agentEvalFixDecision.findUnique({

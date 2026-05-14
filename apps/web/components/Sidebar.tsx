@@ -10,6 +10,8 @@ import {
   ShieldCheck, FileLock, Sparkles,
   // Admin Plataforma (SUPERADMIN) icons
   Activity, TrendingUp, Bot, UserCheck, DollarSign,
+  // FASE 2.2b — Qualidade da IA (cliente)
+  Gauge,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
@@ -25,6 +27,8 @@ const navItems = [
   { href: '/knowledge-base', label: 'Base de Conhecimento', icon: BookOpen },
   // PR #106 — Treinar IA destacado: principal entry point pra evolução contínua do agente.
   { href: '/ai-training', label: 'Treinar IA', icon: Sparkles, highlight: true },
+  // FASE 2.2b #244 — Qualidade da IA do cliente (dashboard + auto-fix + audit).
+  { href: '/treinar/qualidade', label: 'Qualidade da IA', icon: Gauge },
 ];
 
 // Itens restritos a ADMIN / AUDITOR — compliance e governança LGPD

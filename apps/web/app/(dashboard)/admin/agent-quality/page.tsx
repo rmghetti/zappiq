@@ -148,6 +148,31 @@ export default function AgentQualityPage() {
     }
   };
 
+  // FASE 2.2c (#246): dispara `notifyQualityIssue` REAL (mesma função que o cron usa)
+  // com dados fake. Se /test-slack chega mas esse não, o problema era a payload —
+  // o fix da 2.2c simplificou pra 1 bloco markdown único.
+  const testRealAlert = async () => {
+    setSlackTesting(true);
+    setSlackResult(null);
+    try {
+      const result = await agentQualityApi.testRealAlert();
+      setSlackResult({
+        ok: result.ok,
+        configured: true,
+        webhookUsed: 'notifyQualityIssue (real path)',
+        message: result.message,
+      });
+    } catch (err: any) {
+      setSlackResult({
+        ok: false,
+        configured: false,
+        message: err?.message || 'Erro ao disparar alerta real',
+      });
+    } finally {
+      setSlackTesting(false);
+    }
+  };
+
   const openRunDetail = async (runId: string) => {
     setLoadingDetail(true);
     setSelectedRun(null);
@@ -250,10 +275,18 @@ export default function AgentQualityPage() {
             <button
               onClick={testSlack}
               disabled={slackTesting}
-              title="Testa se o webhook do Slack está funcionando"
+              title="Testa se o webhook do Slack está funcionando (payload simples)"
               className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-neutral-100 text-neutral-700 rounded-lg text-sm font-medium transition-colors border border-neutral-200 shadow-sm disabled:opacity-50"
             >
               {slackTesting ? 'Testando…' : 'Testar Slack'}
+            </button>
+            <button
+              onClick={testRealAlert}
+              disabled={slackTesting}
+              title="Dispara alerta REAL (mesma payload que o cron usa). Se /test-slack chega mas esse não, é a payload."
+              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-amber-50 text-amber-800 rounded-lg text-sm font-medium transition-colors border border-amber-200 shadow-sm disabled:opacity-50"
+            >
+              {slackTesting ? 'Disparando…' : '🔬 Testar alerta real'}
             </button>
           </div>
         </div>
@@ -857,7 +890,16 @@ function FixSuggestionCard({
       );
       setTimeout(onAfterAction, 1200);
     } catch (err: any) {
-      setActionError(err?.message || 'Erro ao aplicar');
+      // FASE 2.2c (#246): trata DUPLICATE_PATCH com mensagem orientativa.
+      if (err?.details?.error === 'DUPLICATE_PATCH' || err?.status === 409) {
+        setActionError(
+          err?.details?.message ||
+            'Esta sugestão já existe no prompt. Edite antes de aplicar (CAPS, "REGRA INVIOLÁVEL", PROIBIDO) pra fortalecer.',
+        );
+        setEditing(true);
+      } else {
+        setActionError(err?.message || 'Erro ao aplicar');
+      }
     } finally {
       setLoadingAction(null);
     }
@@ -938,6 +980,30 @@ function FixSuggestionCard({
         </span>
       </summary>
       <div className="px-4 pb-4 pt-1 bg-neutral-50">
+        {/* FASE 2.2c (#246): contexto completo da interação testada. */}
+        {(scenario.userMessage || scenario.response) && (
+          <div className="mb-3 p-3 bg-white border border-neutral-200 rounded">
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 mb-2">
+              Interação testada
+            </div>
+            {scenario.userMessage && (
+              <div className="mb-2">
+                <div className="text-[10px] font-semibold text-neutral-600 mb-0.5">📨 Mensagem enviada ao agente</div>
+                <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 bg-neutral-50 p-2 rounded border border-neutral-200">
+                  {scenario.userMessage}
+                </pre>
+              </div>
+            )}
+            {scenario.response && (
+              <div>
+                <div className="text-[10px] font-semibold text-neutral-600 mb-0.5">🤖 Resposta do agente</div>
+                <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 bg-neutral-50 p-2 rounded border border-neutral-200 max-h-64 overflow-y-auto">
+                  {scenario.response}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
         {!hasSuggestion ? (
           <div className="text-xs text-neutral-500 italic">
             {scenario.combined === 'partial'

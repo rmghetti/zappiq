@@ -133,30 +133,32 @@ export async function notifySlackQualityIssue(input: {
     .map((f) => `• \`${f.scenarioId}\` (${f.category}, ${f.severity})`)
     .join('\n') || '_nenhum fail listado_';
 
+  // FASE 2.2c (#246): payload SIMPLIFICADO. /test-slack chegava mas
+  // notifyQualityIssue não — 6 blocks com fields+context pareciam estar
+  // falhando silenciosamente em algum filtro do Slack. Mudamos para um
+  // único section block markdown (mesmo padrão do /test-slack que funciona)
+  // + emoji unicode em vez de `:chart_with_downwards_trend:` (que pode
+  // causar reject silencioso em alguns workspaces).
+  const messageMarkdown = [
+    `*${severity} — Qualidade do Agente abaixo do limiar*`,
+    '',
+    `*Agente:* ${input.agentName} (${input.organizationName})`,
+    `*Score:* ${input.scorePercent}% (limiar ${SCORE_MIN}%)`,
+    `*Aprovados:* ${input.passed}/${input.totalScenarios} · *Parciais:* ${input.partial} · *Reprovados:* ${input.failed} · *Críticos:* ${input.criticalFailed}`,
+    `*Duração:* ${(input.durationMs / 1000).toFixed(1)}s`,
+    '',
+    `*Top falhas:*`,
+    topFailsLines,
+    '',
+    `runId \`${input.runId}\` · eval ${EVAL_SET_VERSION} · core ${CORE_RULES_VERSION}`,
+    `<${baseUrl}/admin/agent-quality|🔗 Abrir dashboard>`,
+  ].join('\n');
+
   return sendSlackAlert({
     webhook,
     text: `${severity} Agent ${input.agentName} score ${input.scorePercent}% (criticalFailed=${input.criticalFailed})`,
-    blocks: [
-      buildHeaderBlock(`${severity} — Agent quality regression`),
-      buildSectionBlock(
-        `*Agent:* ${input.agentName} (${input.organizationName})\n*Score:* ${input.scorePercent}% — limiar ${SCORE_MIN}%`,
-      ),
-      buildFieldsBlock([
-        { label: 'Score', value: `${input.scorePercent}%` },
-        { label: 'Critical Failed', value: String(input.criticalFailed) },
-        { label: 'Passed', value: `${input.passed}/${input.totalScenarios}` },
-        { label: 'Partial', value: String(input.partial) },
-        { label: 'Failed', value: String(input.failed) },
-        { label: 'Duration', value: `${(input.durationMs / 1000).toFixed(1)}s` },
-      ]),
-      buildDividerBlock(),
-      buildSectionBlock(`*Top fails:*\n${topFailsLines}`),
-      buildContextBlock(
-        `runId \`${input.runId}\` · eval set ${EVAL_SET_VERSION} · core rules ${CORE_RULES_VERSION} · <${baseUrl}/admin/agent-quality|abrir dashboard>`,
-      ),
-    ],
+    blocks: [buildSectionBlock(messageMarkdown)],
     username: 'ZappIQ QA Bot',
-    iconEmoji: ':chart_with_downwards_trend:',
   });
 }
 

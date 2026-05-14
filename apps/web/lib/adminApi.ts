@@ -356,6 +356,8 @@ export interface AgentEvalRunDetailScenario {
   category: string;
   severity: string;
   description: string;
+  /** FASE 2.2c (#246): mensagem enviada ao agente — contexto completo na UI. Opcional pra runs antigas. */
+  userMessage?: string;
   response: string;
   combined: 'pass' | 'partial' | 'fail';
   deterministic: { passed: boolean; failedPatterns: string[]; missingPatterns: string[] };
@@ -459,6 +461,18 @@ class AgentQualityApi {
       webhookUsed?: string | null;
       message: string;
     }>('/api/admin/agent-eval/test-slack', {});
+  }
+
+  /**
+   * POST /api/admin/agent-eval/test-real-alert
+   * FASE 2.2c (#246): dispara `notifyQualityIssue` REAL com dados fake.
+   * Se /test-slack chega mas esse não, problema é payload (não webhook).
+   */
+  async testRealAlert(): Promise<{ ok: boolean; message: string }> {
+    return api.post<{ ok: boolean; message: string }>(
+      '/api/admin/agent-eval/test-real-alert',
+      {},
+    );
   }
 
   /**
