@@ -422,7 +422,9 @@ export async function runTrialFollowupScheduler(): Promise<void> {
     const allOrgs = (await prisma.organization.findMany({
       include: {
         users: {
-          where: { role: 'ADMIN' },
+          // FASE 3 P0b fix (2026-05-14): aceita SUPERADMIN também — TesteZappIQ
+          // tem só usuário SUPERADMIN e estava sendo silenciosamente ignorado.
+          where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
           select: { id: true },
           take: 1,
         },
@@ -437,6 +439,8 @@ export async function runTrialFollowupScheduler(): Promise<void> {
       orgsToProcess: orgs.length,
     });
 
+    let enqueuedD1 = 0, enqueuedD3 = 0, enqueuedD7 = 0, skippedNoAdmin = 0;
+
     for (const org of orgs) {
       // FASE 1.B: D+1/D+3/D+7 baseado em daysSinceCreated (mais previsível
       // que daysRemaining, que depende de trialEndsAt nem sempre setado).
@@ -447,29 +451,38 @@ export async function runTrialFollowupScheduler(): Promise<void> {
         logger.warn({
           msg: 'trial_followup_no_admin_user',
           orgId: org.id,
+          orgName: org.name,
         });
+        skippedNoAdmin++;
         continue;
       }
 
-      // D+1 — primeiro lembrete (24h após cadastro)
-      if (dsc === 1) {
+      // FASE 3 P0b fix (2026-05-14): mudou de `dsc === N` (strict equality)
+      // para `dsc >= N` com gate em alreadySent. A lógica antiga perdia
+      // orgs pra sempre quando o scheduler pulava um dia (deploy, restart,
+      // crash, qualquer coisa). Agora qualquer execução PEGA orgs em catch-up.
+      // alreadySent garante que não envia 2x — feito via UNIQUE constraint.
+      if (dsc >= 1 && !(await alreadySent(org.id, 'D1'))) {
         await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D1');
+        enqueuedD1++;
       }
-
-      // D+3 — oferta call 1:1
-      if (dsc === 3) {
+      if (dsc >= 3 && !(await alreadySent(org.id, 'D3'))) {
         await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D3');
+        enqueuedD3++;
       }
-
-      // D+7 — último toque (próximo do meio do trial)
-      if (dsc === 7) {
+      if (dsc >= 7 && !(await alreadySent(org.id, 'D7'))) {
         await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D7');
+        enqueuedD7++;
       }
     }
 
     logger.info({
       msg: 'trial_followup_scheduler_complete',
       orgsProcessed: orgs.length,
+      enqueuedD1,
+      enqueuedD3,
+      enqueuedD7,
+      skippedNoAdmin,
     });
   } catch (err) {
     logger.error({

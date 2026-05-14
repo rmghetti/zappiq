@@ -92,7 +92,13 @@ router.post(
       const org = await prisma.organization.findUnique({
         where: { id: orgId },
         include: {
-          users: { where: { role: 'ADMIN' }, select: { id: true, email: true }, take: 1 },
+          // FASE 3 P0b fix (2026-05-14): aceita SUPERADMIN também — orgs criadas
+          // pelo CEO ou time interno têm role SUPERADMIN, não ADMIN.
+          users: {
+            where: { role: { in: ['ADMIN', 'SUPERADMIN'] } },
+            select: { id: true, email: true },
+            take: 1,
+          },
         },
       });
       if (!org) {
