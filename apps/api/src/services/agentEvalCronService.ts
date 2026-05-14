@@ -87,15 +87,21 @@ let agentEvalCronWorker: Worker | null = null;
 const SCORE_MIN = Number(process.env.AGENT_EVAL_ALERT_SCORE_MIN ?? 90);
 const CRITICAL_MIN = Number(process.env.AGENT_EVAL_ALERT_CRITICAL ?? 1);
 
-function shouldAlert(summary: {
+// FASE 2.1 (2026-05-13): exportado pra ser reusado em /run-async manual.
+// Antes só rodava em runAgentEvalCronCycle, então runs manuais nunca
+// alertavam mesmo quando estouravam threshold. Bug capturado em
+// produção (run 13/05 72% sem notificação Slack).
+export function shouldAlertQuality(summary: {
   scorePercent: number;
   criticalFailed: number;
 }): boolean {
   return summary.scorePercent < SCORE_MIN || summary.criticalFailed >= CRITICAL_MIN;
 }
 
-// ─── Slack notifier ────────────────────────────────────────────
-async function notifySlackQualityIssue(input: {
+export { SCORE_MIN as AGENT_EVAL_ALERT_SCORE_MIN };
+
+// ─── Slack notifier (exportado pra reuso em route /run-async) ──
+export async function notifySlackQualityIssue(input: {
   agentId: string;
   agentName: string;
   organizationName: string;
@@ -118,7 +124,9 @@ async function notifySlackQualityIssue(input: {
   }
 
   const severity = input.criticalFailed > 0 ? '🚨 CRITICAL' : '⚠️ WARNING';
-  const baseUrl = process.env.APP_URL || 'https://app.zappiq.com.br';
+  // FASE 2.1: APP_URL deveria apontar pra https://zappiq.com.br (não
+  // app.zappiq.com.br que não existe). Mantemos fallback correto.
+  const baseUrl = process.env.APP_URL || 'https://zappiq.com.br';
 
   const topFailsLines = input.topFails
     .slice(0, 5)
@@ -222,7 +230,7 @@ export async function runAgentEvalCronCycle(): Promise<{
       });
 
       // 4. Slack alert se threshold cruzado
-      if (shouldAlert(summary)) {
+      if (shouldAlertQuality(summary)) {
         const topFails = (results as any[])
           .filter((r) => r.combined === 'fail')
           .map((r) => ({
