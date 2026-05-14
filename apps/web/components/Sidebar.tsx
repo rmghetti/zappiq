@@ -36,12 +36,15 @@ const complianceItems = [
 // Itens SUPERADMIN — visibilidade CROSS-TENANT da plataforma toda.
 // Não confundir com `complianceItems` (admin do tenant). Aqui é admin da
 // PLATAFORMA inteira — Rodrigo CEO vê dados de todos os clientes.
+// Ordem: 2 itens de saúde da IA (mais críticos pro CEO no dia-a-dia) →
+// pipeline comercial → finance. Garante que "Qualidade do Agente" não
+// fique cortado pelo footer da sidebar em telas menores.
 const platformAdminItems = [
+  { href: '/admin/agent-quality', label: 'Qualidade do Agente', icon: Activity }, // FASE 2 / V4
+  { href: '/admin/llm-health', label: 'LLM Health', icon: Bot },
+  { href: '/admin/iza-conversations', label: 'Conversas Iza', icon: MessageSquare },
   { href: '/admin/leads', label: 'Leads & Signups', icon: UserCheck },
   { href: '/admin/quota-watch', label: 'Quota Watch', icon: Activity },
-  { href: '/admin/llm-health', label: 'LLM Health', icon: Bot },
-  { href: '/admin/agent-quality', label: 'Qualidade do Agente', icon: Activity }, // FASE 2 / V4
-  { href: '/admin/iza-conversations', label: 'Conversas Iza', icon: MessageSquare },
   { href: '/admin/unit-economics', label: 'Unit Economics', icon: DollarSign },
 ];
 
