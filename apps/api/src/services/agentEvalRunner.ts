@@ -394,6 +394,7 @@ export async function executeAgentEvalRun(
         category: s.category,
         severity: s.severity,
         description: s.description,
+        userMessage: s.userMessage,
         response: '',
         responseLatencyMs: 0,
         responseTokens: {},
