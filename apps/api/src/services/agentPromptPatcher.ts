@@ -51,9 +51,58 @@ export interface PatchResult {
   insertedAtLine: number;
 }
 
+/**
+ * FASE 2.2c (#246): erro lançado quando o diff sugerido já existe (substring
+ * exata após sanitize) dentro do prompt atual. Aplicar de novo seria
+ * silenciosamente duplicar a regra, que foi a causa do "erro persiste após
+ * apply" — a IA gerou a mesma sugestão fraca duas vezes (zappiq_trial_lead_morno,
+ * hash 29dc9b01 aplicado em 13:56 E 14:21), e a regra ficou diluída no prompt,
+ * sendo ignorada pelo LLM em runtime. Só resolveu quando o usuário editou
+ * manualmente para "REGRA INVIOLÁVEL #14 ... OBRIGATORIAMENTE".
+ *
+ * Caller deve capturar e retornar 409 + UI instrui o usuário a editar
+ * a sugestão tornando-a mais forte (caps, "REGRA INVIOLÁVEL", PROIBIDO).
+ */
+export class DuplicatePatchError extends Error {
+  readonly code = 'DUPLICATE_PATCH';
+  readonly existingExcerpt: string;
+  constructor(existingExcerpt: string) {
+    super(
+      'Esta sugestão já existe no prompt — aplicar duplicaria a regra. ' +
+        'Edite a sugestão antes de aplicar: torne-a mais forte (caps, "REGRA INVIOLÁVEL", PROIBIDO).',
+    );
+    this.name = 'DuplicatePatchError';
+    this.existingExcerpt = existingExcerpt;
+  }
+}
+
+/**
+ * Normaliza string pra comparação fuzzy: lowercase, colapsa whitespace,
+ * remove pontuação e marcadores markdown comuns. Permite detectar
+ * duplicação mesmo se a IA reformatou marginalmente a sugestão.
+ */
+function normalizeForDedup(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[*_`>+-]/g, '') // strip markdown emphasis e diff prefixes
+    .replace(/[.,;:!?()"']/g, '') // strip pontuação
+    .replace(/\s+/g, ' ') // colapsa whitespace
+    .trim();
+}
+
 export function applyPatch(input: PatchInput): PatchResult {
   const { currentPrompt, where, diff, scenarioId } = input;
   const cleanDiff = sanitizeDiff(diff);
+
+  // FASE 2.2c (#246): dedup check ANTES de qualquer estratégia.
+  // Se o diff já está (mesmo aproximadamente) no prompt, rejeita.
+  const normalizedDiff = normalizeForDedup(cleanDiff);
+  const normalizedPrompt = normalizeForDedup(currentPrompt);
+  // Threshold: diff precisa ter >= 30 chars normalizados pra disparar dedup
+  // (frases muito curtas comuns como "+ Use o nome" podem dar falso positivo).
+  if (normalizedDiff.length >= 30 && normalizedPrompt.includes(normalizedDiff)) {
+    throw new DuplicatePatchError(cleanDiff.slice(0, 300));
+  }
 
   // Estratégia A: match de REGRA N
   const ruleMatch = where.match(/REGRA\s+(\d+)/i);

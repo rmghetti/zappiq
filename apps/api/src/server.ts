@@ -43,6 +43,7 @@ import adminLlmRoutes from './routes/adminLlm.js'; // V2-025 Observability DAY 1
 import adminLeadsIzaRoutes from './routes/adminLeadsIza.js'; // 2026-05-11 leads + iza-conversations
 import adminLlmStreamRoutes from './routes/adminLlmStream.js'; // PR #V4-004 streaming SSE test
 import adminAgentEvalRoutes from './routes/adminAgentEval.js'; // V3 #235 agent eval contínuo
+import agentQualityRoutes from './routes/agentQuality.js'; // FASE 2.2b #244 — versão cliente Qualidade do Agente
 import adminOnboardingJourneyRoutes from './routes/adminOnboardingJourney.js'; // FASE 1.B #240 onboarding D+1/D+3/D+7
 import { initRetentionJob } from './services/retentionService.js';
 import { initTenantUsageJob } from './services/tenantUsageService.js'; // PR #149 — H10 unit economics
@@ -229,6 +230,10 @@ app.use('/api/admin', adminLeadsIzaRoutes); // 2026-05-11: /admin/leads + /admin
 app.use('/api/admin', adminLlmStreamRoutes); // PR #V4-004: /admin/llm-stream-test (SSE)
 app.use('/api/admin/agent-eval', adminAgentEvalRoutes); // V3 #235: golden set + judge
 app.use('/api/admin/onboarding-journey', adminOnboardingJourneyRoutes); // FASE 1.B #240: trigger + state
+
+// ── Client-facing Qualidade do Agente (FASE 2.2b #244) ─
+// authMiddleware aplicado dentro da própria route + RLS por organizationId.
+app.use('/api/agent-quality', agentQualityRoutes);
 
 // ── Protected Routes (auth + RLS tenant isolation) ─
 app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, contactsRoutes);
