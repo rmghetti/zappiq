@@ -43,6 +43,8 @@ import {
   agentQualityApi,
   type AgentEvalRunRow,
   type AgentEvalRunDetail,
+  type AgentEvalFixDecision,
+  type AgentEvalRunDetailScenario,
 } from '../../../../lib/adminApi';
 
 const REFRESH_INTERVAL_MS = 60_000;
@@ -452,69 +454,17 @@ export default function AgentQualityPage() {
                 </div>
                 <div className="divide-y divide-neutral-100">
                   {allFailed.concat(allPartial).map((r) => (
-                    <details
+                    <FixSuggestionCard
                       key={r.scenarioId}
-                      className="group"
-                      open={r.combined === 'fail' && r.severity === 'critical'}
-                    >
-                      <summary className="cursor-pointer p-4 hover:bg-neutral-50 flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <ResultBadge combined={r.combined} severity={r.severity} />
-                            <code className="text-xs text-neutral-700">{r.scenarioId}</code>
-                          </div>
-                          <div className="text-sm text-neutral-800 mt-1">{r.description}</div>
-                          <div className="text-xs text-neutral-600 mt-1.5">
-                            <strong>Problema:</strong> {r.judge.reason}
-                          </div>
-                        </div>
-                        <span className="text-xs text-blue-600 hover:underline self-center flex-shrink-0">
-                          ver patch ▾
-                        </span>
-                      </summary>
-                      <div className="px-4 pb-4 pt-1 bg-neutral-50">
-                        {r.suggestedFix && r.suggestedFix.patches.length > 0 ? (
-                          <div className="p-3 bg-blue-50 border border-blue-200 rounded">
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <strong className="text-xs text-blue-900">
-                                💡 Sugestão de correção (IA)
-                              </strong>
-                              <span className="text-[10px] text-blue-700">
-                                confiança {(r.suggestedFix.confidence * 100).toFixed(0)}%
-                              </span>
-                            </div>
-                            <div className="text-sm text-blue-900 mb-2">
-                              {r.suggestedFix.summary}
-                            </div>
-                            <div className="space-y-2">
-                              {r.suggestedFix.patches.map((p, i) => (
-                                <div
-                                  key={i}
-                                  className="text-xs bg-white border border-blue-200 rounded p-2"
-                                >
-                                  <div className="text-blue-700 font-medium mb-1">
-                                    Onde aplicar: {p.where}
-                                  </div>
-                                  <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 leading-relaxed">
-                                    {p.diff}
-                                  </pre>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="text-[10px] text-blue-600 mt-2 italic">
-                              Aplique manualmente no system_prompt do agente via SQL no Supabase ou
-                              UI futura. Após aplicar, clique em "Executar agora" pra validar.
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-xs text-neutral-500 italic">
-                            {r.combined === 'partial'
-                              ? 'Desvio menor — sem sugestão automática (sugestões só pra reprovações).'
-                              : 'Sugestão não gerada (Sonnet pode ter falhado nesta execução).'}
-                          </div>
-                        )}
-                      </div>
-                    </details>
+                      runId={latestDetail.id}
+                      scenario={r}
+                      existingDecision={
+                        latestDetail.fixDecisions?.find(
+                          (d) => d.scenarioId === r.scenarioId && d.decision !== 'reverted',
+                        ) || null
+                      }
+                      onAfterAction={() => openRunDetail(latestDetail.id)}
+                    />
                   ))}
                 </div>
               </div>
@@ -709,36 +659,23 @@ export default function AgentQualityPage() {
                                   </code>
                                 </div>
                               )}
-                              {/* Nível 1 auto-suggest */}
+                              {/* FASE 2.2a — Sugestão IA com Apply/Reject/Edit
+                                   (usa o mesmo componente do painel principal,
+                                   permitindo agir sobre runs antigas também) */}
                               {r.suggestedFix && r.suggestedFix.patches.length > 0 && (
-                                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <strong className="text-xs text-blue-900">
-                                      💡 Sugestão de correção (IA)
-                                    </strong>
-                                    <span className="text-[10px] text-blue-700">
-                                      confiança {(r.suggestedFix.confidence * 100).toFixed(0)}%
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-blue-900 mt-1">
-                                    {r.suggestedFix.summary}
-                                  </div>
-                                  <div className="mt-2 space-y-2">
-                                    {r.suggestedFix.patches.map((p, i) => (
-                                      <div key={i} className="text-xs bg-white border border-blue-200 rounded p-2">
-                                        <div className="text-blue-700 font-medium mb-1">
-                                          Onde aplicar: {p.where}
-                                        </div>
-                                        <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800">
-                                          {p.diff}
-                                        </pre>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div className="text-[10px] text-blue-600 mt-2 italic">
-                                    Sugestão gerada por IA. Revise antes de aplicar manualmente
-                                    no system_prompt do agente.
-                                  </div>
+                                <div className="mt-3 -mx-3">
+                                  <FixSuggestionCard
+                                    runId={selectedRun.id}
+                                    scenario={r}
+                                    existingDecision={
+                                      selectedRun.fixDecisions?.find(
+                                        (d) =>
+                                          d.scenarioId === r.scenarioId &&
+                                          d.decision !== 'reverted',
+                                      ) || null
+                                    }
+                                    onAfterAction={() => openRunDetail(selectedRun.id)}
+                                  />
                                 </div>
                               )}
                             </div>
@@ -866,5 +803,273 @@ function ResultBadge({
     <span className={`text-xs px-2 py-0.5 rounded font-medium border ${color}`}>
       {combinedLabel} · {severityLabel}
     </span>
+  );
+}
+
+// ─── FASE 2.2a — Card de sugestão IA com Apply/Reject/Edit ──────────────
+
+function FixSuggestionCard({
+  runId,
+  scenario,
+  existingDecision,
+  onAfterAction,
+}: {
+  runId: string;
+  scenario: AgentEvalRunDetailScenario;
+  existingDecision: AgentEvalFixDecision | null;
+  onAfterAction: () => void;
+}) {
+  // Estado de edição: começa com o diff original do primeiro patch
+  const initialDiff = scenario.suggestedFix?.patches[0]?.diff || '';
+  const [editedDiff, setEditedDiff] = useState(initialDiff);
+  const [editing, setEditing] = useState(false);
+  const [notes, setNotes] = useState('');
+  const [reason, setReason] = useState('');
+  const [loadingAction, setLoadingAction] = useState<'apply' | 'reject' | 'revert' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  // Reset edited diff quando suggestion muda
+  useEffect(() => {
+    setEditedDiff(initialDiff);
+    setEditing(false);
+    setActionError(null);
+    setActionSuccess(null);
+  }, [initialDiff, scenario.scenarioId]);
+
+  const hasSuggestion = !!scenario.suggestedFix && scenario.suggestedFix.patches.length > 0;
+  const decisionMade = existingDecision !== null;
+
+  async function handleApply() {
+    if (!confirm('Aplicar essa sugestão no system_prompt do agente? Essa ação altera o comportamento da IA imediatamente.')) {
+      return;
+    }
+    setLoadingAction('apply');
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const result = await agentQualityApi.applyFix(runId, scenario.scenarioId, {
+        finalDiff: editing ? editedDiff : undefined,
+        notes: notes.trim() || undefined,
+      });
+      setActionSuccess(
+        `✓ Aplicado via ${result.strategy} na linha ${result.insertedAtLine}. Prompt: ${result.decision.id.slice(0, 8)}...`,
+      );
+      setTimeout(onAfterAction, 1200);
+    } catch (err: any) {
+      setActionError(err?.message || 'Erro ao aplicar');
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function handleReject() {
+    if (!confirm('Recusar essa sugestão? Ela não aparecerá mais nesta execução.')) {
+      return;
+    }
+    setLoadingAction('reject');
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await agentQualityApi.rejectFix(runId, scenario.scenarioId, {
+        reason: reason.trim() || undefined,
+      });
+      setActionSuccess('✓ Sugestão recusada e registrada no histórico');
+      setTimeout(onAfterAction, 1200);
+    } catch (err: any) {
+      setActionError(err?.message || 'Erro ao recusar');
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function handleRevert() {
+    if (!existingDecision) return;
+    if (!confirm('Reverter aplicação anterior? O system_prompt volta ao estado original.')) {
+      return;
+    }
+    setLoadingAction('revert');
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await agentQualityApi.revertFix(existingDecision.id, {});
+      setActionSuccess('✓ Aplicação revertida. Prompt restaurado.');
+      setTimeout(onAfterAction, 1200);
+    } catch (err: any) {
+      setActionError(err?.message || 'Erro ao reverter');
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  return (
+    <details className="group" open={scenario.combined === 'fail' && scenario.severity === 'critical' && !decisionMade}>
+      <summary className="cursor-pointer p-4 hover:bg-neutral-50 flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <ResultBadge combined={scenario.combined} severity={scenario.severity} />
+            <code className="text-xs text-neutral-700">{scenario.scenarioId}</code>
+            {existingDecision && (
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${
+                  existingDecision.decision === 'applied'
+                    ? 'bg-green-50 text-green-800 border-green-200'
+                    : existingDecision.decision === 'rejected'
+                      ? 'bg-neutral-100 text-neutral-700 border-neutral-300'
+                      : 'bg-orange-50 text-orange-800 border-orange-200'
+                }`}
+              >
+                {existingDecision.decision === 'applied'
+                  ? '✓ Aplicada'
+                  : existingDecision.decision === 'rejected'
+                    ? '✕ Recusada'
+                    : '↺ Revertida'}{' '}
+                · {existingDecision.decidedByEmail} · {new Date(existingDecision.decidedAt).toLocaleString('pt-BR')}
+              </span>
+            )}
+          </div>
+          <div className="text-sm text-neutral-800 mt-1">{scenario.description}</div>
+          <div className="text-xs text-neutral-600 mt-1.5">
+            <strong>Problema:</strong> {scenario.judge.reason}
+          </div>
+        </div>
+        <span className="text-xs text-blue-600 hover:underline self-center flex-shrink-0">
+          ver patch ▾
+        </span>
+      </summary>
+      <div className="px-4 pb-4 pt-1 bg-neutral-50">
+        {!hasSuggestion ? (
+          <div className="text-xs text-neutral-500 italic">
+            {scenario.combined === 'partial'
+              ? 'Desvio menor — sem sugestão automática (sugestões só pra reprovações).'
+              : 'Sugestão não gerada (a IA pode ter falhado nesta execução).'}
+          </div>
+        ) : (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <strong className="text-xs text-blue-900">💡 Sugestão de correção (IA)</strong>
+              <span className="text-[10px] text-blue-700">
+                confiança {(scenario.suggestedFix!.confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+            <div className="text-sm text-blue-900 mb-2">{scenario.suggestedFix!.summary}</div>
+
+            {/* Patch principal */}
+            <div className="text-xs bg-white border border-blue-200 rounded p-2 mb-2">
+              <div className="text-blue-700 font-medium mb-1">
+                Onde aplicar: {scenario.suggestedFix!.patches[0].where}
+              </div>
+              {editing ? (
+                <textarea
+                  className="w-full font-mono text-[11px] text-neutral-900 leading-relaxed p-2 border border-blue-300 rounded resize-y min-h-[120px] bg-blue-50/30"
+                  value={editedDiff}
+                  onChange={(e) => setEditedDiff(e.target.value)}
+                  disabled={decisionMade || loadingAction !== null}
+                />
+              ) : (
+                <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 leading-relaxed">
+                  {editedDiff}
+                </pre>
+              )}
+              {!decisionMade && (
+                <button
+                  onClick={() => setEditing(!editing)}
+                  className="mt-2 text-[10px] text-blue-700 hover:text-blue-900 hover:underline"
+                  disabled={loadingAction !== null}
+                >
+                  {editing ? '↺ Voltar à sugestão original' : '✎ Editar sugestão antes de aplicar'}
+                </button>
+              )}
+            </div>
+
+            {/* Patches adicionais (sem edição — secundários) */}
+            {scenario.suggestedFix!.patches.length > 1 && (
+              <div className="space-y-1.5 mb-2">
+                <div className="text-[10px] text-blue-700 italic">
+                  Patches adicionais sugeridos (informativos):
+                </div>
+                {scenario.suggestedFix!.patches.slice(1).map((p, i) => (
+                  <div key={i} className="text-xs bg-white/70 border border-blue-200 rounded p-2">
+                    <div className="text-blue-700 font-medium mb-1">Onde: {p.where}</div>
+                    <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800">
+                      {p.diff}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Notas / razão */}
+            {!decisionMade && (
+              <div className="mt-2 space-y-1.5">
+                <input
+                  type="text"
+                  placeholder="Nota opcional (motivo, contexto, link de issue...)"
+                  className="w-full text-xs px-2 py-1.5 border border-blue-200 rounded bg-white focus:outline-none focus:border-blue-500"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  disabled={loadingAction !== null}
+                  maxLength={500}
+                />
+              </div>
+            )}
+
+            {/* Mensagens de feedback */}
+            {actionError && (
+              <div className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                ❌ {actionError}
+              </div>
+            )}
+            {actionSuccess && (
+              <div className="mt-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
+                {actionSuccess}
+              </div>
+            )}
+
+            {/* Botões de ação */}
+            <div className="flex gap-2 mt-3">
+              {!decisionMade ? (
+                <>
+                  <button
+                    onClick={handleApply}
+                    disabled={loadingAction !== null}
+                    className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingAction === 'apply' ? 'Aplicando…' : '✓ Aplicar Sugestão'}
+                  </button>
+                  <button
+                    onClick={handleReject}
+                    disabled={loadingAction !== null}
+                    className="flex-1 px-3 py-1.5 bg-white hover:bg-neutral-100 text-neutral-700 text-xs font-medium rounded border border-neutral-300 disabled:opacity-50"
+                  >
+                    {loadingAction === 'reject' ? 'Recusando…' : '✕ Recusar Sugestão'}
+                  </button>
+                </>
+              ) : existingDecision.decision === 'applied' ? (
+                <button
+                  onClick={handleRevert}
+                  disabled={loadingAction !== null}
+                  className="flex-1 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-800 text-xs font-medium rounded border border-orange-300 disabled:opacity-50"
+                >
+                  {loadingAction === 'revert' ? 'Revertendo…' : '↺ Reverter aplicação'}
+                </button>
+              ) : (
+                <div className="text-[10px] text-neutral-500 italic flex-1">
+                  Decisão registrada. Audit: {existingDecision.notes || '(sem nota)'}
+                </div>
+              )}
+            </div>
+
+            {decisionMade && (
+              <div className="text-[10px] text-neutral-500 mt-2">
+                <strong>Audit:</strong> {existingDecision.decidedByEmail}
+                {existingDecision.decidedByRole ? ` (${existingDecision.decidedByRole})` : ''} ·{' '}
+                {new Date(existingDecision.decidedAt).toLocaleString('pt-BR')}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </details>
   );
 }

@@ -659,10 +659,52 @@ model AgentEvalRun {
   startedAt         DateTime  @default(now()) @map("started_at")
   completedAt       DateTime? @map("completed_at")
   durationMs        Int?      @map("duration_ms")
+  // FASE 2.2a (#243) — instrumentação Slack (diagnóstico de falhas silenciosas)
+  // 'skipped' (não cruzou threshold) | 'sent' | 'failed' (com slackAlertError)
+  slackAlertStatus  String?   @map("slack_alert_status")
+  slackAlertError   String?   @db.Text @map("slack_alert_error")
+  slackAlertSentAt  DateTime? @map("slack_alert_sent_at")
+
+  fixDecisions      AgentEvalFixDecision[]
 
   @@index([agentId, startedAt])
   @@index([status])
   @@map("agent_eval_runs")
+}
+
+// FASE 2.2a (#243) — Audit log de decisões de aplicar/recusar sugestões IA.
+// Quando admin/cliente clica "Aplicar Sugestão" no dashboard, snapshot do
+// prompt antes/depois é persistido aqui pra rollback + audit.
+model AgentEvalFixDecision {
+  id              String        @id @default(uuid()) @db.Text
+  runId           String        @map("run_id")
+  run             AgentEvalRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenarioId      String        @map("scenario_id") // ex: cr5_nome_disponivel_usar
+  agentId         String        @map("agent_id")
+  // 'applied' | 'rejected' | 'reverted'
+  decision        String
+  // Snapshot da sugestão original (JSONB: summary + patches + confidence)
+  originalSuggestion Json?     @map("original_suggestion")
+  // Diff final efetivamente aplicado (pode ter sido editado pelo user)
+  finalDiff       String?       @db.Text @map("final_diff")
+  // Snapshot do system_prompt antes (rollback) e depois
+  promptBefore    String?       @db.Text @map("prompt_before")
+  promptAfter     String?       @db.Text @map("prompt_after")
+  // Audit: quem decidiu
+  decidedById     String?       @map("decided_by_id")
+  decidedByEmail  String        @map("decided_by_email") // snapshot
+  decidedByName   String?       @map("decided_by_name")  // snapshot
+  decidedByRole   String?       @map("decided_by_role")  // SUPERADMIN | ADMIN
+  decidedAt       DateTime      @default(now()) @map("decided_at")
+  // Motivo opcional (preenche em 'rejected' ou notas em 'applied')
+  notes           String?       @db.Text
+  // Se reverted, aponta pra decision original
+  revertedFromId  String?       @map("reverted_from_id")
+
+  @@index([runId])
+  @@index([agentId, decidedAt])
+  @@index([scenarioId])
+  @@map("agent_eval_fix_decisions")
 }
 
 // V2-018 · llm_call_logs (Sprint 0 Blocker 1)

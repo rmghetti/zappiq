@@ -368,10 +368,29 @@ export interface AgentEvalRunDetailScenario {
   };
 }
 
+export interface AgentEvalFixDecision {
+  id: string;
+  runId: string;
+  scenarioId: string;
+  agentId: string;
+  decision: 'applied' | 'rejected' | 'reverted';
+  decidedByEmail: string;
+  decidedByName: string | null;
+  decidedByRole: string | null;
+  decidedAt: string;
+  notes: string | null;
+  revertedFromId: string | null;
+}
+
 export interface AgentEvalRunDetail extends AgentEvalRunRow {
   hasResults: boolean;
   results?: AgentEvalRunDetailScenario[];
   agent?: { id: string; name: string; organizationId: string };
+  fixDecisions?: AgentEvalFixDecision[];
+  // FASE 2.2a — instrumentação Slack
+  slackAlertStatus?: 'skipped' | 'sent' | 'failed' | null;
+  slackAlertError?: string | null;
+  slackAlertSentAt?: string | null;
 }
 
 export interface AgentLite {
@@ -440,6 +459,50 @@ class AgentQualityApi {
       webhookUsed?: string | null;
       message: string;
     }>('/api/admin/agent-eval/test-slack', {});
+  }
+
+  /**
+   * POST /runs/:runId/scenarios/:scenarioId/apply-fix
+   * Aplica sugestão IA no system_prompt do agent. Cria audit row.
+   */
+  async applyFix(
+    runId: string,
+    scenarioId: string,
+    opts: { finalDiff?: string; notes?: string } = {},
+  ): Promise<{ ok: boolean; decision: AgentEvalFixDecision; strategy: string; insertedAtLine: number }> {
+    return api.post(
+      `/api/admin/agent-eval/runs/${encodeURIComponent(runId)}/scenarios/${encodeURIComponent(scenarioId)}/apply-fix`,
+      opts,
+    );
+  }
+
+  /**
+   * POST /runs/:runId/scenarios/:scenarioId/reject-fix
+   * Marca sugestão como recusada. Não modifica prompt.
+   */
+  async rejectFix(
+    runId: string,
+    scenarioId: string,
+    opts: { reason?: string } = {},
+  ): Promise<{ ok: boolean; decision: AgentEvalFixDecision }> {
+    return api.post(
+      `/api/admin/agent-eval/runs/${encodeURIComponent(runId)}/scenarios/${encodeURIComponent(scenarioId)}/reject-fix`,
+      opts,
+    );
+  }
+
+  /**
+   * POST /fix-decisions/:id/revert
+   * Reverte uma aplicação anterior. Restaura promptBefore no agent.
+   */
+  async revertFix(
+    decisionId: string,
+    opts: { reason?: string } = {},
+  ): Promise<{ ok: boolean; decision: AgentEvalFixDecision }> {
+    return api.post(
+      `/api/admin/agent-eval/fix-decisions/${encodeURIComponent(decisionId)}/revert`,
+      opts,
+    );
   }
 }
 
