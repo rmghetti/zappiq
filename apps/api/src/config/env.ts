@@ -50,6 +50,11 @@ const envSchema = z.object({
   // Meta for Developers > seu App > Settings > Basic > App Secret.
   META_APP_SECRET: z.string().optional(),
 
+  // FASE 4 (#251) Instagram Direct: verify token específico (opcional — fallback
+  // pra WHATSAPP_WEBHOOK_VERIFY_TOKEN). Recomendado configurar dedicado pra
+  // poder revogar IG independente do WhatsApp em caso de incidente.
+  IG_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
+
   // Google
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
