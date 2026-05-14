@@ -46,6 +46,8 @@ import {
   shouldAlertQuality,
 } from '../services/agentEvalCronService.js';
 import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services/slackNotifier.js';
+// FASE 2.2a (#243): aplicação cirúrgica de patches no system_prompt.
+import { applyPatch } from '../services/agentPromptPatcher.js';
 
 const router = Router();
 
@@ -216,11 +218,15 @@ router.post(
           });
           logger.info(`[agentEval] async run completed runId=${run.id} score=${summary.scorePercent}%`);
 
-          // FASE 2.1 (#241): Slack alert também em runs manuais (não só cron).
-          // Bug original: notifySlackQualityIssue só era chamado dentro do cron
-          // → runs manuais via dashboard nunca notificavam, mesmo abaixo do
-          // threshold. Agora qualquer run completed dispara alert se aplicável.
-          if (shouldAlertQuality(summary)) {
+          // FASE 2.2a (#243): instrumentação Slack — persiste status no DB
+          // pra diagnosticar falhas silenciosas que antes só ficavam nos
+          // Fly logs (que somem com restart).
+          if (!shouldAlertQuality(summary)) {
+            await prisma.agentEvalRun.update({
+              where: { id: run.id },
+              data: { slackAlertStatus: 'skipped' }, // score >= 90, sem critical
+            }).catch(() => {});
+          } else {
             try {
               const topFails = (results as any[])
                 .filter((r) => r.combined === 'fail')
@@ -235,7 +241,7 @@ router.post(
                 select: { organization: { select: { name: true } } },
               });
 
-              await notifySlackQualityIssue({
+              const sent = await notifySlackQualityIssue({
                 agentId,
                 agentName: agent.name,
                 organizationName: orgInfo?.organization?.name || '—',
@@ -249,9 +255,30 @@ router.post(
                 durationMs,
                 topFails,
               });
-              logger.info(`[agentEval] Slack alert disparado runId=${run.id}`);
+
+              await prisma.agentEvalRun.update({
+                where: { id: run.id },
+                data: {
+                  slackAlertStatus: sent ? 'sent' : 'failed',
+                  slackAlertError: sent
+                    ? null
+                    : 'sendSlackAlert retornou false (webhook não configurado, 4xx/5xx, ou timeout)',
+                  slackAlertSentAt: sent ? new Date() : null,
+                },
+              }).catch(() => {});
+
+              logger.info(
+                `[agentEval] Slack alert ${sent ? 'enviado' : 'falhou silenciosamente'} runId=${run.id}`,
+              );
             } catch (slackErr: any) {
-              logger.warn(`[agentEval] Slack alert falhou (não bloqueia run)`, {
+              await prisma.agentEvalRun.update({
+                where: { id: run.id },
+                data: {
+                  slackAlertStatus: 'failed',
+                  slackAlertError: String(slackErr?.message || slackErr).slice(0, 1000),
+                },
+              }).catch(() => {});
+              logger.warn(`[agentEval] Slack alert exceção (não bloqueia run)`, {
                 err: slackErr?.message,
                 runId: run.id,
               });
@@ -301,6 +328,11 @@ router.get(
         where: { id: req.params.id },
         include: {
           agent: { select: { id: true, name: true, organizationId: true } },
+          // FASE 2.2a (#243): inclui decisões aplicadas/recusadas pra UI
+          // mostrar status correto (sem oferecer botão de aplicar 2x).
+          fixDecisions: {
+            orderBy: { decidedAt: 'desc' },
+          },
         },
       });
       if (!run) {
@@ -425,6 +457,371 @@ router.post(
         webhookUsed: which,
         message: err?.message || 'erro inesperado',
       });
+    }
+  },
+);
+
+// ════════════════════════════════════════════════════════════════════
+// FASE 2.2a (#243) — Apply / Reject / Revert sugestões IA
+// ════════════════════════════════════════════════════════════════════
+
+/**
+ * Helper: extrai metadados do user autenticado pra snapshot em audit log.
+ * Garante que histórico fica completo mesmo se user for deletado depois.
+ */
+async function getActorSnapshot(userId: string | undefined) {
+  if (!userId) return { id: null, email: '—', name: null, role: null };
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, role: true },
+  });
+  return {
+    id: user?.id || null,
+    email: user?.email || '—',
+    name: user?.name || null,
+    role: user?.role || null,
+  };
+}
+
+/**
+ * Helper: encontra o suggestedFix de um cenário específico nos results
+ * persistidos de uma run.
+ */
+function findSuggestionInResults(
+  results: any,
+  scenarioId: string,
+): { suggestion: any; severity: string; combined: string } | null {
+  if (!Array.isArray(results)) return null;
+  const scenario = results.find((r: any) => r.scenarioId === scenarioId);
+  if (!scenario) return null;
+  return {
+    suggestion: scenario.suggestedFix || null,
+    severity: scenario.severity || 'medium',
+    combined: scenario.combined || 'fail',
+  };
+}
+
+/**
+ * POST /api/admin/agent-eval/runs/:runId/scenarios/:scenarioId/apply-fix
+ *
+ * Aplica sugestão IA no system_prompt do agent associado à run.
+ * Body opcional:
+ *   - finalDiff: texto editado pelo user (sobrescreve diff original da sugestão)
+ *   - notes: nota livre
+ *
+ * Cria audit row em agent_eval_fix_decisions com:
+ *   - promptBefore (snapshot pra rollback)
+ *   - promptAfter (snapshot novo)
+ *   - decidedBy (snapshot do user pra histórico)
+ */
+router.post(
+  '/runs/:runId/scenarios/:scenarioId/apply-fix',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    const { runId, scenarioId } = req.params;
+    const finalDiff = req.body?.finalDiff ? String(req.body.finalDiff) : undefined;
+    const notes = req.body?.notes ? String(req.body.notes).slice(0, 1000) : undefined;
+    const actorUserId = (req as any).user?.id as string | undefined;
+
+    try {
+      // Carrega run + agent
+      const run = await prisma.agentEvalRun.findUnique({
+        where: { id: runId },
+        include: { agent: true },
+      });
+      if (!run) {
+        res.status(404).json({ error: 'run não encontrada' });
+        return;
+      }
+
+      // Já existe decisão ativa pra esse (runId, scenarioId)?
+      const existing = await prisma.agentEvalFixDecision.findFirst({
+        where: { runId, scenarioId, decision: { in: ['applied', 'rejected'] } },
+        orderBy: { decidedAt: 'desc' },
+      });
+      if (existing && existing.decision === 'applied') {
+        res.status(409).json({
+          error: 'sugestão já aplicada',
+          decision: existing,
+        });
+        return;
+      }
+
+      // Localiza suggestion nos results da run
+      const scenarioMeta = findSuggestionInResults(run.results, scenarioId);
+      if (!scenarioMeta || !scenarioMeta.suggestion) {
+        res.status(400).json({ error: 'cenário sem sugestão IA disponível' });
+        return;
+      }
+
+      const suggestion = scenarioMeta.suggestion as {
+        summary: string;
+        patches: Array<{ where: string; diff: string }>;
+        confidence: number;
+      };
+      if (!suggestion.patches || suggestion.patches.length === 0) {
+        res.status(400).json({ error: 'sugestão sem patches' });
+        return;
+      }
+
+      // Usa finalDiff se user editou, senão primeiro patch
+      const firstPatch = suggestion.patches[0];
+      const diffToApply = finalDiff || firstPatch.diff;
+      const whereHint = firstPatch.where || '';
+
+      // Aplica patch no system_prompt
+      const currentPrompt = run.agent.systemPrompt || '';
+      const result = applyPatch({
+        currentPrompt,
+        where: whereHint,
+        diff: diffToApply,
+        scenarioId,
+      });
+
+      // Update agent + cria audit row em uma transaction
+      const actor = await getActorSnapshot(actorUserId);
+      const decision = await prisma.$transaction(async (tx) => {
+        await tx.agent.update({
+          where: { id: run.agentId },
+          data: { systemPrompt: result.promptAfter },
+        });
+        return tx.agentEvalFixDecision.create({
+          data: {
+            runId,
+            scenarioId,
+            agentId: run.agentId,
+            decision: 'applied',
+            originalSuggestion: suggestion as any,
+            finalDiff: diffToApply,
+            promptBefore: result.promptBefore,
+            promptAfter: result.promptAfter,
+            decidedById: actor.id,
+            decidedByEmail: actor.email,
+            decidedByName: actor.name,
+            decidedByRole: actor.role,
+            notes: notes || `Aplicado via ${result.strategy} na linha ${result.insertedAtLine}`,
+          },
+        });
+      });
+
+      logger.info({
+        msg: 'agent_eval_fix_applied',
+        runId,
+        scenarioId,
+        agentId: run.agentId,
+        strategy: result.strategy,
+        insertedAtLine: result.insertedAtLine,
+        promptLengthBefore: result.promptBefore.length,
+        promptLengthAfter: result.promptAfter.length,
+        decidedBy: actor.email,
+        decisionId: decision.id,
+      });
+
+      res.json({
+        ok: true,
+        decision,
+        strategy: result.strategy,
+        insertedAtLine: result.insertedAtLine,
+        promptLengthBefore: result.promptBefore.length,
+        promptLengthAfter: result.promptAfter.length,
+      });
+    } catch (err: any) {
+      logger.error('[agentEval] apply-fix erro:', err);
+      res.status(500).json({ error: 'erro ao aplicar sugestão', message: err?.message });
+    }
+  },
+);
+
+/**
+ * POST /api/admin/agent-eval/runs/:runId/scenarios/:scenarioId/reject-fix
+ *
+ * Marca uma sugestão como recusada. Audit row criada com snapshot do user
+ * + razão opcional. UI não oferece mais botão de aplicar pra essa run/cenário.
+ */
+router.post(
+  '/runs/:runId/scenarios/:scenarioId/reject-fix',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    const { runId, scenarioId } = req.params;
+    const reason = req.body?.reason ? String(req.body.reason).slice(0, 1000) : undefined;
+    const actorUserId = (req as any).user?.id as string | undefined;
+
+    try {
+      const run = await prisma.agentEvalRun.findUnique({
+        where: { id: runId },
+        select: { id: true, agentId: true, results: true },
+      });
+      if (!run) {
+        res.status(404).json({ error: 'run não encontrada' });
+        return;
+      }
+
+      const existing = await prisma.agentEvalFixDecision.findFirst({
+        where: { runId, scenarioId, decision: { in: ['applied', 'rejected'] } },
+      });
+      if (existing) {
+        res.status(409).json({
+          error: `cenário já tem decisão '${existing.decision}'`,
+          decision: existing,
+        });
+        return;
+      }
+
+      const scenarioMeta = findSuggestionInResults(run.results, scenarioId);
+      const actor = await getActorSnapshot(actorUserId);
+
+      const decision = await prisma.agentEvalFixDecision.create({
+        data: {
+          runId,
+          scenarioId,
+          agentId: run.agentId,
+          decision: 'rejected',
+          originalSuggestion: (scenarioMeta?.suggestion || null) as any,
+          decidedById: actor.id,
+          decidedByEmail: actor.email,
+          decidedByName: actor.name,
+          decidedByRole: actor.role,
+          notes: reason || 'Recusada sem justificativa',
+        },
+      });
+
+      logger.info({
+        msg: 'agent_eval_fix_rejected',
+        runId,
+        scenarioId,
+        agentId: run.agentId,
+        decidedBy: actor.email,
+        decisionId: decision.id,
+      });
+
+      res.json({ ok: true, decision });
+    } catch (err: any) {
+      logger.error('[agentEval] reject-fix erro:', err);
+      res.status(500).json({ error: 'erro ao recusar sugestão', message: err?.message });
+    }
+  },
+);
+
+/**
+ * POST /api/admin/agent-eval/fix-decisions/:decisionId/revert
+ *
+ * Reverte uma aplicação anterior. Restaura promptBefore da decisão
+ * original no agent + cria nova audit row com decision='reverted'.
+ */
+router.post(
+  '/fix-decisions/:decisionId/revert',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    const { decisionId } = req.params;
+    const reason = req.body?.reason ? String(req.body.reason).slice(0, 1000) : undefined;
+    const actorUserId = (req as any).user?.id as string | undefined;
+
+    try {
+      const original = await prisma.agentEvalFixDecision.findUnique({
+        where: { id: decisionId },
+      });
+      if (!original) {
+        res.status(404).json({ error: 'decisão não encontrada' });
+        return;
+      }
+      if (original.decision !== 'applied') {
+        res.status(400).json({ error: 'só é possível reverter decisões aplicadas' });
+        return;
+      }
+      if (!original.promptBefore) {
+        res.status(400).json({ error: 'snapshot do prompt antes não disponível pra reverter' });
+        return;
+      }
+
+      const actor = await getActorSnapshot(actorUserId);
+
+      const reverted = await prisma.$transaction(async (tx) => {
+        await tx.agent.update({
+          where: { id: original.agentId },
+          data: { systemPrompt: original.promptBefore! },
+        });
+        return tx.agentEvalFixDecision.create({
+          data: {
+            runId: original.runId,
+            scenarioId: original.scenarioId,
+            agentId: original.agentId,
+            decision: 'reverted',
+            originalSuggestion: original.originalSuggestion as any,
+            // Restaura: promptBefore da revert = promptAfter da aplicação original
+            promptBefore: original.promptAfter,
+            promptAfter: original.promptBefore,
+            decidedById: actor.id,
+            decidedByEmail: actor.email,
+            decidedByName: actor.name,
+            decidedByRole: actor.role,
+            revertedFromId: original.id,
+            notes: reason || 'Reversão sem justificativa',
+          },
+        });
+      });
+
+      logger.info({
+        msg: 'agent_eval_fix_reverted',
+        decisionId: reverted.id,
+        revertedFromId: original.id,
+        agentId: original.agentId,
+        decidedBy: actor.email,
+      });
+
+      res.json({ ok: true, decision: reverted });
+    } catch (err: any) {
+      logger.error('[agentEval] revert erro:', err);
+      res.status(500).json({ error: 'erro ao reverter', message: err?.message });
+    }
+  },
+);
+
+/**
+ * GET /api/admin/agent-eval/fix-decisions
+ *
+ * Audit log paginado (cross-tenant, SUPERADMIN). Útil pra dashboard de
+ * auditoria geral mostrando quem aplicou/recusou o que ao longo do tempo.
+ */
+router.get(
+  '/fix-decisions',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    try {
+      const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const agentId = req.query.agentId ? String(req.query.agentId) : undefined;
+      const decision = req.query.decision ? String(req.query.decision) : undefined;
+
+      const where: any = {};
+      if (agentId) where.agentId = agentId;
+      if (decision) where.decision = decision;
+
+      const decisions = await prisma.agentEvalFixDecision.findMany({
+        where,
+        orderBy: { decidedAt: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          runId: true,
+          scenarioId: true,
+          agentId: true,
+          decision: true,
+          decidedByEmail: true,
+          decidedByName: true,
+          decidedByRole: true,
+          decidedAt: true,
+          notes: true,
+          revertedFromId: true,
+          // não retorna promptBefore/After (pode ser MB) — só /:id pra detalhe
+        },
+      });
+      res.json({ total: decisions.length, decisions });
+    } catch (err: any) {
+      logger.error('[agentEval] fix-decisions list erro:', err);
+      res.status(500).json({ error: 'erro ao listar decisões', message: err?.message });
     }
   },
 );
