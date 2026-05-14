@@ -362,9 +362,21 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
       return;
     }
     const { results, ...rest } = run as any;
+    // FASE 2.2c follow-up: enriquece com userMessage do AGENT_EVAL_SET estático
+    // pra que runs antigas (pré-deploy 2026-05-14 13:51) também mostrem a
+    // mensagem enviada ao agente na UI.
+    const enrichedResults = includeResults && Array.isArray(results)
+      ? results.map((r: any) => ({
+          ...r,
+          userMessage:
+            r.userMessage ||
+            AGENT_EVAL_SET.find((s) => s.id === r.scenarioId)?.userMessage ||
+            null,
+        }))
+      : undefined;
     res.json({
       ...rest,
-      results: includeResults ? results : undefined,
+      results: enrichedResults,
       hasResults: results != null,
     });
   } catch (err: any) {

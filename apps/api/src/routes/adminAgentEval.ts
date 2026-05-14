@@ -342,9 +342,21 @@ router.get(
       }
       // Omite results por padrão (pode ser MB) — frontend pede explicitamente
       const { results, ...rest } = run as any;
+      // FASE 2.2c follow-up: runs antigas (pré-deploy 2026-05-14 13:51) não têm
+      // `userMessage` no JSONB. Faz lookup no AGENT_EVAL_SET estático pra que
+      // a UI mostre a interação testada completa mesmo em runs históricas.
+      const enrichedResults = includeResults && Array.isArray(results)
+        ? results.map((r: any) => ({
+            ...r,
+            userMessage:
+              r.userMessage ||
+              AGENT_EVAL_SET.find((s) => s.id === r.scenarioId)?.userMessage ||
+              null,
+          }))
+        : undefined;
       res.json({
         ...rest,
-        results: includeResults ? results : undefined,
+        results: enrichedResults,
         hasResults: results != null,
       });
     } catch (err: any) {
