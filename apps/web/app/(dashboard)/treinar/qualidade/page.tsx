@@ -601,9 +601,26 @@ function ClientFixCard({
                   disabled={decisionMade || loadingAction !== null}
                 />
               ) : (
-                <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 leading-relaxed">
-                  {editedDiff}
-                </pre>
+                <>
+                  {/* FASE 2.2c follow-up: depois de aplicada, mostrar o texto
+                      REAL que foi gravado (existingDecision.finalDiff), não o
+                      state local editedDiff que é resetado pra sugestão IA original. */}
+                  <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 leading-relaxed">
+                    {decisionMade && existingDecision?.finalDiff
+                      ? existingDecision.finalDiff
+                      : editedDiff}
+                  </pre>
+                  {decisionMade &&
+                    existingDecision?.finalDiff &&
+                    existingDecision.finalDiff !==
+                      (scenario.suggestedFix?.patches[0]?.diff || '') && (
+                      <div className="mt-1.5 text-[10px] text-amber-700 italic">
+                        ⚠ Texto editado por{' '}
+                        {existingDecision.decidedByName || existingDecision.decidedByEmail}
+                        {' '}antes de aplicar — diferente da sugestão original.
+                      </div>
+                    )}
+                </>
               )}
               {!decisionMade && (
                 <button

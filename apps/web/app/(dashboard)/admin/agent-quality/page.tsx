@@ -1033,9 +1033,28 @@ function FixSuggestionCard({
                   disabled={decisionMade || loadingAction !== null}
                 />
               ) : (
-                <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 leading-relaxed">
-                  {editedDiff}
-                </pre>
+                <>
+                  {/* FASE 2.2c follow-up (2026-05-14): quando decisão já foi
+                      tomada, mostra `existingDecision.finalDiff` (texto REAL
+                      aplicado, possivelmente editado). Antes mostrava
+                      `editedDiff` que era state local resetado pelo useEffect
+                      pra sugestão IA original — gerava impressão de que a
+                      edição não tinha sido aplicada, mas backend gravava certo. */}
+                  <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 leading-relaxed">
+                    {decisionMade && existingDecision?.finalDiff
+                      ? existingDecision.finalDiff
+                      : editedDiff}
+                  </pre>
+                  {decisionMade &&
+                    existingDecision?.finalDiff &&
+                    existingDecision.finalDiff !==
+                      (scenario.suggestedFix?.patches[0]?.diff || '') && (
+                      <div className="mt-1.5 text-[10px] text-amber-700 italic">
+                        ⚠ Texto acima foi editado por {existingDecision.decidedByEmail}
+                        {' '}antes de aplicar — diferente da sugestão original da IA.
+                      </div>
+                    )}
+                </>
               )}
               {!decisionMade && (
                 <button

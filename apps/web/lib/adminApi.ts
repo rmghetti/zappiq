@@ -382,6 +382,11 @@ export interface AgentEvalFixDecision {
   decidedAt: string;
   notes: string | null;
   revertedFromId: string | null;
+  // FASE 2.2c follow-up (2026-05-14 18:30): o texto que foi EFETIVAMENTE
+  // aplicado no prompt (depois da edição do user). Sem isso, UI mostrava
+  // suggestedFix.patches[0].diff (sugestão IA original) e dava impressão
+  // de que a edição tinha sido ignorada — mas backend grava certo no DB.
+  finalDiff?: string | null;
 }
 
 export interface AgentEvalRunDetail extends AgentEvalRunRow {
