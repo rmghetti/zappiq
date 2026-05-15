@@ -44,9 +44,9 @@ import {
   shouldAlertQuality,
 } from '../services/agentEvalCronService.js';
 import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
-// FASE 2.2d (#252): on-demand suggestion pra cenários partial
+// FASE 2.2d (#252): on-demand suggestion pra cenários partial.
+// AGENT_EVAL_SET já importado mais acima (FASE 2.2b) — só adicionamos suggestFix.
 import { suggestFix } from '../services/agentEvalRunner.js';
-import { AGENT_EVAL_SET } from '../agents/agentEvalSet.js';
 
 const router = Router();
 router.use(authMiddleware as any);
