@@ -44,6 +44,9 @@ import {
   shouldAlertQuality,
 } from '../services/agentEvalCronService.js';
 import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
+// FASE 2.2d (#252): on-demand suggestion pra cenários partial
+import { suggestFix } from '../services/agentEvalRunner.js';
+import { AGENT_EVAL_SET } from '../agents/agentEvalSet.js';
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -384,6 +387,65 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'erro ao buscar execução', message: err?.message });
   }
 });
+
+// ════════════════════════════════════════════════════════════════════
+// FASE 2.2d (#252) — Generate suggestion on-demand (cliente)
+// Mesma lógica do admin, mas com RLS por organizationId.
+// ════════════════════════════════════════════════════════════════════
+router.post(
+  '/runs/:runId/scenarios/:scenarioId/generate-suggestion',
+  async (req: Request, res: Response) => {
+    const orgId = req.user!.organizationId;
+    const { runId, scenarioId } = req.params;
+    try {
+      const run = await loadRunScoped(runId, orgId);
+      if (!run) {
+        res.status(404).json({ error: 'execução não encontrada' });
+        return;
+      }
+      const results = run.results as any[];
+      if (!Array.isArray(results)) {
+        res.status(400).json({ error: 'execução sem resultados' });
+        return;
+      }
+      const idx = results.findIndex((r: any) => r.scenarioId === scenarioId);
+      if (idx === -1) {
+        res.status(404).json({ error: 'cenário não encontrado' });
+        return;
+      }
+      const scenarioResult = results[idx];
+      if (scenarioResult.suggestedFix) {
+        res.json({ ok: true, suggestion: scenarioResult.suggestedFix, cached: true });
+        return;
+      }
+      const scenarioDef = AGENT_EVAL_SET.find((s) => s.id === scenarioId);
+      if (!scenarioDef) {
+        res.status(404).json({ error: 'definição do cenário não encontrada' });
+        return;
+      }
+      const suggestion = await suggestFix(
+        scenarioId,
+        scenarioDef.expectedBehavior,
+        scenarioResult.response || '',
+        scenarioResult.judge?.reason || 'Cenário parcial — usuário pediu sugestão de melhoria',
+        run.agent.systemPrompt || '',
+      );
+      if (!suggestion) {
+        res.status(500).json({ error: 'IA não conseguiu gerar sugestão' });
+        return;
+      }
+      results[idx] = { ...scenarioResult, suggestedFix: suggestion };
+      await prisma.agentEvalRun.update({
+        where: { id: runId },
+        data: { results: results as any },
+      });
+      res.json({ ok: true, suggestion, cached: false });
+    } catch (err: any) {
+      logger.error('[agentQuality] generate-suggestion erro:', err);
+      res.status(500).json({ error: 'erro ao gerar sugestão', message: err?.message });
+    }
+  },
+);
 
 // ════════════════════════════════════════════════════════════════════
 // POST /runs/:runId/scenarios/:scenarioId/apply-fix

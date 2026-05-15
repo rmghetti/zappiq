@@ -180,7 +180,10 @@ Critérios:
 Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
 {"summary": "1 linha executiva", "patches": [{"where": "REGRA 13", "diff": "+ ..."}], "confidence": 0-100}`;
 
-async function suggestFix(
+// FASE 2.2d (#252): exportado pra ser chamado on-demand pelo endpoint
+// generate-suggestion (usuário pede sugestão pra cenário partial que não
+// teve uma gerada automaticamente — sugestões automáticas só ocorrem em fail).
+export async function suggestFix(
   scenarioId: string,
   expectedBehavior: string,
   agentResponse: string,

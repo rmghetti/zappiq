@@ -1005,11 +1005,12 @@ function FixSuggestionCard({
           </div>
         )}
         {!hasSuggestion ? (
-          <div className="text-xs text-neutral-500 italic">
-            {scenario.combined === 'partial'
-              ? 'Desvio menor — sem sugestão automática (sugestões só pra reprovações).'
-              : 'Sugestão não gerada (a IA pode ter falhado nesta execução).'}
-          </div>
+          <GenerateSuggestionButton
+            runId={runId}
+            scenarioId={scenario.scenarioId}
+            combined={scenario.combined}
+            onGenerated={onAfterAction}
+          />
         ) : (
           <div className="p-3 bg-blue-50 border border-blue-200 rounded">
             <div className="flex items-center justify-between gap-2 mb-2">
@@ -1131,13 +1132,18 @@ function FixSuggestionCard({
                   </button>
                 </>
               ) : existingDecision.decision === 'applied' ? (
-                <button
-                  onClick={handleRevert}
-                  disabled={loadingAction !== null}
-                  className="flex-1 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-800 text-xs font-medium rounded border border-orange-300 disabled:opacity-50"
-                >
-                  {loadingAction === 'revert' ? 'Revertendo…' : '↺ Reverter aplicação'}
-                </button>
+                <div className="flex-1 flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    ✓ Em uso em prod desde {new Date(existingDecision.decidedAt).toLocaleDateString('pt-BR')}
+                  </span>
+                  <button
+                    onClick={handleRevert}
+                    disabled={loadingAction !== null}
+                    className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-800 text-xs font-medium rounded border border-orange-300 disabled:opacity-50"
+                  >
+                    {loadingAction === 'revert' ? 'Revertendo…' : '↺ Reverter'}
+                  </button>
+                </div>
               ) : (
                 <div className="text-[10px] text-neutral-500 italic flex-1">
                   Decisão registrada. Audit: {existingDecision.notes || '(sem nota)'}
@@ -1156,5 +1162,75 @@ function FixSuggestionCard({
         )}
       </div>
     </details>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// GenerateSuggestionButton — FASE 2.2d (#252)
+// Sugestões automáticas só são geradas em cenários `fail`. Pra cenários
+// `partial` (desvios menores) ou `fail` que a IA não conseguiu gerar
+// sugestão, esse botão chama o endpoint generate-suggestion on-demand.
+// Após geração, parent recarrega via onGenerated → o card volta a mostrar
+// o fluxo normal Apply/Edit/Reject.
+// ════════════════════════════════════════════════════════════════════
+function GenerateSuggestionButton({
+  runId,
+  scenarioId,
+  combined,
+  onGenerated,
+}: {
+  runId: string;
+  scenarioId: string;
+  combined: 'pass' | 'partial' | 'fail';
+  onGenerated: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleGenerate() {
+    setLoading(true);
+    setError(null);
+    try {
+      await agentQualityApi.generateSuggestion(runId, scenarioId);
+      setTimeout(onGenerated, 600);
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao gerar sugestão');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+      <div className="text-xs text-blue-900 mb-2">
+        {combined === 'partial' ? (
+          <>
+            <strong>Desvio menor detectado.</strong> A IA não gerou sugestão automática
+            (apenas reprovações geram sugestão por padrão). Se você acha que vale corrigir,
+            clique abaixo pra gerar uma sugestão sob demanda.
+          </>
+        ) : (
+          <>
+            <strong>Sugestão não foi gerada automaticamente.</strong> Pode ter sido falha
+            transitória da IA — tente gerar agora.
+          </>
+        )}
+      </div>
+      <button
+        onClick={handleGenerate}
+        disabled={loading}
+        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded disabled:opacity-50"
+      >
+        {loading ? 'Gerando sugestão…' : '💡 Gerar sugestão IA'}
+      </button>
+      {error && (
+        <div className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
+          ❌ {error}
+        </div>
+      )}
+      <div className="mt-2 text-[10px] text-blue-600 italic">
+        Custo ~$0.05 (Sonnet). Após gerar, você pode editar, aplicar ou recusar.
+      </div>
+    </div>
   );
 }
