@@ -49,6 +49,8 @@ import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services
 // FASE 2.2a (#243): aplicação cirúrgica de patches no system_prompt.
 // FASE 2.2c (#246): DuplicatePatchError pra rejeitar sugestão IA repetida.
 import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
+// FASE 2.2d (#252): on-demand suggestion pra cenários partial
+import { suggestFix } from '../services/agentEvalRunner.js';
 
 const router = Router();
 
@@ -510,6 +512,75 @@ router.post(
       });
     } catch (err: any) {
       res.status(500).json({ ok: false, message: err?.message || 'erro inesperado' });
+    }
+  },
+);
+
+// ════════════════════════════════════════════════════════════════════
+// FASE 2.2d (#252) — Generate suggestion on-demand (cenários partial)
+// ════════════════════════════════════════════════════════════════════
+// Sugestões automáticas só são geradas em cenários `fail` no runner (custo
+// controlado). Pra `partial` o user pode pedir manualmente — custo ~$0.05
+// por sugestão. Persiste no results JSONB da run pra cache (não regera
+// se já tem).
+router.post(
+  '/runs/:runId/scenarios/:scenarioId/generate-suggestion',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    const { runId, scenarioId } = req.params;
+    try {
+      const run = await prisma.agentEvalRun.findUnique({
+        where: { id: runId },
+        include: { agent: true },
+      });
+      if (!run) {
+        res.status(404).json({ error: 'run não encontrada' });
+        return;
+      }
+      const results = run.results as any[];
+      if (!Array.isArray(results)) {
+        res.status(400).json({ error: 'run sem results' });
+        return;
+      }
+      const idx = results.findIndex((r: any) => r.scenarioId === scenarioId);
+      if (idx === -1) {
+        res.status(404).json({ error: 'scenario não encontrado na run' });
+        return;
+      }
+      const scenarioResult = results[idx];
+      // Cache: já tem sugestão? Retorna direto, sem regerar.
+      if (scenarioResult.suggestedFix) {
+        res.json({ ok: true, suggestion: scenarioResult.suggestedFix, cached: true });
+        return;
+      }
+      // Carrega expectedBehavior do AGENT_EVAL_SET estático
+      const scenarioDef = AGENT_EVAL_SET.find((s) => s.id === scenarioId);
+      if (!scenarioDef) {
+        res.status(404).json({ error: 'scenario não encontrado no eval set' });
+        return;
+      }
+      const suggestion = await suggestFix(
+        scenarioId,
+        scenarioDef.expectedBehavior,
+        scenarioResult.response || '',
+        scenarioResult.judge?.reason || 'Cenário parcial — usuário pediu sugestão de melhoria',
+        run.agent.systemPrompt || '',
+      );
+      if (!suggestion) {
+        res.status(500).json({ error: 'IA não conseguiu gerar sugestão' });
+        return;
+      }
+      // Persiste no JSONB results pra cache (próxima chamada não regera)
+      results[idx] = { ...scenarioResult, suggestedFix: suggestion };
+      await prisma.agentEvalRun.update({
+        where: { id: runId },
+        data: { results: results as any },
+      });
+      res.json({ ok: true, suggestion, cached: false });
+    } catch (err: any) {
+      logger.error('[agentEval] generate-suggestion erro:', err);
+      res.status(500).json({ error: 'erro ao gerar sugestão', message: err?.message });
     }
   },
 );

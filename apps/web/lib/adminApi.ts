@@ -503,6 +503,21 @@ class AgentQualityApi {
   }
 
   /**
+   * POST /runs/:runId/scenarios/:scenarioId/generate-suggestion
+   * FASE 2.2d (#252): gera sugestão IA on-demand pra cenários partial.
+   * Cache: se já tem suggestedFix no results, retorna sem regenerar.
+   */
+  async generateSuggestion(
+    runId: string,
+    scenarioId: string,
+  ): Promise<{ ok: boolean; suggestion: NonNullable<AgentEvalRunDetailScenario['suggestedFix']>; cached: boolean }> {
+    return api.post(
+      `/api/admin/agent-eval/runs/${encodeURIComponent(runId)}/scenarios/${encodeURIComponent(scenarioId)}/generate-suggestion`,
+      {},
+    );
+  }
+
+  /**
    * POST /runs/:runId/scenarios/:scenarioId/apply-fix
    * Aplica sugestão IA no system_prompt do agent. Cria audit row.
    */

@@ -78,6 +78,17 @@ class ClientAgentQualityApi {
     return api.post<ClientTriggerRunResponse>('/api/agent-quality/run-async', { agentId, ...opts });
   }
 
+  /** POST /runs/:runId/scenarios/:scenarioId/generate-suggestion (FASE 2.2d #252) */
+  async generateSuggestion(
+    runId: string,
+    scenarioId: string,
+  ): Promise<{ ok: boolean; suggestion: any; cached: boolean }> {
+    return api.post(
+      `/api/agent-quality/runs/${encodeURIComponent(runId)}/scenarios/${encodeURIComponent(scenarioId)}/generate-suggestion`,
+      {},
+    );
+  }
+
   /** POST /runs/:runId/scenarios/:scenarioId/apply-fix */
   async applyFix(
     runId: string,

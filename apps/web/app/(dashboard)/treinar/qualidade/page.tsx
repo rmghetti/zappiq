@@ -577,10 +577,26 @@ function ClientFixCard({
           </div>
         )}
         {!hasSuggestion ? (
-          <div className="text-xs text-neutral-500 italic">
-            {isPartial
-              ? 'Desvio menor — sem correção automática sugerida.'
-              : 'Correção não pôde ser gerada nesta execução.'}
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+            <div className="text-xs text-blue-900 mb-2">
+              {isPartial ? (
+                <>
+                  <strong>Desvio menor detectado.</strong> Correção automática não foi
+                  gerada (geramos só pra reprovações). Se você acha que vale corrigir,
+                  peça uma sugestão sob demanda.
+                </>
+              ) : (
+                <>
+                  <strong>Correção não pôde ser gerada.</strong> Tente novamente — pode ter
+                  sido falha transitória da IA.
+                </>
+              )}
+            </div>
+            <ClientGenerateSuggestionButton
+              runId={runId}
+              scenarioId={scenario.scenarioId}
+              onGenerated={onAfterAction}
+            />
           </div>
         ) : (
           <div className="p-3 bg-blue-50 border border-blue-200 rounded">
@@ -694,5 +710,45 @@ function ClientFixCard({
         )}
       </div>
     </details>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ClientGenerateSuggestionButton — FASE 2.2d (#252) versão cliente
+// ════════════════════════════════════════════════════════════════════
+function ClientGenerateSuggestionButton({
+  runId, scenarioId, onGenerated,
+}: { runId: string; scenarioId: string; onGenerated: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleGenerate() {
+    setLoading(true);
+    setError(null);
+    try {
+      await clientAgentQualityApi.generateSuggestion(runId, scenarioId);
+      setTimeout(onGenerated, 600);
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao gerar correção');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        onClick={handleGenerate}
+        disabled={loading}
+        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded disabled:opacity-50"
+      >
+        {loading ? 'Gerando…' : '💡 Pedir correção da IA'}
+      </button>
+      {error && (
+        <div className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
+          ❌ {error}
+        </div>
+      )}
+    </>
   );
 }
