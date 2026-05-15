@@ -130,40 +130,151 @@ async function llmHealthHandler(req: Request, res: Response) {
   try {
     const providers = await llmRouter.getStatus();
 
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [stats, byProviderRaw, fallbacks] = await Promise.all([
+    // FASE 4 enhancement: período configurável via ?period=24h|7d|30d|90d.
+    // Default 24h pra retro compat. Map → hours + bucket size pro timeseries
+    // (24h e 7d agregam por hora; 30d e 90d agregam por dia pra não estourar
+    // 720+ pontos no gráfico).
+    const periodParam = String(req.query.period || '24h');
+    const periodConfig: Record<string, { hours: number; bucket: 'hour' | 'day'; label: string }> = {
+      '24h': { hours: 24, bucket: 'hour', label: 'Últimas 24 horas' },
+      '7d':  { hours: 24 * 7, bucket: 'hour', label: 'Últimos 7 dias' },
+      '30d': { hours: 24 * 30, bucket: 'day', label: 'Últimos 30 dias' },
+      '90d': { hours: 24 * 90, bucket: 'day', label: 'Últimos 90 dias' },
+    };
+    const cfg = periodConfig[periodParam] || periodConfig['24h'];
+    const since = new Date(Date.now() - cfg.hours * 60 * 60 * 1000);
+
+    // ── Métricas globais 24h ──
+    const [stats, byProviderDetailed, fallbacks, errorsTotal, hourlyRaw] = await Promise.all([
       prisma.lLMCallLog.aggregate({
         where: { createdAt: { gte: since } },
         _count: { _all: true },
-        _sum: { costUsdEstimate: true },
+        _sum: { costUsdEstimate: true, inputTokens: true, outputTokens: true },
         _avg: { latencyMs: true },
       }),
+      // Detalhado por provider: count, custo, latência avg, error count
       prisma.lLMCallLog.groupBy({
         by: ['provider'],
         where: { createdAt: { gte: since } },
         _count: { _all: true },
+        _sum: { costUsdEstimate: true, inputTokens: true, outputTokens: true },
+        _avg: { latencyMs: true },
       }),
       prisma.lLMCallLog.count({
         where: { createdAt: { gte: since }, fallbackTriggered: true },
       }),
+      prisma.lLMCallLog.count({
+        where: { createdAt: { gte: since }, error: { not: null } },
+      }),
+      // Série temporal: bucket dinâmico (hour/day) conforme período selecionado
+      prisma.$queryRawUnsafe<
+        Array<{ bucket: Date; calls: bigint; avg_latency: number | null; errors: bigint }>
+      >(`
+        SELECT
+          date_trunc('${cfg.bucket}', "created_at") AS bucket,
+          COUNT(*)::bigint AS calls,
+          AVG("latency_ms")::float AS avg_latency,
+          COUNT(*) FILTER (WHERE error IS NOT NULL)::bigint AS errors
+        FROM llm_call_logs
+        WHERE "created_at" >= $1
+        GROUP BY date_trunc('${cfg.bucket}', "created_at")
+        ORDER BY bucket ASC
+      `, since),
     ]);
 
     const totalCalls = stats._count._all ?? 0;
     const fallbackRate = totalCalls > 0 ? fallbacks / totalCalls : 0;
-    const byProvider: Record<string, number> = {};
-    for (const row of byProviderRaw) {
+    const errorRate = totalCalls > 0 ? errorsTotal / totalCalls : 0;
+
+    // Por provider: enriquecido com latência + custo + erros
+    const byProviderEnriched: Record<string, {
+      calls: number;
+      avgLatencyMs: number;
+      costUsd: string;
+      inputTokens: number;
+      outputTokens: number;
+    }> = {};
+    const byProvider: Record<string, number> = {}; // mantém compat com clients antigos
+    for (const row of byProviderDetailed) {
       byProvider[row.provider] = row._count._all;
+      byProviderEnriched[row.provider] = {
+        calls: row._count._all,
+        avgLatencyMs: Math.round(row._avg.latencyMs ?? 0),
+        costUsd: row._sum.costUsdEstimate?.toString() ?? '0',
+        inputTokens: row._sum.inputTokens ?? 0,
+        outputTokens: row._sum.outputTokens ?? 0,
+      };
     }
 
+    // Erros por provider (count separado pra não acoplar groupBy multi-conditional)
+    const errorsByProviderRaw = await prisma.lLMCallLog.groupBy({
+      by: ['provider'],
+      where: { createdAt: { gte: since }, error: { not: null } },
+      _count: { _all: true },
+    });
+    const errorsByProvider: Record<string, number> = {};
+    for (const row of errorsByProviderRaw) {
+      errorsByProvider[row.provider] = row._count._all;
+    }
+
+    // ── FASE 4 enhancement: cascade order por tier (visual de prioridade) ──
+    // Reflete TIER_PRIMARY_PROVIDER do LLMRouter + defaultChain (Sonnet→Haiku→OpenAI).
+    // Hardcoded espelhando o LLMRouter porque o tier mapping é estático em código —
+    // se o LLMRouter mudar, atualizar este map também. Trade-off: simplicidade.
+    const cascadeByTier: Record<string, string[]> = {
+      STARTER: ['google-gemini-flash', 'anthropic-sonnet', 'anthropic-haiku', 'openai-mini'],
+      GROWTH: ['google-gemini-flash', 'anthropic-sonnet', 'anthropic-haiku', 'openai-mini'],
+      SCALE: ['anthropic-sonnet', 'anthropic-haiku', 'openai-mini'],
+      BUSINESS: ['anthropic-sonnet', 'anthropic-haiku', 'openai-mini'],
+      ENTERPRISE: ['anthropic-sonnet', 'anthropic-haiku', 'openai-mini'],
+      DEFAULT: ['anthropic-sonnet', 'anthropic-haiku', 'openai-mini'],
+    };
+
+    // SLA targets por provider (latência P95 esperada e error rate aceitável).
+    // Valores baseados em benchmarks de mercado + observação prod 2026-04→2026-05.
+    const slaThresholds = {
+      'anthropic-sonnet': { latencyP95Ms: 6000, maxErrorRate: 0.02 },
+      'anthropic-haiku': { latencyP95Ms: 3000, maxErrorRate: 0.02 },
+      'google-gemini-flash': { latencyP95Ms: 3500, maxErrorRate: 0.03 },
+      'openai-mini': { latencyP95Ms: 4500, maxErrorRate: 0.03 },
+    };
+
+    // Hourly timeseries normalizado pro frontend
+    const hourlyTimeseries = hourlyRaw.map((r) => ({
+      hour: r.hour.toISOString(),
+      calls: Number(r.calls),
+      avgLatencyMs: Math.round(r.avg_latency ?? 0),
+      errors: Number(r.errors),
+    }));
+
     res.json({
+      // FASE 4: metadados do período pro frontend renderizar contexto
+      period: {
+        key: periodParam in periodConfig ? periodParam : '24h',
+        label: cfg.label,
+        hours: cfg.hours,
+        bucket: cfg.bucket,
+        since: since.toISOString(),
+      },
       providers,
+      // Mantém chave 'last24h' pra compat com clientes antigos — semanticamente
+      // os números cobrem o período selecionado em ?period=
       last24h: {
         totalCalls,
         totalCostUsd: stats._sum.costUsdEstimate?.toString() ?? '0',
         avgLatencyMs: Math.round(stats._avg.latencyMs ?? 0),
         fallbackRate: Number(fallbackRate.toFixed(4)),
-        byProvider,
+        errorRate: Number(errorRate.toFixed(4)),
+        errorCount: errorsTotal,
+        totalInputTokens: stats._sum.inputTokens ?? 0,
+        totalOutputTokens: stats._sum.outputTokens ?? 0,
+        byProvider,                  // compat (count only)
+        byProviderEnriched,          // FASE 4: detalhado
+        errorsByProvider,            // FASE 4: erros por provider
+        hourlyTimeseries,            // FASE 4: gráfico série temporal (renomear pra "buckets" no futuro)
       },
+      cascadeByTier,                 // FASE 4: priority chain por tier
+      slaThresholds,                 // FASE 4: targets de monitoria
       generatedAt: new Date().toISOString(),
     });
   } catch (err) {

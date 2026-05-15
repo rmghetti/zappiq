@@ -122,26 +122,48 @@ export interface LLMProviderStatus {
   openUntil: number | null;
 }
 
+// FASE 4 — Período configurável + métricas detalhadas + cascade visual
+export type LLMHealthPeriod = '24h' | '7d' | '30d' | '90d';
+
 export interface LLMHealthResponse {
+  period: {
+    key: LLMHealthPeriod;
+    label: string;
+    hours: number;
+    bucket: 'hour' | 'day';
+    since: string;
+  };
   providers: LLMProviderStatus[];
-  last24h: {
+  last24h: { // nome legado — semanticamente cobre `period`
     totalCalls: number;
     totalCostUsd: string;
     avgLatencyMs: number;
     fallbackRate: number;
+    errorRate: number;
+    errorCount: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
     byProvider: Record<string, number>;
+    byProviderEnriched: Record<
+      string,
+      { calls: number; avgLatencyMs: number; costUsd: string; inputTokens: number; outputTokens: number }
+    >;
+    errorsByProvider: Record<string, number>;
+    hourlyTimeseries: Array<{ hour: string; calls: number; avgLatencyMs: number; errors: number }>;
   };
+  cascadeByTier: Record<string, string[]>;
+  slaThresholds: Record<string, { latencyP95Ms: number; maxErrorRate: number }>;
   generatedAt: string;
 }
 
 class LLMHealthApi {
   /**
-   * GET /api/admin/llm-health
-   * Estado em tempo real dos circuit breakers (Redis-backed) + métricas 24h.
+   * GET /api/admin/llm-health?period=24h|7d|30d|90d
+   * Estado em tempo real dos circuit breakers (Redis-backed) + métricas do período.
    * Requer role SUPERADMIN.
    */
-  async getHealth(): Promise<LLMHealthResponse> {
-    return api.get<LLMHealthResponse>('/api/admin/llm-health');
+  async getHealth(period: LLMHealthPeriod = '24h'): Promise<LLMHealthResponse> {
+    return api.get<LLMHealthResponse>(`/api/admin/llm-health?period=${period}`);
   }
 }
 
