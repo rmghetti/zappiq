@@ -239,9 +239,11 @@ async function llmHealthHandler(req: Request, res: Response) {
       'openai-mini': { latencyP95Ms: 4500, maxErrorRate: 0.03 },
     };
 
-    // Hourly timeseries normalizado pro frontend
+    // Hourly timeseries normalizado pro frontend.
+    // Mantém field name `hour` no response pra compat com cliente — semanticamente
+    // pode ser hour OU day conforme cfg.bucket. Frontend renderiza label conforme.
     const hourlyTimeseries = hourlyRaw.map((r) => ({
-      hour: r.hour.toISOString(),
+      hour: r.bucket.toISOString(),
       calls: Number(r.calls),
       avgLatencyMs: Math.round(r.avg_latency ?? 0),
       errors: Number(r.errors),
