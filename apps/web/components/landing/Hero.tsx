@@ -270,17 +270,18 @@ export function Hero() {
             {/* Eyebrow pill — ZappIQ Meta Business Partner */}
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-soft border border-line text-[12px] text-muted mb-6">
               <span className="w-2 h-2 rounded-full bg-grad" />
-              Meta Business Partner
+              Meta Business Partner · WhatsApp + Instagram
             </div>
 
             <h1 className="text-[44px] sm:text-[56px] lg:text-[72px] leading-[1.0] tracking-[-0.045em] font-semibold text-ink mb-6">
-              Atenda no WhatsApp 24 horas por dia. <span className="text-grad">Sem contratar mais ninguém.</span>
+              Atenda no WhatsApp e Instagram 24 horas por dia. <span className="text-grad">Sem contratar mais ninguém.</span>
             </h1>
 
             <p className="text-[17px] lg:text-[18.5px] text-muted leading-[1.55] max-w-[560px] mb-8">
               A <b className="text-ink">Iza</b> — sua IA treinada com o próprio negócio — atende, tira dúvidas,
-              agenda e qualifica lead no WhatsApp, 24/7, em texto e em áudio.
-              Ative em minutos, teste <b className="text-ink">14 dias grátis</b> e decide depois.
+              agenda e qualifica lead no <b className="text-ink">WhatsApp e Instagram Direct</b>, 24/7, em texto e em áudio.
+              Mesma inteligência, mesma marca, em todos os canais Meta. Ative em minutos,
+              teste <b className="text-ink">14 dias grátis</b> e decide depois.
             </p>
 
             <div className="flex flex-wrap gap-3 mb-8">
