@@ -1,0 +1,49 @@
+name: Iza Facts Drift Check
+
+# ============================================================================
+# Camada 3 anti-drift (FASE 4 P7+).
+#
+# Bloqueia PRs que tocam paths SENSIVEIS (landing copy, planConfig, launch
+# flags, fly.toml de pricing) SEM atualizar `docs/iza-facts-changelog.md`
+# nem adicionar o label `no-iza-impact`.
+#
+# Por que: prevenir o pattern do PR #153 quando Iza alucinou que IG
+# nao estava no roadmap porque o prompt nao foi atualizado depois do
+# lancamento do IG Direct.
+#
+# Como contornar (PRs cosmeticos):
+#   - Adicione label `no-iza-impact` no PR → check passa direto
+#   - OU edite docs/iza-facts-changelog.md descrevendo o impacto
+# ============================================================================
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  check-iza-drift:
+    name: Validate iza_facts impact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for no-iza-impact label
+        id: label_check
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          echo "Labels: $LABELS"
+          if echo "$LABELS" | grep -q '"no-iza-impact"'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "PR tem label 'no-iza-impact' - skipping drift check"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run drift check
+        if: steps.label_check.outputs.skip != 'true'
+        run: bash scripts/check-iza-drift.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
