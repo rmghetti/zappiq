@@ -565,3 +565,62 @@ class AgentQualityApi {
 export const agentQualityApi = new AgentQualityApi();
 
 export const adminApi = new AdminApi();
+
+// ─── Iza Facts (Camada 2 anti-drift CRUD) ────────────────────────────
+
+export type IzaFactSection = 'canais' | 'features' | 'urls' | 'compliance' | 'pricing' | 'parcerias';
+export type IzaFactStatus = 'live' | 'beta' | 'rollout' | 'pending' | 'sunset';
+
+export interface IzaFactRow {
+  id: string;
+  section: IzaFactSection;
+  fact_key: string;
+  label: string;
+  status: IzaFactStatus;
+  description: string | null;
+  url: string | null;
+  order_idx: number;
+  active: boolean;
+  notes: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export interface IzaFactsListResponse {
+  facts: IzaFactRow[];
+  total: number;
+}
+
+export interface IzaFactCreateInput {
+  id: string;
+  section: IzaFactSection;
+  fact_key: string;
+  label: string;
+  status: IzaFactStatus;
+  description?: string | null;
+  url?: string | null;
+  order_idx?: number;
+  notes?: string | null;
+}
+
+export type IzaFactUpdateInput = Partial<Omit<IzaFactCreateInput, 'id'>> & { active?: boolean };
+
+class IzaFactsApi {
+  list() {
+    return api.get<IzaFactsListResponse>('/api/admin/iza-facts');
+  }
+  create(input: IzaFactCreateInput) {
+    return api.post<{ ok: true; id: string }>('/api/admin/iza-facts', input);
+  }
+  update(id: string, input: IzaFactUpdateInput) {
+    return api.patch<{ ok: true; id: string; rowsAffected: number }>(`/api/admin/iza-facts/${encodeURIComponent(id)}`, input);
+  }
+  remove(id: string) {
+    return api.delete<{ ok: true }>(`/api/admin/iza-facts/${encodeURIComponent(id)}`);
+  }
+  invalidateCache() {
+    return api.post<{ ok: true }>('/api/admin/iza-facts/cache/invalidate');
+  }
+}
+
+export const izaFactsApi = new IzaFactsApi();
