@@ -260,7 +260,7 @@ export default function ObservabilidadePage() {
             Teste Radar 360° por 14 dias sem custo. Se não entregar insight acionável na primeira semana, cancele sem perguntar nada.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/onboarding?addon=radar"
+            <Link href="/cadastro?addon=radar"
               className="bg-white text-purple-700 font-semibold px-7 py-4 rounded-xl hover:bg-gray-50 transition-colors inline-flex items-center justify-center gap-2">
               Começar trial de 14 dias <ArrowRight size={18} />
             </Link>

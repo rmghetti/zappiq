@@ -234,7 +234,7 @@ export function SeloPage() {
           </p>
           {/* PLACEHOLDER: substituir por dado real */}
           <Link
-            href="/register"
+            href="/cadastro"
             className="inline-flex items-center gap-2 bg-secondary-500 hover:bg-secondary-600 text-white font-semibold px-8 py-4 rounded-xl transition-colors shadow-lg shadow-secondary-500/30 text-base"
           >
             Comecar Gratis e Conquistar o Selo <ArrowRight size={18} />

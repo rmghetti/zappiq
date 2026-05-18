@@ -5,7 +5,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      disallow: ['/api/', '/dashboard/', '/onboarding', '/register', '/login'],
+      disallow: ['/api/', '/dashboard/', '/onboarding', '/cadastro', '/login'],
     },
     sitemap: 'https://zappiq.com.br/sitemap.xml',
   };

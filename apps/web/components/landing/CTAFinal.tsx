@@ -81,7 +81,7 @@ function ExitIntentPopup() {
         <div className="flex flex-col gap-3">
           {/* PLACEHOLDER: substituir href por link real do vídeo */}
           <a
-            href="#VIDEO_DEMO_URL"
+            href="/demo"
             className="btn btn-accent justify-center"
           >
             <Play size={14} /> Ver a ZappIQ em ação
@@ -160,7 +160,7 @@ export function CTAFinal() {
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
             <Link
-              href="/register?utm_source=cta_final"
+              href="/cadastro?utm_source=cta_final"
               className="inline-flex items-center justify-center gap-2 bg-white text-ink hover:bg-white/90 font-medium px-7 py-3.5 rounded-[14px] transition-all shadow-[0_20px_40px_-10px_rgba(255,255,255,0.15)] text-[14.5px]"
             >
               Começar 14 dias grátis <ArrowRight size={16} />

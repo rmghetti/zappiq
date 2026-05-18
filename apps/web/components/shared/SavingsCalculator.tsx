@@ -37,7 +37,7 @@ export interface SavingsCalculatorProps {
   zappiqTierLabel?: string;
   /** Mostrar CTA no final. Default depende da variant. */
   showCta?: boolean;
-  /** Destino do CTA. Default = "/register". */
+  /** Destino do CTA. Default = "/cadastro". */
   ctaHref?: string;
   /** Texto do CTA. Default = "Começar 14 dias grátis". */
   ctaLabel?: string;
@@ -79,7 +79,7 @@ export function SavingsCalculator({
   zappiqMonthly = STARTER_PRICE,
   zappiqTierLabel = 'ZappIQ Starter',
   showCta,
-  ctaHref = '/register',
+  ctaHref = '/cadastro',
   ctaLabel = 'Começar 14 dias grátis',
   onCtaClick,
   title,

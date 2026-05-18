@@ -106,12 +106,7 @@ export function Pricing() {
               </span>
             </div>
 
-            <Link
-              href="/roadmap"
-              className="text-[11.5px] font-medium text-muted hover:text-ink transition-colors underline-offset-4 hover:underline"
-            >
-              Voz (chegando em julho/2026) →
-            </Link>
+            <Link href="/voz" className="text-[11.5px] font-medium text-accent hover:underline">Voz outbound · 6 pacotes a partir de R$ 79,90 →</Link>
           </div>
         </div>
 
