@@ -62,16 +62,22 @@ export default function BillingPage() {
 
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
-                <p className="text-xs text-gray-500 mt-1">{plan.desc}</p>
+                <p className="text-xs text-gray-500 mt-1">{plan.description}</p>
               </div>
 
               <div className="mb-6">
-                <span className="text-3xl font-extrabold text-gray-900">R$ {plan.price}</span>
-                <span className="text-sm text-gray-500">/mês</span>
+                {plan.priceMonthly === null ? (
+                  <span className="text-3xl font-extrabold text-gray-900">Sob consulta</span>
+                ) : (
+                  <>
+                    <span className="text-3xl font-extrabold text-gray-900">R$ {plan.priceMonthly.toLocaleString('pt-BR')}</span>
+                    <span className="text-sm text-gray-500">/mês</span>
+                  </>
+                )}
               </div>
 
               <ul className="space-y-2.5 mb-6">
-                {plan.features.map((f) => (
+                {plan.bullets.slice(0, 8).map((f) => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                     <Check size={16} className="text-primary-500 flex-shrink-0 mt-0.5" />
                     {f}
