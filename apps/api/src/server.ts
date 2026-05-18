@@ -48,6 +48,7 @@ import adminAgentEvalRoutes from './routes/adminAgentEval.js'; // V3 #235 agent 
 import agentQualityRoutes from './routes/agentQuality.js'; // FASE 2.2b #244 — versão cliente Qualidade do Agente
 import adminOnboardingJourneyRoutes from './routes/adminOnboardingJourney.js'; // FASE 1.B #240 onboarding D+1/D+3/D+7
 import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-page site usa Iza real
+import adminIzaFactsRoutes from './routes/adminIzaFacts.js'; // FASE 4 P7+ Admin Camada 2 CRUD
 import { initRetentionJob } from './services/retentionService.js';
 import { initTenantUsageJob } from './services/tenantUsageService.js'; // PR #149 — H10 unit economics
 import { initUsageReconciliationJob } from './services/usageReconciliationService.js'; // PR #149 — Quota Mgmt #6 audit-only
@@ -242,6 +243,7 @@ app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/admin/whatsapp', adminWhatsappRoutes);
 app.use('/api/admin', adminLlmRoutes); // V2-025: GET /api/admin/llm-status
 app.use('/api/admin', adminLeadsIzaRoutes); // 2026-05-11: /admin/leads + /admin/iza-conversations
+app.use('/api/admin', adminIzaFactsRoutes); // FASE 4 P7+ : /admin/iza-facts CRUD Camada 2
 app.use('/api/admin', adminLlmStreamRoutes); // PR #V4-004: /admin/llm-stream-test (SSE)
 app.use('/api/admin/agent-eval', adminAgentEvalRoutes); // V3 #235: golden set + judge
 app.use('/api/admin/onboarding-journey', adminOnboardingJourneyRoutes); // FASE 1.B #240: trigger + state
