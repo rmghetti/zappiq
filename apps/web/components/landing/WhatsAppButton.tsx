@@ -1,35 +1,39 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * WhatsAppButton — V2 Chat Launcher dual (WhatsApp + Iza Chat in-page)
+ * WhatsAppButton — V3 Chat Launcher dual (WhatsApp + Iza Chat in-page LIVE)
  * --------------------------------------------------------------------------
  * FAB único no canto inferior direito que abre menu com 2 opções:
  *   1. Conversar pelo WhatsApp  → wa.me link (web/app)
- *   2. Conversar aqui no site   → chat in-page persistente
+ *   2. Conversar aqui no site   → chat in-page persistente, fala com a Iza
+ *      REAL via POST /api/web-chat/iza-message (Fly · zappiq-api).
  *
- * Chat in-page:
- *   - Janela 360x520 fixa bottom-right
- *   - Estados: open | minimized | closed
- *   - Persistência via localStorage (mensagens + estado) — sobrevive a
- *     navegação entre páginas (Hero → /precos → /sobre etc.)
- *   - Nunca encerra sozinho · só fecha por ação explícita do user (X)
- *   - Minimize → vira pílula compacta com badge
- *   - Restore → reabre com histórico intacto
- *
- * Roteia mensagens pro backend Iza: POST /api/web-chat (precisa endpoint
- * separado; por ora cliente envia + recebe stub canned reply pra demo.
- * Fase seguinte: ligar com agentOrchestrator via SSE).
+ * V3 (FASE 4 P7 · 2026-05-17):
+ *   - REMOVIDO: CANNED_REPLIES (regex) + generateReply (fallback stub).
+ *     Causavam alucinação: "Olá, tudo bom?" caía no fallback genérico.
+ *   - ADICIONADO: fetch real ao endpoint Fly que usa o MESMO system prompt
+ *     v7.6 + CORE_AGENT_RULES_V1 da Iza do WhatsApp. Cascade Sonnet→Haiku→GPT
+ *     idêntica. Resposta no chat web = resposta no WhatsApp.
+ *   - sessionId UUID estável em localStorage pra rastrear conversas únicas.
+ *   - history[] enviado a cada turno (stateless server-side, frontend é a
+ *     fonte de verdade) — máx 20 turnos.
+ *   - Fallback gracioso em erro: oferece WhatsApp como saída.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, X, Minus, Send, Phone, ExternalLink } from 'lucide-react';
 
 const WHATSAPP_NUMBER = '5511926160159';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://zappiq-api.fly.dev';
 const WELCOME = 'Oi! Sou a Iza, a IA da ZappIQ. Posso tirar dúvidas sobre preço, trial, integração WhatsApp/Instagram, treinamento da IA ou qualquer outra coisa. O que você gostaria de saber?';
 
 const STORAGE_MSGS = 'zappiq_chat_msgs_v1';
 const STORAGE_STATE = 'zappiq_chat_state_v1';
+const STORAGE_SESSION_ID = 'zappiq_chat_session_id_v1';
 const STORAGE_DISMISSED_BUBBLE = 'zappiq_chat_bubble_dismissed_v2';
+
+/* History máximo enviado ao backend (mesmo cap do server). */
+const MAX_HISTORY_TURNS = 20;
 
 type ChatMode = 'closed' | 'menu' | 'inpage' | 'minimized';
 
@@ -40,23 +44,63 @@ type ChatMessage = {
   ts: number;
 };
 
-/* ── Respostas canned por intent (MVP — substituir por SSE backend Iza
-       quando endpoint /api/web-chat estiver live) ── */
-const CANNED_REPLIES: { match: RegExp; reply: string }[] = [
-  { match: /pre[çc]o|valor|custa|plano/i, reply: 'Temos 5 tiers a partir de R$ 297/mês (Founders) até Enterprise sob consulta. Cada um tem volume diferente de conversas inclusas + Iza ilimitada. Vou mostrar a tabela completa? Posso te levar pra /precos.' },
-  { match: /trial|14 dias|gratis|grátis|teste/i, reply: '14 dias grátis sem cartão. Você ativa, treina sua IA com docs/FAQ e testa em produção. Se gostar, continua. Se não, cancela em 1 clique. Quer começar agora?' },
-  { match: /whatsapp|wpp|wa/i, reply: 'Integração oficial direta com WhatsApp Cloud API da Meta — sem atravessador. Você usa seu próprio número (recomendo chip dedicado). Ativa em 30-60min de setup guiado. Quer ver o passo a passo?' },
-  { match: /instagram|insta|ig|direct|dm/i, reply: 'Instagram Direct está em rollout! Backend pronto, aprovação Meta em andamento. Mesma Iza, mesmo cérebro, agora respondendo DMs do Insta. Posso te avisar quando liberar?' },
-  { match: /treina|treinar|aprende|docs/i, reply: 'Você sobe seus documentos (PDF, .docx, FAQ), escolhe segmento + sub-segmento e a ZappIQ gera um formulário guiado pra você responder. Sua IA aprende sozinha, sem custo de consultor. Posso explicar mais?' },
-  { match: /demo|conhecer|reuni[ãa]o/i, reply: 'Posso agendar uma demo de 30min com nosso time comercial. Link aqui: /agendar — escolha o horário que melhor te atende.' },
-  { match: /lgpd|privacidade|dados/i, reply: 'LGPD-first por design: DPA pronto em 2 cliques, encarregado de dados acessível, e seu cliente pode pedir exclusão em 48h pela plataforma. Dados primários ficam no Brasil (AWS São Paulo).' },
-];
-
-function generateReply(userText: string): string {
-  for (const { match, reply } of CANNED_REPLIES) {
-    if (match.test(userText)) return reply;
+/* ── Session ID: UUID estável por visitante, persistido em localStorage. ── */
+function getOrCreateSessionId(): string {
+  if (typeof window === 'undefined') return 'ssr';
+  try {
+    const existing = window.localStorage.getItem(STORAGE_SESSION_ID);
+    if (existing) return existing;
+    const fresh =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    window.localStorage.setItem(STORAGE_SESSION_ID, fresh);
+    return fresh;
+  } catch {
+    return 'anon-' + Date.now();
   }
-  return 'Boa pergunta! Pra te responder com precisão, posso te conectar com um humano do nosso time. Que tal agendar uma conversa rápida? /agendar';
+}
+
+/* ── Chama o backend Iza real (Fly) ──
+ * Retorna a reply ou lança erro pra fallback gracioso no caller. */
+async function callIzaBackend(
+  sessionId: string,
+  message: string,
+  history: ChatMessage[],
+): Promise<string> {
+  // Converte history pro formato esperado pelo backend (sem o welcome canned).
+  const apiHistory = history
+    .filter((m) => m.text && m.text.trim().length > 0)
+    .slice(-MAX_HISTORY_TURNS * 2) // user+assistant pairs
+    .map((m) => ({
+      role: (m.role === 'me' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: m.text,
+    }));
+
+  const ctrl = new AbortController();
+  const timeoutId = setTimeout(() => ctrl.abort(), 45_000); // 45s — cascade pode levar
+
+  try {
+    const res = await fetch(`${API_BASE}/api/web-chat/iza-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, message, history: apiHistory }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      // 503 também pode trazer reply de fallback
+      const body = await res.json().catch(() => ({}));
+      if (body?.reply) return String(body.reply);
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const body = await res.json();
+    if (!body?.reply || typeof body.reply !== 'string') {
+      throw new Error('reply ausente');
+    }
+    return body.reply;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -144,28 +188,48 @@ export function WhatsAppButton() {
     }
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || typing) return;
+
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'me',
       text,
       ts: Date.now(),
     };
+    /* Snapshot do history ANTES de adicionar a msg do user (o backend já
+     * recebe a msg nova separadamente — não devemos duplicar). */
+    const historySnapshot = messages;
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setTyping(true);
-    setTimeout(() => {
+
+    try {
+      const sessionId = getOrCreateSessionId();
+      const reply = await callIzaBackend(sessionId, text, historySnapshot);
       const izaMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'iza',
-        text: generateReply(text),
+        text: reply,
         ts: Date.now(),
       };
       setMessages((prev) => [...prev, izaMsg]);
+    } catch (err) {
+      /* Fallback gracioso: explica que houve instabilidade e oferece WhatsApp.
+       * NUNCA inventa resposta — é melhor admitir que esticar uma alucinação. */
+      const fallback: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'iza',
+        text:
+          'Tive uma instabilidade aqui agora e não consegui responder no chat. Se quiser, continua comigo no WhatsApp que respondo na hora: https://wa.me/' +
+          WHATSAPP_NUMBER,
+        ts: Date.now(),
+      };
+      setMessages((prev) => [...prev, fallback]);
+    } finally {
       setTyping(false);
-    }, 900 + Math.random() * 700);
+    }
   };
 
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {

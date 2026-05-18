@@ -47,6 +47,7 @@ import adminLlmStreamRoutes from './routes/adminLlmStream.js'; // PR #V4-004 str
 import adminAgentEvalRoutes from './routes/adminAgentEval.js'; // V3 #235 agent eval contínuo
 import agentQualityRoutes from './routes/agentQuality.js'; // FASE 2.2b #244 — versão cliente Qualidade do Agente
 import adminOnboardingJourneyRoutes from './routes/adminOnboardingJourney.js'; // FASE 1.B #240 onboarding D+1/D+3/D+7
+import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-page site usa Iza real
 import { initRetentionJob } from './services/retentionService.js';
 import { initTenantUsageJob } from './services/tenantUsageService.js'; // PR #149 — H10 unit economics
 import { initUsageReconciliationJob } from './services/usageReconciliationService.js'; // PR #149 — Quota Mgmt #6 audit-only
@@ -65,6 +66,8 @@ app.set('trust proxy', 1);
 // Sem isso, smoke E2E em Preview falha com "Failed to fetch" (CORS rejection).
 const ALLOWED_ORIGIN_PATTERNS: Array<string | RegExp> = [
   env.NEXT_PUBLIC_APP_URL,
+  'https://zappiq.com.br',
+  'https://www.zappiq.com.br',
   /^https:\/\/zappiq-git-[a-z0-9-]+-zappiq\.vercel\.app$/, // branch alias previews
   /^https:\/\/zappiq-[a-z0-9]+-zappiq\.vercel\.app$/, // deployment hash previews
 ];
@@ -226,6 +229,9 @@ app.get('/ready', async (_req, res) => {
 
 // ── Public Routes ───────────────────────────────
 app.use('/api/auth', authLimiter, authRoutes);
+// FASE 4 P7 (#263): chat in-page do site (zappiq.com.br) — público, sem auth,
+// rate-limit dedicado. Usa MESMA Iza do WhatsApp (system prompt v7.6 + cascade).
+app.use('/api/web-chat', webChatRoutes);
 app.use('/api/webhook', webhookRoutes);
 // FASE 4 (#251): Instagram Direct webhook montado na MESMA path mãe; o Express
 // resolve por sub-path (/whatsapp vs /instagram).
