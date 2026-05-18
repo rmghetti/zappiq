@@ -252,7 +252,7 @@ export function RecursosPage() {
           <p className="text-gray-400 mb-8">Alem dos materiais, teste o ZappIQ gratis por 14 dias.</p>
           {/* PLACEHOLDER: substituir por dado real */}
           <Link
-            href="/register"
+            href="/cadastro"
             className="inline-flex items-center gap-2 bg-secondary-500 hover:bg-secondary-600 text-white font-semibold px-8 py-4 rounded-xl transition-colors shadow-lg shadow-secondary-500/30 text-base"
           >
             Comecar Gratis <ArrowRight size={18} />

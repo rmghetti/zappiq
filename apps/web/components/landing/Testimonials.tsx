@@ -72,7 +72,7 @@ export function Testimonials() {
         </div>
 
         <div className="text-center">
-          <Link href="/register?utm_source=fundadores" className="btn btn-accent btn-lg">
+          <Link href="/cadastro?utm_source=fundadores" className="btn btn-accent btn-lg">
             Quero ser Fundador <ArrowRight size={16} />
           </Link>
           <p className="text-[11.5px] text-muted mt-4">

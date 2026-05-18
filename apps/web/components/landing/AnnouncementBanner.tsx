@@ -85,7 +85,7 @@ export function AnnouncementBanner() {
             <strong className="text-white uppercase tracking-wide">Instagram Direct</strong>{' '}
             <span className="text-white/85">chegando ao ZappIQ.</span>
             <span className="hidden md:inline text-white/85"> Mesma Iza, mesmo cérebro,</span>
-            {' '}<span className="text-emerald-300">agora também no Instagram</span>
+            {' '}<span className="text-emerald-300">agora também no Instagram (rollout pra novos clientes)</span>
             <span className="hidden lg:inline text-white/85"> — atende DMs de prospecção e pós-venda 24/7</span>
             <span className="text-white/60">.</span>
           </p>

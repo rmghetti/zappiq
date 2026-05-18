@@ -131,7 +131,7 @@ export function CasesPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              href="/register"
+              href="/cadastro"
               className="inline-flex items-center justify-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-7 py-3.5 rounded-xl transition-colors shadow-lg shadow-primary-500/25"
             >
               Começar 14 dias grátis <ArrowRight size={18} />
@@ -156,7 +156,7 @@ export function CasesPage() {
             Sem setup fee, sem contrato mínimo. Configure em minutos e meça o resultado real.
           </p>
           <Link
-            href="/register"
+            href="/cadastro"
             className="inline-flex items-center gap-2 bg-secondary-500 hover:bg-secondary-600 text-white font-semibold px-8 py-4 rounded-xl transition-colors shadow-lg shadow-secondary-500/30 text-base"
           >
             Começar Grátis <ArrowRight size={18} />

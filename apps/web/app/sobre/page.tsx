@@ -32,7 +32,7 @@ export default function SobrePage() {
             cobrado para tarefas que a tecnologia moderna automatiza em minutos, lock-in via APIs
             proprietárias não documentadas, e planos opacos que misturam utility e marketing em uma só
             fatura. ZappIQ nasceu para romper os três: onboarding self-service de até 47 minutos, stack
-            100% padrão (BSP homologado + Postgres + OpenTelemetry), e planos com preço fixo que separam
+            100% padrão (Cloud API direto Meta + Postgres + OpenTelemetry), e planos com preço fixo que separam
             mensagens utility de marketing conforme a cobrança real do WhatsApp Business Platform.
           </p>
 

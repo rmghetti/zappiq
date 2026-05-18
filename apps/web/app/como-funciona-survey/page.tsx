@@ -138,7 +138,7 @@ export default function ComoFuncionaSurveyPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link
-              href="/register"
+              href="/cadastro"
               className="bg-primary-400 text-gray-900 font-semibold px-7 py-4 rounded-xl hover:bg-primary-300 transition-colors inline-flex items-center justify-center gap-2"
             >
               Começar 14 dias grátis <ArrowRight size={18} />
@@ -350,7 +350,7 @@ export default function ComoFuncionaSurveyPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
-              href="/register"
+              href="/cadastro"
               className="bg-primary-500 hover:bg-primary-600 text-white font-semibold px-8 py-4 rounded-xl transition-colors inline-flex items-center justify-center gap-2 shadow-lg shadow-primary-500/25"
             >
               Começar Onboarding Zero <ArrowRight size={18} />

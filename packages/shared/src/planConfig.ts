@@ -123,7 +123,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       'Radar Insights (analytics operacional)',
       'Suporte por e-mail',
     ],
-    cta: { label: 'Começar 14 dias grátis', href: '/onboarding' },
+    cta: { label: 'Começar 14 dias grátis', href: '/cadastro?plan=starter' },
   },
 
   GROWTH: {
@@ -176,7 +176,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       '15 integrações nativas (HubSpot, RD, Pipedrive, Salesforce...)',
       'Suporte por chat (dias úteis)',
     ],
-    cta: { label: 'Começar 14 dias grátis', href: '/onboarding' },
+    cta: { label: 'Começar 14 dias grátis', href: '/cadastro?plan=growth' },
   },
 
   SCALE: {
@@ -230,7 +230,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       'Retenção de logs: 12 meses',
       'Suporte prioritário',
     ],
-    cta: { label: 'Começar 14 dias grátis', href: '/onboarding' },
+    cta: { label: 'Começar 14 dias grátis', href: '/cadastro?plan=scale' },
   },
 
   BUSINESS: {

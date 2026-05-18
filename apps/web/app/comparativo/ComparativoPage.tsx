@@ -182,7 +182,7 @@ export function ComparativoPage() {
           </p>
           <div className="flex items-center justify-center gap-4 flex-wrap">
             <Link
-              href="/register"
+              href="/cadastro"
               className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-7 py-3.5 rounded-xl shadow-lg shadow-primary-500/30 transition-colors"
             >
               Testar 14 dias grátis <ArrowRight size={18} />
@@ -341,7 +341,7 @@ export function ComparativoPage() {
           </p>
           <div className="flex items-center justify-center gap-4 flex-wrap">
             <Link
-              href="/register"
+              href="/cadastro"
               className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-400 text-white font-semibold px-8 py-4 rounded-xl transition-colors shadow-lg shadow-primary-500/30 text-base"
             >
               Treinar minha IA agora <ArrowRight size={18} />

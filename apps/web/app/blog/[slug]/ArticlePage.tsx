@@ -91,7 +91,7 @@ export default function ArticlePage({ slug }: ArticlePageProps) {
             compromisso.
           </p>
           <Link
-            href="/register"
+            href="/cadastro"
             className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-primary-600 hover:bg-gray-50 transition-colors"
           >
             Comece grátis
