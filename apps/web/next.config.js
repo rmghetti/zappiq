@@ -65,6 +65,19 @@ const nextConfig = {
         destination: '/',
         permanent: true,
       },
+      // Post-PR #157 (2026-05-18): /register (signup V2 legado) foi deletado.
+      // Leads vindos de e-mail/LinkedIn/blog antigos apontavam pra /register —
+      // redirect 301 preserva SEO + reroteia pro /cadastro novo (V3.2+).
+      {
+        source: '/register',
+        destination: '/cadastro',
+        permanent: true,
+      },
+      {
+        source: '/register/:path*',
+        destination: '/cadastro',
+        permanent: true,
+      },
     ];
   },
 };
