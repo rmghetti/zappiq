@@ -3,21 +3,24 @@ import Link from 'next/link';
 import { PublicLayout } from '../../components/landing/PublicLayout';
 
 export const metadata: Metadata = {
-  title: 'Plano Founders ZappIQ — 30% de desconto vitalício',
+  title: 'Cohort Founders ZappIQ — 30% de desconto vitalício',
   description:
-    'Cohort de fundadores ZappIQ · 30% de desconto vitalício para os primeiros 50 clientes pagantes. Condições, elegibilidade e como aplicar.',
+    'Programa Fundadores ZappIQ: 30% de desconto vitalício para os primeiros 50 clientes pagantes. Preço congelado enquanto o contrato seguir ativo. Critérios e aplicação.',
 };
 
-/* V2-007: restruturação do plano Founders com desconto 30% vitalício.
- * Base legal: condição promocional expressa em contrato, sem publicidade
- * enganosa, com teto explícito de 50 vagas. */
+/* V2-007 + FASE 4 P7+ (2026-05-18): cohort Founders com 30% vitalício.
+ * Decisão estratégica: manter 30% vitalício (vs 50% off 12m) por:
+ *   1. LTV/CAC previsível pra fundraising
+ *   2. Remove churn cliff no mês 13
+ *   3. Exclusividade real (vitalício combina com 50 vagas)
+ * Testimonials.tsx alinhado pra mesma oferta (sem 50% off 12m). */
 
 const PERKS = [
-  'Desconto vitalício de 30% sobre qualquer plano contratado enquanto o contrato estiver ativo',
+  'Desconto vitalício de 30% sobre qualquer plano contratado — congelado enquanto o contrato seguir ativo, sem cliff, sem reajuste promocional',
   'Prioridade em roadmap: até 2 features por ano votadas pelo cohort',
   'Canal Slack direto com o time fundador · resposta de até 1h em horário comercial',
   'Early access a novos módulos com 60 dias de antecedência',
-  'Participação opcional em Programa ZappIQ Partners com comissão extra de 5%',
+  'Participação opcional no Programa ZappIQ Partners com comissão extra de 5%',
   'Case study co-autoral publicado (opcional, com aprovação do cliente)',
 ];
 
@@ -25,12 +28,15 @@ export default function FoundersPage() {
   return (
     <PublicLayout>
       <div className="max-w-5xl mx-auto px-6 pb-24">
-        <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">Cohort Founders 2026</p>
+        <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">
+          Cohort Founders 2026 · 50 vagas
+        </p>
         <h1 className="font-display text-4xl lg:text-5xl font-extrabold text-gray-900 leading-tight mb-6">
-          50 vagas · 30% de desconto vitalício · para quem acredita na tese ZappIQ antes do resto.
+          30% off vitalício para as 50 primeiras empresas que entram agora.
         </h1>
         <p className="text-lg text-gray-500 mb-12 max-w-3xl">
-          O plano Founders é a forma mais econômica de adotar ZappIQ. Em troca, pedimos feedback
+          Sem cliff no mês 13. Sem reajuste promocional. Sem letra miúda. Você paga 30% menos pelo
+          plano contratado enquanto o contrato seguir ativo — pra sempre. Em troca, pedimos feedback
           qualificado, abertura para case study (opcional) e disposição para testar features em beta
           antes do rollout geral.
         </p>
@@ -83,6 +89,10 @@ export default function FoundersPage() {
             founders@zappiq.com.br
           </a>
           <p className="text-xs text-gray-500 mt-4">
+            Prefere testar antes? Você tem <strong>14 dias grátis sem cartão</strong> no{' '}
+            <Link href="/cadastro" className="text-gray-300 hover:text-white underline">cadastro padrão</Link>.
+            O desconto Founders é aplicado em contrato pago, após validação do CNPJ.
+            <br />
             Prefere conversar?{' '}
             <Link href="/demo" className="text-gray-300 hover:text-white underline">Agende uma demo</Link>{' '}
             ou acesse a{' '}

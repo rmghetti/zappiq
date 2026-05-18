@@ -2,18 +2,18 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Mail, Phone, Calendar, Download, ChevronDown } from 'lucide-react';
 
-/* NOTA: Preços mencionados nesta página editorial devem acompanhar
+/* NOTA: Preços mencionados nesta página editorial acompanham
    packages/shared/src/planConfig.ts (single source of truth).
-   Valores atuais (V3.2 — 21/04/2026): STARTER=R$197, GROWTH=R$497, SCALE=R$997, BUSINESS=R$1.997. */
+   Valores atuais: Starter R$ 197, Growth R$ 497, Scale R$ 997, Business R$ 1.997. */
 
 export const metadata: Metadata = {
   title: 'Press Kit · ZappIQ',
   description:
-    'Recursos para jornalistas e criadores de conteúdo. Informações sobre ZappIQ, founder bio, assets e contato para imprensa.',
+    'Recursos para imprensa: dados corporativos, founder bio, kit visual e contato direto. ZappIQ é a plataforma SaaS de IA conversacional da MACHIA Tecnologia Disruptiva.',
   openGraph: {
     title: 'Press Kit · ZappIQ',
     description:
-      'Recursos para jornalistas e criadores de conteúdo. Informações sobre ZappIQ, founder bio, assets e contato para imprensa.',
+      'Recursos para imprensa: dados corporativos, founder bio, kit visual e contato direto. ZappIQ é a plataforma SaaS de IA conversacional da MACHIA Tecnologia Disruptiva.',
     type: 'website',
     locale: 'pt_BR',
     url: 'https://zappiq.com.br/press',
@@ -21,6 +21,48 @@ export const metadata: Metadata = {
     images: ['/og-default.png'],
   },
 };
+
+/* FASE 4 P7+ (2026-05-18): reescrita pos-auditoria.
+ * Drift purgado: "21 dias trial", "US$ 15 LLM credit", "proteção de margem",
+ * "Readiness Score", "5 mil clientes" (claims não verificáveis), "Onze e Onze".
+ * Adicionado: razão social MACHIA + CNPJ, diferencial Cloud API direto,
+ * roadmap factual, boilerplate corporativo. */
+
+const FAQ = [
+  {
+    q: 'Qual o diferencial técnico da ZappIQ?',
+    a: 'Três pontos. Primeiro: integração direta na WhatsApp Cloud API oficial da Meta, sem intermediação de BSP — o cliente é dono do próprio número WABA. Segundo: Onboarding Zero, com setup self-service em 30 a 90 minutos sem custo de implementação. Terceiro: Self-healing agent quality, mecanismo proprietário que monitora qualidade conversacional e corrige drift do agente de IA automaticamente.',
+  },
+  {
+    q: 'Qual o mercado endereçável?',
+    a: 'Pequenas e médias empresas brasileiras com volume entre algumas centenas e dezenas de milhares de atendimentos/mês pelo WhatsApp. O mercado de automação WhatsApp no Brasil cresce em ritmo consistente de dois dígitos ao ano, impulsionado pela penetração do aplicativo (95%+ dos brasileiros conectados) e pela maturação da Cloud API da Meta.',
+  },
+  {
+    q: 'Como foi o processo de fundação?',
+    a: 'Rodrigo Ghetti decidiu fundar a ZappIQ após repetidas frustrações comerciais como cliente de plataformas de IA conversacional incumbentes — incluindo setup fees de cinco dígitos para tarefas que, com LLMs modernos, são triviais. A ZappIQ foi estruturada em 2026 sob a holding MACHIA Tecnologia Disruptiva como resposta concreta a esse modelo.',
+  },
+  {
+    q: 'Quais são os planos para os próximos 12 meses?',
+    a: 'Roadmap público: (1) rollout do Instagram Direct para todos os clientes após App Review Meta concluída; (2) expansão de pacotes de voz outbound com vozes Neural2 adicionais; (3) deepening do Self-healing agent quality com novos sinais; (4) integrações nativas com CRMs e ERPs amplamente adotados pelo segmento PME; (5) plano Enterprise com SLAs customizados. Metas comerciais detalhadas não são divulgadas publicamente.',
+  },
+  {
+    q: 'Como a ZappIQ trata LGPD e dados sensíveis?',
+    a: 'Conformidade plena à LGPD. Dados de clientes ficam em infraestrutura brasileira, com criptografia em trânsito e em repouso. Termos de processamento de dados explícitos em contrato. Dados de clientes não são utilizados para treinar modelos de IA. Boas práticas de segurança operacional auditadas internamente, com roadmap de certificações formais em avaliação.',
+  },
+];
+
+const QUOTES = [
+  '"Setup fee em IA conversacional virou anacronismo. Cobrar R$ 8 mil para uma configuração que qualquer LLM moderno entrega em minutos é desrespeito com o cliente. A ZappIQ nasceu para recolocar o preço no lugar certo: na entrega de valor, não no atrito de implantação."',
+  '"O dono do negócio sempre soube melhor que qualquer consultor externo como sua operação funciona. Nossa obrigação é dar uma plataforma que ele consiga colocar em produção sozinho — e que melhore sozinha, sem ele virar engenheiro de prompt."',
+  '"Quem usa BSP está pagando pedágio para um intermediário ser dono do número da empresa dele. A gente faz o oposto: integração direta na Cloud API da Meta. O número é do cliente, sempre foi, sempre vai ser."',
+];
+
+const ASSETS = [
+  { title: 'Logo em alta resolução', desc: 'Logo ZappIQ em PNG e SVG para uso editorial', href: '/press/zappiq-logo.zip', cta: 'Download ZIP →' },
+  { title: 'Screenshots da plataforma', desc: 'Imagens da interface para ilustrar reportagens', href: '/press/screenshots.zip', cta: 'Download ZIP →' },
+  { title: 'Headshot do founder', desc: 'Foto profissional de Rodrigo Ghetti em alta resolução', href: '/press/headshot-rodrigo-ghetti.jpg', cta: 'Download JPG →' },
+  { title: 'Identidade visual', desc: 'Cores, tipografia e guia de marca', href: '/press/brand-guidelines.pdf', cta: 'Download PDF →' },
+];
 
 export default function PressPage() {
   return (
@@ -32,7 +74,8 @@ export default function PressPage() {
             Press Kit ZappIQ
           </h1>
           <p className="mt-4 text-lg text-gray-600">
-            Recursos para jornalistas e criadores de conteúdo
+            Recursos para jornalistas, analistas de mercado e criadores de conteúdo.
+            Dados corporativos, founder bio, kit visual e contato direto.
           </p>
         </div>
       </section>
@@ -43,27 +86,28 @@ export default function PressPage() {
           <h2 className="font-jakarta text-2xl font-bold text-gray-900">Sobre a empresa</h2>
           <div className="mt-8 space-y-4 text-base text-gray-700 leading-relaxed">
             <p>
-              ZappIQ é uma plataforma brasileira de IA conversacional para WhatsApp Business,
-              focada em PMEs que precisam automatizar atendimento, vendas e campanhas sem
-              expertise em tecnologia e sem necessidade de consultor implementador.
+              ZappIQ é a plataforma SaaS de IA conversacional para WhatsApp Business e Instagram
+              Direct desenvolvida pela <strong>MACHIA Tecnologia Disruptiva Ltda</strong> (d.b.a.
+              ZappIQ). A plataforma atende pequenas e médias empresas brasileiras que precisam
+              automatizar atendimento, vendas e campanhas sem depender de consultor implementador
+              ou setup fee.
             </p>
             <p>
-              Fundada em 2026 por Rodrigo Ghetti, a ZappIQ nasceu de uma frustração pessoal
-              com o modelo padrão do mercado: cobrar setup fees altos para tarefas que modernos
-              LLMs e RAG tornam completamente automatizadas. Nossa tese é que a plataforma
-              deve ser tão intuitiva que o cliente chegue a produção em 47 minutos, sem ajuda
-              externa.
+              Diferente do mercado, a ZappIQ opera com integração direta na <strong>WhatsApp Cloud
+              API oficial da Meta</strong> — sem intermediação de BSP (Business Solution Provider).
+              O cliente é proprietário contratual do próprio número WABA, eliminando fees por
+              mensagem e lock-in técnico de templates. A mesma agente de IA atende WhatsApp,
+              Instagram Direct e chat in-page do site, com contexto unificado.
             </p>
             <p>
-              O diferencial ZappIQ é zero setup fee, trial de 21 dias com proteção de margem,
-              e Readiness Score em tempo real que guia cada ação de treinamento da IA. Hoje,
-              centenas de empresas estão em produção gerando receita direta via WhatsApp através
-              da plataforma.
+              Fundada em 2026 por Rodrigo Ghetti, a tese da ZappIQ é que LLMs modernos tornaram
+              obsoleto o modelo de cobrança por setup e consultoria de implementação. A plataforma
+              entrega <strong>Onboarding Zero</strong>: configuração self-service em 30 a 90
+              minutos, sem custo de implementação.
             </p>
             <p>
-              Baseada em São Paulo, a ZappIQ é uma solução 100% cloud-native que roda em
-              infraestrutura escalável, com conformidade plena à LGPD e políticas de dados
-              sensíveis.
+              Sediada em São Paulo, a empresa opera 100% cloud-native, com infraestrutura
+              escalável, conformidade à LGPD e dados armazenados em região brasileira.
             </p>
           </div>
         </div>
@@ -75,16 +119,16 @@ export default function PressPage() {
           <h2 className="font-jakarta text-2xl font-bold text-gray-900">Founder: Rodrigo Ghetti</h2>
           <div className="mt-8 space-y-4 text-base text-gray-700 leading-relaxed">
             <p>
-              Rodrigo Ghetti é gestor sênior de vendas e pré-vendas com 10+ anos de experiência
-              em soluções B2B de Digital Communications. Antes de fundar a ZappIQ, liderou
-              estruturas de vendas e implementação em uma das maiores plataformas de comunicação
-              omnichannel do Brasil, onde vivenciou na prática os problemas que levaram à criação
-              de ZappIQ.
+              Rodrigo Ghetti é executivo sênior de vendas e pré-vendas B2B com mais de 10 anos em
+              Digital Communications e plataformas omnichannel. Antes de fundar a ZappIQ, liderou
+              áreas de vendas e implementação em players brasileiros do setor, onde vivenciou de
+              perto as fricções comerciais que motivaram a criação da plataforma.
             </p>
             <p>
-              Rodrigo é conhecido por seu foco obsessivo em simplificar produtos complexos e
-              rejeitar padrões de mercado que cobram dos clientes por trabalho que a tecnologia
-              deveria fazer automaticamente. A ZappIQ é sua resposta concreta a essa convicção.
+              É reconhecido pelo foco em simplificar produtos técnicos complexos e por questionar
+              publicamente o modelo de setup fee em IA conversacional, que considera incompatível
+              com a realidade econômica dos LLMs atuais. A ZappIQ é a expressão concreta dessa
+              convicção.
             </p>
           </div>
         </div>
@@ -95,27 +139,17 @@ export default function PressPage() {
         <div className="mx-auto max-w-3xl">
           <h2 className="font-jakarta text-2xl font-bold text-gray-900">Fatos rápidos</h2>
           <ul className="mt-8 space-y-3 text-base text-gray-700">
-            <li>
-              <strong>Ano de fundação:</strong> 2026
-            </li>
-            <li>
-              <strong>Sede:</strong> São Paulo, Brasil
-            </li>
-            <li>
-              <strong>Categoria:</strong> SaaS B2B (IA Conversacional)
-            </li>
-            <li>
-              <strong>Tier inicial:</strong> R$ 197/mês (Starter)
-            </li>
-            <li>
-              <strong>Trial:</strong> 21 dias com até US$ 15 em crédito LLM
-            </li>
-            <li>
-              <strong>Diferencial:</strong> Zero setup fee, self-service completo, Readiness Score
-            </li>
-            <li>
-              <strong>Conformidade:</strong> LGPD, privacidade de dados sensíveis, SLA disponível
-            </li>
+            <li><strong>Razão social:</strong> MACHIA Tecnologia Disruptiva Ltda</li>
+            <li><strong>Nome fantasia:</strong> ZappIQ</li>
+            <li><strong>CNPJ:</strong> 46.788.145/0001-08</li>
+            <li><strong>Ano de fundação:</strong> 2026</li>
+            <li><strong>Sede:</strong> São Paulo, Brasil</li>
+            <li><strong>Categoria:</strong> SaaS B2B · IA Conversacional · Mensageria</li>
+            <li><strong>Canais suportados:</strong> WhatsApp Business (Cloud API direto Meta), Instagram Direct (piloto), chat in-page</li>
+            <li><strong>Tier inicial:</strong> R$ 197/mês (Starter) · até Enterprise sob consulta</li>
+            <li><strong>Trial:</strong> 14 dias grátis, sem cartão de crédito</li>
+            <li><strong>Diferenciais técnicos:</strong> Cloud API direto Meta (sem BSP), Onboarding Zero (setup self-service em 30-90min), Self-healing agent quality, voz neural inbound e outbound</li>
+            <li><strong>Conformidade:</strong> LGPD, dados em região BR, SLA contratual a partir do plano Business</li>
           </ul>
         </div>
       </section>
@@ -125,77 +159,23 @@ export default function PressPage() {
         <div className="mx-auto max-w-3xl">
           <h2 className="font-jakarta text-2xl font-bold text-gray-900">Assets disponíveis</h2>
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border border-gray-200 p-6">
-              <div className="flex items-start gap-3">
-                <Download className="mt-1 h-5 w-5 text-indigo-600" />
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">Logo em alta resolução</h3>
-                  <p className="mt-1 text-sm text-gray-600">
-                    Logo ZappIQ em PNG e SVG para uso editorial
-                  </p>
-                  <a
-                    href="/press/zappiq-logo.zip"
-                    className="mt-3 inline-flex text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-                  >
-                    Download ZIP →
-                  </a>
+            {ASSETS.map((asset) => (
+              <div key={asset.title} className="rounded-lg border border-gray-200 p-6">
+                <div className="flex items-start gap-3">
+                  <Download className="mt-1 h-5 w-5 text-indigo-600" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900">{asset.title}</h3>
+                    <p className="mt-1 text-sm text-gray-600">{asset.desc}</p>
+                    <a
+                      href={asset.href}
+                      className="mt-3 inline-flex text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                    >
+                      {asset.cta}
+                    </a>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 p-6">
-              <div className="flex items-start gap-3">
-                <Download className="mt-1 h-5 w-5 text-indigo-600" />
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">Screenshots da plataforma</h3>
-                  <p className="mt-1 text-sm text-gray-600">
-                    Imagens da interface para ilustrar reportagens
-                  </p>
-                  <a
-                    href="/press/screenshots.zip"
-                    className="mt-3 inline-flex text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-                  >
-                    Download ZIP →
-                  </a>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 p-6">
-              <div className="flex items-start gap-3">
-                <Download className="mt-1 h-5 w-5 text-indigo-600" />
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">Headshot do founder</h3>
-                  <p className="mt-1 text-sm text-gray-600">
-                    Foto profissional de Rodrigo Ghetti em alta resolução
-                  </p>
-                  <a
-                    href="/press/headshot-rodrigo-ghetti.jpg"
-                    className="mt-3 inline-flex text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-                  >
-                    Download JPG →
-                  </a>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 p-6">
-              <div className="flex items-start gap-3">
-                <Download className="mt-1 h-5 w-5 text-indigo-600" />
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">Identidade visual</h3>
-                  <p className="mt-1 text-sm text-gray-600">
-                    Cores, tipografia e guia de marca
-                  </p>
-                  <a
-                    href="/press/brand-guidelines.pdf"
-                    className="mt-3 inline-flex text-sm text-indigo-600 hover:text-indigo-700 font-medium"
-                  >
-                    Download PDF →
-                  </a>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
@@ -205,27 +185,16 @@ export default function PressPage() {
         <div className="mx-auto max-w-3xl">
           <h2 className="font-jakarta text-2xl font-bold text-gray-900">Quotes do founder</h2>
           <div className="mt-8 space-y-6">
-            <blockquote className="border-l-4 border-indigo-600 pl-6 italic text-gray-700">
-              "Setup fee em IA conversacional é fraude intelectual. Cobrar R$ 8 mil para fazer
-              o que custa US$ 2 em compute só funciona enquanto o cliente não souber a verdade.
-              A ZappIQ nasceu para mudar essa régua."
-            </blockquote>
-
-            <blockquote className="border-l-4 border-indigo-600 pl-6 italic text-gray-700">
-              "O cliente sempre soube melhor que consultor externo como sua própria operação
-              funciona. A plataforma deveria dar ferramentas para ele treinar a IA sozinho em
-              47 minutos, não criar dependência de implementador."
-            </blockquote>
-
-            <blockquote className="border-l-4 border-indigo-600 pl-6 italic text-gray-700">
-              "Vinte e um dias de trial grátis com proteção de margem é a prova viva de que o
-              modelo funciona. Nenhuma plataforma que cobra setup fee consegue fazer isso."
-            </blockquote>
+            {QUOTES.map((q, i) => (
+              <blockquote key={i} className="border-l-4 border-indigo-600 pl-6 italic text-gray-700">
+                {q}
+              </blockquote>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Contato para imprensa */}
+      {/* Contato */}
       <section className="border-b border-gray-200 px-6 py-16 sm:px-8 sm:py-24">
         <div className="mx-auto max-w-3xl">
           <h2 className="font-jakarta text-2xl font-bold text-gray-900">Contato para imprensa</h2>
@@ -239,18 +208,18 @@ export default function PressPage() {
             <div className="flex items-center gap-3 text-gray-700">
               <Phone className="h-5 w-5 text-indigo-600" />
               <a href="https://wa.me/5511926160159" className="hover:text-indigo-600">
-                (11) 92616-0159 (WhatsApp)
+                (11) 92616-0159 · WhatsApp
               </a>
             </div>
             <div className="flex items-center gap-3 text-gray-700">
               <Calendar className="h-5 w-5 text-indigo-600" />
               <a
-                href="https://calendly.com/zappiq/press"
+                href="https://cal.com/rodrigoghetti/zappiq-demo"
                 className="hover:text-indigo-600"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Agendar entrevista
+                Agendar entrevista com o founder
               </a>
             </div>
           </div>
@@ -264,70 +233,15 @@ export default function PressPage() {
             Perguntas frequentes da imprensa
           </h2>
           <div className="mt-8 space-y-4">
-            <details className="group border border-gray-200 rounded-lg p-6">
-              <summary className="flex cursor-pointer items-center justify-between font-semibold text-gray-900">
-                Qual o diferencial da ZappIQ?
-                <ChevronDown className="h-5 w-5 text-gray-600 transition group-open:rotate-180" />
-              </summary>
-              <p className="mt-4 text-gray-700">
-                Zero setup fee escrito em contrato, self-service completo, Readiness Score em
-                tempo real que guia cada ação de treinamento, e trial de 21 dias com proteção de
-                margem. O cliente chega a produção em 47 minutos, sem consultor externo.
-              </p>
-            </details>
-
-            <details className="group border border-gray-200 rounded-lg p-6">
-              <summary className="flex cursor-pointer items-center justify-between font-semibold text-gray-900">
-                Qual o tamanho do mercado que vocês endereçam?
-                <ChevronDown className="h-5 w-5 text-gray-600 transition group-open:rotate-180" />
-              </summary>
-              <p className="mt-4 text-gray-700">
-                PMEs brasileiras com volume entre 100 e 10 mil atendimentos/mês pelo WhatsApp.
-                O mercado total de automação WhatsApp no Brasil em 2026 ultrapassa R$ 2 bilhões
-                anuais, com crescimento de 40% year-over-year. ZappIQ endereça o segmento
-                self-service que incumbentes negligenciaram.
-              </p>
-            </details>
-
-            <details className="group border border-gray-200 rounded-lg p-6">
-              <summary className="flex cursor-pointer items-center justify-between font-semibold text-gray-900">
-                Como foi o processo de fundação?
-                <ChevronDown className="h-5 w-5 text-gray-600 transition group-open:rotate-180" />
-              </summary>
-              <p className="mt-4 text-gray-700">
-                Rodrigo Ghetti vivenciou pessoalmente o problema ao assinar contrato com
-                plataforma incumbente: R$ 12 mil de setup fee para fazer upload de PDFs em um
-                formulário. Isso o levou a estudar custos reais de LLM e RAG, comprovar que a
-                operação custa centavos, e decidir criar ZappIQ em 2026 com modelo
-                radicalmente diferente.
-              </p>
-            </details>
-
-            <details className="group border border-gray-200 rounded-lg p-6">
-              <summary className="flex cursor-pointer items-center justify-between font-semibold text-gray-900">
-                Quais são os planos para os próximos 12 meses?
-                <ChevronDown className="h-5 w-5 text-gray-600 transition group-open:rotate-180" />
-              </summary>
-              <p className="mt-4 text-gray-700">
-                Roadmap 2026-2027: (1) atingir 5 mil clientes ativos; (2) integração nativa com
-                CRMs e ERPs populares; (3) versão enterprise com contratos customizados; (4)
-                marketplace de agentes especializados por vertical; (5) suite analítica de ROI
-                por campanha.
-              </p>
-            </details>
-
-            <details className="group border border-gray-200 rounded-lg p-6">
-              <summary className="flex cursor-pointer items-center justify-between font-semibold text-gray-900">
-                Como a ZappIQ trata LGPD e dados sensíveis?
-                <ChevronDown className="h-5 w-5 text-gray-600 transition group-open:rotate-180" />
-              </summary>
-              <p className="mt-4 text-gray-700">
-                100% conformidade com LGPD. Dados de clientes são armazenados em infraestrutura
-                brasileira (AWS São Paulo), com criptografia em trânsito e em repouso. Termos de
-                processamento de dados explícitos. Dados não são usados para treinar modelos.
-                Conformidade auditada anualmente. Certificação ISO 27001 em roadmap Q3 2026.
-              </p>
-            </details>
+            {FAQ.map((item) => (
+              <details key={item.q} className="group border border-gray-200 rounded-lg p-6">
+                <summary className="flex cursor-pointer items-center justify-between font-semibold text-gray-900">
+                  {item.q}
+                  <ChevronDown className="h-5 w-5 text-gray-600 transition group-open:rotate-180" />
+                </summary>
+                <p className="mt-4 text-gray-700">{item.a}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>
@@ -335,32 +249,44 @@ export default function PressPage() {
       {/* CTA Final */}
       <section className="px-6 py-16 sm:px-8 sm:py-24 bg-gray-50">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="font-jakarta text-2xl font-bold text-gray-900">Quer saber mais?</h2>
+          <h2 className="font-jakarta text-2xl font-bold text-gray-900">Quer entender mais?</h2>
           <p className="mt-4 text-gray-700">
-            Conheça a plataforma, leia nosso blog e entenda por que estamos mudando a régua de
-            preço em IA conversacional.
+            Conheça a plataforma, marque uma conversa com o founder ou leia o conteúdo editorial
+            da ZappIQ sobre o futuro da IA conversacional no Brasil.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Link
-              href="/comparativo"
+              href="/demo"
               className="inline-flex justify-center rounded-lg bg-indigo-600 px-6 py-3 font-medium text-white hover:bg-indigo-700 transition"
             >
-              Ver comparativo
+              Agendar demo
             </Link>
             <Link
-              href="/blog/setup-fee-fraude-intelectual"
+              href="/comparativo"
               className="inline-flex justify-center rounded-lg bg-white border border-gray-300 px-6 py-3 font-medium text-gray-900 hover:bg-gray-50 transition"
             >
-              Ler artigo completo
+              Ver comparativo de mercado
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-gray-200 px-6 py-8 sm:px-8">
-        <div className="mx-auto max-w-3xl text-center text-sm text-gray-600">
-          <p>ZappIQ © 2026. Todos os direitos reservados.</p>
+      {/* Footer + Boilerplate */}
+      <footer className="border-t border-gray-200 px-6 py-12 sm:px-8 bg-gray-50">
+        <div className="mx-auto max-w-3xl">
+          <p className="text-sm text-gray-700 leading-relaxed">
+            <strong>Sobre a MACHIA Tecnologia Disruptiva.</strong> A MACHIA é uma holding
+            brasileira de tecnologia que desenvolve produtos SaaS focados em automação
+            inteligente para o segmento PME. ZappIQ é seu produto carro-chefe, dedicado a IA
+            conversacional para canais de mensageria (WhatsApp Cloud API, Instagram Direct e
+            chat web). MACHIA Tecnologia Disruptiva Ltda · CNPJ 46.788.145/0001-08 · São Paulo,
+            Brasil.
+          </p>
+          <p className="text-xs text-gray-500 mt-6">
+            © 2026 MACHIA Tecnologia Disruptiva Ltda. Todos os direitos reservados. ZappIQ é
+            marca de titularidade da MACHIA. WhatsApp e Instagram são marcas registradas da
+            Meta Platforms, Inc.
+          </p>
         </div>
       </footer>
     </main>
