@@ -13,6 +13,7 @@ import type { LLMTier, LLMProviderId } from '../services/llm/LLMRouter.js';
 import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
+import { getIzaFactsBlock } from '../services/izaFactsService.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
 export interface ProcessMessageInput {
@@ -775,6 +776,13 @@ async function buildSystemPromptForContact(input: {
     `Primeiro contato? ${isFirstContact ? 'SIM' : 'NÃO (já tem histórico — não pergunte nome de novo, use o que está acima)'}`,
   ].filter(Boolean).join('\n');
 
+  // FASE 4 P7+ Camada 2 (2026-05-17): bloco "# FATOS ATUAIS" gerado em
+  // runtime a partir de iza_facts table. Injetado ENTRE CORE_AGENT_RULES_V1
+  // (inviolável) e agent.systemPrompt (DB seedado, sujeito a drift).
+  // Permite atualizar fatos da plataforma (canais, features, urls) sem
+  // re-seedar prompts. Fail-soft: string vazia em erro de DB.
+  const factsBlock = await getIzaFactsBlock();
+
   // 2. Tentar carregar Agent live correspondente
   try {
     const agent = await prisma.agent.findFirst({
@@ -791,6 +799,7 @@ async function buildSystemPromptForContact(input: {
       const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
       return [
         CORE_AGENT_RULES_V1,
+        factsBlock, // Camada 2 — fatos da plataforma sincronizados em runtime
         agent.systemPrompt,
         '',
         clienteBlock,
@@ -800,13 +809,13 @@ async function buildSystemPromptForContact(input: {
         '',
         `# Agora`,
         now,
-      ].join('\n');
+      ].filter(Boolean).join('\n');
     }
   } catch (err) {
     logger.warn('[Agent] buildSystemPromptForContact: lookup agent falhou — fallback promptEngine', { err });
   }
 
-  // 3. Fallback (orgs sem seed): CORE rules + promptEngine antigo + cliente block.
+  // 3. Fallback (orgs sem seed): CORE rules + facts + promptEngine antigo + cliente block.
   // CORE rules são SEMPRE prependadas independente do path (DB ou promptEngine).
   const fallback = getSystemPrompt({
     niche: orgSettings.niche || 'generic',
@@ -817,5 +826,7 @@ async function buildSystemPromptForContact(input: {
     ragContext,
     currentDateTime: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
   });
-  return `${CORE_AGENT_RULES_V1}${fallback}\n\n${clienteBlock}`;
+  return [CORE_AGENT_RULES_V1, factsBlock, fallback, '', clienteBlock]
+    .filter(Boolean)
+    .join('\n');
 }
