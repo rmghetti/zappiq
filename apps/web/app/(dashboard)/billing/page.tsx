@@ -1,74 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { listPlans } from '@zappiq/shared';
 import { CreditCard, Check, Zap, ArrowRight, ExternalLink } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 
-const PLANS = [
-  {
-    id: 'STARTER',
-    name: 'Starter',
-    price: 197,
-    desc: 'Para profissionais liberais e solopreneurs',
-    features: [
-      '1 número WhatsApp',
-      '1.000 conversas/mês',
-      'Agente IA 24/7',
-      'Agendamento automático',
-      'Base de conhecimento (5 docs)',
-    ],
-    highlight: false,
-  },
-  {
-    id: 'GROWTH',
-    name: 'Growth',
-    price: 497,
-    desc: 'Para PMEs com equipe de atendimento',
-    features: [
-      'Tudo do Starter +',
-      '5 atendentes simultâneos',
-      '5.000 conversas/mês',
-      'CRM e pipeline de leads',
-      'Campanhas em massa',
-      'Analytics avançado',
-      'Integrações (HubSpot, RD)',
-    ],
-    highlight: true,
-  },
-  {
-    id: 'SCALE',
-    name: 'Scale',
-    price: 997,
-    desc: 'Para franquias, redes e múltiplas unidades',
-    features: [
-      'Tudo do Growth +',
-      'Atendentes ilimitados',
-      'Conversas ilimitadas',
-      'White-label com sua marca',
-      'API aberta',
-      'Múltiplos números',
-      'Gerente de sucesso dedicado',
-    ],
-    highlight: false,
-  },
-  {
-    id: 'BUSINESS',
-    name: 'Business',
-    price: 1997,
-    desc: 'Para operações enterprise e multi-marca',
-    features: [
-      'Tudo do Scale +',
-      'Radar 360° Observabilidade incluído',
-      'SLA 99,9% + plantão 24/7',
-      'SLA contratual com KPIs mensuráveis',
-      'DSR LGPD prioridade 48h',
-      'Integrações customizadas',
-      'Success manager sênior dedicado',
-    ],
-    highlight: false,
-  },
-];
+const PLANS = listPlans();
 
 export default function BillingPage() {
   const { organization } = useAuthStore();

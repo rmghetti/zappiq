@@ -22,7 +22,9 @@ const navItems = [
   { href: '/contacts', label: 'Contatos', icon: Users },
   { href: '/crm', label: 'CRM', icon: Target },
   { href: '/campaigns', label: 'Campanhas', icon: Megaphone },
-  { href: '/flows', label: 'Fluxos', icon: GitBranch },
+  // FASE 4 P7+ auditoria 2026-05-18: /flows escondido temp (mock localStorage).
+  // Reativar quando backend /api/flows estiver pronto. Ver AUDITORIA_DASHBOARDS_2026_05_18.md
+  // { href: '/flows', label: 'Fluxos', icon: GitBranch },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/knowledge-base', label: 'Base de Conhecimento', icon: BookOpen },
   // PR #106 — Treinar IA destacado: principal entry point pra evolução contínua do agente.

@@ -106,7 +106,7 @@ export default function SettingsPage() {
   const [waBiz, setWaBiz] = useState('');
   const [savingWhatsApp, setSavingWhatsApp] = useState(false);
 
-  const [agentName, setAgentName] = useState('Iza');
+  const [agentName, setAgentName] = useState('');
   const [agentTone, setAgentTone] = useState('friendly');
   const [agentSegment, setAgentSegment] = useState('generic');
   const [agentHandoff, setAgentHandoff] = useState(
@@ -150,7 +150,7 @@ export default function SettingsPage() {
 
         const agent = orgRes.data.settings?.agent;
         if (agent) {
-          setAgentName(agent.name || 'Iza');
+          setAgentName(agent.name || '');
           setAgentTone(agent.tone || 'friendly');
           setAgentSegment(agent.segment || 'generic');
           setAgentHandoff(

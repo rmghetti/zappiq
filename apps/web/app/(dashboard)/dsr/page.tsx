@@ -45,7 +45,7 @@ export default function DSRPage() {
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
 
-  const isAuthorized = user?.role === 'ADMIN' || user?.role === 'AUDITOR';
+  const isAuthorized = user?.role === 'SUPERADMIN' || user?.role === 'ADMIN' || user?.role === 'AUDITOR';
 
   async function load() {
     setLoading(true);

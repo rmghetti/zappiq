@@ -55,7 +55,7 @@ export default function AuditLogsPage() {
   const [filterResource, setFilterResource] = useState('');
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
 
-  const isAuthorized = user?.role === 'ADMIN' || user?.role === 'AUDITOR';
+  const isAuthorized = user?.role === 'SUPERADMIN' || user?.role === 'ADMIN' || user?.role === 'AUDITOR';
 
   async function load() {
     setLoading(true);
