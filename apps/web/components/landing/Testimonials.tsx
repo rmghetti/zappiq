@@ -1,8 +1,11 @@
 /* ══════════════════════════════════════════════════════════════════════════
  * Testimonials (Programa Fundadores) — Design V4 (Chatbase-style)
  * --------------------------------------------------------------------------
- * Seção de early adopters. 3 perks (50% off 12m, canal direto founders,
- * badge permanente). Removi "30 dias grátis" — agora 14 dias grátis.
+ * FASE 4 P7+ (2026-05-18): alinhamento de oferta com /founders.
+ * Antes: "50% off por 12 meses" — divergia de /founders que dizia 30% vitalício.
+ * Agora: 30% off vitalício (oferta única). CTA aponta pra /founders pra critérios
+ * e aplicação formal (não mais pra /cadastro direto).
+ * Fonte de verdade: apps/web/app/founders/page.tsx
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import Link from 'next/link';
@@ -11,21 +14,21 @@ import { ArrowRight, Sparkles, Users, Percent } from 'lucide-react';
 const PERKS = [
   {
     icon: Percent,
-    title: '50% off por 12 meses',
+    title: '30% off vitalício',
     description:
-      'Metade do preço no primeiro ano. Cupom exclusivo para fundadores. Depois de 12 meses, tabela normal.',
+      'Desconto permanente em qualquer plano, enquanto seu contrato seguir ativo. Sem cliff no mês 13, sem reajuste promocional — preço congelado pra sempre.',
   },
   {
     icon: Users,
-    title: 'Acesso direto ao time',
+    title: 'Canal direto com os founders',
     description:
-      'Canal privado com os founders. Influencie o roadmap e priorize features que importam pro seu negócio.',
+      'Slack privado com o time fundador. Resposta em até 1h em horário comercial. Vote em features de roadmap a cada trimestre.',
   },
   {
     icon: Sparkles,
-    title: 'Badge de Fundador',
+    title: 'Badge permanente de Fundador',
     description:
-      'Reconhecimento permanente na plataforma. Quem entra antes, constrói junto e fica no time fundador pra sempre.',
+      'Reconhecimento dentro da plataforma + early access a novos módulos com 60 dias de antecedência. Quem chega cedo, constrói junto.',
   },
 ];
 
@@ -34,14 +37,15 @@ export function Testimonials() {
     <section className="py-20 lg:py-28 bg-bg-soft">
       <div className="zappiq-wrap">
         <div className="text-center max-w-3xl mx-auto mb-12">
-          <span className="eyebrow">Programa Fundadores · vagas limitadas</span>
+          <span className="eyebrow">Cohort Founders 2026 · 50 vagas</span>
           <h2 className="text-[40px] lg:text-[52px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mb-4">
-            Seja um dos primeiros.{' '}
-            <span className="text-grad">Saia na frente do seu concorrente.</span>
+            Entra no time fundador.{' '}
+            <span className="text-grad">Preço congelado pra sempre.</span>
           </h2>
           <p className="text-[16px] text-muted leading-relaxed">
-            Estamos selecionando empresas pra co-criar a ZappIQ. Em troca do seu feedback real, a gente
-            te dá condições que não vão existir depois que o mercado acordar.
+            50 vagas para empresas que adotam ZappIQ antes do resto do mercado acordar.
+            Em troca do seu feedback qualificado, garantimos 30% de desconto vitalício — sem
+            cliff, sem reajuste promocional, sem letra miúda.
           </p>
         </div>
 
@@ -72,11 +76,11 @@ export function Testimonials() {
         </div>
 
         <div className="text-center">
-          <Link href="/cadastro?utm_source=fundadores" className="btn btn-accent btn-lg">
-            Quero ser Fundador <ArrowRight size={16} />
+          <Link href="/founders?utm_source=home_testimonials" className="btn btn-accent btn-lg">
+            Ver critérios e aplicar <ArrowRight size={16} />
           </Link>
           <p className="text-[11.5px] text-muted mt-4">
-            Vagas limitadas · 14 dias grátis · sem cartão de crédito no trial
+            50 vagas · encerramento ao atingir o limite ou em 30/06/2026 · 14 dias grátis no trial, sem cartão
           </p>
         </div>
       </div>
