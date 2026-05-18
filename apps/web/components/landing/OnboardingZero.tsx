@@ -39,8 +39,11 @@ export function OnboardingZero() {
           </h2>
           <p className="text-[16px] lg:text-[17px] text-muted leading-relaxed">
             O mercado cobra de R$ 3 a 8 mil só pra "treinar a IA com seus dados". Em 2026 isso é
-            atrito desnecessário. Você mesmo sobe seus documentos em minutos, e a Iza aprende
-            seu negócio sozinha. Setup fee: zero.
+            atrito desnecessário. A plataforma ZappIQ permite que você mesmo possa subir seus
+            documentos em minutos, escolhe seu <b className="text-ink">segmento e sub-segmento</b> e a
+            própria ZappIQ gera um <b className="text-ink">formulário de questionamentos bem
+            completo</b> pra você responder o máximo que puder. Assim, sua IA aprende seu
+            negócio sozinha, <b className="text-ink">sem custo adicional</b>.
           </p>
         </div>
 

@@ -108,6 +108,28 @@ const FAQS: FaqItem[] = [
     a: 'A Meta cobra por "conversa" (janela de 24h). Pequena loja: R$ 30-80/mês. PME ativa: R$ 200-500/mês. Operação grande com marketing: R$ 1.500-4.000/mês. ZappIQ NÃO marca up sobre Meta — você paga direto à Meta, com dashboard de gasto em tempo real no nosso painel.',
   },
 
+  // ─────────────────────────── Instagram Direct ─────────────────────────
+  {
+    group: 'Instagram Direct',
+    q: 'A Iza também atende no Instagram Direct?',
+    a: 'Sim. Estamos em rollout do Instagram Direct — mesma Iza, mesma base de conhecimento e mesma marca atendendo DMs do Instagram 24/7. Backend já está em produção; aprovação Meta pra liberação pública está em andamento (App Review). Demos guiadas pra investidores e early adopters já disponíveis.',
+  },
+  {
+    group: 'Instagram Direct',
+    q: 'O Instagram precisa de número novo ou conta separada?',
+    a: 'Não. Usa a conta Instagram Business da sua empresa que já existe. Basta conectar a Página do Facebook vinculada ao seu @ e autorizar o ZappIQ — leva 5 minutos pelo painel.',
+  },
+  {
+    group: 'Instagram Direct',
+    q: 'A Iza distingue se a mensagem veio do WhatsApp ou do Instagram?',
+    a: 'Sim — cada conversa é etiquetada pelo canal de origem. A Iza adapta tom e formato (Instagram tende a ser mais visual e curto), mas mantém memória unificada do cliente. Quem te chamou no IG ontem e no WhatsApp hoje é o mesmo lead, com histórico consolidado.',
+  },
+  {
+    group: 'Instagram Direct',
+    q: 'O Instagram Direct sai mais caro?',
+    a: 'Não. O custo de mensagens Instagram pela Meta hoje é zero (não há cobrança por janela de conversa como no WhatsApp). Você paga apenas o plano ZappIQ + o consumo opcional de IA — mesma tabela que WhatsApp.',
+  },
+
   // ─────────────────────────── Voz Nativa ───────────────────────────────
   {
     group: 'Voz Nativa',

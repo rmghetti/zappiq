@@ -38,38 +38,43 @@ export function PorQueZappIQ() {
           </h2>
           <p className="text-[16px] lg:text-[17px] text-muted leading-relaxed">
             A gente não vende promessa bonita. A gente vende escolha técnica séria,
-            contrato direto com o WhatsApp e preço que não te pega de surpresa no final do mês.
+            parceria direta com a <b className="text-ink">META</b> para utilizar seu WhatsApp e Instagram Direct
+            a um preço que não te pega de surpresa no final do mês.
           </p>
         </div>
 
         {/* Row 1: Cloud API Meta (big) + IA Claude/OpenAI */}
         <div className="grid lg:grid-cols-5 gap-5 mb-5">
-          {/* Cloud API direto Meta — hero card */}
+          {/* Multicanal Meta — hero card (V2 17/05/2026: pivotado pra narrativa multichannel) */}
           <div className="lg:col-span-3 card-soft p-8 lg:p-10 relative overflow-hidden">
             <div className="flex items-center gap-2 mb-5">
               <div className="w-9 h-9 rounded-[10px] bg-grad flex items-center justify-center shadow-[0_8px_16px_-8px_rgba(74,82,208,0.4)]">
                 <ShieldCheck size={18} className="text-white" />
               </div>
-              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">01 · Infra</span>
+              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">01 · Multicanal Meta</span>
             </div>
             <h3 className="text-[24px] lg:text-[28px] font-medium text-ink leading-tight tracking-tight mb-3">
-              Integração oficial com o WhatsApp. Seu número é seu.
+              WhatsApp + Instagram Direct. A ZappIQ utiliza a Iza, mas você cria o melhor nome para seu agente em todas plataformas, mesma marca.
             </h3>
             <p className="text-[14.5px] text-muted leading-relaxed mb-6">
-              Seu WhatsApp, sua conta, seu nome. A gente liga direto na infraestrutura oficial —
-              sem atravessador, sem taxa de intermediário, sem risco de perder seu número se
-              mudarmos de fornecedor. E quando precisar de suporte, é direto.
+              Conexão oficial com a infraestrutura da Meta — sem atravessador, sem taxa de
+              intermediário, seu número e seu @ são seus. WhatsApp ativo hoje, Instagram Direct
+              em rollout (aprovação Meta em andamento). Quando o cliente puxar assunto pelo
+              Insta, a Iza responde com a mesma inteligência do WhatsApp.
             </p>
-            {/* mini-visual: fluxo arquitetural */}
+            {/* mini-visual: fluxo arquitetural multicanal */}
             <div className="flex items-center gap-3 text-[11.5px] font-mono text-muted">
-              <div className="px-3 py-2 rounded-[10px] border border-line bg-white">Seu cliente</div>
+              <div className="flex flex-col gap-1.5">
+                <div className="px-3 py-2 rounded-[10px] border border-line bg-white">WhatsApp</div>
+                <div className="px-3 py-2 rounded-[10px] border border-line bg-white">Instagram</div>
+              </div>
               <div className="flex-1 h-px bg-gradient-to-r from-line via-accent/40 to-line" />
-              <div className="px-3 py-2 rounded-[10px] bg-grad text-white font-medium">WhatsApp oficial</div>
+              <div className="px-3 py-2 rounded-[10px] bg-grad text-white font-medium">Meta oficial</div>
               <div className="flex-1 h-px bg-gradient-to-r from-line via-accent/40 to-line" />
-              <div className="px-3 py-2 rounded-[10px] border border-line bg-white">ZappIQ</div>
+              <div className="px-3 py-2 rounded-[10px] border border-line bg-white">Iza · ZappIQ</div>
             </div>
             <div className="mt-3 text-[11px] text-muted">
-              <span className="text-[#2FB57A]">✓</span> Integração oficial direta — sem camada no meio
+              <span className="text-[#2FB57A]">✓</span> Integração oficial direta · um único agente, todos os canais Meta
             </div>
           </div>
 

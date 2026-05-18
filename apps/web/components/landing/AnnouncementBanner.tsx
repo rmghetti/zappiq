@@ -1,19 +1,22 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * AnnouncementBanner — Top-of-page ribbon proclamando ZappIQ pioneira LATAM
- * em integração ponta-a-ponta com Meta Ads AI Connectors (PR #96).
+ * AnnouncementBanner — Top-of-page ribbon
+ *
+ * V2 (17/05/2026): Pivô pra anunciar Instagram Direct em rollout — narrativa
+ * multichannel reforçada pra demos enterprise/investidores.
+ *
+ * V1 (29/04/2026): Meta Ads AI Connectors first-mover LATAM (PR #96).
  *
  * Aparece logo após Navbar, acima do Hero. Dismissível via localStorage.
- * Lançamento Meta Ads AI Connectors: 29/04/2026.
- * ZappIQ first-mover na LATAM (afirmação aprovada por Rodrigo Ghetti).
+ * STORAGE_KEY bumped pra _v2 pra reaparecer pra quem já dispensou o V1.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Sparkles, ArrowRight, X } from 'lucide-react';
 
-const STORAGE_KEY = 'zappiq_meta_ai_banner_dismissed_v1';
+const STORAGE_KEY = 'zappiq_multichannel_ig_banner_dismissed_v2';
 
 export function AnnouncementBanner() {
   const [visible, setVisible] = useState(false);
@@ -75,16 +78,15 @@ export function AnnouncementBanner() {
       <div className="zappiq-wrap py-3 lg:py-3.5">
         <div className="flex items-center justify-center gap-3 lg:gap-4 text-center">
           <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] bg-white/15 backdrop-blur px-2.5 py-1 rounded-full whitespace-nowrap">
-            <Sparkles size={11} className="text-emerald-300" /> 1ª LATAM
+            <Sparkles size={11} className="text-emerald-300" /> Novo
           </span>
 
           <p className="text-[12.5px] lg:text-[14px] font-medium leading-snug">
-            <span className="hidden sm:inline">ZappIQ </span>
-            <strong className="text-white uppercase tracking-wide">É A PRIMEIRA</strong>{' '}
-            <strong className="text-white">plataforma da América Latina</strong>
-            <span className="hidden md:inline"> com integração ponta-a-ponta</span>
-            {' '}<span className="text-emerald-300">Meta Ads AI Connectors</span>
-            <span className="hidden lg:inline"> — Meta gera, Iza qualifica, você fecha</span>
+            <strong className="text-white uppercase tracking-wide">Instagram Direct</strong>{' '}
+            <span className="text-white/85">chegando ao ZappIQ.</span>
+            <span className="hidden md:inline text-white/85"> Mesma Iza, mesmo cérebro,</span>
+            {' '}<span className="text-emerald-300">agora também no Instagram</span>
+            <span className="hidden lg:inline text-white/85"> — atende DMs de prospecção e pós-venda 24/7</span>
             <span className="text-white/60">.</span>
           </p>
 
@@ -92,7 +94,7 @@ export function AnnouncementBanner() {
             href="/blog/meta-ads-ai-connectors-zappiq"
             className="inline-flex items-center gap-1 text-[12px] lg:text-[13px] font-semibold text-emerald-300 hover:text-emerald-200 transition-colors whitespace-nowrap underline-offset-4 hover:underline"
           >
-            Ler análise completa <ArrowRight size={12} />
+            Saber mais <ArrowRight size={12} />
           </Link>
         </div>
       </div>

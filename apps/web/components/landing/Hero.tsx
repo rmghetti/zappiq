@@ -1,13 +1,23 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Hero — Design V4 (Chatbase-style · WhatsApp phone demo + 5 cenários)
+ * Hero — Design V4 multichannel (WhatsApp ↔ Instagram Direct)
  * --------------------------------------------------------------------------
- * Layout: grid 1.05fr/.95fr · copy à esquerda + iPhone à direita.
- * Phone: 340x680 frame com WhatsApp screen #F5F3EE + bolhas verdes/brancas,
- * typing indicator, 5 cenários rotativos automáticos (Sorriso&Cia, Horizonte,
- * Torque, Allure, Moda Viva). 3 badges flutuantes + geo shapes decorativos.
- * Promessa V4: Onboarding Zero · Voz Nativa · 14 dias grátis · LGPD-first.
+ * V5 (17/05/2026): iPhone alterna entre 2 frames de canal:
+ *   - WhatsApp screen (verde #075E54, bg #F5F3EE, bolhas DCF8C6 + brancas)
+ *   - Instagram Direct (preto, header dark, bolhas gradient azul + cinza)
+ *
+ * 8 cenários intercalados (sempre WA → IG → WA → IG):
+ *   1. WA · Sorriso & Cia          (clínica odonto)
+ *   2. IG · @horizonte.imoveis     (imobiliária — DM após story)
+ *   3. WA · Torque Auto Center     (mecânica — áudio)
+ *   4. IG · @clinica.allure        (estética — DM lead)
+ *   5. WA · Moda Viva              (e-commerce — status pedido)
+ *   6. IG · @fitcorp.br            (academia — DM matrícula)
+ *   7. WA · Vila Madá              (delivery)
+ *   8. IG · @safira.joias          (varejo luxo — DM purchase intent)
+ *
+ * Pacing: cada msg respeita seu dur + 1.8s entre cenários. Loop infinito.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useRef, useState } from 'react';
@@ -19,17 +29,24 @@ type ChatMsg =
   | { role: 'me'; text: 'audio'; audio: string; dur: number }
   | { role: 'ia'; text: string; dur: number; audio?: undefined };
 
+type Channel = 'whatsapp' | 'instagram';
+
 type Scenario = {
+  channel: Channel;
   seg: string;
-  name: string;
+  name: string;       // nome empresa OU username completo
+  handle?: string;    // só pra IG (@perfil)
   initials: string;
   grad: string;
   sub: string;
+  preface?: string;   // ex: "@user respondeu seu story"
   script: ChatMsg[];
 };
 
 const SCENARIOS: Scenario[] = [
+  /* 1 · WhatsApp · clínica odonto */
   {
+    channel: 'whatsapp',
     seg: 'Clínica odontológica',
     name: 'Sorriso & Cia',
     initials: 'SC',
@@ -42,20 +59,28 @@ const SCENARIOS: Scenario[] = [
       { role: 'ia', text: 'Perfeito ✓ <b>Agendado</b>. Seu convênio <b>Unimed</b> cobre avaliação de urgência. Posso enviar o endereço e instruções?', dur: 2800 },
     ],
   },
+
+  /* 2 · Instagram · imobiliária (DM após story) */
   {
-    seg: 'Imobiliária',
-    name: 'Horizonte Imóveis',
+    channel: 'instagram',
+    seg: 'Imobiliária · veio do anúncio',
+    name: 'horizonte.imoveis',
+    handle: '@horizonte.imoveis',
     initials: 'HI',
     grad: 'linear-gradient(135deg,#4A52D0,#6B74E8)',
-    sub: 'resposta em 1s · IA Iza',
+    sub: 'Ativo agora · responde com IA',
+    preface: 'Respondeu seu story · Apto Moema 2 dorm',
     script: [
-      { role: 'me', text: 'Busco apartamento 2 quartos Moema até 850k', dur: 2200 },
-      { role: 'ia', text: 'Ótimo! Separei <b>4 imóveis</b> com seu perfil. O mais bem avaliado: <b>R$ 795.000</b> · 68m² · reformado · 1 vaga. Quer ver fotos?', dur: 2900 },
-      { role: 'me', text: 'Quero sim, e dá pra visitar sábado?', dur: 1800 },
-      { role: 'ia', text: 'Claro ✓ Tenho <b>sáb 10h</b> e <b>sáb 14h</b> com o corretor Marcos. Qual horário fecha melhor pra você?', dur: 2600 },
+      { role: 'me', text: 'Vi seu story do apto Moema, ainda tá disponível?', dur: 2200 },
+      { role: 'ia', text: 'Oi! 🏠 Sim, esse e mais <b>3 com perfil parecido</b> em Moema. O top: <b>R$ 795.000</b>, 68m², reformado, 1 vaga. Quer ver fotos?', dur: 2900 },
+      { role: 'me', text: 'Manda! E dá pra visitar sábado?', dur: 1800 },
+      { role: 'ia', text: 'Claro ✓ Tenho <b>sáb 10h</b> ou <b>sáb 14h</b> com o corretor Marcos. Qual horário fecha melhor?', dur: 2600 },
     ],
   },
+
+  /* 3 · WhatsApp · mecânica (áudio) */
   {
+    channel: 'whatsapp',
     seg: 'Mecânica automotiva',
     name: 'Torque Auto Center',
     initials: 'TA',
@@ -68,20 +93,28 @@ const SCENARIOS: Scenario[] = [
       { role: 'ia', text: '✓ Agendado <b>quarta 09h</b>. Enviei endereço e PIX pro sinal. Seu carro volta no mesmo dia.', dur: 2600 },
     ],
   },
+
+  /* 4 · Instagram · clínica estética (DM lead frio) */
   {
-    seg: 'Clínica estética',
-    name: 'Clínica Allure',
+    channel: 'instagram',
+    seg: 'Estética · lead novo da bio',
+    name: 'clinica.allure',
+    handle: '@clinica.allure',
     initials: 'AL',
     grad: 'linear-gradient(135deg,#EC4899,#8B5CF6)',
-    sub: 'atendimento 24/7 · IA',
+    sub: 'Resposta em 1s · IA Iza',
+    preface: 'Primeira mensagem desta conta',
     script: [
-      { role: 'me', text: 'Quero saber valores de botox região da testa', dur: 1800 },
-      { role: 'ia', text: 'Claro! <b>Aplicação Allergan</b> na testa: <b>R$ 890</b> (3 pontos) ou <b>R$ 1.290</b> (5 pontos). Primeira consulta é <b>gratuita</b>.', dur: 3000 },
+      { role: 'me', text: 'Oi, valores de botox região da testa?', dur: 1800 },
+      { role: 'ia', text: '<b>Aplicação Allergan</b> testa: <b>R$ 890</b> (3 pontos) ou <b>R$ 1.290</b> (5 pontos). Primeira consulta é <b>gratuita</b> ✨', dur: 3000 },
       { role: 'me', text: 'Tem horário amanhã à tarde?', dur: 1600 },
       { role: 'ia', text: 'Sim ✓ <b>Amanhã 15h</b> ou <b>17h30</b> com a Dra. Júlia. Qual prefere?', dur: 2200 },
     ],
   },
+
+  /* 5 · WhatsApp · e-commerce (status pedido) */
   {
+    channel: 'whatsapp',
     seg: 'E-commerce',
     name: 'Moda Viva',
     initials: 'MV',
@@ -92,6 +125,58 @@ const SCENARIOS: Scenario[] = [
       { role: 'ia', text: 'Saiu sim ✓ Saiu do CD às <b>08:14</b>, está em <b>Osasco · SP</b>. Previsão de entrega: <b>hoje até 18h</b>.', dur: 2800 },
       { role: 'me', text: 'Show! E se não entregarem hoje?', dur: 1700 },
       { role: 'ia', text: 'Aviso automático te chega aqui. Se passar do prazo, a <b>devolução fica 100% por minha conta</b> 😊', dur: 2800 },
+    ],
+  },
+
+  /* 6 · Instagram · academia (DM matrícula via promoção) */
+  {
+    channel: 'instagram',
+    seg: 'Academia · veio de promoção',
+    name: 'fitcorp.br',
+    handle: '@fitcorp.br',
+    initials: 'FC',
+    grad: 'linear-gradient(135deg,#F97316,#EF4444)',
+    sub: 'Online · IA Iza',
+    preface: 'Curtiu post · promoção matrícula',
+    script: [
+      { role: 'me', text: 'Vi a promo de matrícula. Tem academia perto da Vila Olímpia?', dur: 2100 },
+      { role: 'ia', text: 'Tem sim 💪 <b>FitCorp Vila Olímpia</b> a 400m do metrô. Promo de hoje: <b>matrícula R$ 0</b> + 1º mês <b>R$ 89</b>.', dur: 2900 },
+      { role: 'me', text: 'Posso ir fazer avaliação amanhã 19h?', dur: 1700 },
+      { role: 'ia', text: 'Posso encaixar ✓ <b>Amanhã 19h</b> com a Renata (educadora física). Sem compromisso de fechar.', dur: 2600 },
+    ],
+  },
+
+  /* 7 · WhatsApp · delivery */
+  {
+    channel: 'whatsapp',
+    seg: 'Restaurante · delivery',
+    name: 'Vila Madá Cozinha',
+    initials: 'VM',
+    grad: 'linear-gradient(135deg,#DC2626,#EA580C)',
+    sub: 'aceita pedidos 24/7 · IA',
+    script: [
+      { role: 'me', text: 'Boa noite! Vocês tão entregando ainda?', dur: 1800 },
+      { role: 'ia', text: 'Boa noite! 🍝 Sim, até <b>23h</b>. Hoje o destaque é <b>nhoque ao molho funghi</b> (R$ 58) e <b>tiramisu da casa</b> de sobremesa.', dur: 2800 },
+      { role: 'me', text: 'Manda 1 nhoque e 1 tiramisu pra Vila Mariana', dur: 1900 },
+      { role: 'ia', text: '✓ Pedido confirmado · <b>R$ 76</b> · entrega ~35min. PIX ou cartão na entrega?', dur: 2400 },
+    ],
+  },
+
+  /* 8 · Instagram · joalheria (DM purchase intent alto) */
+  {
+    channel: 'instagram',
+    seg: 'Joalheria · intenção alta',
+    name: 'safira.joias',
+    handle: '@safira.joias',
+    initials: 'SJ',
+    grad: 'linear-gradient(135deg,#0EA5E9,#6366F1)',
+    sub: 'Ativo agora · IA Iza',
+    preface: 'Respondeu story · aliança ouro 18k',
+    script: [
+      { role: 'me', text: 'Aquela aliança ouro 18k do story ainda tem 16?', dur: 2000 },
+      { role: 'ia', text: 'Tem sim ✨ Aliança <b>Clássica 4mm</b> ouro 18k tam <b>16</b>: <b>R$ 2.890</b> · em até 6x sem juros. Enviamos pelo Brasil em 2 dias.', dur: 3000 },
+      { role: 'me', text: 'Tem certificado de autenticidade?', dur: 1700 },
+      { role: 'ia', text: 'Sim ✓ <b>Certificado IBGM</b> incluso + nota fiscal. Quer reservar enquanto fecha o pagamento?', dur: 2700 },
     ],
   },
 ];
@@ -127,37 +212,76 @@ export function Hero() {
     let alive = true;
     let scIndex = 0;
 
-    const renderBubble = (msg: ChatMsg, key: number): JSX.Element => {
+    const renderBubble = (msg: ChatMsg, key: number, ch: Channel): JSX.Element => {
       const isMe = msg.role === 'me';
+
+      /* ── Estilos por canal ── */
+      const meBg =
+        ch === 'whatsapp'
+          ? 'bg-[#DCF8C6] text-[#111]'
+          : 'text-white';
+      const meStyle: React.CSSProperties =
+        ch === 'whatsapp'
+          ? { opacity: 0, transform: 'translateY(8px)', animation: 'bubIn .4s ease-out forwards' }
+          : {
+              opacity: 0,
+              transform: 'translateY(8px)',
+              animation: 'bubIn .4s ease-out forwards',
+              background: 'linear-gradient(135deg,#3897F0,#4F46E5)',
+            };
+      const iaBg =
+        ch === 'whatsapp'
+          ? 'bg-white text-[#111] shadow-[0_1px_0.5px_rgba(0,0,0,0.13)]'
+          : 'bg-[#262626] text-white';
+      const radius = ch === 'whatsapp' ? 'rounded-[14px]' : 'rounded-[16px]';
+      const metaColor = ch === 'whatsapp' ? 'text-[#666]' : 'text-white/60';
+      const checkColor = ch === 'whatsapp' ? 'text-[#34B7F1]' : 'text-white/85';
+      const checkLabel = ch === 'whatsapp' ? '✓✓' : 'visto';
+
       if (isMe && msg.audio) {
         return (
           <div
             key={key}
-            className="ml-auto bg-[#DCF8C6] rounded-[14px] px-3 py-2 max-w-[80%] text-[13.5px] text-[#111] flex items-center gap-2"
-            style={{ opacity: 0, transform: 'translateY(8px)', animation: 'bubIn .4s ease-out forwards' }}
+            className={`ml-auto ${meBg} ${radius} px-3 py-2 max-w-[80%] text-[13.5px] flex items-center gap-2`}
+            style={meStyle}
           >
-            <span className="w-6 h-6 rounded-full bg-[#075E54] text-white flex items-center justify-center text-[10px]">▶</span>
+            <span
+              className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${
+                ch === 'whatsapp' ? 'bg-[#075E54] text-white' : 'bg-white/20 text-white'
+              }`}
+            >
+              ▶
+            </span>
             <span className="flex items-end gap-[2px] flex-1 h-[20px]">
               {waveBars(20).map((h, i) => (
                 <span
                   key={i}
-                  className="w-[2px] bg-[#075E54]/60 rounded-full"
+                  className={`w-[2px] rounded-full ${
+                    ch === 'whatsapp' ? 'bg-[#075E54]/60' : 'bg-white/60'
+                  }`}
                   style={{ height: `${h}px` }}
                 />
               ))}
             </span>
-            <span className="text-[11px] text-[#666]">{msg.audio}</span>
+            <span className={`text-[11px] ${ch === 'whatsapp' ? 'text-[#666]' : 'text-white/70'}`}>
+              {msg.audio}
+            </span>
           </div>
         );
       }
+
+      const baseStyle: React.CSSProperties = isMe
+        ? meStyle
+        : { opacity: 0, transform: 'translateY(8px)', animation: 'bubIn .4s ease-out forwards' };
+
       return (
         <div
           key={key}
-          className={`${isMe ? 'ml-auto bg-[#DCF8C6]' : 'mr-auto bg-white'} rounded-[14px] px-3 py-2 max-w-[80%] text-[13.5px] text-[#111] shadow-[0_1px_0.5px_rgba(0,0,0,0.13)]`}
-          style={{ opacity: 0, transform: 'translateY(8px)', animation: 'bubIn .4s ease-out forwards' }}
+          className={`${isMe ? `ml-auto ${meBg}` : `mr-auto ${iaBg}`} ${radius} px-3 py-2 max-w-[80%] text-[13.5px]`}
+          style={baseStyle}
           dangerouslySetInnerHTML={{
-            __html: `${msg.text}<div class="flex items-center justify-end gap-1 mt-0.5 text-[10.5px] text-[#666]"><span>${clockNow()}</span>${
-              isMe ? '<span class="text-[#34B7F1]">✓✓</span>' : ''
+            __html: `${msg.text}<div class="flex items-center justify-end gap-1 mt-0.5 text-[10.5px] ${metaColor}"><span>${clockNow()}</span>${
+              isMe ? `<span class="${checkColor}">${checkLabel}</span>` : ''
             }</div>`,
           }}
         />
@@ -180,7 +304,7 @@ export function Hero() {
           setTyping(false);
         }
         const k = key++;
-        setBubbles((prev) => [...prev, renderBubble(msg, k)]);
+        setBubbles((prev) => [...prev, renderBubble(msg, k, sc.channel)]);
         requestAnimationFrame(() => {
           if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
         });
@@ -201,11 +325,12 @@ export function Hero() {
     };
   }, []);
 
+  /* ── Tema do iPhone por canal ── */
+  const isIG = scenario.channel === 'instagram';
+
   return (
     <section className="relative pt-[140px] pb-[100px] lg:pt-[160px] lg:pb-[120px] overflow-hidden">
-      {/* Aurora Background (V4 canon · g→b→p · padrão Aceternity em light mode)
-       * Intensidade média, velocidade harmônica · sem layer pulsante legado.
-       */}
+      {/* Aurora Background (V4 canon · g→b→p · padrão Aceternity em light mode) */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
         <div
           className="absolute -inset-[10px] will-change-[background-position]"
@@ -226,7 +351,7 @@ export function Hero() {
         />
       </div>
 
-      {/* Geo shapes decorativos (entry geoIn + loop geoFloat) */}
+      {/* Geo shapes decorativos */}
       <span
         className="geo-pill hidden lg:block"
         style={{
@@ -267,20 +392,20 @@ export function Hero() {
         <div className="grid lg:grid-cols-[1.05fr_.95fr] gap-12 lg:gap-20 items-center">
           {/* Coluna esquerda: copy */}
           <div className="animate-slide-up">
-            {/* Eyebrow pill — ZappIQ Meta Business Partner */}
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-bg-soft border border-line text-[12px] text-muted mb-6">
               <span className="w-2 h-2 rounded-full bg-grad" />
-              Meta Business Partner
+              Meta Business Partner · WhatsApp + Instagram
             </div>
 
             <h1 className="text-[44px] sm:text-[56px] lg:text-[72px] leading-[1.0] tracking-[-0.045em] font-semibold text-ink mb-6">
-              Atenda no WhatsApp 24 horas por dia. <span className="text-grad">Sem contratar mais ninguém.</span>
+              Atenda no WhatsApp e Instagram 24 horas por dia. <span className="text-grad">Sem contratar mais ninguém.</span>
             </h1>
 
             <p className="text-[17px] lg:text-[18.5px] text-muted leading-[1.55] max-w-[560px] mb-8">
-              A <b className="text-ink">Iza</b> — sua IA treinada com o próprio negócio — atende, tira dúvidas,
-              agenda e qualifica lead no WhatsApp, 24/7, em texto e em áudio.
-              Ative em minutos, teste <b className="text-ink">14 dias grátis</b> e decide depois.
+              <b className="text-ink">Dê o nome ao seu agente</b> — sua IA treinada com o próprio negócio — atende, tira dúvidas,
+              agenda e qualifica lead no <b className="text-ink">WhatsApp e Instagram Direct</b>, 24/7, em texto e em áudio.
+              Mesma inteligência, mesma marca, em todos os canais Meta. Ative em minutos,
+              teste <b className="text-ink">14 dias grátis</b> e decide depois.
             </p>
 
             <div className="flex flex-wrap gap-3 mb-8">
@@ -305,21 +430,39 @@ export function Hero() {
             </div>
           </div>
 
-          {/* Coluna direita: iPhone WhatsApp demo */}
+          {/* Coluna direita: iPhone alternando WA/IG */}
           <div className="relative flex justify-center lg:justify-end">
-            {/* Badges flutuantes (escondidos no mobile) — 1 esq/1 dir para equilíbrio visual */}
+            {/* Badges flutuantes (escondidos no mobile) */}
             <div
               className="hidden md:flex absolute z-20 top-10 -left-4 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
               style={{ animation: 'badgeFloat 5s ease-in-out infinite' }}
             >
               <span className="w-2 h-2 rounded-full bg-g1 animate-pulse" />
-              Consulta agendada em 12 segundos
+              {isIG ? 'DM respondida em 1.2s' : 'Consulta agendada em 12 segundos'}
             </div>
             <div
               className="hidden md:flex absolute z-20 bottom-16 -right-4 items-center gap-2 px-3 py-2 rounded-full bg-white border border-line shadow-[var(--shadow-card)] text-[12px] font-medium"
               style={{ animation: 'badgeFloat 4.5s ease-in-out infinite', animationDelay: '0.8s' }}
             >
-              Lead qualificado <b className="text-accent ml-0.5">automaticamente</b>
+              {isIG ? (
+                <>Lead qualificado <b className="text-accent ml-0.5">do anúncio</b></>
+              ) : (
+                <>Lead qualificado <b className="text-accent ml-0.5">automaticamente</b></>
+              )}
+            </div>
+
+            {/* Channel pill flutuante topo-direito */}
+            <div
+              key={scenario.channel}
+              className="hidden md:flex absolute z-20 -top-2 right-2 items-center gap-1.5 px-3 py-1.5 rounded-full text-white text-[11px] font-semibold uppercase tracking-wider"
+              style={{
+                background: isIG
+                  ? 'linear-gradient(135deg,#FCAF45,#E1306C,#833AB4)'
+                  : '#075E54',
+                animation: 'badgeFloat 6s ease-in-out infinite',
+              }}
+            >
+              {isIG ? 'Instagram' : 'WhatsApp'}
             </div>
 
             {/* iPhone frame */}
@@ -328,7 +471,11 @@ export function Hero() {
               <div className="absolute top-[18px] left-1/2 -translate-x-1/2 w-[110px] h-[26px] bg-black rounded-full z-10" />
 
               {/* Screen */}
-              <div className="relative w-full h-full bg-[#F5F3EE] rounded-[36px] overflow-hidden flex flex-col">
+              <div
+                className={`relative w-full h-full rounded-[36px] overflow-hidden flex flex-col ${
+                  isIG ? 'bg-black' : 'bg-[#F5F3EE]'
+                }`}
+              >
                 {/* Status bar fake */}
                 <div className="absolute top-0 left-0 right-0 h-[42px] flex items-center justify-between px-5 text-[11px] font-medium text-white z-[5] pointer-events-none">
                   <span>{clock || '—'}</span>
@@ -339,29 +486,62 @@ export function Hero() {
                   </span>
                 </div>
 
-                {/* WhatsApp top bar */}
-                <div className="bg-[#075E54] text-white pt-[42px] px-3 pb-3 flex items-center gap-3">
-                  <span className="text-[14px]">←</span>
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0"
-                    style={{ background: scenario.grad }}
-                  >
-                    {scenario.initials}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[14px] font-medium truncate">
-                      {scenario.name} <span className="text-white/70 text-[10px]">✓</span>
+                {/* ═══════ Header por canal ═══════ */}
+                {isIG ? (
+                  /* Instagram Direct header (preto + border bottom #262626) */
+                  <div className="bg-black text-white pt-[42px] px-3 pb-3 flex items-center gap-3 border-b border-[#262626]">
+                    <span className="text-[14px]">←</span>
+                    {/* Avatar com ring gradient Instagram (story-style) */}
+                    <div
+                      className="w-9 h-9 rounded-full p-[2px] flex-shrink-0"
+                      style={{ background: 'linear-gradient(135deg,#FCAF45,#E1306C,#833AB4)' }}
+                    >
+                      <div
+                        className="w-full h-full rounded-full flex items-center justify-center text-white text-[11px] font-semibold"
+                        style={{ background: scenario.grad }}
+                      >
+                        {scenario.initials}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-white/80 truncate">{scenario.sub}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[14px] font-medium truncate flex items-center gap-1">
+                        {scenario.name}
+                        <span className="inline-flex items-center justify-center w-[12px] h-[12px] rounded-full bg-[#3897F0] text-white text-[8px]">✓</span>
+                      </div>
+                      <div className="text-[11px] text-[#a8a8a8] truncate">{scenario.sub}</div>
+                    </div>
+                    <span className="text-[14px] text-white">📞</span>
+                    <span className="text-[14px] text-white">📹</span>
                   </div>
-                  <span className="text-[14px]">📞</span>
-                  <span className="text-[14px]">⋮</span>
-                </div>
+                ) : (
+                  /* WhatsApp header (verde #075E54) */
+                  <div className="bg-[#075E54] text-white pt-[42px] px-3 pb-3 flex items-center gap-3">
+                    <span className="text-[14px]">←</span>
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0"
+                      style={{ background: scenario.grad }}
+                    >
+                      {scenario.initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[14px] font-medium truncate">
+                        {scenario.name} <span className="text-white/70 text-[10px]">✓</span>
+                      </div>
+                      <div className="text-[11px] text-white/80 truncate">{scenario.sub}</div>
+                    </div>
+                    <span className="text-[14px]">📞</span>
+                    <span className="text-[14px]">⋮</span>
+                  </div>
+                )}
 
                 {/* Segment label */}
                 <div
                   key={scenario.seg}
-                  className="text-[10.5px] text-center py-1.5 bg-[#FFF3CD] text-[#856404] border-b border-[#FFE69C] animate-fade-in"
+                  className={`text-[10.5px] text-center py-1.5 animate-fade-in border-b ${
+                    isIG
+                      ? 'bg-[#1a0c1f] text-[#f0c4d5] border-[#2a1530]'
+                      : 'bg-[#FFF3CD] text-[#856404] border-[#FFE69C]'
+                  }`}
                 >
                   {scenario.seg}
                 </div>
@@ -372,28 +552,61 @@ export function Hero() {
                   className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-1.5"
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
                 >
-                  <div className="text-center text-[10.5px] text-[#666] bg-white/70 self-center px-2 py-0.5 rounded-md mb-1">
-                    Hoje
-                  </div>
+                  {/* Preface (só IG) */}
+                  {isIG && scenario.preface && (
+                    <div className="text-center text-[10px] text-[#888] py-1">
+                      ↩ {scenario.preface}
+                    </div>
+                  )}
+                  {/* Divider data (só WA) */}
+                  {!isIG && (
+                    <div className="text-center text-[10.5px] text-[#666] bg-white/70 self-center px-2 py-0.5 rounded-md mb-1">
+                      Hoje
+                    </div>
+                  )}
                   {bubbles}
                   {typing && (
-                    <div className="typing-dots mr-auto">
+                    <div
+                      className={`typing-dots mr-auto ${
+                        isIG ? 'bg-[#262626] border-0' : ''
+                      }`}
+                      style={
+                        isIG
+                          ? ({
+                              background: '#262626',
+                              borderRadius: '14px',
+                              padding: '8px 12px',
+                            } as React.CSSProperties)
+                          : undefined
+                      }
+                    >
                       <span /> <span /> <span />
                     </div>
                   )}
                 </div>
 
-                {/* Input bar */}
-                <div className="bg-[#F0EFEA] px-2 py-2 flex items-center gap-1.5 border-t border-black/5">
-                  <span className="text-[15px] text-[#888]">😊</span>
-                  <div className="flex-1 bg-white rounded-full px-3 py-2 text-[12px] text-[#888]">
-                    Mensagem
+                {/* Input bar por canal */}
+                {isIG ? (
+                  <div className="bg-black px-2 py-2 flex items-center gap-1.5 border-t border-[#262626]">
+                    <span className="text-[15px] text-white">📷</span>
+                    <div className="flex-1 bg-[#1a1a1a] border border-[#262626] rounded-full px-3 py-2 text-[12px] text-[#888]">
+                      Mensagem...
+                    </div>
+                    <span className="text-[15px] text-white">🎤</span>
+                    <span className="text-[15px] text-white">🖼</span>
                   </div>
-                  <span className="text-[15px] text-[#888]">📎</span>
-                  <div className="w-9 h-9 rounded-full bg-[#075E54] flex items-center justify-center text-white text-[14px]">
-                    🎤
+                ) : (
+                  <div className="bg-[#F0EFEA] px-2 py-2 flex items-center gap-1.5 border-t border-black/5">
+                    <span className="text-[15px] text-[#888]">😊</span>
+                    <div className="flex-1 bg-white rounded-full px-3 py-2 text-[12px] text-[#888]">
+                      Mensagem
+                    </div>
+                    <span className="text-[15px] text-[#888]">📎</span>
+                    <div className="w-9 h-9 rounded-full bg-[#075E54] flex items-center justify-center text-white text-[14px]">
+                      🎤
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Resp time chip */}
                 <div className="absolute bottom-[68px] right-3 bg-black/70 text-white text-[10px] px-2 py-1 rounded-md backdrop-blur-sm font-mono">

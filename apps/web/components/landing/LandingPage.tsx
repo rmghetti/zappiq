@@ -37,6 +37,7 @@ import { OnboardingZero } from './OnboardingZero';
 import { VozNativa } from './VozNativa';
 import { HowItWorks } from './HowItWorks';
 import { ROICalculator } from './ROICalculator';
+import { AgentQualityProactive } from './AgentQualityProactive';
 import { TrustAndCompliance } from './TrustAndCompliance';
 import { IzaEstaAqui } from './IzaEstaAqui';
 import { Pricing } from './Pricing';
@@ -60,6 +61,7 @@ export function LandingPage() {
       <VozNativa />
       <HowItWorks />
       <ROICalculator />
+      <AgentQualityProactive />
       <TrustAndCompliance />
       <IzaEstaAqui />
       <Pricing />
