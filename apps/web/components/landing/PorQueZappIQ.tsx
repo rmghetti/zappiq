@@ -38,7 +38,8 @@ export function PorQueZappIQ() {
           </h2>
           <p className="text-[16px] lg:text-[17px] text-muted leading-relaxed">
             A gente não vende promessa bonita. A gente vende escolha técnica séria,
-            contrato direto com o WhatsApp e preço que não te pega de surpresa no final do mês.
+            parceria direta com a <b className="text-ink">META</b> para utilizar seu WhatsApp e Instagram Direct
+            a um preço que não te pega de surpresa no final do mês.
           </p>
         </div>
 
@@ -53,7 +54,7 @@ export function PorQueZappIQ() {
               <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">01 · Multicanal Meta</span>
             </div>
             <h3 className="text-[24px] lg:text-[28px] font-medium text-ink leading-tight tracking-tight mb-3">
-              WhatsApp + Instagram Direct. Mesma Iza, mesma marca.
+              WhatsApp + Instagram Direct. A ZappIQ utiliza a Iza, mas você cria o melhor nome para seu agente em todas plataformas, mesma marca.
             </h3>
             <p className="text-[14.5px] text-muted leading-relaxed mb-6">
               Conexão oficial com a infraestrutura da Meta — sem atravessador, sem taxa de

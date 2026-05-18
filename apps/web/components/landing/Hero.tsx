@@ -402,7 +402,7 @@ export function Hero() {
             </h1>
 
             <p className="text-[17px] lg:text-[18.5px] text-muted leading-[1.55] max-w-[560px] mb-8">
-              A <b className="text-ink">Iza</b> — sua IA treinada com o próprio negócio — atende, tira dúvidas,
+              <b className="text-ink">Dê o nome ao seu agente</b> — sua IA treinada com o próprio negócio — atende, tira dúvidas,
               agenda e qualifica lead no <b className="text-ink">WhatsApp e Instagram Direct</b>, 24/7, em texto e em áudio.
               Mesma inteligência, mesma marca, em todos os canais Meta. Ative em minutos,
               teste <b className="text-ink">14 dias grátis</b> e decide depois.
