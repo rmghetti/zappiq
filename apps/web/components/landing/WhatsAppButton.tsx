@@ -103,6 +103,94 @@ async function callIzaBackend(
   }
 }
 
+/* ── Renderiza texto da mensagem suportando Markdown links + URL bare ──
+ * Por que: a Iza recebe instrução pra mandar links em formato `[label](url)`,
+ * mas o frontend exibia tudo como texto puro — usuário tinha que copiar e colar.
+ *
+ * Pipeline:
+ *   1. Split por Markdown links `[text](url)` → preserva como segmentos com link
+ *   2. Em cada segmento sobrante, scan por URLs bare (http(s)://...) → wrap em <a>
+ *   3. Quebras de linha viram <div> separadas (preserva layout de chat)
+ *
+ * Anti-XSS: usamos React (nada de innerHTML); rel="noopener noreferrer" + target=_blank.
+ * Aceita só http(s) — javascript:/data: são ignorados pelo regex.
+ */
+const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+const URL_RE = /(https?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]])/g;
+
+function renderTextWithLinks(text: string, isOwn: boolean): React.ReactNode {
+  const linkClass = isOwn
+    ? 'underline decoration-white/60 hover:decoration-white text-white font-medium break-all'
+    : 'underline decoration-blue-400 hover:decoration-blue-600 text-blue-600 font-medium break-all';
+
+  // Passe 1: extrai Markdown links e preserva o restante como texto cru
+  type Token = { type: 'md-link'; label: string; url: string } | { type: 'text'; value: string };
+  const tokens: Token[] = [];
+  let lastIdx = 0;
+  text.replace(MD_LINK_RE, (match, label, url, offset) => {
+    if (offset > lastIdx) tokens.push({ type: 'text', value: text.slice(lastIdx, offset) });
+    tokens.push({ type: 'md-link', label, url });
+    lastIdx = offset + match.length;
+    return match;
+  });
+  if (lastIdx < text.length) tokens.push({ type: 'text', value: text.slice(lastIdx) });
+  if (tokens.length === 0) tokens.push({ type: 'text', value: text });
+
+  // Passe 2: expande tokens 'text' por linhas + scaneia URLs bare em cada linha
+  const lines: React.ReactNode[] = [];
+  let lineBuffer: React.ReactNode[] = [];
+  let nodeKey = 0;
+
+  const flushLine = () => {
+    lines.push(<div key={`line-${lines.length}`}>{lineBuffer.length > 0 ? lineBuffer : ' '}</div>);
+    lineBuffer = [];
+  };
+
+  for (const tok of tokens) {
+    if (tok.type === 'md-link') {
+      lineBuffer.push(
+        <a
+          key={`mdl-${nodeKey++}`}
+          href={tok.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={linkClass}
+        >
+          {tok.label}
+        </a>,
+      );
+      continue;
+    }
+    // Text token: pode ter \n e URLs bare
+    const partsByLine = tok.value.split('\n');
+    partsByLine.forEach((part, i) => {
+      if (i > 0) flushLine();
+      // Scan URLs bare nesta linha
+      let cursor = 0;
+      part.replace(URL_RE, (match, _u, offset) => {
+        if (offset > cursor) lineBuffer.push(part.slice(cursor, offset));
+        lineBuffer.push(
+          <a
+            key={`url-${nodeKey++}`}
+            href={match}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={linkClass}
+          >
+            {match}
+          </a>,
+        );
+        cursor = offset + match.length;
+        return match;
+      });
+      if (cursor < part.length) lineBuffer.push(part.slice(cursor));
+    });
+  }
+  flushLine();
+
+  return <>{lines}</>;
+}
+
 function loadFromStorage<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
   try {
@@ -327,9 +415,7 @@ export function WhatsAppButton() {
                   : 'mr-auto bg-white border border-gray-200 text-gray-900'
               }`}
             >
-              {m.text.split('\n').map((line, i) => (
-                <div key={i}>{line}</div>
-              ))}
+              {renderTextWithLinks(m.text, m.role === 'me')}
             </div>
           ))}
           {typing && (

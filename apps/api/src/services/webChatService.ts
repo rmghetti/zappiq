@@ -33,6 +33,7 @@
 import { prisma } from '@zappiq/database';
 import { chatCompletion, type LLMMessage } from './llm/langchainClient.js';
 import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
+import { getIzaFactsBlock } from './izaFactsService.js';
 import { logger } from '../utils/logger.js';
 
 /* ── Cleanup helpers (duplicados de agentOrchestrator pra evitar circular dep
@@ -147,9 +148,24 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   }
   const history = sanitizeHistory(input.history);
 
-  // 1. systemPrompt = CORE_AGENT_RULES_V1 + Iza v7.6 (cache 5min)
-  const izaPrompt = await loadIzaSystemPrompt();
-  const systemPrompt = `${CORE_AGENT_RULES_V1}\n\n${izaPrompt}\n\n# CANAL DE COMUNICAÇÃO\nVocê está respondendo no CHAT IN-PAGE do site zappiq.com.br (não WhatsApp). Visitante anônimo navegando a landing page. Mantenha as mesmas regras, tom e calibração. Sempre que fizer sentido, ofereça mudar pro WhatsApp pra continuar a conversa com histórico salvo.`;
+  // 1. systemPrompt = CORE_AGENT_RULES_V1 + FATOS ATUAIS (runtime) + Iza v7.x + canal
+  //    Ordem importa: FATOS ATUAIS vêm DEPOIS de CORE_AGENT_RULES (que é
+  //    inviolável) e ANTES do izaPrompt seedado em DB. Isso garante que
+  //    fatos novos (canais, features GA, urls) overlayam descrições antigas
+  //    sem precisar re-seedar o agent.system_prompt a cada release.
+  const [izaPrompt, factsBlock] = await Promise.all([
+    loadIzaSystemPrompt(),
+    getIzaFactsBlock(),
+  ]);
+  const systemPrompt = [
+    CORE_AGENT_RULES_V1,
+    factsBlock,
+    izaPrompt,
+    '# CANAL DE COMUNICAÇÃO',
+    'Você está respondendo no CHAT IN-PAGE do site zappiq.com.br (não WhatsApp). Visitante anônimo navegando a landing page. Mantenha as mesmas regras, tom e calibração. Sempre que fizer sentido, ofereça mudar pro WhatsApp pra continuar a conversa com histórico salvo (use Markdown link: `[WhatsApp](https://wa.me/5511926160159)`).',
+    '',
+    '**FORMATO DE LINKS NESTE CANAL (CRÍTICO):** o chat in-page renderiza links em formato Markdown `[texto](url)` como clicáveis. URLs em texto plano viram texto comum. SEMPRE use formato Markdown ao oferecer cadastro, demo, ou qualquer URL.',
+  ].filter(Boolean).join('\n\n');
 
   // 2. Monta messages: history + novo turno do user
   const messages: LLMMessage[] = [
