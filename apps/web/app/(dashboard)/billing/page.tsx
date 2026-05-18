@@ -1,74 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { listPlans } from '@zappiq/shared';
 import { CreditCard, Check, Zap, ArrowRight, ExternalLink } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 
-const PLANS = [
-  {
-    id: 'STARTER',
-    name: 'Starter',
-    price: 197,
-    desc: 'Para profissionais liberais e solopreneurs',
-    features: [
-      '1 número WhatsApp',
-      '1.000 conversas/mês',
-      'Agente IA 24/7',
-      'Agendamento automático',
-      'Base de conhecimento (5 docs)',
-    ],
-    highlight: false,
-  },
-  {
-    id: 'GROWTH',
-    name: 'Growth',
-    price: 497,
-    desc: 'Para PMEs com equipe de atendimento',
-    features: [
-      'Tudo do Starter +',
-      '5 atendentes simultâneos',
-      '5.000 conversas/mês',
-      'CRM e pipeline de leads',
-      'Campanhas em massa',
-      'Analytics avançado',
-      'Integrações (HubSpot, RD)',
-    ],
-    highlight: true,
-  },
-  {
-    id: 'SCALE',
-    name: 'Scale',
-    price: 997,
-    desc: 'Para franquias, redes e múltiplas unidades',
-    features: [
-      'Tudo do Growth +',
-      'Atendentes ilimitados',
-      'Conversas ilimitadas',
-      'White-label com sua marca',
-      'API aberta',
-      'Múltiplos números',
-      'Gerente de sucesso dedicado',
-    ],
-    highlight: false,
-  },
-  {
-    id: 'BUSINESS',
-    name: 'Business',
-    price: 1997,
-    desc: 'Para operações enterprise e multi-marca',
-    features: [
-      'Tudo do Scale +',
-      'Radar 360° Observabilidade incluído',
-      'SLA 99,9% + plantão 24/7',
-      'SLA contratual com KPIs mensuráveis',
-      'DSR LGPD prioridade 48h',
-      'Integrações customizadas',
-      'Success manager sênior dedicado',
-    ],
-    highlight: false,
-  },
-];
+const PLANS = listPlans();
 
 export default function BillingPage() {
   const { organization } = useAuthStore();
@@ -124,16 +62,22 @@ export default function BillingPage() {
 
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
-                <p className="text-xs text-gray-500 mt-1">{plan.desc}</p>
+                <p className="text-xs text-gray-500 mt-1">{plan.description}</p>
               </div>
 
               <div className="mb-6">
-                <span className="text-3xl font-extrabold text-gray-900">R$ {plan.price}</span>
-                <span className="text-sm text-gray-500">/mês</span>
+                {plan.priceMonthly === null ? (
+                  <span className="text-3xl font-extrabold text-gray-900">Sob consulta</span>
+                ) : (
+                  <>
+                    <span className="text-3xl font-extrabold text-gray-900">R$ {plan.priceMonthly.toLocaleString('pt-BR')}</span>
+                    <span className="text-sm text-gray-500">/mês</span>
+                  </>
+                )}
               </div>
 
               <ul className="space-y-2.5 mb-6">
-                {plan.features.map((f) => (
+                {plan.bullets.slice(0, 8).map((f) => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                     <Check size={16} className="text-primary-500 flex-shrink-0 mt-0.5" />
                     {f}
