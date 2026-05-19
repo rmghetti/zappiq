@@ -37,9 +37,12 @@ export async function POST(req: Request) {
     }
     const sb = createClient(supabaseUrl, anonKey);
 
+    // HOTFIX 2026-05-19 — em prod SEMPRE custom domain zappiq.com.br.
+    // VERCEL_URL aponta pra deployment preview com Deployment Protection.
     const baseUrl =
-      process.env.APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
+      process.env.VERCEL_ENV === 'production'
+        ? 'https://zappiq.com.br'
+        : (process.env.APP_URL || `${new URL(req.url).protocol}//${new URL(req.url).host}`);
 
     const normalizedEmail = email.trim().toLowerCase();
 
