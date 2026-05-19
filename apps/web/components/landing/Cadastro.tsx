@@ -106,6 +106,11 @@ export function Cadastro() {
         localStorage.setItem('zappiq_oauth_email', sbEmail);
         localStorage.setItem('zappiq_oauth_name', sbName);
         localStorage.setItem('zappiq_oauth_provider', providerToken !== null ? 'google' : 'magic_link');
+        // HOTFIX 2026-05-19 — persistir access_token Supabase pra /onboarding usar
+        // ao chamar /api/auth/set-password (caminho magic_link). TTL ~1h
+        // (Supabase JWT default), cliente termina onboarding antes disso na pratica.
+        localStorage.setItem('zappiq_supabase_access_token', accessToken);
+        if (refreshToken) localStorage.setItem('zappiq_supabase_refresh_token', refreshToken);
       }
     } catch (err) {
       console.error('[cadastro] JWT decode failed:', err);

@@ -297,6 +297,12 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // HOTFIX 2026-05-19 — Auth provider detectado em detectAndPrefillForm.
+  // 'google'      = Google OAuth: cliente NUNCA define senha (loga sempre por Google)
+  // 'magic_link'  = Magic Link: cliente DEVE definir senha forte no Step 0
+  // 'unknown'     = acesso direto /onboarding (legacy): comportamento padrão = magic_link
+  const [authProvider, setAuthProvider] = useState<'google' | 'magic_link' | 'unknown'>('unknown');
+
   // Formulário principal
   const [form, setForm] = useState({
       // Step 0 - Conta
@@ -304,6 +310,7 @@ export default function OnboardingPage() {
       businessName: '',
       email: '',
       password: '',
+      passwordConfirm: '',
       phone: '',
       // Step 1 - Segmento
       segment: '',
@@ -377,35 +384,42 @@ export default function OnboardingPage() {
       // localStorage fallback (Cadastro.tsx salva email/name após decode JWT)
       const oauthEmail = localStorage.getItem('zappiq_oauth_email') || '';
       const oauthName = localStorage.getItem('zappiq_oauth_name') || '';
+      // HOTFIX 2026-05-19 — detectar provider pra ramificar Step 0:
+      // Google OAuth: NÃO pede senha (cliente loga sempre por Google)
+      // Magic Link: PEDE senha forte + confirmação (cliente loga email+senha depois)
+      const oauthProvider = localStorage.getItem('zappiq_oauth_provider') || '';
 
       const detectedEmail = urlEmail || oauthEmail;
       const detectedName = urlName || oauthName;
 
       if (detectedEmail || fromCallback) {
-        // Senha randômica forte — Supabase Auth controla autenticação real,
-        // backend Prisma só precisa de password pra schema (user pode trocar
-        // via /esqueci-senha). 32 chars [a-zA-Z0-9_-] = ~190 bits entropia.
-        const randomPassword = generateRandomPassword(32);
         const orgName = localStorage.getItem('zappiq_org_name') || '';
+        const provider: 'google' | 'magic_link' | 'unknown' =
+          oauthProvider === 'google' ? 'google'
+          : oauthProvider === 'magic_link' ? 'magic_link'
+          : 'unknown';
+        setAuthProvider(provider);
+
+        // Google OAuth: senha placeholder gerada pra satisfazer schema Prisma,
+        // mas Supabase Auth controla login real via Google. Cliente NUNCA usa.
+        // Magic Link: senha começa vazia, cliente DEVE preencher no Step 0.
+        const password = provider === 'google' ? generateRandomPassword(32) : '';
 
         setForm((prev) => ({
           ...prev,
           name: detectedName || prev.name,
           email: detectedEmail || prev.email,
           businessName: orgName || prev.businessName,
-          password: randomPassword,
+          password,
         }));
-        // PR #103.3 — Só pula Step 0 se TODOS os campos exigidos pelo backend
-        // já estiverem preenchidos. businessName vazio (Google OAuth sem
-        // /cadastro prévio) faz Zod rejeitar `businessName: too small` no
-        // Step 8. Melhor manter Step 0 visível com email/name read-only e
-        // user preenche o nome da empresa antes de seguir.
+        // HOTFIX 2026-05-19 — Magic Link NUNCA pode pular Step 0 (precisa
+        // capturar senha). Google OAuth pode pular se já temos nome+empresa.
         const hasName = (detectedName || '').trim().length >= 2;
         const hasOrgName = orgName.trim().length >= 2;
-        if (hasName && hasOrgName) {
-          setStep(1); // Pula Step 0 (conta) — já temos todos dados
+        if (provider === 'google' && hasName && hasOrgName) {
+          setStep(1); // Google + dados completos → pula Step 0
         } else {
-          setStep(0); // Mantém Step 0 — cliente completa name/businessName
+          setStep(0); // Magic Link OU faltam dados → mantém Step 0
         }
         return;
       }
@@ -490,7 +504,21 @@ export default function OnboardingPage() {
   // Validação por step
   function canAdvance(): boolean {
     switch (step) {
-      case 0: return !!(form.name && form.email && form.password && form.businessName);
+      case 0: {
+        // HOTFIX 2026-05-19 — validação ramificada por provider.
+        // Google OAuth: dispensa checagem de senha (placeholder gerado em detect).
+        // Magic Link: exige senha forte + confirmação batendo.
+        const baseOk = !!(form.name && form.email && form.businessName);
+        if (!baseOk) return false;
+        if (authProvider === 'google') return true;
+        const pwd = form.password;
+        const strong = pwd.length >= 12
+          && /[A-Z]/.test(pwd)
+          && /[a-z]/.test(pwd)
+          && /[0-9]/.test(pwd)
+          && /[^A-Za-z0-9]/.test(pwd);
+        return strong && pwd === form.passwordConfirm;
+      }
       case 1: return !!form.segment;
       case 2: return form.subsegments.length > 0;
       case 3: {
@@ -528,6 +556,29 @@ export default function OnboardingPage() {
     setLoading(true);
     setError('');
     try {
+      // HOTFIX 2026-05-19 — Magic Link: setar senha real no Supabase ANTES de
+      // criar org+user no backend Prisma. Se set-password falha, abortamos
+      // pra cliente nao ficar sem senha (so com magic link expirado).
+      if (authProvider === 'magic_link') {
+        const sbToken = localStorage.getItem('zappiq_supabase_access_token') || '';
+        if (!sbToken) {
+          throw new Error('Sessão expirada. Volte ao cadastro e clique no link novamente.');
+        }
+        const setPwdRes = await fetch('/api/auth/set-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_token: sbToken, password: form.password }),
+        });
+        if (!setPwdRes.ok) {
+          const errData = await setPwdRes.json().catch(() => ({}));
+          throw new Error(errData?.error || 'Não foi possível salvar a senha. Tente novamente.');
+        }
+        // Senha persistida com sucesso — limpa tokens Supabase do localStorage
+        // (proxima sessao do cliente vai usar email+senha, nao magic link)
+        localStorage.removeItem('zappiq_supabase_access_token');
+        localStorage.removeItem('zappiq_supabase_refresh_token');
+      }
+
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://zappiq-api.fly.dev';
 
       // Consolida survey answers do formulário (3 níveis: global + segment + subsegment)
@@ -747,31 +798,90 @@ export default function OnboardingPage() {
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Senha <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => updateForm('password', e.target.value)}
-                    placeholder="Mínimo 6 caracteres"
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                  />
+              {/* HOTFIX 2026-05-19 — bloco senha CONDICIONAL ao provider de auth */}
+              {authProvider === 'google' ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                    <Check size={16} className="text-green-600" />
+                  </div>
+                  <div className="text-sm">
+                    <p className="font-semibold text-green-900">Login via Google ativo</p>
+                    <p className="text-green-700 mt-0.5">
+                      Você não precisa cadastrar senha. Sempre que voltar, basta clicar em &quot;Entrar com Google&quot;.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp (opcional)</label>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    value={form.phone}
-                    onChange={(e) => updateForm('phone', formatPhone(e.target.value))}
-                    placeholder="+55 11 99999-9999"
-                    maxLength={17}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                  />
-                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Senha <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={form.password}
+                        onChange={(e) => updateForm('password', e.target.value)}
+                        placeholder="Sua senha de acesso"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Confirme a senha <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={form.passwordConfirm}
+                        onChange={(e) => updateForm('passwordConfirm', e.target.value)}
+                        placeholder="Repita a senha"
+                        className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:ring-2 outline-none ${
+                          form.passwordConfirm && form.password !== form.passwordConfirm
+                            ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                            : 'border-gray-200 focus:ring-primary-500 focus:border-primary-500'
+                        }`}
+                      />
+                      {form.passwordConfirm && form.password !== form.passwordConfirm && (
+                        <p className="text-xs text-red-600 mt-1">As senhas não coincidem</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Indicador de critérios de senha forte (NIST 800-63B) */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 -mt-2">
+                    <p className="text-xs font-semibold text-gray-700 mb-2">Critérios de segurança:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs">
+                      {[
+                        { ok: form.password.length >= 12, label: 'Mínimo 12 caracteres' },
+                        { ok: /[A-Z]/.test(form.password), label: '1 letra maiúscula' },
+                        { ok: /[a-z]/.test(form.password), label: '1 letra minúscula' },
+                        { ok: /[0-9]/.test(form.password), label: '1 número' },
+                        { ok: /[^A-Za-z0-9]/.test(form.password), label: '1 caractere especial' },
+                        { ok: form.password.length > 0 && form.password === form.passwordConfirm, label: 'Senha e confirmação iguais' },
+                      ].map((c, i) => (
+                        <div key={i} className={`flex items-center gap-1.5 ${c.ok ? 'text-green-700' : 'text-gray-400'}`}>
+                          <span className={`w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 ${c.ok ? 'bg-green-100' : 'bg-gray-200'}`}>
+                            {c.ok && <Check size={9} className="text-green-700" />}
+                          </span>
+                          <span>{c.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp (opcional)</label>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={form.phone}
+                  onChange={(e) => updateForm('phone', formatPhone(e.target.value))}
+                  placeholder="+55 11 99999-9999"
+                  maxLength={17}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                />
               </div>
             </div>
           )}

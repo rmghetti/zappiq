@@ -128,9 +128,14 @@ export async function POST(req: Request) {
     }
 
     // ─── Magic link via Supabase Auth ──────────────────────────
+    // HOTFIX 2026-05-19 — VERCEL_URL retorna o hash do deployment preview
+    // (ex: zappiq-2wu98gc9u-zappiq.vercel.app), o que faz o magic link
+    // apontar pra preview com Deployment Protection -> cliente recebe
+    // "Email link is invalid or has expired". Em prod SEMPRE custom domain.
     const baseUrl =
-      process.env.APP_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://zappiq.com.br');
+      process.env.VERCEL_ENV === 'production'
+        ? 'https://zappiq.com.br'
+        : (process.env.APP_URL || `${new URL(req.url).protocol}//${new URL(req.url).host}`);
 
     // emailRedirectTo aponta DIRETO pra /cadastro?verified=1 porque
     // Supabase Confirm Signup usa implicit flow com tokens no HASH
