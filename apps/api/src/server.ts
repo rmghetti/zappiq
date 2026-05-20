@@ -37,6 +37,7 @@ import dealsRoutes from './routes/deals.js';
 import billingRoutes from './routes/billing.js';
 import settingsRoutes from './routes/settings.js';
 import onboardingRoutes from './routes/onboarding.js';
+import embeddedSignupRoutes from './routes/embeddedSignup.js'; // #273/#274 — callbacks OAuth WA/IG Embedded Signup
 import stripeWebhookRoutes from './routes/stripeWebhook.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 import dsrRoutes from './routes/dataSubjectRequests.js';
@@ -266,6 +267,7 @@ app.use('/api/deals', authMiddleware, rlsTenantMiddleware, dealsRoutes);
 app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes);
 app.use('/api/settings', authMiddleware, rlsTenantMiddleware, settingsRoutes);
 app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, auditLogsRoutes);
+app.use('/api/embedded-signup', authMiddleware, rlsTenantMiddleware, embeddedSignupRoutes); // #273/#274
 
 // DSR — POST público (titular não é usuário); demais exigem auth + RLS
 app.use('/api/dsr', (req, res, next) => {

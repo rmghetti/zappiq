@@ -50,6 +50,10 @@ const envSchema = z.object({
   // Meta for Developers > seu App > Settings > Basic > App Secret.
   META_APP_SECRET: z.string().optional(),
 
+  // Embedded Signup (2026-05-20): App ID público da ZappIQ na Meta. Usado com
+  // META_APP_SECRET pra trocar o `code` do popup por token (oauth/access_token).
+  META_APP_ID: z.string().default('1603310040738671'),
+
   // FASE 4 (#251) Instagram Direct: verify token específico (opcional — fallback
   // pra WHATSAPP_WEBHOOK_VERIFY_TOKEN). Recomendado configurar dedicado pra
   // poder revogar IG independente do WhatsApp em caso de incidente.
