@@ -31,9 +31,36 @@ import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
 import { computeAIReadiness, refreshAIReadiness } from '../services/aiReadinessService.js';
+import { buildKnowledgeBase, surveyDocFilename, countAnsweredQuestions } from '../services/knowledgeBaseBuilder.js';
+import { logAuditEvent } from '../services/auditService.js';
 
 const router = Router();
 router.use(authMiddleware);
+
+// 2026-05-20 — helper de log de treinamento. Reusa a cadeia append-only
+// (hash-chained) de audit_logs: histórico INALTERÁVEL com usuário, data/hora.
+// Fail-soft: nunca quebra a request principal se o log falhar.
+async function logTraining(
+  req: Request,
+  action: string,
+  resource: string,
+  resourceId: string | undefined,
+  summary: string,
+  extra?: { before?: unknown; after?: unknown },
+): Promise<void> {
+  try {
+    await logAuditEvent(req, {
+      action,            // ex: "kb.qa.update"
+      resource,          // ex: "qa_pair"
+      resourceId,
+      details: { summary, area: 'ai-training' },
+      before: extra?.before,
+      after: extra?.after,
+    });
+  } catch (err: any) {
+    logger.warn(`[AITraining] log falhou (${action}): ${err?.message}`);
+  }
+}
 
 // ── Multer config ───────────────────────────────────────
 const ALLOWED_MIMES = new Set([
@@ -137,6 +164,9 @@ router.post(
         `[AITraining] Doc ingestado: ${file.originalname} (${file.size}b) org=${orgId}`,
       );
 
+      await logTraining(req, 'kb.document.create', 'kb_document', doc.id,
+        `Documento enviado: "${file.originalname}"`);
+
       res.status(201).json({ document: doc, readiness });
     } catch (err: any) {
       logger.warn(`[AITraining] Upload falhou: ${err.message}`);
@@ -170,6 +200,8 @@ router.post(
         select: { id: true, title: true, sourceType: true, sourceUrl: true, createdAt: true },
       });
 
+      await logTraining(req, 'kb.url.create', 'kb_document', doc.id, `URL ingerida: ${url}`);
+
       const readiness = await refreshAIReadiness(orgId).catch(() => null);
       res.status(201).json({ document: doc, readiness });
     } catch (err: any) {
@@ -188,7 +220,7 @@ router.delete('/documents/:id', async (req: Request, res: Response, next: NextFu
     // Tenant scoping: só apaga se o doc pertence à KB da org.
     const doc = await prisma.kBDocument.findFirst({
       where: { id, knowledgeBase: { organizationId: orgId } },
-      select: { id: true },
+      select: { id: true, title: true },
     });
     if (!doc) {
       res.status(404).json({ error: 'Documento não encontrado' });
@@ -196,6 +228,15 @@ router.delete('/documents/:id', async (req: Request, res: Response, next: NextFu
     }
 
     await prisma.kBDocument.delete({ where: { id } });
+
+    // Remove do RAG também (best-effort, por filename estável = título do doc)
+    await ragService
+      .deleteDocument(orgId, doc.title)
+      .catch((err: any) => logger.warn(`[AITraining] RAG remove doc falhou: ${err.message}`));
+
+    await logTraining(req, 'kb.document.delete', 'kb_document', id,
+      `Documento removido: "${doc.title}"`);
+
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
     res.json({ ok: true, readiness });
   } catch (err) {
@@ -255,6 +296,9 @@ router.post('/qa', validate(qaSchema), async (req: Request, res: Response, next:
       })
       .catch((err: any) => logger.warn(`[AITraining] RAG sync Q&A falhou: ${err.message}`));
 
+    await logTraining(req, 'kb.qa.create', 'qa_pair', pair.id,
+      `Q&A criado: "${String(question).slice(0, 80)}"`);
+
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
     res.status(201).json({ qaPair: pair, readiness });
   } catch (err) {
@@ -281,6 +325,22 @@ router.put('/qa/:id', validate(qaSchema.partial()), async (req: Request, res: Re
       data: req.body,
     });
 
+    // 2026-05-20 FIX — re-sincroniza o RAG. Antes o PUT só mexia na tabela,
+    // então editar um Q&A NÃO refletia na IA (drift silencioso). Re-ingere o
+    // doc com o MESMO filename (qa-{id}.txt) → substitui a versão anterior.
+    const content = `Pergunta: ${pair.question}\n\nResposta: ${pair.answer}`;
+    await ragService
+      .ingestDocument(orgId, {
+        filename: `qa-${pair.id}.txt`,
+        content: Buffer.from(content),
+        mimeType: 'text/plain',
+      })
+      .catch((err: any) => logger.warn(`[AITraining] RAG re-sync Q&A (update) falhou: ${err.message}`));
+
+    await logTraining(req, 'kb.qa.update', 'qa_pair', pair.id,
+      `Q&A editado: "${String(pair.question).slice(0, 80)}"`,
+      { before: { question: existing.question, answer: existing.answer }, after: { question: pair.question, answer: pair.answer } });
+
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
     res.json({ qaPair: pair, readiness });
   } catch (err) {
@@ -296,7 +356,7 @@ router.delete('/qa/:id', async (req: Request, res: Response, next: NextFunction)
 
     const existing = await (prisma as any).QAPair.findFirst({
       where: { id, organizationId: orgId },
-      select: { id: true },
+      select: { id: true, question: true },
     });
     if (!existing) {
       res.status(404).json({ error: 'Q&A não encontrado' });
@@ -304,8 +364,110 @@ router.delete('/qa/:id', async (req: Request, res: Response, next: NextFunction)
     }
 
     await (prisma as any).QAPair.delete({ where: { id } });
+
+    // 2026-05-20 FIX — remove o doc correspondente do RAG. Antes o Q&A
+    // deletado continuava na base vetorial (a IA seguia respondendo com ele).
+    // Best-effort: o RAG externo dedupe/identifica pelo filename estável.
+    await ragService
+      .deleteDocument(orgId, `qa-${id}.txt`)
+      .catch((err: any) => logger.warn(`[AITraining] RAG remove Q&A falhou: ${err.message}`));
+
+    await logTraining(req, 'kb.qa.delete', 'qa_pair', id,
+      `Q&A removido: "${String(existing.question).slice(0, 80)}"`);
+
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
     res.json({ ok: true, readiness });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// SURVEY DE QUALIFICAÇÃO (editável pós-onboarding)
+// 2026-05-20 — antes as respostas só eram ingeridas 1x no onboarding e
+// sumiam. Agora persistem em organization.settings.surveyAnswers e podem
+// ser re-completadas/editadas a qualquer momento, re-alimentando o RAG.
+// ═══════════════════════════════════════════════════════════
+
+// GET /api/ai-training/survey — retorna as respostas salvas (frontend cruza
+// com o catálogo local de perguntas pra calcular faltantes/destaque vermelho).
+router.get('/survey', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { settings: true },
+    });
+    const settings = (org?.settings as any) || {};
+    const surveyAnswers = settings.surveyAnswers || {};
+    res.json({
+      surveyAnswers,
+      answeredCount: countAnsweredQuestions(surveyAnswers),
+      niche: settings.niche || 'geral',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/ai-training/survey — salva o conjunto completo de respostas +
+// re-ingere o documento de conhecimento no RAG + loga.
+const surveySchema = z.object({ surveyAnswers: z.record(z.any()) });
+router.put('/survey', validate(surveySchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { surveyAnswers } = req.body as { surveyAnswers: Record<string, any> };
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { settings: true, name: true },
+    });
+    const settings = (org?.settings as any) || {};
+    const before = settings.surveyAnswers || {};
+
+    const merged = { ...settings, surveyAnswers };
+    await prisma.organization.update({ where: { id: orgId }, data: { settings: merged } });
+
+    // Re-ingere o doc de conhecimento (filename estável → substitui versão anterior)
+    const niche = settings.niche || 'geral';
+    const businessName = settings.businessName || org?.name || 'Empresa';
+    const kb = buildKnowledgeBase({ businessName, niche, surveyAnswers });
+    await ragService
+      .ingestDocument(orgId, {
+        filename: surveyDocFilename(niche),
+        content: Buffer.from(kb),
+        mimeType: 'text/plain',
+      })
+      .catch((err: any) => logger.warn(`[AITraining] RAG re-sync survey falhou: ${err.message}`));
+
+    const answeredCount = countAnsweredQuestions(surveyAnswers);
+    await logTraining(req, 'kb.survey.update', 'survey', undefined,
+      `Questionário atualizado (${answeredCount} respostas preenchidas)`,
+      { before: { answered: countAnsweredQuestions(before) }, after: { answered: answeredCount } });
+
+    const readiness = await refreshAIReadiness(orgId).catch(() => null);
+    res.json({ surveyAnswers, answeredCount, readiness });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/ai-training/activity — histórico inalterável (hash-chained) de
+// tudo que alimentou a base de conhecimento: quem, o quê, quando.
+router.get('/activity', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const logs = await prisma.auditLog.findMany({
+      where: { organizationId: orgId, action: { startsWith: 'kb.' } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        id: true, action: true, resource: true, resourceId: true,
+        details: true, createdAt: true,
+        user: { select: { name: true, email: true } },
+      },
+    });
+    res.json({ activity: logs });
   } catch (err) {
     next(err);
   }
@@ -337,6 +499,10 @@ router.put('/identity', validate(identitySchema), async (req: Request, res: Resp
       where: { id: orgId },
       data: { settings: merged },
     });
+
+    await logTraining(req, 'kb.identity.update', 'agent_identity', undefined,
+      `Identidade do agente atualizada: ${Object.keys(req.body).join(', ')}`,
+      { before: current, after: merged });
 
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
     res.json({ settings: merged, readiness });
