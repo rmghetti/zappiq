@@ -7,6 +7,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { signToken, signRefreshToken } from '../utils/token.js';
 import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
+import { buildKnowledgeBase, surveyDocFilename } from '../services/knowledgeBaseBuilder.js';
 
 const router = Router();
 
@@ -118,6 +119,11 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
             greetingMessage: greetingMessage || null,
             handoffMessage: handoffMessage || null,
             phone: phone || null,
+            // 2026-05-20 — persistir as respostas do survey em settings pra
+            // permitir EDIÇÃO posterior (/api/ai-training/survey). Antes elas
+            // viravam só doc RAG e sumiam — o "Responder agora" não tinha
+            // de onde ler as respostas atuais.
+            surveyAnswers: surveyAnswers || {},
           },
         } as any,
       });
@@ -148,7 +154,7 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
     if (surveyAnswers && Object.keys(surveyAnswers).length > 0) {
       const knowledgeBase = buildKnowledgeBase({ businessName, niche, surveyAnswers });
       ragService.ingestDocument(result.org.id, {
-        filename: `onboarding-survey-${niche}.txt`,
+        filename: surveyDocFilename(niche),
         content: Buffer.from(knowledgeBase),
         mimeType: 'text/plain',
       }).catch((err: any) => logger.warn('[Onboarding] RAG ingestion failed:', err.message));
@@ -195,33 +201,6 @@ function mapTone(tone: string): string {
     'Técnico': 'technical', 'tecnico': 'technical', 'technical': 'technical',
   };
   return map[tone] || 'friendly';
-}
-
-function buildKnowledgeBase({ businessName, niche, surveyAnswers }: { businessName: string; niche: string; surveyAnswers: Record<string, any> }): string {
-  const lines: string[] = [];
-  lines.push(`=== BASE DE CONHECIMENTO — ${businessName.toUpperCase()} ===`);
-  lines.push(`Segmento: ${niche}`);
-  lines.push('');
-  lines.push('--- INFORMAÇÕES DO NEGÓCIO (coletadas no onboarding) ---');
-  lines.push('');
-
-  for (const [key, value] of Object.entries(surveyAnswers)) {
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      lines.push(`## ${key}`);
-      for (const [question, answer] of Object.entries(value as Record<string, any>)) {
-        if (answer && String(answer).trim()) {
-          lines.push(`**${question}:** ${answer}`);
-        }
-      }
-      lines.push('');
-    } else if (value && String(value).trim()) {
-      lines.push(`**${key}:** ${value}`);
-    }
-  }
-
-  lines.push('');
-  lines.push('--- FIM DA BASE DE CONHECIMENTO ---');
-  return lines.join('\n');
 }
 
 export default router;
