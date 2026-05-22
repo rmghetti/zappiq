@@ -19,7 +19,7 @@
  */
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
-import { llmRouter, type LLMTier } from '../services/llm/LLMRouter.js';
+import { llmRouter, type LLMTier, type LLMProviderId } from '../services/llm/LLMRouter.js';
 import {
   pickBlueprint,
   buildGraphFromContent,
@@ -44,15 +44,34 @@ export interface FlowDraft {
 
 const VALID_TIERS: LLMTier[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
 
-/** Extrai o primeiro objeto JSON de um texto (tolera cercas ```json e ruído). */
+/** Remove caracteres de controle (ASCII < 0x20, exceto \n \r \t) de uma string. */
+function stripControlChars(s: string): string {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code >= 32 || code === 9 || code === 10 || code === 13) out += s[i];
+  }
+  return out;
+}
+
+/**
+ * Extrai o primeiro objeto JSON de um texto. Tolera os erros mais comuns de
+ * LLM: cercas de código, prosa antes/depois, vírgulas sobrando antes de }/] e
+ * caracteres de controle inválidos (Gemini Flash erra muito nesses pontos).
+ */
 function extractJson(text: string): any | null {
   if (!text) return null;
   const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
   if (start === -1 || end === -1 || end <= start) return null;
+  let slice = cleaned.slice(start, end + 1);
+  // remove vírgulas sobrando antes de } ou ] (erro clássico de LLM)
+  slice = slice.replace(/,(\s*[}\]])/g, '$1');
+  // remove caracteres de controle inválidos que quebram JSON.parse
+  slice = stripControlChars(slice);
   try {
-    return JSON.parse(cleaned.slice(start, end + 1));
+    return JSON.parse(slice);
   } catch {
     return null;
   }
@@ -106,7 +125,7 @@ export async function generateFlowDraft(input: {
     'Você é o ZappIQ Maestro, um assistente que monta fluxos de atendimento no WhatsApp para empresas.',
     'Sua tarefa: preencher o CONTEÚDO de um fluxo cuja ESTRUTURA já está definida (Início → Mensagem → Marcar tag → Nó-IA).',
     'NÃO mude a estrutura. Apenas escreva os textos, personalizados ao negócio, e explique o racional.',
-    'Responda EXCLUSIVAMENTE com um objeto JSON válido, sem texto antes ou depois, sem cercas de código.',
+    'Responda EXCLUSIVAMENTE com um objeto JSON válido, sem texto antes ou depois, sem cercas de código, sem vírgula sobrando.',
   ].join(' ');
 
   const user = [
@@ -142,11 +161,20 @@ export async function generateFlowDraft(input: {
       messages: [{ role: 'user', content: user }],
       maxTokens: 900,
       temperature: 0.5,
+      // Geração de fluxo roda 1x por fluxo — priorizamos JSON confiável.
+      // Sonnet devolve JSON limpo quase sempre (Gemini Flash erra muito).
+      // forceProvider tem prioridade sobre tier; tier fica como referência.
       tier,
+      forceProvider: 'anthropic-sonnet' as LLMProviderId,
       orgId: organizationId,
       operation: 'chat',
     });
     parsed = extractJson(resp.text);
+    if (!parsed) {
+      logger.warn('[Maestro] generateFlowDraft: JSON não parseável', {
+        organizationId, sample: (resp.text || '').slice(0, 200),
+      });
+    }
   } catch (e) {
     logger.warn('[Maestro] generateFlowDraft: LLM falhou — usando fallback', {
       organizationId, err: String(e),
@@ -155,7 +183,6 @@ export async function generateFlowDraft(input: {
   }
 
   if (!parsed || typeof parsed !== 'object') {
-    logger.warn('[Maestro] generateFlowDraft: JSON inválido — usando fallback', { organizationId });
     return fallbackDraft('Usei um modelo padrão como base — pode editar à vontade.');
   }
 
