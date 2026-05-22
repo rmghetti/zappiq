@@ -52,7 +52,14 @@ jobs:
         run: pnpm run build
 
       # V2-018 (Sprint 0 Blocker 1): unit + integration tests do api
+      # Os testes importam modulos que validam env no boot (env.ts -> logger.ts),
+      # entao o step precisa das 2 unicas vars OBRIGATORIAS do schema
+      # (DATABASE_URL + JWT_SECRET>=32 chars). Dummies — nenhum teste unitario
+      # conecta de fato; so satisfaz validateEnv() pra suite carregar.
       - name: Test API (Vitest)
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/zappiq_ci?schema=public
+          JWT_SECRET: ci-dummy-jwt-secret-min-32-chars-0000000000
         run: pnpm --filter @zappiq/api test
 
   # ── Security audit ─────────────────────────────────────────────
