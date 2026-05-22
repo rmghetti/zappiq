@@ -36,19 +36,29 @@ const nextConfig = {
 
   // ── Security headers (apply to all routes) ─────────────
   async headers() {
+    // X-Frame-Options é DENY em tudo, EXCETO /tutoriais/* — esses HTMLs estáticos
+    // (ex: tutorial-interativo.html) são embutidos via <iframe> no próprio
+    // dashboard (mesma origem). SAMEORIGIN libera o nosso domínio a enquadrá-los e
+    // segue bloqueando clickjacking de terceiros. As demais proteções são iguais.
+    const baseSecurity = [
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+      {
+        key: 'Strict-Transport-Security',
+        value: 'max-age=63072000; includeSubDomains; preload',
+      },
+    ];
     return [
       {
-        source: '/:path*',
-        headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-          {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=63072000; includeSubDomains; preload',
-          },
-        ],
+        // Todas as rotas, menos /tutoriais/* → framing totalmente proibido.
+        source: '/((?!tutoriais).*)',
+        headers: [{ key: 'X-Frame-Options', value: 'DENY' }, ...baseSecurity],
+      },
+      {
+        // Tutoriais estáticos embutidos no dashboard (mesma origem).
+        source: '/tutoriais/:path*',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }, ...baseSecurity],
       },
     ];
   },
