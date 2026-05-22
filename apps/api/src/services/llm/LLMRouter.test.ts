@@ -545,7 +545,7 @@ describe('LLMRouter', () => {
 
   // V4 #V4-001: getStatus deve listar todos os providers do pool.
   describe('V4 #V4-001 — getStatus inclui Gemini', () => {
-    it('lista 4 providers (Gemini + Sonnet + Haiku + OpenAI)', () => {
+    it('lista 4 providers (Gemini + Sonnet + Haiku + OpenAI)', async () => {
       const router = new LLMRouter();
       const status = await router.getStatus();
       const ids = status.map((s) => s.id).sort();
