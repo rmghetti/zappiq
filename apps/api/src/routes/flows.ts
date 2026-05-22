@@ -2,16 +2,34 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
+// ZappIQ Maestro (#280) — engine PURO compartilhado com a produção
+// (agentOrchestrator → flowRuntime → flowEngine). O /test usa o MESMO motor pra
+// que "testar fluxo" reflita exatamente o comportamento real, sem simulação
+// paralela divergente.
+import { resolveFlowStep, type FlowGraph, type FlowState } from '../agents/flowEngine.js';
 
 const router = Router();
+
+const TRIGGER_TYPES = ['KEYWORD', 'FIRST_CONTACT', 'SCHEDULE', 'MANUAL', 'EVENT'] as const;
 
 const createFlowSchema = z.object({
   name: z.string().min(2),
   description: z.string().optional(),
-  triggerType: z.enum(['KEYWORD', 'FIRST_CONTACT', 'SCHEDULE', 'MANUAL', 'EVENT']),
+  triggerType: z.enum(TRIGGER_TYPES),
   triggerConfig: z.record(z.any()).optional(),
   nodes: z.array(z.any()).default([]),
   edges: z.array(z.any()).default([]),
+});
+
+// PUT: campos editáveis (NUNCA organizationId/id). Zod remove chaves desconhecidas.
+const updateFlowSchema = z.object({
+  name: z.string().min(2).optional(),
+  description: z.string().nullable().optional(),
+  triggerType: z.enum(TRIGGER_TYPES).optional(),
+  triggerConfig: z.record(z.any()).nullable().optional(),
+  nodes: z.array(z.any()).optional(),
+  edges: z.array(z.any()).optional(),
+  isActive: z.boolean().optional(),
 });
 
 // CRUD
@@ -42,8 +60,9 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   } catch (err) { next(err); }
 });
 
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', validate(updateFlowSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // req.body já validado/sanitizado pelo updateFlowSchema (sem id/organizationId).
     const result = await prisma.flow.updateMany({ where: { id: req.params.id, organizationId: req.organizationId! }, data: req.body });
     if (result.count === 0) { res.status(404).json({ error: 'Flow not found' }); return; }
     const updated = await prisma.flow.findUnique({ where: { id: req.params.id } });
@@ -60,155 +79,83 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
 });
 
 // POST /api/flows/:id/publish
+// Garante 1 fluxo ATIVO por org: desativa os demais e ativa este. O runtime
+// (resolveActiveFlowStep) faz findFirst({isActive:true}); com 2 ativos o
+// comportamento ficaria ambíguo, por isso o invariante de exclusividade.
 router.post('/:id/publish', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const result = await prisma.flow.updateMany({
-      where: { id: req.params.id, organizationId: req.organizationId! },
+    const orgId = req.organizationId!;
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+
+    // desativa os outros fluxos da org (scoped por orgId — RLS-safe)
+    await prisma.flow.updateMany({
+      where: { organizationId: orgId, isActive: true, NOT: { id: flow.id } },
+      data: { isActive: false },
+    });
+    // ativa este (+ bump de versão)
+    const published = await prisma.flow.update({
+      where: { id: flow.id },
       data: { isActive: true, version: { increment: 1 } },
     });
-    if (result.count === 0) { res.status(404).json({ error: 'Flow not found' }); return; }
-    res.json({ success: true, message: 'Flow published' });
+    res.json({ success: true, message: 'Flow published (demais desativados)', data: published });
   } catch (err) { next(err); }
 });
 
 // POST /api/flows/:id/test
+// Replay do fluxo usando o MESMO engine da produção (flowEngine.resolveFlowStep).
+// Aceita { message } (1 turno) OU { messages: ["...", "..."] } (multi-turno, pra
+// exercitar condition/await_input). Devolve, por turno, os efeitos
+// (send_text/handoff/tag/update_lead), o próximo passo (await_input|ai|end) e o
+// prompt do nó-IA — exatamente o que o orchestrator faria em prod.
 router.post('/:id/test', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: req.organizationId! } });
     if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
 
-    const nodes = (flow.nodes as any[]) || [];
-    const edges = (flow.edges as any[]) || [];
-    const testInput = req.body.input || {};
-
-    if (nodes.length === 0) {
-      res.json({ success: true, data: { trace: [], message: 'Flow has no nodes' } });
+    const graph: FlowGraph = {
+      nodes: Array.isArray(flow.nodes) ? (flow.nodes as any[]) : [],
+      edges: Array.isArray(flow.edges) ? (flow.edges as any[]) : [],
+    };
+    if (graph.nodes.length === 0) {
+      res.json({ success: true, data: { turns: [], message: 'Flow has no nodes' } });
       return;
     }
 
-    // Encontrar nó inicial (type === 'start' ou primeiro nó)
-    const startNode = nodes.find((n: any) => n.type === 'start') || nodes[0];
+    // Normaliza input: aceita messages[] ou message único.
+    const rawMessages: unknown[] = Array.isArray(req.body?.messages)
+      ? req.body.messages
+      : [req.body?.message ?? req.body?.input?.text ?? ''];
 
-    // Mapas auxiliares para navegação
-    const nodeMap = new Map<string, any>();
-    for (const node of nodes) nodeMap.set(node.id, node);
+    let state: FlowState = { cursor: null, vars: {} };
+    const turns: Array<{
+      input: string;
+      effects: { kind: string; [k: string]: any }[];
+      next: 'await_input' | 'ai' | 'end';
+      aiPrompt: string | null;
+    }> = [];
 
-    // Mapa de arestas: sourceId -> lista de edges (para suportar condições com múltiplas saídas)
-    const edgeMap = new Map<string, any[]>();
-    for (const edge of edges) {
-      if (!edgeMap.has(edge.source)) edgeMap.set(edge.source, []);
-      edgeMap.get(edge.source)!.push(edge);
+    const MAX_TURNS = 25; // trava de segurança
+    for (const raw of rawMessages.slice(0, MAX_TURNS)) {
+      const msg = String(raw ?? '');
+      const step = resolveFlowStep(graph, state, msg);
+      turns.push({
+        input: msg,
+        effects: step.effects,
+        next: step.next,
+        aiPrompt: step.aiPrompt ?? null,
+      });
+      state = step.state;
+      if (step.next === 'end') break;
     }
 
-    const trace: { nodeId: string; type: string; result: string; timestamp: string }[] = [];
-    const maxSteps = 50; // Limite de segurança para evitar loops infinitos
-    let currentNodeId: string | null = startNode.id;
-    let stepCount = 0;
-
-    while (currentNodeId && stepCount < maxSteps) {
-      stepCount++;
-      const node = nodeMap.get(currentNodeId);
-      if (!node) {
-        trace.push({ nodeId: currentNodeId, type: 'unknown', result: 'Node not found — execution stopped', timestamp: new Date().toISOString() });
-        break;
-      }
-
-      let result: string;
-      let nextNodeId: string | null = null;
-
-      switch (node.type) {
-        case 'start':
-          result = 'Flow started';
-          break;
-
-        case 'message':
-          result = `Message: ${node.data?.text || node.data?.content || '(empty message)'}`;
-          break;
-
-        case 'condition': {
-          // Avaliar condição simples: verifica se o campo do input corresponde ao valor esperado
-          const field = node.data?.field || '';
-          const operator = node.data?.operator || 'equals';
-          const expected = node.data?.value;
-          const actual = testInput[field];
-          let conditionMet = false;
-
-          switch (operator) {
-            case 'equals': conditionMet = actual === expected; break;
-            case 'not_equals': conditionMet = actual !== expected; break;
-            case 'contains': conditionMet = String(actual || '').includes(String(expected)); break;
-            case 'greater_than': conditionMet = Number(actual) > Number(expected); break;
-            case 'less_than': conditionMet = Number(actual) < Number(expected); break;
-            default: conditionMet = actual === expected;
-          }
-
-          result = `Condition "${field} ${operator} ${expected}" → ${conditionMet ? 'true' : 'false'}`;
-
-          // Selecionar aresta correta baseado no resultado da condição
-          const outEdges = edgeMap.get(currentNodeId) || [];
-          const matchedEdge = conditionMet
-            ? outEdges.find((e: any) => e.sourceHandle === 'true' || e.label === 'true' || e.data?.condition === 'true')
-            : outEdges.find((e: any) => e.sourceHandle === 'false' || e.label === 'false' || e.data?.condition === 'false');
-
-          if (matchedEdge) {
-            nextNodeId = matchedEdge.target;
-          } else if (outEdges.length > 0) {
-            // Fallback: primeira aresta se condição met, segunda se não
-            nextNodeId = conditionMet
-              ? outEdges[0].target
-              : (outEdges[1]?.target || outEdges[0].target);
-          }
-          break;
-        }
-
-        case 'action':
-          result = `Action executed: ${node.data?.action || node.data?.type || 'generic'}`;
-          break;
-
-        case 'ai':
-          result = `AI node: would call LLM with prompt "${(node.data?.prompt || '').substring(0, 80)}..."`;
-          break;
-
-        case 'human_handoff':
-          result = 'Flagged for human handoff — conversation will be transferred to a human agent';
-          trace.push({ nodeId: node.id, type: node.type, result, timestamp: new Date().toISOString() });
-          currentNodeId = null;
-          continue;
-
-        case 'end':
-          result = 'Flow ended';
-          trace.push({ nodeId: node.id, type: node.type, result, timestamp: new Date().toISOString() });
-          currentNodeId = null;
-          continue;
-
-        default:
-          result = `Executed node of type "${node.type}"`;
-      }
-
-      trace.push({ nodeId: node.id, type: node.type, result, timestamp: new Date().toISOString() });
-
-      // Encontrar próximo nó (se não foi definido pela lógica de condição)
-      if (nextNodeId === null && currentNodeId) {
-        const outEdges = edgeMap.get(currentNodeId) || [];
-        nextNodeId = outEdges.length > 0 ? outEdges[0].target : null;
-      }
-
-      currentNodeId = nextNodeId;
-    }
-
-    if (stepCount >= maxSteps) {
-      trace.push({ nodeId: 'system', type: 'error', result: `Execution halted: reached max steps limit (${maxSteps})`, timestamp: new Date().toISOString() });
-    }
-
-    res.json({ success: true, data: { trace, totalSteps: trace.length } });
-  } catch (err) {
-    // Retornar detalhes do erro em modo teste
-    const error = err instanceof Error ? err : new Error(String(err));
-    res.status(500).json({
-      success: false,
-      error: 'Flow test execution failed',
-      details: error.message,
+    res.json({
+      success: true,
+      data: { engine: 'flowEngine', turns, finalState: state },
     });
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    res.status(500).json({ success: false, error: 'Flow test execution failed', details: error.message });
   }
 });
 
