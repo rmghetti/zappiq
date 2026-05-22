@@ -7,6 +7,9 @@ import { validate } from '../middleware/validate.js';
 // que "testar fluxo" reflita exatamente o comportamento real, sem simulação
 // paralela divergente.
 import { resolveFlowStep, type FlowGraph, type FlowState } from '../agents/flowEngine.js';
+// Maestro "monta pra você" (#288) — gerador híbrido: estrutura determinística
+// + IA preenche conteúdo. Devolve um DRAFT (não persiste); o cliente edita e salva.
+import { generateFlowDraft } from '../agents/flowGenerator.js';
 
 const router = Router();
 
@@ -30,6 +33,21 @@ const updateFlowSchema = z.object({
   nodes: z.array(z.any()).optional(),
   edges: z.array(z.any()).optional(),
   isActive: z.boolean().optional(),
+});
+
+// POST /api/flows/generate — "Maestro monta pra você" (#288)
+// Gera um DRAFT de fluxo personalizado (estrutura determinística + IA preenche
+// conteúdo) com base no segmento/identidade do negócio. NÃO persiste — o cliente
+// revisa, edita e salva via POST /. Devolve também o racional nó a nó.
+const generateFlowSchema = z.object({ goal: z.string().optional() });
+router.post('/generate', validate(generateFlowSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const draft = await generateFlowDraft({
+      organizationId: req.organizationId!,
+      goal: req.body?.goal,
+    });
+    res.json({ success: true, data: draft });
+  } catch (err) { next(err); }
 });
 
 // CRUD

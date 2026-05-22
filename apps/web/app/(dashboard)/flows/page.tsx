@@ -443,11 +443,28 @@ function NodeProperties({ type, data, onChange, onDelete }: {
 }
 
 // ─── Lista de fluxos ─────────────────────────────────────────────────────────
+// ─── "Maestro monta pra você" (#288) ─────────────────────────────────────────
+type FlowDraft = {
+  name: string;
+  nodes: any[];
+  edges: any[];
+  triggerType: string;
+  triggerConfig: Record<string, any>;
+  rationale: { node: string; why: string }[];
+  summary: string;
+  blueprintLabel: string;
+  source: 'ai' | 'fallback';
+};
+
 export default function FlowsPage() {
   const [flows, setFlows] = useState<ApiFlow[] | null>(null);
   const [editing, setEditing] = useState<ApiFlow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // gerador "monta pra você"
+  const [genGoal, setGenGoal] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [draft, setDraft] = useState<FlowDraft | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -480,6 +497,38 @@ export default function FlowsPage() {
     try { await api.delete(`/api/flows/${id}`); load(); } catch { /* noop */ }
   }
 
+  // Pede pro Maestro montar um fluxo (não persiste — abre o painel de revisão).
+  async function generate() {
+    setGenerating(true); setError(null);
+    try {
+      const res = await api.post<{ success: boolean; data: FlowDraft }>('/api/flows/generate', {
+        goal: genGoal.trim() || undefined,
+      });
+      if (res?.data) setDraft(res.data);
+    } catch (e: any) {
+      setError(e?.message || 'O Maestro não conseguiu montar agora. Tente de novo.');
+    } finally { setGenerating(false); }
+  }
+
+  // Aceita o draft: persiste como fluxo novo e abre o editor.
+  async function acceptDraft() {
+    if (!draft) return;
+    setCreating(true); setError(null);
+    try {
+      const res = await api.post<{ success: boolean; data: ApiFlow }>('/api/flows', {
+        name: draft.name,
+        triggerType: draft.triggerType,
+        triggerConfig: draft.triggerConfig || {},
+        nodes: draft.nodes,
+        edges: draft.edges,
+      });
+      setDraft(null); setGenGoal('');
+      if (res?.data) setEditing(res.data);
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao salvar o fluxo gerado');
+    } finally { setCreating(false); }
+  }
+
   if (editing) {
     return (
       <ReactFlowProvider>
@@ -502,6 +551,38 @@ export default function FlowsPage() {
 
       {error && <div className="mb-4 px-4 py-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">{error}</div>}
 
+      {/* Maestro monta pra você (#288) */}
+      <div className="mb-6 rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-indigo-50 to-white p-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white shrink-0">
+            <Sparkles size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-gray-900">Não sabe como montar? O Maestro monta pra você 🎼</h2>
+            <p className="text-sm text-gray-600 mt-0.5">
+              Ele lê o segmento do seu negócio, monta um fluxo sob medida, explica como construiu e deixa você editar tudo. É só dizer o objetivo (ou deixar em branco que ele decide).
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 mt-3">
+              <input
+                value={genGoal}
+                onChange={(e) => setGenGoal(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !generating) generate(); }}
+                placeholder="Ex: agendar consultas, qualificar leads, tirar dúvidas… (opcional)"
+                className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-blue-400 bg-white"
+              />
+              <button
+                onClick={generate}
+                disabled={generating}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50 whitespace-nowrap"
+              >
+                {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                {generating ? 'Montando…' : 'Gerar meu fluxo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {flows === null && (
         <div className="flex items-center gap-2 text-gray-500 p-8 justify-center"><Loader2 size={18} className="animate-spin" /> Carregando…</div>
       )}
@@ -509,6 +590,47 @@ export default function FlowsPage() {
       {flows && flows.length === 0 && (
         <div className="text-center py-16 text-gray-400 border border-dashed border-gray-200 rounded-xl">
           Nenhum fluxo ainda. Clique em &quot;Novo fluxo&quot; pra começar.
+        </div>
+      )}
+
+      {/* Painel de revisão do draft gerado — "Como o Maestro montou isto" */}
+      {draft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDraft(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-500 flex items-center justify-center text-white shrink-0"><Sparkles size={18} /></div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-gray-900">O Maestro montou pra você</h3>
+                <p className="text-sm text-gray-600 mt-0.5">{draft.summary}</p>
+                {draft.source === 'fallback' && (
+                  <p className="text-[11px] text-amber-600 mt-1">Usei um modelo padrão como base — personalize à vontade.</p>
+                )}
+              </div>
+              <button onClick={() => setDraft(null)} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+            <div className="p-5">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Como montei, nó a nó</p>
+              <ol className="space-y-2.5">
+                {draft.rationale.map((r, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 text-xs font-semibold flex items-center justify-center shrink-0">{i + 1}</span>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{r.node}</p>
+                      <p className="text-sm text-gray-600">{r.why}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <div className="p-5 border-t border-gray-100 flex flex-col sm:flex-row gap-2 justify-end">
+              <button onClick={generate} disabled={generating} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2 disabled:opacity-50">
+                {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Gerar outro
+              </button>
+              <button onClick={acceptDraft} disabled={creating} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50">
+                {creating ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} Abrir e editar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
