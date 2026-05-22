@@ -13,7 +13,7 @@
  * Publicar usa POST /:id/publish (garante 1 fluxo ativo por org).
  * ══════════════════════════════════════════════════════════════════════════ */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -32,7 +32,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
-  MessageSquare, GitBranch, Sparkles, Tag, BarChart2, Headset, Clock, PlayCircle,
+  MessageSquare, GitBranch, Sparkles, Tag, BarChart2, Headset, Clock, PlayCircle, Info,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 
@@ -74,6 +74,138 @@ function nodeSummary(type: string, data: any): string {
     case 'start': return 'Cliente inicia conversa';
     default: return '';
   }
+}
+
+// ─── Conteúdo didático por tipo de nó (#289 tooltips) ────────────────────────
+type NodeDoc = { short: string; whatFor: string; how: string; example: string };
+const NODE_DOCS: Record<string, NodeDoc> = {
+  message: {
+    short: 'Envia um texto fixo, sempre igual, sem depender da IA. É o "trilho fixo" — controle total sobre o que o cliente recebe.',
+    whatFor: 'Use para mensagens que precisam ser exatas: boas-vindas, confirmações, avisos, instruções, políticas. Como não passa pela IA, o texto nunca muda nem inventa nada.',
+    how: 'Arraste o nó para o canvas, conecte-o ao fluxo e escreva o texto no painel da direita. Pode usar emojis.',
+    example: '"Olá! 👋 Seja bem-vindo à Clínica X. Como posso te ajudar hoje?"',
+  },
+  condition: {
+    short: 'Cria uma bifurcação: dependendo da resposta do cliente, o fluxo segue por um caminho ou por outro.',
+    whatFor: 'Use para ramificar o atendimento de forma determinística (sem IA): menus, triagem, "se o cliente digitou X, vá por aqui; senão, por ali".',
+    how: 'Conecte duas saídas e, em cada conexão (aresta), defina a palavra-chave que leva por aquele caminho.',
+    example: 'Se a mensagem contém "orçamento" → caminho Comercial; senão → caminho Suporte.',
+  },
+  ai: {
+    short: 'Entrega a conversa para a IA, que responde usando o conhecimento do seu negócio — a mesma base do seu agente.',
+    whatFor: 'Use onde a conversa é aberta e imprevisível: dúvidas, negociação, suporte. A IA entende o contexto e responde naturalmente, sem você roteirizar cada frase.',
+    how: 'Conecte ao fluxo e escreva a INSTRUÇÃO do passo (o que a IA deve fazer aqui). Ela combina isso com o conhecimento já treinado e o tom configurado.',
+    example: 'Instrução: "Tire dúvidas sobre os planos e, se houver intenção de compra, ofereça agendar uma demonstração."',
+  },
+  tag: {
+    short: 'Marca o contato com uma etiqueta para você organizar e segmentar depois — sem enviar nada ao cliente.',
+    whatFor: 'Use para classificar leads automaticamente: "lead-quente", "quer-agendar", "pos-venda". As tags aparecem no CRM e podem alimentar campanhas.',
+    how: 'Conecte no ponto do fluxo onde quer marcar e escreva o nome da tag (curto, em minúsculas, com hífens).',
+    example: 'Quando o cliente pede orçamento, marque "lead-quente" para o time priorizar.',
+  },
+  update_lead: {
+    short: 'Grava uma informação no cadastro do contato (um campo e um valor), automaticamente durante a conversa.',
+    whatFor: 'Use para enriquecer o lead sem digitação manual: origem, interesse, etapa do funil ou qualquer campo personalizado.',
+    how: 'Defina o campo (ex.: "origem") e o valor (ex.: "instagram"). Campos conhecidos vão para as colunas do contato; o resto entra em campos personalizados.',
+    example: 'Atualizar "funil" = "qualificado" assim que o lead responde às perguntas-chave.',
+  },
+  transfer: {
+    short: 'Transfere a conversa para um atendente humano e pausa a IA naquele contato.',
+    whatFor: 'Use quando o caso exige uma pessoa: negociação sensível, reclamação, fechamento. Evita que a IA force algo fora do seu alcance.',
+    how: 'Conecte no ponto de handoff. A conversa entra na fila do time e a IA para de responder até um humano assumir.',
+    example: 'Se o cliente diz "quero falar com alguém", transfira para o time comercial.',
+  },
+  wait: {
+    short: 'Faz uma pausa antes do próximo passo — para dar ritmo natural à conversa ou esperar um intervalo.',
+    whatFor: 'Use para não disparar tudo de uma vez: aguardar alguns segundos entre mensagens ou pausar antes de um follow-up.',
+    how: 'Defina o tempo de espera. O fluxo retoma sozinho depois do intervalo.',
+    example: 'Enviar boas-vindas, aguardar 3s e então mandar o menu de opções.',
+  },
+};
+
+// Item da paleta com tooltip didático (hover ~1,2s) + atalho "Veja mais".
+function PaletteItem({
+  type, meta, onAdd, onInfo,
+}: {
+  type: string;
+  meta: { kind: NodeKind; label: string; icon: any };
+  onAdd: (t: string) => void;
+  onInfo: (t: string) => void;
+}) {
+  const [show, setShow] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const Icon = meta.icon;
+  const doc = NODE_DOCS[type];
+  const enter = () => { if (doc) timer.current = setTimeout(() => setShow(true), 1200); };
+  const leave = () => { if (timer.current) clearTimeout(timer.current); setShow(false); };
+  return (
+    <div className="relative" onMouseEnter={enter} onMouseLeave={leave}>
+      <button
+        onClick={() => onAdd(type)}
+        className={`w-full mb-1.5 rounded-lg border px-2.5 py-2 text-left text-xs flex items-center gap-2 ${KIND_STYLE[meta.kind]} hover:opacity-80`}
+      >
+        <Icon size={14} />
+        <span className="flex-1 truncate">{meta.label}</span>
+        {doc && (
+          <span
+            onClick={(e) => { e.stopPropagation(); onInfo(type); }}
+            className="opacity-50 hover:opacity-100"
+            title="O que é este nó?"
+          >
+            <Info size={12} />
+          </span>
+        )}
+      </button>
+      {show && doc && (
+        <div className="absolute left-full top-0 ml-2 z-40 w-60 rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs">
+          <p className="font-semibold text-gray-900 mb-1">{meta.label}</p>
+          <p className="text-gray-600 leading-snug">{doc.short}</p>
+          <button
+            onClick={(e) => { e.stopPropagation(); onInfo(type); }}
+            className="mt-2 text-blue-600 hover:text-blue-700 font-medium"
+          >
+            Veja mais →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Popup detalhado de um nó (o que faz / quando usar / como usar / exemplo).
+function NodeDocModal({ type, onClose }: { type: string; onClose: () => void }) {
+  const meta = metaFor(type);
+  const doc = NODE_DOCS[type];
+  if (!doc) return null;
+  const Icon = meta.icon;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-lg border flex items-center justify-center ${KIND_STYLE[meta.kind]}`}><Icon size={18} /></div>
+          <div className="flex-1">
+            <h3 className="text-base font-semibold text-gray-900">{meta.label}</h3>
+            <p className="text-xs text-gray-500">{doc.short}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+        </div>
+        <div className="p-5 space-y-4 text-sm">
+          <div>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Para que serve</p>
+            <p className="text-gray-700 leading-relaxed">{doc.whatFor}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Como usar</p>
+            <p className="text-gray-700 leading-relaxed">{doc.how}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Exemplo</p>
+            <div className="rounded-lg bg-gray-50 border border-gray-100 p-3 text-gray-700 italic">{doc.example}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Nó customizado React Flow ───────────────────────────────────────────────
@@ -147,6 +279,7 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
   const [testing, setTesting] = useState(false);
   const [testInput, setTestInput] = useState('quero um orçamento\nsim, por favor');
   const [testTurns, setTestTurns] = useState<TestTurn[] | null>(null);
+  const [docType, setDocType] = useState<string | null>(null); // popup didático do nó
   const [error, setError] = useState<string | null>(null);
 
   const nodeTypes = useMemo(
@@ -273,18 +406,9 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
         {/* Paleta */}
         <div className="w-44 border-r border-gray-200 bg-gray-50 p-2 overflow-y-auto">
           <p className="text-[10px] uppercase tracking-wide text-gray-400 px-1 mb-1">Adicionar nó</p>
-          {Object.entries(NODE_META).filter(([, m]) => m.palette).map(([type, m]) => {
-            const Icon = m.icon;
-            return (
-              <button
-                key={type}
-                onClick={() => addNode(type)}
-                className={`w-full mb-1.5 rounded-lg border px-2.5 py-2 text-left text-xs flex items-center gap-2 ${KIND_STYLE[m.kind]} hover:opacity-80`}
-              >
-                <Icon size={14} /> {m.label}
-              </button>
-            );
-          })}
+          {Object.entries(NODE_META).filter(([, m]) => m.palette).map(([type, m]) => (
+            <PaletteItem key={type} type={type} meta={m} onAdd={addNode} onInfo={setDocType} />
+          ))}
         </div>
 
         {/* Canvas */}
@@ -364,6 +488,9 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
           )}
         </div>
       </div>
+
+      {/* Popup didático do nó (#289) */}
+      {docType && <NodeDocModal type={docType} onClose={() => setDocType(null)} />}
     </div>
   );
 }
