@@ -22,6 +22,7 @@ import ReactFlow, {
   addEdge,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   Handle,
   Position,
   type Node,
@@ -209,16 +210,27 @@ function NodeDocModal({ type, onClose }: { type: string; onClose: () => void }) 
 }
 
 // ─── Nó customizado React Flow ───────────────────────────────────────────────
-function MaestroNode({ type, data, selected }: NodeProps) {
+function MaestroNode({ id, type, data, selected }: NodeProps) {
   const meta = metaFor(type);
   const Icon = meta.icon;
   const summary = nodeSummary(type, data);
+  const { deleteElements } = useReactFlow();
   return (
     <div
-      className={`rounded-lg border px-3 py-2 w-[180px] ${KIND_STYLE[meta.kind]} ${selected ? 'ring-2 ring-primary-400' : ''}`}
+      className={`group relative rounded-lg border px-3 py-2 w-[180px] ${KIND_STYLE[meta.kind]} ${selected ? 'ring-2 ring-primary-400' : ''}`}
       style={{ fontSize: 12 }}
     >
       {type !== 'start' && <Handle type="target" position={Position.Top} />}
+      {/* Excluir quadro — some no nó Início */}
+      {type !== 'start' && (
+        <button
+          onClick={(e) => { e.stopPropagation(); deleteElements({ nodes: [{ id }] }); }}
+          title="Excluir este quadro"
+          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-gray-300 text-gray-500 shadow-sm flex items-center justify-center text-[11px] leading-none opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white hover:border-red-500 transition-opacity"
+        >
+          ×
+        </button>
+      )}
       <div className="flex items-center gap-1.5 font-medium">
         <Icon size={14} /> {data?.label || meta.label}
       </div>
@@ -423,6 +435,7 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
             onNodeClick={(_, n) => { setSelectedNodeId(n.id); setSelectedEdgeId(null); }}
             onEdgeClick={(_, e) => { setSelectedEdgeId(e.id); setSelectedNodeId(null); }}
             onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
+            deleteKeyCode={['Backspace', 'Delete']}
             fitView
           >
             <Background />
