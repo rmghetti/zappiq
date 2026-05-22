@@ -14,6 +14,9 @@ import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
+// ZappIQ Maestro (#280) — flow runtime híbrido. Aditivo: só atua se a org tem
+// flag maestro.enabled + Flow ativo; senão devolve null e a Iza pura roda igual.
+import { resolveActiveFlowStep } from './flowRuntime.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
 export interface ProcessMessageInput {
@@ -172,6 +175,55 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       select: { direction: true, content: true },
     });
 
+    // ── 3.5. ZappIQ Maestro — flow runtime híbrido (#280) ───────
+    // Aditivo + fail-soft: resolveActiveFlowStep retorna null se a org não tem
+    // flag maestro.enabled OU não tem Flow ativo OU em qualquer erro — aí cai
+    // direto pro caminho da Iza pura abaixo. Quando há fluxo ativo:
+    //   - efeitos determinísticos (send_text/handoff) executam aqui;
+    //   - next !== 'ai' (await_input/end) → turno resolvido SEM LLM, retorna;
+    //   - next === 'ai' → injeta o prompt do nó no systemPrompt e segue o
+    //     caminho LLM normal (cascade + iza_facts + RAG). O nó-IA NÃO reinventa
+    //     prompt — apenas adiciona a instrução do passo.
+    let flowAiPrompt: string | undefined;
+    const flowStep = await resolveActiveFlowStep({
+      organizationId,
+      conversationId,
+      messageContent,
+      orgSettings,
+    });
+    if (flowStep) {
+      for (const eff of flowStep.effects) {
+        if (eff.kind === 'send_text') {
+          await sendReplyText({ organizationId, conversationId, content: eff.text });
+          await prisma.message.create({
+            data: {
+              direction: 'OUTBOUND',
+              type: 'TEXT',
+              content: eff.text,
+              status: 'SENT',
+              conversationId,
+              isFromBot: true,
+              aiConfidence: 1.0, // nó determinístico (trilho fixo)
+            },
+          });
+        } else if (eff.kind === 'handoff') {
+          await handleHandoff(organizationId, contactPhone, contactId, orgSettings, io);
+        } else {
+          // set_tag / update_lead — Fase 1: registrados, fiação completa na fase
+          // do builder (quando o shape de data do nó estiver definido na UI).
+          logger.info('[Maestro] efeito de ação ainda não fiado (Fase 1)', {
+            organizationId, contactPhone, effect: eff.kind,
+          });
+        }
+      }
+      if (flowStep.next !== 'ai') {
+        // await_input (aguardando próxima msg) ou end (fluxo terminou) →
+        // turno resolvido deterministicamente, sem chamar LLM.
+        return;
+      }
+      flowAiPrompt = flowStep.aiPrompt;
+    }
+
     // ── 4. Classify intent ──────────────────────────────
     // V2-018: passa contexto pra audit por turn em llm_call_logs
     const llmCtx: LLMContext = { orgId: organizationId, conversationId };
@@ -197,13 +249,19 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // - lead/trial (leadStatus in NEW/CONTACTED/QUALIFIED/UNQUALIFIED) → role='comercial'
     // - customer (leadStatus = CONVERTED)                              → role='suporte'
     // Fallback pro promptEngine antigo se Agent não existir (orgs sem seed).
-    const systemPrompt = await buildSystemPromptForContact({
+    let systemPrompt = await buildSystemPromptForContact({
       organizationId,
       contactId,
       contactPhone, // V4 #157 (PR #70) — pra REGRA 9 do prompt V7
       orgSettings,
       ragContext,
     });
+
+    // Maestro (#280): se viemos de um nó-IA, injeta a instrução do passo NO TOPO
+    // do prompt (sem substituir CORE rules / identidade / iza_facts / RAG).
+    if (flowAiPrompt) {
+      systemPrompt = `INSTRUÇÃO DO PASSO ATUAL DO FLUXO (Maestro): ${flowAiPrompt}\n\n${systemPrompt}`;
+    }
 
     // ── 8. Build history array (sem messageContent — routeIzaTurn adiciona) ───
     const history: LLMMessage[] = historyMessages.map((msg) => ({
