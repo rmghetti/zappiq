@@ -22,9 +22,9 @@ const navItems = [
   { href: '/contacts', label: 'Contatos', icon: Users },
   { href: '/crm', label: 'CRM', icon: Target },
   { href: '/campaigns', label: 'Campanhas', icon: Megaphone },
-  // FASE 4 P7+ auditoria 2026-05-18: /flows escondido temp (mock localStorage).
-  // Reativar quando backend /api/flows estiver pronto. Ver AUDITORIA_DASHBOARDS_2026_05_18.md
-  // { href: '/flows', label: 'Fluxos', icon: GitBranch },
+  // Maestro (GA 2026-05-22): builder de fluxos visível. Backend /api/flows pronto;
+  // publicar liga maestro.enabled na org e o gate suporta FIRST_CONTACT/KEYWORD.
+  { href: '/flows', label: 'Maestro', icon: GitBranch },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/knowledge-base', label: 'Base de Conhecimento', icon: BookOpen },
   // PR #106 — Treinar IA destacado: principal entry point pra evolução contínua do agente.

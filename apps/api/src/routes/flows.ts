@@ -116,7 +116,20 @@ router.post('/:id/publish', async (req: Request, res: Response, next: NextFuncti
       where: { id: flow.id },
       data: { isActive: true, version: { increment: 1 } },
     });
-    res.json({ success: true, message: 'Flow published (demais desativados)', data: published });
+
+    // GA self-serve: publicar TAMBÉM liga o Maestro para a org. Sem isto, o
+    // runtime (resolveActiveFlowStep) exige settings.maestro.enabled e o fluxo
+    // publicado não rodaria — cliente publicaria e "nada aconteceria". Merge
+    // preservando o resto do settings.
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const settings = (org?.settings as Record<string, any>) || {};
+    const maestro = { ...(settings.maestro || {}), enabled: true };
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { settings: { ...settings, maestro } as any },
+    });
+
+    res.json({ success: true, message: 'Flow published (demais desativados; Maestro ativado na org)', data: published });
   } catch (err) { next(err); }
 });
 
