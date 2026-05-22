@@ -135,6 +135,7 @@ export async function generateFlowDraft(input: {
     businessHours ? `Horário de funcionamento: ${businessHours}.` : '',
     `Nome do assistente: ${agentName}.`,
     `Objetivo do fluxo: ${blueprint.label} — ${blueprint.description}`,
+    goal && goal.trim() ? `O cliente descreveu o objetivo com estas palavras: "${goal.trim()}". Adapte os textos a esse pedido específico.` : '',
     '',
     'Preencha e devolva este JSON (em pt-BR, textos curtos e naturais para WhatsApp):',
     '{',

@@ -175,11 +175,36 @@ const NICHE_TO_GOAL: Record<string, BlueprintGoal> = {
   restaurante: 'atendimento',
 };
 
-/** Escolhe o blueprint por objetivo explícito ou, na falta, pelo niche. */
+/**
+ * Casa um objetivo em TEXTO LIVRE (ex.: "agendar consultas", "qualificar meus
+ * leads") com o blueprint mais adequado, por palavra-chave. Retorna null se
+ * nada casar.
+ */
+function goalFromFreeText(goal: string): BlueprintGoal | null {
+  const g = goal.toLowerCase();
+  if (/(agend|marcar.*hor|consulta|reserv|hor[aá]rio)/.test(g)) return 'agendamento';
+  if (/(qualific|lead|prospec|or[çc]amento|interesse)/.test(g)) return 'qualificacao';
+  if (/(d[uú]vid|faq|pergunt|tira.?d[uú]vid|informa)/.test(g)) return 'faq';
+  if (/(p[oó]s.?venda|suporte|troca|devolu|pedido|garantia|status)/.test(g)) return 'posvenda';
+  if (/(atend|recep|boas.?vind|fal(ar|e)|contato)/.test(g)) return 'atendimento';
+  return null;
+}
+
+/**
+ * Escolhe o blueprint. Prioridade:
+ *   1. objetivo = chave exata de blueprint (uso interno)
+ *   2. objetivo em texto livre → palavra-chave
+ *   3. niche (segmento do cadastro)
+ *   4. atendimento (fallback universal)
+ */
 export function pickBlueprint(opts: { goal?: string; niche?: string | null }): Blueprint {
   const explicit = (opts.goal || '').toLowerCase().trim();
   if (explicit && explicit in BLUEPRINTS) {
     return BLUEPRINTS[explicit as BlueprintGoal];
+  }
+  if (explicit) {
+    const fromText = goalFromFreeText(explicit);
+    if (fromText) return BLUEPRINTS[fromText];
   }
   const niche = (opts.niche || '').toLowerCase().trim();
   const goalFromNiche = NICHE_TO_GOAL[niche];
