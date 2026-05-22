@@ -155,7 +155,8 @@ export async function typingOn(
 
 /**
  * Busca dados públicos do user (username, profile pic) usando IGSID.
- * IG REQUER permission `instagram_basic` ou `pages_messaging`.
+ * IG REQUER permission `instagram_business_basic` (nova API Meta 2025+).
+ * Permissões antigas `instagram_basic` / `pages_messaging` foram descontinuadas.
  *
  * Útil pra popular Contact.name após primeira DM (no webhook só temos IGSID).
  * Chamada async (não blocking) — se falhar, contact fica com nome placeholder.
