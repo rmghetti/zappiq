@@ -36,6 +36,7 @@ import { ComVsSem } from './ComVsSem';
 import { OnboardingZero } from './OnboardingZero';
 import { VozNativa } from './VozNativa';
 import { HowItWorks } from './HowItWorks';
+import { MaestroSection } from './MaestroSection';
 import { ROICalculator } from './ROICalculator';
 import { AgentQualityProactive } from './AgentQualityProactive';
 import { TrustAndCompliance } from './TrustAndCompliance';
@@ -60,6 +61,7 @@ export function LandingPage() {
       <OnboardingZero />
       <VozNativa />
       <HowItWorks />
+      <MaestroSection />
       <ROICalculator />
       <AgentQualityProactive />
       <TrustAndCompliance />
