@@ -133,15 +133,25 @@ function PaletteItem({
   onAdd: (t: string) => void;
   onInfo: (t: string) => void;
 }) {
-  const [show, setShow] = useState(false);
+  // Tooltip posicionado com position:fixed (escapa do overflow da paleta, que
+  // antes recortava a caixinha). Coordenadas calculadas a partir do botão.
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const Icon = meta.icon;
   const doc = NODE_DOCS[type];
-  const enter = () => { if (doc) timer.current = setTimeout(() => setShow(true), 1200); };
-  const leave = () => { if (timer.current) clearTimeout(timer.current); setShow(false); };
+  const enter = () => {
+    if (!doc) return;
+    timer.current = setTimeout(() => {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (r) setPos({ x: r.right + 8, y: r.top });
+    }, 600);
+  };
+  const leave = () => { if (timer.current) clearTimeout(timer.current); setPos(null); };
   return (
-    <div className="relative" onMouseEnter={enter} onMouseLeave={leave}>
+    <div onMouseEnter={enter} onMouseLeave={leave}>
       <button
+        ref={btnRef}
         onClick={() => onAdd(type)}
         className={`w-full mb-1.5 rounded-lg border px-2.5 py-2 text-left text-xs flex items-center gap-2 ${KIND_STYLE[meta.kind]} hover:opacity-80`}
       >
@@ -150,15 +160,18 @@ function PaletteItem({
         {doc && (
           <span
             onClick={(e) => { e.stopPropagation(); onInfo(type); }}
-            className="opacity-50 hover:opacity-100"
+            className="opacity-60 hover:opacity-100"
             title="O que é este nó?"
           >
-            <Info size={12} />
+            <Info size={13} />
           </span>
         )}
       </button>
-      {show && doc && (
-        <div className="absolute left-full top-0 ml-2 z-40 w-60 rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs">
+      {pos && doc && (
+        <div
+          style={{ position: 'fixed', left: pos.x, top: pos.y }}
+          className="z-50 w-60 rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs"
+        >
           <p className="font-semibold text-gray-900 mb-1">{meta.label}</p>
           <p className="text-gray-600 leading-snug">{doc.short}</p>
           <button
@@ -508,6 +521,30 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
   );
 }
 
+// Textarea que cresce com o conteúdo (sempre mostra o texto completo).
+function AutoGrowTextarea({ value, onChange, className, placeholder }: {
+  value: string; onChange: (next: string) => void; className?: string; placeholder?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(el.scrollHeight, 64)}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      rows={3}
+      className={className}
+      style={{ resize: 'none', overflow: 'hidden' }}
+    />
+  );
+}
+
 // ─── Painel de propriedades por tipo de nó ───────────────────────────────────
 function NodeProperties({ type, data, onChange, onDelete }: {
   type: string; data: any; onChange: (p: Record<string, any>) => void; onDelete: () => void;
@@ -529,21 +566,22 @@ function NodeProperties({ type, data, onChange, onDelete }: {
       {type === 'message' && (
         <>
           <label className="block text-xs text-gray-600 mb-1">Texto enviado ao cliente</label>
-          <textarea value={data?.text || ''} onChange={(e) => onChange({ text: e.target.value })} rows={3} className={`${inputCls} resize-none`} />
+          <AutoGrowTextarea value={data?.text || ''} onChange={(v) => onChange({ text: v })} className={inputCls} />
         </>
       )}
 
       {type === 'ai' && (
         <>
           <label className="block text-xs text-gray-600 mb-1">Instrução do passo (a Iza assume)</label>
-          <textarea value={data?.prompt || ''} onChange={(e) => onChange({ prompt: e.target.value })} rows={3} className={`${inputCls} resize-none mb-2`} />
-          <label className="block text-xs text-gray-600 mb-1">Modelo</label>
-          <select value={data?.model || ''} onChange={(e) => onChange({ model: e.target.value })} className={inputCls}>
-            <option value="">Automático (cascade)</option>
-            <option value="haiku">Haiku (rápido)</option>
-            <option value="sonnet">Sonnet (forte)</option>
-          </select>
-          <p className="text-[10px] text-gray-400 mt-2">Reusa identidade + conhecimento (RAG) da sua Iza. Não reescreve o prompt-base.</p>
+          <AutoGrowTextarea
+            value={data?.prompt || ''}
+            onChange={(v) => onChange({ prompt: v })}
+            placeholder="Ex: Tire dúvidas sobre os planos e ofereça agendar uma demonstração."
+            className={`${inputCls} mb-2`}
+          />
+          <p className="text-[10px] text-gray-400 mt-1">
+            A Iza usa o modelo de IA automaticamente (otimizado pela ZappIQ) e reaproveita a identidade + conhecimento (RAG) que você treinou. Você não precisa escolher modelo.
+          </p>
         </>
       )}
 
