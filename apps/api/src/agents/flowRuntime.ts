@@ -36,6 +36,39 @@ function flowStateKey(orgId: string, conversationId: string): string {
   return `flow_state:${orgId}:${conversationId}`;
 }
 
+/**
+ * Gate de gatilho (Bloco 3 / #286). Decide se uma conversa que AINDA NÃO entrou
+ * no fluxo (sem cursor) deve INICIAR neste turno. Mid-flow (com cursor) sempre
+ * continua e nem chama isto. Sem o gate, ligar `maestro.enabled` numa org faria
+ * o fluxo capturar TODO o tráfego — aqui só entra quem casa o gatilho.
+ *
+ * Hoje só KEYWORD auto-inicia no inbound. FIRST_CONTACT/SCHEDULE/MANUAL/EVENT
+ * exigem sinais que ainda não temos no orchestrator (nova conversa, agenda,
+ * etc.) — por segurança NÃO auto-iniciam (default fail-closed).
+ *
+ * Contrato de triggerConfig p/ KEYWORD: { keywords: string[] } (ou { keyword }).
+ * Match case-insensitive por substring.
+ */
+function flowTriggerMatches(
+  triggerType: string,
+  triggerConfig: unknown,
+  message: string,
+): boolean {
+  if (triggerType === 'KEYWORD') {
+    const cfg = (triggerConfig as Record<string, any>) || {};
+    const keywords: string[] = Array.isArray(cfg.keywords)
+      ? cfg.keywords
+      : typeof cfg.keyword === 'string'
+        ? [cfg.keyword]
+        : [];
+    if (keywords.length === 0) return false;
+    const m = (message || '').toLowerCase();
+    return keywords.some((k) => k && m.includes(String(k).toLowerCase()));
+  }
+  // Demais gatilhos: auto-início no inbound ainda não fiado (fail-closed).
+  return false;
+}
+
 export interface ActiveFlowStepInput {
   organizationId: string;
   conversationId: string;
@@ -75,6 +108,13 @@ export async function resolveActiveFlowStep(
     const raw = await cache.get(flowStateKey(organizationId, conversationId));
     if (raw) {
       try { state = JSON.parse(raw) as FlowState; } catch { /* estado corrompido — recomeça */ }
+    }
+
+    // Gate de gatilho (Bloco 3): conversa que ainda NÃO entrou no fluxo (sem
+    // cursor) só INICIA se a mensagem casar com o gatilho. Mid-flow (com cursor)
+    // continua sempre. Sem isso, ligar maestro.enabled capturaria todo o tráfego.
+    if (!state.cursor && !flowTriggerMatches(flow.triggerType as unknown as string, flow.triggerConfig, messageContent)) {
+      return null;
     }
 
     const result = resolveFlowStep(graph, state, messageContent);
