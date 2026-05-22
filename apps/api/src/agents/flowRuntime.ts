@@ -42,18 +42,20 @@ function flowStateKey(orgId: string, conversationId: string): string {
  * continua e nem chama isto. Sem o gate, ligar `maestro.enabled` numa org faria
  * o fluxo capturar TODO o tráfego — aqui só entra quem casa o gatilho.
  *
- * Hoje só KEYWORD auto-inicia no inbound. FIRST_CONTACT/SCHEDULE/MANUAL/EVENT
- * exigem sinais que ainda não temos no orchestrator (nova conversa, agenda,
- * etc.) — por segurança NÃO auto-iniciam (default fail-closed).
- *
- * Contrato de triggerConfig p/ KEYWORD: { keywords: string[] } (ou { keyword }).
- * Match case-insensitive por substring.
+ * Gatilhos suportados:
+ *  - FIRST_CONTACT: inicia na PRIMEIRA mensagem ainda não rastreada da conversa.
+ *    Após o fluxo terminar gravamos um marcador ENDED (ver abaixo) pra não
+ *    re-saudar a cada mensagem — roda uma vez e entrega pra Iza.
+ *  - KEYWORD: inicia só se a msg casar uma keyword (triggerConfig.keywords[] ou
+ *    .keyword), match case-insensitive por substring.
+ *  - SCHEDULE/MANUAL/EVENT: ainda não auto-iniciam no inbound (fail-closed).
  */
 function flowTriggerMatches(
   triggerType: string,
   triggerConfig: unknown,
   message: string,
 ): boolean {
+  if (triggerType === 'FIRST_CONTACT') return true;
   if (triggerType === 'KEYWORD') {
     const cfg = (triggerConfig as Record<string, any>) || {};
     const keywords: string[] = Array.isArray(cfg.keywords)
@@ -65,9 +67,12 @@ function flowTriggerMatches(
     const m = (message || '').toLowerCase();
     return keywords.some((k) => k && m.includes(String(k).toLowerCase()));
   }
-  // Demais gatilhos: auto-início no inbound ainda não fiado (fail-closed).
+  // SCHEDULE/MANUAL/EVENT: auto-início no inbound ainda não fiado (fail-closed).
   return false;
 }
+
+/** Marcador de "fluxo já concluído nesta conversa" — evita re-disparo. */
+const FLOW_ENDED = '__ended__';
 
 export interface ActiveFlowStepInput {
   organizationId: string;
@@ -110,6 +115,9 @@ export async function resolveActiveFlowStep(
       try { state = JSON.parse(raw) as FlowState; } catch { /* estado corrompido — recomeça */ }
     }
 
+    // Conversa que JÁ rodou o fluxo até o fim → não re-dispara; Iza pura assume.
+    if (state.cursor === FLOW_ENDED) return null;
+
     // Gate de gatilho (Bloco 3): conversa que ainda NÃO entrou no fluxo (sem
     // cursor) só INICIA se a mensagem casar com o gatilho. Mid-flow (com cursor)
     // continua sempre. Sem isso, ligar maestro.enabled capturaria todo o tráfego.
@@ -119,15 +127,16 @@ export async function resolveActiveFlowStep(
 
     const result = resolveFlowStep(graph, state, messageContent);
 
-    // Persiste novo cursor (ou limpa se terminou)
-    if (result.next === 'end') {
-      await cache.del(flowStateKey(organizationId, conversationId));
+    // Persistência do cursor. Se o fluxo terminou (next='end') OU não há próximo
+    // nó (ex.: nó-IA foi o último, cursor null), gravamos o marcador ENDED para
+    // a conversa NÃO re-disparar o fluxo a cada mensagem — roda uma vez e entrega
+    // pra Iza. Caso contrário, salva o cursor real pra continuar no próximo turno.
+    const nextCursor = result.state?.cursor ?? null;
+    const stateKey = flowStateKey(organizationId, conversationId);
+    if (result.next === 'end' || nextCursor === null) {
+      await cache.set(stateKey, JSON.stringify({ cursor: FLOW_ENDED, vars: result.state?.vars || {} }), FLOW_STATE_TTL);
     } else {
-      await cache.set(
-        flowStateKey(organizationId, conversationId),
-        JSON.stringify(result.state),
-        FLOW_STATE_TTL,
-      );
+      await cache.set(stateKey, JSON.stringify(result.state), FLOW_STATE_TTL);
     }
 
     logger.info('[Maestro] Flow step resolvido', {
