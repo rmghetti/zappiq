@@ -18,6 +18,7 @@
  * na hora. Loop de feedback imediato que converte intenção em ação.
  */
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Sparkles,
   Upload,
@@ -31,9 +32,11 @@ import {
   CheckCircle2,
   ArrowRight,
   Gauge,
+  ClipboardList,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import ReadinessMilestoneNudge from '../../../components/shared/ReadinessMilestoneNudge';
+import { SurveyPanel } from '../../../components/ai-training/SurveyPanel';
 
 // ── Tipos alinhados ao service backend ───────────────────
 interface Readiness {
@@ -89,12 +92,40 @@ const LEVEL_META: Record<Readiness['level'], { label: string; color: string; bg:
   expert: { label: 'Expert', color: 'text-primary-700', bg: 'bg-primary-50 border-primary-200' },
 };
 
-type TabKey = 'documents' | 'qa' | 'identity';
+type TabKey = 'survey' | 'documents' | 'qa' | 'identity';
+
+// Hash ↔ tab. Permite deep-link a partir do FAB (Treinar IA), do Breakdown e
+// das Próximas ações. Ex.: /ai-training#survey abre direto a Qualificação.
+const TAB_HASH: Record<TabKey, string> = {
+  survey: '#survey',
+  documents: '#documents',
+  qa: '#qa',
+  identity: '#identity',
+};
+
+function hashToTab(hash: string): TabKey | null {
+  const h = (hash || '').replace('#', '').toLowerCase();
+  if (h === 'survey' || h === 'qualificacao' || h === 'qualificação') return 'survey';
+  if (h === 'documents' || h === 'documentos' || h === 'knowledge') return 'documents';
+  if (h === 'qa' || h === 'q&a' || h === 'perguntas') return 'qa';
+  if (h === 'identity' || h === 'identidade' || h === 'tom') return 'identity';
+  return null;
+}
 
 export default function AITrainingPage() {
+  const router = useRouter();
   const [readiness, setReadiness] = useState<Readiness | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<TabKey>('documents');
+  const [tab, setTabState] = useState<TabKey>('survey');
+
+  // setTab também escreve o hash na URL — assim o estado é compartilhável e o
+  // botão voltar do navegador funciona entre abas.
+  const setTab = useCallback((next: TabKey) => {
+    setTabState(next);
+    if (typeof window !== 'undefined') {
+      history.replaceState(null, '', `${window.location.pathname}${TAB_HASH[next]}`);
+    }
+  }, []);
 
   const refreshReadiness = useCallback(async () => {
     try {
@@ -108,6 +139,32 @@ export default function AITrainingPage() {
   useEffect(() => {
     refreshReadiness().finally(() => setLoading(false));
   }, [refreshReadiness]);
+
+  // Lê o hash inicial (deep-link do FAB / breakdown / próximas ações) e
+  // reage a mudanças de hash sem recarregar a página.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const apply = () => {
+      const t = hashToTab(window.location.hash);
+      if (t) setTabState(t);
+    };
+    apply();
+    window.addEventListener('hashchange', apply);
+    return () => window.removeEventListener('hashchange', apply);
+  }, []);
+
+  // Navega para uma aba interna OU para outra rota (ex.: WhatsApp em /settings).
+  const navigate = useCallback(
+    (target: TabKey | string) => {
+      if (target === 'survey' || target === 'documents' || target === 'qa' || target === 'identity') {
+        setTab(target);
+        if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        router.push(target);
+      }
+    },
+    [router, setTab],
+  );
 
   if (loading) {
     return (
@@ -130,11 +187,14 @@ export default function AITrainingPage() {
         </p>
       </div>
 
-      {/* Readiness Card */}
-      {readiness && <ReadinessCard readiness={readiness} />}
+      {/* Readiness Card — breakdown e próximas ações são deep-links clicáveis */}
+      {readiness && <ReadinessCard readiness={readiness} onNavigate={navigate} />}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200">
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+        <TabButton active={tab === 'survey'} onClick={() => setTab('survey')}>
+          <ClipboardList size={16} /> Qualificação
+        </TabButton>
         <TabButton active={tab === 'documents'} onClick={() => setTab('documents')}>
           <FileText size={16} /> Documentos
         </TabButton>
@@ -147,6 +207,7 @@ export default function AITrainingPage() {
       </div>
 
       {/* Tab panels */}
+      {tab === 'survey' && <SurveyPanel onChange={refreshReadiness} />}
       {tab === 'documents' && <DocumentsPanel onChange={refreshReadiness} />}
       {tab === 'qa' && <QAPanel onChange={refreshReadiness} />}
       {tab === 'identity' && <IdentityPanel onChange={refreshReadiness} />}
@@ -160,7 +221,31 @@ export default function AITrainingPage() {
 // ═════════════════════════════════════════════════════════
 // Readiness Card
 // ═════════════════════════════════════════════════════════
-function ReadinessCard({ readiness }: { readiness: Readiness }) {
+// Mapeia cada chunk do breakdown e cada próxima ação para o destino correto.
+// Para WhatsApp não há aba interna — manda pra /settings na aba whatsapp.
+const BREAKDOWN_TARGET: Record<keyof Readiness['breakdown'], TabKey | string> = {
+  survey: 'survey',
+  identity: 'identity',
+  documents: 'documents',
+  qaPairs: 'qa',
+  channel: '/settings#whatsapp',
+};
+
+const ACTION_TARGET: Record<string, TabKey | string> = {
+  complete_survey: 'survey',
+  define_identity: 'identity',
+  upload_documents: 'documents',
+  add_qa_pairs: 'qa',
+  connect_whatsapp: '/settings#whatsapp',
+};
+
+function ReadinessCard({
+  readiness,
+  onNavigate,
+}: {
+  readiness: Readiness;
+  onNavigate: (target: TabKey | string) => void;
+}) {
   const level = LEVEL_META[readiness.level];
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
@@ -192,11 +277,11 @@ function ReadinessCard({ readiness }: { readiness: Readiness }) {
             <Gauge size={16} /> Breakdown
           </h3>
           <div className="space-y-3">
-            <BreakdownRow label="Survey de qualificação" score={readiness.breakdown.survey} max={30} />
-            <BreakdownRow label="Identidade & tom" score={readiness.breakdown.identity} max={20} />
-            <BreakdownRow label="Documentos" score={readiness.breakdown.documents} max={25} />
-            <BreakdownRow label="Q&A ativos" score={readiness.breakdown.qaPairs} max={20} />
-            <BreakdownRow label="WhatsApp conectado" score={readiness.breakdown.channel} max={5} />
+            <BreakdownRow label="Survey de qualificação" score={readiness.breakdown.survey} max={30} onClick={() => onNavigate(BREAKDOWN_TARGET.survey)} />
+            <BreakdownRow label="Identidade & tom" score={readiness.breakdown.identity} max={20} onClick={() => onNavigate(BREAKDOWN_TARGET.identity)} />
+            <BreakdownRow label="Documentos" score={readiness.breakdown.documents} max={25} onClick={() => onNavigate(BREAKDOWN_TARGET.documents)} />
+            <BreakdownRow label="Q&A ativos" score={readiness.breakdown.qaPairs} max={20} onClick={() => onNavigate(BREAKDOWN_TARGET.qaPairs)} />
+            <BreakdownRow label="WhatsApp conectado" score={readiness.breakdown.channel} max={5} onClick={() => onNavigate(BREAKDOWN_TARGET.channel)} />
           </div>
         </div>
 
@@ -213,21 +298,26 @@ function ReadinessCard({ readiness }: { readiness: Readiness }) {
               </div>
             ) : (
               readiness.nextActions.slice(0, 3).map((action) => (
-                <div
+                <button
                   key={action.id}
-                  className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50/30 transition-colors"
+                  type="button"
+                  onClick={() => onNavigate(ACTION_TARGET[action.id] ?? 'survey')}
+                  className="w-full text-left flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:border-primary-400 hover:bg-primary-50/40 transition-colors group cursor-pointer"
                 >
                   <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center flex-shrink-0 text-xs font-bold">
                     +{action.impact}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{action.title}</p>
+                    <p className="text-sm font-medium text-gray-900 group-hover:text-primary-700">{action.title}</p>
                     <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
                       {action.description}
                     </p>
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 mt-1.5">
+                      {action.cta} <ArrowRight size={13} />
+                    </span>
                   </div>
-                  <ArrowRight size={16} className="text-gray-400 flex-shrink-0 mt-1" />
-                </div>
+                  <ArrowRight size={16} className="text-gray-300 group-hover:text-primary-500 flex-shrink-0 mt-1 transition-colors" />
+                </button>
               ))
             )}
           </div>
@@ -237,13 +327,31 @@ function ReadinessCard({ readiness }: { readiness: Readiness }) {
   );
 }
 
-function BreakdownRow({ label, score, max }: { label: string; score: number; max: number }) {
+function BreakdownRow({
+  label,
+  score,
+  max,
+  onClick,
+}: {
+  label: string;
+  score: number;
+  max: number;
+  onClick?: () => void;
+}) {
   const pct = (score / max) * 100;
   const full = score >= max;
   return (
-    <div>
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left group rounded-md -mx-1 px-1 py-0.5 hover:bg-gray-50 transition-colors cursor-pointer"
+      title={full ? `${label} — completo` : `Completar: ${label}`}
+    >
       <div className="flex justify-between text-xs mb-1">
-        <span className="text-gray-700">{label}</span>
+        <span className="text-gray-700 group-hover:text-primary-700 flex items-center gap-1">
+          {label}
+          {!full && <ArrowRight size={11} className="text-gray-300 group-hover:text-primary-500 transition-colors" />}
+        </span>
         <span className={full ? 'text-secondary-600 font-semibold' : 'text-gray-500'}>
           {score}/{max}
         </span>
@@ -256,7 +364,7 @@ function BreakdownRow({ label, score, max }: { label: string; score: number; max
           style={{ width: `${pct}%` }}
         />
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -602,6 +710,20 @@ function IdentityPanel({ onChange }: { onChange: () => void }) {
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Pré-carrega a identidade já salva pra o cliente EDITAR (não sobrescrever do zero).
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await api.get<{ identity: typeof form }>('/api/ai-training/identity');
+        if (data?.identity) {
+          setForm((f) => ({ ...f, ...data.identity }));
+        }
+      } catch {
+        /* sem identidade ainda — começa com defaults */
+      }
+    })();
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
