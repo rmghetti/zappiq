@@ -404,6 +404,8 @@ router.get('/survey', async (req: Request, res: Response, next: NextFunction) =>
       surveyAnswers,
       answeredCount: countAnsweredQuestions(surveyAnswers),
       niche: settings.niche || 'geral',
+      segmento: settings.segmento || settings.niche || 'geral',
+      subsegmentos: Array.isArray(settings.subsegmentos) ? settings.subsegmentos : [],
     });
   } catch (err) {
     next(err);
