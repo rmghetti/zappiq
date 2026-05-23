@@ -1,0 +1,1578 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Tutorial interativo · ZappIQ Maestro · Reja sua IA</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       TOKENS
+       ═══════════════════════════════════════════════════════════════ */
+    :root {
+      --ink:        #0E1116;
+      --ink-soft:   #2A3038;
+      --ink-mute:   #5B6573;
+      --ink-faint:  #98A0AC;
+
+      --paper:        #FFFFFF;
+      --paper-warm:   #F6F5F2;
+      --paper-cover:  #0A0A0B;
+      --paper-card:   #FFFFFF;
+
+      --rule:         rgba(14,17,22,0.10);
+      --rule-soft:    rgba(14,17,22,0.06);
+      --rule-strong:  rgba(14,17,22,0.18);
+
+      /* Primary do Maestro — violeta */
+      --p:        #5B47F0;
+      --p-soft:   #EFECFE;
+      --p-deep:   #4234C7;
+
+      /* As 4 cores dos nós (Maestro) */
+      --slate:      #475569;
+      --slate-soft: #F1F3F6;
+      --slate-tint: #E2E6EC;
+      --c-blue:       #3B82F6;
+      --c-blue-soft:  #E5EFFE;
+      --c-blue-tint:  #C9DCFC;
+      --c-green:      #16A34A;
+      --c-green-soft: #DDF5E5;
+      --c-green-tint: #B7E7C3;
+      --c-amber:      #D97706;
+      --c-amber-soft: #FDF1DC;
+      --c-amber-tint: #F8DDA8;
+
+      /* Notes */
+      --tip:        #5B47F0;
+      --tip-soft:   #EFECFE;
+      --warn:       #D2691C;
+      --warn-soft:  #FBEEDD;
+      --gold:       #DC3A3A;
+      --gold-soft:  #FBE3E3;
+      --done:       #16A34A;
+      --done-soft:  #DDF5E5;
+      --note:       #5B6573;
+      --note-soft:  #F1F0EC;
+
+      --sans: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+
+      --r-sm: 6px;
+      --r:    10px;
+      --r-lg: 14px;
+
+      --shadow-modal: 0 30px 80px rgba(14,17,22,0.30), 0 8px 20px rgba(14,17,22,0.18);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BASE
+       ═══════════════════════════════════════════════════════════════ */
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    html, body, #root { height: 100%; }
+    body {
+      font-family: var(--sans);
+      font-size: 15px; line-height: 1.55;
+      color: var(--ink); background: var(--paper-warm);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    button { font: inherit; cursor: pointer; border: 0; background: none; color: inherit; }
+    h1, h2, h3, h4, h5 { margin: 0; font-weight: 800; letter-spacing: -0.022em; }
+    p { margin: 0; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       ONBOARDING BACKDROP
+       ═══════════════════════════════════════════════════════════════ */
+    .ob { position: fixed; inset: 0; background: var(--paper-warm); overflow: auto; }
+    .ob__nav {
+      display: flex; align-items: center;
+      padding: 14px 32px; gap: 24px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--paper);
+    }
+    .ob__brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 17px; letter-spacing: -0.02em; }
+    .ob__mark { width: 32px; height: 32px; border-radius: 8px; background: var(--p); color: white; display: grid; place-items: center; }
+    .ob__menu { display: flex; gap: 28px; margin-left: 32px; font-size: 14px; color: var(--ink-mute); font-weight: 500; }
+    .ob__menu--active { color: var(--ink); font-weight: 600; }
+    .ob__profile { margin-left: auto; }
+    .ob__avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--paper); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+    .ob__main { max-width: 840px; margin: 0 auto; padding: 56px 32px; }
+    .ob__crumb { font-size: 13px; color: var(--ink-mute); display: flex; gap: 8px; align-items: center; margin-bottom: 20px; }
+    .ob__title { font-size: 44px; line-height: 1.05; font-weight: 800; letter-spacing: -0.025em; margin-bottom: 14px; }
+    .ob__lead { font-size: 17px; line-height: 1.55; color: var(--ink-mute); max-width: 640px; margin-bottom: 32px; }
+    .ob__tutorial-cta { display: flex; align-items: center; gap: 24px; padding: 22px; border: 1px solid var(--rule); background: var(--paper); border-radius: var(--r-lg); margin-bottom: 32px; }
+    .ob__tutorial-text { flex: 1; }
+    .ob__tutorial-eyebrow { font-family: var(--mono); text-transform: uppercase; font-size: 11px; letter-spacing: 0.12em; color: var(--p); margin-bottom: 6px; font-weight: 500; }
+    .ob__tutorial-h { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+    .ob__tutorial-d { font-size: 14px; color: var(--ink-mute); margin-top: 4px; }
+    .ob__tutorial-actions { display: flex; gap: 10px; }
+    .ob__channels { display: grid; gap: 12px; }
+    .ob__channel { display: flex; align-items: center; gap: 16px; padding: 18px 22px; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--r-lg); }
+    .ob__channel-icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; }
+    .ob__channel-icon--maestro { background: var(--p); }
+    .ob__channel-body { flex: 1; }
+    .ob__channel-name { font-weight: 700; font-size: 16px; }
+    .ob__channel-status { font-size: 13px; color: var(--ink-mute); margin-top: 2px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TUTORIAL MODAL FRAME
+       ═══════════════════════════════════════════════════════════════ */
+    .tutorial-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; opacity: 1; }
+    .tutorial-backdrop--modal { background: rgba(14, 17, 22, 0.55); backdrop-filter: blur(6px); padding: 28px; place-items: center; }
+    .tutorial-backdrop--full   { background: var(--paper-warm); padding: 0; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .tutorial {
+      display: flex; flex-direction: column;
+      width: 100%; height: 100%;
+      max-width: 1440px;
+      background: var(--paper); color: var(--ink);
+      border-radius: var(--r-lg); overflow: hidden;
+      box-shadow: var(--shadow-modal);
+      animation: slideUp .35s cubic-bezier(.2,.8,.2,1);
+    }
+    .tutorial-backdrop--full .tutorial { border-radius: 0; box-shadow: none; max-width: none; }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: .5; } to { transform: translateY(0); opacity: 1; } }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TOPBAR
+       ═══════════════════════════════════════════════════════════════ */
+    .t-topbar { display: flex; align-items: center; gap: 16px; padding: 12px 22px; background: var(--paper); border-bottom: 1px solid var(--rule); flex-shrink: 0; }
+    .t-topbar__logo { height: 32px; width: auto; display: block; flex-shrink: 0; }
+    .t-topbar__doc { font-family: var(--mono); text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em; color: var(--ink-faint); }
+    .t-topbar__pill { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--rule); font-family: var(--mono); text-transform: uppercase; font-size: 10px; letter-spacing: 0.12em; color: var(--ink-soft); white-space: nowrap; }
+    .t-topbar__progress { flex: 1; max-width: 340px; margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .t-topbar__progress-label { font-family: var(--mono); text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em; color: var(--ink-mute); flex-shrink: 0; }
+    .t-topbar__progress-bar { flex: 1; height: 3px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+    .t-topbar__progress-fill { height: 100%; background: var(--p); transition: width .4s; }
+    .t-topbar__progress-pct { font-family: var(--mono); font-size: 11px; font-weight: 600; min-width: 30px; text-align: right; }
+    .t-topbar__actions { display: flex; gap: 6px; align-items: center; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BUTTONS
+       ═══════════════════════════════════════════════════════════════ */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--r-sm); font-family: var(--sans); font-size: 14px; font-weight: 600; line-height: 1; letter-spacing: -0.005em; transition: all 0.15s ease; white-space: nowrap; text-decoration: none; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+    .btn--primary { background: var(--ink); color: var(--paper); }
+    .btn--primary:hover { background: var(--p); }
+    .btn--accent { background: var(--p); color: white; }
+    .btn--accent:hover { background: var(--p-deep); }
+    .btn--secondary { background: var(--paper); color: var(--ink); border: 1px solid var(--rule-strong); }
+    .btn--secondary:hover { background: var(--paper-warm); }
+    .btn--ghost { background: transparent; color: var(--ink-soft); }
+    .btn--ghost:hover { background: var(--rule-soft); color: var(--ink); }
+    .btn--close { width: 36px; height: 36px; padding: 0; justify-content: center; font-size: 16px; }
+    .btn--lg { padding: 14px 22px; font-size: 15px; }
+    .btn--full { width: 100%; justify-content: center; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BODY = SIDEBAR + MAIN
+       ═══════════════════════════════════════════════════════════════ */
+    .tutorial__body { display: grid; grid-template-columns: 260px 1fr; flex: 1; overflow: hidden; }
+    .tutorial__main { overflow-y: auto; background: var(--paper); display: flex; flex-direction: column; }
+    .tutorial__main-inner { flex: 1; width: 100%; padding: 0; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SIDEBAR
+       ═══════════════════════════════════════════════════════════════ */
+    .t-sidebar { background: var(--paper-warm); border-right: 1px solid var(--rule); padding: 20px 0; overflow-y: auto; display: flex; flex-direction: column; }
+    .t-sidebar__label { padding: 0 22px 14px; font-family: var(--mono); text-transform: uppercase; font-size: 10px; letter-spacing: 0.14em; color: var(--ink-mute); font-weight: 500; }
+    .t-toc { list-style: none; padding: 0; margin: 0; }
+    .t-toc__item { width: 100%; display: grid; grid-template-columns: 26px 1fr; gap: 12px; padding: 9px 22px; text-align: left; align-items: start; border-left: 2px solid transparent; transition: all 0.15s ease; }
+    .t-toc__item:hover { background: var(--rule-soft); }
+    .t-toc__item--active { background: var(--paper); border-left-color: var(--p); }
+    .t-toc__n { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--ink-faint); padding-top: 2px; }
+    .t-toc__item--active .t-toc__n { color: var(--p); font-weight: 600; }
+    .t-toc__text { min-width: 0; }
+    .t-toc__title { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+    .t-toc__note { display: block; font-size: 11px; color: var(--ink-faint); margin-top: 2px; font-weight: 400; }
+    .t-toc__prog { grid-column: 2; margin-top: 6px; height: 2px; background: var(--rule); border-radius: 1px; overflow: hidden; }
+    .t-toc__prog-fill { display: block; height: 100%; background: var(--p); }
+
+    .t-sidebar__help { margin: auto 14px 14px; padding: 14px; background: var(--paper); border-radius: var(--r); border: 1px solid var(--rule); margin-top: 24px; }
+    .t-sidebar__help-eyebrow { font-family: var(--mono); text-transform: uppercase; font-size: 10px; letter-spacing: 0.12em; color: var(--p); margin-bottom: 6px; font-weight: 500; }
+    .t-sidebar__help p { font-size: 13px; line-height: 1.45; margin-bottom: 12px; color: var(--ink-soft); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FOOTER
+       ═══════════════════════════════════════════════════════════════ */
+    .t-footer { display: flex; gap: 12px; align-items: center; padding: 14px 56px; border-top: 1px solid var(--rule); background: var(--paper); position: sticky; bottom: 0; width: 100%; }
+    .t-footer .btn--secondary { margin-left: auto; }
+    .t-footer .btn--primary { min-width: 200px; justify-content: center; }
+    .t-footer .btn--ghost:first-child { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       COVER — DARK
+       ═══════════════════════════════════════════════════════════════ */
+    .cover-wrap { background: var(--paper-cover); color: #F4F5F2; min-height: 100%; padding: 48px 56px 60px; }
+    .cover__header {
+      display: flex; align-items: center; gap: 20px;
+      padding-bottom: 32px; margin-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+    }
+    .cover__logo { height: 72px; width: auto; display: block; flex-shrink: 0; }
+    .cover__header-pill {
+      margin-left: auto;
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.18);
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 11px; letter-spacing: 0.16em; color: rgba(244,245,242,0.75);
+      white-space: nowrap;
+    }
+    .cover__eyebrow-row { display: flex; align-items: center; gap: 12px; margin: 24px 0 28px; max-width: 720px; }
+    .cover__eyebrow-dash { width: 30px; height: 2px; background: var(--p); flex-shrink: 0; }
+    .cover__eyebrow { font-family: var(--mono); text-transform: uppercase; font-size: 12px; letter-spacing: 0.18em; color: #C5BBFD; font-weight: 500; }
+    .cover__title {
+      font-size: 128px; line-height: 0.96; letter-spacing: -0.04em;
+      font-weight: 800; margin-bottom: 32px;
+      max-width: 1000px; color: white;
+    }
+    .cover__title .ai {
+      background: linear-gradient(90deg, #5B47F0 0%, #6FA6F8 50%, #5B47F0 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .cover__lead { font-size: 18px; line-height: 1.5; color: rgba(244,245,242,0.7); max-width: 560px; margin-bottom: 40px; text-wrap: pretty; }
+
+    .cover__pull {
+      font-size: 26px; line-height: 1.3; font-weight: 600;
+      color: rgba(244,245,242,0.92);
+      max-width: 640px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+      margin-bottom: 28px;
+    }
+    .cover__pull-strong { color: white; font-weight: 800; }
+    .cover__pull em { font-style: italic; font-weight: 500; color: rgba(244,245,242,0.7); margin-left: 4px; }
+    .cover__pull .ai {
+      background: linear-gradient(90deg, #5B47F0 0%, #6FA6F8 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      font-style: normal;
+    }
+
+    .cover__divider { display: none; } /* divider já está no cover__pull */
+    .cover__stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-bottom: 56px; max-width: 720px; }
+    .stat__big { font-size: 46px; font-weight: 800; letter-spacing: -0.028em; color: white; }
+    .stat__small { font-size: 18px; color: rgba(244,245,242,0.5); font-weight: 600; margin-left: 2px; }
+    .stat__sub { font-size: 13px; color: rgba(244,245,242,0.55); margin-top: 6px; line-height: 1.4; }
+
+    .cover__map-label { font-family: var(--mono); text-transform: uppercase; font-size: 11px; letter-spacing: 0.14em; color: rgba(244,245,242,0.5); margin-bottom: 14px; }
+    .cover__map-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 32px; align-items: stretch; }
+    .map-card { text-align: left; padding: 22px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); border-radius: var(--r); transition: all 0.2s ease; color: white; display: flex; flex-direction: column; }
+    .map-card:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.20); transform: translateY(-2px); }
+    .map-card__n { font-family: var(--mono); font-size: 11px; font-weight: 500; color: #C5BBFD; letter-spacing: 0.1em; margin-bottom: 12px; }
+    .map-card__t { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px; }
+    .map-card__d { font-size: 13.5px; color: rgba(244,245,242,0.65); line-height: 1.5; margin-bottom: auto; }
+    .map-card__tag { margin-top: 16px; align-self: flex-start; padding: 4px 10px; border-radius: 999px; font-family: var(--mono); text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em; font-weight: 500; background: rgba(91,71,240,0.18); color: #C5BBFD; }
+
+    .cover__cta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+    .cover__cta .btn--primary { background: white; color: var(--paper-cover); }
+    .cover__cta .btn--primary:hover { background: var(--p); color: white; }
+    .cover__cta .btn--ghost { color: rgba(244,245,242,0.7); border: 1px solid rgba(255,255,255,0.18); }
+    .cover__cta .btn--ghost:hover { background: rgba(255,255,255,0.06); color: white; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LONG-FORM PAGES
+       ═══════════════════════════════════════════════════════════════ */
+    .long { padding: 36px 56px 44px; }
+    .long__h1 { font-size: 52px; line-height: 1.02; letter-spacing: -0.03em; margin-bottom: 18px; font-weight: 800; text-wrap: balance; }
+    .long__h2 { font-size: 36px; line-height: 1.05; letter-spacing: -0.025em; margin-bottom: 14px; font-weight: 800; }
+    .long__lead { font-size: 16px; line-height: 1.55; color: var(--ink-soft); max-width: 680px; margin-bottom: 32px; text-wrap: pretty; }
+    .long__lead b { font-weight: 700; color: var(--ink); }
+
+    .eyebrow-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .eyebrow-dash { width: 24px; height: 2px; background: var(--p); flex-shrink: 0; }
+    .eyebrow { font-family: var(--mono); text-transform: uppercase; font-size: 11px; letter-spacing: 0.16em; color: var(--p); font-weight: 500; }
+    .part-header { margin-bottom: 28px; }
+
+    .subhead { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin: 32px 0 14px; }
+    .subhead--steps { display: flex; align-items: center; gap: 12px; color: var(--p); font-family: var(--mono); text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; margin-bottom: 8px; }
+    .subhead--steps::before { content: ""; display: inline-block; width: 24px; height: 2px; background: var(--p); }
+
+    .section-break { height: 1px; background: var(--rule); margin: 48px 0 32px; }
+
+    /* ─── Quote ─── */
+    .quote { position: relative; padding: 28px 28px 28px 56px; background: var(--p-soft); border-radius: var(--r); margin: 28px 0; }
+    .quote__mark { position: absolute; left: 24px; top: 14px; font-size: 64px; line-height: 1; color: var(--p); font-family: 'Manrope', serif; font-weight: 800; opacity: 0.6; }
+    .quote p { font-size: 18px; line-height: 1.45; color: var(--ink); font-weight: 500; }
+
+    /* ─── "Por que importa" grid (seção 1) ─── */
+    .why-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 8px; }
+    .why { padding: 22px; border: 1px solid var(--rule); border-radius: var(--r); }
+    .why__n { font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.12em; color: var(--p); margin-bottom: 10px; }
+    .why__t { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 6px; }
+    .why__b { font-size: 14px; line-height: 1.55; color: var(--ink-soft); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       4 COLOR CARDS (seção 2)
+       ═══════════════════════════════════════════════════════════════ */
+    .four-colors { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .color-card { padding: 22px; border: 1px solid var(--rule); border-radius: var(--r); border-left-width: 4px; background: var(--paper); }
+    .color-card--slate { border-left-color: var(--slate); }
+    .color-card--blue  { border-left-color: var(--c-blue); }
+    .color-card--green { border-left-color: var(--c-green); }
+    .color-card--amber { border-left-color: var(--c-amber); }
+    .color-card__eyebrow { font-family: var(--mono); text-transform: uppercase; font-size: 11px; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 8px; }
+    .color-card--slate .color-card__eyebrow { color: var(--slate); }
+    .color-card--blue  .color-card__eyebrow { color: var(--c-blue); }
+    .color-card--green .color-card__eyebrow { color: var(--c-green); }
+    .color-card--amber .color-card__eyebrow { color: var(--c-amber); }
+    .color-card__title { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 8px; }
+    .color-card__body { font-size: 14.5px; line-height: 1.55; color: var(--ink-soft); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       NODE TYPE CARDS (seção 3)
+       ═══════════════════════════════════════════════════════════════ */
+    .node-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .node-card { display: grid; grid-template-columns: 40px 1fr; gap: 14px; padding: 18px 20px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--paper); align-items: start; }
+    .node-card__icon { width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; font-size: 16px; font-weight: 700; flex-shrink: 0; }
+    .node-card__icon--slate { background: var(--slate-soft); color: var(--slate); border: 1px solid var(--slate-tint); }
+    .node-card__icon--blue  { background: var(--c-blue-soft); color: var(--c-blue); border: 1px solid var(--c-blue-tint); }
+    .node-card__icon--green { background: var(--c-green-soft); color: var(--c-green); border: 1px solid var(--c-green-tint); }
+    .node-card__icon--amber { background: var(--c-amber-soft); color: var(--c-amber); border: 1px solid var(--c-amber-tint); }
+    .node-card__title { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 4px; }
+    .node-card__desc { font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); margin-bottom: 10px; }
+    .node-card__example {
+      margin: 0; padding: 8px 12px;
+      background: var(--paper-warm);
+      border-radius: 6px;
+      font-family: var(--mono); font-size: 12px; line-height: 1.5;
+      color: var(--ink-soft);
+      white-space: pre-wrap; word-break: break-word;
+      border-left: 2px solid var(--p);
+    }
+    .node-card__example b { font-weight: 700; color: var(--ink); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       STEP LIST (Caminhos A/B/Publicar)
+       ═══════════════════════════════════════════════════════════════ */
+    .steplist { list-style: none; padding: 0; margin: 24px 0 0; display: flex; flex-direction: column; gap: 10px; }
+    .step-row { display: grid; grid-template-columns: 42px 1fr; gap: 16px; padding: 16px 20px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--paper); align-items: center; }
+    .step-row__n { width: 30px; height: 30px; border-radius: 50%; background: var(--paper-warm); border: 1.5px solid var(--rule-strong); color: var(--ink-mute); font-family: var(--mono); font-size: 12px; font-weight: 700; display: grid; place-items: center; transition: all 0.15s ease; }
+    .step-row__n:hover { border-color: var(--p); color: var(--p); }
+    .step-row--done .step-row__n { background: var(--p); border-color: var(--p); color: white; font-family: var(--sans); }
+    .step-row__title { font-size: 15.5px; font-weight: 700; line-height: 1.3; letter-spacing: -0.015em; margin-bottom: 3px; }
+    .step-row__desc { font-size: 14px; line-height: 1.5; color: var(--ink-soft); }
+    .step-row__desc b { font-weight: 700; color: var(--ink); }
+    .step-row__desc code,
+    .step-row__desc .code { font-family: var(--mono); font-size: 12.5px; background: var(--paper-warm); padding: 2px 6px; border-radius: 4px; color: var(--ink); }
+    .step-row--done .step-row__title { color: var(--ink-mute); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       NOTES (Dica/Importante/Mesmo motor)
+       ═══════════════════════════════════════════════════════════════ */
+    .note { padding: 14px 16px; border-radius: var(--r); border-left: 3px solid; display: flex; gap: 12px; align-items: flex-start; margin-top: 24px; }
+    .note--tip  { background: var(--tip-soft);  border-color: var(--tip); }
+    .note--warn { background: var(--warn-soft); border-color: var(--warn); }
+    .note--gold { background: var(--gold-soft); border-color: var(--gold); }
+    .note--done { background: var(--done-soft); border-color: var(--done); }
+    .note--note { background: var(--note-soft); border-color: var(--note); }
+    .note__icon { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; color: white; font-size: 13px; font-weight: 700; line-height: 1; }
+    .note--tip  .note__icon { background: var(--tip); }
+    .note--warn .note__icon { background: var(--warn); }
+    .note--gold .note__icon { background: var(--gold); }
+    .note--done .note__icon { background: var(--done); }
+    .note--note .note__icon { background: var(--note); }
+    .note__body-wrap { flex: 1; min-width: 0; }
+    .note__head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+    .note__kind { font-family: var(--mono); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.14em; font-weight: 600; }
+    .note--tip  .note__kind { color: var(--tip); }
+    .note--warn .note__kind { color: var(--warn); }
+    .note--gold .note__kind { color: var(--gold); }
+    .note--done .note__kind { color: var(--done); }
+    .note--note .note__kind { color: var(--ink-mute); }
+    .note__dash  { color: var(--ink-faint); }
+    .note__title { font-size: 13px; font-weight: 700; color: var(--ink); }
+    .note__body  { font-size: 13.5px; line-height: 1.55; color: var(--ink-soft); }
+    .note__body b { font-weight: 700; color: var(--ink); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FIGURES (mockups grandes)
+       ═══════════════════════════════════════════════════════════════ */
+    .figure { display: flex; flex-direction: column; gap: 10px; }
+    .figure__frame { background: var(--paper-warm); border: 1px solid var(--rule); border-radius: var(--r); padding: 22px; }
+    .figure__frame--lg { padding: 22px; }
+    .figure__caption { font-family: var(--mono); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.12em; color: var(--ink-mute); text-align: center; }
+
+    /* ─── ZappIQ App Chrome (mockup wrapper) ─── */
+    .zapp-app { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 0 rgba(0,0,0,0.05), 0 8px 20px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.06); }
+    .zapp-app__bar { display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: #0E1116; color: white; }
+    .zapp-app__brand { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; letter-spacing: -0.01em; }
+    .zapp-app__dot { width: 10px; height: 10px; border-radius: 50%; background: #25D366; }
+    .zapp-app__title { flex: 1; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85); }
+    .zapp-app__actions { display: flex; gap: 6px; }
+    .zapp-btn { padding: 5px 10px; font-size: 12px; border-radius: 5px; font-weight: 600; cursor: pointer; }
+    .zapp-btn--ghost { background: rgba(255,255,255,0.08); color: white; }
+    .zapp-btn--primary { background: var(--c-green); color: white; }
+    .zapp-app__body { padding: 0; }
+
+    /* ─── Editor (paleta + canvas + legenda) ─── */
+    .editor { display: grid; grid-template-columns: 160px 1fr 240px; gap: 0; min-height: 360px; }
+    .editor__palette { padding: 14px 12px; border-right: 1px solid var(--rule); display: flex; flex-direction: column; gap: 6px; background: var(--paper-warm); }
+    .editor__palette-label { font-family: var(--mono); text-transform: uppercase; font-size: 9px; letter-spacing: 0.12em; color: var(--ink-mute); margin-bottom: 6px; }
+    .editor__canvas { padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 0; background: linear-gradient(white, white), radial-gradient(circle, rgba(14,17,22,0.06) 1px, transparent 1px); background-size: 100% 100%, 16px 16px; }
+    .editor__line { width: 2px; height: 18px; background: var(--rule-strong); }
+    .editor__node { padding: 8px 14px; border-radius: 6px; background: var(--ink); color: white; font-size: 12px; font-weight: 700; }
+    .editor__node--start { background: var(--ink); }
+    .editor__legend { padding: 16px; border-left: 1px solid var(--rule); background: var(--paper); }
+    .editor__legend-title { font-size: 12.5px; font-weight: 700; margin-bottom: 10px; }
+    .editor__legend ul { list-style: none; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 6px; }
+    .editor__legend li { font-size: 11.5px; color: var(--ink-soft); display: flex; align-items: center; gap: 8px; line-height: 1.4; }
+    .ldot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .ldot--slate { background: var(--slate); }
+    .ldot--blue  { background: var(--c-blue); }
+    .ldot--green { background: var(--c-green); }
+    .ldot--amber { background: var(--c-amber); }
+    .editor__legend-quote { font-family: var(--mono); font-size: 10px; color: var(--ink-mute); font-style: italic; padding-top: 10px; border-top: 1px solid var(--rule); }
+
+    /* ─── Node chip (usado dentro de mockups) ─── */
+    .nchip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px 8px 8px; border-radius: 8px; background: white; border: 1px solid; font-size: 12px; min-width: 200px; }
+    .nchip--compact { padding: 6px 10px 6px 6px; font-size: 11.5px; min-width: 0; width: 100%; }
+    .nchip--slate { background: var(--slate-soft); border-color: var(--slate-tint); color: var(--slate); }
+    .nchip--blue  { background: var(--c-blue-soft); border-color: var(--c-blue-tint); color: var(--c-blue); }
+    .nchip--green { background: var(--c-green-soft); border-color: var(--c-green-tint); color: var(--c-green); }
+    .nchip--amber { background: var(--c-amber-soft); border-color: var(--c-amber-tint); color: var(--c-amber); }
+    .nchip__icon { width: 20px; height: 20px; border-radius: 4px; display: grid; place-items: center; background: white; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+    .nchip--slate .nchip__icon { color: var(--slate); }
+    .nchip--blue  .nchip__icon { color: var(--c-blue); }
+    .nchip--green .nchip__icon { color: var(--c-green); }
+    .nchip--amber .nchip__icon { color: var(--c-amber); }
+    .nchip__label { font-weight: 700; color: var(--ink); font-size: 12px; }
+    .nchip--compact .nchip__label { font-size: 11.5px; }
+    .nchip__sub { font-size: 11px; color: var(--ink-mute); margin-top: 2px; }
+    .nchip__body { min-width: 0; }
+
+    /* ─── Tela de Fluxos (Caminho A) ─── */
+    .fluxos { padding: 18px 22px 22px; }
+    .fluxos__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+    .fluxos__h { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+    .fluxos__lead { font-size: 12px; color: var(--ink-mute); margin-top: 4px; }
+    .maestro-card { display: grid; grid-template-columns: 36px 1fr; gap: 14px; padding: 16px; background: linear-gradient(135deg, #EFECFE 0%, #F8F6FF 100%); border-radius: 10px; border: 1px solid #DBD3FB; margin-bottom: 12px; }
+    .maestro-card__icon { width: 36px; height: 36px; border-radius: 8px; background: white; display: grid; place-items: center; border: 1px solid #DBD3FB; }
+    .maestro-card__h { font-size: 13px; font-weight: 700; }
+    .maestro-card__d { font-size: 11.5px; color: var(--ink-soft); line-height: 1.5; margin: 6px 0 12px; }
+    .maestro-card__form { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; }
+    .maestro-card__input { padding: 8px 10px; background: white; border-radius: 5px; border: 1px solid var(--rule); font-size: 11px; color: var(--ink-mute); }
+    .fluxo-row { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; padding: 14px 16px; background: white; border: 1px solid var(--rule); border-radius: 10px; align-items: center; }
+    .fluxo-row__icon { width: 32px; height: 32px; border-radius: 6px; background: var(--paper-warm); display: grid; place-items: center; font-size: 14px; }
+    .fluxo-row__t { font-size: 13px; font-weight: 700; }
+    .fluxo-row__d { font-size: 11px; color: var(--ink-mute); margin-top: 2px; }
+    .fluxo-row__status { padding: 3px 8px; background: var(--c-green-soft); color: var(--c-green); border-radius: 999px; font-family: var(--mono); font-size: 9.5px; font-weight: 600; letter-spacing: 0.1em; }
+
+    /* ─── Painel de teste (seção 6) ─── */
+    .test { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--rule); padding: 1px; min-height: 280px; }
+    .test__col { background: white; padding: 14px 16px; display: flex; flex-direction: column; }
+    .test__col-label { font-family: var(--mono); text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.12em; color: var(--ink-mute); margin-bottom: 10px; }
+    .test__input, .test__output { flex: 1; margin: 0; padding: 12px 14px; background: var(--paper-warm); border-radius: 6px; font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--ink-soft); white-space: pre-wrap; word-break: break-word; border: 1px solid var(--rule); }
+    .test__user   { color: var(--ink); font-weight: 600; }
+    .test__effect { color: var(--c-blue); }
+    .test__note   { color: var(--ink-mute); font-family: var(--sans); font-size: 11px; font-style: italic; display: block; margin-top: 8px; }
+
+    /* ─── Tooltip + popup (seção 8) ─── */
+    .tooltip-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; padding: 24px; background: var(--paper-warm); border-radius: 10px; }
+    .tooltip-pair__hover { position: relative; padding: 60px 0 20px; display: grid; place-items: center; }
+    .tt-trigger { padding: 6px 10px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .tt { position: absolute; top: 120px; background: var(--ink); color: white; padding: 10px 12px; border-radius: 8px; font-size: 11px; max-width: 220px; }
+    .tt::before { content: ""; position: absolute; top: -6px; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-bottom-color: var(--ink); border-top: 0; }
+    .tt__t { font-weight: 700; font-size: 12px; margin-bottom: 4px; }
+    .tt__d { color: rgba(255,255,255,0.75); line-height: 1.45; margin-bottom: 6px; }
+    .tt__link { color: #C5BBFD; font-weight: 600; font-size: 11px; }
+
+    .tooltip-pair__detail { padding: 16px 18px; background: white; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); border: 1px solid var(--rule); }
+    .tt-detail__head { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--rule); }
+    .tt-detail__section { padding: 10px 0; }
+    .tt-detail__label { font-family: var(--mono); text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.12em; color: var(--ink-mute); margin-bottom: 6px; font-weight: 600; }
+    .tt-detail__section p { font-size: 12px; line-height: 1.55; color: var(--ink-soft); }
+    .tt-detail__code { margin: 0; padding: 8px 12px; background: var(--paper-warm); border-radius: 5px; font-family: var(--mono); font-size: 11px; line-height: 1.55; color: var(--ink-soft); border-left: 2px solid var(--p); white-space: pre-wrap; }
+    .tt-detail__code b { font-weight: 700; color: var(--ink); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BEST PRACTICES (seção 9)
+       ═══════════════════════════════════════════════════════════════ */
+    .practice-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 20px; }
+    .practice { display: grid; grid-template-columns: 28px 1fr; gap: 14px; padding: 16px 20px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--paper); align-items: start; }
+    .practice__check { width: 24px; height: 24px; border-radius: 50%; background: var(--done-soft); color: var(--done); display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+    .practice__title { font-size: 14.5px; font-weight: 700; line-height: 1.3; letter-spacing: -0.015em; margin-bottom: 4px; }
+    .practice__desc  { font-size: 13px; line-height: 1.5; color: var(--ink-soft); }
+    .practice__desc b { font-weight: 700; color: var(--ink); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       ENCERRAMENTO
+       ═══════════════════════════════════════════════════════════════ */
+    .long__h1 .grad {
+      background: linear-gradient(90deg, #5B47F0 0%, #6FA6F8 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .closing__final { padding: 28px 0 0; display: flex; gap: 12px; flex-wrap: wrap; }
+    .colophon { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); line-height: 1.7; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--rule); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       COMPACT mode
+       ═══════════════════════════════════════════════════════════════ */
+    .tutorial--compact .long__h1 { font-size: 40px; }
+    .tutorial--compact .cover__title { font-size: 88px; }
+    .tutorial--compact .long, .tutorial--compact .t-footer, .tutorial--compact .cover-wrap { padding-left: 36px; padding-right: 36px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       RESPONSIVE
+       ═══════════════════════════════════════════════════════════════ */
+    @media (max-width: 1100px) {
+      .why-grid, .four-colors, .node-grid, .practice-grid { grid-template-columns: 1fr; }
+      .cover__map-grid { grid-template-columns: 1fr; }
+      .editor { grid-template-columns: 1fr; }
+      .editor__palette { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); border-right: 0; border-bottom: 1px solid var(--rule); }
+      .editor__legend { border-left: 0; border-top: 1px solid var(--rule); }
+      .test { grid-template-columns: 1fr; }
+      .tooltip-pair { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 880px) {
+      .tutorial__body { grid-template-columns: 1fr; }
+      .t-sidebar { display: none; }
+      .long, .t-footer, .cover-wrap { padding-left: 24px !important; padding-right: 24px !important; }
+      .cover__title { font-size: 64px; }
+      .long__h1 { font-size: 34px; }
+      .cover__stats { grid-template-columns: 1fr; gap: 18px; }
+      .tutorial-backdrop--modal { padding: 0; }
+      .tutorial { border-radius: 0; }
+      .step-row { grid-template-columns: 30px 1fr; gap: 12px; padding: 14px; }
+    }
+  </style>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel">
+// Conteúdo do manual ZappIQ Maestro v1.0 — Maio/2026
+// Estruturado a partir do PDF "ZappIQ Maestro - Reja sua IA"
+
+const TUTORIAL_META = {
+  doc: "ZQ-MAE-001",
+  version: "v1.0",
+  date: "Maio / 2026",
+  estimate: "10–15 min",
+  colors: 4,
+  nodes: 7,
+  paths: 2,
+  basis: "Construtor visual de fluxos do ZappIQ",
+};
+
+// ─── Por que isso importa (4 cards na seção 1) ──────────────────────
+const WHY_IT_MATTERS = [
+  { n: "01", title: "Previsibilidade onde precisa", body: "Mensagens fixas (preço, política, confirmação) saem sempre exatas — sem alucinação." },
+  { n: "02", title: "Inteligência onde agrega", body: "O nó-IA conversa de verdade, usando o conhecimento do seu negócio." },
+  { n: "03", title: "Sem código", body: "Você monta arrastando blocos. Não precisa ser técnico." },
+  { n: "04", title: "Mesmo cérebro do agente", body: "O nó-IA reaproveita o que você já treinou — não há base de conhecimento duplicada." },
+];
+
+// ─── As 4 cores (seção 2) ───────────────────────────────────────────
+const FOUR_COLORS = [
+  {
+    id: "slate",
+    eyebrow: "Cinza / Ardósia",
+    title: "Trilho fixo",
+    body: "Texto e regras determinísticas que você controla — Mensagem, Condição, Aguardar.",
+  },
+  {
+    id: "blue",
+    eyebrow: "Azul",
+    title: "Nó-IA",
+    body: "A IA assume e conversa com contexto — usando o conhecimento que você treinou.",
+  },
+  {
+    id: "green",
+    eyebrow: "Verde",
+    title: "Ação",
+    body: "Acontece nos bastidores — Marcar tag, Atualizar lead. Não envia nada pro cliente.",
+  },
+  {
+    id: "amber",
+    eyebrow: "Âmbar",
+    title: "Humano",
+    body: "Transfere a conversa para uma pessoa do time. Pausa a IA naquele contato.",
+  },
+];
+
+// ─── Os 7 nós (seção 3) ─────────────────────────────────────────────
+const NODE_TYPES = [
+  {
+    id: "msg", glyph: "M", color: "slate",
+    title: "Mensagem",
+    body: "Envia um texto fixo, sempre igual, sem IA. Controle total do que o cliente recebe.",
+    example: "“Olá! 👋 Seja bem-vindo. Como posso ajudar?”",
+  },
+  {
+    id: "cond", glyph: "?", color: "slate",
+    title: "Condição",
+    body: "Bifurca o fluxo conforme a resposta do cliente, de forma determinística.",
+    example: "Se contém **“orçamento”** → Comercial; senão → Suporte.",
+  },
+  {
+    id: "ai", glyph: "★", color: "blue",
+    title: "Nó-IA",
+    body: "Entrega a conversa para a IA, que responde com o conhecimento do seu negócio.",
+    example: "Instrução: “Tire dúvidas dos planos e ofereça uma demo.”",
+  },
+  {
+    id: "tag", glyph: "#", color: "green",
+    title: "Marcar tag",
+    body: "Etiqueta o contato para organizar e segmentar — sem enviar nada.",
+    example: "Pediu orçamento → tag **“lead-quente”**.",
+  },
+  {
+    id: "lead", glyph: "↺", color: "green",
+    title: "Atualizar lead",
+    body: "Grava uma informação no cadastro do contato (campo e valor).",
+    example: "Atualizar **“funil”** = **“qualificado”**.",
+  },
+  {
+    id: "human", glyph: "👤", color: "amber",
+    title: "Humano",
+    body: "Transfere a conversa para um atendente e pausa a IA naquele contato.",
+    example: "Cliente diz “quero falar com alguém” → transfere.",
+  },
+  {
+    id: "wait", glyph: "⏱", color: "slate",
+    title: "Aguardar",
+    body: "Faz uma pausa antes do próximo passo, para dar ritmo natural à conversa.",
+    example: "Boas-vindas → aguardar 3s → menu.",
+  },
+];
+
+// ─── Caminho A — Maestro monta (seção 4) ────────────────────────────
+const PATH_A = {
+  id: "path_a",
+  number: "04",
+  title: "“O Maestro monta pra você”.",
+  lead: "Se você não sabe por onde começar, deixe o Maestro montar. Ele lê o segmento do seu negócio (informado no cadastro), escolhe o modelo certo, escreve os textos no seu tom e ainda explica como construiu, nó a nó. Você revisa e edita à vontade.",
+  figureLabel: "Tela de Fluxos com o card “O Maestro monta pra você”",
+  steps: [
+    { id: "a1", title: "Abra o menu Maestro",                         desc: "Item **“Fluxos”** no painel do ZappIQ." },
+    { id: "a2", title: "No card azul, digite o objetivo",             desc: "Por exemplo **agendar consultas** — ou deixe em branco para o Maestro decidir pelo seu segmento." },
+    { id: "a3", title: "Clique em “Gerar meu fluxo”",                 desc: "Em segundos o Maestro monta um fluxo sob medida." },
+    { id: "a4", title: "Leia o painel “Como o Maestro montou isto”",  desc: "Ele explica o porquê de cada nó." },
+    { id: "a5", title: "Clique em “Abrir e editar”",                  desc: "O fluxo abre no editor pronto para ajustes." },
+  ],
+};
+
+// ─── Caminho B — Montar do zero (seção 5) ───────────────────────────
+const PATH_B = {
+  id: "path_b",
+  number: "05",
+  title: "Montar do zero.",
+  lead: "Prefere construir manualmente? É simples e visual.",
+  steps: [
+    { id: "b1", title: "Clique em “Novo fluxo”",            desc: "Você começa com o nó **Início**." },
+    { id: "b2", title: "Adicione nós pela paleta",          desc: "Na paleta à esquerda, clique nos nós que quiser adicionar — Mensagem, Nó-IA, Condição, etc." },
+    { id: "b3", title: "Conecte os nós",                    desc: "Arrastando da bolinha inferior de um para a superior do outro." },
+    { id: "b4", title: "Edite cada nó no painel da direita", desc: "Clique em um nó para abrir o painel e preencher o conteúdo (texto, instrução da IA, tag…)." },
+    { id: "b5", title: "Defina caminhos na Condição",        desc: "Clique na conexão e defina a palavra-chave que leva por aquele caminho." },
+  ],
+  tip: {
+    title: "Dica",
+    body: "Comece simples — **Início → Mensagem → Nó-IA** já entrega um atendimento completo. Refine depois.",
+  },
+};
+
+// ─── Publicar (seção 7) ─────────────────────────────────────────────
+const PUBLISH = {
+  id: "publish",
+  number: "07",
+  title: "Publicar.",
+  steps: [
+    { id: "p1", title: "Salvar",   desc: "Com o fluxo pronto e testado, clique em **“Salvar”**." },
+    { id: "p2", title: "Publicar", desc: "Clique em **“Publicar”**. O fluxo entra no ar para o canal conectado." },
+  ],
+  warn: {
+    title: "Importante",
+    body: "Cada organização tem um fluxo ativo por vez. Publicar um novo desativa o anterior automaticamente.",
+  },
+};
+
+// ─── Boas práticas (seção 9) ────────────────────────────────────────
+const BEST_PRACTICES = [
+  { title: "Use trilho fixo para o que não pode variar",  body: "Preço, política, confirmação. Nó-IA para conversa aberta." },
+  { title: "Sempre teste antes de publicar",              body: "O painel mostra o comportamento real, turno a turno." },
+  { title: "Conecte todos os nós",                        body: "Um nó solto não é alcançado pelo fluxo." },
+  { title: "Tags curtas e padronizadas",                  body: "Ex.: **lead-quente**. Facilita segmentar depois." },
+  { title: "Ofereça saída para humano",                   body: "Nos casos sensíveis — não force a IA além do que ela deve resolver." },
+  { title: "Treine seu agente",                           body: "Quanto melhor o conhecimento na “Treinar IA”, melhor o nó-IA responde." },
+];
+
+Object.assign(window, {
+  TUTORIAL_META, WHY_IT_MATTERS, FOUR_COLORS, NODE_TYPES,
+  PATH_A, PATH_B, PUBLISH, BEST_PRACTICES,
+});
+
+</script>
+<script type="text/babel">
+// Mockups das telas do ZappIQ Maestro
+
+const { useState } = React;
+
+// ─── Chrome do app ZappIQ ───────────────────────────────────────────
+function AppChrome({ title, actions, children }) {
+  return (
+    <div className="zapp-app">
+      <div className="zapp-app__bar">
+        <div className="zapp-app__brand">
+          <span className="zapp-app__dot"></span>
+          ZappIQ
+        </div>
+        <div className="zapp-app__title">{title}</div>
+        <div className="zapp-app__actions">{actions}</div>
+      </div>
+      <div className="zapp-app__body">{children}</div>
+    </div>
+  );
+}
+
+// ─── Pequeno chip de nó (usado dentro de mockups) ───────────────────
+function NodeChip({ color, glyph, label, sub, compact = false, active = false }) {
+  return (
+    <div className={`nchip nchip--${color} ${compact ? "nchip--compact" : ""} ${active ? "nchip--active" : ""}`}>
+      <div className="nchip__icon">{glyph}</div>
+      <div className="nchip__body">
+        <div className="nchip__label">{label}</div>
+        {sub && <div className="nchip__sub">{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Mockup grande: Editor de fluxos (paleta + canvas + legenda) ────
+function Fig_Editor() {
+  return (
+    <AppChrome
+      title="Agendamento Consulta"
+      actions={
+        <>
+          <span className="zapp-btn zapp-btn--ghost">▷ Testar</span>
+          <span className="zapp-btn zapp-btn--ghost">Salvar</span>
+          <span className="zapp-btn zapp-btn--primary">Publicar</span>
+        </>
+      }
+    >
+      <div className="editor">
+        <aside className="editor__palette">
+          <div className="editor__palette-label">Adicionar nó</div>
+          <NodeChip color="slate" glyph="M" label="Mensagem" compact/>
+          <NodeChip color="slate" glyph="?" label="Condição" compact/>
+          <NodeChip color="blue"  glyph="★" label="Nó-IA" compact/>
+          <NodeChip color="green" glyph="#" label="Marcar tag" compact/>
+          <NodeChip color="green" glyph="↺" label="Atualizar lead" compact/>
+          <NodeChip color="amber" glyph="👤" label="Humano" compact/>
+          <NodeChip color="slate" glyph="⏱" label="Aguardar" compact/>
+        </aside>
+
+        <div className="editor__canvas">
+          <div className="editor__node editor__node--start">▶ Início</div>
+          <div className="editor__line"></div>
+          <NodeChip color="slate" glyph="M" label="Mensagem" sub="“Olá! Quer agendar?”"/>
+          <div className="editor__line"></div>
+          <NodeChip color="green" glyph="#" label="Marcar tag" sub="tag: interesse-agendamento"/>
+          <div className="editor__line"></div>
+          <NodeChip color="blue"  glyph="★" label="Nó-IA" sub="Coleta dia/horário e confirma"/>
+          <div className="editor__line"></div>
+          <NodeChip color="amber" glyph="👤" label="Humano" sub="Casos que pedem uma pessoa"/>
+        </div>
+
+        <aside className="editor__legend">
+          <div className="editor__legend-title">As 4 cores do Maestro</div>
+          <ul>
+            <li><span className="ldot ldot--slate"></span>Trilho fixo — você controla o texto</li>
+            <li><span className="ldot ldot--blue"></span>Nó-IA — a IA conversa com contexto</li>
+            <li><span className="ldot ldot--green"></span>Ação — marca tag / atualiza o lead</li>
+            <li><span className="ldot ldot--amber"></span>Humano — transfere para o time</li>
+          </ul>
+          <div className="editor__legend-quote">A IA é o cérebro. O Maestro é onde você rege.</div>
+        </aside>
+      </div>
+    </AppChrome>
+  );
+}
+
+// ─── Mockup: Tela de Fluxos (com card "Maestro monta pra você") ─────
+function Fig_FluxosScreen() {
+  return (
+    <AppChrome
+      title=""
+      actions={<><span className="zapp-btn zapp-btn--ghost">TesteZappIQ</span></>}
+    >
+      <div className="fluxos">
+        <div className="fluxos__head">
+          <div>
+            <div className="fluxos__h">Maestro — Fluxos</div>
+            <div className="fluxos__lead">Construa o atendimento: trilho fixo onde precisa de controle, IA onde precisa de conversa.</div>
+          </div>
+          <span className="zapp-btn zapp-btn--primary">+ Novo fluxo</span>
+        </div>
+
+        <div className="maestro-card">
+          <div className="maestro-card__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M13 2L4 13h6l-1 9 9-11h-6l1-9z" fill="#5B47F0"/></svg></div>
+          <div className="maestro-card__body">
+            <div className="maestro-card__h">Não sabe como montar? <b>O Maestro monta pra você</b> ✨</div>
+            <div className="maestro-card__d">Ele lê o segmento do seu negócio, monta um fluxo sob medida, explica como construiu e deixa você editar. É só dizer o objetivo (ou deixe em branco que ele decide).</div>
+            <div className="maestro-card__form">
+              <span className="maestro-card__input">Ex: agendar consultas, qualificar leads, tirar dúvidas… (opcional)</span>
+              <span className="zapp-btn zapp-btn--primary">Gerar meu fluxo</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="fluxo-row">
+          <div className="fluxo-row__icon">📋</div>
+          <div className="fluxo-row__body">
+            <div className="fluxo-row__t">Agendamento Consulta</div>
+            <div className="fluxo-row__d">4 nós · v1</div>
+          </div>
+          <div className="fluxo-row__status">ATIVO</div>
+        </div>
+      </div>
+    </AppChrome>
+  );
+}
+
+// ─── Mockup: Painel de teste (split mensagens / resultado) ──────────
+function Fig_TestPanel() {
+  return (
+    <AppChrome
+      title="Painel de teste — replay no motor real da produção"
+      actions={<span className="zapp-btn zapp-btn--primary">▷ Testar</span>}
+    >
+      <div className="test">
+        <div className="test__col">
+          <div className="test__col-label">Mensagens de teste (uma por linha)</div>
+          <pre className="test__input">{`quero agendar uma consulta
+amanhã de manhã, por favor`}</pre>
+        </div>
+        <div className="test__col">
+          <div className="test__col-label">Resultado (efeitos + próximo passo por turno)</div>
+          <pre className="test__output">
+            <span className="test__user">você › quero agendar uma consulta</span>{"\n"}
+            <span className="test__effect">→ send_text, set_tag · próximo: ai (Iza assume)</span>{"\n\n"}
+            <span className="test__user">você › amanhã de manhã, por favor</span>{"\n"}
+            <span className="test__effect">→ (nada) · próximo: ai (Iza assume)</span>{"\n\n"}
+            <span className="test__note">O que você testa aqui é o que a Iza faz em produção — mesmo motor, sem simulação paralela.</span>
+          </pre>
+        </div>
+      </div>
+    </AppChrome>
+  );
+}
+
+// ─── Tooltip + popup detalhado (seção 8) ────────────────────────────
+function Fig_Tooltip() {
+  return (
+    <div className="tooltip-pair">
+      <div className="tooltip-pair__hover">
+        <div className="tt-trigger">
+          <NodeChip color="blue" glyph="★" label="Nó-IA" compact/>
+        </div>
+        <div className="tt">
+          <div className="tt__t">Nó-IA</div>
+          <div className="tt__d">Entrega a conversa para a IA, que responde usando o conhecimento do seu negócio.</div>
+          <div className="tt__link">Veja mais →</div>
+        </div>
+      </div>
+
+      <div className="tooltip-pair__detail">
+        <div className="tt-detail__head">
+          <NodeChip color="blue" glyph="★" label="Nó-IA"/>
+        </div>
+        <div className="tt-detail__section">
+          <div className="tt-detail__label">Para que serve</div>
+          <p>Em pontos da conversa onde uma resposta fixa não basta — perguntas abertas, dúvidas, suporte. A IA entende o contexto e responde natural.</p>
+        </div>
+        <div className="tt-detail__section">
+          <div className="tt-detail__label">Como usar</div>
+          <p>Conecte ao fluxo e escreva a INSTRUÇÃO do passo. Ela combina isso com o conhecimento já treinado.</p>
+        </div>
+        <div className="tt-detail__section">
+          <div className="tt-detail__label">Exemplo</div>
+          <pre className="tt-detail__code">“Tire dúvidas sobre os <b>planos</b> e, se houver intenção de compra, ofereça agendar uma demonstração.”</pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, {
+  AppChrome, NodeChip,
+  Fig_Editor, Fig_FluxosScreen, Fig_TestPanel, Fig_Tooltip,
+});
+
+</script>
+<script type="text/babel">
+// Componentes reutilizáveis para o tutorial Maestro
+
+const { useState, useEffect } = React;
+
+// ─── Render de texto com **negrito** ────────────────────────────────
+function RichText({ text }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith("**") ? <b key={i}>{p.slice(2, -2)}</b> : <span key={i}>{p}</span>
+      )}
+    </>
+  );
+}
+
+// ─── NoteCard ───────────────────────────────────────────────────────
+function NoteCard({ kind, title, body }) {
+  const meta = {
+    tip:    { label: "Dica",       glyph: "i" },
+    warn:   { label: "Importante", glyph: "!" },
+    gold:   { label: "Regra de ouro", glyph: "!" },
+    done:   { label: "Mesmo motor da produção", glyph: "✓" },
+    note:   { label: "Observação", glyph: "i" },
+  }[kind];
+  return (
+    <div className={`note note--${kind}`}>
+      <div className="note__icon">{meta.glyph}</div>
+      <div className="note__body-wrap">
+        <div className="note__head">
+          <span className="note__kind">{title ? meta.label : meta.label}</span>
+          {title && <>
+            <span className="note__dash">—</span>
+            <span className="note__title">{title}</span>
+          </>}
+        </div>
+        <p className="note__body">{typeof body === "string" ? <RichText text={body}/> : body}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Card de uma das 4 cores do Maestro ─────────────────────────────
+function ColorCard({ c }) {
+  return (
+    <div className={`color-card color-card--${c.id}`}>
+      <div className="color-card__eyebrow">{c.eyebrow}</div>
+      <div className="color-card__title">{c.title}</div>
+      <p className="color-card__body">{c.body}</p>
+    </div>
+  );
+}
+
+// ─── Card de tipo de nó (seção 3) ───────────────────────────────────
+function NodeCard({ n }) {
+  return (
+    <div className="node-card">
+      <div className={`node-card__icon node-card__icon--${n.color}`}>{n.glyph}</div>
+      <div className="node-card__body">
+        <div className="node-card__title">{n.title}</div>
+        <p className="node-card__desc">{n.body}</p>
+        <pre className="node-card__example">
+          <RichText text={n.example}/>
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+// ─── Lista de passos com check ──────────────────────────────────────
+function StepList({ steps, sectionId, onCheck, checked }) {
+  return (
+    <ol className="steplist">
+      {steps.map((s, i) => {
+        const key = `${sectionId}-${s.id}`;
+        const isChecked = checked.has(key);
+        return (
+          <li key={s.id} className={`step-row ${isChecked ? "step-row--done" : ""}`}>
+            <button className="step-row__n" onClick={() => onCheck(key)} aria-label="Marcar como feito">
+              {isChecked ? "✓" : String(i + 1).padStart(2, "0")}
+            </button>
+            <div className="step-row__body">
+              <div className="step-row__title">{s.title}</div>
+              <div className="step-row__desc"><RichText text={s.desc}/></div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ─── Card de boa prática (seção 9) ──────────────────────────────────
+function PracticeCard({ p }) {
+  return (
+    <div className="practice">
+      <div className="practice__check">✓</div>
+      <div className="practice__body">
+        <div className="practice__title">{p.title}</div>
+        <div className="practice__desc"><RichText text={p.body}/></div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Topbar do tutorial ─────────────────────────────────────────────
+function TutorialTopbar({ onClose, progress, onDownloadPdf }) {
+  return (
+    <header className="t-topbar">
+      <img className="t-topbar__logo" src="assets/zappiq-maestro-logo.png" alt="ZappIQ Maestro" />
+      <div className="t-topbar__pill">{TUTORIAL_META.doc} · {TUTORIAL_META.version}</div>
+      <div className="t-topbar__progress">
+        <div className="t-topbar__progress-label">Progresso</div>
+        <div className="t-topbar__progress-bar">
+          <div className="t-topbar__progress-fill" style={{ width: `${progress}%` }}></div>
+        </div>
+        <div className="t-topbar__progress-pct">{progress}%</div>
+      </div>
+      <div className="t-topbar__actions">
+        <button className="btn btn--ghost" onClick={onDownloadPdf}>↓ Baixar PDF</button>
+        <button className="btn btn--ghost btn--close" onClick={onClose} aria-label="Fechar tutorial">✕</button>
+      </div>
+    </header>
+  );
+}
+
+// ─── Sidebar (TOC) ──────────────────────────────────────────────────
+function Sidebar({ sections, currentId, onSelect, sectionProgress }) {
+  return (
+    <nav className="t-sidebar">
+      <div className="t-sidebar__label">Sumário</div>
+      <ol className="t-toc">
+        {sections.map((s) => {
+          const prog = sectionProgress[s.id] || 0;
+          return (
+            <li key={s.id}>
+              <button
+                className={`t-toc__item ${currentId === s.id ? "t-toc__item--active" : ""}`}
+                onClick={() => onSelect(s.id)}
+              >
+                <span className="t-toc__n">{s.number}</span>
+                <span className="t-toc__text">
+                  <span className="t-toc__title">{s.title}</span>
+                  {s.note && <span className="t-toc__note">{s.note}</span>}
+                </span>
+                {prog > 0 && (
+                  <span className="t-toc__prog">
+                    <span className="t-toc__prog-fill" style={{ width: `${prog}%` }}></span>
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="t-sidebar__help">
+        <div className="t-sidebar__help-eyebrow">Travou?</div>
+        <p>Peça o <b>Onboarding Assistido</b> — um especialista da ZappIQ faz com você em videochamada.</p>
+        <a href="https://zappiq.com.br/agendar" className="btn btn--accent btn--full">Agendar com especialista</a>
+      </div>
+    </nav>
+  );
+}
+
+// ─── Footer ─────────────────────────────────────────────────────────
+function TutorialFooter({ prev, next, onPrev, onNext, onComplete }) {
+  return (
+    <footer className="t-footer">
+      <button className="btn btn--ghost" onClick={onPrev} disabled={!prev}>
+        ← {prev ? prev.title : "Início"}
+      </button>
+      <a href="https://zappiq.com.br/maestro" className="btn btn--secondary">
+        Já entendi · ir para o Maestro
+      </a>
+      {next ? (
+        <button className="btn btn--primary" onClick={onNext}>
+          {next.title} →
+        </button>
+      ) : (
+        <button className="btn btn--primary" onClick={onComplete}>
+          Concluir tutorial →
+        </button>
+      )}
+    </footer>
+  );
+}
+
+Object.assign(window, {
+  RichText, NoteCard, ColorCard, NodeCard, StepList, PracticeCard,
+  TutorialTopbar, Sidebar, TutorialFooter,
+});
+
+</script>
+<script type="text/babel">
+// Seções do tutorial Maestro
+
+const { useState: useS, useEffect: useE } = React;
+
+// ─── Cover ──────────────────────────────────────────────────────────
+function CoverSection({ onStart, onJumpTo }) {
+  return (
+    <div className="cover-wrap">
+      <div className="cover__header">
+        <img className="cover__logo" src="assets/zappiq-maestro-logo-dark.png" alt="ZappIQ Maestro" />
+        <div className="cover__header-pill">Manual oficial · {TUTORIAL_META.version} · {TUTORIAL_META.date}</div>
+      </div>
+
+      <div className="cover__eyebrow-row">
+        <span className="cover__eyebrow-dash"></span>
+        <span className="cover__eyebrow">Construtor de fluxos do ZappIQ</span>
+      </div>
+
+      <h1 className="cover__title">Reja sua <span className="ai">IA</span>.</h1>
+
+      <p className="cover__lead">
+        O que é, por que importa e como montar seu atendimento, passo a passo.
+        Combine trilhos fixos onde você precisa de controle absoluto com nós de IA
+        onde a conversa precisa fluir naturalmente.
+      </p>
+
+      <div className="cover__pull">
+        <span className="cover__pull-strong">A IA é o <span className="ai">cérebro</span>.</span>
+        <em>O Maestro é onde você rege.</em>
+      </div>
+
+      <div className="cover__divider"></div>
+
+      <div className="cover__stats">
+        <div className="stat">
+          <div className="stat__big">{TUTORIAL_META.colors}<span className="stat__small"> cores</span></div>
+          <div className="stat__sub">um sistema visual<br/>para qualquer fluxo</div>
+        </div>
+        <div className="stat">
+          <div className="stat__big">{TUTORIAL_META.nodes}<span className="stat__small"> nós</span></div>
+          <div className="stat__sub">blocos para montar<br/>todo seu atendimento</div>
+        </div>
+        <div className="stat">
+          <div className="stat__big">{TUTORIAL_META.paths}<span className="stat__small"> caminhos</span></div>
+          <div className="stat__sub">deixe o Maestro montar<br/>ou comece do zero</div>
+        </div>
+      </div>
+
+      <div className="cover__map-label">Como o manual está dividido</div>
+      <div className="cover__map-grid">
+        <button className="map-card" onClick={() => onJumpTo("s1")}>
+          <div className="map-card__n">Seções 1 — 3</div>
+          <div className="map-card__t">Conceito</div>
+          <div className="map-card__d">O que é o Maestro, o sistema híbrido das 4 cores e os 7 tipos de nó.</div>
+          <div className="map-card__tag">Fundamento</div>
+        </button>
+        <button className="map-card" onClick={() => onJumpTo("s4")}>
+          <div className="map-card__n">Seções 4 — 7</div>
+          <div className="map-card__t">Construir e publicar</div>
+          <div className="map-card__d">Caminho A (Maestro monta), Caminho B (do zero), testar e publicar.</div>
+          <div className="map-card__tag">Passo a passo</div>
+        </button>
+        <button className="map-card" onClick={() => onJumpTo("s9")}>
+          <div className="map-card__n">Seções 8 — 9</div>
+          <div className="map-card__t">Apoio</div>
+          <div className="map-card__d">Ajuda contextual nos nós e boas práticas — para não esquecer nada.</div>
+          <div className="map-card__tag">Referência</div>
+        </button>
+      </div>
+
+      <div className="cover__cta">
+        <button className="btn btn--primary btn--lg" onClick={onStart}>
+          Começar pelo conceito →
+        </button>
+        <button className="btn btn--ghost btn--lg" onClick={() => onJumpTo("s4")}>
+          Pular para “O Maestro monta pra você”
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Seção 1 — O que é ──────────────────────────────────────────────
+function Section1() {
+  return (
+    <div className="long" data-tone="t1">
+      <PartHeader number="01" title="O que é o ZappIQ Maestro." />
+      <p className="long__lead">
+        O Maestro é o construtor visual de fluxos do ZappIQ. Em vez de deixar tudo solto na mão da IA
+        ou amarrar tudo em um script rígido, ele permite que você combine os dois: trilhos fixos onde
+        você precisa de controle absoluto, e nós de IA onde a conversa precisa fluir naturalmente.
+      </p>
+
+      <blockquote className="quote">
+        <span className="quote__mark">”</span>
+        <p>A ideia em uma frase: a IA é o <b>cérebro</b>; o Maestro é onde você <b>rege</b>. Você decide onde a IA tem liberdade e onde o atendimento segue um caminho garantido.</p>
+      </blockquote>
+
+      <h3 className="subhead">Por que isso importa</h3>
+      <div className="why-grid">
+        {WHY_IT_MATTERS.map((w) => (
+          <div className="why" key={w.n}>
+            <div className="why__n">{w.n}</div>
+            <div className="why__t">{w.title}</div>
+            <p className="why__b">{w.body}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Seção 2 — As 4 cores ───────────────────────────────────────────
+function Section2() {
+  return (
+    <div className="long" data-tone="t2">
+      <PartHeader number="02" title="O conceito híbrido e as 4 cores." />
+      <p className="long__lead">
+        Todo fluxo é uma sequência de nós conectados. Cada nó pertence a uma de quatro categorias,
+        identificadas por cor para você bater o olho e entender o que acontece em cada ponto.
+      </p>
+
+      <div className="four-colors">
+        {FOUR_COLORS.map((c) => <ColorCard c={c} key={c.id}/>)}
+      </div>
+
+      <div className="figure" style={{ marginTop: 32 }}>
+        <div className="figure__frame figure__frame--lg">
+          <Fig_Editor/>
+        </div>
+        <div className="figure__caption">Tela do editor: paleta de nós à esquerda, fluxo no centro e a legenda das 4 cores.</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Seção 3 — Tipos de nó ──────────────────────────────────────────
+function Section3() {
+  return (
+    <div className="long" data-tone="t3">
+      <PartHeader number="03" title="Os tipos de nó." />
+      <p className="long__lead">
+        Estes são os blocos que você combina para montar qualquer atendimento. No produto, ao passar
+        o mouse sobre cada nó, abre uma explicação rápida com a opção <b>“Veja mais”</b>.
+      </p>
+
+      <div className="node-grid">
+        {NODE_TYPES.map((n) => <NodeCard n={n} key={n.id}/>)}
+      </div>
+    </div>
+  );
+}
+
+// ─── Seção 4 — Caminho A ────────────────────────────────────────────
+function Section4({ onCheck, checked }) {
+  return (
+    <div className="long" data-tone="t4">
+      <Eyebrow text="Seção 04 · Caminho A"/>
+      <h1 className="long__h1">{PATH_A.title}</h1>
+      <p className="long__lead">{PATH_A.lead}</p>
+
+      <div className="figure">
+        <div className="figure__frame figure__frame--lg">
+          <Fig_FluxosScreen/>
+        </div>
+        <div className="figure__caption">{PATH_A.figureLabel}</div>
+      </div>
+
+      <h3 className="subhead subhead--steps">— Passo a passo</h3>
+      <StepList steps={PATH_A.steps} sectionId="path_a" onCheck={onCheck} checked={checked}/>
+    </div>
+  );
+}
+
+// ─── Seção 5 — Caminho B ────────────────────────────────────────────
+function Section5({ onCheck, checked }) {
+  return (
+    <div className="long" data-tone="t5">
+      <Eyebrow text="Seção 05 · Caminho B"/>
+      <h1 className="long__h1">{PATH_B.title}</h1>
+      <p className="long__lead">{PATH_B.lead}</p>
+
+      <StepList steps={PATH_B.steps} sectionId="path_b" onCheck={onCheck} checked={checked}/>
+
+      <div style={{ marginTop: 24 }}>
+        <NoteCard kind="tip" {...PATH_B.tip}/>
+      </div>
+    </div>
+  );
+}
+
+// ─── Seção 6 — Testar ───────────────────────────────────────────────
+function Section6() {
+  return (
+    <div className="long" data-tone="t6">
+      <PartHeader number="06" title="Testar antes de publicar." />
+      <p className="long__lead">
+        O painel <b>Testar</b> roda o fluxo no <b>mesmo motor da produção</b> — o que você vê aqui é
+        exatamente o que a Iza fará no WhatsApp. Digite mensagens de teste (uma por linha) e veja,
+        turno a turno, os efeitos e o próximo passo.
+      </p>
+
+      <div className="figure">
+        <div className="figure__frame figure__frame--lg">
+          <Fig_TestPanel/>
+        </div>
+        <div className="figure__caption">Painel de teste: à esquerda as mensagens simuladas, à direita os efeitos e o próximo passo de cada turno.</div>
+      </div>
+
+      <NoteCard
+        kind="done"
+        title={null}
+        body="Não é uma simulação paralela. O que aparece no painel é exatamente o caminho que a Iza seguirá quando um cliente real digitar a mesma mensagem no canal conectado."
+      />
+    </div>
+  );
+}
+
+// ─── Seção 7 + 8 — Publicar + Ajuda contextual ──────────────────────
+function Section78({ onCheck, checked }) {
+  return (
+    <div className="long" data-tone="t7">
+      <PartHeader number="07" title="Publicar." />
+      <StepList steps={PUBLISH.steps} sectionId="publish" onCheck={onCheck} checked={checked}/>
+      <NoteCard kind="warn" {...PUBLISH.warn}/>
+
+      <div className="section-break"></div>
+
+      <Eyebrow text="Seção 08 · Ajuda no produto"/>
+      <h2 className="long__h2">Ajuda contextual nos nós.</h2>
+      <p className="long__lead">
+        Não precisa decorar nada. Passe o mouse sobre qualquer nó da paleta por um instante e aparece
+        um resumo. Clique em <b>“Veja mais”</b> (ou no ícone de informação) para abrir a explicação
+        completa: para que serve, como usar e um exemplo.
+      </p>
+
+      <div className="figure">
+        <div className="figure__frame figure__frame--lg">
+          <Fig_Tooltip/>
+        </div>
+        <div className="figure__caption">Tooltip rápido ao passar o mouse e o popup detalhado de cada nó.</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Seção 9 — Boas práticas ────────────────────────────────────────
+function Section9() {
+  return (
+    <div className="long" data-tone="t8">
+      <PartHeader number="09" title="Boas práticas e erros comuns." />
+      <p className="long__lead">
+        Seis princípios simples que separam um fluxo que funciona bem de um que precisa de retrabalho
+        toda semana.
+      </p>
+      <div className="practice-grid">
+        {BEST_PRACTICES.map((p, i) => <PracticeCard p={p} key={i}/>)}
+      </div>
+    </div>
+  );
+}
+
+// ─── Encerramento ───────────────────────────────────────────────────
+function ClosingSection({ onComplete }) {
+  return (
+    <div className="long" data-tone="t9">
+      <Eyebrow text="Encerramento"/>
+      <h1 className="long__h1">Pronto para <span className="grad">reger sua IA</span>?</h1>
+      <p className="long__lead">
+        O Maestro nasceu para te dar o melhor dos dois mundos: <b>controle</b> onde precisa ser exato
+        e <b>inteligência</b> onde a conversa precisa fluir. Comece pelo <b>Caminho A</b> se estiver
+        com pressa, ou pelo <b>B</b> se já tem o fluxo na cabeça. Em qualquer um, teste antes de
+        publicar — é o jeito mais tranquilo de garantir que o atendimento vá no ar do jeito certo de
+        primeira.
+      </p>
+
+      <div className="closing__final">
+        <a href="https://zappiq.com.br/maestro" className="btn btn--primary btn--lg">
+          Abrir o Maestro →
+        </a>
+        <a href="https://zappiq.com.br/agendar" className="btn btn--secondary btn--lg">
+          Prefiro ajuda de um especialista
+        </a>
+      </div>
+
+      <div className="colophon">
+        Documento {TUTORIAL_META.doc} · {TUTORIAL_META.version} · {TUTORIAL_META.date}
+        <br/>Conteúdo baseado na documentação oficial do produto. Sujeito a atualizações.
+      </div>
+    </div>
+  );
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
+function Eyebrow({ text }) {
+  return (
+    <div className="eyebrow-row">
+      <span className="eyebrow-dash"></span>
+      <span className="eyebrow">{text}</span>
+    </div>
+  );
+}
+function PartHeader({ number, title }) {
+  return (
+    <header className="part-header">
+      <div className="eyebrow-row">
+        <span className="eyebrow-dash"></span>
+        <span className="eyebrow">Seção {number}</span>
+      </div>
+      <h1 className="long__h1">{title}</h1>
+    </header>
+  );
+}
+
+Object.assign(window, {
+  CoverSection, Section1, Section2, Section3, Section4, Section5,
+  Section6, Section78, Section9, ClosingSection,
+});
+
+</script>
+<script type="text/babel">
+// App principal do tutorial Maestro
+
+const { useState: useS, useEffect: useE, useMemo, useRef } = React;
+
+const SECTIONS = [
+  { id: "cover", number: "—",  title: "Capa",                       note: "Visão geral" },
+  { id: "s1",    number: "01", title: "O que é o Maestro",          note: "Conceito" },
+  { id: "s2",    number: "02", title: "O conceito híbrido",         note: "As 4 cores" },
+  { id: "s3",    number: "03", title: "Os tipos de nó",             note: "7 blocos" },
+  { id: "s4",    number: "04", title: "Caminho A",                  note: "Maestro monta pra você" },
+  { id: "s5",    number: "05", title: "Caminho B",                  note: "Montar do zero" },
+  { id: "s6",    number: "06", title: "Testar",                     note: "Antes de publicar" },
+  { id: "s78",   number: "07", title: "Publicar e ajuda",           note: "Seções 7 e 8" },
+  { id: "s9",    number: "09", title: "Boas práticas",              note: "Erros comuns" },
+  { id: "end",   number: "—",  title: "Encerramento",               note: "Pronto pra reger" },
+];
+
+function getCheckableKeys(sectionId) {
+  const keys = [];
+  if (sectionId === "s4") PATH_A.steps.forEach((s) => keys.push(`path_a-${s.id}`));
+  if (sectionId === "s5") PATH_B.steps.forEach((s) => keys.push(`path_b-${s.id}`));
+  if (sectionId === "s78") PUBLISH.steps.forEach((s) => keys.push(`publish-${s.id}`));
+  return keys;
+}
+const ALL_CHECKABLE = SECTIONS.flatMap((s) => getCheckableKeys(s.id));
+
+// ═══════════════════════════════════════════════════════════════════
+// Mock da página de onboarding (fundo) — descartar em produção
+// ═══════════════════════════════════════════════════════════════════
+
+function TutorialModal({ tweaks, onClose }) {
+  const [currentId, setCurrentId] = useS("cover");
+  const [checked, setChecked] = useS(() => new Set());
+  const scrollerRef = useRef(null);
+
+  useE(() => {
+    const saved = localStorage.getItem("zappiq-maestro-checks");
+    if (saved) {
+      try { setChecked(new Set(JSON.parse(saved))); } catch (e) {}
+    }
+  }, []);
+  useE(() => {
+    localStorage.setItem("zappiq-maestro-checks", JSON.stringify([...checked]));
+  }, [checked]);
+  useE(() => {
+    if (scrollerRef.current) scrollerRef.current.scrollTop = 0;
+  }, [currentId]);
+
+  const toggleCheck = (key) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const total = ALL_CHECKABLE.length;
+  const done  = [...checked].filter((k) => ALL_CHECKABLE.includes(k)).length;
+  const progress = total ? Math.round((done / total) * 100) : 0;
+
+  const sectionProgress = useMemo(() => {
+    const out = {};
+    SECTIONS.forEach((s) => {
+      const keys = getCheckableKeys(s.id);
+      if (!keys.length) return;
+      const d = keys.filter((k) => checked.has(k)).length;
+      out[s.id] = Math.round((d / keys.length) * 100);
+    });
+    return out;
+  }, [checked]);
+
+  const idx = SECTIONS.findIndex((s) => s.id === currentId);
+  const prev = idx > 0 ? SECTIONS[idx - 1] : null;
+  const next = idx < SECTIONS.length - 1 ? SECTIONS[idx + 1] : null;
+
+  const sharedProps = { onCheck: toggleCheck, checked };
+
+  const render = () => {
+    switch (currentId) {
+      case "cover": return <CoverSection onStart={() => setCurrentId("s1")} onJumpTo={setCurrentId}/>;
+      case "s1":    return <Section1/>;
+      case "s2":    return <Section2/>;
+      case "s3":    return <Section3/>;
+      case "s4":    return <Section4 {...sharedProps}/>;
+      case "s5":    return <Section5 {...sharedProps}/>;
+      case "s6":    return <Section6/>;
+      case "s78":   return <Section78 {...sharedProps}/>;
+      case "s9":    return <Section9/>;
+      case "end":   return <ClosingSection onComplete={onClose}/>;
+      default:      return null;
+    }
+  };
+
+  const className = `tutorial tutorial--${tweaks.size}`;
+  return (
+    <div className={`tutorial-backdrop ${tweaks.mode === "modal" ? "tutorial-backdrop--modal" : "tutorial-backdrop--full"}`}>
+      <div className={className}>
+        <TutorialTopbar
+          onClose={onClose}
+          progress={progress}
+          onDownloadPdf={() => window.open('maestro-reja-sua-ia.pdf','_blank','noopener')}
+        />
+        <div className="tutorial__body">
+          <Sidebar
+            sections={SECTIONS}
+            currentId={currentId}
+            onSelect={setCurrentId}
+            sectionProgress={sectionProgress}
+          />
+          <main className="tutorial__main" ref={scrollerRef}>
+            <div className="tutorial__main-inner">
+              {render()}
+            </div>
+            <TutorialFooter
+              prev={prev}
+              next={next}
+              onPrev={() => prev && setCurrentId(prev.id)}
+              onNext={() => next && setCurrentId(next.id)}
+              onComplete={onClose}
+            />
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// App raiz
+// ═══════════════════════════════════════════════════════════════════
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "mode": "modal",
+  "size": "expanded",
+  "openOnLoad": true
+}/*EDITMODE-END*/;
+
+
+
+// ─── Mount ZappIQ: só o TutorialModal, full-bleed, dentro do iframe ───
+function __notifyClose(){ try { window.parent.postMessage('zappiq-tutorial-close','*'); } catch(e){} }
+function __MaestroTutorialRoot(){
+  const tweaks = { mode: 'full', size: 'expanded' };
+  return <TutorialModal tweaks={tweaks} onClose={__notifyClose} />;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<__MaestroTutorialRoot/>);
+
+</script>
+</body>
+</html>
