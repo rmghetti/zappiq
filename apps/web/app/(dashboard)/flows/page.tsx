@@ -641,15 +641,27 @@ type FlowDraft = {
   source: 'ai' | 'fallback';
 };
 
+// MAESTRO INTELIGENTE — objetivos oferecidos no wizard (chave = goal do backend).
+const OBJECTIVE_OPTIONS: { goal: string; label: string; hint: string }[] = [
+  { goal: 'atendimento', label: 'Atendimento & dúvidas', hint: 'Recebe o cliente e responde com o conhecimento do negócio.' },
+  { goal: 'qualificacao', label: 'Vendas / Qualificação', hint: 'Faz perguntas-chave pra entender necessidade e fit do lead.' },
+  { goal: 'agendamento', label: 'Agendamento', hint: 'Coleta serviço e melhor horário e confirma.' },
+  { goal: 'faq', label: 'Tira-dúvidas (FAQ)', hint: 'Responde perguntas frequentes na base de conhecimento.' },
+  { goal: 'posvenda', label: 'Suporte / Pós-venda', hint: 'Status de pedido, troca, dúvida de uso — tom acolhedor.' },
+];
+
 export default function FlowsPage() {
   const [flows, setFlows] = useState<ApiFlow[] | null>(null);
   const [editing, setEditing] = useState<ApiFlow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  // gerador "monta pra você"
-  const [genGoal, setGenGoal] = useState('');
+  // MAESTRO INTELIGENTE — wizard que lê todo o ai-training e gera 1+ fluxos
   const [generating, setGenerating] = useState(false);
-  const [draft, setDraft] = useState<FlowDraft | null>(null);
+  const [smartOpen, setSmartOpen] = useState(false);
+  const [objectives, setObjectives] = useState<string[]>(['atendimento']);
+  const [multiAgent, setMultiAgent] = useState(false);
+  const [smartDrafts, setSmartDrafts] = useState<FlowDraft[] | null>(null);
+  const [smartNote, setSmartNote] = useState('');
   // tutorial interativo (modal iframe)
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
@@ -703,32 +715,39 @@ export default function FlowsPage() {
     try { await api.delete(`/api/flows/${id}`); load(); } catch { /* noop */ }
   }
 
-  // Pede pro Maestro montar um fluxo (não persiste — abre o painel de revisão).
-  async function generate() {
-    setGenerating(true); setError(null);
+  function toggleObjective(goal: string) {
+    setObjectives((prev) =>
+      prev.includes(goal) ? prev.filter((g) => g !== goal) : [...prev, goal]
+    );
+  }
+
+  // MAESTRO INTELIGENTE: gera 1+ fluxos lendo TODO o ai-training do cliente.
+  async function runSmart() {
+    if (objectives.length === 0) { setError('Escolha pelo menos um objetivo.'); return; }
+    setGenerating(true); setError(null); setSmartDrafts(null);
     try {
-      const res = await api.post<{ success: boolean; data: FlowDraft }>('/api/flows/generate', {
-        goal: genGoal.trim() || undefined,
-      });
-      if (res?.data) setDraft(res.data);
+      const res = await api.post<{ success: boolean; data: { drafts: FlowDraft[]; note: string } }>(
+        '/api/flows/generate-smart',
+        { objectives, multiAgent: multiAgent && objectives.length > 1 },
+      );
+      if (res?.data) { setSmartDrafts(res.data.drafts || []); setSmartNote(res.data.note || ''); }
     } catch (e: any) {
       setError(e?.message || 'O Maestro não conseguiu montar agora. Tente de novo.');
     } finally { setGenerating(false); }
   }
 
-  // Aceita o draft: persiste como fluxo novo e abre o editor.
-  async function acceptDraft() {
-    if (!draft) return;
+  // Aceita um draft: persiste como fluxo novo e abre o editor.
+  async function acceptDraft(d: FlowDraft) {
     setCreating(true); setError(null);
     try {
       const res = await api.post<{ success: boolean; data: ApiFlow }>('/api/flows', {
-        name: draft.name,
-        triggerType: draft.triggerType,
-        triggerConfig: draft.triggerConfig || {},
-        nodes: draft.nodes,
-        edges: draft.edges,
+        name: d.name,
+        triggerType: d.triggerType,
+        triggerConfig: d.triggerConfig || {},
+        nodes: d.nodes,
+        edges: d.edges,
       });
-      setDraft(null); setGenGoal('');
+      setSmartOpen(false); setSmartDrafts(null);
       if (res?.data) setEditing(res.data);
     } catch (e: any) {
       setError(e?.message || 'Falha ao salvar o fluxo gerado');
@@ -806,34 +825,26 @@ export default function FlowsPage() {
       <div className="mt-6" />
 
 
-      {/* Maestro monta pra você (#288) */}
-      <div className="mb-6 rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-indigo-50 to-white p-5">
+      {/* MAESTRO INTELIGENTE — gerador autônomo que lê todo o ai-training */}
+      <div className="mb-6 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-blue-50 to-white p-5">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shrink-0">
             <Sparkles size={20} />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-semibold text-gray-900">Não sabe como montar? O Maestro monta pra você 🎼</h2>
-            <p className="text-sm text-gray-600 mt-0.5">
-              Ele lê o segmento do seu negócio, monta um fluxo sob medida, explica como construiu e deixa você editar tudo. É só dizer o objetivo (ou deixar em branco que ele decide).
-            </p>
-            <div className="flex flex-col sm:flex-row gap-2 mt-3">
-              <input
-                value={genGoal}
-                onChange={(e) => setGenGoal(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !generating) generate(); }}
-                placeholder="Ex: agendar consultas, qualificar leads, tirar dúvidas… (opcional)"
-                className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-blue-400 bg-white"
-              />
-              <button
-                onClick={generate}
-                disabled={generating}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50 whitespace-nowrap"
-              >
-                {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                {generating ? 'Montando…' : 'Gerar meu fluxo'}
-              </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-semibold text-gray-900">MAESTRO INTELIGENTE 🎼</h2>
+              <span className="text-[10px] font-bold uppercase tracking-wide bg-indigo-600 text-white px-2 py-0.5 rounded-full">novo</span>
             </div>
+            <p className="text-sm text-gray-600 mt-0.5">
+              Ele lê <strong>tudo que você preencheu no treinamento da IA</strong> — seu negócio, segmento, serviços, perguntas & respostas — entende o contexto e monta o(s) fluxo(s) sob medida pra você. É só escolher os objetivos.
+            </p>
+            <button
+              onClick={() => { setSmartOpen(true); setSmartDrafts(null); }}
+              className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2"
+            >
+              <Sparkles size={16} /> Deixar o Maestro montar pra mim
+            </button>
           </div>
         </div>
       </div>
@@ -848,43 +859,115 @@ export default function FlowsPage() {
         </div>
       )}
 
-      {/* Painel de revisão do draft gerado — "Como o Maestro montou isto" */}
-      {draft && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDraft(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      {/* Wizard MAESTRO INTELIGENTE — questionário guiado → 1+ drafts */}
+      {smartOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSmartOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-100 flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-500 flex items-center justify-center text-white shrink-0"><Sparkles size={18} /></div>
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shrink-0"><Sparkles size={18} /></div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-base font-semibold text-gray-900">O Maestro montou pra você</h3>
-                <p className="text-sm text-gray-600 mt-0.5">{draft.summary}</p>
-                {draft.source === 'fallback' && (
-                  <p className="text-[11px] text-amber-600 mt-1">Usei um modelo padrão como base — personalize à vontade.</p>
-                )}
+                <h3 className="text-base font-semibold text-gray-900">MAESTRO INTELIGENTE</h3>
+                <p className="text-sm text-gray-600 mt-0.5">Eu uso tudo que você preencheu no treinamento da IA pra montar fluxo(s) sob medida. Escolha o que esse atendimento precisa fazer.</p>
               </div>
-              <button onClick={() => setDraft(null)} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+              <button onClick={() => setSmartOpen(false)} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
             </div>
-            <div className="p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Como montei, nó a nó</p>
-              <ol className="space-y-2.5">
-                {draft.rationale.map((r, i) => (
-                  <li key={i} className="flex gap-3">
-                    <span className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 text-xs font-semibold flex items-center justify-center shrink-0">{i + 1}</span>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{r.node}</p>
-                      <p className="text-sm text-gray-600">{r.why}</p>
+
+            {/* Etapa 1: questionário (enquanto não há drafts) */}
+            {!smartDrafts && (
+              <div className="p-5 space-y-5">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 mb-2">Qual o objetivo desse atendimento?</p>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {OBJECTIVE_OPTIONS.map((o) => {
+                      const active = objectives.includes(o.goal);
+                      return (
+                        <button
+                          key={o.goal}
+                          type="button"
+                          onClick={() => toggleObjective(o.goal)}
+                          className={`text-left p-3 rounded-xl border transition-colors ${active ? 'border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-300' : 'border-gray-200 hover:border-gray-300'}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${active ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>
+                              {active && <span className="text-white text-[10px] leading-none">✓</span>}
+                            </span>
+                            <span className={`text-sm font-medium ${active ? 'text-indigo-700' : 'text-gray-800'}`}>{o.label}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1 ml-6">{o.hint}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Multi-agente — só quando >1 objetivo */}
+                {objectives.length > 1 && (
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="checkbox" checked={multiAgent} onChange={(e) => setMultiAgent(e.target.checked)} className="mt-1" />
+                      <span>
+                        <span className="text-sm font-medium text-gray-900">Quero um especialista por objetivo</span>
+                        <span className="block text-xs text-gray-500 mt-0.5">
+                          O Maestro monta <strong>um fluxo dedicado pra cada objetivo</strong> (ex.: um pra agendamento, outro pra dúvidas). Vantagem: cada fluxo fica mais focado e preciso. Você publica um por vez. Desmarcado, ele monta um único fluxo no objetivo principal.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button onClick={() => setSmartOpen(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
+                  <button onClick={runSmart} disabled={generating} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
+                    {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                    {generating ? 'Pensando no seu negócio…' : 'Gerar com inteligência'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Etapa 2: resultados (1+ drafts) */}
+            {smartDrafts && (
+              <div className="p-5 space-y-4">
+                {smartNote && <p className="text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">{smartNote}</p>}
+                {smartDrafts.length === 0 && <p className="text-sm text-gray-500">Não consegui montar agora. Tente de novo.</p>}
+                {smartDrafts.map((d, idx) => (
+                  <div key={idx} className="rounded-xl border border-gray-200 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900">{d.name}</p>
+                        <p className="text-xs text-indigo-600 font-medium">{d.blueprintLabel}</p>
+                        <p className="text-sm text-gray-600 mt-1">{d.summary}</p>
+                        {d.source === 'fallback' && <p className="text-[11px] text-amber-600 mt-1">Modelo padrão como base — personalize à vontade.</p>}
+                      </div>
+                      <button onClick={() => acceptDraft(d)} disabled={creating} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 flex items-center gap-1.5 shrink-0 disabled:opacity-50">
+                        {creating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Abrir e editar
+                      </button>
                     </div>
-                  </li>
+                    {d.rationale?.length > 0 && (
+                      <details className="mt-3">
+                        <summary className="text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer">Como o Maestro montou (nó a nó)</summary>
+                        <ol className="space-y-2 mt-2">
+                          {d.rationale.map((r, i) => (
+                            <li key={i} className="flex gap-2.5">
+                              <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-semibold flex items-center justify-center shrink-0">{i + 1}</span>
+                              <div><p className="text-xs font-medium text-gray-900">{r.node}</p><p className="text-xs text-gray-600">{r.why}</p></div>
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    )}
+                  </div>
                 ))}
-              </ol>
-            </div>
-            <div className="p-5 border-t border-gray-100 flex flex-col sm:flex-row gap-2 justify-end">
-              <button onClick={generate} disabled={generating} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2 disabled:opacity-50">
-                {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Gerar outro
-              </button>
-              <button onClick={acceptDraft} disabled={creating} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50">
-                {creating ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} Abrir e editar
-              </button>
-            </div>
+                <div className="flex justify-between gap-2 pt-1">
+                  <button onClick={() => setSmartDrafts(null)} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 flex items-center gap-2">
+                    <ArrowRight size={15} className="rotate-180" /> Mudar objetivos
+                  </button>
+                  <button onClick={runSmart} disabled={generating} className="px-4 py-2 rounded-lg text-sm font-medium text-indigo-600 hover:bg-indigo-50 flex items-center gap-2 disabled:opacity-50">
+                    {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Gerar de novo
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
