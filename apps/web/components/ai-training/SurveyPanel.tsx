@@ -20,6 +20,7 @@ import { Loader2, Save, CheckCircle2, Circle, CloudOff } from 'lucide-react';
 import { GLOBAL_SURVEY_BLOCKS } from '../../lib/surveyData';
 import type { SurveyQuestion } from '../../lib/surveyData';
 import { api } from '../../lib/api';
+import { examplePlaceholder } from '../../lib/surveyExamples';
 
 // Chave top-level onde o onboarding grava as respostas globais (por question.id).
 const SECTION_KEY = 'identidade_empresa';
@@ -38,6 +39,7 @@ type AutoState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 export function SurveyPanel({ onChange }: { onChange?: () => void }) {
   const [full, setFull] = useState<Record<string, any>>({});
   const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [niche, setNiche] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false); // save manual (botão)
   const [auto, setAuto] = useState<AutoState>('idle');
@@ -53,10 +55,11 @@ export function SurveyPanel({ onChange }: { onChange?: () => void }) {
   useEffect(() => {
     (async () => {
       try {
-        const data = await api.get<{ surveyAnswers: Record<string, any> }>('/api/ai-training/survey');
+        const data = await api.get<{ surveyAnswers: Record<string, any>; niche?: string }>('/api/ai-training/survey');
         const sa = data?.surveyAnswers || {};
         setFull(sa);
         setAnswers((sa[SECTION_KEY] as Record<string, any>) || {});
+        if (data?.niche) setNiche(data.niche);
       } catch {
         /* sem respostas ainda — começa vazio */
       } finally {
@@ -163,7 +166,7 @@ export function SurveyPanel({ onChange }: { onChange?: () => void }) {
           {block.description && <p className="text-xs text-gray-500 mt-0.5 mb-3">{block.description}</p>}
           <div className="space-y-4">
             {block.questions.map((q) => (
-              <Field key={q.id} q={q} value={answers[q.id]} onChange={(v) => setVal(q.id, v)} />
+              <Field key={q.id} q={q} niche={niche} value={answers[q.id]} onChange={(v) => setVal(q.id, v)} />
             ))}
           </div>
         </section>
@@ -183,10 +186,12 @@ export function SurveyPanel({ onChange }: { onChange?: () => void }) {
   );
 }
 
-function Field({ q, value, onChange }: { q: SurveyQuestion; value: any; onChange: (v: any) => void }) {
+function Field({ q, value, onChange, niche }: { q: SurveyQuestion; value: any; onChange: (v: any) => void; niche?: string }) {
   const answered = isAnswered(value);
   const base = 'w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-primary-400';
   const borderCls = answered ? 'border-gray-200' : 'border-amber-300 bg-amber-50/40';
+  // Exemplo relevante ao segmento (niche); cai no placeholder original se não houver.
+  const ph = examplePlaceholder(niche, q.id, q.placeholder);
 
   return (
     <div>
@@ -196,7 +201,7 @@ function Field({ q, value, onChange }: { q: SurveyQuestion; value: any; onChange
       </label>
 
       {q.type === 'textarea' && (
-        <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} placeholder={q.placeholder} rows={3} className={`${base} ${borderCls} resize-y`} />
+        <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} placeholder={ph} rows={3} className={`${base} ${borderCls} resize-y`} />
       )}
       {q.type === 'select' && (
         <select value={value || ''} onChange={(e) => onChange(e.target.value)} className={`${base} ${borderCls}`}>
@@ -244,7 +249,7 @@ function Field({ q, value, onChange }: { q: SurveyQuestion; value: any; onChange
           type={q.type === 'number' ? 'number' : q.type === 'email' ? 'email' : q.type === 'url' ? 'url' : 'text'}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={q.placeholder}
+          placeholder={ph}
           className={`${base} ${borderCls}`}
         />
       )}
