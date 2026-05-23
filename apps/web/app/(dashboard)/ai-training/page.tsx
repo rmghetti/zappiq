@@ -33,6 +33,7 @@ import {
   ArrowRight,
   Gauge,
   ClipboardList,
+  History,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import ReadinessMilestoneNudge from '../../../components/shared/ReadinessMilestoneNudge';
@@ -82,6 +83,16 @@ interface QAPair {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+interface TrainingActivity {
+  id: string;
+  action: string; // ex.: 'kb.document.create'
+  resource: string;
+  resourceId?: string | null;
+  details?: { summary?: string; area?: string } | null;
+  createdAt: string;
+  user?: { name?: string | null; email?: string | null } | null;
 }
 
 // ── Metadados visuais por nível ──────────────────────────
@@ -376,6 +387,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [urlLoading, setUrlLoading] = useState(false);
   const [urlInput, setUrlInput] = useState('');
+  const [urlProgress, setUrlProgress] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadDocs = useCallback(async () => {
@@ -418,17 +430,34 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
   };
 
   const handleUrl = async () => {
-    if (!urlInput.trim()) return;
+    // Multi-URL: aceita várias URLs separadas por quebra de linha, vírgula ou espaço.
+    // Ingere uma a uma (sequencial pra não estourar o crawler) e mantém na caixa
+    // só as que falharam, pra retry.
+    const urls = urlInput
+      .split(/[\n,\s]+/)
+      .map((u) => u.trim())
+      .filter(Boolean);
+    if (urls.length === 0) return;
+
     setUrlLoading(true);
-    try {
-      await api.post('/api/ai-training/documents/url', { url: urlInput.trim() });
-      setUrlInput('');
-      await loadDocs();
-      onChange();
-    } catch (err: any) {
-      alert(`Erro: ${err.message}`);
-    } finally {
-      setUrlLoading(false);
+    let ok = 0;
+    const failed: string[] = [];
+    for (let i = 0; i < urls.length; i++) {
+      setUrlProgress(`Ingerindo ${i + 1}/${urls.length}…`);
+      try {
+        await api.post('/api/ai-training/documents/url', { url: urls[i] });
+        ok++;
+        await loadDocs(); // feedback incremental — cada URL aparece na lista
+      } catch {
+        failed.push(urls[i]);
+      }
+    }
+    setUrlProgress(null);
+    setUrlLoading(false);
+    setUrlInput(failed.join('\n'));
+    onChange();
+    if (failed.length > 0) {
+      alert(`${ok} URL(s) ingerida(s). Falharam ${failed.length}: ${failed.join(', ')}`);
     }
   };
 
@@ -473,19 +502,22 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <div className="flex items-center gap-2 mb-2">
             <Globe size={18} className="text-primary-500" />
-            <p className="text-sm font-medium text-gray-900">Ingerir URL do seu site</p>
+            <p className="text-sm font-medium text-gray-900">Ingerir URLs do seu site</p>
           </div>
           <p className="text-xs text-gray-500 mb-3">
-            Cole a URL. Nosso crawler lê e vetoriza automaticamente.
+            Cole uma ou várias URLs (uma por linha). O crawler lê e vetoriza cada uma.
           </p>
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="https://seusite.com.br/sobre"
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
-            />
+          <textarea
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            placeholder={'https://seusite.com.br/sobre\nhttps://seusite.com.br/precos\nhttps://seusite.com.br/faq'}
+            rows={3}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-primary-500 focus:outline-none resize-y"
+          />
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <span className="text-xs text-gray-500">
+              {urlProgress || (urlInput.trim() ? `${urlInput.split(/[\n,\s]+/).filter(Boolean).length} URL(s)` : '')}
+            </span>
             <button
               onClick={handleUrl}
               disabled={urlLoading || !urlInput.trim()}
@@ -532,6 +564,94 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
           </ul>
         )}
       </div>
+
+      {/* Histórico de treinamento — log inalterável (audit) de tudo que treina a IA */}
+      <TrainingHistory />
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════
+// Histórico de treinamento (audit log kb.*)
+// ═════════════════════════════════════════════════════════
+const ACTION_LABEL: Record<string, string> = {
+  'kb.document.create': 'Documento enviado',
+  'kb.document.delete': 'Documento removido',
+  'kb.url.create': 'URL ingerida',
+  'kb.qa.create': 'Q&A criada',
+  'kb.qa.update': 'Q&A atualizada',
+  'kb.qa.delete': 'Q&A removida',
+  'kb.survey.update': 'Questionário atualizado',
+  'kb.identity.update': 'Identidade atualizada',
+};
+
+function TrainingHistory() {
+  const [items, setItems] = useState<TrainingActivity[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api.get<{ activity: TrainingActivity[] }>('/api/ai-training/activity');
+      setItems(data.activity || []);
+    } catch (err) {
+      console.warn('Falha ao carregar histórico:', err);
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loaded && items.length === 0) return null;
+
+  const shown = expanded ? items : items.slice(0, 6);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+          <History size={16} className="text-gray-500" /> Histórico de treinamento
+        </h3>
+        <span className="text-xs text-gray-500">{items.length} evento(s)</span>
+      </div>
+      {!loaded ? (
+        <div className="p-6 flex items-center justify-center text-gray-400 text-sm">
+          <Loader2 size={16} className="animate-spin mr-2" /> Carregando…
+        </div>
+      ) : (
+        <>
+          <ul className="divide-y divide-gray-100">
+            {shown.map((a) => (
+              <li key={a.id} className="px-4 py-3 flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full bg-primary-400 mt-1.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-900">
+                    <span className="font-medium">{ACTION_LABEL[a.action] || a.action}</span>
+                    {a.details?.summary && (
+                      <span className="text-gray-600"> — {a.details.summary}</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {new Date(a.createdAt).toLocaleString('pt-BR')}
+                    {a.user?.name ? ` · ${a.user.name}` : a.user?.email ? ` · ${a.user.email}` : ''}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {items.length > 6 && (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="w-full px-4 py-2.5 text-xs font-medium text-primary-600 hover:bg-primary-50/40 border-t border-gray-100 transition-colors"
+            >
+              {expanded ? 'Mostrar menos' : `Ver todos os ${items.length} eventos`}
+            </button>
+          )}
+        </>
+      )}
     </div>
   );
 }
