@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { MessageSquare, Users, Bot, CalendarCheck, TrendingUp, Clock, ArrowRight } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { AgentTrainingWidget } from '../../../components/dashboard/AgentTrainingWidget';
+import { CanaisTutorialCard } from '../../../components/dashboard/CanaisTutorialCard';
 
 interface OverviewData {
   totalMessages: number;
@@ -71,6 +72,10 @@ export default function DashboardPage() {
           do DB. Renderiza ${agent.name} dinâmico. Mostra nextActions proativas
           do backend. Aparece enquanto agente não atinge level=expert. */}
       <AgentTrainingWidget />
+
+      {/* Tutorial de ativação de canais (WhatsApp/Instagram) — visível na home
+          pra todo cliente, especialmente quem ainda não conectou número. */}
+      <CanaisTutorialCard />
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">

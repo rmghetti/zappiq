@@ -1,0 +1,2922 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Tutorial interativo · ZappIQ · Ativar WhatsApp e Instagram</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       TOKENS — paleta extraída do PDF
+       ═══════════════════════════════════════════════════════════════ */
+    :root {
+      /* Inks */
+      --ink:        #0E1116;
+      --ink-soft:   #2A3038;
+      --ink-mute:   #5B6573;
+      --ink-faint:  #98A0AC;
+
+      /* Surfaces */
+      --paper:        #FFFFFF;
+      --paper-warm:   #F6F5F2;
+      --paper-cover:  #0A0A0B;
+      --paper-card:   #FFFFFF;
+
+      /* Rules */
+      --rule:        rgba(14,17,22,0.10);
+      --rule-soft:   rgba(14,17,22,0.06);
+      --rule-strong: rgba(14,17,22,0.18);
+
+      /* Part accents — cores do PDF */
+      --p1: #5B47F0;          /* violet — Preparativos */
+      --p1-soft: #EFECFE;
+      --p3: #1DA859;          /* green — WhatsApp */
+      --p3-soft: #E1F5EA;
+      --p4: #E8567D;          /* pink — Instagram */
+      --p4-soft: #FCE7EE;
+      --p-default: #5B47F0;
+      --p-default-soft: #EFECFE;
+
+      /* WhatsApp green (icon e success) */
+      --wa: #25D366;
+      /* Instagram gradient */
+      --ig-grad: linear-gradient(135deg, #FEDA77 0%, #F58529 25%, #DD2A7B 60%, #8134AF 90%);
+
+      /* Notes colors */
+      --tip:   #5B47F0;       /* azul-violeta */
+      --tip-soft: #EFECFE;
+      --warn:  #D2691C;       /* laranja */
+      --warn-soft: #FBEEDD;
+      --gold:  #DC3A3A;       /* vermelho */
+      --gold-soft: #FBE3E3;
+      --done:  #1DA859;       /* verde */
+      --done-soft: #E1F5EA;
+      --note:  #5B6573;
+      --note-soft: #F1F0EC;
+
+      --fb-blue: #1877F2;
+
+      /* Fonts */
+      --sans: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+
+      /* Radii */
+      --r-sm: 6px;
+      --r:    10px;
+      --r-lg: 14px;
+      --r-xl: 22px;
+
+      --shadow-modal: 0 30px 80px rgba(14,17,22,0.30), 0 8px 20px rgba(14,17,22,0.18);
+    }
+
+    /* Dark/Soft themes */
+    .tutorial--dark {
+      --ink: #F4F5F2;
+      --ink-soft: #D8DAD3;
+      --ink-mute: #9AA0A8;
+      --ink-faint: #5E646E;
+      --paper: #0E1116;
+      --paper-warm: #15181F;
+      --paper-card: #1A1E26;
+      --rule: rgba(244,245,242,0.10);
+      --rule-soft: rgba(244,245,242,0.05);
+      --rule-strong: rgba(244,245,242,0.18);
+      --tip-soft: rgba(91,71,240,0.18);
+      --warn-soft: rgba(210,105,28,0.18);
+      --gold-soft: rgba(220,58,58,0.18);
+      --done-soft: rgba(29,168,89,0.18);
+      --note-soft: rgba(244,245,242,0.06);
+      --p1-soft: rgba(91,71,240,0.18);
+      --p3-soft: rgba(29,168,89,0.18);
+      --p4-soft: rgba(232,86,125,0.18);
+    }
+    .tutorial--soft {
+      --paper-warm: #F1EFE9;
+    }
+
+    /* Per-part theming via data-part */
+    .long[data-part="p1"], .long[data-part="p2"] { --p: var(--p1); --p-soft: var(--p1-soft); }
+    .long[data-part="p3"] { --p: var(--p3); --p-soft: var(--p3-soft); }
+    .long[data-part="p4"] { --p: var(--p4); --p-soft: var(--p4-soft); }
+    .long { --p: var(--p1); --p-soft: var(--p1-soft); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BASE
+       ═══════════════════════════════════════════════════════════════ */
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    html, body, #root { height: 100%; }
+    body {
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ink);
+      background: var(--paper-warm);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      font-feature-settings: "ss01", "cv11";
+    }
+    button { font: inherit; cursor: pointer; border: 0; background: none; color: inherit; }
+    h1, h2, h3, h4, h5 { margin: 0; font-weight: 800; letter-spacing: -0.022em; }
+    p { margin: 0; }
+    a { color: inherit; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       ONBOARDING BACKDROP — página da ZappIQ por trás do modal
+       ═══════════════════════════════════════════════════════════════ */
+    .ob {
+      position: fixed; inset: 0;
+      background: var(--paper-warm);
+      overflow: auto;
+    }
+    .ob__nav {
+      display: flex; align-items: center;
+      padding: 14px 32px; gap: 24px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--paper);
+    }
+    .ob__brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 17px; letter-spacing: -0.02em; }
+    .ob__menu {
+      display: flex; gap: 28px; margin-left: 32px;
+      font-size: 14px; color: var(--ink-mute); font-weight: 500;
+    }
+    .ob__menu--active { color: var(--ink); font-weight: 600; }
+    .ob__profile { margin-left: auto; }
+    .ob__avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--ink); color: var(--paper);
+      display: grid; place-items: center;
+      font-size: 12px; font-weight: 700;
+    }
+    .ob__main {
+      max-width: 840px; margin: 0 auto;
+      padding: 56px 32px;
+    }
+    .ob__crumb {
+      font-size: 13px; color: var(--ink-mute);
+      display: flex; gap: 8px; align-items: center; margin-bottom: 20px;
+    }
+    .ob__title {
+      font-size: 44px; line-height: 1.05; font-weight: 800; letter-spacing: -0.025em;
+      margin-bottom: 14px;
+    }
+    .ob__lead {
+      font-size: 17px; line-height: 1.55; color: var(--ink-mute);
+      max-width: 640px; margin-bottom: 32px;
+    }
+    .ob__tutorial-cta {
+      display: flex; align-items: center; gap: 24px;
+      padding: 22px;
+      border: 1px solid var(--rule); background: var(--paper);
+      border-radius: var(--r-lg);
+      margin-bottom: 32px;
+    }
+    .ob__tutorial-text { flex: 1; }
+    .ob__tutorial-eyebrow {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 11px; letter-spacing: 0.12em; color: var(--p1);
+      margin-bottom: 6px; font-weight: 500;
+    }
+    .ob__tutorial-h { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+    .ob__tutorial-d { font-size: 14px; color: var(--ink-mute); margin-top: 4px; }
+    .ob__tutorial-actions { display: flex; gap: 10px; }
+
+    .ob__channels { display: grid; gap: 12px; }
+    .ob__channel {
+      display: flex; align-items: center; gap: 16px;
+      padding: 18px 22px;
+      background: var(--paper);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-lg);
+    }
+    .ob__channel-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: grid; place-items: center; flex-shrink: 0;
+    }
+    .ob__channel-icon--wa { background: #25D366; }
+    .ob__channel-icon--ig { background: var(--ig-grad); }
+    .ob__channel-body { flex: 1; }
+    .ob__channel-name { font-weight: 700; font-size: 16px; }
+    .ob__channel-status { font-size: 13px; color: var(--ink-mute); margin-top: 2px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LOGO ZappIQ + MACHIA — usados no header da página
+       ═══════════════════════════════════════════════════════════════ */
+    .zlogo { display: flex; align-items: center; gap: 6px; font-weight: 800; letter-spacing: -0.02em; }
+    .zlogo__bubble {
+      width: 28px; height: 28px;
+      background: linear-gradient(180deg, #2BCB7B 0%, #1DA859 100%);
+      border-radius: 50% 50% 50% 6px;
+      display: grid; place-items: center;
+      color: white; flex-shrink: 0;
+      box-shadow: 0 1px 2px rgba(29,168,89,0.4);
+    }
+    .zlogo__text { display: flex; align-items: baseline; }
+    .zlogo__text b { color: var(--ink); }
+    .zlogo__text i { color: var(--p3); font-style: normal; }
+    .zlogo__text span { padding: 0 3px; color: var(--ink-faint); font-weight: 400; }
+
+    .machia {
+      display: flex; align-items: center;
+      width: 56px; height: 56px;
+      background: white;
+      border: 1px solid var(--rule);
+      border-radius: 4px;
+      padding: 6px;
+      flex-shrink: 0;
+    }
+    .machia svg { width: 100%; height: 100%; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TUTORIAL MODAL — BACKDROP & FRAME
+       ═══════════════════════════════════════════════════════════════ */
+    .tutorial-backdrop {
+      position: fixed; inset: 0; z-index: 100;
+      display: grid;
+      animation: fadeIn .25s ease-out;
+    }
+    .tutorial-backdrop--modal {
+      background: rgba(14, 17, 22, 0.55);
+      backdrop-filter: blur(6px);
+      padding: 28px;
+      place-items: center;
+    }
+    .tutorial-backdrop--full { background: var(--paper-warm); padding: 0; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .tutorial {
+      display: flex; flex-direction: column;
+      width: 100%; height: 100%;
+      max-width: 1440px;
+      background: var(--paper);
+      color: var(--ink);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-modal);
+      animation: slideUp .35s cubic-bezier(.2,.8,.2,1);
+    }
+    .tutorial-backdrop--full .tutorial { border-radius: 0; box-shadow: none; max-width: none; }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: .5; } to { transform: translateY(0); opacity: 1; } }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MODAL TOP BAR (close + progress + actions)
+       ═══════════════════════════════════════════════════════════════ */
+    .t-topbar {
+      display: flex; align-items: center; gap: 16px;
+      padding: 12px 22px;
+      background: var(--paper);
+      border-bottom: 1px solid var(--rule);
+      flex-shrink: 0;
+    }
+    .t-topbar__doc {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 11px; letter-spacing: 0.1em; color: var(--ink-faint);
+    }
+    .t-topbar__pill {
+      padding: 4px 10px; border-radius: 999px;
+      border: 1px solid var(--rule);
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 10px; letter-spacing: 0.12em; color: var(--ink-soft);
+      white-space: nowrap;
+    }
+    .t-topbar__progress {
+      flex: 1; max-width: 340px;
+      margin-left: auto;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .t-topbar__progress-label {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 10px; letter-spacing: 0.1em; color: var(--ink-mute);
+      flex-shrink: 0;
+    }
+    .t-topbar__progress-bar {
+      flex: 1; height: 3px; background: var(--rule); border-radius: 2px; overflow: hidden;
+    }
+    .t-topbar__progress-fill { height: 100%; background: var(--ink); transition: width .4s; }
+    .t-topbar__progress-pct {
+      font-family: var(--mono); font-size: 11px; font-weight: 600; min-width: 30px; text-align: right;
+    }
+    .t-topbar__actions { display: flex; gap: 6px; align-items: center; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BUTTONS
+       ═══════════════════════════════════════════════════════════════ */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 14px;
+      border-radius: var(--r-sm);
+      font-family: var(--sans);
+      font-size: 14px; font-weight: 600;
+      line-height: 1; letter-spacing: -0.005em;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+    .btn--primary { background: var(--ink); color: var(--paper); }
+    .btn--primary:hover { background: var(--p1); }
+    .btn--accent { background: var(--p1); color: white; }
+    .btn--secondary {
+      background: var(--paper); color: var(--ink);
+      border: 1px solid var(--rule-strong);
+    }
+    .btn--secondary:hover { background: var(--paper-warm); }
+    .btn--ghost { background: transparent; color: var(--ink-soft); }
+    .btn--ghost:hover { background: var(--rule-soft); color: var(--ink); }
+    .btn--close { width: 36px; height: 36px; padding: 0; justify-content: center; font-size: 16px; }
+    .btn--lg { padding: 14px 22px; font-size: 15px; }
+    .btn--full { width: 100%; justify-content: center; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BODY = SIDEBAR + MAIN
+       ═══════════════════════════════════════════════════════════════ */
+    .tutorial__body { display: grid; grid-template-columns: 260px 1fr; flex: 1; overflow: hidden; }
+    .tutorial__main {
+      overflow-y: auto;
+      background: var(--paper);
+      display: flex; flex-direction: column;
+    }
+    .tutorial__main-inner {
+      flex: 1;
+      width: 100%;
+      padding: 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       PAGE HEADER — replica do header do PDF em cada parte
+       ═══════════════════════════════════════════════════════════════ */
+    .page-header {
+      display: grid;
+      grid-template-columns: auto auto 1fr auto;
+      gap: 18px;
+      align-items: center;
+      padding: 18px 56px 16px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--paper);
+      position: sticky; top: 0; z-index: 5;
+    }
+    .page-header__rule {
+      position: absolute; left: 56px; bottom: -1px;
+      width: 60px; height: 3px;
+      background: var(--p, var(--p1));
+    }
+    .page-header__title {
+      font-size: 14px; font-weight: 600; color: var(--ink-soft); letter-spacing: -0.005em;
+    }
+    .page-header__section {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 11px; letter-spacing: 0.14em; color: var(--ink-mute); font-weight: 500;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SIDEBAR
+       ═══════════════════════════════════════════════════════════════ */
+    .t-sidebar {
+      background: var(--paper-warm);
+      border-right: 1px solid var(--rule);
+      padding: 20px 0;
+      overflow-y: auto;
+      display: flex; flex-direction: column;
+    }
+    .t-sidebar__label {
+      padding: 0 22px 14px;
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 10px; letter-spacing: 0.14em; color: var(--ink-mute); font-weight: 500;
+    }
+    .t-toc { list-style: none; padding: 0; margin: 0; }
+    .t-toc__item {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      gap: 12px;
+      padding: 9px 22px;
+      text-align: left;
+      align-items: start;
+      border-left: 2px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .t-toc__item:hover { background: var(--rule-soft); }
+    .t-toc__item--active {
+      background: var(--paper);
+      border-left-color: var(--p, var(--p1));
+    }
+    .t-toc__n {
+      font-family: var(--mono); font-size: 11px; font-weight: 500;
+      color: var(--ink-faint); padding-top: 2px;
+    }
+    .t-toc__item--active .t-toc__n { color: var(--p, var(--p1)); font-weight: 600; }
+    .t-toc__text { min-width: 0; }
+    .t-toc__title { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+    .t-toc__note { display: block; font-size: 11px; color: var(--ink-faint); margin-top: 2px; font-weight: 400; }
+    .t-toc__prog {
+      grid-column: 2;
+      margin-top: 6px;
+      height: 2px; background: var(--rule); border-radius: 1px; overflow: hidden;
+    }
+    .t-toc__prog-fill { display: block; height: 100%; background: var(--p, var(--p1)); }
+
+    .t-sidebar__help {
+      margin: auto 14px 14px;
+      padding: 14px;
+      background: var(--paper);
+      border-radius: var(--r);
+      border: 1px solid var(--rule);
+      margin-top: 24px;
+    }
+    .t-sidebar__help-eyebrow {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 10px; letter-spacing: 0.12em; color: var(--p1);
+      margin-bottom: 6px; font-weight: 500;
+    }
+    .t-sidebar__help p { font-size: 13px; line-height: 1.45; margin-bottom: 12px; color: var(--ink-soft); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FOOTER
+       ═══════════════════════════════════════════════════════════════ */
+    .t-footer {
+      display: flex; gap: 12px; align-items: center;
+      padding: 14px 56px;
+      border-top: 1px solid var(--rule);
+      background: var(--paper);
+      position: sticky; bottom: 0;
+      width: 100%;
+    }
+    .t-footer .btn--secondary { margin-left: auto; }
+    .t-footer .btn--primary { min-width: 200px; justify-content: center; }
+    .t-footer .btn--ghost:first-child { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       COVER — DARK
+       ═══════════════════════════════════════════════════════════════ */
+    .cover-wrap {
+      background: var(--paper-cover);
+      color: #F4F5F2;
+      min-height: 100%;
+      padding: 40px 56px 60px;
+      position: relative;
+    }
+    .cover-wrap__top {
+      display: flex; align-items: center; gap: 16px;
+      padding-bottom: 60px;
+      flex-wrap: wrap;
+    }
+    .cover-wrap__divider {
+      width: 1px; height: 28px; background: rgba(255,255,255,0.15);
+    }
+    .cover-wrap .zlogo__text b { color: white; }
+    .cover-wrap .zlogo__text span { color: rgba(255,255,255,0.4); }
+    .cover-wrap .machia { background: white; }
+    .cover-pill {
+      margin-left: auto;
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.2);
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 11px; letter-spacing: 0.16em; color: rgba(255,255,255,0.7);
+    }
+    .cover__eyebrow-row {
+      display: flex; align-items: center; gap: 12px;
+      margin: 20px 0 28px;
+      max-width: 720px;
+    }
+    .cover__eyebrow-dash {
+      width: 30px; height: 2px; background: var(--p1);
+      flex-shrink: 0;
+    }
+    .cover__eyebrow {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 12px; letter-spacing: 0.18em; color: var(--p1); font-weight: 500;
+    }
+    .cover__title {
+      font-size: 96px; line-height: 0.96; letter-spacing: -0.038em;
+      font-weight: 800;
+      margin-bottom: 32px;
+      max-width: 1000px;
+      color: white;
+    }
+    .cover__title .wa { color: #25D366; }
+    .cover__title .ig {
+      background: var(--ig-grad);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .cover__lead {
+      font-size: 18px; line-height: 1.5; color: rgba(244,245,242,0.7);
+      max-width: 560px; margin-bottom: 56px;
+      text-wrap: pretty;
+    }
+    .cover__divider {
+      width: 100%; height: 1px;
+      background: rgba(255,255,255,0.15);
+      margin-bottom: 28px;
+    }
+    .cover__stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-bottom: 56px; max-width: 720px; }
+    .stat__big { font-size: 46px; font-weight: 800; letter-spacing: -0.028em; color: white; }
+    .stat__small { font-size: 18px; color: rgba(244,245,242,0.5); font-weight: 600; margin-left: 2px; }
+    .stat__sub { font-size: 13px; color: rgba(244,245,242,0.5); margin-top: 6px; }
+
+    .cover__map-label {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 11px; letter-spacing: 0.14em; color: rgba(244,245,242,0.5);
+      margin-bottom: 14px;
+    }
+    .cover__map-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+      margin-bottom: 32px;
+      align-items: stretch;
+    }
+    .map-card {
+      text-align: left;
+      padding: 22px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: var(--r);
+      transition: all 0.2s ease;
+      position: relative;
+      color: white;
+      display: flex; flex-direction: column;
+    }
+    .map-card:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.20);
+      transform: translateY(-2px);
+    }
+    .map-card__n {
+      font-family: var(--mono); font-size: 11px; font-weight: 500;
+      color: var(--p1); letter-spacing: 0.1em;
+      margin-bottom: 12px;
+    }
+    .map-card__t { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px; }
+    .map-card__d { font-size: 13.5px; color: rgba(244,245,242,0.65); line-height: 1.5; margin-bottom: auto; }
+    .map-card__tag {
+      margin-top: 16px;
+      align-self: flex-start;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 10px; letter-spacing: 0.1em; font-weight: 500;
+    }
+    .map-card:nth-child(1) .map-card__tag { background: rgba(91,71,240,0.18); color: #A9A1FC; }
+    .map-card:nth-child(2) .map-card__tag { background: rgba(29,168,89,0.18); color: #6BD9A1; }
+    .map-card:nth-child(3) .map-card__tag { background: rgba(232,86,125,0.18); color: #F4A1B6; }
+
+    .cover__cta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+    .cover__cta .btn--primary { background: white; color: var(--paper-cover); }
+    .cover__cta .btn--primary:hover { background: var(--p1); color: white; }
+    .cover__cta .btn--ghost { color: rgba(244,245,242,0.7); border: 1px solid rgba(255,255,255,0.18); }
+    .cover__cta .btn--ghost:hover { background: rgba(255,255,255,0.06); color: white; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LONG-FORM (intro, glossary, etc) — modo claro
+       ═══════════════════════════════════════════════════════════════ */
+    .long {
+      padding: 36px 56px 44px;
+    }
+    .long__h1 {
+      font-size: 56px; line-height: 1.02;
+      letter-spacing: -0.032em; margin-bottom: 18px;
+      font-weight: 800;
+      text-wrap: balance;
+    }
+    .long__h1 em { font-style: normal; color: var(--ink-faint); font-weight: 800; }
+    .long__lead {
+      font-size: 16px; line-height: 1.55; color: var(--ink-soft);
+      max-width: 640px; margin-bottom: 32px;
+      text-wrap: pretty;
+    }
+    .eyebrow-row {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 16px;
+    }
+    .eyebrow-dash { width: 24px; height: 2px; background: var(--p, var(--p1)); flex-shrink: 0; }
+    .eyebrow {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 11px; letter-spacing: 0.16em; color: var(--p, var(--p1)); font-weight: 500;
+    }
+    .part-header { margin-bottom: 36px; }
+    .part-header__eb {
+      font-family: var(--mono); font-size: 12px; color: var(--ink-mute);
+      margin-top: 16px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       NOTES — Dica/Cuidado/Regra de ouro/Pronto
+       ═══════════════════════════════════════════════════════════════ */
+    .notes { display: grid; gap: 10px; margin-top: 18px; grid-template-columns: 1fr 1fr; }
+    .notes--full { grid-template-columns: 1fr; }
+    .notes:has(.note:only-child) { grid-template-columns: 1fr; }
+
+    .note {
+      padding: 14px 16px;
+      border-radius: var(--r);
+      border-left: 3px solid;
+      display: flex; gap: 12px;
+      align-items: flex-start;
+    }
+    .note--tip   { background: var(--tip-soft);  border-color: var(--tip); }
+    .note--warn  { background: var(--warn-soft); border-color: var(--warn); }
+    .note--gold  { background: var(--gold-soft); border-color: var(--gold); }
+    .note--done  { background: var(--done-soft); border-color: var(--done); }
+    .note--note  { background: var(--note-soft); border-color: var(--note); }
+
+    .note__icon {
+      width: 22px; height: 22px; border-radius: 50%;
+      display: grid; place-items: center;
+      flex-shrink: 0;
+      color: white;
+      font-size: 13px; font-weight: 700;
+      line-height: 1;
+    }
+    .note--tip  .note__icon { background: var(--tip); }
+    .note--warn .note__icon { background: var(--warn); }
+    .note--gold .note__icon { background: var(--gold); }
+    .note--done .note__icon { background: var(--done); }
+    .note--note .note__icon { background: var(--note); }
+
+    .note__body-wrap { flex: 1; min-width: 0; }
+    .note__head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+    .note__kind {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 10.5px; letter-spacing: 0.14em; font-weight: 600;
+    }
+    .note--tip  .note__kind { color: var(--tip); }
+    .note--warn .note__kind { color: var(--warn); }
+    .note--gold .note__kind { color: var(--gold); }
+    .note--done .note__kind { color: var(--done); }
+    .note--note .note__kind { color: var(--ink-mute); }
+    .note__dash { color: var(--ink-faint); }
+    .note__title { font-size: 13px; font-weight: 700; color: var(--ink); }
+    .note__body  { font-size: 13.5px; line-height: 1.55; color: var(--ink-soft); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       STEP CARD — figura à esquerda, conteúdo à direita
+       ═══════════════════════════════════════════════════════════════ */
+    .step {
+      border: 1px solid var(--rule);
+      border-radius: var(--r-lg);
+      padding: 22px;
+      margin-top: 18px;
+      background: var(--paper);
+    }
+    .step__head {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .step__pill {
+      padding: 5px 10px;
+      background: var(--p-soft, var(--p1-soft));
+      color: var(--p, var(--p1));
+      border-radius: 6px;
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 11px; letter-spacing: 0.1em; font-weight: 600;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .step__title { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; flex: 1; min-width: 200px; }
+    .step__time {
+      font-family: var(--mono); font-size: 12px; color: var(--ink-mute);
+    }
+
+    .step__pips {
+      display: flex; gap: 4px;
+      margin-bottom: 18px;
+      padding-bottom: 18px;
+      border-bottom: 1px dashed var(--rule);
+    }
+    .pip {
+      width: 26px; height: 26px;
+      display: grid; place-items: center;
+      font-family: var(--mono); font-size: 11px; font-weight: 600;
+      border-radius: 50%;
+      background: var(--paper); color: var(--ink-mute);
+      border: 1.5px solid var(--rule-strong);
+    }
+    .pip--active { background: var(--p, var(--p1)); color: white; border-color: var(--p, var(--p1)); }
+    .pip--done { background: var(--p-soft, var(--p1-soft)); color: var(--p, var(--p1)); border-color: var(--p-soft, var(--p1-soft)); }
+
+    .step__grid {
+      display: grid; grid-template-columns: 1fr 1.1fr; gap: 24px;
+      align-items: start;
+    }
+    .step__figure-col { display: flex; flex-direction: column; gap: 10px; }
+    .step__content { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+    .step__lead { font-size: 14.5px; line-height: 1.55; color: var(--ink-soft); margin-bottom: -6px; }
+
+    .block { display: block; }
+    .block__label {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 10.5px; letter-spacing: 0.14em; color: var(--p, var(--p1));
+      margin-bottom: 8px; font-weight: 600;
+    }
+    .block__body { font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+
+    .actions { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    .action {
+      display: grid; grid-template-columns: 26px 1fr; gap: 10px;
+      align-items: start;
+    }
+    .action p { font-size: 14.5px; line-height: 1.55; color: var(--ink); padding-top: 2px; }
+    .action b { font-weight: 700; }
+    .action__check {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: white;
+      font-family: var(--sans); font-size: 11px; font-weight: 700;
+      display: grid; place-items: center;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .action__check:hover { background: var(--p, var(--p1)); }
+    .action--done .action__check { background: var(--done); }
+    .action--done p { color: var(--ink-mute); text-decoration: line-through; text-decoration-thickness: 1px; text-decoration-color: var(--rule-strong); }
+
+    /* ─── Figure (left side of step) ─── */
+    .figure { display: flex; flex-direction: column; gap: 10px; }
+    .figure__frame {
+      background: var(--paper-warm);
+      border: 1px solid var(--rule);
+      border-radius: var(--r);
+      padding: 18px;
+      display: grid; place-items: center;
+      min-height: 280px;
+    }
+    .figure__caption {
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 10.5px; letter-spacing: 0.12em; color: var(--ink-mute);
+      text-align: center;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MULTI-FIGURE (Instagram 5 steps)
+       ═══════════════════════════════════════════════════════════════ */
+    .step--multi .step__grid { display: block; }
+    .multi-grid { display: grid; gap: 14px; margin: 18px 0; }
+    .multi-card {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      padding: 22px;
+      border: 1px solid var(--rule);
+      border-radius: var(--r);
+      align-items: center;
+      position: relative;
+    }
+    .multi-card__n {
+      position: absolute; top: -12px; left: 22px;
+      width: 26px; height: 26px;
+      background: var(--p, var(--p1)); color: white;
+      border-radius: 50%;
+      display: grid; place-items: center;
+      font-family: var(--mono); font-size: 11px; font-weight: 600;
+    }
+    .multi-card__fig {
+      background: var(--paper-warm);
+      border-radius: var(--r);
+      padding: 14px;
+      display: grid; place-items: center;
+    }
+    .multi-card__t { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 6px; line-height: 1.1; }
+    .multi-card__d { font-size: 14px; line-height: 1.55; color: var(--ink-soft); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       GLOSSARY
+       ═══════════════════════════════════════════════════════════════ */
+    .glossary { display: grid; gap: 0; margin-top: 12px; }
+    .gloss {
+      display: grid; grid-template-columns: 220px 1fr; gap: 32px;
+      padding: 20px 0;
+      border-top: 1px solid var(--rule);
+    }
+    .gloss:last-child { border-bottom: 1px solid var(--rule); }
+    .gloss dt { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
+    .gloss dd { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CHECKLIST
+       ═══════════════════════════════════════════════════════════════ */
+    .checklist {
+      list-style: none; padding: 0;
+      margin: 28px 0 0;
+      display: grid; gap: 10px;
+      grid-template-columns: 1fr 1fr;
+    }
+    .chk {
+      display: grid; grid-template-columns: 28px 1fr;
+      gap: 12px; align-items: start;
+      padding: 16px;
+      border: 1px solid var(--rule);
+      border-radius: var(--r);
+    }
+    .chk__box {
+      width: 22px; height: 22px; border-radius: 5px;
+      background: var(--paper);
+      border: 1.5px solid var(--rule-strong);
+      color: var(--p, var(--p1)); font-weight: 700; font-size: 13px;
+      transition: all 0.15s ease;
+      margin-top: 1px;
+    }
+    .chk__box:hover { border-color: var(--p, var(--p1)); }
+    .chk--on .chk__box { background: var(--p, var(--p1)); border-color: var(--p, var(--p1)); color: white; }
+    .chk__title { font-size: 14.5px; font-weight: 700; line-height: 1.3; }
+    .chk__note { font-size: 13px; color: var(--ink-mute); margin-top: 4px; line-height: 1.5; }
+    .chk--on .chk__title { color: var(--ink-mute); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CONVENTIONS (intro) — replica do PDF
+       ═══════════════════════════════════════════════════════════════ */
+    .convs {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px 32px;
+      margin-top: 28px;
+    }
+    .conv { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
+    .conv__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transform: translateY(1px); }
+    .conv__dot--tip { background: var(--tip); }
+    .conv__dot--warn { background: var(--warn); }
+    .conv__dot--gold { background: var(--gold); }
+    .conv__dot--done { background: var(--done); }
+    .conv b { font-weight: 700; }
+    .conv span { color: var(--ink-mute); }
+
+    /* Cover-of-page convention map cards */
+    .intro-cards {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+      margin: 28px 0;
+      align-items: stretch;
+    }
+    .intro-card {
+      padding: 22px;
+      border: 1px solid var(--rule);
+      border-radius: var(--r);
+      display: flex; flex-direction: column;
+      position: relative;
+    }
+    .intro-card__n {
+      font-family: var(--mono); font-size: 11px; font-weight: 600;
+      letter-spacing: 0.12em;
+      margin-bottom: 12px;
+    }
+    .intro-card:nth-child(1) .intro-card__n { color: var(--p1); }
+    .intro-card:nth-child(2) .intro-card__n { color: var(--p3); }
+    .intro-card:nth-child(3) .intro-card__n { color: var(--p4); }
+    .intro-card__t { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 8px; line-height: 1.15; }
+    .intro-card__d { font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; margin-bottom: auto; }
+    .intro-card__d b { font-weight: 700; }
+    .intro-card__tag {
+      margin-top: 16px; align-self: flex-start;
+      padding: 4px 10px; border-radius: 6px;
+      font-family: var(--mono); text-transform: uppercase;
+      font-size: 10px; letter-spacing: 0.12em; font-weight: 500;
+    }
+    .intro-card:nth-child(1) .intro-card__tag { background: var(--p1-soft); color: var(--p1); }
+    .intro-card:nth-child(2) .intro-card__tag { background: var(--p3-soft); color: var(--p3); }
+    .intro-card:nth-child(3) .intro-card__tag { background: var(--p4-soft); color: var(--p4); }
+    .intro-arrow {
+      position: absolute; right: -19px; top: 50%;
+      transform: translateY(-50%);
+      width: 22px; height: 22px;
+      background: var(--paper);
+      display: grid; place-items: center;
+      color: var(--ink-faint);
+      z-index: 1;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LINKS section
+       ═══════════════════════════════════════════════════════════════ */
+    .links { display: grid; gap: 0; }
+    .link {
+      display: grid; grid-template-columns: 40px 1fr 20px; gap: 18px;
+      align-items: center;
+      padding: 16px 0;
+      border-top: 1px solid var(--rule);
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .link:last-child { border-bottom: 1px solid var(--rule); }
+    .link:hover { padding-left: 8px; padding-right: 8px; background: var(--paper-warm); }
+    .link__n { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink-faint); }
+    .link__title { font-size: 15px; font-weight: 700; line-height: 1.35; }
+    .link__url { font-family: var(--mono); font-size: 12px; color: var(--ink-mute); margin-top: 3px; }
+    .link__arrow { color: var(--p1); font-size: 16px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FAQ — cards de pergunta
+       ═══════════════════════════════════════════════════════════════ */
+    .faq { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .faq__item {
+      border: 1px solid var(--rule);
+      border-radius: var(--r);
+      padding: 18px;
+      position: relative;
+      transition: all 0.15s ease;
+    }
+    .faq__item[open] { background: var(--paper-warm); }
+    .faq__q {
+      list-style: none;
+      cursor: pointer;
+      display: flex; justify-content: space-between; gap: 12px;
+      font-size: 15px; font-weight: 700; line-height: 1.3; padding-right: 24px;
+      letter-spacing: -0.015em;
+    }
+    .faq__q::-webkit-details-marker { display: none; }
+    .faq__plus {
+      position: absolute; right: 18px; top: 18px;
+      font-family: var(--mono); font-size: 18px; color: var(--p1); font-weight: 400;
+    }
+    .faq__a {
+      padding-top: 10px;
+      font-size: 13.5px; line-height: 1.55; color: var(--ink-soft);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TIMELINE
+       ═══════════════════════════════════════════════════════════════ */
+    .timeline { display: grid; gap: 0; margin-bottom: 28px; }
+    .tl {
+      display: grid;
+      grid-template-columns: 40px 1fr 240px 160px 160px;
+      gap: 16px; align-items: center;
+      padding: 16px 0;
+      border-top: 1px solid var(--rule);
+    }
+    .tl:last-of-type { border-bottom: 1px solid var(--rule); }
+    .tl__n { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--ink-faint); }
+    .tl__title { font-size: 15px; font-weight: 700; }
+    .tl__bar {
+      height: 8px; background: var(--rule); border-radius: 4px; overflow: hidden; position: relative;
+    }
+    .tl__bar-fill { display: block; height: 100%; background: var(--p1); width: 30%; }
+    .tl--slow .tl__bar-fill { width: 100%; background: var(--warn); }
+    .tl__time { font-family: var(--mono); font-size: 13px; color: var(--ink-soft); }
+    .tl__freq { font-size: 13px; color: var(--ink-mute); }
+
+    .totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; padding: 24px 0; border-top: 1px solid var(--rule); }
+    .total__big { font-size: 38px; font-weight: 800; letter-spacing: -0.028em; }
+    .total__big span { font-size: 18px; color: var(--ink-mute); font-weight: 700; margin-left: 4px; }
+    .total__sub { font-size: 13px; color: var(--ink-mute); margin-top: 4px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CLOSING (Parte 8)
+       ═══════════════════════════════════════════════════════════════ */
+    .long__h1 .grad {
+      background: linear-gradient(90deg, #5B47F0 0%, #1DA859 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      font-style: normal; font-weight: 800;
+    }
+    .closing__card {
+      padding: 24px;
+      background: var(--p1-soft);
+      border-radius: var(--r);
+      display: flex; align-items: center; gap: 24px;
+      margin: 28px 0;
+    }
+    .closing__where { flex: 1; font-size: 15px; line-height: 1.55; }
+    .closing__pull {
+      font-size: 26px; line-height: 1.2; letter-spacing: -0.02em;
+      max-width: 720px; padding: 28px 0;
+      border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+      font-weight: 700;
+      text-wrap: balance;
+    }
+    .closing__final { padding: 28px 0; }
+    .colophon {
+      font-family: var(--mono); font-size: 11px;
+      color: var(--ink-faint); line-height: 1.7;
+      margin-top: 18px;
+    }
+    .part-end {
+      display: flex; gap: 18px; align-items: center;
+      padding: 22px;
+      background: var(--p3-soft);
+      border-radius: var(--r);
+      margin-top: 28px;
+    }
+    .part-end__check {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--p3); color: white;
+      display: grid; place-items: center; font-size: 20px; font-weight: 800;
+      flex-shrink: 0;
+    }
+    .part-end__t { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 2px; }
+    .part-end__d { font-size: 13.5px; color: var(--ink-soft); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MOCKUP FIGURES — Browser chrome, Meta dialogs
+       ═══════════════════════════════════════════════════════════════ */
+    .browser {
+      width: 100%; max-width: 420px;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.05), 0 8px 20px rgba(0,0,0,0.08);
+      border: 1px solid rgba(0,0,0,0.06);
+      color: #1c1e21;
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+    }
+    .browser__bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 12px;
+      background: #ebebeb;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+    .browser__dots { display: flex; gap: 4px; }
+    .browser__dots span { width: 9px; height: 9px; border-radius: 50%; }
+    .browser__dots span:nth-child(1) { background: #ff605c; }
+    .browser__dots span:nth-child(2) { background: #ffbd44; }
+    .browser__dots span:nth-child(3) { background: #00ca4e; }
+    .browser__url {
+      flex: 1; padding: 4px 10px;
+      background: white; border-radius: 4px;
+      font-family: var(--mono); font-size: 10px; color: #444;
+      border: 1px solid rgba(0,0,0,0.08);
+    }
+    .browser__body { padding: 16px 18px 22px; min-height: 220px; }
+
+    /* Facebook signup */
+    .fb-logo { font-family: 'Helvetica Neue', sans-serif; font-size: 28px; font-weight: 700; color: var(--fb-blue); letter-spacing: -0.02em; margin-bottom: 12px; text-align: center; }
+    .fb-signup { max-width: 320px; margin: 0 auto; }
+    .fb-card { background: white; padding: 16px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .fb-card h3 { font-size: 16px; margin-bottom: 4px; font-weight: 700; letter-spacing: -0.005em; }
+    .fb-sub { font-size: 11px; color: #65676b; padding-bottom: 8px; border-bottom: 1px solid #dadde1; margin-bottom: 10px; }
+    .fb-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+    .fb-input { background: #f5f6f7; border: 1px solid #ccd0d5; border-radius: 4px; padding: 8px 10px; font-size: 11px; color: #65676b; margin-bottom: 6px; }
+    .fb-input--filled { color: #1c1e21; background: white; border-color: #1877F2; }
+    .fb-meta { font-size: 10px; color: #65676b; padding: 6px 0; }
+    .fb-btn { background: #36a420; color: white; padding: 8px 14px; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; width: 100%; margin-top: 6px; }
+    .fb-btn--full { width: 100%; }
+    .fb-btn--ghost { background: white; color: var(--fb-blue); border: 1px solid var(--fb-blue); }
+    .fb-btn--green { background: #25D366; }
+
+    /* Business manager */
+    .bm { display: grid; grid-template-columns: 90px 1fr; gap: 12px; min-height: 220px; }
+    .bm__sidebar { background: #f5f6f7; padding: 10px 8px; border-radius: 4px; display: flex; flex-direction: column; gap: 4px; }
+    .bm__logo { padding: 4px 6px; margin-bottom: 6px; color: #1c1e21; }
+    .bm__item { padding: 6px 8px; font-size: 10px; border-radius: 3px; color: #65676b; }
+    .bm__item--active { background: white; color: var(--fb-blue); font-weight: 600; }
+    .bm__main { padding: 4px; }
+    .bm__main h3 { font-size: 13px; margin-bottom: 10px; font-weight: 700; }
+    .bm__main label { display: block; font-size: 10px; color: #65676b; margin-bottom: 4px; margin-top: 8px; }
+    .bm__actions { display: flex; gap: 6px; margin-top: 12px; }
+    .bm__actions .fb-btn { width: auto; }
+
+    /* Security center */
+    .sec-status { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: #fff8e6; border-radius: 4px; font-size: 10px; margin-bottom: 12px; }
+    .sec-dot { width: 6px; height: 6px; border-radius: 50%; background: #f7b928; }
+    .sec-lead { font-size: 11px; color: #65676b; margin-bottom: 10px; line-height: 1.45; }
+    .sec-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 4px; }
+    .sec-list li { font-size: 11px; display: flex; gap: 6px; align-items: center; }
+    .sec-check { color: var(--fb-blue); font-weight: 700; }
+
+    /* Instagram conversion */
+    .ig { background: white; }
+    .ig__top { display: flex; align-items: center; gap: 6px; font-weight: 600; padding-bottom: 10px; border-bottom: 1px solid #dadde1; margin-bottom: 12px; font-size: 13px; }
+    .ig__panel { font-size: 11px; }
+    .ig__title { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+    .ig-rows { display: grid; gap: 1px; background: #efefef; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+    .ig-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: white; }
+    .ig-row--cta { color: var(--fb-blue); font-weight: 600; }
+    .ig-row--active { background: #e7f3ff; color: var(--fb-blue); font-weight: 600; }
+    .ig-toggle { color: #c7c7c7; }
+    .ig-toggle--blue { color: var(--fb-blue); }
+    .ig-cards { display: grid; gap: 8px; margin-bottom: 12px; }
+    .ig-card { padding: 10px 12px; background: #f5f6f7; border-radius: 6px; border: 1px solid transparent; }
+    .ig-card--active { background: #e7f3ff; border-color: var(--fb-blue); }
+    .ig-card__t { font-weight: 700; font-size: 12px; }
+    .ig-card__d { font-size: 10px; color: #65676b; margin-top: 2px; }
+    .ig-bullets { padding-left: 16px; margin: 0 0 12px; font-size: 11px; }
+    .ig-bullets li { margin-bottom: 6px; line-height: 1.45; }
+    .ig-success { text-align: center; padding: 16px 0; }
+    .ig-success__check { width: 44px; height: 44px; border-radius: 50%; background: #25D366; color: white; display: grid; place-items: center; font-size: 22px; margin: 0 auto 12px; }
+    .ig-success__sub { font-size: 10px; color: #65676b; margin-top: 4px; }
+    .ig-btn { background: var(--fb-blue); color: white; padding: 8px; border-radius: 4px; width: 100%; font-weight: 700; font-size: 12px; cursor: pointer; }
+
+    /* Meta Dialog */
+    .meta-dialog {
+      width: 100%; max-width: 360px; background: white;
+      border-radius: 8px; overflow: hidden;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1), 0 12px 28px rgba(0,0,0,0.15);
+      color: #1c1e21; font-family: 'Segoe UI', Roboto, sans-serif; font-size: 13px;
+    }
+    .meta-dialog__head { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid #dadde1; background: #f5f6f7; }
+    .meta-dialog__brand { font-family: 'Helvetica Neue', sans-serif; font-weight: 700; font-size: 14px; color: var(--fb-blue); flex: 1; }
+    .meta-dialog__close { color: #65676b; font-size: 18px; cursor: pointer; }
+    .meta-dialog__body { padding: 16px; }
+    .meta-dialog__body h3 { font-size: 15px; margin-bottom: 12px; color: #1c1e21; font-weight: 700; }
+    .meta-dialog__body label { display: block; font-size: 11px; color: #65676b; margin-top: 10px; margin-bottom: 4px; }
+    .label-hint { color: #8a8d91; font-weight: 400; }
+    .meta-dialog__lead { font-size: 12px; color: #65676b; margin-bottom: 12px; line-height: 1.5; }
+    .meta-dialog__hint { font-size: 10px; color: #8a8d91; margin: 6px 0 12px; }
+    .meta-dialog__alt { text-align: center; font-size: 10px; color: #8a8d91; padding: 8px 0; }
+    .meta-dialog__row { display: flex; gap: 8px; margin-top: 14px; }
+    .meta-dialog__row .fb-btn { width: auto; }
+    .meta-dialog__link { color: var(--fb-blue); font-size: 11px; cursor: pointer; display: block; margin: 10px 0; }
+    .meta-dialog--success .meta-dialog__body { padding: 22px 16px; text-align: center; }
+    .success-check { display: grid; place-items: center; padding: 4px 0 12px; }
+    .success-check__ring { width: 56px; height: 56px; border-radius: 50%; background: #25D366; display: grid; place-items: center; color: white; font-size: 28px; font-weight: 700; box-shadow: 0 0 0 6px rgba(37,211,102,0.15); }
+    .success-title { font-size: 18px !important; color: #25D366 !important; }
+    .success-summary { background: #f5f6f7; border-radius: 6px; padding: 12px; margin: 12px 0; text-align: left; }
+    .success-row { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; }
+    .success-row span { color: #65676b; }
+
+    .perm-list { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 6px; }
+    .perm-list li { font-size: 12px; display: flex; gap: 8px; align-items: center; }
+    .perm-icon { color: var(--fb-blue); font-size: 6px; }
+    .perm-toggles { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 0; }
+    .perm-toggles li { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-top: 1px solid #efefef; font-size: 12px; }
+    .perm-toggles li:first-child { border-top: 0; }
+    .toggle { width: 30px; height: 18px; border-radius: 9px; background: #ccd0d5; position: relative; transition: background .2s; flex-shrink: 0; }
+    .toggle--on { background: #25D366; }
+    .toggle__dot { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: white; transition: transform .2s; }
+    .toggle--on .toggle__dot { transform: translateX(12px); }
+
+    .port-list { display: grid; gap: 6px; margin-bottom: 14px; }
+    .port-item { display: grid; grid-template-columns: 28px 1fr 18px; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid #dadde1; border-radius: 6px; background: white; }
+    .port-item--active { border-color: var(--fb-blue); background: #e7f3ff; }
+    .port-item--dim { opacity: 0.6; }
+    .port-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--fb-blue); color: white; display: grid; place-items: center; font-size: 10px; font-weight: 700; }
+    .port-avatar--alt { background: #ccd0d5; color: #65676b; font-weight: 400; font-size: 14px; }
+    .port-avatar--ig { background: var(--ig-grad); }
+    .port-meta b { display: block; font-size: 11px; font-weight: 700; }
+    .port-meta span { font-size: 10px; color: #65676b; }
+    .port-radio { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #ccd0d5; }
+    .port-radio--on { border-color: var(--fb-blue); border-width: 5px; }
+
+    .phone-row { display: grid; grid-template-columns: 70px 1fr; gap: 6px; margin-bottom: 6px; }
+    .phone-cc { background: #f5f6f7; border: 1px solid #ccd0d5; border-radius: 4px; padding: 8px 10px; font-size: 11px; display: flex; align-items: center; gap: 4px; }
+    .radio-row { display: grid; gap: 6px; }
+    .radio { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #dadde1; border-radius: 4px; font-size: 11px; cursor: pointer; }
+    .radio span { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #ccd0d5; }
+    .radio--on { border-color: var(--fb-blue); background: #e7f3ff; }
+    .radio--on span { border-color: var(--fb-blue); border-width: 4px; }
+
+    .otp-row { display: flex; gap: 6px; margin: 14px 0; justify-content: center; }
+    .otp-cell { width: 30px; height: 38px; border-radius: 4px; border: 1px solid #ccd0d5; background: white; display: grid; place-items: center; font-size: 16px; font-weight: 700; color: #1c1e21; }
+    .otp-cell--cursor { border-color: var(--fb-blue); border-width: 2px; }
+
+    .pay__head { display: flex; align-items: center; gap: 6px; font-weight: 700; padding-bottom: 10px; border-bottom: 1px solid #dadde1; margin-bottom: 12px; color: #25D366; font-size: 13px; }
+    .pay__panel h3 { font-size: 14px; margin-bottom: 6px; font-weight: 700; }
+    .pay__lead { font-size: 11px; color: #65676b; margin-bottom: 12px; line-height: 1.5; }
+    .pay__divider { font-size: 10px; color: #65676b; text-transform: uppercase; letter-spacing: 0.1em; margin: 14px 0 6px; padding-top: 10px; border-top: 1px solid #efefef; }
+    .pay__row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 11px; }
+    .pay__row span { color: #65676b; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       COMPACT mode
+       ═══════════════════════════════════════════════════════════════ */
+    .tutorial--compact .long__h1 { font-size: 42px; }
+    .tutorial--compact .cover__title { font-size: 64px; }
+    .tutorial--compact .step__title { font-size: 19px; }
+    .tutorial--compact .long, .tutorial--compact .page-header, .tutorial--compact .t-footer, .tutorial--compact .cover-wrap { padding-left: 36px; padding-right: 36px; }
+    .tutorial--compact .step { padding: 18px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       RESPONSIVE
+       ═══════════════════════════════════════════════════════════════ */
+    @media (max-width: 1100px) {
+      .step__grid { grid-template-columns: 1fr; }
+      .figure__frame { max-width: 460px; margin: 0 auto; min-height: 220px; }
+      .cover__map-grid { grid-template-columns: 1fr; }
+      .multi-card { grid-template-columns: 1fr; gap: 14px; }
+      .totals { grid-template-columns: 1fr; gap: 18px; }
+      .intro-cards { grid-template-columns: 1fr; }
+      .intro-arrow { display: none; }
+      .checklist { grid-template-columns: 1fr; }
+      .faq { grid-template-columns: 1fr; }
+      .notes { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 880px) {
+      .tutorial__body { grid-template-columns: 1fr; }
+      .t-sidebar { display: none; }
+      .long, .page-header, .t-footer, .cover-wrap { padding-left: 24px !important; padding-right: 24px !important; }
+      .cover__title { font-size: 52px; }
+      .long__h1 { font-size: 36px; }
+      .gloss { grid-template-columns: 1fr; gap: 6px; }
+      .tl { grid-template-columns: 28px 1fr; gap: 8px; }
+      .tl__bar, .tl__time, .tl__freq { grid-column: 2; }
+      .cover__stats { grid-template-columns: 1fr; gap: 18px; }
+      .tutorial-backdrop--modal { padding: 0; }
+      .tutorial { border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script type="text/babel">
+// Conteúdo do manual ZappIQ v3.0 — Maio/2026
+// Estruturado a partir do PDF "Como ativar seu WhatsApp e Instagram"
+
+const TUTORIAL_META = {
+  doc: "ZQ-ONB-001",
+  version: "v3.0",
+  date: "Maio / 2026",
+  estimate: "30–40 min",
+  screens: 11,
+  basis: "100% baseado na documentação oficial da Meta",
+};
+
+const GLOSSARY = [
+  { term: "Meta", def: "A empresa dona do Facebook, Instagram e WhatsApp. É com ela que você cria as contas." },
+  { term: "Conta do Facebook", def: "Seu login pessoal no Facebook. Tudo começa por ele — mesmo que você quase não use o Facebook." },
+  { term: "Portfólio Empresarial", def: "Uma “pasta” da Meta onde ficam os ativos do seu negócio (WhatsApp, Instagram, Página). Gratuito. Também chamado de Gerenciador de Negócios / Business Manager." },
+  { term: "WABA", def: "Conta do WhatsApp Business — a conta oficial do seu WhatsApp empresarial dentro da Meta. É diferente do app WhatsApp comum." },
+  { term: "Número & Nome de exibição", def: "O nome que o cliente vê quando seu negócio manda mensagem (ex: “Padaria do João”)." },
+  { term: "Verificação de Negócio", def: "A Meta confere se sua empresa é real (pede CNPJ e comprovante). Libera os recursos completos." },
+  { term: "Página do Facebook", def: "O perfil público da sua empresa no Facebook. O Instagram comercial precisa estar ligado a uma." },
+  { term: "Código de verificação (OTP)", def: "Um número de 6 dígitos que a Meta envia por SMS/ligação para confirmar que o telefone é seu." },
+  { term: "Cloud API", def: "A “ponte” oficial da Meta que permite a ZappIQ enviar e receber mensagens pelo seu número. É o que torna a IA possível." },
+];
+
+const CHECKLIST = [
+  { title: "Número de telefone NOVO e dedicado", note: "Não pode estar ativo no app WhatsApp ou WhatsApp Business comum." },
+  { title: "Celular com esse chip em mãos", note: "O código de verificação chega por SMS ou ligação." },
+  { title: "Login do Facebook (e-mail e senha)", note: "Todo o cadastro começa por ele." },
+  { title: "CNPJ / MEI / Contrato Social", note: "Para a Meta verificar seu negócio." },
+  { title: "Comprovante de endereço da empresa", note: "Conta de luz, água, telefone fixo ou internet — em nome do CNPJ." },
+  { title: "Cartão Visa ou Mastercard", note: "Internacional / online habilitado — forma de pagamento da conta WhatsApp." },
+  { title: "Login do Instagram da empresa", note: "Acesso pelo navegador para deixar a conta profissional (web)." },
+];
+
+const OFFICIAL_LINKS = [
+  { n: "01", title: "Criar conta no Facebook", url: "facebook.com/reg" },
+  { n: "02", title: "Criar / gerenciar o Portfólio Empresarial", url: "business.facebook.com" },
+  { n: "03", title: "Verificar seu negócio — passo a passo oficial", url: "facebook.com/business/help/2058515294227817" },
+  { n: "04", title: "Enviar documentos de verificação", url: "facebook.com/business/help/159334372093366" },
+  { n: "05", title: "WhatsApp Manager — gerenciar suas contas", url: "business.facebook.com/wa/manage" },
+  { n: "06", title: "Adicionar forma de pagamento", url: "faq.whatsapp.com/167763192262914" },
+  { n: "07", title: "Diretrizes do nome de exibição", url: "facebook.com/business/help/757569725593362" },
+  { n: "08", title: "Configurar conta profissional no Instagram", url: "help.instagram.com/502981923235522" },
+];
+
+// ───────────────────────────────────────────────────────────────────
+// PARTE 1 — Preparar contas na Meta
+// ───────────────────────────────────────────────────────────────────
+const PART1 = {
+  id: "p1",
+  number: "01",
+  title: "Preparar suas contas na Meta",
+  subtitle: "Quatro preparativos. Você faz uma vez na vida.",
+  intro: "Se já tem Facebook, Portfólio Empresarial e Instagram profissional, pode pular direto para a Parte 3.",
+  steps: [
+    {
+      id: "1.1",
+      title: "Criar uma conta no Facebook",
+      time: "≈ 5 min",
+      lead: "Mesmo que você quase não use o Facebook, é por ele que tudo começa.",
+      figureLabel: "Tela inicial de criação de conta no Facebook",
+      actions: [
+        "Abra **facebook.com/criar-conta** no navegador e clique em “Criar nova conta”.",
+        "Preencha nome, sobrenome, e-mail (use um e-mail da empresa que você controla), uma senha forte e sua data de nascimento.",
+        "Clique em “Cadastre-se”. A Meta envia um código por SMS ou e-mail — digite-o para confirmar.",
+      ],
+      gold: {
+        title: "Guarde bem este acesso",
+        body: "Esta conta do Facebook será a “dona” de tudo (WhatsApp, Instagram). Anote o e-mail e a senha em local seguro.",
+      },
+    },
+    {
+      id: "1.2",
+      title: "Criar o Portfólio Empresarial",
+      time: "≈ 5 min",
+      lead: "É a “pasta” gratuita da Meta onde ficam os ativos do seu negócio: WhatsApp, Instagram e Página do Facebook.",
+      figureLabel: "Formulário de criação do Portfólio Empresarial (Business Manager)",
+      actions: [
+        "Acesse **business.facebook.com** já logado na sua conta do Facebook e clique em “Criar conta”.",
+        "No campo “Nome do portfólio empresarial”, use a razão social ou o nome real da empresa — evite caracteres especiais.",
+        "Informe o seu nome e o e-mail comercial. Clique em “Criar”.",
+        "Abra o seu e-mail, procure a mensagem “Confirme seu e-mail comercial” e clique no link. Sem este passo você não consegue avançar.",
+      ],
+      tip: {
+        title: "Dica",
+        body: "Você pode criar mais de um portfólio, mas o ideal é um por empresa — bem nomeado, ajuda a não se confundir mais tarde.",
+      },
+      warn: {
+        title: "Cuidado",
+        body: "Usar um e-mail @gmail pessoal e perder o acesso depois. Prefira um e-mail corporativo (domínio da empresa).",
+      },
+    },
+    {
+      id: "1.3",
+      title: "Verificar o seu negócio",
+      time: "≈ 10 min + 2 a 5 dias úteis",
+      lead: "Confirma que sua empresa é real e libera a criação das contas de WhatsApp. É a parte mais demorada — comece cedo. Roda em paralelo: você pode seguir os outros passos enquanto a Meta analisa.",
+      figureLabel: "Central de Segurança — verificação do negócio",
+      actions: [
+        "Dentro do **business.facebook.com**, vá em **Configurações do Negócio → Central de Segurança → “Iniciar verificação”**.",
+        "Informe os dados da empresa (razão social, endereço, telefone) exatamente como no CNPJ.",
+        "Envie os documentos. No Brasil são aceitos: Cartão CNPJ, Certificado MEI, Contrato Social, conta de luz/água/telefone fixo/internet em nome da empresa (últimos 12 meses) ou extrato bancário PJ.",
+        "Acompanhe o status na própria Central de Segurança.",
+      ],
+      warn: {
+        title: "Por que pode ser recusado",
+        body: "CNPJ inativo, documento ilegível, endereço que não bate com o do CNPJ, ou site da empresa sem informações de contato. Confira tudo antes de enviar.",
+      },
+    },
+    {
+      id: "1.4",
+      title: "Deixar o Instagram como conta profissional (pelo navegador)",
+      time: "≈ 5 min · 5 etapas",
+      lead: "Necessário só se você for conectar o Instagram. Feito pelo computador, em instagram.com. Você não perde seguidores nem publicações.",
+      multiFigure: [
+        { n: "01", title: "Abra Configurações", desc: "Em instagram.com, vá em Tipo e ferramentas da conta → clique em “Trocar para conta profissional”." },
+        { n: "02", title: "Escolha “Comercial”", desc: "Selecione a opção Comercial — ideal para varejistas, negócios locais e prestadores de serviço." },
+        { n: "03", title: "Confira os recursos", desc: "Veja insights, promoções e opções de contato. Clique em “Avançar”." },
+        { n: "04", title: "Selecione a categoria", desc: "Escolha uma categoria (ex.: Produto/serviço) e clique em “Concluir”." },
+        { n: "05", title: "Pronto!", desc: "Sua conta comercial do Instagram está ativa e pronta para conectar à ZappIQ." },
+      ],
+      note: {
+        title: "Observação importante",
+        body: "A vinculação com a Página do Facebook é feita depois, no Meta Business Suite — não acontece nesta etapa de conversão.",
+      },
+    },
+  ],
+};
+
+// ───────────────────────────────────────────────────────────────────
+// PARTE 3 — Conectar o WhatsApp (8 telas)
+// ───────────────────────────────────────────────────────────────────
+const PART3 = {
+  id: "p3",
+  number: "03",
+  title: "Conectar o WhatsApp — as 8 telas",
+  subtitle: "≈ 8 a 10 minutos",
+  intro: "Com as contas preparadas, agora é a parte rápida. No painel da ZappIQ, clique em “Conectar WhatsApp”. Abre uma janela da própria Meta por cima. Tudo que você digita ali vai direto e seguro para a Meta — a ZappIQ não vê sua senha.",
+  totalScreens: 8,
+  steps: [
+    {
+      id: "w1",
+      screenN: 1,
+      title: "Entrar no Facebook",
+      time: "≈ 1 min",
+      whatAppears: "A janela de login da Meta, com campos de e-mail/telefone e senha e o botão azul “Entrar”.",
+      actions: [
+        "Digite o e-mail e a senha da conta do Facebook que administra o seu Portfólio Empresarial — a que você criou na Parte 1.",
+        "Clique em “Entrar”. Se já estava logado, basta clicar em “Continuar como [seu nome]”.",
+      ],
+      tip: { title: "Dica", body: "Use sempre a mesma conta do Facebook do começo ao fim — a que tem o portfólio da empresa." },
+      warn: { title: "Cuidado", body: "Entrar com uma conta pessoal diferente: aí o portfólio da empresa não aparece nas telas seguintes." },
+    },
+    {
+      id: "w2",
+      screenN: 2,
+      title: "Autorizar a ZappIQ",
+      time: "≈ 30 seg",
+      whatAppears: "Uma lista do que a ZappIQ vai poder fazer: gerenciar sua conta WhatsApp Business, enviar/receber mensagens e gerenciar modelos.",
+      actions: [
+        "Leia a lista de permissões.",
+        "Clique em “Continuar” para autorizar.",
+      ],
+      tip: { title: "Dica", body: "É normal e necessário — são exatamente as permissões que deixam a IA responder por você." },
+      warn: { title: "Cuidado", body: "Não feche a janela achando que é golpe. É a tela oficial de autorização da Meta." },
+    },
+    {
+      id: "w3",
+      screenN: 3,
+      title: "Escolher o Portfólio Empresarial",
+      time: "≈ 1 min",
+      whatAppears: "A lista dos portfólios que você administra, com a opção “Criar novo portfólio empresarial”.",
+      actions: [
+        "Selecione o portfólio que você criou na Parte 1 — aparece com o nome da sua empresa.",
+        "Se ainda não tiver um, clique em “Criar novo” e preencha na hora.",
+        "Clique em “Continuar”.",
+      ],
+      tip: { title: "Dica", body: "Se fez a Parte 1, ele já aparece prontinho aqui — é só selecionar." },
+      warn: { title: "Cuidado", body: "Não crie um portfólio duplicado por não reconhecer o que já existe. Confira o nome antes." },
+    },
+    {
+      id: "w4",
+      screenN: 4,
+      title: "Criar a Conta WhatsApp Business",
+      time: "≈ 2 min",
+      whatAppears: "Um formulário com o nome da conta WhatsApp Business e o nome de exibição — o nome que o cliente vê nas mensagens.",
+      actions: [
+        "Preencha o nome da conta com o nome comercial da empresa.",
+        "No nome de exibição, use o nome real do negócio (ex: “Padaria do João Atendimento”).",
+        "Clique em “Avançar”.",
+      ],
+      tip: { title: "Dica", body: "O nome de exibição passa por revisão da Meta. Use o nome real, sem palavras promocionais como “Promoção” ou “Grátis”." },
+      warn: { title: "Cuidado", body: "Nomes genéricos ou promocionais costumam ser reprovados, atrasando sua ativação." },
+    },
+    {
+      id: "w5",
+      screenN: 5,
+      title: "Adicionar o número de telefone",
+      time: "≈ 1 min",
+      whatAppears: "O seletor de país (+55), o campo do número e a escolha entre SMS ou Ligação.",
+      actions: [
+        "Digite a sua linha nova e dedicada — com DDD.",
+        "Escolha SMS (celular) ou Ligação (celular ou fixo).",
+        "Clique em “Enviar código”.",
+      ],
+      tip: { title: "Dica", body: "Tenha o celular com o chip em mãos para receber o código em seguida. Número fixo? Escolha “Ligação”." },
+      warn: { title: "Cuidado", body: "Usar um número que ainda tem WhatsApp comum ativo: a verificação vai falhar." },
+    },
+    {
+      id: "w6",
+      screenN: 6,
+      title: "Confirmar o número (digitar o código)",
+      time: "≈ 1 min",
+      whatAppears: "Caixinhas para digitar o código de 6 dígitos que chegou por SMS ou ligação, e um link “Reenviar código”.",
+      actions: [
+        "Digite os 6 dígitos que você recebeu.",
+        "Clique em “Confirmar”.",
+      ],
+      tip: { title: "Dica", body: "Não chegou em 1 minuto? Use “Reenviar código” ou volte e troque SMS por Ligação." },
+      warn: { title: "Cuidado", body: "Digitar um código antigo/expirado — eles têm validade curta. Use sempre o mais recente." },
+    },
+    {
+      id: "w7",
+      screenN: 7,
+      title: "Revisar as permissões",
+      time: "≈ 30 seg",
+      whatAppears: "Um resumo final das permissões, com todas as chaves (toggles) já ligadas em verde.",
+      actions: [
+        "Confira que está tudo ligado.",
+        "Clique em “Continuar”.",
+      ],
+      tip: { title: "Dica", body: "Deixe todas ligadas — cada uma é necessária para a IA funcionar." },
+      warn: { title: "Cuidado", body: "Desligar permissões por insegurança: a integração quebra e a IA para de responder." },
+    },
+    {
+      id: "w8",
+      screenN: 8,
+      title: "Tudo pronto!",
+      time: "≈ 30 seg",
+      whatAppears: "Uma tela verde com um check, confirmando que portfólio, conta WhatsApp Business e número foram criados e conectados.",
+      actions: [
+        "Clique em “Concluir”.",
+        "A janela fecha sozinha e volta para a ZappIQ, que registra tudo automaticamente.",
+      ],
+      done: {
+        title: "Você não precisa copiar nenhum código",
+        body: "A ZappIQ recebe tudo da Meta sozinha. Em segundos o WhatsApp aparece como “Conectado” no seu painel.",
+      },
+      warn: { title: "Cuidado", body: "Fechar a janela ANTES de clicar em “Concluir”: a conexão fica pela metade e você precisa refazer." },
+    },
+  ],
+};
+
+// ───────────────────────────────────────────────────────────────────
+// PARTE 4 — Conectar o Instagram (3 telas)
+// ───────────────────────────────────────────────────────────────────
+const PART4 = {
+  id: "p4",
+  number: "04",
+  title: "Conectar o Instagram Direct",
+  subtitle: "≈ 3 a 4 minutos · 3 telas",
+  intro: "O Instagram é um processo separado do WhatsApp (regra da Meta), mas bem mais curto, porque a preparação você já fez na Parte 1.4. No painel da ZappIQ, clique em “Conectar Instagram”.",
+  totalScreens: 3,
+  steps: [
+    {
+      id: "i1",
+      screenN: 1,
+      title: "Entrar no Facebook",
+      time: "≈ 1 min",
+      whatAppears: "A mesma janela de login da Meta da Parte 3.",
+      actions: ["Entre com a conta do Facebook que administra a Página vinculada ao seu Instagram."],
+      tip: { title: "Dica", body: "Tem que ser a conta que é administradora da Página do Facebook ligada ao seu Instagram." },
+      warn: { title: "Cuidado", body: "Logar com uma conta sem acesso à Página: o Instagram não vai aparecer para selecionar." },
+    },
+    {
+      id: "i2",
+      screenN: 2,
+      title: "Escolher a Página e o Instagram",
+      time: "≈ 1 min",
+      whatAppears: "A lista das Páginas que você administra, mostrando a conta do Instagram vinculada a cada uma.",
+      actions: [
+        "Marque a Página e a conta do Instagram corretas.",
+        "Clique em “Continuar”.",
+      ],
+      tip: { title: "Dica", body: "Se seu Instagram não aparece, ele ainda não está como Profissional ou não está vinculado à Página — volte ao Passo 1.4." },
+      warn: { title: "Cuidado", body: "Conta de Instagram pessoal/criador, ou sem Página conectada: não aparece aqui." },
+    },
+    {
+      id: "i3",
+      screenN: 3,
+      title: "Revisar permissões e concluir",
+      time: "≈ 1 min",
+      whatAppears: "A lista de permissões do Instagram (gerenciar mensagens do Direct) com tudo ligado, e o botão de concluir.",
+      actions: [
+        "Mantenha a permissão de Mensagens (Direct) ligada.",
+        "Clique em “Continuar” / “Concluir”.",
+      ],
+      tip: { title: "Dica", body: "Depois, mande um Direct de teste de outra conta para ver a IA responder na hora." },
+      warn: { title: "Cuidado", body: "Desligar a permissão de mensagens: a IA não consegue responder os Directs." },
+      gold: {
+        title: "O passo que quase todo mundo esquece",
+        body: "No aplicativo do Instagram, vá em Configurações → Mensagens → Controles de mensagens → Ferramentas conectadas e ative “Permitir acesso a mensagens”. Sem isso, mesmo conectado, a IA não consegue responder suas DMs.",
+      },
+    },
+  ],
+};
+
+// ───────────────────────────────────────────────────────────────────
+// PARTE 5 — Pagamento
+// ───────────────────────────────────────────────────────────────────
+const PART5 = {
+  id: "p5",
+  number: "05",
+  title: "Adicionar forma de pagamento",
+  subtitle: "≈ 3 min · logo após conectar",
+  intro: "Para enviar campanhas e mensagens em massa, a conta WhatsApp precisa de uma forma de pagamento. A cobrança por conversa é da Meta (valores dela), não da ZappIQ. Sem isso, a IA ainda responde quem te procura, mas você não consegue iniciar disparos.",
+  steps: [
+    {
+      id: "pay",
+      title: "Cadastrar cartão no WhatsApp Manager",
+      figureLabel: "Tela de pagamentos do WhatsApp Manager",
+      actions: [
+        "Acesse o **WhatsApp Manager → Configurações → Pagamentos**.",
+        "Clique em “Adicionar forma de pagamento” e informe um cartão Visa ou Mastercard com transações internacionais e online habilitadas.",
+        "Em “Informações do negócio”, confira o CNPJ e a razão social.",
+      ],
+      note: {
+        title: "Quem cobra quem",
+        body: "A Meta cobra do seu cartão por conversa iniciada — valores definidos por ela. A ZappIQ cobra a assinatura da plataforma à parte. São dois recibos diferentes.",
+      },
+    },
+  ],
+};
+
+// ───────────────────────────────────────────────────────────────────
+// PARTE 6 — Tempos
+// ───────────────────────────────────────────────────────────────────
+const TIMELINE = [
+  { n: "01", title: "Criar conta no Facebook", time: "≈ 5 min", freq: "Uma vez" },
+  { n: "02", title: "Criar Portfólio Empresarial", time: "≈ 5 min", freq: "Uma vez" },
+  { n: "03", title: "Verificação do negócio", time: "≈ 10 min + 2 a 5 dias", freq: "Comece cedo (em paralelo)", slow: true },
+  { n: "04", title: "Instagram profissional + Página", time: "≈ 5 min", freq: "Uma vez" },
+  { n: "05", title: "Conectar WhatsApp (8 telas)", time: "≈ 8 a 10 min", freq: "No dia da ativação" },
+  { n: "06", title: "Conectar Instagram (3 telas)", time: "≈ 3 a 4 min", freq: "No dia da ativação" },
+  { n: "07", title: "Adicionar forma de pagamento", time: "≈ 3 min", freq: "Logo após conectar" },
+];
+
+// ───────────────────────────────────────────────────────────────────
+// PARTE 7 — FAQ
+// ───────────────────────────────────────────────────────────────────
+const FAQ = [
+  {
+    q: "Posso usar o mesmo número do meu WhatsApp pessoal?",
+    a: "Não recomendamos. Ele teria que sair do app (apagando o histórico) e não poderia mais ser usado no WhatsApp comum. Use uma linha nova dedicada.",
+  },
+  {
+    q: "Vou perder meus contatos ou conversas?",
+    a: "Não, desde que você use uma linha nova. Seu WhatsApp pessoal continua intacto na linha antiga.",
+  },
+  {
+    q: "Preciso saber programar?",
+    a: "Não. Todo o processo é feito clicando em botões nas telas da Meta. Se travar, há o Onboarding Assistido.",
+  },
+  {
+    q: "Quanto a Meta cobra?",
+    a: "A Meta cobra por conversa iniciada — valores definidos por ela, que mudam por país e tipo de conversa. Esse custo é pago direto à Meta no cartão que você cadastrar. A assinatura da ZappIQ é separada.",
+  },
+  {
+    q: "Posso ativar só o WhatsApp, ou só o Instagram?",
+    a: "Sim. São processos independentes. Ative o que quiser, quando quiser. Pode começar por um e fazer o outro depois.",
+  },
+  {
+    q: "A verificação do negócio é obrigatória para testar?",
+    a: "Para testar a IA respondendo, não. Para liberar volume maior de mensagens e campanhas, sim. Por isso recomendamos iniciá-la logo no começo.",
+  },
+  {
+    q: "Já uso o WhatsApp API em outra plataforma. Como migro?",
+    a: "É possível migrar mantendo o número (processo de migração da Meta), mas tem uma janela curta de indisponibilidade e o histórico antigo não vem junto. Para esse caso, recomendamos fortemente o Onboarding Assistido — nosso time conduz para evitar imprevistos.",
+  },
+];
+
+// Expor globalmente
+Object.assign(window, {
+  TUTORIAL_META, GLOSSARY, CHECKLIST, OFFICIAL_LINKS,
+  PART1, PART3, PART4, PART5, TIMELINE, FAQ,
+});
+
+</script>
+<script type="text/babel">
+// Mockups das telas da Meta — substituem as "IMAGENS EM BREVE" do PDF
+// São versões estilizadas, não-pixel-perfect, para o cliente reconhecer cada tela
+
+const { useState } = React;
+
+// ─── Chrome de janela browser ──────────────────────────────────────
+function BrowserChrome({ url, children, dark = false }) {
+  return (
+    <div className={`browser ${dark ? "browser--dark" : ""}`}>
+      <div className="browser__bar">
+        <div className="browser__dots">
+          <span></span><span></span><span></span>
+        </div>
+        <div className="browser__url">{url}</div>
+        <div className="browser__spacer"></div>
+      </div>
+      <div className="browser__body">{children}</div>
+    </div>
+  );
+}
+
+// ─── Logo Meta minimalista ─────────────────────────────────────────
+function MetaLogo({ size = 22 }) {
+  return (
+    <svg width={size * 2.2} height={size} viewBox="0 0 100 36" fill="none">
+      <path d="M14 10c5 0 8 4 12 10 4 6 6 8 9 8 3 0 5-2 5-5s-1-7-4-12c-2-3-4-5-7-5-4 0-7 4-10 9-3 5-5 8-8 8-2 0-4-2-4-5s2-8 5-8z" stroke="#1877F2" strokeWidth="2.5" fill="none"/>
+      <text x="44" y="24" fontFamily="Inter, sans-serif" fontWeight="700" fontSize="18" fill="currentColor">Meta</text>
+    </svg>
+  );
+}
+
+function WhatsAppGlyph({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2a10 10 0 00-8.5 15.2L2 22l4.9-1.4A10 10 0 1012 2zm0 18a8 8 0 01-4.1-1.1l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 1112 20zm4.6-5.9c-.3-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5 0a6.4 6.4 0 01-1.9-1.2 7 7 0 01-1.3-1.6c-.1-.2 0-.4.1-.5l.4-.4.2-.3v-.3l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 00-.7.3 3 3 0 00-1 2.3 5.4 5.4 0 001.2 2.9c.1.2 2 3.1 4.9 4.4a16.4 16.4 0 001.6.6 4 4 0 001.8.1 3 3 0 002-1.4 2.4 2.4 0 00.2-1.4c-.1-.1-.2-.2-.5-.3z"/>
+    </svg>
+  );
+}
+
+function InstaGlyph({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="3" width="18" height="18" rx="5"/>
+      <circle cx="12" cy="12" r="4"/>
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor"/>
+    </svg>
+  );
+}
+
+// ─── PARTE 1 ───────────────────────────────────────────────────────
+function Fig_FacebookSignup() {
+  return (
+    <BrowserChrome url="facebook.com/criar-conta">
+      <div className="fb-signup">
+        <div className="fb-logo">facebook</div>
+        <div className="fb-card">
+          <h3>Criar nova conta</h3>
+          <p className="fb-sub">Rápido e fácil.</p>
+          <div className="fb-row">
+            <div className="fb-input">Nome</div>
+            <div className="fb-input">Sobrenome</div>
+          </div>
+          <div className="fb-input">E-mail ou celular</div>
+          <div className="fb-input">Nova senha</div>
+          <div className="fb-meta">Data de nascimento · 01 / Jan / 1990</div>
+          <button className="fb-btn">Cadastre-se</button>
+        </div>
+      </div>
+    </BrowserChrome>
+  );
+}
+
+function Fig_BusinessManager() {
+  return (
+    <BrowserChrome url="business.facebook.com">
+      <div className="bm">
+        <div className="bm__sidebar">
+          <div className="bm__logo"><MetaLogo size={16}/></div>
+          <div className="bm__item bm__item--active">Portfólios</div>
+          <div className="bm__item">Configurações</div>
+          <div className="bm__item">Central de Segurança</div>
+        </div>
+        <div className="bm__main">
+          <h3>Criar portfólio empresarial</h3>
+          <label>Nome do portfólio empresarial</label>
+          <div className="fb-input fb-input--filled">Padaria do João</div>
+          <label>Seu nome</label>
+          <div className="fb-input">João da Silva</div>
+          <label>E-mail comercial</label>
+          <div className="fb-input">contato@padariadojoao.com.br</div>
+          <div className="bm__actions">
+            <button className="fb-btn fb-btn--ghost">Cancelar</button>
+            <button className="fb-btn">Criar</button>
+          </div>
+        </div>
+      </div>
+    </BrowserChrome>
+  );
+}
+
+function Fig_SecurityCenter() {
+  return (
+    <BrowserChrome url="business.facebook.com/settings/security">
+      <div className="bm">
+        <div className="bm__sidebar">
+          <div className="bm__logo"><MetaLogo size={16}/></div>
+          <div className="bm__item">Portfólios</div>
+          <div className="bm__item">Configurações</div>
+          <div className="bm__item bm__item--active">Central de Segurança</div>
+        </div>
+        <div className="bm__main">
+          <h3>Verificação do negócio</h3>
+          <div className="sec-status">
+            <span className="sec-dot"></span>
+            <span>Não verificado · ação necessária</span>
+          </div>
+          <p className="sec-lead">Para liberar todos os recursos do WhatsApp Business, confirme que sua empresa é real enviando os documentos abaixo.</p>
+          <ul className="sec-list">
+            <li><span className="sec-check">✓</span> Razão social e endereço</li>
+            <li><span className="sec-check">✓</span> CNPJ ou MEI</li>
+            <li><span className="sec-check">○</span> Comprovante de endereço</li>
+          </ul>
+          <button className="fb-btn">Iniciar verificação</button>
+        </div>
+      </div>
+    </BrowserChrome>
+  );
+}
+
+function Fig_InstaSettings({ stage = 1 }) {
+  // Stage 1..5 — Instagram conversion steps
+  const stages = {
+    1: { title: "Tipo e ferramentas da conta", body: <div className="ig-rows"><div className="ig-row"><span>Conta profissional</span><span className="ig-toggle">›</span></div><div className="ig-row"><span>Configurações de fonte</span><span className="ig-toggle">›</span></div><div className="ig-row ig-row--cta"><span>Trocar para conta profissional</span><span className="ig-toggle ig-toggle--blue">›</span></div></div> },
+    2: { title: "Em que área seu negócio se encaixa?", body: <div className="ig-cards"><div className="ig-card"><div className="ig-card__t">Criador de conteúdo</div><div className="ig-card__d">Para influenciadores e artistas.</div></div><div className="ig-card ig-card--active"><div className="ig-card__t">Comercial</div><div className="ig-card__d">Para varejistas, negócios locais e prestadores de serviço.</div></div></div> },
+    3: { title: "Conta comercial · recursos", body: <ul className="ig-bullets"><li><b>Insights</b> · veja o desempenho das suas publicações</li><li><b>Promoções</b> · alcance mais pessoas com anúncios</li><li><b>Contato</b> · adicione um botão para mensagens</li></ul> },
+    4: { title: "Selecione a categoria", body: <div className="ig-rows"><div className="ig-row">Restaurante</div><div className="ig-row ig-row--active">Produto/serviço</div><div className="ig-row">Comércio local</div></div> },
+    5: { title: "Tudo certo!", body: <div className="ig-success"><div className="ig-success__check">✓</div><p>Sua conta profissional está ativa.</p><p className="ig-success__sub">Agora você pode conectar com a ZappIQ.</p></div> },
+  };
+  const s = stages[stage];
+  return (
+    <BrowserChrome url="instagram.com / configurações">
+      <div className="ig">
+        <div className="ig__top">
+          <InstaGlyph size={20}/>
+          <span>Instagram</span>
+        </div>
+        <div className="ig__panel">
+          <div className="ig__title">{s.title}</div>
+          {s.body}
+          {stage < 5 && <button className="ig-btn">{stage === 4 ? "Concluir" : "Avançar"}</button>}
+        </div>
+      </div>
+    </BrowserChrome>
+  );
+}
+
+// ─── PARTE 3 — 8 telas WhatsApp ────────────────────────────────────
+function Fig_FBLogin() {
+  return (
+    <div className="meta-dialog">
+      <div className="meta-dialog__head">
+        <span className="meta-dialog__brand">facebook</span>
+        <span className="meta-dialog__close">×</span>
+      </div>
+      <div className="meta-dialog__body">
+        <h3>Entrar no Facebook</h3>
+        <div className="fb-input">E-mail ou telefone</div>
+        <div className="fb-input">Senha</div>
+        <button className="fb-btn fb-btn--full">Entrar</button>
+        <div className="meta-dialog__alt">— ou —</div>
+        <button className="fb-btn fb-btn--ghost fb-btn--full">Continuar como João</button>
+      </div>
+    </div>
+  );
+}
+
+function Fig_Authorize() {
+  return (
+    <div className="meta-dialog">
+      <div className="meta-dialog__head">
+        <MetaLogo size={14}/>
+        <span className="meta-dialog__close">×</span>
+      </div>
+      <div className="meta-dialog__body">
+        <h3>A ZappIQ está solicitando acesso a</h3>
+        <ul className="perm-list">
+          <li><span className="perm-icon">●</span> Gerenciar sua conta WhatsApp Business</li>
+          <li><span className="perm-icon">●</span> Enviar e receber mensagens</li>
+          <li><span className="perm-icon">●</span> Gerenciar modelos de mensagem</li>
+          <li><span className="perm-icon">●</span> Ler insights da conta</li>
+        </ul>
+        <div className="meta-dialog__row">
+          <button className="fb-btn fb-btn--ghost">Cancelar</button>
+          <button className="fb-btn">Continuar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Fig_PortfolioSelect() {
+  return (
+    <div className="meta-dialog">
+      <div className="meta-dialog__head">
+        <span className="meta-dialog__brand">WhatsApp Business</span>
+        <span className="meta-dialog__close">×</span>
+      </div>
+      <div className="meta-dialog__body">
+        <h3>Escolha o portfólio empresarial</h3>
+        <p className="meta-dialog__lead">Selecione o portfólio em que sua conta WhatsApp Business será criada.</p>
+        <div className="port-list">
+          <div className="port-item port-item--active">
+            <div className="port-avatar">PJ</div>
+            <div className="port-meta"><b>Padaria do João</b><span>ID 41028351</span></div>
+            <div className="port-radio port-radio--on"></div>
+          </div>
+          <div className="port-item">
+            <div className="port-avatar port-avatar--alt">+</div>
+            <div className="port-meta"><b>Criar novo portfólio empresarial</b><span>Faz na hora</span></div>
+            <div className="port-radio"></div>
+          </div>
+        </div>
+        <button className="fb-btn fb-btn--full">Continuar</button>
+      </div>
+    </div>
+  );
+}
+
+function Fig_WABACreate() {
+  return (
+    <div className="meta-dialog">
+      <div className="meta-dialog__head">
+        <span className="meta-dialog__brand">WhatsApp Business</span>
+        <span className="meta-dialog__close">×</span>
+      </div>
+      <div className="meta-dialog__body">
+        <h3>Criar conta do WhatsApp Business</h3>
+        <label>Nome da conta WhatsApp Business</label>
+        <div className="fb-input fb-input--filled">Padaria do João</div>
+        <label>Nome de exibição <span className="label-hint">— o que o cliente vê</span></label>
+        <div className="fb-input fb-input--filled">Padaria do João Atendimento</div>
+        <div className="meta-dialog__hint">Use o nome real do negócio. A Meta revisa.</div>
+        <button className="fb-btn fb-btn--full">Avançar</button>
+      </div>
+    </div>
+  );
+}
+
+function Fig_PhoneEntry() {
+  return (
+    <div className="meta-dialog">
+      <div className="meta-dialog__head">
+        <span className="meta-dialog__brand">WhatsApp Business</span>
+        <span className="meta-dialog__close">×</span>
+      </div>
+      <div className="meta-dialog__body">
+        <h3>Adicionar número de telefone</h3>
+        <label>Número da empresa</label>
+        <div className="phone-row">
+          <div className="phone-cc">🇧🇷 +55</div>
+          <div className="fb-input fb-input--filled">(11) 99876-1234</div>
+        </div>
+        <label>Como você quer receber o código?</label>
+        <div className="radio-row">
+          <label className="radio radio--on"><span></span>SMS (celular)</label>
+          <label className="radio"><span></span>Ligação (celular ou fixo)</label>
+        </div>
+        <button className="fb-btn fb-btn--full">Enviar código</button>
+      </div>
+    </div>
+  );
+}
+
+function Fig_OTP() {
+  return (
+    <div className="meta-dialog">
+      <div className="meta-dialog__head">
+        <span className="meta-dialog__brand">WhatsApp Business</span>
+        <span className="meta-dialog__close">×</span>
+      </div>
+      <div className="meta-dialog__body">
+        <h3>Digite o código</h3>
+        <p className="meta-dialog__lead">Enviamos um código de 6 dígitos para o número <b>+55 11 99876-1234</b>.</p>
+        <div className="otp-row">
+          <span className="otp-cell">4</span><span className="otp-cell">2</span><span className="otp-cell">8</span>
+          <span className="otp-cell">1</span><span className="otp-cell"></span><span className="otp-cell otp-cell--cursor"></span>
+        </div>
+        <a className="meta-dialog__link">Reenviar código (em 0:54)</a>
+        <button className="fb-btn fb-btn--full">Confirmar</button>
+      </div>
+    </div>
+  );
+}
+
+function Fig_PermissionsReview() {
+  return (
+    <div className="meta-dialog">
+      <div className="meta-dialog__head">
+        <MetaLogo size={14}/>
+        <span className="meta-dialog__close">×</span>
+      </div>
+      <div className="meta-dialog__body">
+        <h3>Revise as permissões</h3>
+        <p className="meta-dialog__lead">A ZappIQ poderá:</p>
+        <ul className="perm-toggles">
+          <li><span>Gerenciar suas contas WhatsApp Business</span><Toggle on/></li>
+          <li><span>Enviar e receber mensagens</span><Toggle on/></li>
+          <li><span>Gerenciar modelos de mensagem</span><Toggle on/></li>
+          <li><span>Ler insights da conta</span><Toggle on/></li>
+        </ul>
+        <button className="fb-btn fb-btn--full">Continuar</button>
+      </div>
+    </div>
+  );
+}
+
+function Fig_Success() {
+  return (
+    <div className="meta-dialog meta-dialog--success">
+      <div className="meta-dialog__head">
+        <span className="meta-dialog__brand">WhatsApp Business</span>
+        <span className="meta-dialog__close">×</span>
+      </div>
+      <div className="meta-dialog__body">
+        <div className="success-check">
+          <div className="success-check__ring">
+            <span>✓</span>
+          </div>
+        </div>
+        <h3 className="success-title">Tudo pronto!</h3>
+        <p className="meta-dialog__lead">Sua conta WhatsApp Business foi criada e conectada à ZappIQ.</p>
+        <div className="success-summary">
+          <div className="success-row"><span>Portfólio</span><b>Padaria do João</b></div>
+          <div className="success-row"><span>Conta WhatsApp</span><b>Padaria do João</b></div>
+          <div className="success-row"><span>Número</span><b>+55 11 99876-1234</b></div>
+        </div>
+        <button className="fb-btn fb-btn--full fb-btn--green">Concluir</button>
+      </div>
+    </div>
+  );
+}
+
+function Toggle({ on }) {
+  return <span className={`toggle ${on ? "toggle--on" : ""}`}><span className="toggle__dot"></span></span>;
+}
+
+// ─── PARTE 4 — Instagram (3 telas) ──────────────────────────────────
+function Fig_IGPageSelect() {
+  return (
+    <div className="meta-dialog">
+      <div className="meta-dialog__head">
+        <InstaGlyph size={14}/>
+        <span className="meta-dialog__brand" style={{ marginLeft: 6 }}>Instagram</span>
+        <span className="meta-dialog__close">×</span>
+      </div>
+      <div className="meta-dialog__body">
+        <h3>Selecione a Página e o Instagram</h3>
+        <p className="meta-dialog__lead">Mostramos as Páginas que você administra e a conta do Instagram vinculada a cada uma.</p>
+        <div className="port-list">
+          <div className="port-item port-item--active">
+            <div className="port-avatar port-avatar--ig">📷</div>
+            <div className="port-meta"><b>@padariadojoao</b><span>Página: Padaria do João · Comercial</span></div>
+            <div className="port-radio port-radio--on"></div>
+          </div>
+          <div className="port-item port-item--dim">
+            <div className="port-avatar port-avatar--ig">📷</div>
+            <div className="port-meta"><b>@joaodasilva</b><span>Conta pessoal · não disponível</span></div>
+            <div className="port-radio"></div>
+          </div>
+        </div>
+        <button className="fb-btn fb-btn--full">Continuar</button>
+      </div>
+    </div>
+  );
+}
+
+function Fig_IGPermissions() {
+  return (
+    <div className="meta-dialog">
+      <div className="meta-dialog__head">
+        <InstaGlyph size={14}/>
+        <span className="meta-dialog__brand" style={{ marginLeft: 6 }}>Instagram</span>
+        <span className="meta-dialog__close">×</span>
+      </div>
+      <div className="meta-dialog__body">
+        <h3>Revise as permissões</h3>
+        <ul className="perm-toggles">
+          <li><span>Gerenciar mensagens do Direct</span><Toggle on/></li>
+          <li><span>Ler insights da conta</span><Toggle on/></li>
+          <li><span>Acessar dados básicos do perfil</span><Toggle on/></li>
+        </ul>
+        <button className="fb-btn fb-btn--full">Continuar</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── PARTE 5 — Pagamento ────────────────────────────────────────────
+function Fig_Payment() {
+  return (
+    <BrowserChrome url="business.facebook.com/wa/manage/payments">
+      <div className="pay">
+        <div className="pay__head">
+          <WhatsAppGlyph size={18}/>
+          <span>WhatsApp Manager · Pagamentos</span>
+        </div>
+        <div className="pay__panel">
+          <h3>Forma de pagamento</h3>
+          <p className="pay__lead">Você ainda não cadastrou um cartão. Sem isso, a IA responde quem te procura, mas você não consegue iniciar disparos.</p>
+          <button className="fb-btn">+ Adicionar forma de pagamento</button>
+          <div className="pay__divider">Informações do negócio</div>
+          <div className="pay__row"><span>Razão social</span><b>Padaria do João LTDA</b></div>
+          <div className="pay__row"><span>CNPJ</span><b>12.345.678/0001-99</b></div>
+        </div>
+      </div>
+    </BrowserChrome>
+  );
+}
+
+// ─── Mapa figura por id de step ────────────────────────────────────
+const FIGURES = {
+  "1.1": <Fig_FacebookSignup/>,
+  "1.2": <Fig_BusinessManager/>,
+  "1.3": <Fig_SecurityCenter/>,
+  // 1.4 has multi-figure: handled separately
+  "w1": <Fig_FBLogin/>,
+  "w2": <Fig_Authorize/>,
+  "w3": <Fig_PortfolioSelect/>,
+  "w4": <Fig_WABACreate/>,
+  "w5": <Fig_PhoneEntry/>,
+  "w6": <Fig_OTP/>,
+  "w7": <Fig_PermissionsReview/>,
+  "w8": <Fig_Success/>,
+  "i1": <Fig_FBLogin/>,
+  "i2": <Fig_IGPageSelect/>,
+  "i3": <Fig_IGPermissions/>,
+  "pay": <Fig_Payment/>,
+};
+
+Object.assign(window, { FIGURES, Fig_InstaSettings, BrowserChrome });
+
+</script>
+<script type="text/babel">
+// Componentes reutilizáveis: logo, header, cards de aviso, sidebar, footer
+
+const { useState, useEffect } = React;
+
+// ─── LOGO ZappIQ (verde com raio) ───────────────────────────────────
+function ZLogo({ dark = false }) {
+  return (
+    <div className="zlogo">
+      <div className="zlogo__bubble" aria-hidden="true">
+        <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
+          <path d="M9 1L2 9h4l-1 6 7-8H8l1-6z" fill="white" stroke="white" strokeWidth="0.5" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div className="zlogo__text">
+        <b>Zapp</b><span>|</span><i>Q</i>
+      </div>
+    </div>
+  );
+}
+
+// ─── MACHIA badge ───────────────────────────────────────────────────
+function MachiaBadge() {
+  return (
+    <div className="machia" aria-label="A platform Machia Company">
+      <svg viewBox="0 0 100 100" fill="none">
+        <text x="50" y="35" textAnchor="middle"
+              fontFamily="JetBrains Mono, monospace"
+              fontSize="8" fontWeight="500"
+              fill="#0E1116" letterSpacing="0.5">A PLATFORM</text>
+        <path d="M22 78 L50 30 L78 78 Z" fill="#0E1116"/>
+        <text x="50" y="62" textAnchor="middle"
+              fontFamily="Manrope, sans-serif"
+              fontSize="13" fontWeight="800"
+              fill="white" letterSpacing="0.5">MACHIA</text>
+        <text x="50" y="92" textAnchor="middle"
+              fontFamily="JetBrains Mono, monospace"
+              fontSize="7" fontWeight="500"
+              fill="#0E1116" letterSpacing="0.3">COMPANY</text>
+      </svg>
+    </div>
+  );
+}
+
+// ─── Page header (replica do PDF — logo + título + seção) ───────────
+function PageHeader({ section }) {
+  return (
+    <header className="page-header">
+      <ZLogo/>
+      <MachiaBadge/>
+      <div className="page-header__title">Como ativar seu WhatsApp e Instagram</div>
+      <div className="page-header__section">{section}</div>
+      <div className="page-header__rule"></div>
+    </header>
+  );
+}
+
+// ─── Render de texto com **negrito** ────────────────────────────────
+function RichText({ text }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith("**") ? <b key={i}>{p.slice(2, -2)}</b> : <span key={i}>{p}</span>
+      )}
+    </>
+  );
+}
+
+// ─── Cards de aviso (Dica, Cuidado, Regra de ouro, Pronto) ──────────
+function NoteCard({ kind, title, body }) {
+  const meta = {
+    tip:    { label: "Dica",          glyph: "i" },
+    warn:   { label: "Cuidado",       glyph: "!" },
+    gold:   { label: "Regra de ouro", glyph: "!" },
+    done:   { label: "Pronto!",       glyph: "✓" },
+    note:   { label: "Observação",    glyph: "i" },
+  }[kind];
+  return (
+    <div className={`note note--${kind}`}>
+      <div className="note__icon">{meta.glyph}</div>
+      <div className="note__body-wrap">
+        <div className="note__head">
+          <span className="note__kind">{meta.label}</span>
+          {title && <>
+            <span className="note__dash">—</span>
+            <span className="note__title">{title}</span>
+          </>}
+        </div>
+        <p className="note__body">{body}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Lista de actions numeradas ─────────────────────────────────────
+function ActionList({ items, stepId, onCheck, checked }) {
+  return (
+    <ol className="actions">
+      {items.map((a, i) => {
+        const key = `${stepId}-${i}`;
+        const isChecked = checked.has(key);
+        return (
+          <li key={i} className={`action ${isChecked ? "action--done" : ""}`}>
+            <button
+              className="action__check"
+              onClick={() => onCheck(key)}
+              aria-label={isChecked ? "Marcar como pendente" : "Marcar como feito"}
+            >
+              {isChecked ? "✓" : i + 1}
+            </button>
+            <p><RichText text={a} /></p>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ─── Step card ──────────────────────────────────────────────────────
+function StepCard({ step, figure, screenN, totalScreens, onCheck, checked, pillLabel }) {
+  const label = pillLabel || (screenN ? `TELA ${screenN} DE ${totalScreens}` : `PASSO ${step.id}`);
+  return (
+    <article className="step">
+      <header className="step__head">
+        <span className="step__pill">{label}</span>
+        <h2 className="step__title">{step.title}</h2>
+        {step.time && <span className="step__time">{step.time}</span>}
+      </header>
+
+      {screenN && totalScreens && (
+        <div className="step__pips">
+          {Array.from({ length: totalScreens }).map((_, i) => (
+            <span key={i} className={`pip ${i + 1 === screenN ? "pip--active" : i + 1 < screenN ? "pip--done" : ""}`}>
+              {i + 1}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="step__grid">
+        <div className="step__figure-col">
+          <div className="figure">
+            <div className="figure__frame">{figure}</div>
+            {step.figureLabel && <div className="figure__caption">{step.figureLabel}</div>}
+          </div>
+        </div>
+
+        <div className="step__content">
+          {step.lead && <p className="step__lead">{step.lead}</p>}
+
+          {step.whatAppears && (
+            <div className="block">
+              <div className="block__label">O que aparece na tela</div>
+              <p className="block__body">{step.whatAppears}</p>
+            </div>
+          )}
+
+          {step.actions && (
+            <div className="block">
+              <div className="block__label">O que você faz</div>
+              <ActionList items={step.actions} stepId={step.id} onCheck={onCheck} checked={checked} />
+            </div>
+          )}
+
+          <div className={`notes ${(step.tip && step.warn) ? "" : "notes--full"}`}>
+            {step.tip && <NoteCard kind="tip" {...step.tip} />}
+            {step.warn && <NoteCard kind="warn" {...step.warn} />}
+            {step.gold && <NoteCard kind="gold" {...step.gold} />}
+            {step.done && <NoteCard kind="done" {...step.done} />}
+            {step.note && <NoteCard kind="note" {...step.note} />}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// ─── Topbar do tutorial (modal chrome — close + progress) ───────────
+function TutorialTopbar({ onClose, progress, onDownloadPdf }) {
+  return (
+    <header className="t-topbar">
+      <div className="t-topbar__doc">ZQ-ONB-001</div>
+      <div className="t-topbar__pill">{TUTORIAL_META.version} · {TUTORIAL_META.date}</div>
+      <div className="t-topbar__progress">
+        <div className="t-topbar__progress-label">Progresso</div>
+        <div className="t-topbar__progress-bar">
+          <div className="t-topbar__progress-fill" style={{ width: `${progress}%` }}></div>
+        </div>
+        <div className="t-topbar__progress-pct">{progress}%</div>
+      </div>
+      <div className="t-topbar__actions">
+        <button className="btn btn--ghost" onClick={onDownloadPdf}>↓ Baixar PDF</button>
+        <button className="btn btn--ghost btn--close" onClick={onClose} aria-label="Fechar tutorial">✕</button>
+      </div>
+    </header>
+  );
+}
+
+// ─── Sidebar (TOC) ──────────────────────────────────────────────────
+function Sidebar({ sections, currentId, onSelect, sectionProgress }) {
+  return (
+    <nav className="t-sidebar">
+      <div className="t-sidebar__label">Sumário</div>
+      <ol className="t-toc">
+        {sections.map((s) => {
+          const prog = sectionProgress[s.id] || 0;
+          return (
+            <li key={s.id}>
+              <button
+                className={`t-toc__item ${currentId === s.id ? "t-toc__item--active" : ""}`}
+                style={partColorVars(s.id)}
+                onClick={() => onSelect(s.id)}
+              >
+                <span className="t-toc__n">{s.number}</span>
+                <span className="t-toc__text">
+                  <span className="t-toc__title">{s.title}</span>
+                  {s.note && <span className="t-toc__note">{s.note}</span>}
+                </span>
+                {prog > 0 && (
+                  <span className="t-toc__prog">
+                    <span className="t-toc__prog-fill" style={{ width: `${prog}%` }}></span>
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="t-sidebar__help">
+        <div className="t-sidebar__help-eyebrow">Travou?</div>
+        <p>Peça o <b>Onboarding Assistido</b> — um especialista da ZappIQ faz com você em videochamada.</p>
+        <a href="https://zappiq.com.br/agendar" className="btn btn--accent btn--full">Agendar com especialista</a>
+      </div>
+    </nav>
+  );
+}
+
+// Cor da parte por id de seção (usado pela sidebar)
+function partColorVars(id) {
+  if (id === "p3") return { "--p": "var(--p3)", "--p-soft": "var(--p3-soft)" };
+  if (id === "p4") return { "--p": "var(--p4)", "--p-soft": "var(--p4-soft)" };
+  if (id === "p1" || id === "p2") return { "--p": "var(--p1)", "--p-soft": "var(--p1-soft)" };
+  return {};
+}
+
+// ─── Footer (prev / next) ───────────────────────────────────────────
+function TutorialFooter({ prev, next, onPrev, onNext, onComplete }) {
+  return (
+    <footer className="t-footer">
+      <button className="btn btn--ghost" onClick={onPrev} disabled={!prev}>
+        ← {prev ? prev.title : "Início"}
+      </button>
+      <a href="https://zappiq.com.br/onboarding" className="btn btn--secondary">
+        Já fiz isso · ir para o onboarding
+      </a>
+      {next ? (
+        <button className="btn btn--primary" onClick={onNext}>
+          {next.title} →
+        </button>
+      ) : (
+        <button className="btn btn--primary" onClick={onComplete}>
+          Concluir tutorial →
+        </button>
+      )}
+    </footer>
+  );
+}
+
+Object.assign(window, {
+  ZLogo, MachiaBadge, PageHeader,
+  RichText, NoteCard, ActionList, StepCard,
+  TutorialTopbar, Sidebar, TutorialFooter,
+  partColorVars,
+});
+
+</script>
+<script type="text/babel">
+// Seções do tutorial — design fiel ao PDF
+
+const { useState: useS, useEffect: useE } = React;
+
+// ─── PageWrap: header sticky + long content area ────────────────────
+function PageWrap({ part, section, children }) {
+  return (
+    <div className="long" data-part={part}>{children}</div>
+  );
+}
+
+// ─── COVER · capa dark ──────────────────────────────────────────────
+function CoverSection({ onStart, onJumpTo }) {
+  return (
+    <div className="cover-wrap">
+      <div className="cover__eyebrow-row">
+        <span className="cover__eyebrow-dash"></span>
+        <span className="cover__eyebrow">Guia de ativação de canais</span>
+      </div>
+
+      <h1 className="cover__title">
+        Como ativar<br/>
+        seu <span className="wa">WhatsApp</span><br/>
+        e seu <span className="ig">Instagram</span><br/>
+        na ZappIQ.
+      </h1>
+
+      <p className="cover__lead">
+        Manual completo, do zero, para você fazer sozinho — sem conhecimento técnico.
+        Cada tela tem uma figura para você comparar com o que está vendo na sua.
+      </p>
+
+      <div className="cover__divider"></div>
+
+      <div className="cover__stats">
+        <div className="stat">
+          <div className="stat__big">30–40<span className="stat__small"> min</span></div>
+          <div className="stat__sub">de mão na obra</div>
+        </div>
+        <div className="stat">
+          <div className="stat__big">11<span className="stat__small"> telas</span></div>
+          <div className="stat__sub">guiadas com figura</div>
+        </div>
+        <div className="stat">
+          <div className="stat__big">100%</div>
+          <div className="stat__sub">baseado na documentação<br/>oficial da Meta</div>
+        </div>
+      </div>
+
+      <div className="cover__map-label">Como o manual está dividido</div>
+      <div className="cover__map-grid">
+        <button className="map-card" onClick={() => onJumpTo("p1")}>
+          <div className="map-card__n">01</div>
+          <div className="map-card__t">Preparativos</div>
+          <div className="map-card__d">Conta no Facebook, Portfólio Empresarial, verificação e Instagram como conta profissional. Faz uma vez na vida.</div>
+          <div className="map-card__tag">Partes 1 e 2</div>
+        </button>
+        <button className="map-card" onClick={() => onJumpTo("p3")}>
+          <div className="map-card__n">02</div>
+          <div className="map-card__t">Conectar o WhatsApp</div>
+          <div className="map-card__d">Oito telas da própria Meta abertas dentro do painel da ZappIQ. ≈ 8 a 10 minutos.</div>
+          <div className="map-card__tag">Parte 3</div>
+        </button>
+        <button className="map-card" onClick={() => onJumpTo("p4")}>
+          <div className="map-card__n">03</div>
+          <div className="map-card__t">Conectar o Instagram</div>
+          <div className="map-card__d">Mais três telas para ligar o Direct. ≈ 3 a 4 minutos.</div>
+          <div className="map-card__tag">Parte 4</div>
+        </button>
+      </div>
+
+      <div className="cover__cta">
+        <button className="btn btn--primary btn--lg" onClick={onStart}>
+          Começar pelo passo 1 →
+        </button>
+        <button className="btn btn--ghost btn--lg" onClick={() => onJumpTo("checklist")}>
+          Ver checklist do que preciso em mãos
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── INTRO · como usar ──────────────────────────────────────────────
+function IntroSection() {
+  return (
+    <PageWrap section="Introdução" part="p1">
+      <Eyebrow text="Antes de começar" />
+      <h1 className="long__h1">Como usar este manual.</h1>
+      <p className="long__lead">
+        Foi pensado para ser seguido na ordem, de cima para baixo. Você não precisa saber nada de programação —
+        basta clicar e comparar a sua tela com a figura ao lado de cada passo.
+      </p>
+
+      <div className="intro-cards">
+        <div className="intro-card">
+          <div className="intro-card__n">01</div>
+          <div className="intro-card__t">Preparativos</div>
+          <div className="intro-card__d">Conta no Facebook, Portfólio Empresarial, verificação e Instagram como conta profissional. <b>Faz uma vez na vida.</b></div>
+          <div className="intro-card__tag">Partes 1 e 2</div>
+          <div className="intro-arrow">→</div>
+        </div>
+        <div className="intro-card">
+          <div className="intro-card__n">02</div>
+          <div className="intro-card__t">Conectar o WhatsApp</div>
+          <div className="intro-card__d">Oito telas da própria Meta abertas dentro do painel da ZappIQ. <b>≈ 8 a 10 minutos.</b></div>
+          <div className="intro-card__tag">Parte 3</div>
+          <div className="intro-arrow">→</div>
+        </div>
+        <div className="intro-card">
+          <div className="intro-card__n">03</div>
+          <div className="intro-card__t">Conectar o Instagram</div>
+          <div className="intro-card__d">Mais três telas para ligar o Direct. <b>≈ 3 a 4 minutos.</b></div>
+          <div className="intro-card__tag">Parte 4</div>
+        </div>
+      </div>
+
+      <NoteCard kind="tip" title="Dica de uso"
+        body="Travou em alguma etapa? Pule para o FAQ no fim do manual ou peça o Onboarding Assistido — um especialista da ZappIQ faz com você em uma videochamada." />
+
+      <h3 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', marginTop: 40, marginBottom: 12 }}>
+        Convenções deste manual
+      </h3>
+      <div className="convs">
+        <div className="conv"><span className="conv__dot conv__dot--tip"></span><b>Dica</b><span>— atalho útil ou contexto.</span></div>
+        <div className="conv"><span className="conv__dot conv__dot--warn"></span><b>Cuidado</b><span>— erro comum que atrasa a ativação.</span></div>
+        <div className="conv"><span className="conv__dot conv__dot--gold"></span><b>Regra de ouro</b><span>— ler antes de qualquer coisa.</span></div>
+        <div className="conv"><span className="conv__dot conv__dot--done"></span><b>Pronto!</b><span>— confirmação de etapa concluída.</span></div>
+      </div>
+    </PageWrap>
+  );
+}
+
+// ─── GLOSSARY ───────────────────────────────────────────────────────
+function GlossarySection() {
+  return (
+    <PageWrap section="Glossário" part="p1">
+      <Eyebrow text="00 · Antes de tudo" />
+      <h1 className="long__h1">O que significam os termos.</h1>
+      <p className="long__lead">
+        A Meta usa alguns nomes técnicos. Você não precisa decorar — mas saber o que cada um é
+        ajuda a não se perder. Sempre que aparecer um destes termos no manual, é só voltar aqui.
+      </p>
+      <dl className="glossary">
+        {GLOSSARY.map((g) => (
+          <div className="gloss" key={g.term}>
+            <dt>{g.term}</dt>
+            <dd>{g.def}</dd>
+          </div>
+        ))}
+      </dl>
+    </PageWrap>
+  );
+}
+
+// ─── CHECKLIST ──────────────────────────────────────────────────────
+function ChecklistSection({ checks, onToggle }) {
+  return (
+    <PageWrap section="Checklist" part="p1">
+      <Eyebrow text="00 · Antes de tudo" />
+      <h1 className="long__h1">Tenha isto em mãos.</h1>
+      <p className="long__lead">
+        Separe tudo antes de começar. Ter os itens à mão evita travar no meio do caminho.
+      </p>
+
+      <ul className="checklist">
+        {CHECKLIST.map((c, i) => {
+          const key = `check-${i}`;
+          const isOn = checks.has(key);
+          return (
+            <li key={i} className={`chk ${isOn ? "chk--on" : ""}`}>
+              <button className="chk__box" onClick={() => onToggle(key)}>
+                {isOn ? "✓" : ""}
+              </button>
+              <div className="chk__text">
+                <div className="chk__title">{c.title}</div>
+                <div className="chk__note">{c.note}</div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div style={{ marginTop: 24 }}>
+        <NoteCard kind="gold"
+          title="A regra de ouro — leia com atenção"
+          body="O número que você vai usar NÃO pode estar ativo no aplicativo WhatsApp nem no WhatsApp Business comum. Se estiver, será preciso desconectá-lo do app primeiro — e isso APAGA o histórico de conversas dele. Por isso, a recomendação firme: compre um chip novo, uma linha exclusiva para o atendimento. Pode ser celular (SMS) ou fixo (ligação)." />
+      </div>
+    </PageWrap>
+  );
+}
+
+// ─── PARTE 1 · Preparar contas ──────────────────────────────────────
+function Part1Section({ onCheck, checked }) {
+  return (
+    <PageWrap section="Parte 1 · Preparar contas" part="p1">
+      <PartHeader number="01" title="Preparar suas contas na Meta." lead={PART1.intro}/>
+
+      {PART1.steps.map((step) => {
+        if (step.multiFigure) {
+          return (
+            <article className="step step--multi" key={step.id}>
+              <header className="step__head">
+                <span className="step__pill">PASSO {step.id}</span>
+                <h2 className="step__title">{step.title}</h2>
+                {step.time && <span className="step__time">{step.time}</span>}
+              </header>
+              {step.lead && <p className="step__lead" style={{ marginBottom: 18 }}>{step.lead}</p>}
+              <div className="multi-grid">
+                {step.multiFigure.map((m, i) => (
+                  <div className="multi-card" key={i}>
+                    <div className="multi-card__n">{m.n}</div>
+                    <div className="multi-card__fig">
+                      <Fig_InstaSettings stage={i + 1}/>
+                    </div>
+                    <div>
+                      <div className="multi-card__t">{m.title}</div>
+                      <div className="multi-card__d">{m.desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {step.note && <NoteCard kind="note" {...step.note} />}
+            </article>
+          );
+        }
+        return (
+          <StepCard
+            key={step.id}
+            step={step}
+            pillLabel={`PASSO ${step.id}`}
+            figure={FIGURES[step.id]}
+            onCheck={onCheck}
+            checked={checked}
+          />
+        );
+      })}
+    </PageWrap>
+  );
+}
+
+// ─── PARTE 2 · Links ────────────────────────────────────────────────
+function LinksSection() {
+  return (
+    <PageWrap section="Parte 2 · Links oficiais" part="p1">
+      <PartHeader number="02" title="Todos os links oficiais num só lugar."
+        lead="Guarde esta lista. Todos os endereços são oficiais da Meta."/>
+      <div className="links">
+        {OFFICIAL_LINKS.map((l) => (
+          <a className="link" key={l.n} href={`https://${l.url}`} target="_blank" rel="noreferrer">
+            <span className="link__n">{l.n}</span>
+            <div className="link__body">
+              <div className="link__title">{l.title}</div>
+              <div className="link__url">{l.url}</div>
+            </div>
+            <span className="link__arrow">↗</span>
+          </a>
+        ))}
+      </div>
+    </PageWrap>
+  );
+}
+
+// ─── PARTE 3 · WhatsApp ─────────────────────────────────────────────
+function Part3Section({ onCheck, checked }) {
+  return (
+    <PageWrap section="Parte 3 · Conectar WhatsApp" part="p3">
+      <PartHeader number="03" title={<>Conectar o WhatsApp <em>— as 8 telas.</em></>} lead={PART3.intro}/>
+      {PART3.steps.map((step) => (
+        <StepCard
+          key={step.id}
+          step={step}
+          figure={FIGURES[step.id]}
+          screenN={step.screenN}
+          totalScreens={PART3.totalScreens}
+          onCheck={onCheck}
+          checked={checked}
+        />
+      ))}
+      <div className="part-end">
+        <div className="part-end__check">✓</div>
+        <div>
+          <div className="part-end__t">WhatsApp conectado</div>
+          <div className="part-end__d">A ZappIQ recebe tudo da Meta sozinha. Em segundos o WhatsApp aparece como “Conectado” no seu painel.</div>
+        </div>
+      </div>
+    </PageWrap>
+  );
+}
+
+// ─── PARTE 4 · Instagram ────────────────────────────────────────────
+function Part4Section({ onCheck, checked }) {
+  return (
+    <PageWrap section="Parte 4 · Conectar Instagram" part="p4">
+      <PartHeader number="04" title={<>Conectar o Instagram Direct <em>— as 3 telas.</em></>} lead={PART4.intro}/>
+      {PART4.steps.map((step) => (
+        <StepCard
+          key={step.id}
+          step={step}
+          figure={FIGURES[step.id]}
+          screenN={step.screenN}
+          totalScreens={PART4.totalScreens}
+          onCheck={onCheck}
+          checked={checked}
+        />
+      ))}
+    </PageWrap>
+  );
+}
+
+// ─── PARTE 5 · Pagamento ────────────────────────────────────────────
+function Part5Section({ onCheck, checked }) {
+  return (
+    <PageWrap section="Parte 5 · Pagamento" part="p1">
+      <PartHeader number="05" title="Adicionar forma de pagamento." lead={PART5.intro}/>
+      {PART5.steps.map((step) => (
+        <StepCard
+          key={step.id}
+          step={step}
+          pillLabel="PASSO ÚNICO"
+          figure={FIGURES[step.id]}
+          onCheck={onCheck}
+          checked={checked}
+        />
+      ))}
+    </PageWrap>
+  );
+}
+
+// ─── PARTE 6 · Tempos ───────────────────────────────────────────────
+function TimelineSection() {
+  return (
+    <PageWrap section="Parte 6 · Tempos" part="p1">
+      <PartHeader number="06" title="Quanto tempo leva cada etapa."
+        lead="Tempo de mão na obra: cerca de 30 a 40 minutos no total. A única espera de verdade é a verificação do negócio — e ela não impede você de começar a testar a IA antes de terminar."/>
+
+      <div className="timeline">
+        {TIMELINE.map((t) => (
+          <div className={`tl ${t.slow ? "tl--slow" : ""}`} key={t.n}>
+            <div className="tl__n">{t.n}</div>
+            <div className="tl__title">{t.title}</div>
+            <div className="tl__bar"><span className="tl__bar-fill"></span></div>
+            <div className="tl__time">{t.time}</div>
+            <div className="tl__freq">{t.freq}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="totals">
+        <div className="total"><div className="total__big">30–40<span>min</span></div><div className="total__sub">de tempo ativo seu</div></div>
+        <div className="total"><div className="total__big">2–5<span>dias</span></div><div className="total__sub">de análise da Meta (em paralelo)</div></div>
+        <div className="total"><div className="total__big">11<span>telas</span></div><div className="total__sub">guiadas com figura nas Partes 3 e 4</div></div>
+      </div>
+    </PageWrap>
+  );
+}
+
+// ─── PARTE 7 · FAQ ──────────────────────────────────────────────────
+function FAQSection() {
+  const [open, setOpen] = useS(null);
+  return (
+    <PageWrap section="Parte 7 · FAQ" part="p1">
+      <PartHeader number="07" title="Perguntas frequentes."
+        lead="As dúvidas que mais aparecem entre quem está ativando os canais pela primeira vez."/>
+      <div className="faq">
+        {FAQ.map((f, i) => (
+          <details
+            key={i}
+            className="faq__item"
+            open={open === i}
+            onClick={(e) => {
+              e.preventDefault();
+              setOpen(open === i ? null : i);
+            }}
+          >
+            <summary className="faq__q">
+              <span>{f.q}</span>
+              <span className="faq__plus">{open === i ? "−" : "?"}</span>
+            </summary>
+            {open === i && <div className="faq__a">{f.a}</div>}
+          </details>
+        ))}
+      </div>
+    </PageWrap>
+  );
+}
+
+// ─── PARTE 8 · Onboarding assistido ─────────────────────────────────
+function ClosingSection({ onComplete }) {
+  return (
+    <PageWrap section="Parte 8 · Onboarding" part="p1">
+      <Eyebrow text="Parte 08 · Encerramento" />
+      <h1 className="long__h1">Prefere que a gente <span className="grad">faça com você</span>?</h1>
+      <p className="long__lead">
+        Se preferir não fazer sozinho, ou se for um caso de migração de número de outra plataforma,
+        escolha o Onboarding Assistido. Um especialista da ZappIQ agenda uma videochamada e configura
+        tudo com você, do início ao fim. É a forma mais tranquila de garantir que dê certo de primeira.
+      </p>
+
+      <div className="closing__card">
+        <div className="closing__where">
+          No painel da ZappIQ → tela de conexão de canais →
+          <b> “Agendar onboarding assistido”</b>
+        </div>
+        <a href="https://zappiq.com.br/agendar" className="btn btn--primary btn--lg">Agendar agora</a>
+      </div>
+
+      <div className="closing__pull">
+        Você está em boas mãos. Sozinho ou assistido, o objetivo é o mesmo: sua IA atendendo seus clientes
+        no WhatsApp e no Instagram, com segurança e sem dor de cabeça.
+      </div>
+
+      <div className="closing__final">
+        <a href="https://zappiq.com.br/onboarding" className="btn btn--primary btn--lg">
+          Voltar para o onboarding →
+        </a>
+      </div>
+
+      <div className="colophon">
+        Documento {TUTORIAL_META.doc} · {TUTORIAL_META.version} · {TUTORIAL_META.date}
+        <br/>Conteúdo baseado na documentação oficial da Meta. Sujeito a atualizações.
+      </div>
+    </PageWrap>
+  );
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
+function Eyebrow({ text }) {
+  return (
+    <div className="eyebrow-row">
+      <span className="eyebrow-dash"></span>
+      <span className="eyebrow">{text}</span>
+    </div>
+  );
+}
+function PartHeader({ number, title, lead }) {
+  return (
+    <header className="part-header">
+      <div className="eyebrow-row">
+        <span className="eyebrow-dash"></span>
+        <span className="eyebrow">Parte {number}</span>
+      </div>
+      <h1 className="long__h1">{title}</h1>
+      {lead && <p className="long__lead">{lead}</p>}
+    </header>
+  );
+}
+
+Object.assign(window, {
+  PageWrap, CoverSection, IntroSection, GlossarySection, ChecklistSection,
+  Part1Section, LinksSection, Part3Section, Part4Section, Part5Section,
+  TimelineSection, FAQSection, ClosingSection,
+});
+
+</script>
+<script type="text/babel">
+
+const { useState: useS, useEffect: useE, useMemo, useRef } = React;
+
+const PDF_URL = "/tutoriais/cadastrar-whatsapp-instagram.pdf";
+
+const SECTIONS = [
+  { id: "cover",     number: "—",  title: "Capa",                    note: "Visão geral" },
+  { id: "intro",     number: "—",  title: "Como usar este manual",   note: "Convenções" },
+  { id: "glossary",  number: "00", title: "Glossário",               note: "Termos da Meta" },
+  { id: "checklist", number: "00", title: "Tenha isto em mãos",      note: "Checklist" },
+  { id: "p1",        number: "01", title: "Preparar contas na Meta", note: "4 preparativos" },
+  { id: "p2",        number: "02", title: "Links oficiais",          note: "Atalhos da Meta" },
+  { id: "p3",        number: "03", title: "Conectar o WhatsApp",     note: "8 telas" },
+  { id: "p4",        number: "04", title: "Conectar o Instagram",    note: "3 telas" },
+  { id: "p5",        number: "05", title: "Forma de pagamento",      note: "WhatsApp Manager" },
+  { id: "p6",        number: "06", title: "Quanto tempo leva",       note: "Cronograma" },
+  { id: "p7",        number: "07", title: "Perguntas frequentes",    note: "FAQ" },
+  { id: "p8",        number: "08", title: "Onboarding assistido",    note: "Quer ajuda?" },
+];
+
+function getCheckableKeys(sectionId) {
+  const keys = [];
+  if (sectionId === "checklist") CHECKLIST.forEach((_, i) => keys.push(`check-${i}`));
+  if (sectionId === "p1") PART1.steps.forEach((s) => (s.actions || []).forEach((_, i) => keys.push(`${s.id}-${i}`)));
+  if (sectionId === "p3") PART3.steps.forEach((s) => (s.actions || []).forEach((_, i) => keys.push(`${s.id}-${i}`)));
+  if (sectionId === "p4") PART4.steps.forEach((s) => (s.actions || []).forEach((_, i) => keys.push(`${s.id}-${i}`)));
+  if (sectionId === "p5") PART5.steps.forEach((s) => (s.actions || []).forEach((_, i) => keys.push(`${s.id}-${i}`)));
+  return keys;
+}
+const ALL_CHECKABLE = SECTIONS.flatMap((s) => getCheckableKeys(s.id));
+
+function closeToParent() {
+  try { window.parent.postMessage("zappiq-tutorial-close", "*"); } catch (e) {}
+}
+
+function TutorialModal({ onClose }) {
+  const tweaks = { size: "expanded", theme: "editorial", mode: "full" };
+  const [currentId, setCurrentId] = useS("cover");
+  const [checked, setChecked] = useS(() => new Set());
+  const scrollerRef = useRef(null);
+
+  useE(() => {
+    const saved = localStorage.getItem("zappiq-tutorial-checks");
+    if (saved) { try { setChecked(new Set(JSON.parse(saved))); } catch (e) {} }
+  }, []);
+  useE(() => {
+    localStorage.setItem("zappiq-tutorial-checks", JSON.stringify([...checked]));
+  }, [checked]);
+  useE(() => { if (scrollerRef.current) scrollerRef.current.scrollTop = 0; }, [currentId]);
+
+  // Intercepta links internos pra não navegar dentro do iframe.
+  useE(() => {
+    function onDocClick(e) {
+      const a = e.target.closest && e.target.closest("a[href]");
+      if (!a) return;
+      const href = a.getAttribute("href") || "";
+      if (href.includes("/onboarding")) { e.preventDefault(); onClose(); return; }
+      if (href.includes("/agendar")) { e.preventDefault(); window.open(href, "_blank", "noopener"); return; }
+    }
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [onClose]);
+
+  const toggleCheck = (key) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const totalCheckable = ALL_CHECKABLE.length;
+  const doneCount = [...checked].filter((k) => ALL_CHECKABLE.includes(k)).length;
+  const progress = totalCheckable ? Math.round((doneCount / totalCheckable) * 100) : 0;
+
+  const sectionProgress = useMemo(() => {
+    const out = {};
+    SECTIONS.forEach((s) => {
+      const keys = getCheckableKeys(s.id);
+      if (!keys.length) return;
+      const done = keys.filter((k) => checked.has(k)).length;
+      out[s.id] = Math.round((done / keys.length) * 100);
+    });
+    return out;
+  }, [checked]);
+
+  const currentIdx = SECTIONS.findIndex((s) => s.id === currentId);
+  const prev = currentIdx > 0 ? SECTIONS[currentIdx - 1] : null;
+  const next = currentIdx < SECTIONS.length - 1 ? SECTIONS[currentIdx + 1] : null;
+
+  const onJumpTo = (id) => setCurrentId(id);
+  const onPrev = () => prev && setCurrentId(prev.id);
+  const onNext = () => next && setCurrentId(next.id);
+  const onStart = () => setCurrentId("glossary");
+  const onComplete = () => onClose();
+  const onDownloadPdf = () => window.open(PDF_URL, "_blank", "noopener");
+
+  const sharedProps = { onCheck: toggleCheck, checked, onToggle: toggleCheck, checks: checked };
+
+  const renderSection = () => {
+    switch (currentId) {
+      case "cover":     return <CoverSection onStart={onStart} onJumpTo={onJumpTo}/>;
+      case "intro":     return <IntroSection/>;
+      case "glossary":  return <GlossarySection/>;
+      case "checklist": return <ChecklistSection {...sharedProps}/>;
+      case "p1":        return <Part1Section {...sharedProps}/>;
+      case "p2":        return <LinksSection/>;
+      case "p3":        return <Part3Section {...sharedProps}/>;
+      case "p4":        return <Part4Section {...sharedProps}/>;
+      case "p5":        return <Part5Section {...sharedProps}/>;
+      case "p6":        return <TimelineSection/>;
+      case "p7":        return <FAQSection/>;
+      case "p8":        return <ClosingSection onComplete={onComplete}/>;
+      default:          return null;
+    }
+  };
+
+  return (
+    <div className={`tutorial-backdrop tutorial-backdrop--full`}>
+      <div className={`tutorial tutorial--${tweaks.size} tutorial--${tweaks.theme}`}>
+        <TutorialTopbar onClose={onClose} progress={progress} onDownloadPdf={onDownloadPdf}/>
+        <div className="tutorial__body">
+          <Sidebar sections={SECTIONS} currentId={currentId} onSelect={setCurrentId} sectionProgress={sectionProgress}/>
+          <main className="tutorial__main" ref={scrollerRef}>
+            <div className="tutorial__main-inner">{renderSection()}</div>
+            <TutorialFooter prev={prev} next={next} onPrev={onPrev} onNext={onNext} onComplete={onComplete}/>
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmbedApp() {
+  return <TutorialModal onClose={closeToParent} />;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<EmbedApp/>);
+
+</script>
+</body>
+</html>
