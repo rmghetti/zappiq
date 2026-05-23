@@ -389,13 +389,33 @@ export default function OnboardingPage() {
       // Magic Link: PEDE senha forte + confirmação (cliente loga email+senha depois)
       const oauthProvider = localStorage.getItem('zappiq_oauth_provider') || '';
 
-      const detectedEmail = urlEmail || oauthEmail;
+      // FONTE DE VERDADE = token Supabase vivo. Bug 2026-05-23: o onboarding
+      // mostrava email/provider de OUTRA conta (flags stale de uma sessão
+      // anterior). Decodifica o access_token e prefere o que está NELE — é a
+      // identidade realmente autenticada agora.
+      let tokenEmail = '';
+      let tokenProvider = '';
+      try {
+        const at = localStorage.getItem('zappiq_supabase_access_token') || '';
+        if (at.split('.').length === 3) {
+          const p = JSON.parse(atob(at.split('.')[1]));
+          tokenEmail = p.email || '';
+          tokenProvider = (p.app_metadata && p.app_metadata.provider) || '';
+        }
+      } catch { /* token ilegível — cai nos flags abaixo */ }
+
+      const detectedEmail = urlEmail || tokenEmail || oauthEmail;
       const detectedName = urlName || oauthName;
 
       if (detectedEmail || fromCallback) {
         const orgName = localStorage.getItem('zappiq_org_name') || '';
+        // provider: o token manda (app_metadata.provider). 'google' = Google;
+        // qualquer outro valor ('email'/'otp') = magic link. Só cai nos flags
+        // se não houver token legível.
         const provider: 'google' | 'magic_link' | 'unknown' =
-          oauthProvider === 'google' ? 'google'
+          tokenProvider === 'google' ? 'google'
+          : tokenProvider ? 'magic_link'
+          : oauthProvider === 'google' ? 'google'
           : oauthProvider === 'magic_link' ? 'magic_link'
           : 'unknown';
         setAuthProvider(provider);
