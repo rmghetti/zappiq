@@ -50,6 +50,10 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
   logger.info(`[Agent] Processing message from ${contactPhone}`, { organizationId, messageType });
 
+  // Token por org (self-serve multi-tenant). Resolve uma vez; cai no global se
+  // a org não tem token próprio (ex.: Iza dogfood). Ver whatsappService.WaCreds.
+  const waCreds = await resolveWaCreds(organizationId);
+
   try {
     // ── 0. Mark message as read ─────────────────────────
     // FASE 4 (#251): channel-aware. Em IG, faz mark_seen via Graph API.
@@ -68,7 +72,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     if (autoReplyTemplate) {
       logger.info(`[Agent] AUTOREPLY mode active for ${contactPhone}`);
       try {
-        await waService.sendText(contactPhone, autoReplyTemplate);
+        await waService.sendText(contactPhone, autoReplyTemplate, false, waCreds);
         await prisma.message.create({
           data: {
             direction: 'OUTBOUND',
@@ -156,6 +160,8 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         await waService.sendText(
           contactPhone,
           'Não consegui processar seu áudio agora. Pode me mandar em texto?',
+          false,
+          waCreds,
         );
         return;
       }
@@ -163,7 +169,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
     // ── 2.5. Handle outros não-textos (image, document, video, location) ─
     if (messageType !== 'text' && messageType !== 'button_reply' && messageType !== 'list_reply') {
-      await handleNonTextMessage(contactPhone, messageType);
+      await handleNonTextMessage(contactPhone, messageType, waCreds);
       return;
     }
 
@@ -434,7 +440,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
               voice: voiceCfg.voice,
             });
             if (ttsResult.mediaId) {
-              await waService.sendAudio(contactPhone, ttsResult.mediaId);
+              await waService.sendAudio(contactPhone, ttsResult.mediaId, waCreds);
               sentAsAudio = true;
               logger.info('[Agent] Resposta enviada como ÁUDIO (TTS)', {
                 contactPhone, minutesEstimate: ttsResult.minutesEstimate,
@@ -453,9 +459,9 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       // Fallback ou caminho normal: envia como texto
       if (!sentAsAudio) {
         if (parsed.buttons && parsed.buttons.length > 0) {
-          await waService.sendButtons(contactPhone, null, parsed.replyText, parsed.buttons);
+          await waService.sendButtons(contactPhone, null, parsed.replyText, parsed.buttons, waCreds);
         } else {
-          await waService.sendText(contactPhone, parsed.replyText);
+          await waService.sendText(contactPhone, parsed.replyText, false, waCreds);
         }
       }
 
@@ -492,7 +498,9 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // Fallback message
     await waService.sendText(
       contactPhone,
-      'Olá! Estou com uma dificuldade técnica momentânea. Em breve um atendente entrará em contato. Desculpe o inconveniente! 🙏'
+      'Olá! Estou com uma dificuldade técnica momentânea. Em breve um atendente entrará em contato. Desculpe o inconveniente! 🙏',
+      false,
+      waCreds,
     ).catch(() => {});
   }
 }
@@ -765,6 +773,9 @@ async function handleHandoff(
 ): Promise<void> {
   logger.info(`[Agent] Handoff triggered for ${contactPhone}`, { organizationId });
 
+  // Token por org pro envio do holding message (self-serve multi-tenant).
+  const waCreds = await resolveWaCreds(organizationId);
+
   // Pause AI for 1 hour
   await cache.set(`ai_paused:${organizationId}:${contactPhone}`, '1', 3600);
 
@@ -786,7 +797,7 @@ async function handleHandoff(
   // Send holding message
   const holdMsg = orgSettings?.handoffMessage ||
     'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido! 😊';
-  await waService.sendText(contactPhone, holdMsg);
+  await waService.sendText(contactPhone, holdMsg, false, waCreds);
 }
 
 // ── Handle Non-Text Messages ────────────────────────────
@@ -794,7 +805,7 @@ async function handleHandoff(
 // ajudar?") removidos. Agora alinhado com REGRA 4 (anti-padrões) do
 // prompt V6 da Iza. Áudio NÃO cai mais aqui — é interceptado em
 // processIncomingMessage (etapa 2) e transcrito via Whisper.
-async function handleNonTextMessage(phone: string, msgType: string): Promise<void> {
+async function handleNonTextMessage(phone: string, msgType: string, creds?: waService.WaCreds): Promise<void> {
   const responses: Record<string, string> = {
     // audio nunca chega aqui em prod (Whisper trata antes), mas mantém fallback
     // pra caso mediaId esteja vazio ou OPENAI_API_KEY desconfigurada.
@@ -806,7 +817,27 @@ async function handleNonTextMessage(phone: string, msgType: string): Promise<voi
   };
 
   const reply = responses[msgType] || 'Recebi sua mensagem. Me conta em texto o que você precisa.';
-  await waService.sendText(phone, reply);
+  await waService.sendText(phone, reply, false, creds);
+}
+
+// ── Token por org (self-serve multi-tenant) ─────────────
+// Lê whatsappPhoneNumberId + whatsappAccessToken da org. Se a org não tem
+// token próprio (ex.: Iza dogfood), devolve {} e o whatsappService cai no
+// token global (env). Mantém a Iza 100% inalterada. Fail-soft: erro de DB
+// devolve {} (degrada pro global, nunca derruba o envio).
+async function resolveWaCreds(organizationId: string): Promise<waService.WaCreds> {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { whatsappPhoneNumberId: true, whatsappAccessToken: true },
+    });
+    return {
+      accessToken: org?.whatsappAccessToken ?? undefined,
+      phoneNumberId: org?.whatsappPhoneNumberId ?? undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════

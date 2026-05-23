@@ -33,7 +33,56 @@ function createClient(): AxiosInstance {
 const waClient = createClient();
 const PHONE_ID = env.WHATSAPP_PHONE_NUMBER_ID || '';
 
-export async function sendText(to: string, text: string, previewUrl = false) {
+/**
+ * Credenciais WhatsApp por organização (self-serve multi-tenant).
+ *
+ * Por que existe: até então TODO outbound saía pelo token global da ZappIQ
+ * (env.WHATSAPP_ACCESS_TOKEN) + PHONE_ID global. Isso só funciona pra números
+ * sob o guarda-chuva Meta da ZappIQ (modelo da Iza). Pra o cliente ativar o
+ * PRÓPRIO número self-serve, cada org guarda seu Phone Number ID + Access Token
+ * (colunas whatsappPhoneNumberId / whatsappAccessToken) e o envio usa ELES.
+ *
+ * Fallback: se a org não tem token próprio (ex.: a Iza dogfood), cai no global.
+ * Assim a Iza permanece 100% inalterada — só clientes com token próprio mudam.
+ * Mesmo padrão que o Instagram já usa (instagramAccessToken por org).
+ */
+export interface WaCreds {
+  accessToken?: string | null;
+  phoneNumberId?: string | null;
+}
+
+function clientFor(creds?: WaCreds): AxiosInstance {
+  const token = creds?.accessToken;
+  // Só cria client dedicado quando há token próprio E ele difere do global.
+  // Caso contrário reusa o client global (comportamento legado / Iza).
+  if (token && token !== (env.WHATSAPP_ACCESS_TOKEN || '')) {
+    const c = axios.create({
+      baseURL: BASE_URL,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      timeout: 15_000,
+    });
+    c.interceptors.response.use(
+      (res) => res,
+      (err) => {
+        logger.error('[WA] API error (org token)', {
+          status: err.response?.status,
+          error: err.response?.data?.error,
+          url: err.config?.url,
+        });
+        throw err;
+      }
+    );
+    return c;
+  }
+  return waClient;
+}
+
+function phoneIdFor(creds?: WaCreds): string {
+  const pid = creds?.phoneNumberId;
+  return (pid && String(pid).trim()) || PHONE_ID;
+}
+
+export async function sendText(to: string, text: string, previewUrl = false, creds?: WaCreds) {
   const payload = {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
@@ -42,7 +91,7 @@ export async function sendText(to: string, text: string, previewUrl = false) {
     text: { body: text, preview_url: previewUrl },
   };
 
-  const { data } = await waClient.post(`/${PHONE_ID}/messages`, payload);
+  const { data } = await clientFor(creds).post(`/${phoneIdFor(creds)}/messages`, payload);
   logger.info(`[WA] Text sent to ${to}`, { messageId: data.messages?.[0]?.id });
   return data;
 }
@@ -52,7 +101,7 @@ export async function sendText(to: string, text: string, previewUrl = false) {
  * uploadado (via /PHONE_ID/media). mediaId é gerado por textToSpeech.ts
  * após sintetizar via OpenAI TTS e fazer upload Meta CDN.
  */
-export async function sendAudio(to: string, mediaId: string) {
+export async function sendAudio(to: string, mediaId: string, creds?: WaCreds) {
   const payload = {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
@@ -61,12 +110,12 @@ export async function sendAudio(to: string, mediaId: string) {
     audio: { id: mediaId },
   };
 
-  const { data } = await waClient.post(`/${PHONE_ID}/messages`, payload);
+  const { data } = await clientFor(creds).post(`/${phoneIdFor(creds)}/messages`, payload);
   logger.info(`[WA] Audio sent to ${to}`, { messageId: data.messages?.[0]?.id, mediaId });
   return data;
 }
 
-export async function sendTemplate(to: string, templateName: string, languageCode: string, components: any[] = []) {
+export async function sendTemplate(to: string, templateName: string, languageCode: string, components: any[] = [], creds?: WaCreds) {
   const payload = {
     messaging_product: 'whatsapp',
     to,
@@ -78,12 +127,12 @@ export async function sendTemplate(to: string, templateName: string, languageCod
     },
   };
 
-  const { data } = await waClient.post(`/${PHONE_ID}/messages`, payload);
+  const { data } = await clientFor(creds).post(`/${phoneIdFor(creds)}/messages`, payload);
   logger.info(`[WA] Template "${templateName}" sent to ${to}`);
   return data;
 }
 
-export async function sendButtons(to: string, headerText: string | null, bodyText: string, buttons: Array<{ id: string; title: string }>) {
+export async function sendButtons(to: string, headerText: string | null, bodyText: string, buttons: Array<{ id: string; title: string }>, creds?: WaCreds) {
   const payload = {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
@@ -102,7 +151,7 @@ export async function sendButtons(to: string, headerText: string | null, bodyTex
     },
   };
 
-  const { data } = await waClient.post(`/${PHONE_ID}/messages`, payload);
+  const { data } = await clientFor(creds).post(`/${phoneIdFor(creds)}/messages`, payload);
   return data;
 }
 
@@ -112,7 +161,8 @@ export async function sendList(
   bodyText: string,
   footerText: string | null,
   buttonLabel: string,
-  sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>
+  sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>,
+  creds?: WaCreds
 ) {
   const payload = {
     messaging_product: 'whatsapp',
@@ -138,12 +188,12 @@ export async function sendList(
     },
   };
 
-  const { data } = await waClient.post(`/${PHONE_ID}/messages`, payload);
+  const { data } = await clientFor(creds).post(`/${phoneIdFor(creds)}/messages`, payload);
   return data;
 }
 
-export async function markAsRead(messageId: string) {
-  await waClient.post(`/${PHONE_ID}/messages`, {
+export async function markAsRead(messageId: string, creds?: WaCreds) {
+  await clientFor(creds).post(`/${phoneIdFor(creds)}/messages`, {
     messaging_product: 'whatsapp',
     status: 'read',
     message_id: messageId,
