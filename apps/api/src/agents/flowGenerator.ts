@@ -23,6 +23,9 @@ import { llmRouter, type LLMTier, type LLMProviderId } from '../services/llm/LLM
 import {
   pickBlueprint,
   buildGraphFromContent,
+  BLUEPRINTS,
+  type Blueprint,
+  type BlueprintGoal,
   type BlueprintContent,
 } from './flowBlueprints.js';
 
@@ -217,4 +220,265 @@ export async function generateFlowDraft(input: {
     blueprintLabel: blueprint.label,
     source: 'ai',
   };
+}
+
+// ============================================================================
+// MAESTRO INTELIGENTE (Onda 1) — geração multi-objetivo com TODO o ai-training
+// ============================================================================
+// Diferença pro generateFlowDraft acima: aqui o Maestro lê TODO o conhecimento
+// que o cliente preencheu (survey completo, identidade, segmento/subsegmento,
+// títulos de documentos, pares de Q&A) e usa isso pra entender o negócio e
+// personalizar de verdade. Aceita N objetivos e devolve 1 draft por objetivo.
+
+export interface BusinessContext {
+  businessName: string;
+  niche: string | null;
+  tone: string;
+  businessHours: string;
+  agentName: string;
+  segmento: string | null;
+  subsegmentos: string[];
+  /** Texto compacto com tudo que o cliente preencheu — vai pro prompt do LLM. */
+  brief: string;
+  plan?: string | null;
+}
+
+/** Achata recursivamente um objeto de respostas em linhas "valor" legíveis. */
+function flattenAnswers(obj: any, out: string[], depth = 0): void {
+  if (obj == null || depth > 4) return;
+  if (typeof obj === 'string') {
+    const v = obj.trim();
+    if (v) out.push(v);
+  } else if (Array.isArray(obj)) {
+    for (const x of obj) flattenAnswers(x, out, depth + 1);
+  } else if (typeof obj === 'object') {
+    for (const v of Object.values(obj)) flattenAnswers(v, out, depth + 1);
+  }
+}
+
+/** Carrega o contexto completo do negócio a partir do ai-training. */
+export async function loadBusinessContext(organizationId: string): Promise<BusinessContext> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { plan: true, settings: true },
+  });
+  const settings = (org?.settings as Record<string, any>) || {};
+  const niche: string | null = settings.niche ?? null;
+  const businessName: string = settings.businessName || 'sua empresa';
+  const tone: string = settings.tone || 'profissional e simpático';
+  const businessHours: string =
+    typeof settings.businessHours === 'string'
+      ? settings.businessHours
+      : settings.businessHours ? JSON.stringify(settings.businessHours) : '';
+  const agentName: string = settings.agentName || 'seu assistente';
+  const segmento: string | null = settings.segmento ?? niche ?? null;
+  const subsegmentos: string[] = Array.isArray(settings.subsegmentos) ? settings.subsegmentos : [];
+
+  // Survey (achatado, dedupe, cap) — o coração do "entender o negócio".
+  const answerLines: string[] = [];
+  flattenAnswers(settings.surveyAnswers || {}, answerLines);
+  const surveyBrief = Array.from(new Set(answerLines))
+    .map((s) => s.replace(/\s+/g, ' ').slice(0, 240))
+    .slice(0, 24);
+
+  // Documentos/URLs ingeridos (só títulos — o conteúdo já está no RAG runtime).
+  let docTitles: string[] = [];
+  try {
+    const docs = await prisma.kBDocument.findMany({
+      where: { knowledgeBase: { organizationId } },
+      select: { title: true },
+      take: 12,
+      orderBy: { createdAt: 'desc' },
+    });
+    docTitles = docs.map((d) => d.title).filter(Boolean);
+  } catch { /* fail-soft */ }
+
+  // Q&A ativos (pergunta + resposta curta).
+  let qaLines: string[] = [];
+  try {
+    const qas = await (prisma as any).QAPair.findMany({
+      where: { organizationId, isActive: true },
+      select: { question: true, answer: true },
+      take: 10,
+      orderBy: { priority: 'desc' },
+    });
+    qaLines = (qas as any[]).map((q) => `P: ${String(q.question).slice(0, 120)} | R: ${String(q.answer).slice(0, 160)}`);
+  } catch { /* fail-soft */ }
+
+  const briefParts: string[] = [
+    `Negócio: ${businessName}.`,
+    segmento ? `Segmento: ${segmento}.` : '',
+    subsegmentos.length ? `Subsegmentos: ${subsegmentos.join(', ')}.` : '',
+    `Tom de voz: ${tone}.`,
+    businessHours ? `Horário: ${businessHours}.` : '',
+    `Nome do assistente: ${agentName}.`,
+    surveyBrief.length ? `\nO que o cliente contou sobre o negócio:\n- ${surveyBrief.join('\n- ')}` : '',
+    docTitles.length ? `\nDocumentos/materiais enviados: ${docTitles.join('; ')}.` : '',
+    qaLines.length ? `\nPerguntas & respostas já cadastradas:\n- ${qaLines.join('\n- ')}` : '',
+  ].filter(Boolean);
+
+  return {
+    businessName, niche, tone, businessHours, agentName, segmento, subsegmentos,
+    plan: org?.plan ?? null,
+    brief: briefParts.join('\n').slice(0, 4000),
+  };
+}
+
+/** Objetivos recomendados a partir do niche/segmento (pré-marca o wizard). */
+export function recommendObjectives(niche: string | null, segmento: string | null): BlueprintGoal[] {
+  const key = (segmento || niche || '').toLowerCase().trim();
+  const bp = pickBlueprint({ niche: key });
+  const recommended: BlueprintGoal[] = [bp.goal];
+  // Atendimento é base universal — sempre oferece junto se não for o principal.
+  if (!recommended.includes('atendimento')) recommended.push('atendimento');
+  return recommended;
+}
+
+/** Gera UM draft pra um objetivo específico, usando o brief completo do negócio. */
+async function generateDraftForObjective(
+  ctx: BusinessContext,
+  blueprint: Blueprint,
+  organizationId: string,
+  multiAgent: boolean,
+): Promise<FlowDraft> {
+  const fallback = (): FlowDraft => {
+    const graph = buildGraphFromContent(blueprint.defaults);
+    return {
+      name: blueprint.defaults.flowName,
+      nodes: graph.nodes,
+      edges: graph.edges,
+      triggerType: 'FIRST_CONTACT',
+      triggerConfig: {},
+      rationale: [
+        { node: 'Início', why: 'Dispara quando o cliente inicia a conversa.' },
+        { node: 'Mensagem', why: 'Boas-vindas determinísticas, sempre iguais.' },
+        { node: 'Marcar tag', why: `Organiza o contato pelo objetivo: ${blueprint.label}.` },
+        { node: 'Nó-IA', why: 'A IA assume usando o conhecimento do seu negócio.' },
+      ],
+      summary: `Modelo de "${blueprint.label}" para ${ctx.businessName} (base padrão — pode editar).`,
+      blueprintId: blueprint.id,
+      blueprintLabel: blueprint.label,
+      source: 'fallback',
+    };
+  };
+
+  const system = [
+    'Você é o MAESTRO INTELIGENTE da ZappIQ: monta fluxos de atendimento no WhatsApp/Instagram personalizados ao negócio.',
+    'Use TODO o contexto do negócio abaixo para escrever textos específicos e úteis (cite serviços, jeito de falar, diferenciais reais — nada genérico).',
+    'A ESTRUTURA do fluxo é fixa (Início → Mensagem → Marcar tag → Nó-IA): NÃO mude a estrutura, só o conteúdo.',
+    'Responda EXCLUSIVAMENTE com um objeto JSON válido, sem texto antes/depois, sem cercas, sem vírgula sobrando.',
+  ].join(' ');
+
+  const user = [
+    '=== CONTEXTO DO NEGÓCIO (preenchido pelo cliente no treinamento da IA) ===',
+    ctx.brief,
+    '',
+    `=== OBJETIVO DESTE FLUXO: ${blueprint.label} — ${blueprint.description} ===`,
+    multiAgent
+      ? 'Este é UM de vários fluxos especialistas (um por objetivo). Deixe a mensagem e a tag bem focadas SÓ neste objetivo.'
+      : 'Este é o fluxo principal do negócio.',
+    '',
+    'Devolva este JSON (pt-BR, textos curtos e naturais, usando o que você entendeu do negócio):',
+    '{',
+    '  "flowName": "nome curto do fluxo",',
+    '  "welcomeText": "boas-vindas (1-2 frases, pode 1 emoji), personalizada ao negócio",',
+    '  "tag": "tag-em-kebab-case",',
+    '  "aiPrompt": "instrução pro nó-IA: o que fazer neste objetivo, citando serviços/contexto reais (2-4 frases)",',
+    '  "rationale": [',
+    '    {"node":"Início","why":"..."},{"node":"Mensagem","why":"..."},{"node":"Marcar tag","why":"..."},{"node":"Nó-IA","why":"..."}',
+    '  ],',
+    '  "summary": "1-2 frases pro dono do negócio explicando o que montou e por que faz sentido pra ELE"',
+    '}',
+  ].join('\n');
+
+  const tier = VALID_TIERS.includes(ctx.plan as LLMTier) ? (ctx.plan as LLMTier) : undefined;
+
+  let parsed: any = null;
+  try {
+    const resp = await llmRouter.complete({
+      system,
+      messages: [{ role: 'user', content: user }],
+      maxTokens: 1000,
+      temperature: 0.5,
+      tier,
+      forceProvider: 'anthropic-sonnet' as LLMProviderId,
+      orgId: organizationId,
+      operation: 'chat',
+    });
+    parsed = extractJson(resp.text);
+  } catch (e) {
+    logger.warn('[MaestroInteligente] LLM falhou — fallback', { organizationId, objetivo: blueprint.goal, err: String(e) });
+    return fallback();
+  }
+  if (!parsed || typeof parsed !== 'object') return fallback();
+
+  const content: BlueprintContent = {
+    flowName: String(parsed.flowName || blueprint.defaults.flowName).slice(0, 80),
+    welcomeText: String(parsed.welcomeText || blueprint.defaults.welcomeText).slice(0, 600),
+    tag: (String(parsed.tag || blueprint.defaults.tag).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)) || blueprint.defaults.tag,
+    aiPrompt: String(parsed.aiPrompt || blueprint.defaults.aiPrompt).slice(0, 900),
+  };
+  const rationale = Array.isArray(parsed.rationale)
+    ? parsed.rationale.filter((r: any) => r && r.node && r.why).map((r: any) => ({ node: String(r.node).slice(0, 40), why: String(r.why).slice(0, 300) }))
+    : [];
+  const graph = buildGraphFromContent(content);
+
+  return {
+    name: content.flowName,
+    nodes: graph.nodes,
+    edges: graph.edges,
+    triggerType: 'FIRST_CONTACT',
+    triggerConfig: {},
+    rationale: rationale.length > 0 ? rationale : fallback().rationale,
+    summary: String(parsed.summary || `Fluxo de "${blueprint.label}" personalizado para ${ctx.businessName}.`).slice(0, 500),
+    blueprintId: blueprint.id,
+    blueprintLabel: blueprint.label,
+    source: 'ai',
+  };
+}
+
+export interface SmartFlowsResult {
+  drafts: FlowDraft[];
+  objectives: BlueprintGoal[];
+  multiAgent: boolean;
+  /** Recomendação/explicação do Maestro pro cliente (ex.: multi-agente). */
+  note: string;
+}
+
+/**
+ * MAESTRO INTELIGENTE — gera 1+ fluxos a partir dos objetivos escolhidos e de
+ * TODO o conhecimento do ai-training. Se nenhum objetivo for passado, recomenda
+ * pelo segmento. multiAgent=true => 1 fluxo especialista por objetivo.
+ */
+export async function generateSmartFlows(input: {
+  organizationId: string;
+  objectives?: string[];
+  multiAgent?: boolean;
+}): Promise<SmartFlowsResult> {
+  const { organizationId } = input;
+  const ctx = await loadBusinessContext(organizationId);
+
+  // Normaliza objetivos pros goals válidos; se vazio, recomenda pelo segmento.
+  const requested = (input.objectives || [])
+    .map((o) => String(o).toLowerCase().trim())
+    .filter((o): o is BlueprintGoal => o in BLUEPRINTS);
+  let objectives: BlueprintGoal[] = Array.from(new Set(requested));
+  if (objectives.length === 0) objectives = recommendObjectives(ctx.niche, ctx.segmento);
+
+  const multiAgent = !!input.multiAgent && objectives.length > 1;
+
+  // multiAgent=false + vários objetivos: gera só o primeiro (fluxo único focado
+  // no objetivo principal). multiAgent=true: 1 draft por objetivo.
+  const toGenerate = multiAgent ? objectives : [objectives[0]];
+
+  const drafts: FlowDraft[] = [];
+  for (const goal of toGenerate) {
+    drafts.push(await generateDraftForObjective(ctx, BLUEPRINTS[goal], organizationId, multiAgent));
+  }
+
+  const note = multiAgent
+    ? `Montei ${drafts.length} fluxos especialistas (um por objetivo) usando o que você preencheu no treinamento. Hoje você publica um por vez; revise e edite cada um.`
+    : `Montei o fluxo de "${BLUEPRINTS[objectives[0]].label}" usando o que você preencheu no treinamento. Quer um especialista por objetivo? Posso montar vários.`;
+
+  return { drafts, objectives, multiAgent, note };
 }

@@ -9,7 +9,7 @@ import { validate } from '../middleware/validate.js';
 import { resolveFlowStep, type FlowGraph, type FlowState } from '../agents/flowEngine.js';
 // Maestro "monta pra você" (#288) — gerador híbrido: estrutura determinística
 // + IA preenche conteúdo. Devolve um DRAFT (não persiste); o cliente edita e salva.
-import { generateFlowDraft } from '../agents/flowGenerator.js';
+import { generateFlowDraft, generateSmartFlows } from '../agents/flowGenerator.js';
 
 const router = Router();
 
@@ -47,6 +47,25 @@ router.post('/generate', validate(generateFlowSchema), async (req: Request, res:
       goal: req.body?.goal,
     });
     res.json({ success: true, data: draft });
+  } catch (err) { next(err); }
+});
+
+// POST /api/flows/generate-smart — MAESTRO INTELIGENTE (Onda 1)
+// Usa TODO o ai-training (survey completo, docs, Q&A, segmento) + os objetivos
+// escolhidos pra gerar 1+ DRAFTS personalizados. multiAgent=true => 1 fluxo
+// especialista por objetivo. NÃO persiste — o cliente revisa/edita/salva.
+const generateSmartSchema = z.object({
+  objectives: z.array(z.string()).optional(),
+  multiAgent: z.boolean().optional(),
+});
+router.post('/generate-smart', validate(generateSmartSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await generateSmartFlows({
+      organizationId: req.organizationId!,
+      objectives: req.body?.objectives,
+      multiAgent: req.body?.multiAgent,
+    });
+    res.json({ success: true, data: result });
   } catch (err) { next(err); }
 });
 
