@@ -29,7 +29,7 @@ Tier premium para empresas com >50 colaboradores ou >R$10M de faturamento, que t
 - Mensagens de IA ilimitadas (Pulse AI)
 - Disparos ilimitados (Spark Campaigns)
 - Contatos ilimitados (Nexus CRM)
-- Fluxos ilimitados (Forge Studio)
+- Fluxos ilimitados (ZappIQ Maestro)
 - Usuários administrativos ilimitados
 - Integrações ilimitadas
 

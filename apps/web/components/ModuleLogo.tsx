@@ -81,9 +81,9 @@ const LOGO_CONFIGS: Record<string, LogoConfig> = {
     ),
   },
   forge: {
-    name1: 'Forge',
-    name2: 'Studio',
-    color2: '#F59E0B',
+    name1: 'ZappIQ',
+    name2: 'Maestro',
+    color2: '#4F46E5',
     subtitle: 'CONSTRUTOR DE FLUXOS',
     innerIcon: (
       <>
