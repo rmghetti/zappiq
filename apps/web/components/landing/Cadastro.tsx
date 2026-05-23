@@ -90,9 +90,13 @@ export function Cadastro() {
 
     if (!accessToken) return;
 
-    // Aceita Magic Link (type=signup) OU OAuth (provider_token presente)
-    const isValidAuthFlow = type === 'signup' || providerToken !== null;
-    if (!isValidAuthFlow) return;
+    // Aceita QUALQUER retorno autenticado do Supabase (access_token presente),
+    // EXCETO recovery (reset de senha tem fluxo próprio). Bug 2026-05-23: antes
+    // só aceitava type==='signup' OU provider_token (Google), o que IGNORAVA o
+    // Magic Link de RETORNO (type=magiclink) — deixando o localStorage stale de
+    // uma sessão anterior (email/provider errados aparecendo no /onboarding).
+    // O token é validado server-side em passwordless-exchange/confirm-signup.
+    if (type === 'recovery') return;
 
     // PR #101.3 — Decodifica JWT Supabase pra extrair email/name e salvar
     // em localStorage. /onboarding useEffect lê e pula Step 0 ("Crie sua conta")
@@ -102,10 +106,14 @@ export function Cadastro() {
       const sbEmail = jwtPayload.email || '';
       const meta = jwtPayload.user_metadata || {};
       const sbName = meta.full_name || meta.name || (sbEmail ? sbEmail.split('@')[0] : '');
+      // Provider VEM do JWT (app_metadata.provider): 'google' p/ OAuth, 'email'
+      // p/ Magic Link/OTP. Mais confiável que o heurístico providerToken!==null.
+      const appProvider = (jwtPayload.app_metadata && jwtPayload.app_metadata.provider) || '';
+      const isGoogle = appProvider === 'google' || providerToken !== null;
       if (sbEmail) {
         localStorage.setItem('zappiq_oauth_email', sbEmail);
         localStorage.setItem('zappiq_oauth_name', sbName);
-        localStorage.setItem('zappiq_oauth_provider', providerToken !== null ? 'google' : 'magic_link');
+        localStorage.setItem('zappiq_oauth_provider', isGoogle ? 'google' : 'magic_link');
         // HOTFIX 2026-05-19 — persistir access_token Supabase pra /onboarding usar
         // ao chamar /api/auth/set-password (caminho magic_link). TTL ~1h
         // (Supabase JWT default), cliente termina onboarding antes disso na pratica.
