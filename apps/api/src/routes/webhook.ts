@@ -10,17 +10,13 @@ const router = Router();
 // ── WhatsApp payload signature verification (X-Hub-Signature-256) ──
 // Meta assina os payloads de webhook com o APP SECRET (Settings > Basic do
 // Meta App), NAO com o WhatsApp Access Token. Sao credenciais distintas.
-// Fallback para WHATSAPP_ACCESS_TOKEN apenas em transicao — remover depois.
-function verifyWhatsAppSignature(payload: string | Buffer, signature: string | undefined): boolean {
-  if (!signature) return false;
-  const appSecret = env.META_APP_SECRET || env.WHATSAPP_ACCESS_TOKEN;
-  if (!appSecret) {
-    logger.warn('[Webhook] META_APP_SECRET not set — cannot verify signatures, rejecting POST');
-    return false;
-  }
-  if (!env.META_APP_SECRET) {
-    logger.warn('[Webhook] META_APP_SECRET ausente — usando fallback WHATSAPP_ACCESS_TOKEN (provavelmente vai falhar). Configure META_APP_SECRET.');
-  }
+//
+// Self-serve multi-tenant: cada cliente pode usar o app Meta DELE, que assina
+// com o app secret DELE. Por isso resolvemos a org pelo phone_number_id do
+// payload e verificamos contra org.metaAppSecret; se a org nao tem (Iza /
+// cliente sob o app da ZappIQ), cai no META_APP_SECRET global.
+function verifyWhatsAppSignature(payload: string | Buffer, signature: string | undefined, appSecret: string): boolean {
+  if (!signature || !appSecret) return false;
   const expectedSig = 'sha256=' + crypto
     .createHmac('sha256', appSecret)
     .update(payload)
@@ -30,6 +26,26 @@ function verifyWhatsAppSignature(payload: string | Buffer, signature: string | u
   // timingSafeEqual lanca se buffers tiverem tamanhos diferentes.
   if (sigBuf.length !== expBuf.length) return false;
   return crypto.timingSafeEqual(sigBuf, expBuf);
+}
+
+// Resolve o secret de assinatura pro payload: app secret DA ORG (dona do
+// phone_number_id) com fallback pro global. Parse e lookup ANTES do verify —
+// usamos o payload nao-verificado SO pra escolher a chave; o verify de fato
+// valida a assinatura. Fail-soft: qualquer erro cai no global.
+async function resolveWaSigningSecret(rawBody: Buffer): Promise<string> {
+  const globalSecret = env.META_APP_SECRET || env.WHATSAPP_ACCESS_TOKEN || '';
+  try {
+    const body = JSON.parse(rawBody.toString('utf8'));
+    const phoneNumberId = body?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+    if (!phoneNumberId) return globalSecret;
+    const org = await prisma.organization.findFirst({
+      where: { whatsappPhoneNumberId: phoneNumberId },
+      select: { metaAppSecret: true } as any,
+    });
+    return ((org as any)?.metaAppSecret as string) || globalSecret;
+  } catch {
+    return globalSecret;
+  }
 }
 
 // ── GET /api/webhook/whatsapp — Meta verification ──
@@ -57,10 +73,13 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
     : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
   const signature = req.headers['x-hub-signature-256'] as string | undefined;
 
-  if (env.NODE_ENV === 'production' && !verifyWhatsAppSignature(rawBody, signature)) {
-    logger.warn('[Webhook] Invalid WhatsApp signature — rejecting request');
-    res.status(403).json({ error: 'Invalid signature' });
-    return;
+  if (env.NODE_ENV === 'production') {
+    const signingSecret = await resolveWaSigningSecret(rawBody);
+    if (!verifyWhatsAppSignature(rawBody, signature, signingSecret)) {
+      logger.warn('[Webhook] Invalid WhatsApp signature — rejecting request');
+      res.status(403).json({ error: 'Invalid signature' });
+      return;
+    }
   }
 
   // Always respond 200 immediately (Meta expects fast response)

@@ -152,6 +152,11 @@ model Organization {
   instagramAccountId     String? @map("instagram_account_id")
   instagramPageId        String? @map("instagram_page_id")
   instagramAccessToken   String? @map("instagram_access_token") @db.Text
+  // Self-serve "traga seu token": app secret do app Meta DO CLIENTE, usado pra
+  // verificar a assinatura (x-hub-signature-256) dos webhooks WA/IG que chegam
+  // assinados pelo app dele. Sem isso (ex.: Iza, ou cliente sob o app da ZappIQ)
+  // o webhook cai no META_APP_SECRET global. Ver [[canais-self-serve-token-por-org]].
+  metaAppSecret          String? @map("meta_app_secret")
   settings                  Json     @default("{}")
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt

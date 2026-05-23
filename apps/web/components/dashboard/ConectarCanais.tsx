@@ -46,6 +46,7 @@ interface OrgSettingsResponse {
   instagramAccountId?: string | null;
   instagramPageId?: string | null;
   instagramAccessToken?: string | null;
+  metaAppSecret?: string | null;
   settings?: Record<string, any> | null;
 }
 
@@ -67,6 +68,8 @@ export default function ConectarCanais() {
   const [igAccount, setIgAccount] = useState('');
   const [igPage, setIgPage] = useState('');
   const [igToken, setIgToken] = useState('');
+  // App Secret do app Meta do cliente (verificação de webhook por org)
+  const [metaAppSecret, setMetaAppSecret] = useState('');
 
   // Tutorial roda em <iframe> e avisa o parent por postMessage no ✕.
   useEffect(() => {
@@ -97,6 +100,7 @@ export default function ConectarCanais() {
       setIgAccount(org.instagramAccountId || '');
       setIgPage(org.instagramPageId || '');
       setIgToken(org.instagramAccessToken || '');
+      setMetaAppSecret(org.metaAppSecret || '');
       const act = settings.channelActivation;
       if (act === 'instagram' || act === 'both') setActivation(act);
       else setActivation('whatsapp');
@@ -133,6 +137,8 @@ export default function ConectarCanais() {
       // settings é JSON: preserva o resto e grava channelActivation.
       const payload: Record<string, any> = {
         settings: { ...origSettings, channelActivation: activation },
+        // App Secret é do APP Meta (cobre WA + IG do mesmo app). Salva sempre.
+        metaAppSecret: metaAppSecret.trim() || null,
       };
       if (wantWa) {
         payload.whatsappPhoneNumberId = waPhone.trim() || null;
@@ -250,6 +256,35 @@ export default function ConectarCanais() {
           ]}
         />
       )}
+
+      {/* Segurança do webhook — App Secret do app Meta do cliente */}
+      <div className="rounded-xl border border-gray-100 bg-white p-5 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+            <ShieldCheck size={20} className="text-gray-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Segurança do webhook (App Secret)</p>
+            <p className="text-xs text-gray-500">
+              Necessário se você usa seu próprio app Meta. Deixe em branco se conectou pelo onboarding assistido da ZappIQ.
+            </p>
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">App Secret (Meta App)</label>
+          <input
+            type="password"
+            value={metaAppSecret}
+            onChange={(e) => setMetaAppSecret(e.target.value)}
+            placeholder="App Secret do seu app Meta (Configurações → Básico)"
+            autoComplete="off"
+            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Usamos só para validar a autenticidade das mensagens que chegam do seu Meta. Fica protegido.
+          </p>
+        </div>
+      </div>
 
       <button
         onClick={handleSave}
