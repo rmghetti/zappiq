@@ -30,16 +30,13 @@ import { aiProcessQueue } from '../services/queueService.js';
 
 const router = Router();
 
-// ── HMAC signature verification (mesma lógica do WhatsApp) ──
-// Meta usa o MESMO APP SECRET pra assinar webhooks de WhatsApp e Instagram
-// (porque o "subscription" mora no mesmo Meta App). Logo, reusamos.
-function verifyMetaSignature(payload: string | Buffer, signature: string | undefined): boolean {
-  if (!signature) return false;
-  const appSecret = env.META_APP_SECRET || env.WHATSAPP_ACCESS_TOKEN;
-  if (!appSecret) {
-    logger.warn('[WebhookIG] META_APP_SECRET not set — cannot verify, rejecting POST');
-    return false;
-  }
+// ── HMAC signature verification ──
+// Self-serve multi-tenant: cada cliente pode usar o app Meta DELE, que assina
+// com o app secret DELE. Resolvemos a org pelo IG account id (entry[0].id) do
+// payload e verificamos contra org.metaAppSecret; sem isso (Iza / cliente sob o
+// app da ZappIQ) cai no META_APP_SECRET global.
+function verifyMetaSignature(payload: string | Buffer, signature: string | undefined, appSecret: string): boolean {
+  if (!signature || !appSecret) return false;
   const expectedSig =
     'sha256=' +
     crypto.createHmac('sha256', appSecret).update(payload).digest('hex');
@@ -47,6 +44,25 @@ function verifyMetaSignature(payload: string | Buffer, signature: string | undef
   const expBuf = Buffer.from(expectedSig);
   if (sigBuf.length !== expBuf.length) return false;
   return crypto.timingSafeEqual(sigBuf, expBuf);
+}
+
+// Resolve o secret de assinatura pro payload IG: app secret DA ORG (dona do
+// instagramAccountId) com fallback global. Parse antes do verify — usamos o
+// payload nao-verificado SO pra escolher a chave. Fail-soft: erro cai no global.
+async function resolveIgSigningSecret(rawBody: Buffer): Promise<string> {
+  const globalSecret = env.META_APP_SECRET || env.WHATSAPP_ACCESS_TOKEN || '';
+  try {
+    const body = JSON.parse(rawBody.toString('utf8'));
+    const igAccountId = body?.entry?.[0]?.id;
+    if (!igAccountId) return globalSecret;
+    const org = await prisma.organization.findFirst({
+      where: { instagramAccountId: igAccountId },
+      select: { metaAppSecret: true } as any,
+    });
+    return ((org as any)?.metaAppSecret as string) || globalSecret;
+  } catch {
+    return globalSecret;
+  }
 }
 
 // ── GET /api/webhook/instagram — Meta verification ──
@@ -76,10 +92,13 @@ router.post('/instagram', async (req: Request, res: Response) => {
     : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
   const signature = req.headers['x-hub-signature-256'] as string | undefined;
 
-  if (env.NODE_ENV === 'production' && !verifyMetaSignature(rawBody, signature)) {
-    logger.warn('[WebhookIG] Invalid Instagram signature — rejecting');
-    res.status(403).json({ error: 'Invalid signature' });
-    return;
+  if (env.NODE_ENV === 'production') {
+    const signingSecret = await resolveIgSigningSecret(rawBody);
+    if (!verifyMetaSignature(rawBody, signature, signingSecret)) {
+      logger.warn('[WebhookIG] Invalid Instagram signature — rejecting');
+      res.status(403).json({ error: 'Invalid signature' });
+      return;
+    }
   }
 
   // Always 200 immediately (Meta retry agressivamente em delays)
