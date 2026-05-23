@@ -67,7 +67,16 @@ function levelFromScore(score: number): AIReadinessResult['level'] {
 export async function computeAIReadiness(organizationId: string): Promise<AIReadinessResult> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, settings: true },
+    select: {
+      id: true,
+      settings: true,
+      // Colunas de canal — base pra contar a CONFIGURAÇÃO salva no score
+      // (não só o proxy de mensagem outbound). Self-serve multi-tenant.
+      whatsappPhoneNumberId: true,
+      whatsappAccessToken: true,
+      instagramAccountId: true,
+      instagramAccessToken: true,
+    } as any,
   });
 
   if (!org) throw new Error(`Organization not found: ${organizationId}`);
@@ -75,6 +84,15 @@ export async function computeAIReadiness(organizationId: string): Promise<AIRead
   const settings = (org.settings as any) || {};
   const surveyAnswers = settings.surveyAnswers || {};
   const niche: string | undefined = settings.niche;
+  const orgAny = org as any;
+
+  // Intenção de ativação escolhida pelo cliente: 'whatsapp' | 'instagram' | 'both'.
+  // Default: se já tem phoneNumberId de WhatsApp, assume whatsapp; senão whatsapp
+  // (canal padrão). Persistida em settings.channelActivation pelo painel /settings.
+  const channelIntent: 'whatsapp' | 'instagram' | 'both' =
+    settings.channelActivation === 'instagram' || settings.channelActivation === 'both'
+      ? settings.channelActivation
+      : 'whatsapp';
 
   // ── 1. Survey (até 30 pontos) ─────────────────────────
   let surveyScore = 0;
@@ -111,17 +129,33 @@ export async function computeAIReadiness(organizationId: string): Promise<AIRead
   // 4pt a cada 3 Q&As ativos, teto 20.
   const qaScore = Math.min(20, Math.floor(qaPairsCount / 3) * 4);
 
-  // ── 5. Canal WhatsApp conectado (5 pontos) ────────────
-  // Proxy: existência de mensagens outbound reais — significa que o número
-  // está funcional. Em breve substituir por WhatsAppConnection model.
-  const whatsappConnections = await prisma.message.count({
-    where: {
-      conversation: { organizationId },
-      direction: 'OUTBOUND',
-    },
+  // ── 5. Canal conectado (5 pontos) — WhatsApp e/ou Instagram ────────────
+  // Conta a CONFIGURAÇÃO salva (phoneNumberId+token de WA, accountId+token de IG)
+  // conforme a intenção do cliente. Fallback legado: proxy de outbound real
+  // (cobre a Iza dogfood, que usa token global sem campos próprios na org).
+  const waConfigured = !!(orgAny.whatsappPhoneNumberId && orgAny.whatsappAccessToken);
+  const igConfigured = !!(orgAny.instagramAccountId && orgAny.instagramAccessToken);
+
+  const outboundExists = await prisma.message.count({
+    where: { conversation: { organizationId }, direction: 'OUTBOUND' },
     take: 1,
   });
-  const channelScore = whatsappConnections > 0 ? 5 : 0;
+
+  // Canal "pronto" conforme a intenção escolhida:
+  //   whatsapp  → WA configurado
+  //   instagram → IG configurado
+  //   both      → ambos configurados
+  let channelReady = false;
+  if (channelIntent === 'whatsapp') channelReady = waConfigured;
+  else if (channelIntent === 'instagram') channelReady = igConfigured;
+  else channelReady = waConfigured && igConfigured;
+
+  // Fallback legado: se há outbound real, o canal está de fato funcional
+  // (Iza dogfood via token global). Garante que orgs já ativas não percam o ponto.
+  if (!channelReady && outboundExists > 0) channelReady = true;
+
+  const channelScore = channelReady ? 5 : 0;
+  const whatsappConnections = outboundExists; // mantém shape do stats legado
 
   const score =
     surveyScore + identityScore + documentsScore + qaScore + channelScore;
@@ -178,13 +212,25 @@ export async function computeAIReadiness(organizationId: string): Promise<AIRead
   }
 
   if (channelScore === 0) {
+    // Título/descrição conforme a intenção de ativação escolhida pelo cliente.
+    const channelTitle =
+      channelIntent === 'instagram'
+        ? 'Conecte sua Conta Instagram'
+        : channelIntent === 'whatsapp'
+          ? 'Conecte seu número de WhatsApp e sua Conta Instagram'
+          : 'Conecte seu número de WhatsApp e sua Conta Instagram';
+    const channelDesc =
+      channelIntent === 'instagram'
+        ? 'Sem o canal conectado, sua IA não responde DMs. Conexão direta via Meta — escolha o que ativar e leva poucos minutos.'
+        : 'Sem o canal conectado, sua IA não fala com clientes. Conecte WhatsApp e/ou Instagram Direct via Meta — você escolhe o que ativar.';
     nextActions.push({
+      // Mantém id 'connect_whatsapp' pra preservar o deep-link existente do
+      // frontend (ACTION_TARGET/ACTION_HREFS). O texto agora cobre WA + IG.
       id: 'connect_whatsapp',
-      title: 'Conecte seu número de WhatsApp',
-      description:
-        'Sem o canal conectado, sua IA não fala com clientes. Conexão direta via WhatsApp Cloud API — leva menos de 5 minutos.',
+      title: channelTitle,
+      description: channelDesc,
       impact: 5,
-      cta: 'Conectar WhatsApp',
+      cta: 'Conectar canais',
       completed: false,
     });
   }

@@ -89,7 +89,17 @@ export async function sendReplyText(input: SendReplyInput): Promise<SendReplyRes
   if (!phone) {
     throw new Error(`Conversation ${input.conversationId} sem phone/whatsappId no contact`);
   }
-  const result = await waService.sendText(phone, input.content);
+  // Token por org (self-serve multi-tenant). Mesmo padrão do IG acima: carrega
+  // as credenciais WA da org e passa pro send. Sem token próprio → whatsappService
+  // cai no token global (Iza dogfood inalterada).
+  const waOrg = await prisma.organization.findUnique({
+    where: { id: input.organizationId },
+    select: { whatsappPhoneNumberId: true, whatsappAccessToken: true },
+  });
+  const result = await waService.sendText(phone, input.content, false, {
+    accessToken: waOrg?.whatsappAccessToken ?? undefined,
+    phoneNumberId: waOrg?.whatsappPhoneNumberId ?? undefined,
+  });
   return {
     channel: 'whatsapp',
     externalMessageId: result?.messages?.[0]?.id,
@@ -126,6 +136,13 @@ export async function markIncomingAsRead(input: {
     return;
   }
 
-  // WhatsApp default
-  await waService.markAsRead(input.externalMessageId).catch(() => {});
+  // WhatsApp default — token por org (fallback global pra Iza).
+  const waOrg = await prisma.organization.findUnique({
+    where: { id: input.organizationId },
+    select: { whatsappPhoneNumberId: true, whatsappAccessToken: true },
+  });
+  await waService.markAsRead(input.externalMessageId, {
+    accessToken: waOrg?.whatsappAccessToken ?? undefined,
+    phoneNumberId: waOrg?.whatsappPhoneNumberId ?? undefined,
+  }).catch(() => {});
 }
