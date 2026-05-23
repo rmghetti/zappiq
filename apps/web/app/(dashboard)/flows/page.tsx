@@ -34,8 +34,15 @@ import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
   MessageSquare, GitBranch, Sparkles, Tag, BarChart2, Headset, Clock, PlayCircle, Info,
+  BookOpen, Download, ArrowRight, X, Zap,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
+
+// Tutorial interativo "Reja sua IA" (HTML self-contained do Claude Design) + PDF
+// baixável. Servidos estaticamente de apps/web/public/tutoriais/. Mesmo padrão do
+// tutorial de canais (WhatsApp/Instagram): modal grande com <iframe> same-origin.
+const MAESTRO_TUTORIAL_HTML = '/tutoriais/maestro-tutorial.html';
+const MAESTRO_TUTORIAL_PDF = '/tutoriais/maestro-reja-sua-ia.pdf';
 
 // ─── Tipos de nó → categoria + visual ───────────────────────────────────────
 type NodeKind = 'start' | 'fixed' | 'ai' | 'action' | 'human';
@@ -643,6 +650,27 @@ export default function FlowsPage() {
   const [genGoal, setGenGoal] = useState('');
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState<FlowDraft | null>(null);
+  // tutorial interativo (modal iframe)
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+
+  // O tutorial roda dentro de um <iframe>; ele avisa o parent por postMessage
+  // quando o usuário fecha/conclui. Esc também fecha.
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (e?.data === 'zappiq-tutorial-close') setTutorialOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setTutorialOpen(false);
+    }
+    if (tutorialOpen) {
+      window.addEventListener('message', onMessage);
+      window.addEventListener('keydown', onKey);
+      return () => {
+        window.removeEventListener('message', onMessage);
+        window.removeEventListener('keydown', onKey);
+      };
+    }
+  }, [tutorialOpen]);
 
   const load = useCallback(async () => {
     try {
@@ -717,17 +745,66 @@ export default function FlowsPage() {
 
   return (
     <div className="max-w-4xl mx-auto py-2">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Maestro — Fluxos</h1>
-          <p className="text-sm text-gray-500">Construa o atendimento: trilho fixo onde precisa de controle, IA onde precisa de conversa.</p>
+      {/* Intro Maestro — espelha o design (print): manual antes do 1º fluxo */}
+      <div className="mb-2">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">Construa o atendimento da sua IA</h1>
+        <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+          Antes de montar seu primeiro fluxo, dá uma olhada no manual interativo. 10–15 minutos
+          explicando o conceito das 4 cores, os 7 tipos de nó e como testar antes de publicar.
+        </p>
+      </div>
+
+      {error && <div className="my-4 px-4 py-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">{error}</div>}
+
+      {/* Card: Manual interativo — Reja sua IA (Baixar PDF + Abrir tutorial) */}
+      <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-600">
+              Recomendado · 10 a 15 min
+            </p>
+            <h2 className="text-lg font-bold text-gray-900 mt-1">Manual interativo — Reja sua IA</h2>
+            <p className="text-sm text-gray-500 mt-0.5">As 4 cores, os 7 nós, os 2 caminhos. Tudo com tela ao vivo.</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href={MAESTRO_TUTORIAL_PDF}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-2 whitespace-nowrap"
+            >
+              <Download size={15} /> Baixar PDF
+            </a>
+            <button
+              onClick={() => setTutorialOpen(true)}
+              className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black flex items-center gap-2 whitespace-nowrap"
+            >
+              Abrir tutorial <ArrowRight size={15} />
+            </button>
+          </div>
         </div>
-        <button onClick={createFlow} disabled={creating} className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 flex items-center gap-2 disabled:opacity-50">
-          {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Novo fluxo
+      </div>
+
+      {/* Card: Novo fluxo (do zero ou deixe o Maestro montar) */}
+      <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm flex items-center gap-4">
+        <div className="w-11 h-11 rounded-xl bg-primary-500 flex items-center justify-center text-white shrink-0">
+          <Zap size={22} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900">Novo fluxo</p>
+          <p className="text-xs text-gray-500 mt-0.5">Comece do zero ou deixe o Maestro montar</p>
+        </div>
+        <button
+          onClick={createFlow}
+          disabled={creating}
+          className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
+        >
+          {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Criar fluxo
         </button>
       </div>
 
-      {error && <div className="mb-4 px-4 py-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">{error}</div>}
+      <div className="mt-6" />
+
 
       {/* Maestro monta pra você (#288) */}
       <div className="mb-6 rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-indigo-50 to-white p-5">
@@ -829,6 +906,39 @@ export default function FlowsPage() {
           </div>
         ))}
       </div>
+
+      {/* Modal grande do tutorial interativo (iframe self-contained) */}
+      {tutorialOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex flex-col sm:p-4 md:p-6" role="dialog" aria-modal="true">
+          <div className="relative bg-white sm:rounded-2xl overflow-hidden shadow-2xl w-full h-full sm:max-w-6xl sm:mx-auto flex flex-col">
+            <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-gray-100 bg-white">
+              <span className="text-xs font-medium text-gray-500">Manual interativo · ZappIQ Maestro</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={MAESTRO_TUTORIAL_PDF}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5"
+                >
+                  <Download size={13} /> Baixar PDF
+                </a>
+                <button
+                  onClick={() => setTutorialOpen(false)}
+                  aria-label="Fechar tutorial"
+                  className="w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 flex items-center justify-center"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <iframe
+              src={MAESTRO_TUTORIAL_HTML}
+              title="Manual interativo do ZappIQ Maestro — Reja sua IA"
+              className="flex-1 w-full border-0"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
