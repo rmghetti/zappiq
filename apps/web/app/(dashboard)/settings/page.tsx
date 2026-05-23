@@ -92,6 +92,22 @@ const SEGMENT_OPTIONS = [
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('general');
+
+  // Deep-link por hash (ex.: /settings#whatsapp vindo do AI Readiness "Conectar
+  // WhatsApp"). Lê o hash inicial e reage a mudanças.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const apply = () => {
+      const h = window.location.hash.replace('#', '').toLowerCase();
+      if (h === 'whatsapp' || h === 'team' || h === 'ai' || h === 'general' || h === 'billing') {
+        setTab(h as Tab);
+      }
+    };
+    apply();
+    window.addEventListener('hashchange', apply);
+    return () => window.removeEventListener('hashchange', apply);
+  }, []);
+
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [org, setOrg] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);

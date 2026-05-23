@@ -484,6 +484,30 @@ const identitySchema = z.object({
   handoffMessage: z.string().max(1000).optional(),
 });
 
+// GET /identity — devolve os campos de identidade atuais (org.settings) para
+// pré-preencher o painel. Sem isso o cliente não consegue EDITAR o que já
+// existe, só sobrescrever do zero.
+router.get('/identity', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { settings: true },
+    });
+    const s = (org?.settings as any) || {};
+    res.json({
+      identity: {
+        agentName: s.agentName || '',
+        tone: (s.tone as 'friendly' | 'formal' | 'technical') || 'friendly',
+        greetingMessage: s.greetingMessage || '',
+        handoffMessage: s.handoffMessage || '',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.put('/identity', validate(identitySchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;

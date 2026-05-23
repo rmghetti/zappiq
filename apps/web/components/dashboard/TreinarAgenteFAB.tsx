@@ -18,7 +18,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Sparkles, X, Upload, MessageSquareText, User, BarChart3 } from 'lucide-react';
+import { Sparkles, X, Upload, MessageSquareText, User, BarChart3, ClipboardList } from 'lucide-react';
 import { useAgentReadiness } from '../../hooks/useAgentReadiness';
 import { useAuthStore } from '../../stores/authStore';
 
@@ -31,6 +31,13 @@ interface FabAction {
 }
 
 const ACTIONS: FabAction[] = [
+  {
+    href: '/ai-training#survey',
+    icon: ClipboardList,
+    label: 'Completar qualificação',
+    description: 'Questionário do negócio — maior peso no score (30 pts)',
+    iconColor: 'text-fuchsia-600',
+  },
   {
     href: '/ai-training#documents',
     icon: Upload,
