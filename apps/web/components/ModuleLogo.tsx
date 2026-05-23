@@ -205,6 +205,21 @@ export function ModuleLogo() {
   const pathname = usePathname();
   const productId = resolveProduct(pathname);
 
+  // Maestro (/flows): logo oficial em imagem (arquivo aprovado pelo CEO),
+  // não o SVG gerado dos demais módulos.
+  if (productId === 'forge') {
+    return (
+      <Image
+        src="/zappiq-maestro.png"
+        alt="ZappIQ Maestro"
+        width={132}
+        height={46}
+        priority
+        style={{ height: 38, width: 'auto' }}
+      />
+    );
+  }
+
   if (productId) {
     return <ProductLogo id={productId} />;
   }
