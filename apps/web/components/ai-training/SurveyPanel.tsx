@@ -15,8 +15,8 @@
  *   segmento: {...}, subsegmentos: {...}              // preservados intactos
  * }
  */
-import { useEffect, useState } from 'react';
-import { Loader2, Save, CheckCircle2, Circle } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Loader2, Save, CheckCircle2, Circle, CloudOff } from 'lucide-react';
 import { GLOBAL_SURVEY_BLOCKS } from '../../lib/surveyData';
 import type { SurveyQuestion } from '../../lib/surveyData';
 import { api } from '../../lib/api';
@@ -32,13 +32,23 @@ function isAnswered(v: any): boolean {
   return String(v).trim() !== '';
 }
 
+// Status do autosave mostrado no cabeçalho.
+type AutoState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
+
 export function SurveyPanel({ onChange }: { onChange?: () => void }) {
   const [full, setFull] = useState<Record<string, any>>({});
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false); // save manual (botão)
+  const [auto, setAuto] = useState<AutoState>('idle');
   const [error, setError] = useState<string | null>(null);
+
+  // Refs pra o autosave debounced enxergar sempre o estado mais recente sem
+  // recriar o timer a cada tecla.
+  const fullRef = useRef(full);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipFirst = useRef(true);
+  useEffect(() => { fullRef.current = full; }, [full]);
 
   useEffect(() => {
     (async () => {
@@ -59,25 +69,53 @@ export function SurveyPanel({ onChange }: { onChange?: () => void }) {
   const total = ALL_QUESTIONS.length;
   const pct = total ? Math.round((answeredCount / total) * 100) : 0;
 
-  function setVal(id: string, value: any) {
-    setAnswers((a) => ({ ...a, [id]: value }));
-    setSaved(false);
-  }
-
-  async function save() {
-    setSaving(true);
+  // Persiste no backend (que re-sincroniza o RAG). `snapshot` = respostas a
+  // salvar; manual=true quando veio do botão (mostra "Salvo ✓").
+  const persist = useCallback(async (snapshot: Record<string, any>, manual: boolean) => {
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    if (manual) setSaving(true);
+    setAuto('saving');
     setError(null);
     try {
-      const surveyAnswers = { ...full, [SECTION_KEY]: answers };
+      const surveyAnswers = { ...fullRef.current, [SECTION_KEY]: snapshot };
       await api.put('/api/ai-training/survey', { surveyAnswers });
       setFull(surveyAnswers);
-      setSaved(true);
+      setAuto('saved');
       onChange?.();
     } catch (e: any) {
       setError(e?.message || 'Falha ao salvar o questionário');
+      setAuto('error');
     } finally {
-      setSaving(false);
+      if (manual) setSaving(false);
     }
+  }, [onChange]);
+
+  // AUTOSAVE: ~1,5s depois que o cliente para de digitar, persiste sozinho.
+  // Evita a perda de dados quando o cliente preenche e não clica em "Salvar".
+  useEffect(() => {
+    if (loading) return;
+    if (skipFirst.current) { skipFirst.current = false; return; } // ignora o set inicial pós-load
+    setAuto('pending');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => { void persist(answers, false); }, 1500);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [answers, loading, persist]);
+
+  // Avisa se o cliente tentar sair com algo ainda não salvo.
+  useEffect(() => {
+    function beforeUnload(e: BeforeUnloadEvent) {
+      if (auto === 'pending' || auto === 'saving') { e.preventDefault(); e.returnValue = ''; }
+    }
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [auto]);
+
+  function setVal(id: string, value: any) {
+    setAnswers((a) => ({ ...a, [id]: value }));
+  }
+
+  function save() {
+    void persist(answers, true);
   }
 
   if (loading) {
@@ -99,7 +137,13 @@ export function SurveyPanel({ onChange }: { onChange?: () => void }) {
           <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1.5 max-w-md">
             <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-secondary-500 transition-all" style={{ width: `${pct}%` }} />
           </div>
-          <p className="text-xs text-gray-500 mt-1">Tudo que você responder aqui treina a IA — re-sincroniza a base de conhecimento na hora de salvar.</p>
+          <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
+            Tudo que você responder aqui treina a IA — salva sozinho e re-sincroniza a base de conhecimento.
+            {auto === 'pending' && <span className="text-gray-400">· alterações não salvas…</span>}
+            {auto === 'saving' && <span className="text-primary-600 inline-flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> salvando…</span>}
+            {auto === 'saved' && <span className="text-secondary-600 inline-flex items-center gap-1"><CheckCircle2 size={11} /> salvo automaticamente</span>}
+            {auto === 'error' && <span className="text-red-600 inline-flex items-center gap-1"><CloudOff size={11} /> falha ao salvar</span>}
+          </p>
         </div>
         <button
           onClick={save}
@@ -107,7 +151,7 @@ export function SurveyPanel({ onChange }: { onChange?: () => void }) {
           className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
         >
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          {saved ? 'Salvo ✓' : 'Salvar respostas'}
+          {auto === 'saved' && !saving ? 'Salvo ✓' : 'Salvar respostas'}
         </button>
       </div>
 
@@ -132,7 +176,7 @@ export function SurveyPanel({ onChange }: { onChange?: () => void }) {
           className="px-5 py-2.5 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 flex items-center gap-2 disabled:opacity-50"
         >
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          {saved ? 'Salvo ✓' : 'Salvar respostas'}
+          {auto === 'saved' && !saving ? 'Salvo ✓' : 'Salvar respostas'}
         </button>
       </div>
     </div>
