@@ -16,12 +16,13 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Users, Smartphone, Brain, Plus, Trash2,
-  CheckCircle2, AlertCircle, Loader2, CreditCard,
+  CheckCircle2, AlertCircle, Loader2, CreditCard, Plug,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
+import ConectarCanais from '../../../components/dashboard/ConectarCanais';
 
-type Tab = 'general' | 'team' | 'whatsapp' | 'ai' | 'billing';
+type Tab = 'general' | 'team' | 'canais' | 'whatsapp' | 'ai' | 'billing';
 
 interface BillingSettings {
   autoOverage?: boolean;
@@ -99,7 +100,7 @@ export default function SettingsPage() {
     if (typeof window === 'undefined') return;
     const apply = () => {
       const h = window.location.hash.replace('#', '').toLowerCase();
-      if (h === 'whatsapp' || h === 'team' || h === 'ai' || h === 'general' || h === 'billing') {
+      if (h === 'whatsapp' || h === 'team' || h === 'ai' || h === 'general' || h === 'billing' || h === 'canais') {
         setTab(h as Tab);
       }
     };
@@ -348,6 +349,7 @@ export default function SettingsPage() {
   const tabs: { key: Tab; label: string; icon: typeof Settings }[] = [
     { key: 'general', label: 'Geral', icon: Settings },
     { key: 'team', label: 'Equipe', icon: Users },
+    { key: 'canais', label: 'Canais', icon: Plug },
     { key: 'whatsapp', label: 'WhatsApp', icon: Smartphone },
     { key: 'ai', label: 'IA / Agente', icon: Brain },
     { key: 'billing', label: 'Cobrança & Limites', icon: CreditCard },
@@ -397,6 +399,12 @@ export default function SettingsPage() {
           </button>
         ))}
       </div>
+
+      {/* Canais — UI self-service (#272): card do tutorial interativo + popup +
+          cards de conexão WhatsApp/Instagram. O tab "WhatsApp" abaixo segue como
+          entrada manual de IDs enquanto o Embedded Signup (config_id + Advanced
+          Access) não está liberado. */}
+      {tab === 'canais' && <ConectarCanais />}
 
       {/* General */}
       {tab === 'general' && (
