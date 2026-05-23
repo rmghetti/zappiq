@@ -620,6 +620,8 @@ export default function OnboardingPage() {
         password: form.password === 'already_set' ? generateRandomPassword(32) : form.password,
         phone: form.phone || undefined,
         niche: form.segment || form.subsegments[0] || 'geral',
+        segmento: form.segment || undefined,
+        subsegmentos: (form.subsegments && form.subsegments.length) ? form.subsegments : undefined,
         agentName: form.agentName,
         tone: form.tone,
         businessHours: businessHoursMap,

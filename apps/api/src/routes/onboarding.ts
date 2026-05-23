@@ -21,6 +21,10 @@ const onboardingSchema = z.object({
 
   // Step 2 — Segment
   niche: z.string().min(2),
+  // Segmento (key) + subsegmentos (keys) escolhidos no cadastro. Persistidos
+  // pra personalizar survey/exemplos por segmento e subsegmento (Goal 2).
+  segmento: z.string().optional(),
+  subsegmentos: z.array(z.string()).optional(),
 
   // Step 3 — Agent config
   agentName: z.string().default('Bia'),
@@ -76,7 +80,7 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
   try {
     const {
       name, businessName, email, password, phone,
-      niche, agentName, tone, businessHours, greetingMessage, handoffMessage,
+      niche, segmento, subsegmentos, agentName, tone, businessHours, greetingMessage, handoffMessage,
       surveyAnswers, websiteUrl,
     } = req.body;
 
@@ -112,6 +116,10 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
           subscriptionStatus: 'trialing',
           settings: {
             niche,
+            // Segmento (key) + subsegmentos (keys) — base pra personalização
+            // por segmento/subsegmento. Fallback do segmento = niche.
+            segmento: segmento || niche || null,
+            subsegmentos: Array.isArray(subsegmentos) ? subsegmentos : [],
             agentName: agentName || 'Bia',
             tone: mapTone(tone),
             businessName,
