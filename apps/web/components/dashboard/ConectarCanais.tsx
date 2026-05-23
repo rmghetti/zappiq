@@ -1,42 +1,31 @@
 'use client';
 
 /**
- * ConectarCanais — UI self-service de conexão de canais (#272).
+ * ConectarCanais — UI self-service de conexão de canais (#272 / self-serve token por org).
  *
- * ====================== RASCUNHO / DRAFT (2026-05-20) ======================
- * Scaffold cabeado aos endpoints REAIS do backend (#273/#274 — PR #164):
- *   GET  /api/embedded-signup/status     -> estado de conexão
- *   POST /api/embedded-signup/whatsapp   {code, wabaId, phoneNumberId}
- *   POST /api/embedded-signup/instagram  {code, pageId?}
+ * ===========================================================================
+ * MODELO ATUAL (2026-05-23) — "traga seu token" (token por org):
+ *   O cliente escolhe o que ativar (WhatsApp, Instagram Direct ou ambos) e
+ *   preenche as credenciais do PROPRIO app Meta. Salvamos nas colunas da org
+ *   (whatsapp e instagram) + settings.channelActivation. O backend
+ *   (whatsappService e instagramService) usa ESSAS credenciais pra enviar:
+ *   token por org, com fallback global so pra Iza dogfood. Conta pro AI Readiness.
  *
- * NÃO está montado em lugar nenhum ainda — é pra revisar + estilizar JUNTO
- * com o Rodrigo na próxima sessão e então decidir onde plugar (proposta:
- * substituir o tab "WhatsApp" atual em settings/page.tsx, que hoje é paste
- * manual de IDs).
+ *   Por que manual e não 1 clique: o Embedded Signup (FB Login for Business)
+ *   depende de Advanced Access no App Review da Meta (backlog #Meta). Enquanto
+ *   isso não sai, o caminho "traga seu token" já entrega ativação 100% real,
+ *   sem App Review. O tutorial interativo guia o cliente passo a passo, e o
+ *   onboarding assistido cobre quem travar.
  *
- * 2026-05-22 — Acrescentado o quadro de acesso ao tutorial (TutorialAccessCard)
- * acima dos cards de canal + popup grande (TutorialModal) que carrega o tutorial
- * interativo self-contained (apps/web/public/tutoriais/tutorial-interativo.html)
- * num <iframe>. O HTML é a build do design feito no Claude Design; o ✕ interno e
- * os links "ir para o onboarding" fecham o popup via postMessage. "Baixar PDF"
- * aponta pro PDF já entregue. Re-exportou o design? Basta substituir o HTML.
- *
- * GATES pendentes antes de funcionar pra cliente externo:
- *   1. config_id do Facebook Login for Business (Rodrigo cria no App Review,
- *      Passo 3 do GUIA_APP_REVIEW_META_EMBEDDED_SIGNUP.md) -> env
- *      NEXT_PUBLIC_META_CONFIG_ID. Sem ele, o popup do Embedded Signup não abre.
- *   2. Advanced Access aprovado no App Review (até lá só dev/test users).
- *
- * O launcher do FB SDK (launchWhatsAppSignup / launchInstagramSignup) está
- * marcado com TODO — depende do config_id. O fluxo de status, os cards, o
- * popup didático e o onboarding assistido já funcionam standalone.
+ *   Quando o Embedded Signup liberar: ele grava NAS MESMAS colunas — o botão
+ *   "1 clique" só preenche o que hoje o cliente cola na mão. Zero retrabalho.
  * ===========================================================================
  */
 
 import { useEffect, useState, useCallback } from 'react';
 import {
   Smartphone, Instagram, CheckCircle2, Loader2, X, BookOpen,
-  CalendarClock, Download, ArrowRight, ShieldCheck,
+  CalendarClock, Download, ArrowRight, ShieldCheck, Save, AlertCircle,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 
@@ -44,33 +33,42 @@ import { api } from '../../lib/api';
 const ONBOARD_ASSISTIDO_URL =
   'https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ34YUuDtykuvlBt8DEZxD0sFZOctNdeyIcl4nn7EOfEBBDm2W5wpjecxxxQlmwu9PQ_7QGJc5Yd';
 
-// Tutorial interativo (HTML self-contained gerado no Claude Design) + PDF baixável.
-// Ambos servidos estaticamente de apps/web/public/tutoriais/.
+// Tutorial interativo (HTML self-contained) + PDF baixável, servidos de /public/tutoriais/.
 const TUTORIAL_HTML_URL = '/tutoriais/tutorial-interativo.html';
 const TUTORIAL_PDF_URL = '/tutoriais/cadastrar-whatsapp-instagram.pdf';
 
-// TODO(Rodrigo): trocar pelo Configuration ID do Facebook Login for Business
-// (Passo 3 do guia). Idealmente via env NEXT_PUBLIC_META_CONFIG_ID.
-const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '';
-const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || '1603310040738671';
+type Activation = 'whatsapp' | 'instagram' | 'both';
 
-interface ChannelStatus {
-  whatsapp: { connected: boolean; phoneNumberId: string | null; wabaId: string | null; connectedAt: string | null };
-  instagram: { connected: boolean; instagramAccountId: string | null; pageName: string | null; connectedAt: string | null };
+interface OrgSettingsResponse {
+  whatsappPhoneNumberId?: string | null;
+  whatsappBusinessAccountId?: string | null;
+  whatsappAccessToken?: string | null;
+  instagramAccountId?: string | null;
+  instagramPageId?: string | null;
+  instagramAccessToken?: string | null;
+  settings?: Record<string, any> | null;
 }
 
-type Channel = 'whatsapp' | 'instagram';
-
 export default function ConectarCanais() {
-  const [status, setStatus] = useState<ChannelStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState<Channel | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [howToChannel, setHowToChannel] = useState<Channel | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
-  // O tutorial roda dentro de um <iframe>. Ele avisa o parent (esta página) por
-  // postMessage quando o usuário clica no ✕ ou em "ir para o onboarding".
+  // Estado do formulário
+  const [activation, setActivation] = useState<Activation>('whatsapp');
+  const [origSettings, setOrigSettings] = useState<Record<string, any>>({});
+  // WhatsApp
+  const [waPhone, setWaPhone] = useState('');
+  const [waBiz, setWaBiz] = useState('');
+  const [waToken, setWaToken] = useState('');
+  // Instagram
+  const [igAccount, setIgAccount] = useState('');
+  const [igPage, setIgPage] = useState('');
+  const [igToken, setIgToken] = useState('');
+
+  // Tutorial roda em <iframe> e avisa o parent por postMessage no ✕.
   useEffect(() => {
     function onMessage(e: MessageEvent) {
       if (e?.data === 'zappiq-tutorial-close') setTutorialOpen(false);
@@ -86,65 +84,73 @@ export default function ConectarCanais() {
     };
   }, []);
 
-  const loadStatus = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await api.get<ChannelStatus>('/api/embedded-signup/status');
-      setStatus(data);
+      const res = await api.get<{ success: boolean; data: OrgSettingsResponse }>('/api/settings');
+      const org = res?.data || ({} as OrgSettingsResponse);
+      const settings = (org.settings as any) || {};
+      setOrigSettings(settings);
+      setWaPhone(org.whatsappPhoneNumberId || '');
+      setWaBiz(org.whatsappBusinessAccountId || '');
+      setWaToken(org.whatsappAccessToken || '');
+      setIgAccount(org.instagramAccountId || '');
+      setIgPage(org.instagramPageId || '');
+      setIgToken(org.instagramAccessToken || '');
+      const act = settings.channelActivation;
+      if (act === 'instagram' || act === 'both') setActivation(act);
+      else setActivation('whatsapp');
     } catch {
-      // Fail-soft: o backend de Embedded Signup ainda não está montado em prod
-      // (depende de App Review/config_id). Não bloqueia o tutorial — trata os
-      // canais como desconectados e segue. O card do tutorial é independente.
-      setStatus({
-        whatsapp: { connected: false, phoneNumberId: null, wabaId: null, connectedAt: null },
-        instagram: { connected: false, instagramAccountId: null, pageName: null, connectedAt: null },
-      });
+      // Fail-soft: mantém formulário vazio. Não bloqueia o tutorial.
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadStatus(); }, [loadStatus]);
+  useEffect(() => { load(); }, [load]);
 
-  // ── FB SDK Embedded Signup launchers ──────────────────────────────────────
-  // TODO: carregar o SDK do Facebook (FB.init) e abrir FB.login com o
-  // config_id. O callback devolve `code` + ids selecionados, que mandamos
-  // pro backend. Esqueleto abaixo mostra o shape esperado.
-  async function launchWhatsAppSignup() {
-    if (!META_CONFIG_ID) {
-      setError('Configuration ID da Meta ainda não configurado (NEXT_PUBLIC_META_CONFIG_ID). Ver guia App Review, Passo 3.');
+  const wantWa = activation === 'whatsapp' || activation === 'both';
+  const wantIg = activation === 'instagram' || activation === 'both';
+  const waConnected = !!(waPhone.trim() && waToken.trim());
+  const igConnected = !!(igAccount.trim() && igToken.trim());
+
+  async function handleSave() {
+    setError(null);
+    setOkMsg(null);
+
+    // Valida só os campos do(s) canal(is) escolhido(s).
+    if (wantWa && (!waPhone.trim() || !waToken.trim())) {
+      setError('Para ativar o WhatsApp, preencha o Phone Number ID e o Access Token.');
       return;
     }
-    setConnecting('whatsapp');
-    setError(null);
-    try {
-      // const { code, wabaId, phoneNumberId } = await openFbEmbeddedSignup('whatsapp');
-      // await api.post('/api/embedded-signup/whatsapp', { code, wabaId, phoneNumberId });
-      // await loadStatus();
-      throw new Error('FB SDK launcher pendente (config_id). Backend já pronto.');
-    } catch (e: any) {
-      setError(e?.message || 'Falha ao conectar WhatsApp');
-    } finally {
-      setConnecting(null);
-    }
-  }
-
-  async function launchInstagramSignup() {
-    if (!META_CONFIG_ID) {
-      setError('Configuration ID da Meta ainda não configurado (NEXT_PUBLIC_META_CONFIG_ID). Ver guia App Review, Passo 3.');
+    if (wantIg && (!igAccount.trim() || !igToken.trim())) {
+      setError('Para ativar o Instagram, preencha o Instagram Account ID e o Access Token.');
       return;
     }
-    setConnecting('instagram');
-    setError(null);
+
+    setSaving(true);
     try {
-      // const { code, pageId } = await openFbEmbeddedSignup('instagram');
-      // await api.post('/api/embedded-signup/instagram', { code, pageId });
-      // await loadStatus();
-      throw new Error('FB SDK launcher pendente (config_id). Backend já pronto.');
+      // settings é JSON: preserva o resto e grava channelActivation.
+      const payload: Record<string, any> = {
+        settings: { ...origSettings, channelActivation: activation },
+      };
+      if (wantWa) {
+        payload.whatsappPhoneNumberId = waPhone.trim() || null;
+        payload.whatsappBusinessAccountId = waBiz.trim() || null;
+        payload.whatsappAccessToken = waToken.trim() || null;
+      }
+      if (wantIg) {
+        payload.instagramAccountId = igAccount.trim() || null;
+        payload.instagramPageId = igPage.trim() || null;
+        payload.instagramAccessToken = igToken.trim() || null;
+      }
+      await api.put('/api/settings', payload);
+      setOrigSettings((s) => ({ ...s, channelActivation: activation }));
+      setOkMsg('Canais salvos! Seu agente já pode atender pelos canais ativados. O score será atualizado.');
     } catch (e: any) {
-      setError(e?.message || 'Falha ao conectar Instagram');
+      setError(e?.message || 'Falha ao salvar. Tente novamente.');
     } finally {
-      setConnecting(null);
+      setSaving(false);
     }
   }
 
@@ -161,44 +167,98 @@ export default function ConectarCanais() {
       <header>
         <h2 className="text-lg font-semibold text-gray-900">Conectar canais</h2>
         <p className="text-sm text-gray-500">
-          Conecte seu WhatsApp Business e/ou Instagram para o agente atender em seu nome.
-          Você pode conectar um ou os dois.
+          Escolha o que ativar e conecte WhatsApp Business e/ou Instagram Direct.
+          Seu agente passa a atender pelos canais que você ativar.
         </p>
       </header>
 
       {error && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-          {error}
+        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" /> {error}
+        </div>
+      )}
+      {okMsg && (
+        <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 flex items-start gap-2">
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> {okMsg}
         </div>
       )}
 
-      {/* Acesso ao tutorial — fica acima das opções de conexão */}
-      <TutorialAccessCard
-        onOpen={() => setTutorialOpen(true)}
-        pdfUrl={TUTORIAL_PDF_URL}
-      />
+      {/* Tutorial — acima das opções de conexão */}
+      <TutorialAccessCard onOpen={() => setTutorialOpen(true)} pdfUrl={TUTORIAL_PDF_URL} />
 
-      <ChannelCard
-        icon={<Smartphone size={22} className="text-green-600" />}
-        title="WhatsApp Business"
-        connected={status?.whatsapp.connected ?? false}
-        detail={status?.whatsapp.connected ? `Número conectado · ID ${status?.whatsapp.phoneNumberId}` : 'Atendimento no WhatsApp da sua empresa'}
-        connecting={connecting === 'whatsapp'}
-        onConnect={launchWhatsAppSignup}
-        onHowTo={() => setHowToChannel('whatsapp')}
-        accent="green"
-      />
+      {/* Seletor de ativação */}
+      <div>
+        <p className="text-sm font-semibold text-gray-900 mb-2">O que você quer ativar?</p>
+        <div className="grid sm:grid-cols-3 gap-3">
+          <ActivationOption
+            active={activation === 'whatsapp'}
+            onClick={() => setActivation('whatsapp')}
+            icon={<Smartphone size={18} className="text-green-600" />}
+            label="Apenas WhatsApp"
+          />
+          <ActivationOption
+            active={activation === 'instagram'}
+            onClick={() => setActivation('instagram')}
+            icon={<Instagram size={18} className="text-pink-600" />}
+            label="Apenas Instagram Direct"
+          />
+          <ActivationOption
+            active={activation === 'both'}
+            onClick={() => setActivation('both')}
+            icon={
+              <span className="flex items-center gap-0.5">
+                <Smartphone size={16} className="text-green-600" />
+                <Instagram size={16} className="text-pink-600" />
+              </span>
+            }
+            label="WhatsApp e Instagram"
+          />
+        </div>
+      </div>
 
-      <ChannelCard
-        icon={<Instagram size={22} className="text-pink-600" />}
-        title="Instagram Direct"
-        connected={status?.instagram.connected ?? false}
-        detail={status?.instagram.connected ? `${status?.instagram.pageName ?? 'Conta'} conectada` : 'Responder DMs do Instagram do seu negócio'}
-        connecting={connecting === 'instagram'}
-        onConnect={launchInstagramSignup}
-        onHowTo={() => setHowToChannel('instagram')}
-        accent="pink"
-      />
+      <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2 text-xs text-gray-500 flex items-center gap-2">
+        <ShieldCheck size={14} className="text-primary-500 shrink-0" />
+        Suas credenciais ficam guardadas só na sua organização e são usadas apenas para o agente responder em seu nome.
+      </div>
+
+      {/* Formulário WhatsApp */}
+      {wantWa && (
+        <ChannelForm
+          title="WhatsApp Business"
+          icon={<Smartphone size={20} className="text-green-600" />}
+          connected={waConnected}
+          accent="green"
+          fields={[
+            { label: 'Phone Number ID', value: waPhone, set: setWaPhone, placeholder: 'Ex: 123456789012345', hint: 'Meta Business Suite → WhatsApp → API Setup.' },
+            { label: 'Business Account ID (WABA)', value: waBiz, set: setWaBiz, placeholder: 'Ex: 987654321098765', hint: 'Opcional, mas recomendado.' },
+            { label: 'Access Token', value: waToken, set: setWaToken, placeholder: 'Token permanente do seu app Meta', secret: true, hint: 'Token de System User (permanente). Fica protegido.' },
+          ]}
+        />
+      )}
+
+      {/* Formulário Instagram */}
+      {wantIg && (
+        <ChannelForm
+          title="Instagram Direct"
+          icon={<Instagram size={20} className="text-pink-600" />}
+          connected={igConnected}
+          accent="pink"
+          fields={[
+            { label: 'Instagram Account ID', value: igAccount, set: setIgAccount, placeholder: 'Ex: 17841400000000000', hint: 'ID da conta Instagram Business.' },
+            { label: 'Page ID (Facebook)', value: igPage, set: setIgPage, placeholder: 'ID da Página vinculada', hint: 'Página do Facebook vinculada ao Instagram.' },
+            { label: 'Access Token', value: igToken, set: setIgToken, placeholder: 'Page Access Token de longa duração', secret: true, hint: 'Token da Página (longa duração). Fica protegido.' },
+          ]}
+        />
+      )}
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="px-5 py-2.5 bg-primary-500 text-white rounded-lg text-sm font-semibold hover:bg-primary-600 disabled:opacity-50 flex items-center gap-2"
+      >
+        {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+        {saving ? 'Salvando…' : 'Salvar e ativar canais'}
+      </button>
 
       {/* Onboarding assistido — sempre visível */}
       <div className="rounded-xl border border-gray-100 bg-gray-50 p-5 flex items-start gap-4">
@@ -219,22 +279,82 @@ export default function ConectarCanais() {
         </a>
       </div>
 
-      {howToChannel && (
-        <HowToModal channel={howToChannel} onClose={() => setHowToChannel(null)} />
-      )}
-
       {tutorialOpen && (
-        <TutorialModal
-          src={TUTORIAL_HTML_URL}
-          pdfUrl={TUTORIAL_PDF_URL}
-          onClose={() => setTutorialOpen(false)}
-        />
+        <TutorialModal src={TUTORIAL_HTML_URL} pdfUrl={TUTORIAL_PDF_URL} onClose={() => setTutorialOpen(false)} />
       )}
     </div>
   );
 }
 
-// ── Card de acesso ao tutorial (CTA acima dos canais) ─────────────────────────
+// ── Opção de ativação (radio card) ────────────────────────────────────────────
+function ActivationOption({
+  active, onClick, icon, label,
+}: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 px-3 py-3 rounded-xl border text-left transition-colors ${
+        active ? 'border-primary-500 bg-primary-50/60 ring-1 ring-primary-300' : 'border-gray-200 bg-white hover:border-gray-300'
+      }`}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className={`text-sm font-medium ${active ? 'text-primary-700' : 'text-gray-700'}`}>{label}</span>
+      {active && <CheckCircle2 size={16} className="text-primary-500 ml-auto shrink-0" />}
+    </button>
+  );
+}
+
+// ── Formulário de um canal ────────────────────────────────────────────────────
+interface FieldDef {
+  label: string;
+  value: string;
+  set: (v: string) => void;
+  placeholder?: string;
+  hint?: string;
+  secret?: boolean;
+}
+function ChannelForm({
+  title, icon, connected, accent, fields,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  connected: boolean;
+  accent: 'green' | 'pink';
+  fields: FieldDef[];
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 space-y-4">
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent === 'green' ? 'bg-green-50' : 'bg-pink-50'}`}>
+          {icon}
+        </div>
+        <p className="text-sm font-semibold text-gray-900 flex-1">{title}</p>
+        {connected && (
+          <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
+            <CheckCircle2 size={14} /> Configurado
+          </span>
+        )}
+      </div>
+      {fields.map((f) => (
+        <div key={f.label}>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+          <input
+            type={f.secret ? 'password' : 'text'}
+            value={f.value}
+            onChange={(e) => f.set(e.target.value)}
+            placeholder={f.placeholder}
+            autoComplete="off"
+            className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+          />
+          {f.hint && <p className="text-xs text-gray-500 mt-1">{f.hint}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Card de acesso ao tutorial ────────────────────────────────────────────────
 function TutorialAccessCard({ onOpen, pdfUrl }: { onOpen: () => void; pdfUrl: string }) {
   return (
     <div className="rounded-xl border border-primary-100 bg-gradient-to-br from-primary-50/70 to-white p-5 flex flex-col sm:flex-row sm:items-center gap-4">
@@ -247,7 +367,7 @@ function TutorialAccessCard({ onOpen, pdfUrl }: { onOpen: () => void; pdfUrl: st
         </p>
         <p className="text-sm font-semibold text-gray-900 mt-0.5">Tutorial interativo de ativação</p>
         <p className="text-xs text-gray-500 mt-0.5">
-          Veja cada uma das 11 telas com figura, antes de começar. Pelo computador, sem conhecimento técnico.
+          Veja cada tela com figura antes de começar. Onde encontrar cada ID e token, passo a passo.
         </p>
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -275,7 +395,6 @@ function TutorialModal({ src, pdfUrl, onClose }: { src: string; pdfUrl: string; 
   return (
     <div className="fixed inset-0 z-[60] bg-black/60 flex flex-col sm:p-4 md:p-6" role="dialog" aria-modal="true">
       <div className="relative bg-white sm:rounded-2xl overflow-hidden shadow-2xl w-full h-full sm:max-w-6xl sm:mx-auto flex flex-col">
-        {/* Barra de fechar externa — o tutorial tem o próprio chrome interno (✕ + Baixar PDF) */}
         <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-gray-100 bg-white">
           <span className="text-xs font-medium text-gray-500">Tutorial de ativação · ZappIQ</span>
           <div className="flex items-center gap-2">
@@ -301,139 +420,6 @@ function TutorialModal({ src, pdfUrl, onClose }: { src: string; pdfUrl: string; 
           title="Tutorial interativo de ativação ZappIQ"
           className="flex-1 w-full border-0"
         />
-      </div>
-    </div>
-  );
-}
-
-// ── Card de canal ────────────────────────────────────────────────────────────
-function ChannelCard({
-  icon, title, detail, connected, connecting, onConnect, onHowTo, accent,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  detail: string;
-  connected: boolean;
-  connecting: boolean;
-  onConnect: () => void;
-  onHowTo: () => void;
-  accent: 'green' | 'pink';
-}) {
-  return (
-    <div className="rounded-xl border border-gray-100 bg-white p-5">
-      <div className="flex items-center gap-3">
-        <div className={`w-11 h-11 rounded-lg flex items-center justify-center ${accent === 'green' ? 'bg-green-50' : 'bg-pink-50'}`}>
-          {icon}
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-gray-900">{title}</p>
-          <p className="text-xs text-gray-500">{detail}</p>
-        </div>
-        {connected && (
-          <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
-            <CheckCircle2 size={14} /> Conectado
-          </span>
-        )}
-      </div>
-
-      {!connected && (
-        <div className="flex items-center gap-3 mt-4">
-          <button
-            onClick={onConnect}
-            disabled={connecting}
-            className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 disabled:opacity-50 flex items-center gap-2"
-          >
-            {connecting ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
-            {connecting ? 'Conectando…' : `Conectar ${title.split(' ')[0]}`}
-          </button>
-          <button
-            onClick={onHowTo}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 flex items-center gap-2"
-          >
-            <BookOpen size={14} /> Veja como cadastrar
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Popup didático "Veja como cadastrar" ──────────────────────────────────────
-// Conteúdo resumido por canal. O tutorial completo (PDF, marca ZappIQ|MACHIA)
-// é baixável pelo botão — Rodrigo está refinando o design dele à parte.
-const STEPS: Record<Channel, { title: string; steps: string[]; tutorial: string }> = {
-  whatsapp: {
-    title: 'Conectar WhatsApp Business',
-    steps: [
-      'Clique em "Conectar WhatsApp" — abre o login seguro da Meta (Facebook).',
-      'Faça login com a conta que administra o seu negócio na Meta.',
-      'Escolha (ou crie na hora) o Portfólio Empresarial e a conta WhatsApp Business.',
-      'Selecione o número que vai atender. Pode ser um novo número ou um já existente.',
-      'Confirme o código de verificação enviado por SMS/ligação ao número.',
-      'Pronto: o número fica conectado e o agente já responde por ele.',
-    ],
-    tutorial: '/tutoriais/cadastrar-whatsapp-instagram.pdf',
-  },
-  instagram: {
-    title: 'Conectar Instagram Direct',
-    steps: [
-      'Pré-requisito: sua conta Instagram precisa ser Business e estar vinculada a uma Página do Facebook.',
-      'Clique em "Conectar Instagram" — abre o login seguro da Meta.',
-      'Faça login com a conta que administra a Página vinculada ao seu Instagram.',
-      'Selecione a Página correspondente ao seu Instagram Business.',
-      'Autorize o acesso às mensagens (DMs).',
-      'Pronto: as DMs do seu Instagram passam a ser respondidas pelo agente.',
-    ],
-    tutorial: '/tutoriais/cadastrar-whatsapp-instagram.pdf',
-  },
-};
-
-function HowToModal({ channel, onClose }: { channel: Channel; onClose: () => void }) {
-  const data = STEPS[channel];
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <h3 className="text-base font-semibold text-gray-900">{data.title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
-        </div>
-
-        <div className="p-5 space-y-3">
-          <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-            <ShieldCheck size={14} className="text-primary-500" />
-            Login direto na Meta. Suas credenciais não passam pela ZappIQ.
-          </div>
-          <ol className="space-y-3">
-            {data.steps.map((s, i) => (
-              <li key={i} className="flex gap-3 text-sm text-gray-700">
-                <span className="shrink-0 w-6 h-6 rounded-full bg-primary-50 text-primary-600 text-xs font-semibold flex items-center justify-center">
-                  {i + 1}
-                </span>
-                <span>{s}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        <div className="flex items-center gap-3 p-5 border-t border-gray-100">
-          <a
-            href={data.tutorial}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-          >
-            <Download size={14} /> Baixar tutorial completo
-          </a>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 ml-auto"
-          >
-            Entendi
-          </button>
-        </div>
       </div>
     </div>
   );

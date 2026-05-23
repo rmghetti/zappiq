@@ -36,7 +36,8 @@ const ACTION_HREFS: Record<string, string> = {
   define_identity: '/ai-training#identity',
   upload_documents: '/ai-training#documents',
   add_qa_pairs: '/ai-training#qa',
-  connect_whatsapp: '/settings#whatsapp',
+  connect_whatsapp: '/settings#canais',
+  connect_channels: '/settings#canais',
 };
 
 export function AgentTrainingWidget() {
@@ -71,7 +72,7 @@ export function AgentTrainingWidget() {
               {agentName} está em <span className={colors.text}>{levelLabel}</span>
             </h2>
             <span className={`px-2 py-0.5 rounded-full ${colors.bg} ${colors.text} text-xs font-bold`}>
-              {readiness.score}/100
+              {readiness.score}%
             </span>
           </div>
 

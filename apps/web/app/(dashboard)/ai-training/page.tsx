@@ -239,7 +239,7 @@ const BREAKDOWN_TARGET: Record<keyof Readiness['breakdown'], TabKey | string> = 
   identity: 'identity',
   documents: 'documents',
   qaPairs: 'qa',
-  channel: '/settings#whatsapp',
+  channel: '/settings#canais',
 };
 
 const ACTION_TARGET: Record<string, TabKey | string> = {
@@ -247,7 +247,9 @@ const ACTION_TARGET: Record<string, TabKey | string> = {
   define_identity: 'identity',
   upload_documents: 'documents',
   add_qa_pairs: 'qa',
-  connect_whatsapp: '/settings#whatsapp',
+  // Dual-canal: a ação "Conectar canais" leva pra aba Canais (WA + IG).
+  connect_whatsapp: '/settings#canais',
+  connect_channels: '/settings#canais',
 };
 
 function ReadinessCard({
@@ -265,8 +267,7 @@ function ReadinessCard({
           <div>
             <p className="text-xs opacity-80 font-medium uppercase tracking-wide">AI Readiness Score</p>
             <p className="text-4xl font-extrabold font-display">
-              {readiness.score}
-              <span className="text-xl opacity-60">/100</span>
+              {readiness.score}<span className="text-xl opacity-60">%</span>
             </p>
           </div>
           <div className={`px-4 py-2 rounded-full border ${level.bg} ${level.color} text-sm font-semibold`}>
@@ -292,7 +293,7 @@ function ReadinessCard({
             <BreakdownRow label="Identidade & tom" score={readiness.breakdown.identity} max={20} onClick={() => onNavigate(BREAKDOWN_TARGET.identity)} />
             <BreakdownRow label="Documentos" score={readiness.breakdown.documents} max={25} onClick={() => onNavigate(BREAKDOWN_TARGET.documents)} />
             <BreakdownRow label="Q&A ativos" score={readiness.breakdown.qaPairs} max={20} onClick={() => onNavigate(BREAKDOWN_TARGET.qaPairs)} />
-            <BreakdownRow label="WhatsApp conectado" score={readiness.breakdown.channel} max={5} onClick={() => onNavigate(BREAKDOWN_TARGET.channel)} />
+            <BreakdownRow label="Canais conectados (WhatsApp / Instagram)" score={readiness.breakdown.channel} max={5} onClick={() => onNavigate(BREAKDOWN_TARGET.channel)} />
           </div>
         </div>
 
