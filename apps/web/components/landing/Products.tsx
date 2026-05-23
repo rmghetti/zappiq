@@ -83,9 +83,9 @@ const LOGO_CONFIGS: Record<string, LogoConfig> = {
     ),
   },
   forge: {
-    name1: 'Forge',
-    name2: 'Studio',
-    color2: '#F59E0B',
+    name1: 'ZappIQ',
+    name2: 'Maestro',
+    color2: '#4F46E5',
     subtitle: 'CONSTRUTOR VISUAL DE FLUXOS',
     innerIcon: (
       <>
@@ -344,7 +344,7 @@ const PRODUCTS = [
     mockup: 'crm',
   },
   {
-    id: 'forge', icon: Workflow, name: 'Forge Studio', tagline: 'Construtor Visual de Fluxos',
+    id: 'forge', icon: Workflow, name: 'ZappIQ Maestro', tagline: 'Construtor Visual de Fluxos',
     desc: 'Crie jornadas de atendimento complexas arrastando e soltando blocos. Sem código, sem desenvolvedor. Templates prontos para cada segmento aceleram o go-to-market.',
     bullets: [
       'Editor drag-and-drop intuitivo com blocos de condição, ação e delay',
