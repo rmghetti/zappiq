@@ -270,7 +270,20 @@ interface ApiFlow {
   isActive: boolean;
   triggerType: string;
   version: number;
+  // MAESTRO INTELIGENTE (Onda 3): treinamento mudou depois do fluxo ser gerado/editado.
+  stale?: boolean;
 }
+
+// Preview da atualização inteligente (POST /:id/refresh-suggestion).
+type FlowRefresh = {
+  name: string;
+  nodes: any[];
+  edges: any[];
+  changeNote: string;
+  newWelcome?: string;
+  oldWelcome?: string;
+  source: 'ai' | 'fallback';
+};
 
 interface TestTurn {
   input: string;
@@ -662,6 +675,10 @@ export default function FlowsPage() {
   const [multiAgent, setMultiAgent] = useState(false);
   const [smartDrafts, setSmartDrafts] = useState<FlowDraft[] | null>(null);
   const [smartNote, setSmartNote] = useState('');
+  // Atualização inteligente (Onda 3): treino mudou → sugerir + aplicar 1 clique
+  const [refreshTarget, setRefreshTarget] = useState<ApiFlow | null>(null);
+  const [refreshPreview, setRefreshPreview] = useState<FlowRefresh | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   // tutorial interativo (modal iframe)
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
@@ -752,6 +769,34 @@ export default function FlowsPage() {
     } catch (e: any) {
       setError(e?.message || 'Falha ao salvar o fluxo gerado');
     } finally { setCreating(false); }
+  }
+
+  // Onda 3: pede ao Maestro a sugestão de atualização (preview, não persiste).
+  async function requestRefresh(flow: ApiFlow) {
+    setRefreshTarget(flow); setRefreshPreview(null); setRefreshing(true); setError(null);
+    try {
+      const res = await api.post<{ success: boolean; data: FlowRefresh }>(`/api/flows/${flow.id}/refresh-suggestion`, {});
+      if (res?.data) setRefreshPreview(res.data);
+    } catch (e: any) {
+      setError(e?.message || 'Não consegui gerar a sugestão agora.');
+      setRefreshTarget(null);
+    } finally { setRefreshing(false); }
+  }
+
+  // Onda 3: aplica a atualização (1 clique = autorização). Persiste via PUT.
+  async function applyRefresh() {
+    if (!refreshTarget || !refreshPreview) return;
+    setRefreshing(true); setError(null);
+    try {
+      await api.put(`/api/flows/${refreshTarget.id}`, {
+        nodes: refreshPreview.nodes,
+        edges: refreshPreview.edges,
+      });
+      setRefreshTarget(null); setRefreshPreview(null);
+      load();
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao aplicar a atualização');
+    } finally { setRefreshing(false); }
   }
 
   if (editing) {
@@ -982,13 +1027,70 @@ export default function FlowsPage() {
                 <p className="text-xs text-gray-400">{(f.nodes?.length || 0)} nós · v{f.version}</p>
               </div>
             </button>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              {f.stale && (
+                <button
+                  onClick={() => requestRefresh(f)}
+                  disabled={refreshing}
+                  title="Seu treinamento mudou — o Maestro pode atualizar este fluxo"
+                  className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                >
+                  <Sparkles size={12} /> Atualizar com o Maestro
+                </button>
+              )}
               {f.isActive && <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700">Ativo</span>}
               <button onClick={() => removeFlow(f.id)} className="p-1.5 text-gray-400 hover:text-red-500" title="Excluir"><Trash2 size={14} /></button>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Modal: preview da atualização inteligente (Onda 3) */}
+      {refreshTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!refreshing) { setRefreshTarget(null); setRefreshPreview(null); } }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shrink-0"><Sparkles size={18} /></div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-gray-900">Atualizar &quot;{refreshTarget.name}&quot;</h3>
+                <p className="text-sm text-gray-600 mt-0.5">Seu treinamento mudou. O Maestro preparou uma atualização — você decide se aplica.</p>
+              </div>
+              <button onClick={() => { if (!refreshing) { setRefreshTarget(null); setRefreshPreview(null); } }} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+            <div className="p-5 space-y-4">
+              {!refreshPreview && (
+                <div className="flex items-center gap-2 text-gray-500 py-6 justify-center"><Loader2 size={18} className="animate-spin" /> O Maestro está revisando seu fluxo…</div>
+              )}
+              {refreshPreview && (
+                <>
+                  <p className="text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">{refreshPreview.changeNote}</p>
+                  {refreshPreview.oldWelcome !== undefined && refreshPreview.newWelcome !== undefined && refreshPreview.oldWelcome !== refreshPreview.newWelcome && (
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Mensagem antes</p>
+                        <p className="text-sm text-gray-500 line-through">{refreshPreview.oldWelcome || '(vazia)'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-indigo-600 uppercase tracking-wide">Mensagem atualizada</p>
+                        <p className="text-sm text-gray-900">{refreshPreview.newWelcome}</p>
+                      </div>
+                    </div>
+                  )}
+                  {refreshPreview.source === 'fallback' && (
+                    <p className="text-[11px] text-amber-600">Não consegui gerar a atualização agora — tente de novo.</p>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="p-5 border-t border-gray-100 flex justify-end gap-2">
+              <button onClick={() => { setRefreshTarget(null); setRefreshPreview(null); }} disabled={refreshing} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">Agora não</button>
+              <button onClick={applyRefresh} disabled={refreshing || !refreshPreview || refreshPreview.source === 'fallback'} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
+                {refreshing ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} Aplicar atualização
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal grande do tutorial interativo (iframe self-contained) */}
       {tutorialOpen && (
