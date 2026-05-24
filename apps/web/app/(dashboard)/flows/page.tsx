@@ -771,6 +771,28 @@ export default function FlowsPage() {
     } finally { setCreating(false); }
   }
 
+  // Cria TODOS os drafts gerados de uma vez (multi-agente). Persiste cada um e
+  // volta pra lista — onde o cliente seleciona, edita ou exclui cada fluxo.
+  async function createAllDrafts() {
+    if (!smartDrafts || smartDrafts.length === 0) return;
+    setCreating(true); setError(null);
+    try {
+      for (const d of smartDrafts) {
+        await api.post('/api/flows', {
+          name: d.name,
+          triggerType: d.triggerType,
+          triggerConfig: d.triggerConfig || {},
+          nodes: d.nodes,
+          edges: d.edges,
+        });
+      }
+      setSmartOpen(false); setSmartDrafts(null);
+      load();
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao criar os fluxos gerados');
+    } finally { setCreating(false); }
+  }
+
   // Onda 3: pede ao Maestro a sugestão de atualização (preview, não persiste).
   async function requestRefresh(flow: ApiFlow) {
     setRefreshTarget(flow); setRefreshPreview(null); setRefreshing(true); setError(null);
@@ -1003,6 +1025,13 @@ export default function FlowsPage() {
                     )}
                   </div>
                 ))}
+                {smartDrafts.length > 0 && (
+                  <button onClick={createAllDrafts} disabled={creating} className="w-full px-4 py-3 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2 disabled:opacity-50">
+                    {creating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                    {smartDrafts.length > 1 ? `Criar os ${smartDrafts.length} fluxos` : 'Criar este fluxo'}
+                  </button>
+                )}
+                <p className="text-xs text-gray-500 text-center">Os fluxos vão pra sua lista — lá você seleciona, edita ou exclui cada um. Ou use “Abrir e editar” pra abrir um direto no editor.</p>
                 <div className="flex justify-between gap-2 pt-1">
                   <button onClick={() => setSmartDrafts(null)} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 flex items-center gap-2">
                     <ArrowRight size={15} className="rotate-180" /> Mudar objetivos
