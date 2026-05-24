@@ -1408,7 +1408,7 @@ Object.assign(window, {
   <script type="text/babel" data-presets="react">
 
 // ── Bootstrap de produção (substitui app.jsx; sem FlowsBackdrop nem TweaksPanel) ──
-const { useState: useS, useEffect: useE, useRef } = React;
+// Usa React.* direto pra não colidir com hooks já declarados em sections/components.
 
 const SECTIONS = [
   { id: "cover", number: "—", title: "Capa",                     note: "Visão geral" },
@@ -1423,9 +1423,9 @@ const SECTIONS = [
 function closeTutorial(){ try { window.parent.postMessage("zappiq-tutorial-close", "*"); } catch(e){} }
 
 function TutorialApp() {
-  const [currentId, setCurrentId] = useS("cover");
-  const scrollerRef = useRef(null);
-  useE(() => { if (scrollerRef.current) scrollerRef.current.scrollTop = 0; }, [currentId]);
+  const [currentId, setCurrentId] = React.useState("cover");
+  const scrollerRef = React.useRef(null);
+  React.useEffect(() => { if (scrollerRef.current) scrollerRef.current.scrollTop = 0; }, [currentId]);
 
   const idx = SECTIONS.findIndex((s) => s.id === currentId);
   const prev = idx > 0 ? SECTIONS[idx - 1] : null;
