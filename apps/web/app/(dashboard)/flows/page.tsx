@@ -1269,8 +1269,8 @@ export default function FlowsPage() {
       <div className="mb-2">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">Construa o atendimento da sua IA</h1>
         <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-          Antes de montar seu primeiro fluxo, dá uma olhada no manual interativo. 10–15 minutos
-          explicando o conceito das 4 cores, os 7 tipos de nó e como testar antes de publicar.
+          Antes de montar, dá uma olhada no tutorial do MAESTRO INTELIGENTE 2.0. Em 5 a 7 minutos:
+          a virada de chave, os 7 passos na tela e a prova de que ele desenha a operação inteira sozinho.
         </p>
       </div>
 
@@ -1281,10 +1281,10 @@ export default function FlowsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-600">
-              Recomendado · 10 a 15 min
+              Recomendado · 5 a 7 min
             </p>
-            <h2 className="text-lg font-bold text-gray-900 mt-1">Manual interativo — Reja sua IA</h2>
-            <p className="text-sm text-gray-500 mt-0.5">As 4 cores, os 7 nós, os 2 caminhos. Tudo com tela ao vivo.</p>
+            <h2 className="text-lg font-bold text-gray-900 mt-1">Tutorial — MAESTRO INTELIGENTE 2.0</h2>
+            <p className="text-sm text-gray-500 mt-0.5">A virada de chave, os 7 passos na tela e a prova de que não é template.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <a
@@ -1581,7 +1581,7 @@ export default function FlowsPage() {
         <div className="fixed inset-0 z-[60] bg-black/60 flex flex-col sm:p-4 md:p-6" role="dialog" aria-modal="true">
           <div className="relative bg-white sm:rounded-2xl overflow-hidden shadow-2xl w-full h-full sm:max-w-6xl sm:mx-auto flex flex-col">
             <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-gray-100 bg-white">
-              <span className="text-xs font-medium text-gray-500">Manual interativo · ZappIQ Maestro</span>
+              <span className="text-xs font-medium text-gray-500">Tutorial · MAESTRO INTELIGENTE 2.0</span>
               <div className="flex items-center gap-2">
                 <a
                   href={MAESTRO_TUTORIAL_PDF}
@@ -1602,7 +1602,7 @@ export default function FlowsPage() {
             </div>
             <iframe
               src={MAESTRO_TUTORIAL_HTML}
-              title="Manual interativo do ZappIQ Maestro — Reja sua IA"
+              title="Tutorial do ZappIQ Maestro — MAESTRO INTELIGENTE 2.0"
               className="flex-1 w-full border-0"
             />
           </div>
