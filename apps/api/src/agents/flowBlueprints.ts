@@ -18,6 +18,7 @@ export type BlueprintGoal =
   | 'atendimento'
   | 'agendamento'
   | 'qualificacao'
+  | 'vendas'
   | 'faq'
   | 'posvenda';
 
@@ -119,6 +120,20 @@ export const BLUEPRINTS: Record<BlueprintGoal, Blueprint> = {
         'Qualifique o lead com 2-3 perguntas curtas (necessidade, urgência e orçamento/fit). Seja simpático, uma pergunta por vez, e ao final resuma o que entendeu.',
     },
   },
+  vendas: {
+    id: 'bp_vendas_v1',
+    goal: 'vendas',
+    label: 'Vendas',
+    description:
+      'Conduz o cliente com intenção de compra até o fechamento: apresenta a oferta certa, trata objeções, faz cross-sell/upsell quando faz sentido e leva o cliente ao próximo passo (pagar, marcar, contratar).',
+    defaults: {
+      flowName: 'Vendas',
+      welcomeText: 'Que ótimo que você se interessou! 🙌 Me conta o que você está procurando que eu te ajudo a fechar do melhor jeito.',
+      tag: 'oportunidade-venda',
+      aiPrompt:
+        'Conduza a venda de forma consultiva: entenda o que o cliente quer, apresente a melhor opção com o diferencial do negócio, trate objeções (preço, prazo, confiança) com clareza e leve ao próximo passo concreto (fechar, marcar ou contratar). Faça cross-sell/upsell só quando agregar de verdade.',
+    },
+  },
   faq: {
     id: 'bp_faq_v1',
     goal: 'faq',
@@ -166,9 +181,9 @@ const NICHE_TO_GOAL: Record<string, BlueprintGoal> = {
   consultoria: 'qualificacao',
   imobiliaria: 'qualificacao',
   realestate: 'qualificacao',
-  retail: 'atendimento',
-  varejo: 'atendimento',
-  ecommerce: 'posvenda',
+  retail: 'vendas',
+  varejo: 'vendas',
+  ecommerce: 'vendas',
   banking: 'atendimento',
   financas: 'atendimento',
   food: 'atendimento',
@@ -183,7 +198,8 @@ const NICHE_TO_GOAL: Record<string, BlueprintGoal> = {
 function goalFromFreeText(goal: string): BlueprintGoal | null {
   const g = goal.toLowerCase();
   if (/(agend|marcar.*hor|consulta|reserv|hor[aá]rio)/.test(g)) return 'agendamento';
-  if (/(qualific|lead|prospec|or[çc]amento|interesse)/.test(g)) return 'qualificacao';
+  if (/(vend|compr|fechar|or[çc]amento|proposta|cota[çc][aã]o|carrinho|checkout|upsell|cross.?sell)/.test(g)) return 'vendas';
+  if (/(qualific|lead|prospec|interesse)/.test(g)) return 'qualificacao';
   if (/(d[uú]vid|faq|pergunt|tira.?d[uú]vid|informa)/.test(g)) return 'faq';
   if (/(p[oó]s.?venda|suporte|troca|devolu|pedido|garantia|status)/.test(g)) return 'posvenda';
   if (/(atend|recep|boas.?vind|fal(ar|e)|contato)/.test(g)) return 'atendimento';
@@ -197,6 +213,24 @@ function goalFromFreeText(goal: string): BlueprintGoal | null {
  *   3. niche (segmento do cadastro)
  *   4. atendimento (fallback universal)
  */
+/**
+ * Jornada completa recomendada por niche/segmento. O Arquiteto de Jornada
+ * (generateJourney) usa isto quando o cliente NÃO escolhe objetivos: monta a
+ * operação inteira (do 1o contato ao pós-venda) pra encantar — o cliente depois
+ * remove o que não usa. Atendimento é sempre o hub de entrada.
+ */
+export function recommendJourney(niche?: string | null, segmento?: string | null): BlueprintGoal[] {
+  const key = (segmento || niche || '').toLowerCase().trim();
+  // Base universal: entrada → qualifica → vende → tira dúvida → pós-venda.
+  const base: BlueprintGoal[] = ['atendimento', 'qualificacao', 'vendas', 'faq', 'posvenda'];
+  // Agendamento entra quando o negócio trabalha com horário marcado.
+  const wantsAgenda = /(sa[uú]de|clinic|odonto|est[eé]tic|health|consult|agend|sal[aã]o|barbear|advoc|imobili|real|spa|terap|petshop|veterin)/.test(key);
+  const out: BlueprintGoal[] = wantsAgenda
+    ? ['atendimento', 'qualificacao', 'agendamento', 'vendas', 'faq', 'posvenda']
+    : base;
+  return out;
+}
+
 export function pickBlueprint(opts: { goal?: string; niche?: string | null }): Blueprint {
   const explicit = (opts.goal || '').toLowerCase().trim();
   if (explicit && explicit in BLUEPRINTS) {
