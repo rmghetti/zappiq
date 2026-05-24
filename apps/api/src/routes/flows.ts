@@ -9,7 +9,7 @@ import { validate } from '../middleware/validate.js';
 import { resolveFlowStep, type FlowGraph, type FlowState } from '../agents/flowEngine.js';
 // Maestro "monta pra você" (#288) — gerador híbrido: estrutura determinística
 // + IA preenche conteúdo. Devolve um DRAFT (não persiste); o cliente edita e salva.
-import { generateFlowDraft, generateSmartFlows } from '../agents/flowGenerator.js';
+import { generateFlowDraft, generateSmartFlows, regenerateFlowContent } from '../agents/flowGenerator.js';
 
 const router = Router();
 
@@ -72,11 +72,24 @@ router.post('/generate-smart', validate(generateSmartSchema), async (req: Reques
 // CRUD
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const orgId = req.organizationId!;
     const flows = await prisma.flow.findMany({
-      where: { organizationId: req.organizationId! },
+      where: { organizationId: orgId },
       orderBy: { updatedAt: 'desc' },
     });
-    res.json({ success: true, data: flows });
+    // MAESTRO INTELIGENTE (Onda 3): marca o fluxo como "stale" quando o
+    // treinamento da IA mudou DEPOIS do fluxo ser gerado/editado. Sinal barato
+    // (sem LLM): aiReadinessUpdatedAt (bumpa em toda mudança de treino) > flow.updatedAt.
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { aiReadinessUpdatedAt: true } as any,
+    });
+    const trainingAt = (org as any)?.aiReadinessUpdatedAt as Date | null | undefined;
+    const data = flows.map((f) => ({
+      ...f,
+      stale: !!(trainingAt && f.updatedAt && new Date(f.updatedAt) < new Date(trainingAt)),
+    }));
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 });
 
@@ -112,6 +125,22 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
     const result = await prisma.flow.deleteMany({ where: { id: req.params.id, organizationId: req.organizationId! } });
     if (result.count === 0) { res.status(404).json({ error: 'Flow not found' }); return; }
     res.json({ success: true, message: 'Flow deleted' });
+  } catch (err) { next(err); }
+});
+
+// POST /api/flows/:id/refresh-suggestion — MAESTRO INTELIGENTE (Onda 3)
+// Regenera SÓ o conteúdo textual do fluxo (mensagem/tag/prompt do nó-IA) com
+// base no treinamento ATUAL, preservando a estrutura. NÃO persiste — devolve um
+// preview; o cliente aplica com 1 clique (PUT /:id). O clique é a autorização.
+router.post('/:id/refresh-suggestion', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: req.organizationId! } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const result = await regenerateFlowContent({
+      organizationId: req.organizationId!,
+      flow: { name: flow.name, nodes: (flow.nodes as any) || [], edges: (flow.edges as any) || [] },
+    });
+    res.json({ success: true, data: result });
   } catch (err) { next(err); }
 });
 

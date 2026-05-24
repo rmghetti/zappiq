@@ -482,3 +482,114 @@ export async function generateSmartFlows(input: {
 
   return { drafts, objectives, multiAgent, note };
 }
+
+// ============================================================================
+// MAESTRO INTELIGENTE (Onda 3) — atualização inteligente quando o treino muda
+// ============================================================================
+// Quando o cliente altera o ai-training, o fluxo publicado pode ficar
+// desatualizado (ex.: novo horário, novo serviço). Aqui o Maestro REGENERA só o
+// CONTEÚDO textual dos nós (mensagem, tag, prompt do nó-IA) com base no treino
+// atual, PRESERVANDO a estrutura que o cliente montou (posições, nós extras,
+// edges). Devolve um preview; o cliente aplica com 1 clique (autorização).
+
+export interface FlowRefreshResult {
+  name: string;
+  nodes: any[];
+  edges: any[];
+  /** O que mudou / por que, em linguagem natural pro cliente. */
+  changeNote: string;
+  /** Texto novo sugerido pra mensagem de boas-vindas (preview). */
+  newWelcome?: string;
+  oldWelcome?: string;
+  source: 'ai' | 'fallback';
+}
+
+export async function regenerateFlowContent(input: {
+  organizationId: string;
+  flow: { name: string; nodes: any[]; edges: any[] };
+}): Promise<FlowRefreshResult> {
+  const { organizationId, flow } = input;
+  const ctx = await loadBusinessContext(organizationId);
+  const nodes = Array.isArray(flow.nodes) ? flow.nodes : [];
+
+  const msgIdx = nodes.findIndex((n) => n?.type === 'message');
+  const tagIdx = nodes.findIndex((n) => n?.type === 'tag');
+  const aiIdx = nodes.findIndex((n) => n?.type === 'ai');
+
+  const curWelcome = (msgIdx >= 0 && nodes[msgIdx]?.data?.text) || '';
+  const curTag = (tagIdx >= 0 && nodes[tagIdx]?.data?.tag) || '';
+  const curAi = (aiIdx >= 0 && nodes[aiIdx]?.data?.prompt) || '';
+
+  const unchanged = (): FlowRefreshResult => ({
+    name: flow.name, nodes: flow.nodes, edges: flow.edges,
+    changeNote: 'Não consegui gerar a atualização agora — seu fluxo segue como está. Tente de novo.',
+    source: 'fallback',
+  });
+
+  const system = [
+    'Você é o MAESTRO INTELIGENTE da ZappIQ. O cliente atualizou o treinamento da IA e este fluxo pode estar desatualizado.',
+    'Sua tarefa: REESCREVER apenas o CONTEÚDO textual (mensagem de boas-vindas, tag, instrução do nó-IA) pra refletir o treinamento ATUAL, mantendo o mesmo objetivo/estrutura do fluxo.',
+    'Use o contexto do negócio (serviços, horários, jeito de falar reais). Responda EXCLUSIVAMENTE com JSON válido, sem cercas.',
+  ].join(' ');
+
+  const user = [
+    '=== CONTEXTO ATUAL DO NEGÓCIO (treinamento da IA) ===',
+    ctx.brief,
+    '',
+    '=== CONTEÚDO ATUAL DO FLUXO (pode estar desatualizado) ===',
+    `Mensagem de boas-vindas: ${curWelcome || '(vazia)'}`,
+    `Tag: ${curTag || '(vazia)'}`,
+    `Instrução do nó-IA: ${curAi || '(vazia)'}`,
+    '',
+    'Reescreva refletindo o treinamento atual. Devolva este JSON:',
+    '{',
+    '  "welcomeText": "boas-vindas atualizada (1-2 frases, pode 1 emoji)",',
+    '  "tag": "tag-em-kebab-case",',
+    '  "aiPrompt": "instrução do nó-IA atualizada (2-4 frases, citando serviços/horários reais)",',
+    '  "changeNote": "1-2 frases pro dono do negócio explicando o que mudou e por quê"',
+    '}',
+  ].join('\n');
+
+  const tier = VALID_TIERS.includes(ctx.plan as LLMTier) ? (ctx.plan as LLMTier) : undefined;
+
+  let parsed: any = null;
+  try {
+    const resp = await llmRouter.complete({
+      system,
+      messages: [{ role: 'user', content: user }],
+      maxTokens: 900,
+      temperature: 0.4,
+      tier,
+      forceProvider: 'anthropic-sonnet' as LLMProviderId,
+      orgId: organizationId,
+      operation: 'chat',
+    });
+    parsed = extractJson(resp.text);
+  } catch (e) {
+    logger.warn('[MaestroInteligente] regenerateFlowContent: LLM falhou', { organizationId, err: String(e) });
+    return unchanged();
+  }
+  if (!parsed || typeof parsed !== 'object') return unchanged();
+
+  const newWelcome = String(parsed.welcomeText || curWelcome).slice(0, 600);
+  const newTag = (String(parsed.tag || curTag).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)) || curTag;
+  const newAi = String(parsed.aiPrompt || curAi).slice(0, 900);
+
+  // Patch SÓ os nós de conteúdo, preservando todo o resto (estrutura/posições).
+  const newNodes = nodes.map((n, i) => {
+    if (i === msgIdx) return { ...n, data: { ...n.data, text: newWelcome } };
+    if (i === tagIdx) return { ...n, data: { ...n.data, tag: newTag } };
+    if (i === aiIdx) return { ...n, data: { ...n.data, prompt: newAi } };
+    return n;
+  });
+
+  return {
+    name: flow.name,
+    nodes: newNodes,
+    edges: flow.edges,
+    changeNote: String(parsed.changeNote || 'Atualizei os textos do fluxo com base no seu treinamento mais recente.').slice(0, 400),
+    newWelcome,
+    oldWelcome: curWelcome,
+    source: 'ai',
+  };
+}
