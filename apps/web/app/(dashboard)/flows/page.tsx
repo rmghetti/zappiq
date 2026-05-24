@@ -25,6 +25,9 @@ import ReactFlow, {
   useReactFlow,
   Handle,
   Position,
+  MarkerType,
+  ConnectionLineType,
+  BackgroundVariant,
   type Node,
   type Edge,
   type Connection,
@@ -65,6 +68,22 @@ const KIND_STYLE: Record<NodeKind, string> = {
   action: 'bg-emerald-50 border-emerald-300 text-emerald-700',
   human:  'bg-amber-50 border-amber-300 text-amber-700',
 };
+
+// Repaginação visual (premium): badge de ícone em gradiente + cor de destaque
+// por categoria. Usado nos nós do editor e nos blocos da visão consolidada.
+const KIND_BADGE: Record<NodeKind, string> = {
+  start:  'linear-gradient(135deg,#64748B,#334155)',
+  fixed:  'linear-gradient(135deg,#38BDF8,#2563EB)',
+  ai:     'linear-gradient(135deg,#6366F1,#7C3AED)',
+  action: 'linear-gradient(135deg,#34D399,#059669)',
+  human:  'linear-gradient(135deg,#FBBF24,#EA580C)',
+};
+const KIND_ACCENT: Record<NodeKind, string> = {
+  start:  '#475569', fixed: '#2563EB', ai: '#6366F1', action: '#059669', human: '#EA580C',
+};
+// Fundo premium do canvas (gradiente suave) — aplicado no container do ReactFlow.
+const CANVAS_BG = 'linear-gradient(135deg,#EEF2FF 0%,#F5F3FF 45%,#ECFEFF 100%)';
+const EDGE_BASE = { type: 'smoothstep' as const, markerEnd: { type: MarkerType.ArrowClosed, color: '#94A3B8', width: 16, height: 16 }, style: { stroke: '#94A3B8', strokeWidth: 2 } };
 
 function metaFor(type: string) {
   return NODE_META[type] || { kind: 'fixed' as NodeKind, label: type, icon: MessageSquare, palette: true };
@@ -230,32 +249,44 @@ function NodeDocModal({ type, onClose }: { type: string; onClose: () => void }) 
 }
 
 // ─── Nó customizado React Flow ───────────────────────────────────────────────
+const HANDLE_STYLE = { width: 9, height: 9, background: '#fff', border: '2px solid #94A3B8' } as const;
+
 function MaestroNode({ id, type, data, selected }: NodeProps) {
   const meta = metaFor(type);
   const Icon = meta.icon;
   const summary = nodeSummary(type, data);
+  const accent = KIND_ACCENT[meta.kind];
   const { deleteElements } = useReactFlow();
   return (
     <div
-      className={`group relative rounded-lg border px-3 py-2 w-[180px] ${KIND_STYLE[meta.kind]} ${selected ? 'ring-2 ring-primary-400' : ''}`}
-      style={{ fontSize: 12 }}
+      className="group relative w-[212px] rounded-2xl bg-white transition-all"
+      style={{
+        border: `1px solid ${selected ? accent : '#E8EDF4'}`,
+        boxShadow: selected
+          ? `0 0 0 3px ${accent}22, 0 10px 24px -8px ${accent}55`
+          : '0 6px 18px -10px rgba(15,23,42,0.25), 0 1px 2px rgba(15,23,42,0.04)',
+      }}
     >
-      {type !== 'start' && <Handle type="target" position={Position.Top} />}
-      {/* Excluir quadro — some no nó Início */}
+      {type !== 'start' && <Handle type="target" position={Position.Top} style={{ ...HANDLE_STYLE, borderColor: accent }} />}
       {type !== 'start' && (
         <button
           onClick={(e) => { e.stopPropagation(); deleteElements({ nodes: [{ id }] }); }}
           title="Excluir este quadro"
-          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-gray-300 text-gray-500 shadow-sm flex items-center justify-center text-[11px] leading-none opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white hover:border-red-500 transition-opacity"
+          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-gray-200 text-gray-400 shadow-sm flex items-center justify-center text-[12px] leading-none opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white hover:border-red-500 transition-opacity z-10"
         >
           ×
         </button>
       )}
-      <div className="flex items-center gap-1.5 font-medium">
-        <Icon size={14} /> {data?.label || meta.label}
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm" style={{ background: KIND_BADGE[meta.kind] }}>
+          <Icon size={17} color="#fff" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{data?.label || meta.label}</p>
+          <p className="text-[11px] text-slate-400 truncate mt-0.5">{summary || meta.label}</p>
+        </div>
       </div>
-      <div className="text-[11px] opacity-80 mt-0.5 truncate">{summary}</div>
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="source" position={Position.Bottom} style={{ ...HANDLE_STYLE, borderColor: accent }} />
     </div>
   );
 }
@@ -457,7 +488,7 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
         </div>
 
         {/* Canvas */}
-        <div className="flex-1 min-w-0 bg-white">
+        <div className="flex-1 min-w-0" style={{ background: CANVAS_BG }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -465,15 +496,18 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
+            defaultEdgeOptions={EDGE_BASE}
+            connectionLineType={ConnectionLineType.SmoothStep}
             onNodeClick={(_, n) => { setSelectedNodeId(n.id); setSelectedEdgeId(null); }}
             onEdgeClick={(_, e) => { setSelectedEdgeId(e.id); setSelectedNodeId(null); }}
             onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
             deleteKeyCode={['Backspace', 'Delete']}
+            proOptions={{ hideAttribution: true }}
             fitView
           >
-            <Background />
-            <Controls />
-            <MiniMap pannable zoomable />
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#C7D2FE" />
+            <Controls showInteractive={false} />
+            <MiniMap pannable zoomable maskColor="rgba(99,102,241,0.08)" nodeColor="#A5B4FC" />
           </ReactFlow>
         </div>
 
@@ -663,9 +697,162 @@ const OBJECTIVE_OPTIONS: { goal: string; label: string; hint: string }[] = [
   { goal: 'posvenda', label: 'Suporte / Pós-venda', hint: 'Status de pedido, troca, dúvida de uso — tom acolhedor.' },
 ];
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FLUXOS CONSOLIDADOS — mapa único, visual e editável, de todos os fluxos da org
+// e de como eles se interligam (handoffs), sob a ótica da operação completa.
+// v1: visualização + edição das conexões (salvas em settings.consolidatedMap).
+// O roteamento ao vivo entre fluxos é a próxima onda (motor multi-fluxo).
+// ═══════════════════════════════════════════════════════════════════════════
+type ConsolidatedMapData = { positions?: Record<string, {x:number;y:number}>; edges?: any[] };
+
+// Nó de entrada (cliente) — círculo em gradiente, estilo "hub" da operação.
+function ClientEntryNode() {
+  return (
+    <div className="flex flex-col items-center" style={{ width: 150 }}>
+      <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg" style={{ background: 'linear-gradient(135deg,#6366F1,#7C3AED)' }}>
+        <MessageSquare size={28} color="#fff" />
+      </div>
+      <p className="mt-2 text-[12px] font-semibold text-slate-700 text-center leading-tight">Cliente<br/>Primeiro contato</p>
+      <Handle type="source" position={Position.Right} style={{ ...HANDLE_STYLE, borderColor: '#6366F1' }} />
+    </div>
+  );
+}
+// Bloco de fluxo — card premium com badge gradiente + nome + status.
+function FlowBlockNode({ data }: NodeProps) {
+  const active = !!data?.active;
+  return (
+    <div className="relative w-[240px] rounded-2xl bg-white" style={{ border: '1px solid #E8EDF4', boxShadow: '0 8px 22px -10px rgba(79,70,229,0.30), 0 1px 2px rgba(15,23,42,0.05)' }}>
+      <Handle type="target" position={Position.Left} style={{ ...HANDLE_STYLE, borderColor: '#6366F1' }} />
+      <div className="flex items-center gap-2.5 px-3.5 py-3">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm" style={{ background: 'linear-gradient(135deg,#6366F1,#7C3AED)' }}>
+          <GitBranch size={17} color="#fff" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{data?.label}</p>
+          <p className="text-[11px] mt-0.5 truncate" style={{ color: active ? '#059669' : '#94A3B8' }}>
+            {active ? '● Ativo · clique pra editar' : 'clique pra editar'}
+          </p>
+        </div>
+      </div>
+      <Handle type="source" position={Position.Right} style={{ ...HANDLE_STYLE, borderColor: '#6366F1' }} />
+    </div>
+  );
+}
+
+function ConsolidatedMapInner({ flows, onBack, onEditFlow }: {
+  flows: ApiFlow[]; onBack: () => void; onEditFlow: (f: ApiFlow) => void;
+}) {
+  const [origSettings, setOrigSettings] = useState<Record<string, any>>({});
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState(false);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const cNodeTypes = useMemo(() => ({ clientEntry: ClientEntryNode, flowBlock: FlowBlockNode }), []);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      let map: ConsolidatedMapData = {};
+      try {
+        const res = await api.get<{ success: boolean; data: any }>('/api/settings');
+        const st = (res?.data?.settings as any) || {};
+        setOrigSettings(st);
+        map = (st.consolidatedMap as ConsolidatedMapData) || {};
+      } catch { /* fail-soft */ }
+      if (cancel) return;
+      const pos = map.positions || {};
+      // Nó de entrada (cliente) + um nó por fluxo — tipos custom (premium).
+      const initNodes: Node[] = [{
+        id: 'entry', type: 'clientEntry', position: pos['entry'] || { x: 40, y: 220 },
+        data: {},
+      }];
+      flows.forEach((f, i) => {
+        initNodes.push({
+          id: f.id, type: 'flowBlock', position: pos[f.id] || { x: 340, y: 60 + i * 130 },
+          data: { label: f.name, active: f.isActive },
+        });
+      });
+      // Edges salvas, OU default: entrada → cada fluxo (ponto de partida).
+      let initEdges: Edge[] = Array.isArray(map.edges) && map.edges.length
+        ? map.edges.map((e:any)=>({ ...EDGE_BASE, ...e, animated:true }))
+        : flows.map((f) => ({ id:`entry-${f.id}`, source:'entry', target:f.id, ...EDGE_BASE, animated:true }));
+      // Garante que edges só referenciem nós existentes (fluxo pode ter sido excluído).
+      const ids = new Set(initNodes.map(n=>n.id));
+      initEdges = initEdges.filter((e:any)=>ids.has(e.source)&&ids.has(e.target));
+      setNodes(initNodes); setEdges(initEdges); setLoaded(true);
+    })();
+    return () => { cancel = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flows]);
+
+  const onConnect = useCallback((c: Connection) => {
+    setEdges((eds) => addEdge({ ...c, animated:true, style:{stroke:'#4F46E5'}, label:'encaminha' }, eds));
+  }, [setEdges]);
+
+  const onNodeClick = useCallback((_: any, node: Node) => {
+    if (node.id === 'entry') return;
+    const f = flows.find((x) => x.id === node.id);
+    if (f) onEditFlow(f);
+  }, [flows, onEditFlow]);
+
+  async function save() {
+    setSaving(true); setSavedMsg(false);
+    try {
+      const positions: Record<string,{x:number;y:number}> = {};
+      nodes.forEach((n) => { positions[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) }; });
+      const cleanEdges = edges.map((e) => ({ id:e.id, source:e.source, target:e.target, label:e.label, animated:true }));
+      await api.put('/api/settings', { settings: { ...origSettings, consolidatedMap: { positions, edges: cleanEdges } } });
+      setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500);
+    } catch { /* noop */ } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="h-[calc(100vh-120px)] flex flex-col">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ArrowLeft size={18} /></button>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Fluxos consolidados</h1>
+            <p className="text-xs text-gray-500">Como seus fluxos se interligam, numa visão única da operação. Arraste conexões entre fluxos; clique num fluxo pra editar.</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {savedMsg && <span className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-full">Mapa salvo</span>}
+          <button onClick={save} disabled={saving} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Salvar mapa
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 rounded-2xl border border-gray-200 overflow-hidden" style={{ background: CANVAS_BG }}>
+        {!loaded ? (
+          <div className="h-full flex items-center justify-center text-gray-500 gap-2"><Loader2 size={18} className="animate-spin" /> Montando o mapa…</div>
+        ) : flows.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-gray-400">Crie fluxos primeiro — eles aparecem aqui interligados.</div>
+        ) : (
+          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+            onConnect={onConnect} onNodeClick={onNodeClick} nodeTypes={cNodeTypes}
+            defaultEdgeOptions={EDGE_BASE} connectionLineType={ConnectionLineType.SmoothStep}
+            fitView proOptions={{ hideAttribution: true }}>
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#C7D2FE" />
+            <Controls showInteractive={false} />
+            <MiniMap pannable zoomable maskColor="rgba(99,102,241,0.08)" nodeColor="#A5B4FC" />
+          </ReactFlow>
+        )}
+      </div>
+      <p className="text-[11px] text-gray-400 mt-2">Dica: cada conexão representa um encaminhamento entre fluxos (ex.: Atendimento → Agendamento). O roteamento automático entre fluxos ao vivo chega na próxima atualização do Maestro.</p>
+    </div>
+  );
+}
+
+function ConsolidatedMap(props: { flows: ApiFlow[]; onBack: () => void; onEditFlow: (f: ApiFlow) => void }) {
+  return <ReactFlowProvider><ConsolidatedMapInner {...props} /></ReactFlowProvider>;
+}
+
 export default function FlowsPage() {
   const [flows, setFlows] = useState<ApiFlow[] | null>(null);
   const [editing, setEditing] = useState<ApiFlow | null>(null);
+  const [view, setView] = useState<'list' | 'consolidated'>('list');
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   // MAESTRO INTELIGENTE — wizard que lê todo o ai-training e gera 1+ fluxos
@@ -829,6 +1016,16 @@ export default function FlowsPage() {
     );
   }
 
+  if (view === 'consolidated') {
+    return (
+      <ConsolidatedMap
+        flows={flows || []}
+        onBack={() => { setView('list'); load(); }}
+        onEditFlow={(f) => setEditing(f)}
+      />
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto py-2">
       {/* Intro Maestro — espelha o design (print): manual antes do 1º fluxo */}
@@ -880,6 +1077,12 @@ export default function FlowsPage() {
           <p className="text-sm font-semibold text-gray-900">Novo fluxo</p>
           <p className="text-xs text-gray-500 mt-0.5">Comece do zero ou deixe o Maestro montar</p>
         </div>
+        <button
+          onClick={() => setView('consolidated')}
+          className="px-4 py-2 rounded-lg text-sm font-medium border border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 whitespace-nowrap"
+        >
+          <GitBranch size={16} /> Fluxos consolidados
+        </button>
         <button
           onClick={createFlow}
           disabled={creating}
