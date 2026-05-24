@@ -37,7 +37,7 @@ import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
   MessageSquare, GitBranch, Sparkles, Tag, BarChart2, Headset, Clock, PlayCircle, Info,
-  BookOpen, Download, ArrowRight, X, Zap,
+  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 
@@ -691,17 +691,20 @@ type FlowDraft = {
 // MAESTRO INTELIGENTE — objetivos oferecidos no wizard (chave = goal do backend).
 const OBJECTIVE_OPTIONS: { goal: string; label: string; hint: string }[] = [
   { goal: 'atendimento', label: 'Atendimento & dúvidas', hint: 'Recebe o cliente e responde com o conhecimento do negócio.' },
-  { goal: 'qualificacao', label: 'Vendas / Qualificação', hint: 'Faz perguntas-chave pra entender necessidade e fit do lead.' },
+  { goal: 'qualificacao', label: 'Qualificação de leads', hint: 'Faz perguntas-chave pra entender necessidade e fit do lead.' },
+  { goal: 'vendas', label: 'Vendas', hint: 'Conduz a compra, trata objeções e leva ao fechamento.' },
   { goal: 'agendamento', label: 'Agendamento', hint: 'Coleta serviço e melhor horário e confirma.' },
   { goal: 'faq', label: 'Tira-dúvidas (FAQ)', hint: 'Responde perguntas frequentes na base de conhecimento.' },
   { goal: 'posvenda', label: 'Suporte / Pós-venda', hint: 'Status de pedido, troca, dúvida de uso — tom acolhedor.' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
-// FLUXOS CONSOLIDADOS — mapa único, visual e editável, de todos os fluxos da org
-// e de como eles se interligam (handoffs), sob a ótica da operação completa.
-// v1: visualização + edição das conexões (salvas em settings.consolidatedMap).
-// O roteamento ao vivo entre fluxos é a próxima onda (motor multi-fluxo).
+// MAPA DA OPERAÇÃO (Fluxos Consolidados) — MAESTRO INTELIGENTE 2.0
+// Visão única, visual e editável, de TODOS os fluxos e de como se interligam
+// (handoffs, cada conexão rotulada com a intenção que dispara o salto). Os nós
+// de fluxo são EXPANSÍVEIS tipo mapa mental: clicar abre a cadeia de atividades
+// daquele fluxo ali mesmo. Salva em settings.consolidatedMap. O roteamento ao
+// vivo entre fluxos é a próxima onda dedicada (motor multi-fluxo).
 // ═══════════════════════════════════════════════════════════════════════════
 type ConsolidatedMapData = { positions?: Record<string, {x:number;y:number}>; edges?: any[] };
 
@@ -717,30 +720,68 @@ function ClientEntryNode() {
     </div>
   );
 }
-// Bloco de fluxo — card premium com badge gradiente + nome + status.
+// Bloco de fluxo — card premium expansível (mapa mental). Header abre/fecha a
+// cadeia de atividades do fluxo; botão interno abre o editor.
 function FlowBlockNode({ data }: NodeProps) {
+  const [open, setOpen] = useState(false);
   const active = !!data?.active;
+  const acts: { type: string; summary: string }[] = Array.isArray(data?.activities) ? data.activities : [];
   return (
-    <div className="relative w-[240px] rounded-2xl bg-white" style={{ border: '1px solid #E8EDF4', boxShadow: '0 8px 22px -10px rgba(79,70,229,0.30), 0 1px 2px rgba(15,23,42,0.05)' }}>
+    <div className="relative w-[262px] rounded-2xl bg-white" style={{ border: open ? '1px solid #C7D2FE' : '1px solid #E8EDF4', boxShadow: open ? '0 14px 34px -12px rgba(79,70,229,0.45), 0 1px 2px rgba(15,23,42,0.05)' : '0 8px 22px -10px rgba(79,70,229,0.30), 0 1px 2px rgba(15,23,42,0.05)' }}>
       <Handle type="target" position={Position.Left} style={{ ...HANDLE_STYLE, borderColor: '#6366F1' }} />
-      <div className="flex items-center gap-2.5 px-3.5 py-3">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-2.5 px-3.5 py-3 text-left">
         <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm" style={{ background: 'linear-gradient(135deg,#6366F1,#7C3AED)' }}>
           <GitBranch size={17} color="#fff" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{data?.label}</p>
           <p className="text-[11px] mt-0.5 truncate" style={{ color: active ? '#059669' : '#94A3B8' }}>
-            {active ? '● Ativo · clique pra editar' : 'clique pra editar'}
+            {active ? '● Ativo' : `${acts.length} ${acts.length === 1 ? 'atividade' : 'atividades'}`} · {open ? 'recolher' : 'ver a cadeia'}
           </p>
         </div>
-      </div>
+        <ChevronDown size={16} className="text-slate-400 shrink-0" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-1 border-t border-slate-100">
+          <ol className="space-y-1.5 mt-2">
+            {acts.map((a, i) => {
+              const m = metaFor(a.type);
+              const Icon = m.icon;
+              return (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: KIND_BADGE[m.kind] }}>
+                    <Icon size={12} color="#fff" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold text-slate-700 leading-tight">{m.label}</p>
+                    <p className="text-[10px] text-slate-400 leading-snug" style={{ maxWidth: 200, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{a.summary}</p>
+                  </div>
+                </li>
+              );
+            })}
+            {acts.length === 0 && <li className="text-[11px] text-slate-400">Sem atividades ainda.</li>}
+          </ol>
+          {typeof data?.onEdit === 'function' && (
+            <button type="button" onClick={(e) => { e.stopPropagation(); data.onEdit(); }} className="mt-2.5 w-full text-[11px] font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg py-1.5 flex items-center justify-center gap-1 border border-indigo-100">
+              <Play size={11} /> Abrir e editar fluxo
+            </button>
+          )}
+        </div>
+      )}
       <Handle type="source" position={Position.Right} style={{ ...HANDLE_STYLE, borderColor: '#6366F1' }} />
     </div>
   );
 }
 
-function ConsolidatedMapInner({ flows, onBack, onEditFlow }: {
-  flows: ApiFlow[]; onBack: () => void; onEditFlow: (f: ApiFlow) => void;
+function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, architecting, journeyNote, onExpandFull }: {
+  flows: ApiFlow[];
+  onBack?: () => void;
+  onEditFlow: (f: ApiFlow) => void;
+  inline?: boolean;
+  onArchitect?: () => void;
+  architecting?: boolean;
+  journeyNote?: string;
+  onExpandFull?: () => void;
 }) {
   const [origSettings, setOrigSettings] = useState<Record<string, any>>({});
   const [loaded, setLoaded] = useState(false);
@@ -764,18 +805,21 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow }: {
       const pos = map.positions || {};
       // Nó de entrada (cliente) + um nó por fluxo — tipos custom (premium).
       const initNodes: Node[] = [{
-        id: 'entry', type: 'clientEntry', position: pos['entry'] || { x: 40, y: 220 },
+        id: 'entry', type: 'clientEntry', position: pos['entry'] || { x: 40, y: 240 },
         data: {},
       }];
       flows.forEach((f, i) => {
+        const activities = (Array.isArray(f.nodes) ? f.nodes : [])
+          .filter((n: any) => n?.type && n.type !== 'start')
+          .map((n: any) => ({ type: n.type, summary: nodeSummary(n.type, n.data) }));
         initNodes.push({
-          id: f.id, type: 'flowBlock', position: pos[f.id] || { x: 340, y: 60 + i * 130 },
-          data: { label: f.name, active: f.isActive },
+          id: f.id, type: 'flowBlock', position: pos[f.id] || { x: 360, y: 40 + i * 150 },
+          data: { label: f.name, active: f.isActive, activities, onEdit: () => onEditFlow(f) },
         });
       });
-      // Edges salvas, OU default: entrada → cada fluxo (ponto de partida).
+      // Edges salvas (handoffs com rótulo de intenção), OU default: entrada → cada fluxo.
       let initEdges: Edge[] = Array.isArray(map.edges) && map.edges.length
-        ? map.edges.map((e:any)=>({ ...EDGE_BASE, ...e, animated:true }))
+        ? map.edges.map((e:any)=>({ ...EDGE_BASE, ...e, animated:true, labelStyle:{ fontSize:10, fontWeight:600, fill:'#4F46E5' }, labelBgStyle:{ fill:'#EEF2FF', fillOpacity:0.95 }, labelBgPadding:[6,3] as [number,number], labelBgBorderRadius:6 }))
         : flows.map((f) => ({ id:`entry-${f.id}`, source:'entry', target:f.id, ...EDGE_BASE, animated:true }));
       // Garante que edges só referenciem nós existentes (fluxo pode ter sido excluído).
       const ids = new Set(initNodes.map(n=>n.id));
@@ -787,65 +831,117 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow }: {
   }, [flows]);
 
   const onConnect = useCallback((c: Connection) => {
-    setEdges((eds) => addEdge({ ...c, animated:true, style:{stroke:'#4F46E5'}, label:'encaminha' }, eds));
+    setEdges((eds) => addEdge({ ...c, animated:true, style:{stroke:'#4F46E5'}, label:'encaminha', labelStyle:{ fontSize:10, fontWeight:600, fill:'#4F46E5' }, labelBgStyle:{ fill:'#EEF2FF', fillOpacity:0.95 } }, eds));
   }, [setEdges]);
-
-  const onNodeClick = useCallback((_: any, node: Node) => {
-    if (node.id === 'entry') return;
-    const f = flows.find((x) => x.id === node.id);
-    if (f) onEditFlow(f);
-  }, [flows, onEditFlow]);
 
   async function save() {
     setSaving(true); setSavedMsg(false);
     try {
       const positions: Record<string,{x:number;y:number}> = {};
       nodes.forEach((n) => { positions[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) }; });
-      const cleanEdges = edges.map((e) => ({ id:e.id, source:e.source, target:e.target, label:e.label, animated:true }));
+      const cleanEdges = edges.map((e) => ({ id:e.id, source:e.source, target:e.target, label:e.label, style:e.style, animated:true }));
       await api.put('/api/settings', { settings: { ...origSettings, consolidatedMap: { positions, edges: cleanEdges } } });
       setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500);
     } catch { /* noop */ } finally { setSaving(false); }
   }
 
+  const canvas = (
+    <div className={`rounded-2xl border border-gray-200 overflow-hidden ${inline ? 'h-[440px]' : 'flex-1'}`} style={{ background: CANVAS_BG }}>
+      {!loaded ? (
+        <div className="h-full flex items-center justify-center text-gray-500 gap-2"><Loader2 size={18} className="animate-spin" /> Montando o mapa…</div>
+      ) : flows.length === 0 ? (
+        <div className="h-full flex flex-col items-center justify-center text-center gap-3 px-6">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg" style={{ background: 'linear-gradient(135deg,#6366F1,#7C3AED)' }}><Workflow size={24} color="#fff" /></div>
+          <p className="text-sm text-gray-500 max-w-sm">Deixe o Maestro <strong>arquitetar sua operação inteira</strong> — do primeiro contato ao pós-venda — e veja tudo interligado aqui.</p>
+          {onArchitect && (
+            <button onClick={onArchitect} disabled={architecting} className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
+              {architecting ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {architecting ? 'O Maestro está desenhando…' : 'Maestro, arquitete minha operação'}
+            </button>
+          )}
+        </div>
+      ) : (
+        <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+          onConnect={onConnect} nodeTypes={cNodeTypes}
+          defaultEdgeOptions={EDGE_BASE} connectionLineType={ConnectionLineType.SmoothStep}
+          fitView proOptions={{ hideAttribution: true }}>
+          <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#C7D2FE" />
+          <Controls showInteractive={false} />
+          <MiniMap pannable zoomable maskColor="rgba(99,102,241,0.08)" nodeColor="#A5B4FC" />
+        </ReactFlow>
+      )}
+    </div>
+  );
+
+  // ── Modo inline (painel-herói no /flows, abaixo do MAESTRO INTELIGENTE) ──
+  if (inline) {
+    return (
+      <div className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shrink-0"><Workflow size={20} /></div>
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-gray-900">Mapa da Operação</h2>
+              <p className="text-xs text-gray-500">Todos os seus fluxos e como se interligam, numa visão única. Clique num fluxo pra abrir a cadeia de atividades.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {flows.length > 0 && onArchitect && (
+              <button onClick={onArchitect} disabled={architecting} title="Refazer a operação completa com o Maestro" className="px-3 py-2 rounded-lg text-xs font-medium border border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1.5 disabled:opacity-50">
+                {architecting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} Arquitetar
+              </button>
+            )}
+            {flows.length > 0 && (
+              <button onClick={save} disabled={saving} className="px-3 py-2 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar
+              </button>
+            )}
+            {onExpandFull && flows.length > 0 && (
+              <button onClick={onExpandFull} className="px-3 py-2 rounded-lg text-xs font-medium bg-gray-900 text-white hover:bg-black flex items-center gap-1.5"><Maximize2 size={14} /> Tela cheia</button>
+            )}
+          </div>
+        </div>
+        {savedMsg && <p className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-full inline-block mb-2">Mapa salvo</p>}
+        {journeyNote && <p className="text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">{journeyNote}</p>}
+        {canvas}
+      </div>
+    );
+  }
+
+  // ── Modo tela cheia ──
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ArrowLeft size={18} /></button>
+          {onBack && <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ArrowLeft size={18} /></button>}
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Fluxos consolidados</h1>
-            <p className="text-xs text-gray-500">Como seus fluxos se interligam, numa visão única da operação. Arraste conexões entre fluxos; clique num fluxo pra editar.</p>
+            <h1 className="text-xl font-bold text-gray-900">Mapa da Operação</h1>
+            <p className="text-xs text-gray-500">Como seus fluxos se interligam, numa visão única. Clique num fluxo pra abrir a cadeia de atividades; arraste conexões entre fluxos.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {savedMsg && <span className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-full">Mapa salvo</span>}
+          {onArchitect && (
+            <button onClick={onArchitect} disabled={architecting} className="px-4 py-2 rounded-lg text-sm font-medium border border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 disabled:opacity-50">
+              {architecting ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} Arquitetar com o Maestro
+            </button>
+          )}
           <button onClick={save} disabled={saving} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Salvar mapa
           </button>
         </div>
       </div>
-      <div className="flex-1 rounded-2xl border border-gray-200 overflow-hidden" style={{ background: CANVAS_BG }}>
-        {!loaded ? (
-          <div className="h-full flex items-center justify-center text-gray-500 gap-2"><Loader2 size={18} className="animate-spin" /> Montando o mapa…</div>
-        ) : flows.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-gray-400">Crie fluxos primeiro — eles aparecem aqui interligados.</div>
-        ) : (
-          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-            onConnect={onConnect} onNodeClick={onNodeClick} nodeTypes={cNodeTypes}
-            defaultEdgeOptions={EDGE_BASE} connectionLineType={ConnectionLineType.SmoothStep}
-            fitView proOptions={{ hideAttribution: true }}>
-            <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#C7D2FE" />
-            <Controls showInteractive={false} />
-            <MiniMap pannable zoomable maskColor="rgba(99,102,241,0.08)" nodeColor="#A5B4FC" />
-          </ReactFlow>
-        )}
-      </div>
-      <p className="text-[11px] text-gray-400 mt-2">Dica: cada conexão representa um encaminhamento entre fluxos (ex.: Atendimento → Agendamento). O roteamento automático entre fluxos ao vivo chega na próxima atualização do Maestro.</p>
+      {journeyNote && <p className="text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">{journeyNote}</p>}
+      {canvas}
+      <p className="text-[11px] text-gray-400 mt-2">Dica: cada conexão é um encaminhamento entre fluxos com a intenção que o dispara (ex.: “objeção de preço” → Vendas). O roteamento automático ao vivo entre fluxos chega na próxima atualização do Maestro.</p>
     </div>
   );
 }
 
-function ConsolidatedMap(props: { flows: ApiFlow[]; onBack: () => void; onEditFlow: (f: ApiFlow) => void }) {
+function ConsolidatedMap(props: {
+  flows: ApiFlow[]; onBack?: () => void; onEditFlow: (f: ApiFlow) => void;
+  inline?: boolean; onArchitect?: () => void; architecting?: boolean; journeyNote?: string; onExpandFull?: () => void;
+}) {
   return <ReactFlowProvider><ConsolidatedMapInner {...props} /></ReactFlowProvider>;
 }
 
@@ -862,6 +958,9 @@ export default function FlowsPage() {
   const [multiAgent, setMultiAgent] = useState(false);
   const [smartDrafts, setSmartDrafts] = useState<FlowDraft[] | null>(null);
   const [smartNote, setSmartNote] = useState('');
+  // MAESTRO INTELIGENTE 2.0 — Arquiteto de Jornada: desenha a operação inteira.
+  const [architecting, setArchitecting] = useState(false);
+  const [journeyNote, setJourneyNote] = useState('');
   // Atualização inteligente (Onda 3): treino mudou → sugerir + aplicar 1 clique
   const [refreshTarget, setRefreshTarget] = useState<ApiFlow | null>(null);
   const [refreshPreview, setRefreshPreview] = useState<FlowRefresh | null>(null);
@@ -980,6 +1079,61 @@ export default function FlowsPage() {
     } finally { setCreating(false); }
   }
 
+  // MAESTRO INTELIGENTE 2.0 — Arquiteto de Jornada: gera a operação inteira
+  // (1 fluxo por objetivo + malha de handoffs), persiste todos os fluxos e
+  // salva o mapa de interligações (settings.consolidatedMap) com os rótulos de
+  // intenção. Depois recarrega a lista e o Mapa da Operação mostra tudo.
+  async function runJourney() {
+    if (architecting) return;
+    if (flows && flows.length > 0) {
+      const ok = window.confirm('O Maestro vai desenhar a operação completa (Atendimento, Qualificação, Agendamento, Vendas, FAQ, Pós-venda) e criar esses fluxos interligados. Os fluxos atuais continuam na lista. Seguir?');
+      if (!ok) return;
+    }
+    setArchitecting(true); setError(null); setJourneyNote('');
+    try {
+      const res = await api.post<{ success: boolean; data: { flows: { goal: string; draft: FlowDraft }[]; handoffs: { from: string; to: string; intent: string; why: string }[]; summary: string; note: string } }>(
+        '/api/flows/generate-journey', {},
+      );
+      const data = res?.data;
+      if (!data || !Array.isArray(data.flows) || data.flows.length === 0) {
+        setError('O Maestro não conseguiu desenhar a operação agora. Tente de novo.');
+        return;
+      }
+      // Persiste cada fluxo e mapeia objetivo → id criado (pra ligar os handoffs).
+      const goalToId: Record<string, string> = {};
+      let firstId: string | null = null;
+      for (const jf of data.flows) {
+        const created = await api.post<{ success: boolean; data: ApiFlow }>('/api/flows', {
+          name: jf.draft.name,
+          triggerType: jf.draft.triggerType,
+          triggerConfig: jf.draft.triggerConfig || {},
+          nodes: jf.draft.nodes,
+          edges: jf.draft.edges,
+        });
+        const id = created?.data?.id;
+        if (id) { goalToId[jf.goal] = id; if (!firstId) firstId = id; }
+      }
+      // Monta as arestas do Mapa: entrada → 1o contato + handoffs rotulados.
+      const mapEdges: any[] = [];
+      const entryTarget = goalToId['atendimento'] || firstId;
+      if (entryTarget) mapEdges.push({ id: `entry-${entryTarget}`, source: 'entry', target: entryTarget, label: 'primeiro contato', style: { stroke: '#94A3B8', strokeDasharray: '5 4' } });
+      for (const h of data.handoffs || []) {
+        const s = goalToId[h.from]; const t = goalToId[h.to];
+        if (s && t && s !== t) mapEdges.push({ id: `${s}-${t}`, source: s, target: t, label: h.intent, style: { stroke: '#6366F1' } });
+      }
+      // Salva o mapa (posições vazias → auto-layout). Preserva o resto do settings.
+      try {
+        const st = (await api.get<{ success: boolean; data: any }>('/api/settings'))?.data?.settings || {};
+        await api.put('/api/settings', { settings: { ...st, consolidatedMap: { positions: {}, edges: mapEdges } } });
+      } catch { /* fail-soft: fluxos já criados, mapa cai no default */ }
+      setJourneyNote(`${data.summary || ''} ${data.note || ''}`.trim());
+      setView('consolidated');
+      load();
+    } catch (e: any) {
+      setError(e?.message || 'O Maestro não conseguiu desenhar a operação agora.');
+    } finally { setArchitecting(false); }
+  }
+
   // Onda 3: pede ao Maestro a sugestão de atualização (preview, não persiste).
   async function requestRefresh(flow: ApiFlow) {
     setRefreshTarget(flow); setRefreshPreview(null); setRefreshing(true); setError(null);
@@ -1022,6 +1176,9 @@ export default function FlowsPage() {
         flows={flows || []}
         onBack={() => { setView('list'); load(); }}
         onEditFlow={(f) => setEditing(f)}
+        onArchitect={runJourney}
+        architecting={architecting}
+        journeyNote={journeyNote}
       />
     );
   }
@@ -1081,7 +1238,7 @@ export default function FlowsPage() {
           onClick={() => setView('consolidated')}
           className="px-4 py-2 rounded-lg text-sm font-medium border border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 whitespace-nowrap"
         >
-          <GitBranch size={16} /> Fluxos consolidados
+          <Workflow size={16} /> Mapa da Operação
         </button>
         <button
           onClick={createFlow}
@@ -1118,6 +1275,21 @@ export default function FlowsPage() {
           </div>
         </div>
       </div>
+
+      {/* MAPA DA OPERAÇÃO (inline) — abaixo do MAESTRO INTELIGENTE, acima dos fluxos */}
+      {flows !== null && (
+        <div className="mb-6">
+          <ConsolidatedMap
+            flows={flows}
+            inline
+            onEditFlow={(f) => setEditing(f)}
+            onArchitect={runJourney}
+            architecting={architecting}
+            journeyNote={journeyNote}
+            onExpandFull={() => setView('consolidated')}
+          />
+        </div>
+      )}
 
       {flows === null && (
         <div className="flex items-center gap-2 text-gray-500 p-8 justify-center"><Loader2 size={18} className="animate-spin" /> Carregando…</div>
