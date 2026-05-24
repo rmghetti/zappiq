@@ -9,7 +9,7 @@ import { validate } from '../middleware/validate.js';
 import { resolveFlowStep, type FlowGraph, type FlowState } from '../agents/flowEngine.js';
 // Maestro "monta pra você" (#288) — gerador híbrido: estrutura determinística
 // + IA preenche conteúdo. Devolve um DRAFT (não persiste); o cliente edita e salva.
-import { generateFlowDraft, generateSmartFlows, regenerateFlowContent } from '../agents/flowGenerator.js';
+import { generateFlowDraft, generateSmartFlows, regenerateFlowContent, generateJourney } from '../agents/flowGenerator.js';
 
 const router = Router();
 
@@ -64,6 +64,23 @@ router.post('/generate-smart', validate(generateSmartSchema), async (req: Reques
       organizationId: req.organizationId!,
       objectives: req.body?.objectives,
       multiAgent: req.body?.multiAgent,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+});
+
+// POST /api/flows/generate-journey — MAESTRO INTELIGENTE 2.0 (Arquiteto de Jornada)
+// Lê TODO o ai-training e desenha a OPERAÇÃO INTEIRA: 1 fluxo especialista por
+// objetivo + a malha de interligações (handoffs) entre eles, cada aresta com a
+// intenção que dispara o salto + o racional do consultor. Cada Nó-IA já sai
+// ciente das transições (handoff "quente"). NÃO persiste — devolve a jornada
+// pro cliente revisar/editar/salvar (settings.journeyMap + cada fluxo via POST /).
+const generateJourneySchema = z.object({ objectives: z.array(z.string()).optional() });
+router.post('/generate-journey', validate(generateJourneySchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await generateJourney({
+      organizationId: req.organizationId!,
+      objectives: req.body?.objectives,
     });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

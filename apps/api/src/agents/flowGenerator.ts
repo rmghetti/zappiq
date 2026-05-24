@@ -23,6 +23,7 @@ import { llmRouter, type LLMTier, type LLMProviderId } from '../services/llm/LLM
 import {
   pickBlueprint,
   buildGraphFromContent,
+  recommendJourney,
   BLUEPRINTS,
   type Blueprint,
   type BlueprintGoal,
@@ -592,4 +593,218 @@ export async function regenerateFlowContent(input: {
     oldWelcome: curWelcome,
     source: 'ai',
   };
+}
+
+// ============================================================================
+// MAESTRO INTELIGENTE 2.0 — O ARQUITETO DE JORNADA (generateJourney)
+// ============================================================================
+// Salto de "gerador de fluxos isolados" para "consultor que desenha a operação
+// inteira". A partir de TODO o ai-training, o Maestro:
+//   1. monta um fluxo especialista por objetivo (Atendimento, Qualificação,
+//      Agendamento, Vendas, FAQ, Pós-venda) — a jornada completa do negócio;
+//   2. DESENHA a malha de interligações (handoffs) entre os fluxos, cada aresta
+//      com a INTENÇÃO que dispara o salto + o racional do consultor (ex.:
+//      "objeção de preço" → Vendas; "fechou a compra" → Pós-venda). Loops e
+//      caminhos bidirecionais são esperados (dúvidas↔vendas, agendamento↔vendas);
+//   3. injeta CONSCIÊNCIA DE HANDOFF no Nó-IA de cada fluxo — o prompt do agente
+//      passa a conhecer as transições possíveis, então o comportamento real já
+//      muda hoje (handoff "quente" carregando contexto), antes mesmo do motor
+//      de roteamento multi-fluxo ao vivo (próxima onda dedicada).
+// Padrões emprestados das líderes: Decagon (AOP por tarefa), Voiceflow (global
+// triggers / saltar entre fluxos por intenção), Sierra (montar tudo do que o
+// cliente já escreveu), journey orchestration (deflexão, cross-sell, escalonar).
+
+export interface JourneyHandoff {
+  from: BlueprintGoal;
+  to: BlueprintGoal;
+  /** Intenção/condição que dispara o salto (curto, pt-BR). */
+  intent: string;
+  /** Por que o Maestro ligou assim (1 frase, viés consultivo). */
+  why: string;
+}
+
+export interface JourneyFlow {
+  goal: BlueprintGoal;
+  draft: FlowDraft;
+}
+
+export interface JourneyResult {
+  flows: JourneyFlow[];
+  handoffs: JourneyHandoff[];
+  objectives: BlueprintGoal[];
+  /** Resumo consultivo do Maestro pro dono do negócio. */
+  summary: string;
+  note: string;
+}
+
+const GOAL_LABEL: Record<BlueprintGoal, string> = {
+  atendimento: BLUEPRINTS.atendimento.label,
+  qualificacao: BLUEPRINTS.qualificacao.label,
+  agendamento: BLUEPRINTS.agendamento.label,
+  vendas: BLUEPRINTS.vendas.label,
+  faq: BLUEPRINTS.faq.label,
+  posvenda: BLUEPRINTS.posvenda.label,
+};
+
+/**
+ * Malha de handoffs determinística (fallback se a IA falhar) — uma jornada
+ * realista e completa. Mantém só as arestas cujas duas pontas existem no
+ * conjunto de objetivos gerados.
+ */
+function defaultHandoffs(objectives: BlueprintGoal[]): JourneyHandoff[] {
+  const set = new Set(objectives);
+  const candidates: JourneyHandoff[] = [
+    { from: 'atendimento', to: 'qualificacao', intent: 'o contato é novo e demonstra interesse', why: 'Entender a necessidade antes de oferecer qualquer coisa.' },
+    { from: 'atendimento', to: 'faq', intent: 'o cliente tem só uma dúvida pontual', why: 'Resolver rápido sem fricção — deflexão.' },
+    { from: 'atendimento', to: 'agendamento', intent: 'o cliente já quer marcar um horário', why: 'Atalho direto pra quem chega decidido.' },
+    { from: 'atendimento', to: 'posvenda', intent: 'o cliente já comprou e precisa de suporte', why: 'Separar quem é cliente de quem é lead.' },
+    { from: 'qualificacao', to: 'vendas', intent: 'o lead está qualificado e com fit', why: 'Lead pronto vai pra venda no momento certo.' },
+    { from: 'qualificacao', to: 'agendamento', intent: 'o lead prefere conversar ou visitar antes', why: 'Respeitar o ritmo de quem precisa de mais toque.' },
+    { from: 'faq', to: 'vendas', intent: 'a dúvida foi resolvida e surgiu intenção de compra', why: 'Aproveitar a janela de interesse logo após o esclarecimento.' },
+    { from: 'vendas', to: 'faq', intent: 'surgiu uma objeção ou dúvida que trava a compra', why: 'Tirar a dúvida e devolver o cliente pro fechamento.' },
+    { from: 'vendas', to: 'agendamento', intent: 'fechar exige marcar um horário, visita ou demonstração', why: 'Quando a venda depende de um próximo encontro.' },
+    { from: 'agendamento', to: 'vendas', intent: 'horário marcado, hora de retomar a venda', why: 'Não deixar o agendamento esfriar — voltar a vender.' },
+    { from: 'vendas', to: 'posvenda', intent: 'a compra foi fechada', why: 'Transição natural pra encantar e fidelizar.' },
+    { from: 'posvenda', to: 'vendas', intent: 'cliente satisfeito com potencial de recompra ou upsell', why: 'Pós-venda bem feito reabre venda — cross-sell/upsell.' },
+  ];
+  return candidates.filter((h) => set.has(h.from) && set.has(h.to));
+}
+
+/**
+ * O Maestro (consultor) desenha a malha de handoffs olhando o negócio real.
+ * Se a IA falhar ou devolver lixo, cai no defaultHandoffs (jornada realista).
+ */
+async function designHandoffs(
+  ctx: BusinessContext,
+  objectives: BlueprintGoal[],
+  organizationId: string,
+): Promise<JourneyHandoff[]> {
+  if (objectives.length < 2) return [];
+  const fallback = () => defaultHandoffs(objectives);
+
+  const list = objectives.map((g) => `- ${g}: ${GOAL_LABEL[g]}`).join('\n');
+  const system = [
+    'Você é o MAESTRO INTELIGENTE da ZappIQ atuando como CONSULTOR de operação conversacional.',
+    'Sua tarefa: desenhar a malha de TRANSIÇÕES (handoffs) entre os fluxos do negócio — como uma conversa real flui do primeiro contato ao fechamento e pós-venda.',
+    'Pense em TODOS os cenários plausíveis para ESTE negócio: objeção→vendas, dúvida→faq, faq→vendas, qualificou→vendas, venda→agendamento, agendamento→vendas (loop), venda→pós-venda, pós-venda→nova venda (upsell). Loops e caminhos bidirecionais são desejáveis.',
+    'Responda EXCLUSIVAMENTE com JSON válido, sem cercas, sem texto antes/depois.',
+  ].join(' ');
+
+  const user = [
+    '=== CONTEXTO DO NEGÓCIO (treinamento da IA) ===',
+    ctx.brief,
+    '',
+    '=== FLUXOS DISPONÍVEIS (use SÓ estas chaves em from/to) ===',
+    list,
+    '',
+    'Devolva este JSON. "from" e "to" devem ser chaves da lista acima. Gere de 6 a 14 transições realistas pra ESTE negócio:',
+    '{',
+    '  "handoffs": [',
+    '    {"from":"atendimento","to":"qualificacao","intent":"condição curta que dispara o salto","why":"por que liguei assim (1 frase)"}',
+    '  ],',
+    '  "summary": "2-3 frases, como um consultor explicando ao dono do negócio a lógica da operação que você desenhou"',
+    '}',
+  ].join('\n');
+
+  const tier = VALID_TIERS.includes(ctx.plan as LLMTier) ? (ctx.plan as LLMTier) : undefined;
+  try {
+    const resp = await llmRouter.complete({
+      system,
+      messages: [{ role: 'user', content: user }],
+      maxTokens: 1100,
+      temperature: 0.5,
+      tier,
+      forceProvider: 'anthropic-sonnet' as LLMProviderId,
+      orgId: organizationId,
+      operation: 'chat',
+    });
+    const parsed = extractJson(resp.text);
+    const raw = parsed && Array.isArray(parsed.handoffs) ? parsed.handoffs : null;
+    if (!raw) return fallback();
+
+    const valid = new Set(objectives);
+    const seen = new Set<string>();
+    const handoffs: JourneyHandoff[] = [];
+    for (const h of raw) {
+      const from = String(h?.from || '').toLowerCase().trim() as BlueprintGoal;
+      const to = String(h?.to || '').toLowerCase().trim() as BlueprintGoal;
+      if (!valid.has(from) || !valid.has(to) || from === to) continue;
+      const key = `${from}->${to}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      handoffs.push({
+        from,
+        to,
+        intent: String(h?.intent || 'quando fizer sentido').slice(0, 120),
+        why: String(h?.why || '').slice(0, 200),
+      });
+      if (handoffs.length >= 16) break;
+    }
+    // Garante uma malha mínima: se a IA devolveu pouca coisa, completa com defaults.
+    if (handoffs.length < 3) {
+      const def = fallback();
+      for (const d of def) {
+        const key = `${d.from}->${d.to}`;
+        if (!seen.has(key)) { seen.add(key); handoffs.push(d); }
+      }
+    }
+    return handoffs;
+  } catch (e) {
+    logger.warn('[MaestroJornada] designHandoffs: LLM falhou — fallback', { organizationId, err: String(e) });
+    return fallback();
+  }
+}
+
+/**
+ * ARQUITETO DE JORNADA — gera a operação inteira (fluxos + interligações) a
+ * partir do ai-training. Se nenhum objetivo for passado, monta a jornada
+ * completa recomendada pelo segmento (o cliente depois remove o que não usa).
+ */
+export async function generateJourney(input: {
+  organizationId: string;
+  objectives?: string[];
+}): Promise<JourneyResult> {
+  const { organizationId } = input;
+  const ctx = await loadBusinessContext(organizationId);
+
+  const requested = (input.objectives || [])
+    .map((o) => String(o).toLowerCase().trim())
+    .filter((o): o is BlueprintGoal => o in BLUEPRINTS);
+  let objectives: BlueprintGoal[] = Array.from(new Set(requested));
+  if (objectives.length === 0) objectives = recommendJourney(ctx.niche, ctx.segmento);
+
+  // 1 fluxo especialista por objetivo (jornada multi-agente por padrão).
+  const flows: JourneyFlow[] = [];
+  for (const goal of objectives) {
+    const draft = await generateDraftForObjective(ctx, BLUEPRINTS[goal], organizationId, true);
+    flows.push({ goal, draft });
+  }
+
+  // O consultor desenha as interligações.
+  const handoffs = await designHandoffs(ctx, objectives, organizationId);
+
+  // Injeta consciência de handoff no Nó-IA de cada fluxo (handoff "quente").
+  for (const jf of flows) {
+    const outgoing = handoffs.filter((h) => h.from === jf.goal);
+    if (outgoing.length === 0) continue;
+    const aiNode = (jf.draft.nodes as any[]).find((n) => n?.type === 'ai');
+    if (!aiNode) continue;
+    const lines = outgoing.map(
+      (h) => `- Se ${h.intent}, conduza a conversa para o fluxo de "${GOAL_LABEL[h.to]}" (carregue o contexto, não faça o cliente repetir).`,
+    );
+    aiNode.data = aiNode.data || {};
+    aiNode.data.prompt = `${aiNode.data.prompt}\n\nTransições possíveis (handoffs desenhados pelo Maestro):\n${lines.join('\n')}`;
+    // Metadados pro motor de roteamento ao vivo (próxima onda) já ler daqui.
+    aiNode.data.handoffs = outgoing.map((h) => ({ to: h.to, intent: h.intent }));
+  }
+
+  const summary =
+    `Desenhei a operação completa de ${ctx.businessName}: ${flows.length} fluxos especialistas ` +
+    `(${objectives.map((g) => GOAL_LABEL[g]).join(', ')}) já interligados em ${handoffs.length} transições — ` +
+    `do primeiro contato ao fechamento e pós-venda. Cada agente sabe pra onde levar o cliente em cada cenário.`;
+  const note =
+    'Esta é a sua operação inteira, pensada de ponta a ponta. Você pode abrir cada fluxo pra ver as atividades, ' +
+    'editar as conexões e remover o que não usa. Ao salvar, os agentes passam a conhecer essas transições.';
+
+  return { flows, handoffs, objectives, summary, note };
 }
