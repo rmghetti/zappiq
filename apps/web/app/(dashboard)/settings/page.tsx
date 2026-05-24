@@ -100,7 +100,9 @@ export default function SettingsPage() {
     if (typeof window === 'undefined') return;
     const apply = () => {
       const h = window.location.hash.replace('#', '').toLowerCase();
-      if (h === 'whatsapp' || h === 'team' || h === 'ai' || h === 'general' || h === 'billing' || h === 'canais') {
+      // #whatsapp foi unificado em "Canais" — deep-links antigos caem lá.
+      if (h === 'whatsapp') { setTab('canais'); return; }
+      if (h === 'team' || h === 'ai' || h === 'general' || h === 'billing' || h === 'canais') {
         setTab(h as Tab);
       }
     };
@@ -350,7 +352,6 @@ export default function SettingsPage() {
     { key: 'general', label: 'Geral', icon: Settings },
     { key: 'team', label: 'Equipe', icon: Users },
     { key: 'canais', label: 'Canais', icon: Plug },
-    { key: 'whatsapp', label: 'WhatsApp', icon: Smartphone },
     { key: 'ai', label: 'IA / Agente', icon: Brain },
     { key: 'billing', label: 'Cobrança & Limites', icon: CreditCard },
   ];
