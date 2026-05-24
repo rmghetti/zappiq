@@ -789,7 +789,11 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
   const [savedMsg, setSavedMsg] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [selEdgeId, setSelEdgeId] = useState<string | null>(null);
+  const [showRationale, setShowRationale] = useState(false);
   const cNodeTypes = useMemo(() => ({ clientEntry: ClientEntryNode, flowBlock: FlowBlockNode }), []);
+  const nameOf = useCallback((id: string) => (id === 'entry' ? 'Cliente' : (nodes.find((n) => n.id === id)?.data as any)?.label || 'fluxo'), [nodes]);
+  const selEdge = edges.find((e) => e.id === selEdgeId) || null;
 
   useEffect(() => {
     let cancel = false;
@@ -831,15 +835,31 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
   }, [flows]);
 
   const onConnect = useCallback((c: Connection) => {
-    setEdges((eds) => addEdge({ ...c, animated:true, style:{stroke:'#4F46E5'}, label:'encaminha', labelStyle:{ fontSize:10, fontWeight:600, fill:'#4F46E5' }, labelBgStyle:{ fill:'#EEF2FF', fillOpacity:0.95 } }, eds));
+    setEdges((eds) => addEdge({ ...c, animated:true, style:{stroke:'#4F46E5'}, label:'encaminha', data:{}, labelStyle:{ fontSize:10, fontWeight:600, fill:'#4F46E5' }, labelBgStyle:{ fill:'#EEF2FF', fillOpacity:0.95 } }, eds));
   }, [setEdges]);
+
+  const onEdgeClick = useCallback((_: any, edge: Edge) => { setSelEdgeId(edge.id); }, []);
+  const updateSelEdge = useCallback((patch: { label?: string; why?: string }) => {
+    if (!selEdgeId) return;
+    setEdges((eds) => eds.map((e) => e.id === selEdgeId
+      ? { ...e, ...(patch.label !== undefined ? { label: patch.label } : {}), data: { ...(e.data || {}), ...(patch.why !== undefined ? { why: patch.why } : {}) } }
+      : e));
+  }, [selEdgeId, setEdges]);
+  const deleteSelEdge = useCallback(() => {
+    if (!selEdgeId) return;
+    setEdges((eds) => eds.filter((e) => e.id !== selEdgeId));
+    setSelEdgeId(null);
+  }, [selEdgeId, setEdges]);
+
+  // Conexões com rótulo (handoffs) — alimenta o painel "por que o Maestro desenhou assim".
+  const handoffEdges = edges.filter((e) => e.source !== 'entry' && e.label);
 
   async function save() {
     setSaving(true); setSavedMsg(false);
     try {
       const positions: Record<string,{x:number;y:number}> = {};
       nodes.forEach((n) => { positions[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) }; });
-      const cleanEdges = edges.map((e) => ({ id:e.id, source:e.source, target:e.target, label:e.label, style:e.style, animated:true }));
+      const cleanEdges = edges.map((e) => ({ id:e.id, source:e.source, target:e.target, label:e.label, data:e.data || {}, style:e.style, animated:true }));
       await api.put('/api/settings', { settings: { ...origSettings, consolidatedMap: { positions, edges: cleanEdges } } });
       setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500);
     } catch { /* noop */ } finally { setSaving(false); }
@@ -862,7 +882,7 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
         </div>
       ) : (
         <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-          onConnect={onConnect} nodeTypes={cNodeTypes}
+          onConnect={onConnect} onEdgeClick={onEdgeClick} nodeTypes={cNodeTypes}
           defaultEdgeOptions={EDGE_BASE} connectionLineType={ConnectionLineType.SmoothStep}
           fitView proOptions={{ hideAttribution: true }}>
           <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#C7D2FE" />
@@ -872,6 +892,64 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
       )}
     </div>
   );
+
+  // Editor da conexão selecionada + painel de racional do Maestro (compartilhado).
+  const extras = flows.length > 0 ? (
+    <>
+      {selEdge && (
+        <div className="mt-3 rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+              <ArrowRight size={15} className="text-indigo-600" />
+              {nameOf(selEdge.source)} <span className="text-indigo-400">→</span> {nameOf(selEdge.target)}
+            </p>
+            <button onClick={() => setSelEdgeId(null)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
+          </div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Quando salta (condição/intenção)</label>
+          <input
+            value={typeof selEdge.label === 'string' ? selEdge.label : ''}
+            onChange={(e) => updateSelEdge({ label: e.target.value })}
+            placeholder="ex.: objeção de preço"
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          />
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1 mt-3">Por que o Maestro ligou assim</label>
+          <textarea
+            value={(selEdge.data as any)?.why || ''}
+            onChange={(e) => updateSelEdge({ why: e.target.value })}
+            rows={2}
+            placeholder="Racional da conexão (opcional)"
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
+          />
+          <div className="flex items-center justify-between mt-3">
+            <button onClick={deleteSelEdge} className="text-xs font-medium text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5"><Trash2 size={13} /> Excluir conexão</button>
+            <span className="text-[11px] text-gray-400">As mudanças entram ao clicar em “Salvar mapa”.</span>
+          </div>
+        </div>
+      )}
+
+      {handoffEdges.length > 0 && (
+        <div className="mt-3 rounded-xl border border-gray-200 bg-white">
+          <button onClick={() => setShowRationale((v) => !v)} className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left">
+            <span className="text-sm font-semibold text-gray-900 flex items-center gap-2"><Sparkles size={15} className="text-indigo-600" /> Por que o Maestro desenhou assim ({handoffEdges.length} transições)</span>
+            <ChevronDown size={16} className="text-gray-400" style={{ transform: showRationale ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+          </button>
+          {showRationale && (
+            <ul className="px-4 pb-3 space-y-2 border-t border-gray-100 pt-3">
+              {handoffEdges.map((e) => (
+                <li key={e.id} className="flex gap-2.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-gray-900">{nameOf(e.source)} → {nameOf(e.target)} <span className="text-indigo-600 font-normal">· {typeof e.label === 'string' ? e.label : ''}</span></p>
+                    {(e.data as any)?.why && <p className="text-xs text-gray-500">{(e.data as any).why}</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </>
+  ) : null;
 
   // ── Modo inline (painel-herói no /flows, abaixo do MAESTRO INTELIGENTE) ──
   if (inline) {
@@ -904,6 +982,7 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
         {savedMsg && <p className="text-xs text-green-700 bg-green-50 px-3 py-1.5 rounded-full inline-block mb-2">Mapa salvo</p>}
         {journeyNote && <p className="text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">{journeyNote}</p>}
         {canvas}
+        {extras}
       </div>
     );
   }
@@ -933,7 +1012,8 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
       </div>
       {journeyNote && <p className="text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">{journeyNote}</p>}
       {canvas}
-      <p className="text-[11px] text-gray-400 mt-2">Dica: cada conexão é um encaminhamento entre fluxos com a intenção que o dispara (ex.: “objeção de preço” → Vendas). O roteamento automático ao vivo entre fluxos chega na próxima atualização do Maestro.</p>
+      {extras}
+      <p className="text-[11px] text-gray-400 mt-2">Dica: clique numa conexão pra editar a intenção que a dispara ou excluí-la. Cada Nó-IA já sai ciente dessas transições (handoff “quente”). O roteamento automático ao vivo entre fluxos chega na próxima atualização do Maestro.</p>
     </div>
   );
 }
@@ -1119,7 +1199,7 @@ export default function FlowsPage() {
       if (entryTarget) mapEdges.push({ id: `entry-${entryTarget}`, source: 'entry', target: entryTarget, label: 'primeiro contato', style: { stroke: '#94A3B8', strokeDasharray: '5 4' } });
       for (const h of data.handoffs || []) {
         const s = goalToId[h.from]; const t = goalToId[h.to];
-        if (s && t && s !== t) mapEdges.push({ id: `${s}-${t}`, source: s, target: t, label: h.intent, style: { stroke: '#6366F1' } });
+        if (s && t && s !== t) mapEdges.push({ id: `${s}-${t}`, source: s, target: t, label: h.intent, data: { why: h.why }, style: { stroke: '#6366F1' } });
       }
       // Salva o mapa (posições vazias → auto-layout). Preserva o resto do settings.
       try {
