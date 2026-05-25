@@ -8,6 +8,7 @@ import * as waService from '../services/whatsappService.js';
 import { sendReplyText, markIncomingAsRead } from '../services/channelDispatcher.js';
 import * as ragService from '../services/ragService.js';
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
+import { syncContactToCrm } from '../services/crmAutomationService.js'; // CRM Onda 1 — IA preenche o pipeline
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
 import type { LLMTier, LLMProviderId } from '../services/llm/LLMRouter.js';
 import { transcribeAudio } from '../services/llm/audioTranscription.js';
@@ -490,6 +491,21 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
           createdAt: new Date().toISOString(),
         },
       });
+    }
+
+    // ── 14. CRM sync (Onda 1) — IA preenche o pipeline ──────────────
+    // Fail-soft: nunca bloqueia a resposta. Roda DEPOIS do envio. Mapeia o
+    // intent do turno (purchase_intent/objection/handoff/...) em progressão de
+    // lead + timeline + tarefa de follow-up. Ver crmAutomationService.
+    try {
+      await syncContactToCrm({
+        organizationId,
+        contactId,
+        conversationId,
+        intent: ((turnResult as any).intent ?? 'normal'),
+      });
+    } catch (crmErr) {
+      logger.warn('[Agent] CRM sync falhou (fail-soft)', { organizationId, contactId, err: String(crmErr) });
     }
 
   } catch (err) {
