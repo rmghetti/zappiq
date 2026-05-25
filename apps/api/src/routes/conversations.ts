@@ -61,6 +61,53 @@ router.get('/', validate(querySchema, 'query'), async (req: Request, res: Respon
   }
 });
 
+// ── GET /api/conversations/:id/context — card de CRM do contato ──
+// CRM Onda 2: painel de contexto. Card do contato (lead status/score/estágio) +
+// deal aberto + tarefas pendentes + timeline de atividades. Org-scoped (RLS via
+// middleware + filtro explícito). Alimenta o 3o painel do dashboard de Conversas.
+router.get('/:id/context', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const conv = await prisma.conversation.findFirst({
+      where: { id: req.params.id, organizationId: req.organizationId!, deletedAt: null },
+      select: { id: true, contactId: true, channel: true, status: true, sentiment: true, summary: true, createdAt: true },
+    });
+    if (!conv) {
+      res.status(404).json({ success: false, error: 'Conversa não encontrada' });
+      return;
+    }
+
+    const [contact, deal, tasks, activities] = await Promise.all([
+      prisma.contact.findUnique({
+        where: { id: conv.contactId },
+        select: {
+          id: true, name: true, phone: true, email: true, company: true,
+          leadStatus: true, leadScore: true, funnelStage: true, tags: true,
+          firstTouchAt: true, lastTouchAt: true, createdAt: true,
+        },
+      }),
+      prisma.deal.findFirst({
+        where: { contactId: conv.contactId, organizationId: req.organizationId!, wonAt: null, lostAt: null },
+        orderBy: { createdAt: 'desc' },
+        include: { pipelineStage: { select: { name: true, color: true, order: true } } },
+      }),
+      prisma.task.findMany({
+        where: { contactId: conv.contactId, organizationId: req.organizationId!, status: 'PENDING' },
+        orderBy: [{ dueDate: 'asc' }],
+        take: 5,
+      }),
+      prisma.activity.findMany({
+        where: { contactId: conv.contactId, organizationId: req.organizationId! },
+        orderBy: { createdAt: 'desc' },
+        take: 25,
+      }),
+    ]);
+
+    res.json({ success: true, data: { conversation: conv, contact, deal, tasks, activities } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── GET /api/conversations/:id ──────────────────
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
