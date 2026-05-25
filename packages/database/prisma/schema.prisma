@@ -194,6 +194,10 @@ model Organization {
   tenantUsageMonthly TenantUsageMonthly[]
   qaPairs            QAPair[]
   onboardingJourneyStates OnboardingJourneyState[]  // FASE 1.B task #240
+  // CRM sinérgico (Onda 0): pipeline, timeline de atividades e tarefas por org.
+  pipelineStages     PipelineStage[]
+  activities         Activity[]
+  tasks              Task[]
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
@@ -287,10 +291,16 @@ model Contact {
   lastInteractionAt  DateTime?
   consentMarketing   Boolean    @default(false)
   consentMarketingAt DateTime?
+  // CRM (Onda 0): atribuição de origem (campanha que originou) + first/last touch.
+  sourceCampaignId   String?
+  firstTouchAt       DateTime?
+  lastTouchAt        DateTime?
   organizationId     String
   organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversations      Conversation[]
   deals              Deal[]
+  activities         Activity[]
+  tasks              Task[]
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -318,6 +328,7 @@ model Conversation {
   organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   messages         Message[]
   internalNotes    InternalNote[]
+  activities       Activity[]
   currentFlowState Json?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
@@ -480,17 +491,145 @@ model Deal {
   id             String   @id @default(cuid())
   title          String
   value          Decimal?
+  // Legado: estágio textual livre. Mantido p/ back-compat; a fonte canônica
+  // passa a ser stageId (PipelineStage). Sincronizados na transição.
   stage          String   @default("new")
+  stageId        String?
+  pipelineStage  PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  // CRM (Onda 0): dono, previsão, atribuição e desfecho.
+  ownerId           String?
+  expectedCloseDate DateTime?
+  lossReason        LossReason?
+  sourceCampaignId  String?
+  sourceAgentId     String?
+  wonAt             DateTime?
+  lostAt            DateTime?
   contactId      String
   contact        Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
   organizationId String
+  activities     Activity[]
+  tasks          Task[]
   closedAt       DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@index([organizationId])
   @@index([contactId])
+  @@index([stageId])
   @@map("deals")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CRM sinérgico (Onda 0) — pipeline + timeline de atividades + tarefas
+// ─────────────────────────────────────────────────────────────────
+// PipelineStage: estágios ordenáveis por org (seed: Novo→...→Ganho/Perdido).
+// Activity: feed cronológico unificado (mensagens, mudança de estágio, notas,
+//   tarefas, eventos de campanha, resumos da IA) — fonte da timeline do contato.
+// Task: próximo passo com dono e prazo, ligado a contato/deal.
+// ═══════════════════════════════════════════════════════════════════
+enum ActivityType {
+  CONTACT_CREATED
+  MESSAGE
+  STAGE_CHANGE
+  NOTE
+  TASK_CREATED
+  TASK_COMPLETED
+  CAMPAIGN_EVENT
+  AI_SUMMARY
+  FIELD_UPDATE
+  LEAD_SCORE_CHANGE
+  DEAL_CREATED
+  DEAL_WON
+  DEAL_LOST
+}
+
+enum ActorType {
+  HUMAN
+  AI
+  SYSTEM
+}
+
+enum TaskStatus {
+  PENDING
+  DONE
+  CANCELLED
+}
+
+enum LossReason {
+  PRICE
+  COMPETITOR
+  TIMING
+  NO_DECISION
+  NO_BUDGET
+  NO_RESPONSE
+  OTHER
+}
+
+model PipelineStage {
+  id             String       @id @default(cuid())
+  name           String
+  order          Int          @default(0)
+  color          String?
+  isWon          Boolean      @default(false)
+  isLost         Boolean      @default(false)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deals          Deal[]
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@map("pipeline_stages")
+}
+
+model Activity {
+  id             String       @id @default(cuid())
+  type           ActivityType
+  actor          ActorType    @default(SYSTEM)
+  actorUserId    String?
+  title          String
+  body           String?
+  metadata       Json?
+  contactId      String?
+  contact        Contact?      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  dealId         String?
+  deal           Deal?         @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId])
+  @@index([contactId])
+  @@index([dealId])
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("activities")
+}
+
+model Task {
+  id             String       @id @default(cuid())
+  title          String
+  description    String?
+  status         TaskStatus   @default(PENDING)
+  dueDate        DateTime?
+  assignedToId   String?
+  completedAt    DateTime?
+  contactId      String?
+  contact        Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  dealId         String?
+  deal           Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([contactId])
+  @@index([dealId])
+  @@index([status])
+  @@index([assignedToId])
+  @@map("tasks")
 }
 
 model MessageTemplate {
