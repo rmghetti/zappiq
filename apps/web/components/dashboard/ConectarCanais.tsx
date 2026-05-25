@@ -22,7 +22,7 @@
  * ===========================================================================
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Smartphone, Instagram, CheckCircle2, Loader2, X, BookOpen,
   CalendarClock, Download, ArrowRight, ShieldCheck, Save, AlertCircle,
@@ -36,6 +36,15 @@ const ONBOARD_ASSISTIDO_URL =
 // Tutorial interativo (HTML self-contained) + PDF baixável, servidos de /public/tutoriais/.
 const TUTORIAL_HTML_URL = '/tutoriais/tutorial-interativo.html';
 const TUTORIAL_PDF_URL = '/tutoriais/cadastrar-whatsapp-instagram.pdf';
+
+// Embedded Signup (Conectar em 1 clique) — App ID + config_id PUBLICOS da ZappIQ
+// na Meta. Nao sao secretos (usados client-side no FB SDK). Fallback hardcoded
+// pra nao depender de env no Vercel. config_id criado 2026-05-24 (WhatsApp
+// Embedded Signup, token de 60 dias). Em prod, so conecta cliente externo apos
+// Advanced Access aprovado no App Review; ate la funciona pra test users do app.
+const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || '1603310040738671';
+const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '3990962534537609';
+const META_GRAPH_VERSION = 'v21.0';
 
 type Activation = 'whatsapp' | 'instagram' | 'both';
 
@@ -70,6 +79,47 @@ export default function ConectarCanais() {
   const [igToken, setIgToken] = useState('');
   // App Secret do app Meta do cliente (verificação de webhook por org)
   const [metaAppSecret, setMetaAppSecret] = useState('');
+
+  // Embedded Signup (1 clique): estado de conexão + sessionInfo capturado da Meta.
+  const [waConnecting, setWaConnecting] = useState(false);
+  const sessionInfoRef = useRef<{ wabaId?: string; phoneNumberId?: string }>({});
+
+  // Carrega o SDK do Facebook (1x) e escuta o sessionInfo do Embedded Signup.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const w = window as any;
+    w.fbAsyncInit = function () {
+      w.FB?.init({ appId: META_APP_ID, autoLogAppEvents: true, xfbml: false, version: META_GRAPH_VERSION });
+    };
+    if (!document.getElementById('facebook-jssdk')) {
+      const js = document.createElement('script');
+      js.id = 'facebook-jssdk';
+      js.src = 'https://connect.facebook.net/en_US/sdk.js';
+      js.async = true;
+      js.defer = true;
+      js.crossOrigin = 'anonymous';
+      document.body.appendChild(js);
+    } else if (w.FB) {
+      w.FB.init({ appId: META_APP_ID, autoLogAppEvents: true, xfbml: false, version: META_GRAPH_VERSION });
+    }
+    // O popup do Embedded Signup manda waba_id + phone_number_id por postMessage.
+    function onWaMessage(e: MessageEvent) {
+      if (e.origin !== 'https://www.facebook.com' && e.origin !== 'https://web.facebook.com') return;
+      try {
+        const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (data?.type === 'WA_EMBEDDED_SIGNUP' && data?.event === 'FINISH') {
+          sessionInfoRef.current = {
+            wabaId: data.data?.waba_id,
+            phoneNumberId: data.data?.phone_number_id,
+          };
+        }
+      } catch {
+        /* mensagem não-JSON: ignora */
+      }
+    }
+    window.addEventListener('message', onWaMessage);
+    return () => window.removeEventListener('message', onWaMessage);
+  }, []);
 
   // Tutorial roda em <iframe> e avisa o parent por postMessage no ✕.
   useEffect(() => {
@@ -160,6 +210,47 @@ export default function ConectarCanais() {
     }
   }
 
+  // Conectar WhatsApp em 1 clique (Embedded Signup). O popup da Meta devolve um
+  // `code` (via FB.login) + waba_id/phone_number_id (via postMessage). Mandamos
+  // pro backend /api/embedded-signup/whatsapp, que troca por token e grava na org.
+  const launchWhatsAppSignup = useCallback(() => {
+    const w = window as any;
+    if (!w.FB) {
+      setError('Carregando o conector da Meta… aguarde alguns segundos e tente de novo.');
+      return;
+    }
+    setError(null);
+    setOkMsg(null);
+    sessionInfoRef.current = {};
+    w.FB.login(
+      (response: any) => {
+        const code = response?.authResponse?.code;
+        if (!code) {
+          setError('Conexão com a Meta cancelada ou não autorizada. Você também pode conectar manualmente abaixo.');
+          return;
+        }
+        const { wabaId, phoneNumberId } = sessionInfoRef.current;
+        setWaConnecting(true);
+        api
+          .post('/api/embedded-signup/whatsapp', { code, wabaId, phoneNumberId })
+          .then(async () => {
+            await load();
+            setOkMsg('WhatsApp conectado! Seu agente já pode atender pelo WhatsApp.');
+          })
+          .catch((e: any) => {
+            setError(e?.message || 'Não consegui concluir a conexão automática. Tente o modo manual abaixo.');
+          })
+          .finally(() => setWaConnecting(false));
+      },
+      {
+        config_id: META_CONFIG_ID,
+        response_type: 'code',
+        override_default_response_type: true,
+        extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+      },
+    );
+  }, [load]);
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-gray-500 p-8 justify-center">
@@ -227,7 +318,30 @@ export default function ConectarCanais() {
         Suas credenciais ficam guardadas só na sua organização e são usadas apenas para o agente responder em seu nome.
       </div>
 
-      {/* Formulário WhatsApp */}
+      {/* Conectar WhatsApp em 1 clique (Embedded Signup) — acima do manual */}
+      {wantWa && (
+        <div className="rounded-xl border border-green-200 bg-green-50/60 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="w-11 h-11 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+            <Smartphone size={22} className="text-green-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-900">Conectar WhatsApp em 1 clique</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Conecte pelo fluxo oficial da Meta — sem copiar IDs nem tokens. Você autoriza no popup e pronto.
+            </p>
+          </div>
+          <button
+            onClick={launchWhatsAppSignup}
+            disabled={waConnecting}
+            className="px-4 py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 whitespace-nowrap shrink-0"
+          >
+            {waConnecting ? <Loader2 size={15} className="animate-spin" /> : <Smartphone size={15} />}
+            {waConnecting ? 'Conectando…' : 'Conectar com a Meta'}
+          </button>
+        </div>
+      )}
+
+      {/* Formulário WhatsApp (manual / alternativa ao 1 clique) */}
       {wantWa && (
         <ChannelForm
           title="WhatsApp Business"
