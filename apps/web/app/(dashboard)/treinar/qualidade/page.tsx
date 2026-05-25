@@ -34,7 +34,7 @@ import type {
 } from '@/lib/adminApi';
 
 const TRIGGER_LABELS: Record<string, string> = {
-  cron: 'Diário automático',
+  cron: 'Semanal automático',
   manual: 'Manual (admin)',
   client_manual: 'Manual (você)',
   pre_release: 'Pré-deploy',
@@ -144,8 +144,13 @@ export default function QualidadeIAClientePage() {
         <h1 className="text-2xl font-semibold text-neutral-900 mb-2">Qualidade da IA</h1>
         <div className="mt-6 p-6 bg-amber-50 border border-amber-200 rounded">
           <p className="text-amber-900">
-            Você ainda não tem um agente publicado. Termine o treinamento em
-            <a href="/ai-training" className="underline ml-1">Treinar IA</a> pra ativar a auditoria de qualidade.
+            Você ainda não tem um agente <strong>publicado</strong>. Publique seu agente no
+            <a href="/flows" className="underline mx-1">Maestro</a>
+            pra ativar a auditoria de qualidade.
+          </p>
+          <p className="text-amber-800 text-sm mt-2">
+            Não precisa estar com o treinamento 100% — a auditoria avalia o agente como ele
+            está hoje. Quanto mais completo o treino, melhor tende a ser a nota.
           </p>
         </div>
       </div>
@@ -346,6 +351,20 @@ function RunDetailPanel({
         )}
       </div>
 
+      {/* Nudge proativo: nota baixa → completar treinamento eleva o resultado */}
+      {!isRunning && run.scorePercent != null && run.scorePercent < 90 && (
+        <div className="px-5 pt-4">
+          <div className="p-3 bg-indigo-50 border border-indigo-200 rounded flex items-start gap-2.5">
+            <span className="text-base leading-none mt-0.5">💡</span>
+            <div className="text-sm text-indigo-900">
+              Boa parte da nota vem de quanto seu agente sabe do seu negócio. Completar o
+              treinamento da IA costuma <strong>elevar este resultado</strong>.
+              <a href="/ai-training" className="underline font-medium ml-1">Completar treinamento →</a>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Lista de cenários com problema + sugestão IA */}
       <div className="p-5">
         <h3 className="text-sm font-semibold text-neutral-900 mb-3">
@@ -356,7 +375,7 @@ function RunDetailPanel({
         {failedScenarios.length === 0 && !isRunning && (
           <p className="text-sm text-neutral-600">
             Seu agente passou em todos os cenários testados. Continue acompanhando — rodamos
-            uma execução diária automática.
+            uma execução automática por semana.
           </p>
         )}
         <div className="space-y-3">
