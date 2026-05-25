@@ -83,6 +83,17 @@ export const agentEvalCronQueue = new Queue('agent-eval-cron', {
 
 let agentEvalCronWorker: Worker | null = null;
 
+// ─── Org da Iza (agente do SUPERADMIN / Cliente Zero) ──────────
+// Mesmo id canonical usado em adminLeadsIza.ts, LLMRouter.ts, tools.ts.
+// A auditoria automática da Iza roda DIÁRIA (o CEO controla de perto);
+// agentes de clientes rodam SEMANAL (corta custo de tokens do cron).
+const IZA_ORG_ID = 'cmo1ywwfe00ko1jskexiexsm4';
+
+// Escopo do ciclo: 'iza' = só o agente da org da Iza (diário);
+// 'clients' = todos os agents live EXCETO a org da Iza (semanal);
+// 'all' = todos (usado por triggers manuais/legados).
+type CronScope = 'iza' | 'clients' | 'all';
+
 // ─── Thresholds ─────────────────────────────────────────────────
 const SCORE_MIN = Number(process.env.AGENT_EVAL_ALERT_SCORE_MIN ?? 90);
 const CRITICAL_MIN = Number(process.env.AGENT_EVAL_ALERT_CRITICAL ?? 1);
@@ -162,20 +173,31 @@ export async function notifySlackQualityIssue(input: {
   });
 }
 
-// ─── Core loop: itera por todos agents ativos ─────────────────
-export async function runAgentEvalCronCycle(): Promise<{
+// ─── Core loop: itera por agents ativos do escopo ─────────────
+export async function runAgentEvalCronCycle(scope: CronScope = 'all'): Promise<{
   agentsProcessed: number;
   agentsAlerted: number;
   agentsFailed: number;
   durationMs: number;
 }> {
   const startedAt = Date.now();
-  logger.info('[agentEvalCron] cycle iniciado');
+  logger.info(`[agentEvalCron] cycle iniciado (scope=${scope})`);
 
   // Lista agents 'live' (Iza canonical + futuros agents de clientes ativos).
   // Agent.status enum: 'draft' | 'reviewed' | 'live' — só rodamos eval em live.
+  // Escopo:
+  //   'iza'     → só a org da Iza (diário, controle do CEO)
+  //   'clients' → todas as orgs EXCETO a Iza (semanal, custo controlado)
+  //   'all'     → todas (compat com triggers manuais)
+  const orgFilter =
+    scope === 'iza'
+      ? { organizationId: IZA_ORG_ID }
+      : scope === 'clients'
+        ? { organizationId: { not: IZA_ORG_ID } }
+        : {};
+
   const agents = await prisma.agent.findMany({
-    where: { status: 'live' },
+    where: { status: 'live', ...orgFilter },
     include: {
       organization: { select: { id: true, name: true } },
     },
@@ -195,7 +217,10 @@ export async function runAgentEvalCronCycle(): Promise<{
           evalSetVersion: EVAL_SET_VERSION,
           coreRulesVersion: CORE_RULES_VERSION,
           triggeredBy: 'cron',
-          scenarioFilter: { source: 'cron_daily', all: true } as any,
+          scenarioFilter: {
+            source: scope === 'iza' ? 'cron_daily_iza' : 'cron_weekly',
+            all: true,
+          } as any,
           totalScenarios: AGENT_EVAL_SET.length,
         },
       });
@@ -283,8 +308,18 @@ export async function runAgentEvalCronCycle(): Promise<{
 export async function initAgentEvalCronJob(): Promise<void> {
   agentEvalCronWorker = new Worker(
     'agent-eval-cron',
-    async () => {
-      return runAgentEvalCronCycle();
+    async (job) => {
+      // Kill-switch de custo: AGENT_EVAL_CRON_DISABLED=true pausa a auditoria
+      // automática sem precisar deploy (rede de segurança durante o teste).
+      if (process.env.AGENT_EVAL_CRON_DISABLED === 'true') {
+        logger.warn('[agentEvalCron] AGENT_EVAL_CRON_DISABLED=true — ciclo pulado (kill-switch).');
+        return { agentsProcessed: 0, agentsAlerted: 0, agentsFailed: 0, durationMs: 0 };
+      }
+      // Escopo derivado do nome do job:
+      //   'daily-agent-eval-iza' → só a Iza (diário)
+      //   'weekly-agent-eval'    → só clientes (semanal)
+      const scope: CronScope = job.name === 'daily-agent-eval-iza' ? 'iza' : 'clients';
+      return runAgentEvalCronCycle(scope);
     },
     { connection, concurrency: 1 }, // 1 cycle por vez — sequencial entre agents
   );
@@ -297,18 +332,38 @@ export async function initAgentEvalCronJob(): Promise<void> {
     logger.info(`[agentEvalCron] Job ${job.id} concluído`, result as Record<string, unknown>);
   });
 
-  // 04:30 UTC diariamente — 30min depois do usage-reconciliation pra
-  // evitar concorrência por rate limit Anthropic.
+  // Custo: a auditoria automática de CLIENTES roda SEMANAL (segundas 04:30 UTC)
+  // — corta ~85% do consumo de tokens do cron mantendo a vigília. A Iza (agente
+  // do SUPERADMIN / Cliente Zero) roda DIÁRIA (04:30 UTC) pra o CEO controlar
+  // de perto. Dois jobs separados, escopo derivado do nome (ver Worker acima).
+  //
+  // Remove o agendamento diário ÚNICO antigo (rodava em TODOS os agents) pra
+  // não rodar duplicado com o novo diário-só-Iza.
+  try {
+    await agentEvalCronQueue.removeRepeatable('daily-agent-eval', { pattern: '30 4 * * *' }, 'agent-eval-cron-daily');
+  } catch { /* fail-soft: pode não existir */ }
+
+  // DIÁRIO — só a org da Iza.
   await agentEvalCronQueue.add(
-    'daily-agent-eval',
+    'daily-agent-eval-iza',
     {},
     {
-      repeat: { pattern: '30 4 * * *' },
-      jobId: 'agent-eval-cron-daily',
+      repeat: { pattern: '30 4 * * *' }, // todo dia 04:30 UTC
+      jobId: 'agent-eval-cron-iza-daily',
     },
   );
 
-  logger.info('[agentEvalCron] Job agendado (diário 04:30 UTC)');
+  // SEMANAL — clientes (todas as orgs exceto a Iza).
+  await agentEvalCronQueue.add(
+    'weekly-agent-eval',
+    {},
+    {
+      repeat: { pattern: '30 4 * * 1' }, // segundas 04:30 UTC
+      jobId: 'agent-eval-cron-weekly',
+    },
+  );
+
+  logger.info('[agentEvalCron] Jobs agendados (Iza diário 04:30 UTC + clientes semanal segundas 04:30 UTC)');
 }
 
 export async function closeAgentEvalCronJob(): Promise<void> {
