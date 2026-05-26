@@ -63,6 +63,17 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    // PR #218 (CRM 3b): SUPERADMIN org override. Se o user setou um org
+    // no OrgSwitcher, manda como header X-Organization-Override em TODAS
+    // as requests. Backend valida que user.role === 'SUPERADMIN' antes
+    // de aceitar o override (defesa em profundidade).
+    if (typeof window !== 'undefined') {
+      const override = localStorage.getItem('zappiq_org_override');
+      if (override) {
+        headers['X-Organization-Override'] = override;
+      }
+    }
+
     let config: RequestInit = {
       ...rest,
       headers,

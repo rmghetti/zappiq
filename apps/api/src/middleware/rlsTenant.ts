@@ -25,7 +25,27 @@ import { logger } from '../utils/logger.js';
  * Deve rodar DEPOIS de authMiddleware.
  */
 export function rlsTenantMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const orgId = req.organizationId;
+  // PR #218 (CRM Onda 3b): SUPERADMIN pode passar header X-Organization-Override
+  // pra visualizar dados de qualquer org. Suporta org-switcher do header sem
+  // furar RLS — o orgId override eh o que vai pra SET LOCAL.
+  // Se user nao for SUPERADMIN, header eh IGNORADO (defesa em profundidade).
+  const overrideHeader = req.headers['x-organization-override'];
+  const userRole = (req.user as any)?.role;
+  let orgId = req.organizationId;
+
+  if (
+    overrideHeader &&
+    typeof overrideHeader === 'string' &&
+    userRole === 'SUPERADMIN' &&
+    /^[a-z0-9]{20,30}$/i.test(overrideHeader)
+  ) {
+    logger.info('rlsTenantMiddleware: SUPERADMIN org override', {
+      userId: (req.user as any)?.userId,
+      realOrgId: orgId,
+      overrideOrgId: overrideHeader,
+    });
+    orgId = overrideHeader;
+  }
 
   if (!orgId) {
     // Rota não autenticada ou sem org — RLS vai bloquear tudo (safe default)

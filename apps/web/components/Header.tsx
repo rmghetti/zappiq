@@ -5,6 +5,7 @@ import { useUiStore } from '../stores/uiStore';
 import { useAuthStore } from '../stores/authStore';
 import { ModuleLogo } from './ModuleLogo';
 import { AgentHealthChip } from './dashboard/AgentHealthChip';
+import { OrgSwitcher } from './OrgSwitcher'; // PR #218 CRM 3b — SUPERADMIN org override
 
 export function Header() {
   const { toggleSidebar } = useUiStore();
@@ -38,6 +39,8 @@ export function Header() {
       <div className="flex items-center gap-3">
         {/* PR #106 — Health Chip do agente: chip persistente com score + level */}
         <AgentHealthChip />
+        {/* PR #218 CRM 3b — Org switcher (visível só pra SUPERADMIN) */}
+        <OrgSwitcher />
         {organization && (
           <span className="text-sm text-gray-500 hidden md:block">
             {organization.name} · <span className="font-medium text-primary-600">{organization.plan}</span>
