@@ -9,6 +9,7 @@
  */
 
 import { llmRouter } from './llm/LLMRouter.js';
+import { classifyIntent, shouldEscalateToSonnet, type IzaIntent } from './llm/intentClassifier.js';
 import { logger } from '../utils/logger.js';
 import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
 import type { EvalScenario } from '../agents/agentEvalSet.js';
@@ -298,6 +299,31 @@ async function runScenario(
   }));
   messages.push({ role: 'user', content: scenario.userMessage });
 
+  // V5 fix (2026-05-26): eval runner DEVE espelhar prod 1:1. Antes chamava
+  // llmRouter.complete direto, sem classify — ou seja, eval testava Gemini
+  // Starter puro enquanto prod já escalava pra Sonnet em intent crítica
+  // (handoff/objection/enterprise/purchase_intent/price_question). Resultado:
+  // cenários como zappiq_voice_preco_correto sempre apareciam como 'partial'
+  // no eval (Gemini reflex "começa em R$ X"), mesmo com Sonnet acertando
+  // em prod. Agora roda classifyIntent + shouldEscalateToSonnet ANTES da
+  // chamada principal — mesma cascata do izaTurnRouter.
+  let intent: IzaIntent = 'normal';
+  let forceProvider: 'anthropic-sonnet' | undefined;
+  try {
+    intent = await classifyIntent(scenario.userMessage, messages.slice(0, -1) as any, {
+      orgId: null,
+      conversationId: null,
+    });
+    if (shouldEscalateToSonnet(intent)) {
+      forceProvider = 'anthropic-sonnet';
+    }
+  } catch (err: any) {
+    logger.warn('[agentEvalRunner] classifyIntent falhou no eval — usando default tier', {
+      scenarioId: scenario.id,
+      err: err?.message,
+    });
+  }
+
   const t0 = Date.now();
   const resp = await withRetry(() => llmRouter.complete({
     system: systemPrompt,
@@ -305,6 +331,7 @@ async function runScenario(
     maxTokens: 800,
     temperature: 0.3,
     operation: 'chat',
+    forceProvider,
   }));
   const responseLatencyMs = Date.now() - t0;
 
