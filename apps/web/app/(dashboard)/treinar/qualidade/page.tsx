@@ -439,9 +439,15 @@ function ClientFixCard({
   const [editing, setEditing] = useState(false);
   const [notes, setNotes] = useState('');
   const [reason, setReason] = useState('');
-  const [loadingAction, setLoadingAction] = useState<'apply' | 'reject' | 'revert' | null>(null);
+  const [loadingAction, setLoadingAction] = useState<'apply' | 'reject' | 'revert' | 're-test' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  // Re-teste pós-Apply (loop curto rumo a 90%+): o usuário clica e a gente roda
+  // SÓ esse cenário contra o systemPrompt atual pra ver se a correção pegou.
+  const [retestResult, setRetestResult] = useState<{
+    combined: 'pass' | 'partial' | 'fail';
+    judge: { passed: boolean; reason: string };
+  } | null>(null);
 
   useEffect(() => {
     setEditedDiff(initialDiff);
@@ -501,6 +507,20 @@ function ClientFixCard({
       setTimeout(onAfterAction, 1200);
     } catch (err: any) {
       setActionError(err?.message || 'Erro ao recusar');
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function handleRetest() {
+    setLoadingAction('re-test');
+    setActionError(null);
+    setRetestResult(null);
+    try {
+      const r = await clientAgentQualityApi.reTestScenario(runId, scenario.scenarioId);
+      setRetestResult({ combined: r.combined, judge: r.judge });
+    } catch (err: any) {
+      setActionError(err?.message || 'Erro ao re-testar cenário');
     } finally {
       setLoadingAction(null);
     }
@@ -693,6 +713,28 @@ function ClientFixCard({
               </div>
             )}
 
+            {/* Resultado do Re-teste pós-Apply (loop curto rumo a 90%+). */}
+            {retestResult && (
+              <div
+                className={`mt-2 text-xs rounded p-2 border ${
+                  retestResult.combined === 'pass'
+                    ? 'text-green-800 bg-green-50 border-green-200'
+                    : retestResult.combined === 'partial'
+                      ? 'text-amber-900 bg-amber-50 border-amber-200'
+                      : 'text-red-800 bg-red-50 border-red-200'
+                }`}
+              >
+                <div className="font-semibold mb-0.5">
+                  {retestResult.combined === 'pass'
+                    ? '✓ Re-teste passou — a correção pegou. O score sobe na próxima execução completa.'
+                    : retestResult.combined === 'partial'
+                      ? '⚠ Ainda parcial — melhorou, mas não 100%. Edite a sugestão (fortaleça a regra: CAPS, "REGRA INVIOLÁVEL") e re-aplique.'
+                      : '✗ Ainda reprovou — a correção não pegou. Edite a sugestão pra ser mais explícita e re-aplique.'}
+                </div>
+                <div className="text-[11px] opacity-80">{retestResult.judge.reason}</div>
+              </div>
+            )}
+
             <div className="flex gap-2 mt-3">
               {!decisionMade ? (
                 <>
@@ -712,13 +754,23 @@ function ClientFixCard({
                   </button>
                 </>
               ) : existingDecision.decision === 'applied' ? (
-                <button
-                  onClick={handleRevert}
-                  disabled={loadingAction !== null}
-                  className="flex-1 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-800 text-xs font-medium rounded border border-orange-300 disabled:opacity-50"
-                >
-                  {loadingAction === 'revert' ? 'Revertendo…' : '↺ Reverter aplicação'}
-                </button>
+                <>
+                  <button
+                    onClick={handleRetest}
+                    disabled={loadingAction !== null}
+                    className="flex-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-medium rounded border border-blue-300 disabled:opacity-50"
+                    title="Roda só esse cenário contra o prompt atual pra confirmar que a correção empurrou o score"
+                  >
+                    {loadingAction === 're-test' ? 'Re-testando…' : '🔄 Re-testar agora'}
+                  </button>
+                  <button
+                    onClick={handleRevert}
+                    disabled={loadingAction !== null}
+                    className="flex-1 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-800 text-xs font-medium rounded border border-orange-300 disabled:opacity-50"
+                  >
+                    {loadingAction === 'revert' ? 'Revertendo…' : '↺ Reverter aplicação'}
+                  </button>
+                </>
               ) : (
                 <div className="text-[10px] text-neutral-500 italic flex-1">
                   Decisão registrada · {existingDecision.notes || '(sem observação)'}

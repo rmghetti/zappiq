@@ -564,6 +564,63 @@ router.post(
 );
 
 // ════════════════════════════════════════════════════════════════════
+// POST /runs/:runId/scenarios/:scenarioId/re-test
+// ─────────────────────────────────────────────────────────────────
+// Loop curto pós-Apply: roda SÓ aquele cenário contra o systemPrompt atual
+// (que já tem o fix aplicado) e devolve pass/partial/fail + diagnóstico.
+// Objetivo: feedback imediato pra o usuário ver se a correção empurrou o
+// score em direção a 90%+. Se não passou, ele edita e re-aplica.
+// Custo: ~1 chat + 1 judge Sonnet por clique (~$0.01-0.05).
+// ════════════════════════════════════════════════════════════════════
+router.post(
+  '/runs/:runId/scenarios/:scenarioId/re-test',
+  async (req: Request, res: Response) => {
+    const orgId = req.user!.organizationId;
+    const { runId, scenarioId } = req.params;
+    try {
+      const run = await loadRunScoped(runId, orgId);
+      if (!run) {
+        res.status(404).json({ error: 'execução não encontrada' });
+        return;
+      }
+      const scenario = AGENT_EVAL_SET.find((s) => s.id === scenarioId);
+      if (!scenario) {
+        res.status(404).json({ error: 'cenário não encontrado no set atual' });
+        return;
+      }
+      const { results } = await executeAgentEvalRun(
+        [scenario],
+        {
+          id: run.agentId,
+          name: run.agent.name,
+          systemPrompt: run.agent.systemPrompt || '',
+        },
+      );
+      const result = results[0];
+      logger.info({
+        msg: 'agent_quality_scenario_retested',
+        runId,
+        scenarioId,
+        agentId: run.agentId,
+        orgId,
+        combined: result.combined,
+      });
+      res.json({
+        ok: true,
+        scenarioId,
+        combined: result.combined,
+        judge: result.judge,
+        severity: result.severity,
+        response: result.response,
+      });
+    } catch (err: any) {
+      logger.error('[agentQuality] re-test erro:', err);
+      res.status(500).json({ error: 'erro ao re-testar', message: err?.message });
+    }
+  },
+);
+
+// ════════════════════════════════════════════════════════════════════
 // POST /runs/:runId/scenarios/:scenarioId/reject-fix
 // ════════════════════════════════════════════════════════════════════
 router.post(
