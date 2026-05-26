@@ -167,7 +167,7 @@ async function ensureDealAndFollowUp(args: {
     deal = await prisma.deal.create({
       data: {
         title: `Oportunidade — ${contactLabel}`,
-        stage: 'proposta',
+        stage: 'proposal',
         stageId: stage?.id ?? null,
         contactId,
         organizationId,
@@ -185,7 +185,7 @@ async function ensureDealAndFollowUp(args: {
       },
     });
   } else if (stage && deal.stageId !== stage.id) {
-    await prisma.deal.update({ where: { id: deal.id }, data: { stage: 'proposta', stageId: stage.id } });
+    await prisma.deal.update({ where: { id: deal.id }, data: { stage: 'proposal', stageId: stage.id } });
     await prisma.activity.create({
       data: {
         type: 'STAGE_CHANGE' as any,

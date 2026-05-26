@@ -65,14 +65,43 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
   } catch (err) { next(err); }
 });
 
+// Mapa: chave do kanban (legado) -> nome do PipelineStage (CRM Onda 0).
+// Mantém o campo legado `stage` (string) e o `stageId` (FK) em sincronia, pra
+// o painel de contexto das Conversas refletir o mesmo estágio do kanban.
+const STAGE_KEY_TO_PIPELINE: Record<string, string> = {
+  new: 'Novo lead',
+  contatado: 'Contatado',
+  qualified: 'Qualificado',
+  proposal: 'Proposta',
+  negotiation: 'Negociacao',
+  won: 'Ganho',
+  lost: 'Perdido',
+};
+
 // PUT /api/deals/:id/stage
 router.put('/:id/stage', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { stage } = req.body;
     if (!stage) { res.status(400).json({ error: 'stage is required' }); return; }
+
+    // Resolve o PipelineStage correspondente na org (mantém stageId em sincronia).
+    const pipelineName = STAGE_KEY_TO_PIPELINE[stage as string];
+    const ps = pipelineName
+      ? await prisma.pipelineStage.findFirst({
+          where: { organizationId: req.organizationId!, name: pipelineName },
+          select: { id: true },
+        })
+      : null;
+
+    const now = new Date();
     const result = await prisma.deal.updateMany({
       where: { id: req.params.id, organizationId: req.organizationId! },
-      data: { stage, ...(stage === 'won' || stage === 'lost' ? { closedAt: new Date() } : {}) },
+      data: {
+        stage,
+        ...(ps ? { stageId: ps.id } : {}),
+        ...(stage === 'won' ? { closedAt: now, wonAt: now } : {}),
+        ...(stage === 'lost' ? { closedAt: now, lostAt: now } : {}),
+      },
     });
     if (result.count === 0) { res.status(404).json({ error: 'Deal not found' }); return; }
     res.json({ success: true, message: `Deal moved to ${stage}` });
