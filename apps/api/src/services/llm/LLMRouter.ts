@@ -91,12 +91,25 @@ export type LLMCompletionRequest = {
   messages: LLMMessage[];
   maxTokens?: number;
   temperature?: number;
-  /** Override de provider (Enterprise / classify forçando Haiku / etc). Tem prioridade sobre tier. */
+  /**
+   * Override HARD de provider (Enterprise contract / classify forçando Haiku).
+   * Cadeia = [provider], SEM fallback. Use quando provider especifico eh
+   * requisito contratual ou semantico (ex: classifier DEVE rodar em Haiku).
+   * Tem prioridade sobre tier e preferProvider.
+   */
   forceProvider?: LLMProviderId;
   /**
+   * Preferencia SOFT de provider (escalada por intent, etc). Cadeia =
+   * [preferProvider, ...defaultChain.filter(!=prefer)] — fallback completo
+   * se primario falhar. PR #216: criado pra fix do crash "all providers
+   * exhausted" quando Sonnet rate-limita. Use quando voce QUER um provider
+   * especifico mas tolera fallback (caso geral de escalada por intent).
+   */
+  preferProvider?: LLMProviderId;
+  /**
    * Tier do tenant — quando setado, determina provider primário via
-   * TIER_PRIMARY_PROVIDER. Se nem tier nem forceProvider estiverem
-   * setados, usa cascade default (Sonnet primário). V4 #V4-001.
+   * TIER_PRIMARY_PROVIDER. Se nenhum (force/prefer/tier) estiver setado,
+   * usa cascade default (Sonnet primário). V4 #V4-001.
    */
   tier?: LLMTier;
   /** ID da org (tenant) — vai pra audit. */
@@ -596,6 +609,13 @@ export class LLMRouter {
     if (req.forceProvider) {
       const p = this.providers[req.forceProvider];
       return p ? [p] : [];
+    }
+    // PR #216: preferProvider monta [prefer, ...fallback] — sobrevive rate-limit/breaker.
+    if (req.preferProvider) {
+      const p = this.providers[req.preferProvider];
+      if (!p) return this.defaultChain;
+      const fallback = this.defaultChain.filter((x) => x.id !== req.preferProvider);
+      return [p, ...fallback];
     }
     if (req.tier) {
       const primaryId = TIER_PRIMARY_PROVIDER[req.tier];
