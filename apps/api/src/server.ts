@@ -34,6 +34,7 @@ import knowledgeBaseRoutes from './routes/knowledgeBase.js';
 import aiTrainingRoutes from './routes/aiTraining.js'; // PR #106.1 — readiness score + KB upload + Q&A + identity
 import templatesRoutes from './routes/templates.js';
 import dealsRoutes from './routes/deals.js';
+import crmRoutes from './routes/crm.js'; // PR #217 — métricas executivas /api/crm/metrics
 import billingRoutes from './routes/billing.js';
 import settingsRoutes from './routes/settings.js';
 import onboardingRoutes from './routes/onboarding.js';
@@ -264,6 +265,7 @@ app.use('/api/kb', authMiddleware, rlsTenantMiddleware, knowledgeBaseRoutes);
 app.use('/api/ai-training', authMiddleware, rlsTenantMiddleware, aiTrainingRoutes); // PR #106.1
 app.use('/api/templates', authMiddleware, rlsTenantMiddleware, templatesRoutes);
 app.use('/api/deals', authMiddleware, rlsTenantMiddleware, dealsRoutes);
+app.use('/api/crm', authMiddleware, rlsTenantMiddleware, crmRoutes); // PR #217 CRM 3a — métricas executivas
 app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes);
 app.use('/api/settings', authMiddleware, rlsTenantMiddleware, settingsRoutes);
 app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, auditLogsRoutes);
