@@ -22,6 +22,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Target, Plus, DollarSign, User, TrendingUp, Clock, AlertTriangle } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { DealFormModal } from '../../../components/crm/DealFormModal';
+import { LossReasonModal } from '../../../components/crm/LossReasonModal'; // PR #220 CRM 3c
 
 interface Deal {
   id: string;
@@ -47,6 +48,14 @@ interface CrmMetrics {
   };
   conversaoPorEstagio: Array<{ stage: string; passou: number; total: number; percentual: number }>;
   motivosPerda: Array<{ reason: string; count: number }>;
+  // PR #220 (CRM 3c): forecast pipeline-weighted breakdown por estágio.
+  forecastBreakdown?: Array<{
+    stage: string;
+    probability: number;
+    count: number;
+    valorBruto: number;
+    valorProjetado: number;
+  }>;
 }
 
 const STAGES = [
@@ -83,6 +92,8 @@ export default function CrmPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [initialStage, setInitialStage] = useState('new');
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+  // PR #220: modal de motivo de perda quando arrasta pra "Perdido"
+  const [lossModal, setLossModal] = useState<{ deal: Deal } | null>(null);
 
   const fetchDeals = useCallback(() => {
     setLoading(true);
@@ -106,12 +117,14 @@ export default function CrmPage() {
     setModalOpen(true);
   }
 
-  async function moveStage(dealId: string, newStage: string) {
+  async function moveStage(dealId: string, newStage: string, lossReason?: string) {
     // Update otimista — UI muda na hora, request roda em background
     const previous = deals;
     setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, stage: newStage } : d)));
     try {
-      await api.put(`/api/deals/${dealId}/stage`, { stage: newStage });
+      const payload: { stage: string; lossReason?: string } = { stage: newStage };
+      if (newStage === 'lost' && lossReason) payload.lossReason = lossReason;
+      await api.put(`/api/deals/${dealId}/stage`, payload);
       // Refresh métricas (deal mudou stage → conversão muda)
       api.get('/api/crm/metrics').then((m: any) => setMetrics(m || null)).catch(() => {});
     } catch {
@@ -146,6 +159,11 @@ export default function CrmPage() {
     if (!dealId) return;
     const deal = deals.find((d) => d.id === dealId);
     if (!deal || deal.stage === stageKey) return;
+    // PR #220: drop em "Perdido" abre modal pra capturar lossReason ANTES de mover.
+    if (stageKey === 'lost') {
+      setLossModal({ deal });
+      return;
+    }
     moveStage(dealId, stageKey);
   }
 
@@ -292,9 +310,9 @@ export default function CrmPage() {
         })}
       </div>
 
-      {/* ─── Rodapé analítico (conversão + motivos perda) ────────── */}
+      {/* ─── Rodapé analítico (conversão + motivos perda + forecast) ── */}
       {metrics && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
           {/* Funil de conversão por estágio */}
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-gray-700 mb-3">
@@ -321,6 +339,59 @@ export default function CrmPage() {
                 );
               })}
             </div>
+          </div>
+
+          {/* PR #220 CRM 3c — Forecast breakdown por estágio */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">
+              De onde vem o forecast · pipeline-weighted
+            </h4>
+            {!metrics.forecastBreakdown || metrics.forecastBreakdown.length === 0 ? (
+              <p className="text-xs text-gray-500 italic">Sem deals abertos pra projetar.</p>
+            ) : (
+              <div className="space-y-2">
+                {metrics.forecastBreakdown
+                  .filter((b) => b.count > 0)
+                  .map((b) => {
+                    const stage = STAGES.find((s) => s.key === b.stage);
+                    const maxBruto = Math.max(...metrics.forecastBreakdown!.map((x) => x.valorBruto));
+                    return (
+                      <div key={b.stage}>
+                        <div className="flex items-center justify-between text-xs text-gray-700 mb-0.5">
+                          <span className="font-medium">
+                            {stage?.label || b.stage}
+                            <span className="ml-1 text-[10px] text-gray-400">
+                              ({fmtPct(b.probability, 0)})
+                            </span>
+                          </span>
+                          <span className="text-gray-500">
+                            {fmtBRL(b.valorProjetado)} de {fmtBRL(b.valorBruto)}
+                          </span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden relative">
+                          {/* Valor bruto (cinza claro) */}
+                          <div
+                            className="absolute h-full bg-gray-200"
+                            style={{ width: maxBruto > 0 ? `${(b.valorBruto / maxBruto) * 100}%` : '0' }}
+                          />
+                          {/* Valor projetado (azul = bruto × prob) */}
+                          <div
+                            className="absolute h-full bg-purple-500 transition-all"
+                            style={{ width: maxBruto > 0 ? `${(b.valorProjetado / maxBruto) * 100}%` : '0' }}
+                          />
+                        </div>
+                        <div className="text-[10px] text-gray-400 mt-0.5">
+                          {b.count} deal{b.count !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    );
+                  })}
+                <div className="pt-2 mt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                  <span className="font-semibold text-gray-700">Total forecast</span>
+                  <span className="font-bold text-purple-700">{fmtBRL(metrics.kpis.forecast)}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Top 3 motivos de perda */}
@@ -365,6 +436,19 @@ export default function CrmPage() {
         onClose={() => setModalOpen(false)}
         onSaved={fetchDeals}
         initialStage={initialStage}
+      />
+
+      {/* PR #220 CRM 3c — Modal "Por que perdemos?" */}
+      <LossReasonModal
+        open={!!lossModal}
+        dealTitle={lossModal?.deal.title || ''}
+        onCancel={() => setLossModal(null)}
+        onConfirm={(reason) => {
+          if (lossModal) {
+            moveStage(lossModal.deal.id, 'lost', reason);
+            setLossModal(null);
+          }
+        }}
       />
     </div>
   );

@@ -81,8 +81,16 @@ const STAGE_KEY_TO_PIPELINE: Record<string, string> = {
 // PUT /api/deals/:id/stage
 router.put('/:id/stage', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { stage } = req.body;
+    // PR #220 (CRM 3c): lossReason opcional capturado pelo modal ao
+    // arrastar deal pra coluna 'Perdido'. Aceita enum: price | competitor |
+    // timing | no_response | not_qualified | other. Persistido no Deal.
+    const { stage, lossReason } = req.body;
     if (!stage) { res.status(400).json({ error: 'stage is required' }); return; }
+    const VALID_LOSS_REASONS = ['price', 'competitor', 'timing', 'no_response', 'not_qualified', 'other'];
+    const validLossReason: string | null =
+      stage === 'lost' && lossReason && VALID_LOSS_REASONS.includes(lossReason)
+        ? lossReason
+        : null;
 
     // Resolve o PipelineStage correspondente na org (mantém stageId em sincronia).
     const pipelineName = STAGE_KEY_TO_PIPELINE[stage as string];
@@ -101,6 +109,7 @@ router.put('/:id/stage', async (req: Request, res: Response, next: NextFunction)
         ...(ps ? { stageId: ps.id } : {}),
         ...(stage === 'won' ? { closedAt: now, wonAt: now } : {}),
         ...(stage === 'lost' ? { closedAt: now, lostAt: now } : {}),
+        ...(validLossReason ? { lossReason: validLossReason as any } : {}),
       },
     });
     if (result.count === 0) { res.status(404).json({ error: 'Deal not found' }); return; }
