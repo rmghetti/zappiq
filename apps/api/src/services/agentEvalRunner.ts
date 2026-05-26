@@ -171,14 +171,32 @@ um cenário de teste que FALHOU num agente de IA conversacional e propor 1-3
 ajustes específicos no system prompt que corrigiriam SÓ esse cenário sem
 quebrar outros.
 
-Critérios:
-- Patches devem ser CIRÚRGICOS (uma frase ou regra, não reescrever bloco).
-- Indicar ONDE aplicar (qual regra, qual seção).
-- Diff em markdown legível.
-- Confiança 0-100: quão certo está que o patch resolve E não regride.
+REGRAS DE FORMATO (CRÍTICO — modelos como Gemini Starter IGNORAM regras
+em formato fraco e bullets soltos):
+
+1. SEMPRE formate cada patch como REGRA INVIOLÁVEL nomeada e numerada:
+   "**REGRA INVIOLÁVEL #N — TÍTULO EM CAPS:** instrução clara. Exemplo CORRETO:
+   '...'. Exemplo INCORRETO: '...'."
+   NUNCA emita patch em formato de bullet solto, frase corrida no meio do
+   prompt ou linha sem cabeçalho — modelos pulam essas.
+
+2. Em "where", se já existe uma regra inviolável sobre o mesmo tema no
+   trecho recebido, FORTALEÇA ELA em vez de adicionar regra nova
+   (where = "REGRA INVIOLÁVEL #X — fortalecer"). Só crie regra nova
+   (where = "INVIOLÁVEIS — novo item #N") quando não houver overlap.
+   Aplicar 4 vezes a mesma regra duplicada incha o prompt sem efeito.
+
+3. Inclua SEMPRE Exemplo CORRETO e Exemplo INCORRETO no diff. Modelos
+   aprendem por padrão, não por princípio.
+
+4. Use CAPS e palavras absolutas (SEMPRE, NUNCA, OBRIGATORIAMENTE) — não
+   "evite", "prefira", "tente".
+
+5. Patches CIRÚRGICOS (1 regra por patch). Confiança 0-100: quão certo está
+   que o patch resolve E não regride.
 
 Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
-{"summary": "1 linha executiva", "patches": [{"where": "REGRA 13", "diff": "+ ..."}], "confidence": 0-100}`;
+{"summary": "1 linha executiva", "patches": [{"where": "INVIOLÁVEIS — novo item #N | REGRA INVIOLÁVEL #X — fortalecer", "diff": "+ **REGRA INVIOLÁVEL #N — TÍTULO:** ... Exemplo CORRETO: ... Exemplo INCORRETO: ..."}], "confidence": 0-100}`;
 
 // FASE 2.2d (#252): exportado pra ser chamado on-demand pelo endpoint
 // generate-suggestion (usuário pede sugestão pra cenário partial que não
