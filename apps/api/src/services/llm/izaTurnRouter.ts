@@ -143,11 +143,17 @@ export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> 
       });
 
   // ── 3. Decide provider final ──────────────────────────────────
-  const finalProvider = pickProvider(intent, req.tier, req.forceProvider);
+  // PR #216 fix: escalada por intent agora usa preferProvider (com fallback)
+  // em vez de forceProvider (sem fallback). Bug anterior: Sonnet rate-limit
+  // → "all providers exhausted" → lead recebe vazio. Agora cai pra Haiku/Gemini.
+  // forceProvider (Enterprise override hard) preservado intacto.
+  const hardForce = req.forceProvider; // override Enterprise (sem fallback)
+  const softPrefer =
+    !hardForce && shouldEscalateToSonnet(intent) ? 'anthropic-sonnet' : undefined;
 
   if (intent !== 'normal') {
     logger.info(
-      `[izaTurnRouter] Intent=${intent} → escalando pra Sonnet (tier=${req.tier})`,
+      `[izaTurnRouter] Intent=${intent} → prefer Sonnet com fallback (tier=${req.tier})`,
       { orgId: req.orgId, conversationId: req.conversationId },
     );
   }
@@ -168,8 +174,9 @@ export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> 
     // Custo extra negligenciável (Gemini Flash $0.30/1M output ≈ +$0.0003/turn).
     maxTokens: req.maxTokens ?? 2048,
     operation: 'chat',
-    forceProvider: finalProvider,
-    tier: finalProvider ? undefined : req.tier, // se já forçou, tier não importa
+    forceProvider: hardForce,
+    preferProvider: softPrefer,
+    tier: hardForce || softPrefer ? undefined : req.tier,
     orgId: req.orgId ?? null,
     conversationId: req.conversationId ?? null,
   });

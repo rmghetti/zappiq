@@ -308,14 +308,17 @@ async function runScenario(
   // em prod. Agora roda classifyIntent + shouldEscalateToSonnet ANTES da
   // chamada principal — mesma cascata do izaTurnRouter.
   let intent: IzaIntent = 'normal';
-  let forceProvider: 'anthropic-sonnet' | undefined;
+  let preferProvider: 'anthropic-sonnet' | undefined;
   try {
     intent = await classifyIntent(scenario.userMessage, messages.slice(0, -1) as any, {
       orgId: null,
       conversationId: null,
     });
     if (shouldEscalateToSonnet(intent)) {
-      forceProvider = 'anthropic-sonnet';
+      // PR #216: preferProvider (com fallback) em vez de forceProvider (sem).
+      // Bug anterior: Sonnet rate-limit derrubava 7 cenarios com "all providers
+      // exhausted". Agora cai pra Haiku/Gemini se Sonnet falhar.
+      preferProvider = 'anthropic-sonnet';
     }
   } catch (err: any) {
     logger.warn('[agentEvalRunner] classifyIntent falhou no eval — usando default tier', {
@@ -331,7 +334,7 @@ async function runScenario(
     maxTokens: 800,
     temperature: 0.3,
     operation: 'chat',
-    forceProvider,
+    preferProvider,
   }));
   const responseLatencyMs = Date.now() - t0;
 
