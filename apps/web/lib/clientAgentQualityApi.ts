@@ -101,6 +101,29 @@ class ClientAgentQualityApi {
     );
   }
 
+  /**
+   * POST /runs/:runId/scenarios/:scenarioId/re-test
+   * Loop curto pós-Apply: roda só aquele cenário contra o systemPrompt atual.
+   * Devolve o veredicto novo (pass/partial/fail) pra confirmar que o fix
+   * empurrou o score em direção a 90%+.
+   */
+  async reTestScenario(
+    runId: string,
+    scenarioId: string,
+  ): Promise<{
+    ok: boolean;
+    scenarioId: string;
+    combined: 'pass' | 'partial' | 'fail';
+    judge: { passed: boolean; reason: string };
+    severity: string;
+    response: string;
+  }> {
+    return api.post(
+      `/api/agent-quality/runs/${encodeURIComponent(runId)}/scenarios/${encodeURIComponent(scenarioId)}/re-test`,
+      {},
+    );
+  }
+
   /** POST /runs/:runId/scenarios/:scenarioId/reject-fix */
   async rejectFix(
     runId: string,

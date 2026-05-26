@@ -311,11 +311,12 @@ async function runScenario(
   else if (!deterministicPassed && !judge.passed) combined = 'fail';
   else combined = 'partial';
 
-  // Nível 1 auto-suggest: gera sugestão SÓ pra fails (não pra partials,
-  // pra economizar custo — partials são desvios menores e raramente exigem
-  // patch). Sugestão é metadata informativa; humano aplica manualmente.
+  // Nível 1 auto-suggest: gera sugestão pra TODA NÃO-aprovação (fail + partial).
+  // Mudanca 2026-05-25: parciais tambem ganham sugestao e botao Aplicar — o
+  // objetivo e fechar o loop curto e empurrar o score em direcao a 90%+ (sem
+  // depender do usuario lembrar de pedir sob demanda pra desvios menores).
   let suggestedFix: ScenarioResult['suggestedFix'] = undefined;
-  if (combined === 'fail') {
+  if (combined === 'fail' || combined === 'partial') {
     suggestedFix = await suggestFix(
       scenario.id,
       scenario.expectedBehavior,
