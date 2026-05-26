@@ -18,7 +18,7 @@
  *   • Mesmo Apply/Reject/Edit/Revert da FASE 2.2a — audit completo.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   clientAgentQualityApi,
   classifyQuality,
@@ -315,6 +315,40 @@ function RunDetailPanel({
     }
   });
 
+  // ─ Backfill silencioso de sugestões (Fix B — runs antigas) ─────────
+  // Runs criadas antes do gate de auto-geração pra parciais (PR #211)
+  // não têm suggestedFix pré-gerado. Disparamos serialmente o
+  // /generate-suggestion em background pra não exigir clique manual em
+  // cada cenário. Roda 1× por run (ref guard) e refresca ao terminar.
+  const [backfillStatus, setBackfillStatus] = useState<{ total: number; done: number } | null>(null);
+  const backfillStartedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!run.id || isRunning) return;
+    if (backfillStartedRef.current === run.id) return;
+
+    const pending = failedScenarios.filter((s) => !s.suggestedFix);
+    if (pending.length === 0) return;
+
+    backfillStartedRef.current = run.id;
+    setBackfillStatus({ total: pending.length, done: 0 });
+
+    (async () => {
+      for (let i = 0; i < pending.length; i++) {
+        const sc = pending[i];
+        try {
+          await clientAgentQualityApi.generateSuggestion(run.id, sc.scenarioId);
+        } catch {
+          // Silencia falha individual — segue pro próximo.
+        }
+        setBackfillStatus({ total: pending.length, done: i + 1 });
+      }
+      setBackfillStatus(null);
+      onAfterAction();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run.id, isRunning, failedScenarios.length]);
+
   return (
     <div className="bg-white border border-neutral-200 rounded">
       {/* Card de saúde */}
@@ -360,6 +394,22 @@ function RunDetailPanel({
               Boa parte da nota vem de quanto seu agente sabe do seu negócio. Completar o
               treinamento da IA costuma <strong>elevar este resultado</strong>.
               <a href="/ai-training" className="underline font-medium ml-1">Completar treinamento →</a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Banner de backfill silencioso (runs antigas — Fix B). */}
+      {backfillStatus && (
+        <div className="px-5 pt-4">
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded flex items-center gap-3">
+            <span className="inline-block w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+            <div className="text-sm text-blue-900 flex-1">
+              Gerando correções automáticas em segundo plano…{' '}
+              <strong>
+                {backfillStatus.done}/{backfillStatus.total}
+              </strong>{' '}
+              prontas. A página atualiza sozinha ao terminar.
             </div>
           </div>
         </div>
@@ -620,9 +670,9 @@ function ClientFixCard({
             <div className="text-xs text-blue-900 mb-2">
               {isPartial ? (
                 <>
-                  <strong>Desvio menor detectado.</strong> Correção automática não foi
-                  gerada (geramos só pra reprovações). Se você acha que vale corrigir,
-                  peça uma sugestão sob demanda.
+                  <strong>Desvio menor detectado.</strong> Em execuções a partir
+                  de agora a correção automática já vem pronta. Pra esta execução
+                  antiga, clique abaixo — a sugestão aparece em segundos.
                 </>
               ) : (
                 <>
