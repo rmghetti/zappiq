@@ -36,13 +36,20 @@
 import { llmRouter, type LLMMessage } from './LLMRouter.js';
 import { logger } from '../../utils/logger.js';
 
-export type IzaIntent = 'handoff' | 'objection' | 'enterprise' | 'purchase_intent' | 'normal';
+export type IzaIntent =
+  | 'handoff'
+  | 'objection'
+  | 'enterprise'
+  | 'purchase_intent'
+  | 'price_question'
+  | 'normal';
 
 const VALID_INTENTS: ReadonlySet<IzaIntent> = new Set([
   'handoff',
   'objection',
   'enterprise',
   'purchase_intent',
+  'price_question',
   'normal',
 ]);
 
@@ -59,9 +66,10 @@ Classifique a ÚLTIMA mensagem do cliente em UMA das categorias:
 - objection: cliente está negociando preço de forma séria, levantando dúvida técnica complexa, ou comparando concorrente específico (ex: "tá caro", "qual a diferença pra Take Blip?", "esse preço é negociável?")
 - enterprise: cliente menciona volume alto (>500 mensagens/dia), cargo C-level (CEO, CTO, Diretor), escala enterprise, ou pede demo customizada (ex: "sou CEO", "1500 atendimentos/dia", "preciso falar com fundador")
 - purchase_intent: cliente ACEITA uma oferta concreta que a Iza ACABOU DE FAZER (trial, demo, plano específico, link). Exemplos: "Quero", "Quero sim", "Vou começar", "OK manda", "Pode mandar", "Fechado", "Bora", "Vamos lá", "Aceito", "Sim quero". IMPORTANTE: olha o histórico — só vale purchase_intent se a Iza acabou de oferecer algo concreto. Aceitação genérica sem CTA prévio = normal.
-- normal: TUDO mais (saudação simples, pergunta de preço genérica, dúvida sobre features, descoberta de necessidade, "sim" sem contexto de aceitação)
+- price_question: cliente pergunta VALOR/PREÇO/QUANTO CUSTA de produto/plano/pacote SEM aceitar oferta e SEM objetar. Exemplos: "quanto custa?", "qual o preço?", "qual o valor do Voice 200?", "tem tabela?", "quanto é o pacote X?", "qual o preço do plano Growth?", "valores?", "tabela de preços?". Por que separado: respostas de preço exigem formato preciso (R$ X,XX) — Gemini Starter erra fraseado ("começa em 79 reais e 90 centavos"). Sonnet acerta. IMPORTANTE: se cliente está negociando ("tá caro") → objection. Se está aceitando ("manda o link") → purchase_intent.
+- normal: TUDO mais (saudação simples, dúvida sobre features, descoberta de necessidade, "sim" sem contexto de aceitação)
 
-Responda APENAS UMA PALAVRA: handoff, objection, enterprise, purchase_intent, ou normal.
+Responda APENAS UMA PALAVRA: handoff, objection, enterprise, purchase_intent, price_question, ou normal.
 Sem pontuação, sem explicação, sem prefixo. APENAS a palavra.`;
 
 export interface ClassifyContext {
@@ -114,7 +122,7 @@ export async function classifyIntent(
     // "intent é objection", etc. A primeira ocorrência vence.
     // Ordem importa: purchase_intent antes pra evitar 'normal' contaminação
     // em respostas tipo "purchase_intent — mas se for normal..." (raro).
-    const match = raw.match(/\b(handoff|objection|enterprise|purchase_intent|normal)\b/);
+    const match = raw.match(/\b(handoff|objection|enterprise|purchase_intent|price_question|normal)\b/);
     if (match) {
       return match[1] as IzaIntent;
     }
