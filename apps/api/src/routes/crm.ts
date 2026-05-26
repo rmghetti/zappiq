@@ -141,6 +141,21 @@ router.get('/metrics', async (req: Request, res: Response, next: NextFunction) =
       return acc + val * prob;
     }, 0);
 
+    // PR #220 (CRM 3c): breakdown por estágio pra UI mostrar de onde vem o
+    // forecast. Pra cada stage aberto, soma valor bruto + valor projetado
+    // (value × probability) + count de deals.
+    const forecastBreakdown = Object.entries(STAGE_PROBABILITY).map(([stageKey, prob]) => {
+      const dealsNoStage = dealsAbertos.filter((d) => d.stage === stageKey);
+      const valorBruto = dealsNoStage.reduce((acc, d) => acc + Number(d.value || 0), 0);
+      return {
+        stage: stageKey,
+        probability: prob,
+        count: dealsNoStage.length,
+        valorBruto,
+        valorProjetado: valorBruto * prob,
+      };
+    });
+
     res.json({
       windowDays: days,
       computedAt: new Date().toISOString(),
@@ -157,6 +172,7 @@ router.get('/metrics', async (req: Request, res: Response, next: NextFunction) =
       },
       conversaoPorEstagio,
       motivosPerda,
+      forecastBreakdown,
     });
   } catch (err) {
     next(err);
