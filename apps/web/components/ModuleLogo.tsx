@@ -4,30 +4,33 @@ import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Config visual de cada logo de produto
+// Config visual de cada secao do dashboard.
+//
+// V4 (2026-05-27): Brand unificado "ZappIQ" em TODAS as rotas — antes
+// renderizava 6 sub-produtos ficticios (NexusCRM, EchoCopilot, etc) e
+// gerava percepcao de "comprei 6 produtos". Agora cada rota mantem icone
+// e cor distintos (contexto visual gostoso), mas o nome e sempre "ZappIQ"
+// + subtitle da secao.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface LogoConfig {
-  name1: string;
-  name2: string;
-  color2: string;
+  /** Subtitle visivel ao lado do logo — descreve a secao */
   subtitle: string;
+  /** Cor de destaque do icone (gradiente padrao verde-azul) */
+  accentColor: string;
+  /** Icone SVG interno do balao */
   innerIcon: React.ReactNode;
 }
 
 const LOGO_CONFIGS: Record<string, LogoConfig> = {
   core: {
-    name1: 'ZappIQ',
-    name2: 'Core',
-    color2: '#1B6B3A',
-    subtitle: 'CENTRAL DE CONVERSAS',
+    subtitle: 'CONVERSAS',
+    accentColor: '#1B6B3A',
     innerIcon: <path d="M65 31L41 60H57L52 82L78 48H62L65 31Z" fill="white" />,
   },
   pulse: {
-    name1: 'Pulse',
-    name2: 'AI',
-    color2: '#EF4444',
-    subtitle: 'AGENTE DE IA 24/7',
+    subtitle: 'BASE DE CONHECIMENTO',
+    accentColor: '#EF4444',
     innerIcon: (
       <>
         <polyline
@@ -39,10 +42,8 @@ const LOGO_CONFIGS: Record<string, LogoConfig> = {
     ),
   },
   spark: {
-    name1: 'Spark',
-    name2: 'Campaigns',
-    color2: '#F59E0B',
-    subtitle: 'MOTOR DE CAMPANHAS',
+    subtitle: 'CAMPANHAS',
+    accentColor: '#F59E0B',
     innerIcon: (
       <>
         <path d="M44,48 L50,48 L63,38 L63,68 L50,58 L44,58 Z" fill="white" />
@@ -53,10 +54,8 @@ const LOGO_CONFIGS: Record<string, LogoConfig> = {
     ),
   },
   radar: {
-    name1: 'Radar',
-    name2: 'Insights',
-    color2: '#7C3AED',
-    subtitle: 'ANALYTICS EM TEMPO REAL',
+    subtitle: 'ANALYTICS',
+    accentColor: '#7C3AED',
     innerIcon: (
       <>
         <circle cx="60" cy="52" r="14" stroke="white" strokeWidth="3" fill="none" />
@@ -68,10 +67,8 @@ const LOGO_CONFIGS: Record<string, LogoConfig> = {
     ),
   },
   nexus: {
-    name1: 'Nexus',
-    name2: 'CRM',
-    color2: '#0D9488',
-    subtitle: 'CRM NATIVO PARA WHATSAPP',
+    subtitle: 'CRM',
+    accentColor: '#0D9488',
     innerIcon: (
       <>
         <line x1="42" y1="44" x2="78" y2="44" stroke="white" strokeWidth="4.5" strokeLinecap="round" />
@@ -81,10 +78,8 @@ const LOGO_CONFIGS: Record<string, LogoConfig> = {
     ),
   },
   forge: {
-    name1: 'ZappIQ',
-    name2: 'Maestro',
-    color2: '#4F46E5',
-    subtitle: 'CONSTRUTOR DE FLUXOS',
+    subtitle: 'MAESTRO',
+    accentColor: '#4F46E5',
     innerIcon: (
       <>
         <rect x="47" y="46" width="13" height="13" rx="2" fill="white" />
@@ -96,15 +91,33 @@ const LOGO_CONFIGS: Record<string, LogoConfig> = {
     ),
   },
   echo: {
-    name1: 'Echo',
-    name2: 'Copilot',
-    color2: '#C026D3',
-    subtitle: 'COPILOTO INTELIGENTE',
+    subtitle: 'CONTATOS',
+    accentColor: '#C026D3',
     innerIcon: (
       <>
         <circle cx="60" cy="53" r="5" fill="white" />
         <path d="M48,53 C48,40 72,40 72,53" stroke="white" strokeWidth="3" fill="none" strokeLinecap="round" />
         <path d="M41,53 C41,33 79,33 79,53" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.6" />
+      </>
+    ),
+  },
+  training: {
+    subtitle: 'TREINAR IA',
+    accentColor: '#0EA5E9',
+    innerIcon: (
+      <>
+        <circle cx="60" cy="52" r="5" fill="white" />
+        <path d="M60 30 L60 38 M60 66 L60 74 M44 52 L36 52 M76 52 L84 52 M48 40 L43 35 M72 64 L77 69 M48 64 L43 69 M72 40 L77 35"
+              stroke="white" strokeWidth="3" strokeLinecap="round" />
+      </>
+    ),
+  },
+  quality: {
+    subtitle: 'QUALIDADE DA IA',
+    accentColor: '#16A34A',
+    innerIcon: (
+      <>
+        <path d="M48 55 L57 64 L74 44" stroke="white" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
       </>
     ),
   },
@@ -115,20 +128,21 @@ const LOGO_CONFIGS: Record<string, LogoConfig> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ROUTE_MAP: Record<string, string | null> = {
-  '/dashboard':      null,        // null = logo principal ZappIQ
-  '/conversations':  'core',
-  '/contacts':       'echo',
-  '/crm':            'nexus',
-  '/campaigns':      'spark',
-  '/flows':          'forge',
-  '/analytics':      'radar',
-  '/knowledge-base': 'pulse',
-  '/settings':       null,
-  '/billing':        null,
+  '/dashboard':         null,        // null = logo principal ZappIQ
+  '/conversations':     'core',
+  '/contacts':          'echo',
+  '/crm':               'nexus',
+  '/campaigns':         'spark',
+  '/flows':             'forge',
+  '/analytics':         'radar',
+  '/knowledge-base':    'pulse',
+  '/ai-training':       'training',
+  '/treinar/qualidade': 'quality',
+  '/settings':          null,
+  '/billing':           null,
 };
 
 function resolveProduct(pathname: string): string | null {
-  // Tenta match exato, depois prefixo
   for (const [route, product] of Object.entries(ROUTE_MAP)) {
     if (pathname === route || pathname.startsWith(route + '/')) {
       return product;
@@ -138,30 +152,30 @@ function resolveProduct(pathname: string): string | null {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SVG do produto (compact — altura 32px)
+// SVG do contexto (altura 32px) — brand sempre "ZappIQ"
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ProductLogo({ id }: { id: string }) {
+function ContextLogo({ id }: { id: string }) {
   const cfg = LOGO_CONFIGS[id];
   if (!cfg) return null;
   const gid = `hdr_${id}`;
   return (
     <svg
-      viewBox="0 0 162 40"
-      width="148"
+      viewBox="0 0 200 40"
+      width="180"
       height="36"
       xmlns="http://www.w3.org/2000/svg"
       shapeRendering="geometricPrecision"
       textRendering="optimizeLegibility"
-      aria-label={`${cfg.name1}${cfg.name2}`}
+      aria-label={`ZappIQ ${cfg.subtitle}`}
     >
       <defs>
         <linearGradient id={gid} x1="0.9" y1="0" x2="0.1" y2="1" gradientUnits="objectBoundingBox">
           <stop offset="0" stopColor="#25D366" />
-          <stop offset="1" stopColor="#4361EE" />
+          <stop offset="1" stopColor={cfg.accentColor} />
         </linearGradient>
       </defs>
-      {/* Bubble + ícone + sparkles */}
+      {/* Bubble com icone do contexto */}
       <g transform="translate(2,2) scale(0.37)">
         <path
           d="M60 95C82.0914 95 100 77.0914 100 55C100 32.9086 82.0914 15 60 15C37.9086 15 20 32.9086 20 55C20 63.271 22.508 70.9554 26.8407 77.2646L20 95L38.9912 89.6133C45.242 93.1171 52.4096 95 60 95Z"
@@ -171,25 +185,25 @@ function ProductLogo({ id }: { id: string }) {
         <path d="M104,15 L105.5,20 L110.5,21.5 L105.5,23 L104,28 L102.5,23 L97.5,21.5 L102.5,20 Z" fill="#818CF8" />
         <path d="M91,8 L92,11.5 L95.5,12.5 L92,13.5 L91,17 L90,13.5 L86.5,12.5 L90,11.5 Z" fill="#A5B4FC" />
       </g>
-      {/* Nome */}
+      {/* ZappIQ (brand) */}
       <text
         x="46"
         y="25"
         fontFamily="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
         letterSpacing="-0.3"
       >
-        <tspan fontWeight="800" fontSize="14" fill="#1A2744">{cfg.name1}</tspan>
-        <tspan fontWeight="700" fontSize="14" fill={cfg.color2}>{cfg.name2}</tspan>
+        <tspan fontWeight="800" fontSize="15" fill="#1A2744">Zapp</tspan>
+        <tspan fontWeight="800" fontSize="15" fill={cfg.accentColor}>IQ</tspan>
       </text>
-      {/* Subtitle */}
+      {/* Subtitle = secao */}
       <text
         x="47"
         y="35"
         fontFamily="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
-        fontSize="6.5"
+        fontSize="7"
         fontWeight="600"
         fill="#9CA3AF"
-        letterSpacing="0.8"
+        letterSpacing="1.2"
       >
         {cfg.subtitle}
       </text>
@@ -198,7 +212,7 @@ function ProductLogo({ id }: { id: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Componente exportado — lê pathname e renderiza o logo correto
+// Componente exportado — le pathname e renderiza o brand correto
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ModuleLogo() {
@@ -206,7 +220,7 @@ export function ModuleLogo() {
   const productId = resolveProduct(pathname);
 
   // Maestro (/flows): logo oficial em imagem (arquivo aprovado pelo CEO),
-  // não o SVG gerado dos demais módulos.
+  // mantemos o png pra preservar identidade ja amadurecida.
   if (productId === 'forge') {
     return (
       <Image
@@ -221,10 +235,10 @@ export function ModuleLogo() {
   }
 
   if (productId) {
-    return <ProductLogo id={productId} />;
+    return <ContextLogo id={productId} />;
   }
 
-  // Dashboard / Settings / Billing → logo principal
+  // Dashboard / Settings / Billing → logo principal ZappIQ
   return (
     <Image
       src="/logo-positivo.svg"
