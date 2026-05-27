@@ -4,7 +4,7 @@
  * Pricing — Design V4 (5 tiers + toggles · Chatbase-style)
  * --------------------------------------------------------------------------
  * LÓGICA PRESERVADA 100%:
- *   - 5 planos via listPlans() de @zappiq/shared
+ *   - 4 planos ativos via listActivePlans() de @zappiq/shared (Iza Lite/Growth/Scale/Enterprise)
  *   - toggle anual (-20%) + Radar 360° add-on + Voz outbound (none/padrao/premium)
  *   - Enterprise: voz incluída, Radar incluso, sob consulta
  *   - Business: SLA 99,9% destaque
@@ -18,9 +18,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Check, Radar, Shield, Sparkles, Crown } from 'lucide-react';
-import { listPlans, ADDONS, getAnnualPrice, type PlanConfig } from '@zappiq/shared';
+import { listActivePlans, ADDONS, getAnnualPrice, type PlanConfig } from '@zappiq/shared';
 
-const PLANS: PlanConfig[] = listPlans();
+const PLANS: PlanConfig[] = listActivePlans();
 const RADAR_ADDON = ADDONS.RADAR_360;
 
 // V2-020 (Sprint 0 Blocker 6): seletor de Voz removido até julho/2026.
@@ -111,7 +111,7 @@ export function Pricing() {
         </div>
 
         {/* Grid de 5 tiers · md:2-col / lg:5-col */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-3 max-w-7xl mx-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-3 max-w-7xl mx-auto">
           {PLANS.map((plan) => {
             const basePrice = computePrice(plan);
             const radarExtra = computeRadarExtra(plan);
