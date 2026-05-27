@@ -50,7 +50,7 @@ export function LossReasonModal({ open, dealTitle, onCancel, onConfirm }: LossRe
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
         {/* Header */}
         <div className="flex items-start justify-between p-5 border-b border-gray-200">
