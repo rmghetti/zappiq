@@ -97,7 +97,7 @@ export default function BillingPage() {
           </h3>
           <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
             Sem cartao no inicio. Conecta WhatsApp, treina a IA, deixa a Iza atender. Apos 14 dias,
-            R$ 249,00/mes (ou R$ 199,20/mes se voce trava o plano anual com 20% off antes do trial expirar).
+            R$ 249,90/mes (ou R$ 199,92/mes se voce trava o plano anual com 20% off antes do trial expirar).
           </p>
         </div>
       </div>
