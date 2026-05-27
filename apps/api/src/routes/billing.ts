@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import Stripe from 'stripe';
 import { prisma } from '@zappiq/database';
+import { STRIPE_V4_PRICES, STRIPE_V4_MODE } from '@zappiq/shared';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
@@ -8,111 +9,165 @@ const stripe = new Stripe(env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 const router = Router();
 
 // =====================================================
-// Pricing V3.2 · Stripe Price IDs reais (live account)
+// Pricing V4 (2026-05-27)
 // -----------------------------------------------------
-// Fonte canônica: packages/shared/src/planConfig.ts
-// Mapeamento por tier × billing period.
-// Anual: 20% off (== monthly × 9.6 ao invés de 12).
+// Fonte de verdade: packages/shared/src/planStripeIds.ts (gerado pelo
+// .command PRICING_V4_LITE_TRIAL no PR #223). Antes ficava hardcoded
+// aqui, agora vem do shared pra evitar drift.
+//
+// Iza Lite tem trial_period_days: 14 — sem isso o cliente seria
+// cobrado R$ 249,00 no dia 1.
 // =====================================================
-const PLANS = {
+
+// Mapa tier -> dias de trial. Centralizado pra futuro (Growth/Scale com trial
+// promocional, por exemplo). Hoje so Iza Lite usa.
+const TRIAL_DAYS: Record<string, number> = {
+  IZA_LITE: STRIPE_V4_PRICES.IZA_LITE.trialDays, // 14
+  GROWTH:   STRIPE_V4_PRICES.GROWTH.trialDays,   // 0
+  SCALE:    STRIPE_V4_PRICES.SCALE.trialDays,    // 0
+};
+
+// Grandfather V3.2: clientes em STARTER ou BUSINESS antigo ainda podem
+// fazer portal/upgrade — mas signup NOVO so via tiers V4.
+const LEGACY_V32_PRICE_MAP: Record<string, { monthly: string; annual: string }> = {
   STARTER: {
-    name: 'Starter',
-    monthly: { amount: 197,  priceId: 'price_1TOguVKlp5SWv74X5SZzRqTH' },
-    annual:  { amount: 1896, priceId: 'price_1TOguiKlp5SWv74XztvAJQJE' },
-  },
-  GROWTH: {
-    name: 'Growth',
-    monthly: { amount: 497,  priceId: 'price_1TOguYKlp5SWv74XjsbTItxg' },
-    annual:  { amount: 4776, priceId: 'price_1TOgulKlp5SWv74XpEx93YYD' },
-  },
-  SCALE: {
-    name: 'Scale',
-    monthly: { amount: 997,  priceId: 'price_1TOgubKlp5SWv74XnpBRyLnz' },
-    annual:  { amount: 9576, priceId: 'price_1TOguoKlp5SWv74XS6CGFe70' },
+    monthly: 'price_1TOguVKlp5SWv74X5SZzRqTH',
+    annual:  'price_1TOguiKlp5SWv74XztvAJQJE',
   },
   BUSINESS: {
-    name: 'Business',
-    monthly: { amount: 1997,  priceId: 'price_1TOgufKlp5SWv74XKOPNvSre' },
-    annual:  { amount: 19176, priceId: 'price_1TOgusKlp5SWv74XUky82PNK' },
+    monthly: 'price_1TOgufKlp5SWv74XKOPNvSre',
+    annual:  'price_1TOgusKlp5SWv74XUky82PNK',
   },
-} as const;
+};
 
-type PlanKey = keyof typeof PLANS;
-type BillingPeriod = 'monthly' | 'annual';
+type PlanV4 = keyof typeof STRIPE_V4_PRICES;        // 'IZA_LITE' | 'GROWTH' | 'SCALE'
+type BillingCycle = 'monthly' | 'annual';
 
-const isPlanKey = (s: unknown): s is PlanKey =>
-  typeof s === 'string' && s in PLANS;
-const isBillingPeriod = (s: unknown): s is BillingPeriod =>
+const V4_PLANS = Object.keys(STRIPE_V4_PRICES) as PlanV4[];
+const ALL_PLANS = [...V4_PLANS, ...Object.keys(LEGACY_V32_PRICE_MAP)] as string[];
+
+const isPlanV4 = (s: unknown): s is PlanV4 =>
+  typeof s === 'string' && (V4_PLANS as readonly string[]).includes(s);
+
+const isLegacyPlan = (s: unknown): s is keyof typeof LEGACY_V32_PRICE_MAP =>
+  typeof s === 'string' && s in LEGACY_V32_PRICE_MAP;
+
+const isBillingCycle = (s: unknown): s is BillingCycle =>
   s === 'monthly' || s === 'annual';
 
-// GET /api/billing/plans
+// GET /api/billing/plans  (publica os tiers V4 + nao expoe legacy)
 router.get('/plans', (_req: Request, res: Response) => {
   res.json({
     success: true,
-    data: Object.entries(PLANS).map(([key, p]) => ({
-      id: key,
-      name: p.name,
-      monthly: { amount: p.monthly.amount, priceId: p.monthly.priceId },
-      annual:  { amount: p.annual.amount,  priceId: p.annual.priceId  },
-      annualDiscountPercent: 20,
-    })),
+    version: 'v4',
+    stripeMode: STRIPE_V4_MODE,
+    data: V4_PLANS.map((id) => {
+      const p = STRIPE_V4_PRICES[id];
+      return {
+        id,
+        productId: p.productId,
+        monthly: { priceId: p.monthly },
+        annual:  { priceId: p.annual  },
+        trialDays: p.trialDays,
+        annualDiscountPercent: 20,
+      };
+    }),
   });
 });
 
 // POST /api/billing/checkout
-// Body: { plan: 'STARTER'|'GROWTH'|'SCALE'|'BUSINESS', billing?: 'monthly'|'annual' }
+// Body: { plan, cycle?, billing? }
+//   plan  = 'IZA_LITE' | 'GROWTH' | 'SCALE' (novos)
+//           ou 'STARTER' | 'BUSINESS' (legacy grandfather)
+//   cycle = 'monthly' | 'annual'  (novo nome — billing/page.tsx V4 manda esse)
+//   billing = 'monthly' | 'annual' (compat com frontend V3.2 antigo)
 router.post('/checkout', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { plan, billing = 'monthly' } = req.body ?? {};
+    const body = req.body ?? {};
+    const plan: string = body.plan;
+    const cycle: BillingCycle = (body.cycle ?? body.billing ?? 'monthly') as BillingCycle;
 
-    if (!isPlanKey(plan)) {
-      res.status(400).json({ error: 'Invalid plan', allowed: Object.keys(PLANS) });
-      return;
-    }
-    if (!isBillingPeriod(billing)) {
-      res.status(400).json({ error: 'Invalid billing period', allowed: ['monthly', 'annual'] });
+    if (!isBillingCycle(cycle)) {
+      res.status(400).json({ error: 'Invalid cycle', allowed: ['monthly', 'annual'] });
       return;
     }
 
-    const planConfig = PLANS[plan];
-    const priceId = planConfig[billing].priceId;
+    let priceId: string;
+    let trialDays = 0;
+    let pricingVersion: 'v4' | 'v32_legacy';
+
+    if (isPlanV4(plan)) {
+      const cfg = STRIPE_V4_PRICES[plan];
+      priceId = cycle === 'monthly' ? cfg.monthly : cfg.annual;
+      trialDays = TRIAL_DAYS[plan] ?? 0;
+      pricingVersion = 'v4';
+    } else if (isLegacyPlan(plan)) {
+      // Permite upgrade de grandfathered (Starter/Business antigos) — mas log
+      // pra acompanhar. Trial 0 (esses planos nao tinham trial).
+      priceId = LEGACY_V32_PRICE_MAP[plan][cycle];
+      trialDays = 0;
+      pricingVersion = 'v32_legacy';
+      logger.warn('checkout.legacy_v32_plan_used', {
+        organizationId: req.organizationId,
+        plan,
+        cycle,
+        note: 'Cliente assinou tier V3.2 legacy — esperado so pra grandfather',
+      });
+    } else {
+      res.status(400).json({
+        error: 'Invalid plan',
+        allowed: ALL_PLANS,
+        note: 'V4 tiers (Iza Lite/Growth/Scale) sao os recomendados. STARTER e BUSINESS sao legacy.',
+      });
+      return;
+    }
 
     const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
+
+    const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
+      metadata: {
+        organizationId: req.organizationId!,
+        plan,
+        cycle,
+        pricing_version: pricingVersion,
+      },
+    };
+
+    // CRITICAL: trial_period_days so se > 0. Iza Lite usa 14.
+    if (trialDays > 0) {
+      subscriptionData.trial_period_days = trialDays;
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
-      // V3.2: expõe campo "inserir cupom" (ex.: ANTONELLA100 pra pilotos)
       allow_promotion_codes: true,
       line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: {
-        metadata: {
-          organizationId: req.organizationId!,
-          plan,
-          billing,
-          pricing_version: 'v32',
-        },
-      },
+      subscription_data: subscriptionData,
       metadata: {
         organizationId: req.organizationId!,
         plan,
-        billing,
-        pricing_version: 'v32',
+        cycle,
+        pricing_version: pricingVersion,
       },
       success_url: `${env.NEXT_PUBLIC_APP_URL}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${env.NEXT_PUBLIC_APP_URL}/billing/cancel`,
+      cancel_url:  `${env.NEXT_PUBLIC_APP_URL}/billing/cancel`,
     });
 
     logger.info('checkout.session.created', {
       organizationId: req.organizationId,
       plan,
-      billing,
+      cycle,
       priceId,
+      trialDays,
+      pricingVersion,
       sessionId: session.id,
     });
 
-    res.json({ success: true, url: session.url });
-  } catch (err) { next(err); }
+    res.json({ success: true, url: session.url, trialDays, pricingVersion });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET /api/billing/portal
@@ -132,7 +187,9 @@ router.get('/portal', async (req: Request, res: Response, next: NextFunction) =>
     });
 
     res.json({ success: true, url: session.url });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;
