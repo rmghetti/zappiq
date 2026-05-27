@@ -83,8 +83,8 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
     name: 'Lite',
     tagline: 'Comece em 5 minutos — 14 dias gratis pra validar',
     description:
-      'Trial 14 dias gratuito. Apos isso, R\$ 249,90/mes (ou R\$ 199,92/mes no plano anual). Pensado pra autonomo, solo e PME validando o canal antes de escalar pro Growth.',
-    priceMonthly: 249.90,
+      'Trial 14 dias gratuito. Apos isso, R\$ 247,00/mes (ou R\$ 197,60/mes no plano anual). Pensado pra autonomo, solo e PME validando o canal antes de escalar pro Growth.',
+    priceMonthly: 247.00,
     annualDiscountPercent: 20,
     highlight: true,
     premium: false,
@@ -118,8 +118,8 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       support: 'email',
     },
     bullets: [
-      'TRIAL 14 DIAS GRATIS — apos isso R\$ 249,90/mes',
-      'Anual: R\$ 199,92/mes (economiza 20%)',
+      'TRIAL 14 DIAS GRATIS — apos isso R\$ 247,00/mes',
+      'Anual: R\$ 197,60/mes (economiza 20%)',
       '1 atendente humano',
       '1.500 mensagens de IA/mes',
       '200 disparos (utility/marketing)/mes',
