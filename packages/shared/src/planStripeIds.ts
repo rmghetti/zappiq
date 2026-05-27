@@ -18,8 +18,8 @@ export interface StripePriceMap {
 export const STRIPE_V4_PRICES: Record<'IZA_LITE' | 'GROWTH' | 'SCALE', StripePriceMap> = {
   IZA_LITE: {
     productId: 'prod_UaxMHfEx97YuWa',
-    monthly:   'price_1TbmiFKlp5SWv74XoW3wS1WU',
-    annual:    'price_1TbmiHKlp5SWv74XuSXZkWXw',
+    monthly:   'price_1Tbqp7Klp5SWv74X1g7vmRlu',
+    annual:    'price_1Tbqp8Klp5SWv74X9ZqOtDh0',
     trialDays: 14,
   },
   GROWTH: {
