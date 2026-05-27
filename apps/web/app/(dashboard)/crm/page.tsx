@@ -19,7 +19,8 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { Target, Plus, DollarSign, User, TrendingUp, Clock, AlertTriangle } from 'lucide-react';
+import Link from 'next/link';
+import { Target, Plus, DollarSign, User, TrendingUp, Clock, AlertTriangle, BarChart3 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { DealFormModal } from '../../../components/crm/DealFormModal';
 import { LossReasonModal } from '../../../components/crm/LossReasonModal'; // PR #220 CRM 3c
@@ -181,12 +182,21 @@ export default function CrmPage() {
             {deals.length} deals · arraste cards entre as colunas pra mover de estágio
           </p>
         </div>
-        <button
-          onClick={() => openCreate('new')}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600"
-        >
-          <Plus size={16} /> Novo Deal
-        </button>
+        <div className="flex items-center gap-2">
+          {/* PR #221 CRM Onda 4 — Link pra página de atribuição/ROI */}
+          <Link
+            href="/crm/atribuicao"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            <BarChart3 size={14} /> Atribuição
+          </Link>
+          <button
+            onClick={() => openCreate('new')}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600"
+          >
+            <Plus size={16} /> Novo Deal
+          </button>
+        </div>
       </div>
 
       {/* ─── Barra de 6 KPIs (Onda 3a) ───────────────────────────── */}
