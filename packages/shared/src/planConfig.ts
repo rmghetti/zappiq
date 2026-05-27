@@ -62,7 +62,7 @@ export interface PlanConfig {
   premium: boolean;
   /** Ordem de exibição */
   order: number;
-  /** V4: Trial gratuito em dias (0 = sem trial). Iza Lite usa 14. */
+  /** V4: Trial gratuito em dias (0 = sem trial). Lite usa 14. */
   trialDays?: number;
   /** V4: Plano descontinuado — escondido nos cards de venda (UI filtra). */
   deprecated?: boolean;
@@ -80,7 +80,7 @@ export interface PlanConfig {
 export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
   IZA_LITE: {
     id: 'IZA_LITE',
-    name: 'Iza Lite',
+    name: 'Lite',
     tagline: 'Comece em 5 minutos — 14 dias gratis pra validar',
     description:
       'Trial 14 dias gratuito. Apos isso, R\$ 249,90/mes (ou R\$ 199,92/mes no plano anual). Pensado pra autonomo, solo e PME validando o canal antes de escalar pro Growth.',
@@ -137,7 +137,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
   STARTER: {
     id: 'STARTER',
     name: 'Starter (legado)',
-    tagline: 'Plano descontinuado em 2026-05-27 — substituido por Iza Lite Trial',
+    tagline: 'Plano descontinuado em 2026-05-27 — substituido por Lite Trial',
     deprecated: true,
     description:
       'Profissionais liberais, solopreneurs e micro-operações validando o canal WhatsApp com IA.',
@@ -689,7 +689,7 @@ export const VOICE_ADDON_DEPRECATED_STRIPE_IDS = {
 // HELPERS
 // ═══════════════════════════════════════════════════════════
 
-export const PLAN_IDS: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
+export const PLAN_IDS: PlanId[] = ['IZA_LITE', 'STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
 
 export function getPlan(id: PlanId): PlanConfig {
   return PLAN_CONFIG[id];
