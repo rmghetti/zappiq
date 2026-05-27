@@ -542,7 +542,7 @@ function TutorialAccessCard({ onOpen, pdfUrl }: { onOpen: () => void; pdfUrl: st
 // ── Modal grande com o tutorial interativo (iframe self-contained) ────────────
 function TutorialModal({ src, pdfUrl, onClose }: { src: string; pdfUrl: string; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[60] bg-black/60 flex flex-col sm:p-4 md:p-6" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex flex-col sm:p-4 md:p-6" role="dialog" aria-modal="true">
       <div className="relative bg-white sm:rounded-2xl overflow-hidden shadow-2xl w-full h-full sm:max-w-6xl sm:mx-auto flex flex-col">
         <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-gray-100 bg-white">
           <span className="text-xs font-medium text-gray-500">Tutorial de ativação · ZappIQ</span>
