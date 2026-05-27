@@ -179,4 +179,135 @@ router.get('/metrics', async (req: Request, res: Response, next: NextFunction) =
   }
 });
 
+/**
+ * GET /api/crm/attribution (CRM Onda 4, PR #221)
+ *
+ * Atribuição fim-a-fim de campanha → venda. Pra cada campanha da org,
+ * agrega o funil completo: sent → reply → contact criado → deal criado →
+ * deal ganho → receita total.
+ *
+ * CAC (Customer Acquisition Cost) estimado: usamos R$ 0,05 por mensagem
+ * enviada (proxy do custo WhatsApp Cloud API + RBM). Quando schema ganhar
+ * Campaign.budgetCents real, trocar pela soma de spend.
+ *
+ * Janela padrão: últimos 90 dias.
+ */
+const ESTIMATED_COST_PER_MSG_BRL = 0.05; // proxy até termos Campaign.budgetCents
+
+router.get('/attribution', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const daysParam = Number(req.query.days);
+    const days = Number.isFinite(daysParam) && daysParam > 0 && daysParam <= 365 ? daysParam : 90;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    // Carrega todas as campanhas da org (sem cutoff — quero contar histórico)
+    const campaigns = await prisma.campaign.findMany({
+      where: { organizationId: orgId },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        status: true,
+        sentCount: true,
+        deliveredCount: true,
+        readCount: true,
+        repliedCount: true,
+        createdAt: true,
+        completedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Carrega contacts e deals atribuídos (com sourceCampaignId) na janela
+    const [contactsAttributed, dealsAttributed] = await Promise.all([
+      prisma.contact.findMany({
+        where: {
+          organizationId: orgId,
+          sourceCampaignId: { not: null },
+          createdAt: { gte: cutoff },
+        },
+        select: { id: true, sourceCampaignId: true },
+      }),
+      prisma.deal.findMany({
+        where: {
+          organizationId: orgId,
+          sourceCampaignId: { not: null },
+          createdAt: { gte: cutoff },
+        },
+        select: { id: true, sourceCampaignId: true, stage: true, value: true, wonAt: true },
+      }),
+    ]);
+
+    // Pra cada campanha, agrega
+    const attribution = campaigns.map((c) => {
+      const cContacts = contactsAttributed.filter((x) => x.sourceCampaignId === c.id);
+      const cDeals = dealsAttributed.filter((x) => x.sourceCampaignId === c.id);
+      const cDealsWon = cDeals.filter((d) => d.stage === 'won');
+      const receitaTotal = cDealsWon.reduce((acc, d) => acc + Number(d.value || 0), 0);
+      const ticketMedio = cDealsWon.length > 0 ? receitaTotal / cDealsWon.length : 0;
+      const cacEstimado = c.sentCount * ESTIMATED_COST_PER_MSG_BRL;
+      const roi = cacEstimado > 0 ? (receitaTotal - cacEstimado) / cacEstimado : 0;
+      const replyRate = c.sentCount > 0 ? c.repliedCount / c.sentCount : 0;
+      const conversionRate = cContacts.length > 0 ? cDealsWon.length / cContacts.length : 0;
+
+      return {
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        status: c.status,
+        createdAt: c.createdAt,
+        // Funil
+        sentCount: c.sentCount,
+        deliveredCount: c.deliveredCount,
+        readCount: c.readCount,
+        repliedCount: c.repliedCount,
+        contactsCreated: cContacts.length,
+        dealsCreated: cDeals.length,
+        dealsWon: cDealsWon.length,
+        // Financeiro
+        receitaTotal,
+        ticketMedio,
+        cacEstimado,
+        roi, // (receita - custo) / custo. Pode ser negativo.
+        // Taxas
+        replyRate, // repliedCount / sentCount
+        conversionRate, // dealsWon / contactsCreated
+      };
+    });
+
+    // KPIs agregados
+    const totalReceita = attribution.reduce((acc, a) => acc + a.receitaTotal, 0);
+    const totalDealsWon = attribution.reduce((acc, a) => acc + a.dealsWon, 0);
+    const totalCAC = attribution.reduce((acc, a) => acc + a.cacEstimado, 0);
+    const totalReplies = attribution.reduce((acc, a) => acc + a.repliedCount, 0);
+    const totalSent = attribution.reduce((acc, a) => acc + a.sentCount, 0);
+    const melhorCampanha = attribution
+      .filter((a) => a.cacEstimado > 0)
+      .sort((a, b) => b.roi - a.roi)[0] || null;
+
+    res.json({
+      windowDays: days,
+      kpisGerais: {
+        totalReceitaAtribuida: totalReceita,
+        totalDealsAtribuidos: totalDealsWon,
+        totalCacEstimado: totalCAC,
+        roiGeral: totalCAC > 0 ? (totalReceita - totalCAC) / totalCAC : 0,
+        replyRateMedio: totalSent > 0 ? totalReplies / totalSent : 0,
+        melhorCampanha: melhorCampanha
+          ? { id: melhorCampanha.id, name: melhorCampanha.name, roi: melhorCampanha.roi }
+          : null,
+        totalCampanhas: attribution.length,
+      },
+      campanhas: attribution,
+      assumptions: {
+        costPerMessageBrl: ESTIMATED_COST_PER_MSG_BRL,
+        note: 'CAC = sentCount × R$ 0,05 (proxy Cloud API). Quando Campaign.budgetCents existir, trocar por spend real.',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
