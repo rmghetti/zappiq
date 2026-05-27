@@ -6,7 +6,7 @@
 // Alinhado com ZappIQ_Modelo_Comercial_2026.docx (v2026.1).
 // ─────────────────────────────────────────────────────────
 
-export type PlanId = 'STARTER' | 'GROWTH' | 'SCALE' | 'BUSINESS' | 'ENTERPRISE';
+export type PlanId = 'IZA_LITE' | 'STARTER' | 'GROWTH' | 'SCALE' | 'BUSINESS' | 'ENTERPRISE';
 
 export interface PlanLimits {
   /** Atendentes humanos simultâneos (-1 = ilimitado) */
@@ -62,6 +62,10 @@ export interface PlanConfig {
   premium: boolean;
   /** Ordem de exibição */
   order: number;
+  /** V4: Trial gratuito em dias (0 = sem trial). Iza Lite usa 14. */
+  trialDays?: number;
+  /** V4: Plano descontinuado — escondido nos cards de venda (UI filtra). */
+  deprecated?: boolean;
   limits: PlanLimits;
   features: PlanFeatures;
   /** Bullet points para a UI (descritivos) */
@@ -74,10 +78,67 @@ export interface PlanConfig {
 // ═══════════════════════════════════════════════════════════
 
 export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
+  IZA_LITE: {
+    id: 'IZA_LITE',
+    name: 'Iza Lite',
+    tagline: 'Comece em 5 minutos — 14 dias gratis pra validar',
+    description:
+      'Trial 14 dias gratuito. Apos isso, R\$ 249,00/mes (ou R\$ 199,20/mes no plano anual). Pensado pra autonomo, solo e PME validando o canal antes de escalar pro Growth.',
+    priceMonthly: 249.00,
+    annualDiscountPercent: 20,
+    highlight: true,
+    premium: false,
+    order: 0,
+    trialDays: 14,
+    limits: {
+      agents: 1,
+      aiMessagesPerMonth: 1500,
+      broadcastsPerMonth: 200,
+      contacts: 1000,
+      flows: 3,
+      whatsappNumbers: 1,
+      knowledgeBaseDocs: 10,
+      logRetentionDays: 90,
+      integrations: 5,
+      customIntegrationHoursPerMonth: 0,
+    },
+    features: {
+      echoCopilot: false,
+      radarInsights: true,
+      radar360: false,
+      ssoSaml: false,
+      apiOpen: false,
+      whiteLabel: false,
+      dedicatedOnboarding: false,
+      dedicatedCsm: false,
+      slaContractual: false,
+      dedicatedInfra: false,
+      soc24x7: false,
+      dpoDirect: false,
+      support: 'email',
+    },
+    bullets: [
+      'TRIAL 14 DIAS GRATIS — apos isso R\$ 249,00/mes',
+      'Anual: R\$ 199,20/mes (economiza 20%)',
+      '1 atendente humano',
+      '1.500 mensagens de IA/mes',
+      '200 disparos (utility/marketing)/mes',
+      '1.000 contatos no CRM',
+      '3 fluxos de automacao (Maestro Inteligente)',
+      '1 numero WhatsApp Business + 1 Instagram Direct',
+      'Base de conhecimento RAG (10 docs)',
+      'Agent Quality (Eval continuo da IA)',
+      'Radar Insights (analytics operacional)',
+      'Suporte por e-mail',
+    ],
+    cta: { label: 'Comecar 14 dias gratis', href: '/cadastro?plan=iza_lite' },
+  },
+
   STARTER: {
     id: 'STARTER',
-    name: 'Starter',
-    tagline: 'Para começar a automatizar',
+    name: 'Starter (legado)',
+    tagline: 'Plano descontinuado em 2026-05-27 — substituido por Iza Lite Trial',
+    deprecated: true,
     description:
       'Profissionais liberais, solopreneurs e micro-operações validando o canal WhatsApp com IA.',
     priceMonthly: 197,
@@ -182,61 +243,69 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
   SCALE: {
     id: 'SCALE',
     name: 'Scale',
-    tagline: 'Para operações em escala',
+    tagline: 'Operação seria com KPI auditavel',
     description:
-      'Redes, franquias e operações multi-time com volume alto e exigência de uptime.',
-    priceMonthly: 997,
+      'Redes, franquias e operacoes multi-time com volume alto, observabilidade avancada, SLA contratual e governanca LGPD madura. Absorve tudo do antigo Business V3.2.',
+    priceMonthly: 1497,
     annualDiscountPercent: 20,
     highlight: false,
     premium: false,
     order: 3,
+    trialDays: 0,
     limits: {
-      agents: 30,
-      aiMessagesPerMonth: 25000,
-      broadcastsPerMonth: 20000,
-      contacts: 50000,
+      agents: 75,
+      aiMessagesPerMonth: 80000,
+      broadcastsPerMonth: 60000,
+      contacts: 200000,
       flows: -1,
-      whatsappNumbers: 5,
-      knowledgeBaseDocs: 200,
-      logRetentionDays: 365,
+      whatsappNumbers: 15,
+      knowledgeBaseDocs: -1,
+      logRetentionDays: 730,
       integrations: -1,
-      customIntegrationHoursPerMonth: 8,
+      customIntegrationHoursPerMonth: 20,
     },
     features: {
       echoCopilot: true,
       radarInsights: true,
-      radar360: false,
-      ssoSaml: false,
+      radar360: true,
+      ssoSaml: true,
       apiOpen: true,
       whiteLabel: true,
       dedicatedOnboarding: true,
-      dedicatedCsm: false,
-      slaContractual: false,
+      dedicatedCsm: true,
+      slaContractual: true,
       dedicatedInfra: false,
       soc24x7: false,
-      dpoDirect: false,
+      dpoDirect: true,
       support: 'priority',
     },
     bullets: [
-      '30 atendentes humanos',
-      '25.000 mensagens de IA/mês',
-      '20.000 disparos/mês',
-      '50.000 contatos no CRM',
-      'Fluxos ilimitados',
-      '5 números WhatsApp Business',
-      'White-label (sua marca no painel)',
-      'Integrações ilimitadas + 8h/mês de integração customizada',
-      'Onboarding dedicado (14 dias)',
-      'Retenção de logs: 12 meses',
-      'Suporte prioritário',
+      '75 atendentes humanos',
+      '80.000 mensagens de IA/mes',
+      '60.000 disparos/mes',
+      '200.000 contatos no CRM',
+      '15 numeros WhatsApp Business',
+      'Base de conhecimento ilimitada',
+      'Radar 360 Observabilidade incluida',
+      'SLA contratual 99,9% com creditos automaticos',
+      'SSO (SAML 2.0 / OIDC) + auditoria LGPD completa',
+      '20h/mes de integracao customizada',
+      'White-label + Customer Success Manager dedicado',
+      'Retencao de logs: 24 meses',
+      'DPO como contato direto + ROP customizado',
+      'Suporte prioritario com tempo de resposta garantido',
+      'Memory Layer Mem0 (em rollout)',
+      'Vision inbound (imagens WA/IG)',
+      'Outcome Beta opt-in (Conversa Convertida)',
     ],
-    cta: { label: 'Começar 14 dias grátis', href: '/cadastro?plan=scale' },
+    cta: { label: 'Falar com especialista', href: '/contato?plan=scale' },
   },
 
   BUSINESS: {
     id: 'BUSINESS',
-    name: 'Business',
-    tagline: 'Para operações críticas com SLA formal',
+    name: 'Business (legado)',
+    tagline: 'Plano descontinuado em 2026-05-27 — funcionalidades absorvidas pelo Scale V4',
+    deprecated: true,
     description:
       'Operações de missão crítica que precisam de SLA contratual, observabilidade avançada e governança LGPD madura — sem migrar para um contrato totalmente customizado.',
     priceMonthly: 1997,
@@ -651,4 +720,26 @@ export function listAddons(): AddonConfig[] {
 
 export function getAddonsForPlan(planId: PlanId): AddonConfig[] {
   return Object.values(ADDONS).filter((a) => a.availableFor.includes(planId));
+}
+
+export function listActivePlans(): PlanConfig[] {
+  return listPlans().filter((p) => !p.deprecated);
+}
+
+export function listLegacyPlans(): PlanConfig[] {
+  return listPlans().filter((p) => p.deprecated);
+}
+
+export function planMonthlyPrice(plan: PlanConfig): number | null {
+  return plan.priceMonthly;
+}
+
+export function planAnnualMonthlyEquivalent(plan: PlanConfig): number | null {
+  if (plan.priceMonthly === null) return null;
+  return Number((plan.priceMonthly * (1 - plan.annualDiscountPercent / 100)).toFixed(2));
+}
+
+export function planAnnualTotal(plan: PlanConfig): number | null {
+  const eq = planAnnualMonthlyEquivalent(plan);
+  return eq === null ? null : Number((eq * 12).toFixed(2));
 }
