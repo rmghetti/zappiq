@@ -93,7 +93,7 @@ export default function BillingPage() {
         </div>
         <div className="flex-1">
           <h3 className="text-sm font-bold text-emerald-900">
-            Iza Lite — 14 dias gratis pra validar
+            Lite — 14 dias gratis pra validar
           </h3>
           <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
             Sem cartao no inicio. Conecta WhatsApp, treina a IA, deixa a Iza atender. Apos 14 dias,

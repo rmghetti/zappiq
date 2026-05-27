@@ -40,7 +40,7 @@ interface FormData {
 // IZA_LITE eh o entry tier com Trial 14d. Default no signup novo.
 // STARTER e BUSINESS deprecated — escondidos pra signup novo.
 const PLAN_OPTIONS: { id: PlanId; label: string; price: string; sub: string; highlight?: boolean }[] = [
-  { id: 'IZA_LITE', label: 'Iza Lite', price: 'R$ 249,90', sub: '14 dias gratis · entrada', highlight: true },
+  { id: 'IZA_LITE', label: 'Lite', price: 'R$ 249,90', sub: '14 dias gratis · entrada', highlight: true },
   { id: 'GROWTH', label: 'Growth', price: 'R$ 497', sub: 'Para crescer' },
   { id: 'SCALE', label: 'Scale', price: 'R$ 1.497', sub: 'Operacao seria com SLA' },
 ];
