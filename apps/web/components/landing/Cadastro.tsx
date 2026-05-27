@@ -36,11 +36,13 @@ interface FormData {
   company: string;
 }
 
+// V4 (2026-05-27): Pricing reorganizado.
+// IZA_LITE eh o entry tier com Trial 14d. Default no signup novo.
+// STARTER e BUSINESS deprecated — escondidos pra signup novo.
 const PLAN_OPTIONS: { id: PlanId; label: string; price: string; sub: string; highlight?: boolean }[] = [
-  { id: 'STARTER', label: 'Starter', price: 'R$ 197', sub: 'Para começar' },
-  { id: 'GROWTH', label: 'Growth', price: 'R$ 497', sub: 'Mais escolhido', highlight: true },
-  { id: 'SCALE', label: 'Scale', price: 'R$ 997', sub: 'Para crescer' },
-  { id: 'BUSINESS', label: 'Business', price: 'R$ 1.997', sub: 'Operação crítica' },
+  { id: 'IZA_LITE', label: 'Iza Lite', price: 'R$ 249,90', sub: '14 dias gratis · entrada', highlight: true },
+  { id: 'GROWTH', label: 'Growth', price: 'R$ 497', sub: 'Para crescer' },
+  { id: 'SCALE', label: 'Scale', price: 'R$ 1.497', sub: 'Operacao seria com SLA' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -53,7 +55,7 @@ export function Cadastro() {
   const [form, setForm] = useState<FormData>({
     name: '',
     email: '',
-    plan: 'GROWTH', // pré-selecionado
+    plan: 'IZA_LITE', // V4: Iza Lite e o entry tier com Trial 14d
     cnpj: '',
     company: '',
   });
