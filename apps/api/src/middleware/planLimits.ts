@@ -3,6 +3,7 @@ import { prisma } from '@zappiq/database';
 import { PLAN_CONFIG, type PlanId, type PlanLimits } from '@zappiq/shared';
 import { cache } from '../services/cloud/index.js';
 import { logger } from '../utils/logger.js';
+import { reportOverageMeterEvent, estimateOverageBrl } from '../services/quotaOverageService.js';
 
 // PR #V4-005.3: migrado de redis direto pra abstração cloud-agnostic (cache).
 // cache.incrby / cache.incrbyfloat / cache.get / cache.expire são fail-soft
@@ -122,6 +123,10 @@ export async function checkLimit(
   reason?: string;
   planId: PlanId;
   isTrialing: boolean;
+  /** True quando autoOverage ativo e estourou plano (permite + cobra). */
+  isOverage?: boolean;
+  /** Quantas msgs deste delta sao overage (pra reportar pro Stripe). */
+  overageDelta?: number;
 }> {
   const { planId, limits, isTrialing } = await getEffectivePlan(orgId);
   const limit = limits[kind];
@@ -133,7 +138,24 @@ export async function checkLimit(
   const current = await getUsage(orgId, kind);
   const wouldBe = current + delta;
 
-  if (wouldBe > limit) {
+  if (wouldBe <= limit) {
+    // Dentro do plano — comportamento normal
+    return {
+      allowed: true,
+      limit,
+      current,
+      remaining: limit - wouldBe,
+      planId,
+      isTrialing,
+    };
+  }
+
+  // ─── ALEM DO LIMITE — decisao de overage ─────────────────────────
+  // Le settings.billing pra decidir se permite cobranca extra ou bloqueia
+  // Apenas aplica logica de overage pra aiMessagesPerMonth nesta onda (1.A).
+  // Outros kinds (broadcasts, contacts, etc.) continuam com block hard.
+
+  if (kind !== 'aiMessagesPerMonth') {
     return {
       allowed: false,
       limit,
@@ -145,13 +167,53 @@ export async function checkLimit(
     };
   }
 
+  const org = (await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { settings: true },
+  })) as any;
+  const billing = (org?.settings as any)?.billing ?? {};
+  const autoOverage: boolean = Boolean(billing.autoOverage);
+  const hardCeilingBrl: number | null = billing.hardCeilingBrl ?? null;
+
+  if (!autoOverage) {
+    return {
+      allowed: false,
+      limit,
+      current,
+      remaining: Math.max(0, limit - current),
+      reason: `Limite do plano ${planId} atingido para ${kind}. autoOverage desativado — ative em /settings/billing pra continuar com cobranca por mensagem excedente.`,
+      planId,
+      isTrialing,
+    };
+  }
+
+  // autoOverage ON — calcula overage e checa hardCeiling
+  const totalOverageMsgs = wouldBe - limit;
+  if (hardCeilingBrl !== null && hardCeilingBrl > 0) {
+    const projectedOverageBrl = estimateOverageBrl(totalOverageMsgs);
+    if (projectedOverageBrl > hardCeilingBrl) {
+      return {
+        allowed: false,
+        limit,
+        current,
+        remaining: 0,
+        reason: `Teto de R$ ${hardCeilingBrl.toFixed(2)}/mes atingido (excedente projetado: R$ ${projectedOverageBrl.toFixed(2)}). Aumente o teto em /settings/billing pra continuar.`,
+        planId,
+        isTrialing,
+      };
+    }
+  }
+
+  // Permite e marca como overage — middleware vai disparar meter_event
   return {
     allowed: true,
     limit,
     current,
-    remaining: limit - wouldBe,
+    remaining: 0,
     planId,
     isTrialing,
+    isOverage: true,
+    overageDelta: delta,
   };
 }
 
@@ -184,8 +246,31 @@ export function enforceLimit(kind: LimitKind, delta = 1) {
         return;
       }
 
-      // Incrementa e segue.
+      // Incrementa o contador local (vale pro proximo check do mesmo ciclo).
       await incrementUsage(orgId, kind, delta);
+
+      // OVERAGE: se permitido por estar acima do plano via autoOverage,
+      // reporta meter_event pro Stripe (fire-and-forget, fail-soft).
+      // Sinaliza no header pro frontend mostrar aviso ao operador.
+      if (check.isOverage && check.overageDelta && check.overageDelta > 0) {
+        res.setHeader('X-Quota-Overage', 'true');
+        reportOverageMeterEvent({ orgId, count: check.overageDelta })
+          .then((r) => {
+            if (r.reported) {
+              logger.info(
+                `[planLimits] overage reportado org=${orgId} count=${check.overageDelta} eventId=${r.meterEventId}`,
+              );
+            } else if (r.skipped !== 'mode_audit_only') {
+              logger.warn(
+                `[planLimits] overage NAO reportado org=${orgId} reason=${r.skipped}`,
+              );
+            }
+          })
+          .catch((err) => {
+            logger.warn(`[planLimits] overage report exception: ${err?.message ?? err}`);
+          });
+      }
+
       next();
     } catch (err: any) {
       logger.error(`[planLimits] enforcement error: ${err.message}`);

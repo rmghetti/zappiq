@@ -68,6 +68,13 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
 
+  // Quota Overage Mode (#147 — Onda 1.A)
+  //   - audit_only (default): bloqueia em 100% (comportamento atual)
+  //   - enforce: respeita settings.billing.autoOverage + hardCeilingBrl
+  //              permite excedente quando opt-in + dispara Stripe meter_event
+  // Flipar via: fly secrets set QUOTA_OVERAGE_MODE=enforce -a zappiq-api
+  QUOTA_OVERAGE_MODE: z.enum(['audit_only', 'enforce']).default('audit_only'),
+
   // Frontend
   NEXT_PUBLIC_APP_URL: z.string().default('http://localhost:3000'),
 
