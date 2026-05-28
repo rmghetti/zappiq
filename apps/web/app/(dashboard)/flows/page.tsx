@@ -995,7 +995,11 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
           {onBack && <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ArrowLeft size={18} /></button>}
           <div>
             <h1 className="text-xl font-bold text-gray-900">Mapa da Operação</h1>
-            <p className="text-xs text-gray-500">Como seus fluxos se interligam, numa visão única. Clique num fluxo pra abrir a cadeia de atividades; arraste conexões entre fluxos.</p>
+            
+        <Link href="/flows/templates" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-full hover:bg-violet-100 mb-4">
+          ✨ Ver 15 templates prontos por vertical
+        </Link>
+        <p className="text-xs text-gray-500">Como seus fluxos se interligam, numa visão única. Clique num fluxo pra abrir a cadeia de atividades; arraste conexões entre fluxos.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

@@ -418,6 +418,41 @@ model Flow {
   @@map("flows")
 }
 
+
+model FlowTemplate {
+  id            String                  @id @default(cuid())
+  name          String
+  description   String
+  vertical      FlowTemplateVertical
+  category      FlowTemplateCategory
+  nodes         Json
+  edges         Json
+  triggerType   FlowTriggerType
+  triggerConfig Json?
+  order         Int                     @default(0)
+  isActive      Boolean                 @default(true)
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@index([vertical])
+  @@index([category])
+  @@map("flow_templates")
+}
+
+enum FlowTemplateVertical {
+  DENTISTA
+  SALAO_BELEZA
+  ACADEMIA
+  PETSHOP
+  ECOMMERCE_MODA
+}
+
+enum FlowTemplateCategory {
+  BOAS_VINDAS_QUALIFICACAO
+  AGENDAMENTO_RECUPERACAO
+  NPS_POS_VENDA
+}
+
 model KnowledgeBase {
   id             String       @id @default(cuid())
   name           String
