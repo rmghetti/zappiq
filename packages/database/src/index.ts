@@ -12,3 +12,6 @@ if (process.env.NODE_ENV !== 'production') {
 
 export * from '@prisma/client';
 export default prisma;
+
+// Templates Maestro V1 (single source of truth)
+export * from './flowTemplatesData';
