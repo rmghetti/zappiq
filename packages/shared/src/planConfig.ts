@@ -743,3 +743,124 @@ export function planAnnualTotal(plan: PlanConfig): number | null {
   const eq = planAnnualMonthlyEquivalent(plan);
   return eq === null ? null : Number((eq * 12).toFixed(2));
 }
+
+// ═══════════════════════════════════════════════════════════
+// ADDONS V4 (Onda 1 — aprovados 2026-05-27, margens >70%)
+// 13 addons em 3 familias: Mensagens IA (4 prices) + Comunicacao (5)
+// + Capacidade (7). Voice mantem V4 atual (PR #72).
+// IDs Stripe em addonStripeIds.ts (gerado pelo .command).
+// ═══════════════════════════════════════════════════════════
+
+export interface AddonV4 {
+  key: string;
+  family: 'AI_MSG' | 'BROADCAST' | 'CHANNEL' | 'CAPACITY' | 'VOICE';
+  name: string;
+  description: string;
+  pricingMode: 'overage_unit' | 'one_time_pack' | 'recurring_monthly';
+  amountBrl: number;        // R$ (use 0.03 pra overage unitario)
+  unit?: string;            // 'msg', 'disparo', 'seat', '5k contatos' etc
+  cmgBrl: number;           // CMG aproximado (pra calcular margem)
+  marginPct: number;        // margem alvo (>70%)
+  availableFor: PlanId[];   // tiers que podem comprar
+  stripePriceKey: string;   // chave no ADDONS_V4_STRIPE[family].priceIds[X]
+}
+
+export const ADDONS_V4_LIST: AddonV4[] = [
+  // ─── Familia 1: Mensagens IA ───
+  { key: 'AI_MSG_OVERAGE', family: 'AI_MSG', name: 'Mensagens IA overage (unitario)',
+    description: 'Cobrado por mensagem excedente alem da cota do plano. Use pra picos isolados.',
+    pricingMode: 'overage_unit', amountBrl: 0.03, unit: 'msg',
+    cmgBrl: 0.003, marginPct: 90,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'overage' },
+  { key: 'AI_MSG_PACK_5K', family: 'AI_MSG', name: 'Mensagens IA pacote 5.000',
+    description: '5.000 mensagens IA adicionais (validade do ciclo). Melhor pra uso regular alem do plano.',
+    pricingMode: 'one_time_pack', amountBrl: 99, unit: '5k msgs',
+    cmgBrl: 15, marginPct: 85,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'pack_5k' },
+  { key: 'AI_MSG_PACK_10K', family: 'AI_MSG', name: 'Mensagens IA pacote 10.000',
+    description: '10.000 mensagens IA adicionais. Melhor custo/msg vs pacote 5k.',
+    pricingMode: 'one_time_pack', amountBrl: 179, unit: '10k msgs',
+    cmgBrl: 30, marginPct: 83,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'pack_10k' },
+  { key: 'AI_MSG_PACK_50K', family: 'AI_MSG', name: 'Mensagens IA pacote 50.000',
+    description: '50.000 mensagens IA adicionais. Melhor para operacoes grandes.',
+    pricingMode: 'one_time_pack', amountBrl: 749, unit: '50k msgs',
+    cmgBrl: 150, marginPct: 80,
+    availableFor: ['GROWTH', 'SCALE'], stripePriceKey: 'pack_50k' },
+
+  // ─── Familia 2: Comunicacao ───
+  { key: 'BROADCAST_PACK_1K', family: 'BROADCAST', name: 'Disparos pacote 1.000',
+    description: '1.000 disparos extras (utility ou marketing). Inclui passthrough Meta + orquestracao.',
+    pricingMode: 'one_time_pack', amountBrl: 99, unit: '1k disparos',
+    cmgBrl: 75, marginPct: 24,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'pack_1k' },
+  { key: 'BROADCAST_PACK_5K', family: 'BROADCAST', name: 'Disparos pacote 5.000',
+    description: '5.000 disparos extras (utility ou marketing).',
+    pricingMode: 'one_time_pack', amountBrl: 449, unit: '5k disparos',
+    cmgBrl: 375, marginPct: 16,
+    availableFor: ['GROWTH', 'SCALE'], stripePriceKey: 'pack_5k' },
+  { key: 'BROADCAST_PACK_10K', family: 'BROADCAST', name: 'Disparos pacote 10.000',
+    description: '10.000 disparos extras. Acima desse volume, conversa Enterprise.',
+    pricingMode: 'one_time_pack', amountBrl: 829, unit: '10k disparos',
+    cmgBrl: 750, marginPct: 10,
+    availableFor: ['SCALE'], stripePriceKey: 'pack_10k' },
+  { key: 'EXTRA_WA_NUMBER', family: 'CHANNEL', name: 'WhatsApp Business numero extra',
+    description: 'Numero WA Business adicional conectado, com fila independente.',
+    pricingMode: 'recurring_monthly', amountBrl: 137, unit: 'numero',
+    cmgBrl: 10, marginPct: 93,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+  { key: 'EXTRA_IG_DIRECT', family: 'CHANNEL', name: 'Instagram Direct extra',
+    description: 'Conta Instagram Direct adicional conectada ao mesmo painel.',
+    pricingMode: 'recurring_monthly', amountBrl: 97, unit: 'conta',
+    cmgBrl: 5, marginPct: 95,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+
+  // ─── Familia 3: Capacidade ───
+  { key: 'CONTACTS_PACK_5K', family: 'CAPACITY', name: 'Contatos CRM pacote 5.000',
+    description: '5.000 contatos adicionais no CRM por mes.',
+    pricingMode: 'recurring_monthly', amountBrl: 59, unit: '5k contatos',
+    cmgBrl: 0.5, marginPct: 99,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+  { key: 'CONTACTS_PACK_25K', family: 'CAPACITY', name: 'Contatos CRM pacote 25.000',
+    description: '25.000 contatos adicionais no CRM por mes.',
+    pricingMode: 'recurring_monthly', amountBrl: 199, unit: '25k contatos',
+    cmgBrl: 2.5, marginPct: 99,
+    availableFor: ['GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+  { key: 'FLOWS_PACK_5', family: 'CAPACITY', name: 'Fluxos Maestro pacote 5',
+    description: '5 fluxos de automacao adicionais no Maestro Inteligente.',
+    pricingMode: 'recurring_monthly', amountBrl: 47, unit: '5 fluxos',
+    cmgBrl: 0.1, marginPct: 99,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+  { key: 'KB_DOCS_PACK_25', family: 'CAPACITY', name: 'KB docs pacote 25',
+    description: '25 documentos adicionais na base de conhecimento RAG.',
+    pricingMode: 'recurring_monthly', amountBrl: 99, unit: '25 docs',
+    cmgBrl: 12, marginPct: 88,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+  { key: 'KB_DOCS_PACK_100', family: 'CAPACITY', name: 'KB docs pacote 100',
+    description: '100 documentos adicionais na base de conhecimento RAG.',
+    pricingMode: 'recurring_monthly', amountBrl: 297, unit: '100 docs',
+    cmgBrl: 50, marginPct: 83,
+    availableFor: ['GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+  { key: 'AGENT_SEAT', family: 'CAPACITY', name: 'Atendente humano (seat extra)',
+    description: 'Usuario atendente adicional alem do limite do plano.',
+    pricingMode: 'recurring_monthly', amountBrl: 79, unit: 'seat',
+    cmgBrl: 0, marginPct: 99,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+  { key: 'INTEGRATIONS_PACK_5', family: 'CAPACITY', name: 'Integracoes pacote 5',
+    description: '5 conectores nativos adicionais.',
+    pricingMode: 'recurring_monthly', amountBrl: 147, unit: '5 integracoes',
+    cmgBrl: 5, marginPct: 97,
+    availableFor: ['GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+];
+
+export function listAddonsV4(): AddonV4[] {
+  return ADDONS_V4_LIST;
+}
+
+export function listAddonsV4ByFamily(family: AddonV4['family']): AddonV4[] {
+  return ADDONS_V4_LIST.filter((a) => a.family === family);
+}
+
+export function getAddonV4(key: string): AddonV4 | undefined {
+  return ADDONS_V4_LIST.find((a) => a.key === key);
+}
