@@ -60,6 +60,7 @@ import { PLAN_CONFIG, type PlanConfig, type PlanId } from '@zappiq/shared';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import redis from '../utils/redis.js';
+import { dispatchMultiChannelQuotaAlert, type QuotaAlertThreshold } from './quotaAlertsService.js';
 import {
   sendSlackAlert,
   buildHeaderBlock,
@@ -111,7 +112,7 @@ const RECONCIL_TTL_SECONDS = 60 * 24 * 3600; // 60 dias
 
 // Notify thresholds em ordem decrescente — checamos do mais crítico pro mais leve.
 // Cada threshold tem um field correspondente no hash Redis pra idempotência.
-const NOTIFY_THRESHOLDS = [100, 80, 50] as const;
+const NOTIFY_THRESHOLDS = [100, 95, 90, 80, 70] as const;
 type NotifyThreshold = (typeof NOTIFY_THRESHOLDS)[number];
 
 function thresholdField(threshold: NotifyThreshold): string {
@@ -254,7 +255,10 @@ function actionLabel(action: ReconcileDecision['reconciliationAction']): string 
 
 function emojiForThreshold(t: NotifyThreshold): string {
   if (t === 100) return ':rotating_light:';
+  if (t === 95) return ':rotating_light:';
+  if (t === 90) return ':warning:';
   if (t === 80) return ':warning:';
+  if (t === 70) return ':bell:';
   return ':bell:';
 }
 
@@ -408,6 +412,24 @@ export async function reconcileOrg(
 
         if (slackSent) {
           await redis.hset(key, { [field]: new Date().toISOString() });
+        }
+
+        // Onda 1.B — dispatch multi-canal (email + WA cadastro do admin)
+        // Sequencial pra nao perder log; fail-soft via try interno.
+        try {
+          await dispatchMultiChannelQuotaAlert({
+            orgId,
+            orgName: org.name,
+            threshold: decision.thresholdReached as QuotaAlertThreshold,
+            current: actual,
+            limit: planLimit,
+            usagePercent,
+            planId: org.plan,
+            reconcilAction: decision.reconciliationAction,
+            overageBrlCents: decision.estimatedOverageBrlCents,
+          });
+        } catch (err: any) {
+          logger.warn(`[UsageReconcil] multi-channel dispatch falhou org=${orgId}: ${err?.message}`);
         }
       }
     }
