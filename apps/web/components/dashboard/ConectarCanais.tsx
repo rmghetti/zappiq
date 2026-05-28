@@ -82,6 +82,7 @@ export default function ConectarCanais() {
 
   // Embedded Signup (1 clique): estado de conexão + sessionInfo capturado da Meta.
   const [waConnecting, setWaConnecting] = useState(false);
+  const [igConnecting, setIgConnecting] = useState(false);
   const sessionInfoRef = useRef<{ wabaId?: string; phoneNumberId?: string }>({});
 
   // Carrega o SDK do Facebook (1x) e escuta o sessionInfo do Embedded Signup.
@@ -251,6 +252,52 @@ export default function ConectarCanais() {
     );
   }, [load]);
 
+  // Conectar Instagram em 1 clique (FB Login for Business pra IG).
+  // Reusa o mesmo SDK do FB; apenas o config_id muda pra que a Meta saiba
+  // que o popup eh pra IG Messaging (instagram_business_manage_messages).
+  // Se META_IG_CONFIG_ID nao estiver setado, mostra mensagem pra CEO completar
+  // setup no painel Meta.
+  const launchInstagramSignup = useCallback(() => {
+    const igConfigId = (process.env.NEXT_PUBLIC_META_IG_CONFIG_ID || '').trim();
+    if (!igConfigId) {
+      setError('Conector Instagram em configuracao pelo time. Use o modo manual abaixo por enquanto.');
+      return;
+    }
+    const w = window as any;
+    if (!w.FB) {
+      setError('Carregando o conector da Meta… aguarde alguns segundos e tente de novo.');
+      return;
+    }
+    setError(null);
+    setOkMsg(null);
+    w.FB.login(
+      (response: any) => {
+        const code = response?.authResponse?.code;
+        if (!code) {
+          setError('Conexao com Instagram cancelada ou nao autorizada. Use o modo manual abaixo.');
+          return;
+        }
+        setIgConnecting(true);
+        api
+          .post('/api/embedded-signup/instagram', { code })
+          .then(async () => {
+            await load();
+            setOkMsg('Instagram conectado! Seu agente ja pode atender pelo Direct.');
+          })
+          .catch((e: any) => {
+            setError(e?.message || 'Nao consegui concluir a conexao automatica. Use o modo manual abaixo.');
+          })
+          .finally(() => setIgConnecting(false));
+      },
+      {
+        config_id: igConfigId,
+        response_type: 'code',
+        override_default_response_type: true,
+        extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+      },
+    );
+  }, [load]);
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-gray-500 p-8 justify-center">
@@ -341,7 +388,30 @@ export default function ConectarCanais() {
         </div>
       )}
 
-      {/* Formulário WhatsApp (manual / alternativa ao 1 clique) */}
+      
+      {/* Conectar Instagram em 1 clique (Embedded Signup) — acima do manual */}
+      {wantIg && (
+        <div className="rounded-xl border border-pink-200 bg-pink-50/60 p-5 flex flex-col sm:flex-row sm:items-center gap-4 mt-4">
+          <div className="w-11 h-11 rounded-lg bg-pink-100 flex items-center justify-center shrink-0">
+            <Instagram size={22} className="text-pink-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-900">Conectar Instagram em 1 clique</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Conecte sua conta Instagram Business pelo fluxo oficial da Meta — sem copiar IDs nem tokens.
+            </p>
+          </div>
+          <button
+            onClick={launchInstagramSignup}
+            disabled={igConnecting}
+            className="px-4 py-2.5 bg-pink-600 text-white rounded-lg text-sm font-semibold hover:bg-pink-700 disabled:opacity-50 flex items-center gap-2 whitespace-nowrap shrink-0"
+          >
+            {igConnecting ? <Loader2 size={15} className="animate-spin" /> : <Instagram size={15} />}
+            {igConnecting ? 'Conectando…' : 'Conectar com a Meta'}
+          </button>
+        </div>
+      )}
+{/* Formulário WhatsApp (manual / alternativa ao 1 clique) */}
       {wantWa && (
         <ChannelForm
           title="WhatsApp Business"
