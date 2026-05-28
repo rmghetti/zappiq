@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Check, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Loader2, Info } from 'lucide-react';
 import { Logo } from '../../components/Logo';
 import { formatPhone } from '../../lib/masks';
+import { QuotaBehaviorStep } from '../../components/onboarding/QuotaBehaviorStep';
+
 import {
   GLOBAL_SURVEY_BLOCKS as RAW_GLOBAL_BLOCKS,
   SEGMENTS as RAW_SEGMENTS,
