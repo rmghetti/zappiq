@@ -70,7 +70,7 @@ const CERTIFICATIONS = [
 
 export function TrustAndCompliance() {
   return (
-    <section id="seguranca" className="py-20 lg:py-28 bg-bg">
+    <section id="segurança" className="py-20 lg:py-28 bg-bg">
       <div className="zappiq-wrap">
         <div className="text-center max-w-3xl mx-auto mb-14">
           <span className="eyebrow">Segurança · Conformidade · Confiança</span>

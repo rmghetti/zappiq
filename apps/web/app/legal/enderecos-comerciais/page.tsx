@@ -55,7 +55,7 @@ export default function EnderecosComerciaisPage() {
         <h2>5. Procurador para notificações processuais</h2>
         <p>
           Notificações judiciais e extrajudiciais podem ser endereçadas ao endereço fiscal acima ou
-          por e-mail a <a href="mailto:juridico@zappiq.com.br">juridico@zappiq.com.br</a>, observando
+          por e-mail a <a href="mailto:jurídico@zappiq.com.br">jurídico@zappiq.com.br</a>, observando
           que a eficácia citatória por e-mail depende de aceite expresso nos termos aplicáveis.
         </p>
 

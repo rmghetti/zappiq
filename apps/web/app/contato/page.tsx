@@ -39,7 +39,7 @@ const CHANNELS = [
   },
   {
     title: 'Jurídico',
-    email: 'juridico@zappiq.com.br',
+    email: 'jurídico@zappiq.com.br',
     desc: 'Contratos, notificações extrajudiciais, propriedade intelectual.',
   },
 ];

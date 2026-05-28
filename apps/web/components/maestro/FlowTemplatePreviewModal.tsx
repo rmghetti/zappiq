@@ -34,7 +34,7 @@ const NODE_TYPE_META: Record<string, { color: string; icon: string; label: strin
   message:        { color: 'bg-blue-50 text-blue-700 border-blue-200', icon: '>', label: 'Mensagem' },
   ai_node:        { color: 'bg-violet-50 text-violet-700 border-violet-200', icon: '~', label: 'Iza responde (IA)' },
   condition:      { color: 'bg-amber-50 text-amber-700 border-amber-200', icon: '?', label: 'Condicao' },
-  action:         { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: '+', label: 'Acao' },
+  action:         { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: '+', label: 'Ação' },
   human_handoff:  { color: 'bg-orange-50 text-orange-700 border-orange-200', icon: '@', label: 'Humano assume' },
 };
 
@@ -166,7 +166,7 @@ export function FlowTemplatePreviewModal({
                         <p className="text-xs text-slate-600">Intent: {node.data.intent}</p>
                       )}
                       {node.data.action && (
-                        <p className="text-xs text-slate-600">Acao: <code className="bg-white/60 px-1 rounded">{node.data.action}</code></p>
+                        <p className="text-xs text-slate-600">Ação: <code className="bg-white/60 px-1 rounded">{node.data.action}</code></p>
                       )}
                     </div>
                   </div>
@@ -179,7 +179,7 @@ export function FlowTemplatePreviewModal({
         {/* Footer com CTA */}
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
           <p className="text-xs text-slate-500">
-            Ao usar, o template e copiado pro seu Maestro como rascunho. Voce pode editar antes de publicar.
+            Ao usar, o template e copiado pro seu Maestro como rascunho. Você pode editar antes de publicar.
           </p>
           <div className="flex gap-2">
             <button onClick={onClose}

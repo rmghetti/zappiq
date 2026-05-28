@@ -2,8 +2,8 @@
  * app/page.tsx — root dispatcher (V5.3)
  * --------------------------------------------------------------------------
  * Renderiza PrelaunchPage ou LandingPage com base na env LAUNCH_MODE.
- *   LAUNCH_MODE=prelaunch (default ate 04/05/2026) → PrelaunchPage
- *   LAUNCH_MODE=live (apos lancamento)             → LandingPage
+ *   LAUNCH_MODE=prelaunch (default até 04/05/2026) → PrelaunchPage
+ *   LAUNCH_MODE=live (após lancamento)             → LandingPage
  *
  * /home segue sempre renderizando LandingPage (apps/web/app/home/page.tsx)
  * pra permitir preview da home V5 durante o periodo de teaser.

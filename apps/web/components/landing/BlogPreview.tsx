@@ -21,7 +21,7 @@ const RECENT_ARTICLES = [
     readingTime: '7 min',
   },
   {
-    slug: 'guia-automacao-whatsapp-clinicas-2026',
+    slug: 'guia-automação-whatsapp-clínicas-2026',
     title: 'Guia completo de automação WhatsApp para clínicas em 2026',
     excerpt:
       'Tudo que você precisa saber para automatizar agendamentos, confirmações e atendimento na sua clínica.',

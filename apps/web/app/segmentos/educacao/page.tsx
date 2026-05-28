@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 /* PLACEHOLDER: substituir por dados reais do segmento educação */
 const data: SegmentPageData = {
-  slug: 'educacao',
+  slug: 'educação',
   name: 'Educação',
   businessType: 'Escolas e Cursos',
   heroTitle: 'ZappIQ para Educação: Automatize matrículas e comunicação escolar',

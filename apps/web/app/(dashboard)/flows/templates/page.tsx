@@ -5,7 +5,7 @@
  *
  * Detecta vertical via organization.settings.niche e pre-filtra os templates
  * relevantes. Quem ainda nao tem template pronto vê CTA pro Maestro Inteligente.
- * Cards ricos: descricao, o que faz, indicado pra, metricas esperadas, complex,
+ * Cards ricos: descrição, o que faz, indicado pra, metricas esperadas, complex,
  * tempo de setup. Modal de preview detalhado antes de "Usar".
  * ════════════════════════════════════════════════════════════════════════════ */
 
@@ -116,7 +116,7 @@ export default function TemplatesPage() {
             Biblioteca de Templates
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Jornadas prontas, testadas em producao. Clique pra pre-visualizar; um clique copia pro seu Maestro como rascunho.
+            Jornadas prontas, testadas em produção. Clique pra pre-visualizar; um clique copia pro seu Maestro como rascunho.
           </p>
         </div>
       </div>
@@ -222,7 +222,7 @@ export default function TemplatesPage() {
       ) : visibleTemplates.length === 0 ? (
         <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
           <Sparkles size={40} className="text-slate-300 mx-auto mb-4" />
-          <h3 className="text-base font-semibold text-slate-700 mb-2">Nenhum template pra essa selecao</h3>
+          <h3 className="text-base font-semibold text-slate-700 mb-2">Nenhum template pra essa seleção</h3>
           <p className="text-sm text-slate-500 mb-5 max-w-md mx-auto">
             Tente ver todas as verticais ou peca pra Iza montar uma jornada personalizada do zero.
           </p>

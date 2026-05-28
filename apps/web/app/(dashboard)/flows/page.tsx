@@ -693,7 +693,7 @@ type FlowDraft = {
 // MAESTRO INTELIGENTE — objetivos oferecidos no wizard (chave = goal do backend).
 const OBJECTIVE_OPTIONS: { goal: string; label: string; hint: string }[] = [
   { goal: 'atendimento', label: 'Atendimento & dúvidas', hint: 'Recebe o cliente e responde com o conhecimento do negócio.' },
-  { goal: 'qualificacao', label: 'Qualificação de leads', hint: 'Faz perguntas-chave pra entender necessidade e fit do lead.' },
+  { goal: 'qualificação', label: 'Qualificação de leads', hint: 'Faz perguntas-chave pra entender necessidade e fit do lead.' },
   { goal: 'vendas', label: 'Vendas', hint: 'Conduz a compra, trata objeções e leva ao fechamento.' },
   { goal: 'agendamento', label: 'Agendamento', hint: 'Coleta serviço e melhor horário e confirma.' },
   { goal: 'faq', label: 'Tira-dúvidas (FAQ)', hint: 'Responde perguntas frequentes na base de conhecimento.' },
@@ -1436,7 +1436,7 @@ export default function FlowsPage() {
                       <span>
                         <span className="text-sm font-medium text-gray-900">Quero um especialista por objetivo</span>
                         <span className="block text-xs text-gray-500 mt-0.5">
-                          O Maestro monta <strong>um fluxo dedicado pra cada objetivo</strong> (ex.: um pra agendamento, outro pra dúvidas). Vantagem: cada fluxo fica mais focado e preciso. Você publica um por vez. Desmarcado, ele monta um único fluxo no objetivo principal.
+                          O Maestro monta <strong>um fluxo dedicado pra cada objetivo</strong> (ex.: um pra agendamento, outro pra dúvidas). Vantagem: cada fluxo fica mais focado e preciso. Você pública um por vez. Desmarcado, ele monta um único fluxo no objetivo principal.
                         </span>
                       </span>
                     </label>

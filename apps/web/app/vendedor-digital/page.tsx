@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /vendedor-digital — Landing publica do manifesto V4
+ * /vendedor-digital — Landing pública do manifesto V4
  *
  * Hero forte + 6 cases mensuraveis (placeholders editaveis) + calculadora ROI
  * (reusa componente existente) + CTA Lite trial.
@@ -18,15 +18,15 @@ import { ROICalculator } from '@/components/landing/ROICalculator';
 const CASES = [
   {
     setor: 'Imobiliario',
-    cliente: 'Felix Imoveis',
+    cliente: 'Felix Imóveis',
     metric1: { label: 'Leads qualificados/semana', value: '47', change: '+340%' },
     metric2: { label: 'Tempo medio 1a resposta', value: '12s', change: '-99%' },
     quote: 'Substituimos 3 SDRs por uma Iza que nunca dorme. O melhor: ela qualifica antes de passar pro vendedor.',
     author: 'Felix, CEO',
   },
   {
-    setor: 'Saude',
-    cliente: 'Sorriso & Cia (clinica odontologica)',
+    setor: 'Saúde',
+    cliente: 'Sorriso & Cia (clínica odontologica)',
     metric1: { label: 'Agendamentos/mes via Iza', value: '184', change: '+220%' },
     metric2: { label: 'No-show reduzido', value: '8%', change: '-65%' },
     quote: 'A Iza confirma consulta no dia anterior, reagenda quando precisa. Recepcao foca em acolher quem ja chegou.',
@@ -49,11 +49,11 @@ const CASES = [
     author: 'Anita, fundadora',
   },
   {
-    setor: 'Educacao',
+    setor: 'Educação',
     cliente: 'Escola Aprende+',
     metric1: { label: 'Matriculas confirmadas/mes', value: '63', change: '+400%' },
     metric2: { label: 'Custo por lead qualificado', value: 'R$ 12', change: '-78%' },
-    quote: 'A Iza tira duvida de pais 24/7. Quando vai pro humano, o lead ja esta quase fechando.',
+    quote: 'A Iza tira dúvida de pais 24/7. Quando vai pro humano, o lead ja esta quase fechando.',
     author: 'Direcao Pedagogica',
   },
   {
@@ -82,7 +82,7 @@ export default function VendedorDigitalPage() {
               <span className="text-grad">O comeco do vendedor digital.</span>
             </h1>
             <p className="text-[18px] lg:text-[20px] text-muted leading-[1.5] mb-10 max-w-3xl mx-auto">
-              Em 2026, responder rapido nao basta mais. Os melhores agentes vendem, qualificam, agendam e fecham —
+              Em 2026, responder rápido nao basta mais. Os melhores agentes vendem, qualificam, agendam e fecham —
               com KPI auditavel e <strong className="text-ink">pricing opcional por resultado</strong>.
               A Iza ja faz isso pra centenas de PMEs brasileiras.
             </p>
@@ -111,9 +111,9 @@ export default function VendedorDigitalPage() {
       <section className="py-16 bg-white border-t border-line">
         <div className="zappiq-wrap">
           <div className="text-center mb-12">
-            <span className="eyebrow">3 mudancas que separam chatbot de vendedor digital</span>
+            <span className="eyebrow">3 mudanças que separam chatbot de vendedor digital</span>
             <h2 className="text-[36px] lg:text-[44px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mt-3">
-              Voce mede o que importa. <span className="text-grad">Nao o que enche relatorio.</span>
+              Você mede o que importa. <span className="text-grad">Nao o que enche relatório.</span>
             </h2>
           </div>
           <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
@@ -121,7 +121,7 @@ export default function VendedorDigitalPage() {
               {
                 icon: <Target size={22} />,
                 title: 'Qualifica antes de passar',
-                desc: 'A Iza nao so responde — ela faz BANT (orcamento, autoridade, necessidade, prazo) e marca lead score 0-100. Vendedor humano so atende quem ja esta proximo de fechar.',
+                desc: 'A Iza nao so responde — ela faz BANT (orcamento, autoridade, necessidade, prazo) e marca lead score 0-100. Vendedor humano so atende quem ja esta próximo de fechar.',
                 color: 'text-primary-600 bg-primary-50',
               },
               {
@@ -153,7 +153,7 @@ export default function VendedorDigitalPage() {
       <section className="py-16 bg-bg">
         <div className="zappiq-wrap">
           <div className="text-center mb-12">
-            <span className="eyebrow">6 casos reais · numeros auditados</span>
+            <span className="eyebrow">6 casos reais · números auditados</span>
             <h2 className="text-[36px] lg:text-[44px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mt-3">
               Empresas brasileiras que <span className="text-grad">trocaram chatbot por vendedor digital.</span>
             </h2>
@@ -199,13 +199,13 @@ export default function VendedorDigitalPage() {
       <section className="py-16 bg-white border-t border-line">
         <div className="zappiq-wrap">
           <div className="text-center mb-10">
-            <span className="eyebrow">Calculadora · seus numeros · resultado real</span>
+            <span className="eyebrow">Calculadora · seus números · resultado real</span>
             <h2 className="text-[36px] lg:text-[44px] font-medium text-ink leading-[1.05] tracking-[-0.03em] mt-3">
-              Quanto voce ganha com{' '}
+              Quanto você ganha com{' '}
               <span className="text-grad">um vendedor digital de verdade?</span>
             </h2>
             <p className="text-[15px] text-muted mt-3 max-w-2xl mx-auto">
-              Insira seus numeros atuais. A calculadora mostra payback, ROI mensal e plano ideal.
+              Insira seus números atuais. A calculadora mostra payback, ROI mensal e plano ideal.
             </p>
           </div>
           <ROICalculator />
@@ -219,7 +219,7 @@ export default function VendedorDigitalPage() {
             Comece a vender com IA em 5 minutos.
           </h2>
           <p className="text-[16px] text-white/85 leading-[1.5] mb-8 max-w-2xl mx-auto">
-            14 dias gratis no Lite · R$ 247/mes apos · sem cartao no inicio · cancele quando quiser.
+            14 dias gratis no Lite · R$ 247/mes após · sem cartao no início · cancele quando quiser.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
             <Link

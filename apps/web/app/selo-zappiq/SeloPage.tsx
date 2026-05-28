@@ -97,10 +97,10 @@ function ZappIQBadge({ size = 200 }: { size?: number }) {
  * e B-02), exibimos segmentos representativos — zero nome fictício de cliente
  * associado a dado mensurável. Quando logos reais chegarem, preencher. */
 const CERTIFIED_COMPANIES = [
-  { name: 'Clínica de Saúde (beta)', segment: 'Saude', initials: 'CS' },
+  { name: 'Clínica de Saúde (beta)', segment: 'Saúde', initials: 'CS' },
   { name: 'Varejo de Moda (beta)', segment: 'Varejo', initials: 'VM' },
   { name: 'Oficina Automotiva (beta)', segment: 'Automotivo', initials: 'OA' },
-  { name: 'Escola Particular (beta)', segment: 'Educacao', initials: 'EP' },
+  { name: 'Escola Particular (beta)', segment: 'Educação', initials: 'EP' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -116,7 +116,7 @@ const STEPS = [
   {
     icon: <Star size={28} />,
     title: 'Alcance CSAT acima de 4.5',
-    description: 'Mantenha uma nota media de satisfacao acima de 4.5 por pelo menos 30 dias consecutivos.',
+    description: 'Mantenha uma nota media de satisfação acima de 4.5 por pelo menos 30 dias consecutivos.',
   },
   {
     icon: <BadgeCheck size={28} />,
@@ -153,11 +153,11 @@ export function SeloPage() {
           </div>
           <div className="flex-1 text-center lg:text-left">
             <h2 className="font-display text-2xl font-bold text-gray-900 mb-4">
-              Uma marca de confianca para seu negocio
+              Uma marca de confiança para seu negocio
             </h2>
             <p className="text-gray-500 leading-relaxed mb-4">
               O Selo ZappIQ certifica que sua empresa oferece atendimento de excelencia via WhatsApp.
-              Clientes que veem o selo tem 3x mais confianca na hora de comprar ou agendar.
+              Clientes que veem o selo tem 3x mais confiança na hora de comprar ou agendar.
             </p>
             <ul className="text-sm text-gray-600 space-y-2">
               <li className="flex items-center gap-2">
@@ -166,7 +166,7 @@ export function SeloPage() {
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-xs font-bold">✓</span>
-                Renovacao automatica enquanto manter CSAT acima de 4.5
+                Renovacao automática enquanto manter CSAT acima de 4.5
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-xs font-bold">✓</span>

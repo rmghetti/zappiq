@@ -6,7 +6,7 @@ import { Send, ArrowRight, MessageCircle, Bot } from 'lucide-react';
 import { PublicLayout } from '../../components/landing/PublicLayout';
 
 /* ------------------------------------------------------------------ */
-/* Cenarios de demonstracao                                            */
+/* Cenarios de demonstração                                            */
 /* ------------------------------------------------------------------ */
 
 type Scenario = {
@@ -20,14 +20,14 @@ type Scenario = {
 
 const SCENARIOS: Scenario[] = [
   {
-    id: 'clinica',
-    label: 'Sou uma Clinica',
+    id: 'clínica',
+    label: 'Sou uma Clínica',
     icon: '🏥',
-    greeting: 'Ola! Bem-vindo a sua clinica. Sou a assistente virtual treinada com seu fluxo. Como posso ajudar voce hoje?',
+    greeting: 'Ola! Bem-vindo a sua clínica. Sou a assistente virtual treinada com seu fluxo. Como posso ajudar você hoje?',
     pairs: [
       {
         keywords: ['agendar', 'consulta', 'marcar'],
-        response: 'Claro! Para qual especialidade? Temos Dermatologia, Cardiologia e Clinica Geral. Escolha abaixo ou digite.',
+        response: 'Claro! Para qual especialidade? Temos Dermatologia, Cardiologia e Clínica Geral. Escolha abaixo ou digite.',
       },
       {
         keywords: ['horario', 'funcionamento', 'aberto', 'abre', 'fecha'],
@@ -35,22 +35,22 @@ const SCENARIOS: Scenario[] = [
       },
       {
         keywords: ['preco', 'valor', 'quanto custa', 'custo'],
-        response: 'Consulta particular: R$250. Aceitamos Unimed, Bradesco Saude e SulAmerica. Deseja agendar?',
+        response: 'Consulta particular: R$250. Aceitamos Unimed, Bradesco Saúde e SulAmerica. Deseja agendar?',
       },
       {
         keywords: ['convenio', 'plano', 'unimed', 'bradesco', 'sulamerica'],
-        response: 'Trabalhamos com Unimed, Bradesco Saude, SulAmerica e Porto Seguro. Qual e o seu?',
+        response: 'Trabalhamos com Unimed, Bradesco Saúde, SulAmerica e Porto Seguro. Qual e o seu?',
       },
       {
-        keywords: ['endereco', 'localizacao', 'onde fica', 'mapa', 'maps'],
+        keywords: ['endereco', 'localização', 'onde fica', 'mapa', 'maps'],
         response: 'Estamos na Av. Paulista, 1500 - Conj. 304, Sao Paulo-SP. Quer que eu envie no Maps?',
       },
       {
         keywords: ['exame', 'resultado'],
-        response: 'Posso verificar o status do seu exame. Por favor, me informe seu CPF ou numero do protocolo.',
+        response: 'Posso verificar o status do seu exame. Por favor, me informe seu CPF ou número do protocolo.',
       },
     ],
-    fallback: 'Entendi! Posso ajudar com agendamento, horarios, valores ou localizacao. O que prefere?',
+    fallback: 'Entendi! Posso ajudar com agendamento, horarios, valores ou localização. O que prefere?',
   },
   {
     id: 'ecommerce',
@@ -60,11 +60,11 @@ const SCENARIOS: Scenario[] = [
     pairs: [
       {
         keywords: ['pedido', 'rastreio', 'rastrear', 'entrega', 'status'],
-        response: 'Me informe o numero do pedido e vou verificar o status em tempo real para voce!',
+        response: 'Me informe o número do pedido e vou verificar o status em tempo real para você!',
       },
       {
-        keywords: ['troca', 'devolver', 'devolucao', 'trocar'],
-        response: 'Voce tem ate 30 dias para troca gratis! Me envie o numero do pedido e o motivo, e ja inicio o processo.',
+        keywords: ['troca', 'devolver', 'devolução', 'trocar'],
+        response: 'Você tem até 30 dias para troca gratis! Me envie o número do pedido e o motivo, e ja início o processo.',
       },
       {
         keywords: ['frete', 'entrega', 'prazo'],
@@ -72,51 +72,51 @@ const SCENARIOS: Scenario[] = [
       },
       {
         keywords: ['tamanho', 'medida', 'tabela'],
-        response: 'Temos P, M, G e GG. Posso enviar a tabela de medidas do produto que voce esta vendo. Qual peca?',
+        response: 'Temos P, M, G e GG. Posso enviar a tabela de medidas do produto que você esta vendo. Qual peca?',
       },
       {
-        keywords: ['cupom', 'desconto', 'promocao', 'oferta'],
-        response: 'Voce tem sorte! Use o cupom PRIMEIRA10 para 10% off na primeira compra. Valido ate o fim do mes!',
+        keywords: ['cupom', 'desconto', 'promoção', 'oferta'],
+        response: 'Você tem sorte! Use o cupom PRIMEIRA10 para 10% off na primeira compra. Valido até o fim do mes!',
       },
       {
         keywords: ['pagamento', 'pagar', 'pix', 'cartao', 'parcela'],
-        response: 'Aceitamos PIX (5% off), cartao em ate 6x sem juros e boleto. Qual prefere?',
+        response: 'Aceitamos PIX (5% off), cartao em até 6x sem juros e boleto. Qual prefere?',
       },
     ],
-    fallback: 'Posso ajudar com pedidos, trocas, frete, tamanhos ou promocoes. O que voce precisa?',
+    fallback: 'Posso ajudar com pedidos, trocas, frete, tamanhos ou promoções. O que você precisa?',
   },
   {
     id: 'b2b',
     label: 'Sou uma Empresa B2B',
     icon: '🏢',
-    greeting: 'Ola! Bem-vindo a Nexus Consultoria. Sou a assistente virtual. Posso ajudar com informacoes sobre nossos servicos!',
+    greeting: 'Ola! Bem-vindo a Nexus Consultoria. Sou a assistente virtual. Posso ajudar com informações sobre nossos servicos!',
     pairs: [
       {
-        keywords: ['servico', 'solucao', 'produto', 'oferecem'],
-        response: 'Oferecemos consultoria em transformacao digital, automacao de processos e inteligencia de dados. Qual area mais te interessa?',
+        keywords: ['servico', 'solução', 'produto', 'oferecem'],
+        response: 'Oferecemos consultoria em transformação digital, automação de processos e inteligência de dados. Qual area mais te interessa?',
       },
       {
         keywords: ['preco', 'valor', 'orcamento', 'proposta', 'investimento'],
         response: 'Os projetos partem de R$5.000/mes. Posso agendar uma call com nosso consultor para montar uma proposta personalizada. Que tal?',
       },
       {
-        keywords: ['agendar', 'reuniao', 'call', 'conversar'],
-        response: 'Perfeito! Tenho horarios disponiveis amanha as 10h, 14h ou 16h. Qual funciona melhor para voce?',
+        keywords: ['agendar', 'reunião', 'call', 'conversar'],
+        response: 'Perfeito! Tenho horarios disponíveis amanha as 10h, 14h ou 16h. Qual funciona melhor para você?',
       },
       {
-        keywords: ['case', 'resultado', 'cliente', 'referencia'],
-        response: 'Temos cases com +40% de eficiencia e -35% de custo operacional. Posso enviar nosso portfolio com resultados detalhados!',
+        keywords: ['case', 'resultado', 'cliente', 'referência'],
+        response: 'Temos cases com +40% de eficiência e -35% de custo operacional. Posso enviar nosso portfolio com resultados detalhados!',
       },
       {
-        keywords: ['prazo', 'tempo', 'implementacao', 'cronograma'],
-        response: 'Projetos tipicos levam 4-8 semanas para implementacao completa. Fazemos uma POC em 2 semanas para validar. Quer saber mais?',
+        keywords: ['prazo', 'tempo', 'implementação', 'cronograma'],
+        response: 'Projetos tipicos levam 4-8 semanas para implementação completa. Fazemos uma POC em 2 semanas para validar. Quer saber mais?',
       },
       {
-        keywords: ['contato', 'email', 'telefone', 'responsavel'],
-        response: 'Nosso time comercial esta disponivel pelo e-mail contato@nexus.com ou telefone (11) 3000-0000. Prefere que eu agende uma ligacao?',
+        keywords: ['contato', 'email', 'telefone', 'responsável'],
+        response: 'Nosso time comercial esta disponível pelo e-mail contato@nexus.com ou telefone (11) 3000-0000. Prefere que eu agende uma ligação?',
       },
     ],
-    fallback: 'Posso ajudar com informacoes sobre servicos, precos, agendamento ou cases de sucesso. O que prefere saber?',
+    fallback: 'Posso ajudar com informações sobre servicos, precos, agendamento ou cases de sucesso. O que prefere saber?',
   },
 ];
 
@@ -167,7 +167,7 @@ export function DemoPage() {
       const copy = [...prev];
       copy[activeTab] = [...copy[activeTab], { role: 'user', text }, { role: 'bot', text: reply }];
 
-      // Mostrar mensagem final apos 3 interacoes do usuario
+      // Mostrar mensagem final após 3 interações do usuário
       const userCount = copy[activeTab].filter((m) => m.role === 'user').length;
       if (userCount >= 3 && !showFinal[activeTab]) {
         copy[activeTab] = [...copy[activeTab], { role: 'bot', text: FINAL_MESSAGE }];
@@ -297,7 +297,7 @@ export function DemoPage() {
             </h2>
           </div>
           <p className="text-gray-400 mb-8">
-            Seus clientes terao essa mesma experiencia. Configure em minutos, sem codigo.
+            Seus clientes terao essa mesma experiência. Configure em minutos, sem código.
           </p>
           {/* PLACEHOLDER: substituir por dado real */}
           <Link

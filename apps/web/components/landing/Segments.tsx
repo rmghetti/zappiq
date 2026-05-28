@@ -6,10 +6,10 @@ import { Heart, ShoppingBag, Briefcase, BookOpen, Car, Home, Dog, Scissors, Uten
 
 // Segmentos que possuem landing page dedicada
 const SEGMENT_PAGES: Record<string, string> = {
-  'Sa��de': '/segmentos/saude',
+  'Sa��de': '/segmentos/saúde',
   'Varejo': '/segmentos/varejo',
   'Serviços B2B': '/segmentos/servicos-b2b',
-  'Educação': '/segmentos/educacao',
+  'Educação': '/segmentos/educação',
 };
 
 const SEGMENTS = [

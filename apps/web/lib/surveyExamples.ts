@@ -16,7 +16,7 @@
  * Resolução: examplePlaceholder(niche, id, fallbackOriginal)
  *   = NICHE_EXAMPLES[niche]?.[id] ?? GENERIC[id] ?? fallbackOriginal
  *
- * Niches válidos (key de surveySegments): academia, dentista, psicologo,
+ * Niches válidos (key de surveySegments): academia, dentista, psicólogo,
  * advogado, nutricionista, salao, petshop, imobiliaria, restaurante, escola,
  * servicos_tecnicos, clinica_medica, contabilidade, oficina, agencia_digital,
  * ecommerce.
@@ -226,8 +226,8 @@ const petshop: Examples = {
   crm_ltv: 'Ex: R$ 1.800/ano por pet (banhos recorrentes + vet + produtos).',
 };
 
-// ── Psicologia / terapia (psicologo) ─────────────────────────────────────────
-const psicologo: Examples = {
+// ── Psicologia / terapia (psicólogo) ─────────────────────────────────────────
+const psicólogo: Examples = {
   ide_nome_fantasia: 'Ex: Espaço Equilíbrio Psicologia',
   ide_razao_social: 'Ex: Equilíbrio Serviços Psicológicos Ltda.',
   pos_proposta_valor: 'Ex: Terapia acolhedora e baseada em evidências, presencial ou online, no seu tempo e sem julgamento.',
@@ -284,7 +284,7 @@ const advogado: Examples = {
   pre_parcelamento: 'Ex: Consulta no Pix/cartão; honorários conforme contrato; entrada + êxito.',
   faq_perguntas_frequentes: 'Ex:\nP: Cobra consulta?\nR: Sim, R$ 350, abatidos se fechar o caso.\nP: Tenho chance?\nR: Avaliamos os documentos antes de opinar.\nP: Cobra se perder?\nR: No êxito, só se ganharmos.',
   faq_contraindicacoes: 'Ex: Não atuamos em casos criminais nem damos parecer sem analisar a documentação.',
-  crm_tags: 'Ex: #consulta, #trabalhista, #familia, #civel, #pj, #acordo',
+  crm_tags: 'Ex: #consulta, #trabalhista, #família, #civel, #pj, #acordo',
   crm_ltv: 'Ex: R$ 8.000 por cliente (honorários de êxito + causas recorrentes).',
 };
 
@@ -315,7 +315,7 @@ const nutricionista: Examples = {
   pre_parcelamento: 'Ex: Pix, cartão e recibo para reembolso; pacote em até 3x.',
   faq_perguntas_frequentes: 'Ex:\nP: Atende online?\nR: Sim, presencial e online.\nP: Aceita convênio?\nR: Particular com recibo para reembolso.\nP: Vou passar fome?\nR: Não, o plano respeita seu paladar e rotina.',
   faq_contraindicacoes: 'Ex: Gestantes e pessoas com doença renal/diabetes seguem protocolo específico após avaliação.',
-  crm_tags: 'Ex: #avaliacao, #emagrecimento, #esportiva, #retorno, #plano-trimestral, #online',
+  crm_tags: 'Ex: #avaliação, #emagrecimento, #esportiva, #retorno, #plano-trimestral, #online',
   crm_ltv: 'Ex: R$ 1.200 por cliente (pacote trimestral + retornos).',
 };
 
@@ -408,7 +408,7 @@ const servicos_tecnicos: Examples = {
   pre_parcelamento: 'Ex: Pix, débito e crédito; reparos acima de R$ 300 em 2x.',
   faq_perguntas_frequentes: 'Ex:\nP: Cobra a visita?\nR: R$ 120, abatidos se aprovar o reparo.\nP: Tem garantia?\nR: 90 dias.\nP: Pra quando fica?\nR: Em média 2-3 dias após aprovação.',
   faq_contraindicacoes: 'Ex: Equipamentos com dano por líquido ou já abertos por terceiros podem não ter garantia.',
-  crm_tags: 'Ex: #orcamento, #aguardando-aprovacao, #garantia, #empresa, #retorno',
+  crm_tags: 'Ex: #orcamento, #aguardando-aprovação, #garantia, #empresa, #retorno',
   crm_ltv: 'Ex: R$ 900 por cliente (reparos recorrentes + manutenção).',
 };
 
@@ -501,7 +501,7 @@ const oficina: Examples = {
   pre_parcelamento: 'Ex: Pix, débito e crédito; serviços acima de R$ 500 em até 3x.',
   faq_perguntas_frequentes: 'Ex:\nP: Cobra o diagnóstico?\nR: R$ 90, abatido se aprovar o serviço.\nP: Tem garantia?\nR: 90 dias.\nP: Pra quando fica?\nR: Revisão simples no mesmo dia.',
   faq_contraindicacoes: 'Ex: Não fazemos funilaria/pintura nem reparo de câmbio automático complexo (encaminhamos parceiro).',
-  crm_tags: 'Ex: #revisao, #orcamento, #aguardando-aprovacao, #garantia, #retorno, #troca-oleo',
+  crm_tags: 'Ex: #revisao, #orcamento, #aguardando-aprovação, #garantia, #retorno, #troca-oleo',
   crm_ltv: 'Ex: R$ 2.400/ano por cliente (revisões + manutenções recorrentes).',
 };
 
@@ -532,7 +532,7 @@ const agencia_digital: Examples = {
   pre_parcelamento: 'Ex: Fee mensal recorrente (boleto/cartão/Pix); verba de mídia paga direto na plataforma.',
   faq_perguntas_frequentes: 'Ex:\nP: A verba de anúncio é à parte?\nR: Sim, o fee é a gestão; a mídia é separada.\nP: Tem fidelidade?\nR: Ciclo mínimo de 3 meses.\nP: Quando vejo resultado?\nR: Otimização real a partir do 2º mês.',
   faq_contraindicacoes: 'Ex: Resultado depende de verba de mídia adequada e produto/oferta validados.',
-  crm_tags: 'Ex: #lead-quente, #trafego, #social, #proposta, #onboarding, #cliente-recorrente',
+  crm_tags: 'Ex: #lead-quente, #tráfego, #social, #proposta, #onboarding, #cliente-recorrente',
   crm_ltv: 'Ex: R$ 30.000 por cliente (fee mensal ao longo de ~12 meses).',
 };
 
@@ -573,7 +573,7 @@ export const NICHE_EXAMPLES: Record<string, Examples> = {
   salao,
   academia,
   petshop,
-  psicologo,
+  psicólogo,
   advogado,
   nutricionista,
   imobiliaria,

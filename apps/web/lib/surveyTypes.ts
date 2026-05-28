@@ -85,7 +85,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Rua, número, complemento, bairro, cidade, estado, CEP',
         required: true,
         helpText: 'A IA informará esse endereço quando o cliente perguntar como chegar ou onde fica. Inclua referências de localização se possível.',
-        category: 'localizacao',
+        category: 'localização',
       },
       {
         id: 'ide_tem_filiais',
@@ -93,7 +93,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         type: 'boolean',
         required: true,
         helpText: 'Se houver filiais, a IA poderá direcionar o cliente para a unidade mais próxima ou adequada.',
-        category: 'localizacao',
+        category: 'localização',
       },
       {
         id: 'ide_filiais_detalhes',
@@ -102,7 +102,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Unidade Centro — Rua X, 100 (atendimento geral)\nUnidade Sul — Av. Y, 200 (apenas cirurgias)',
         required: false,
         helpText: 'Informe endereço, horários distintos e serviços oferecidos em cada unidade para que a IA direcione corretamente.',
-        category: 'localizacao',
+        category: 'localização',
       },
       {
         id: 'ide_cobertura_geografica',
@@ -119,7 +119,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Define até onde a IA pode prometer atendimento. Se o cliente estiver fora da área, a IA informará a limitação.',
-        category: 'localizacao',
+        category: 'localização',
       },
       {
         id: 'ide_modalidade_atendimento',
@@ -135,7 +135,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'A IA adaptará a conversa conforme a modalidade: presencial pede endereço, remoto envia link, delivery confirma CEP.',
-        category: 'operacao',
+        category: 'operação',
       },
       {
         id: 'ide_site_url',
@@ -198,7 +198,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Seg-Sex: 08:00-18:00\nSáb: 08:00-12:00\nDom: Fechado',
         required: true,
         helpText: 'A IA informará os horários e saberá quando está fora do expediente. Especifique se há horário de almoço ou diferenças entre unidades.',
-        category: 'operacao',
+        category: 'operação',
       },
       {
         id: 'ide_fuso_horario',
@@ -213,7 +213,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Essencial para que a IA calcule corretamente se está dentro ou fora do horário comercial.',
-        category: 'operacao',
+        category: 'operação',
       },
       {
         id: 'ide_idiomas_atendimento',
@@ -233,7 +233,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Se o cliente escrever em outro idioma, a IA tentará responder nesse idioma (se suportado) ou indicará as opções.',
-        category: 'operacao',
+        category: 'operação',
       },
       {
         id: 'ide_tempo_mercado',
@@ -272,7 +272,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Define o comportamento da IA fora do expediente. A maioria dos clientes manda mensagem à noite — é importante ter uma estratégia.',
-        category: 'operacao',
+        category: 'operação',
       },
       {
         id: 'ide_sazonalidade',
@@ -281,7 +281,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Dezembro e Janeiro são os meses mais fortes. Black Friday tem promoções.',
         required: false,
         helpText: 'A IA pode ajustar tom e urgência em períodos de pico: "estamos com alta demanda, recomendo agendar logo".',
-        category: 'operacao',
+        category: 'operação',
       },
     ],
   },
@@ -361,7 +361,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: confiável, moderna, acolhedora',
         required: true,
         helpText: 'Esses adjetivos guiarão o tom e vocabulário da IA em cada interação.',
-        category: 'percepcao',
+        category: 'percepção',
       },
       {
         id: 'pos_palavras_proibidas',
@@ -402,7 +402,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: "Seu sorriso, nossa missão."',
         required: false,
         helpText: 'A IA pode usar o slogan em aberturas ou encerramentos para reforçar a marca.',
-        category: 'percepcao',
+        category: 'percepção',
       },
       {
         id: 'pos_historia_marca',
@@ -411,7 +411,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: "Fundada em 2010 pelo Dr. João, que queria criar um consultório sem medo."',
         required: false,
         helpText: 'Storytelling gera conexão emocional. A IA pode usar a história quando o cliente perguntar sobre a empresa.',
-        category: 'percepcao',
+        category: 'percepção',
       },
       {
         id: 'pos_premios_certificacoes',
@@ -447,7 +447,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Ética, transparência, inovação, cuidado humanizado',
         required: false,
         helpText: 'Valores guiam decisões da IA em situações ambíguas. Se "transparência" é valor, a IA nunca omitirá informações.',
-        category: 'percepcao',
+        category: 'percepção',
       },
       {
         id: 'pos_promessa_entrega',
@@ -591,7 +591,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Se o decisor é outro, a IA pode sugerir: "Gostaria de enviar essa proposta para o decisor avaliar?".',
-        category: 'decisao',
+        category: 'decisão',
       },
       {
         id: 'pub_quem_pesquisa',
@@ -607,7 +607,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: false,
         helpText: 'Se quem pesquisa é diferente de quem decide, a IA adapta a conversa para fornecer insumos de decisão.',
-        category: 'decisao',
+        category: 'decisão',
       },
       {
         id: 'pub_ciclo_decisao',
@@ -623,7 +623,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Ciclos longos pedem follow-up paciente; curtos pedem urgência e facilidade. A IA ajusta sua persistência.',
-        category: 'decisao',
+        category: 'decisão',
       },
       {
         id: 'pub_como_descobrem',
@@ -984,7 +984,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Avaliação gratuita, Consulta inicial, Aula experimental',
         required: true,
         helpText: 'O serviço de entrada é o que a IA mais vai oferecer. Deve ter baixa barreira (grátis ou barato).',
-        category: 'estrategia',
+        category: 'estratégia',
       },
       {
         id: 'com_maior_margem',
@@ -993,7 +993,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Implante dentário — margem de 60%',
         required: false,
         helpText: 'A IA pode priorizar sutilmente a oferta de produtos com maior margem quando fizer sentido para o cliente.',
-        category: 'estrategia',
+        category: 'estratégia',
       },
       {
         id: 'com_maior_volume',
@@ -1002,7 +1002,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Limpeza dental — 40% de todas as consultas',
         required: false,
         helpText: 'O mais vendido geralmente é o de entrada. A IA usará como referência para leads sem demanda definida.',
-        category: 'estrategia',
+        category: 'estratégia',
       },
       {
         id: 'com_servico_premium',
@@ -1011,7 +1011,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Protocolo de implante completo — R$ 25.000',
         required: false,
         helpText: 'A IA oferece o premium para clientes que demonstram alto poder aquisitivo e desejo por excelência.',
-        category: 'estrategia',
+        category: 'estratégia',
       },
       {
         id: 'com_recorrencia',
@@ -1029,7 +1029,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Cliente quer limpeza → oferecer clareamento junto\nCliente quer restauração → oferecer faceta de porcelana',
         required: false,
         helpText: 'Upsell aumenta o ticket médio. A IA sugere de forma natural: "Muitos clientes aproveitam para também...".',
-        category: 'estrategia',
+        category: 'estratégia',
       },
       {
         id: 'com_cross_sell',
@@ -1038,7 +1038,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Quem faz implante → plano de manutenção\nQuem faz clareamento → kit de manutenção em casa',
         required: false,
         helpText: 'Cross-sell oferece algo complementar. A IA pode mencionar: "Para manter o resultado, recomendamos também...".',
-        category: 'estrategia',
+        category: 'estratégia',
       },
       {
         id: 'com_combos_pacotes',
@@ -1074,7 +1074,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Cirurgia bariátrica — só mencionar se o cliente perguntar diretamente.\nTratamento capilar — não oferecer para quem veio por outro motivo.',
         required: false,
         helpText: 'Alguns serviços são delicados ou não devem ser oferecidos sem demanda explícita do cliente.',
-        category: 'estrategia',
+        category: 'estratégia',
       },
       {
         id: 'com_tempo_entrega',
@@ -1122,7 +1122,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Pergunta preço específico, quer agendar, menciona urgência, já pesquisou, cita concorrente.',
         required: true,
         helpText: 'Lead quente deve ser atendido com prioridade e direcionado rapidamente para o fechamento.',
-        category: 'classificacao',
+        category: 'classificação',
       },
       {
         id: 'qual_lead_morno',
@@ -1131,7 +1131,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Pede informações gerais, pergunta "como funciona", quer saber opções, diz "estou pesquisando".',
         required: true,
         helpText: 'Lead morno precisa de nutrição: educação, diferenciais e sugestão de próximo passo suave.',
-        category: 'classificacao',
+        category: 'classificação',
       },
       {
         id: 'qual_lead_frio',
@@ -1140,7 +1140,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Pergunta genérica, não responde perguntas de qualificação, diz que é "só pra saber".',
         required: true,
         helpText: 'Lead frio não deve receber pressão. A IA educa, oferece material e deixa a porta aberta.',
-        category: 'classificacao',
+        category: 'classificação',
       },
       {
         id: 'qual_perguntas_obrigatorias',
@@ -1149,7 +1149,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex:\n1. Qual serviço você tem interesse?\n2. É para você ou para outra pessoa?\n3. Já fez esse tipo de tratamento antes?\n4. Tem preferência de horário?\n5. Qual sua região/unidade mais próxima?',
         required: true,
         helpText: 'Perguntas de qualificação são essenciais. A IA faz na ordem natural da conversa, sem parecer formulário.',
-        category: 'qualificacao',
+        category: 'qualificação',
       },
       {
         id: 'qual_sinais_intencao',
@@ -1208,7 +1208,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Perguntar orçamento ajuda a filtrar, mas pode afastar clientes sensíveis. Escolha a abordagem certa.',
-        category: 'qualificacao',
+        category: 'qualificação',
       },
       {
         id: 'qual_pergunta_prazo',
@@ -1221,7 +1221,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Saber o prazo ajuda a priorizar e criar urgência positiva: "Temos uma vaga perfeita para sua necessidade".',
-        category: 'qualificacao',
+        category: 'qualificação',
       },
       {
         id: 'qual_pergunta_decisor',
@@ -1235,7 +1235,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Se o decisor é outro, a IA pode adaptar: enviar material para compartilhar, marcar reunião com ambos, etc.',
-        category: 'qualificacao',
+        category: 'qualificação',
       },
       {
         id: 'qual_score_minimo',
@@ -1244,7 +1244,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Quente (8-10): perguntou preço + quer agendar\nMorno (4-7): interessado mas sem urgência\nFrio (1-3): só pesquisando',
         required: false,
         helpText: 'O score permite priorizar atendimento humano para os leads mais qualificados.',
-        category: 'classificacao',
+        category: 'classificação',
       },
       {
         id: 'qual_informacoes_minimas',
@@ -1263,7 +1263,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Essas informações garantem que o atendimento humano já comece qualificado, economizando tempo de todos.',
-        category: 'qualificacao',
+        category: 'qualificação',
       },
       {
         id: 'qual_desqualificacao',
@@ -1272,7 +1272,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Fora da área de cobertura, menor sem responsável, busca serviço que não oferecemos.',
         required: false,
         helpText: 'Desqualificar com elegância evita desperdício de tempo: "Infelizmente não atendemos essa região, mas recomendo...".',
-        category: 'classificacao',
+        category: 'classificação',
       },
       {
         id: 'qual_reengajamento',
@@ -1281,7 +1281,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Após 24h: "Oi [nome]! Vi que ficou alguma dúvida sobre [serviço]. Posso ajudar?"\nApós 3 dias: "Olá! Ainda temos uma condição especial disponível para você 😊"',
         required: false,
         helpText: 'Mensagens de reengajamento devem ser naturais, não parecer spam. Ofereça valor, não pressão.',
-        category: 'qualificacao',
+        category: 'qualificação',
       },
     ],
   },
@@ -1410,7 +1410,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Cancelamento com até 24h de antecedência: sem custo.\nMenos de 24h: cobrança de 50% do valor.\nNo-show: cobrança integral.',
         required: true,
         helpText: 'A IA precisa informar a política de cancelamento quando o cliente pedir. Transparência evita conflitos.',
-        category: 'politica',
+        category: 'política',
       },
       {
         id: 'pre_reembolso',
@@ -1419,7 +1419,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Reembolso integral em até 7 dias (CDC). Proporcional após início do tratamento. Não se aplica a consumíveis.',
         required: false,
         helpText: 'Se o cliente perguntar sobre reembolso, a IA deve ser transparente e seguir o Código de Defesa do Consumidor.',
-        category: 'politica',
+        category: 'política',
       },
       {
         id: 'pre_cobranca_recorrente',
@@ -1455,7 +1455,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: false,
         helpText: 'Se o cliente perguntar sobre nota fiscal, a IA precisa responder corretamente.',
-        category: 'politica',
+        category: 'política',
       },
       {
         id: 'pre_orcamento_validade',
@@ -1464,7 +1464,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: 30 dias, 15 dias, 7 dias',
         required: false,
         helpText: 'Validade do orçamento cria urgência legítima: "Esse valor é válido por mais 5 dias".',
-        category: 'politica',
+        category: 'política',
       },
       {
         id: 'pre_negociacao_ia',
@@ -1593,7 +1593,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: Cancelamento com 24h de antecedência: grátis. Menos de 24h: taxa de R$ 50. Pode remarcar 1x sem custo.',
         required: true,
         helpText: 'A IA informa as regras quando o cliente pedir para cancelar/remarcar, sem julgamento.',
-        category: 'politica',
+        category: 'política',
       },
       {
         id: 'ope_politica_noshow',
@@ -1602,7 +1602,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         placeholder: 'Ex: 1º no-show: aviso. 2º no-show: cobrança de 50%. 3º no-show: bloqueio do agendamento online.',
         required: false,
         helpText: 'No-show é um problema sério. A IA pode lembrar a política ao confirmar: "Caso não possa comparecer, avise com 24h".',
-        category: 'politica',
+        category: 'política',
       },
       {
         id: 'ope_confirmacao_agendamento',
@@ -1615,7 +1615,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: true,
         helpText: 'Confirmação imediata gera confiança. A IA pode enviar: "Agendamento confirmado! ✅ [data] às [hora]".',
-        category: 'confirmacao',
+        category: 'confirmação',
       },
       {
         id: 'ope_lembretes',
@@ -1631,7 +1631,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: false,
         helpText: 'Lembretes reduzem no-show em até 80%. A IA envia automaticamente nos momentos configurados.',
-        category: 'confirmacao',
+        category: 'confirmação',
       },
       {
         id: 'ope_documentos_previos',
@@ -1687,7 +1687,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: false,
         helpText: 'A integração permite que a IA consulte disponibilidade em tempo real e agende direto no sistema.',
-        category: 'integracao',
+        category: 'integração',
       },
     ],
   },
@@ -2044,7 +2044,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         ],
         required: false,
         helpText: 'Se já usa CRM, podemos integrar para sincronizar leads e dados automaticamente.',
-        category: 'integracao',
+        category: 'integração',
       },
       {
         id: 'crm_lgpd',

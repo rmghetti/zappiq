@@ -36,7 +36,7 @@ const COLUMNS = [
       { label: 'Enterprise', href: '/enterprise' },
       { label: '14 dias grátis', href: '/#precos' },
       { label: 'Voz Nativa (add-on)', href: '/voz' },
-      { label: 'Migração Zenvia', href: '/migracao-zenvia' },
+      { label: 'Migração Zenvia', href: '/migração-zenvia' },
       { label: 'SLA contratual', href: '/sla' },
     ],
   },

@@ -353,10 +353,10 @@ export default function MigracaoZenviaPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <a
-              href="mailto:migracao@zappiq.com.br?subject=Diagn%C3%B3stico%20BSP%20%E2%86%92%20ZappIQ"
+              href="mailto:migração@zappiq.com.br?subject=Diagn%C3%B3stico%20BSP%20%E2%86%92%20ZappIQ"
               className="inline-flex items-center justify-center bg-secondary-500 hover:bg-secondary-600 text-white font-semibold px-6 py-3 rounded-xl"
             >
-              migracao@zappiq.com.br
+              migração@zappiq.com.br
             </a>
             <Link
               href="/demo"

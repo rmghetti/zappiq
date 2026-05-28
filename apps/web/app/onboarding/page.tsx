@@ -596,7 +596,7 @@ export default function OnboardingPage() {
           throw new Error(errData?.error || 'Não foi possível salvar a senha. Tente novamente.');
         }
         // Senha persistida com sucesso — limpa tokens Supabase do localStorage
-        // (proxima sessao do cliente vai usar email+senha, nao magic link)
+        // (próxima sessao do cliente vai usar email+senha, nao magic link)
         localStorage.removeItem('zappiq_supabase_access_token');
         localStorage.removeItem('zappiq_supabase_refresh_token');
       }
