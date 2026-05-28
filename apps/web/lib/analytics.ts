@@ -8,7 +8,7 @@
  * UTM attribution (first-touch):
  *   - Captura utm_source/medium/campaign/content/term da URL na primeira visita
  *   - Armazena em sessionStorage (zera ao fechar tab — mas funciona pra session)
- *   - Persiste em localStorage tambem como fallback (sobrevive a fechar tab)
+ *   - Persiste em localStorage também como fallback (sobrevive a fechar tab)
  *   - getUtm() retorna sempre o first-touch (não sobrescreve ao trocar URL)
  *
  * Privacy: sessionStorage/localStorage só. Nunca cookies extras.

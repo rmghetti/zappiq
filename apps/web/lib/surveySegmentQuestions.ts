@@ -421,7 +421,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
   // ═══════════════════════════════════════════════════════════════════════════
   // 3. PSICÓLOGO
   // ═══════════════════════════════════════════════════════════════════════════
-  psicologo: [
+  psicólogo: [
     {
       id: 'psicologo_abordagem',
       title: 'Abordagem e Público',
@@ -752,7 +752,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
         },
         {
           id: 'advogado_honorarios_modelo',
-          label: 'Quais modelos de honorários o escritório pratica?',
+          label: 'Quais modelos de honorários o escritório prática?',
           type: 'multiselect',
           helpText: 'A IA pode explicar as opções de forma acessível ao lead.',
           options: ['Honorários fixos', 'Honorários por hora', 'Honorários de êxito (% sobre o resultado)', 'Misto (fixo + êxito)', 'Tabela OAB', 'Depende do caso'],

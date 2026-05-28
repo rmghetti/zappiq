@@ -1,7 +1,7 @@
 /**
  * /legal/deletar-dados — Endpoint público DSR LGPD Art. 18
  *
- * Criado pro D-Day Onda 1 (14/05/2026). A Política de Privacidade V3.2 referencia
+ * Criado pro D-Day Onda 1 (14/05/2026). A Política de Privacidade V3.2 referência
  * esta URL como canal de autoatendimento para direitos do titular. Sem esta página,
  * a Política de Privacidade fica apontando pra 404 — gate obrigatório de compliance.
  *

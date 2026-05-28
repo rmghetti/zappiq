@@ -94,7 +94,7 @@ export function SelfServiceTraining() {
   const step = STEPS[activeStep];
 
   return (
-    <section id="voce-treina-sua-ia" className="relative py-24 bg-gradient-to-b from-white to-gray-50">
+    <section id="você-treina-sua-ia" className="relative py-24 bg-gradient-to-b from-white to-gray-50">
       <div className="max-w-7xl mx-auto px-6">
         {/* Header */}
         <div className="max-w-3xl mx-auto text-center mb-16">

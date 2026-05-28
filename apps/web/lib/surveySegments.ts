@@ -155,7 +155,7 @@ export const SEGMENTS: Segment[] = [
 
   // ── 3. Psicologia ──────────────────────────────────────────────────
   {
-    key: 'psicologo',
+    key: 'psicólogo',
     icon: '🧠',
     label: 'Psicologia',
     description: 'Psicólogos clínicos e organizacionais',
@@ -231,7 +231,7 @@ export const SEGMENTS: Segment[] = [
     description: 'Escritórios e advogados autônomos',
     subsegments: [
       {
-        key: 'familia',
+        key: 'família',
         label: 'Direito de Família',
         description:
           'Casos de divórcio, guarda de filhos, pensão alimentícia, inventário e questões de direito sucessório',
@@ -325,7 +325,7 @@ export const SEGMENTS: Segment[] = [
           'Alimentação estratégica para atletas e praticantes de exercícios visando performance e recuperação muscular',
       },
       {
-        key: 'clinica',
+        key: 'clínica',
         label: 'Nutrição Clínica',
         description:
           'Tratamento nutricional para condições de saúde como diabetes, hipertensão, alergias alimentares e doenças intestinais',
@@ -699,7 +699,7 @@ export const SEGMENTS: Segment[] = [
           'Aulas particulares e de reforço para alunos com dificuldades em matérias específicas',
       },
       {
-        key: 'tecnico',
+        key: 'técnico',
         label: 'Curso Técnico',
         description:
           'Formação técnica profissionalizante em áreas como enfermagem, administração, TI e design',
@@ -769,7 +769,7 @@ export const SEGMENTS: Segment[] = [
           'Projetos e instalação de câmeras de vigilância, DVR, NVR e monitoramento remoto por aplicativo',
       },
       {
-        key: 'automacao',
+        key: 'automação',
         label: 'Automação Residencial',
         description:
           'Projetos de casa inteligente com controle de iluminação, cortinas, som ambiente e integração por voz',
@@ -1095,7 +1095,7 @@ export const SEGMENTS: Segment[] = [
           'Venda de produtos de beleza, skincare, maquiagem e cuidados pessoais em loja física ou virtual',
       },
       {
-        key: 'eletronicos',
+        key: 'eletrônicos',
         label: 'Eletrônicos',
         description:
           'Loja de celulares, computadores, acessórios de tecnologia e eletrônicos em geral',

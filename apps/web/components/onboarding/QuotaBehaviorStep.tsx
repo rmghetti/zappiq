@@ -25,11 +25,11 @@ const OPTIONS: Array<{
   {
     id: 'notify_decide',
     icon: <Bell size={20} />,
-    title: 'Avisar e deixar voce decidir (recomendado)',
+    title: 'Avisar e deixar você decidir (recomendado)',
     subtitle: 'Receba alertas em 70/80/90/95% pra agir antes do limite',
     bullets: [
       'Email + WhatsApp em 5 niveis de alerta',
-      'Em 95% voce decide: liberar excedente ou bloquear',
+      'Em 95% você decide: liberar excedente ou bloquear',
       'Comportamento padrao do mercado — controle total',
     ],
     gradient: 'from-blue-50 to-violet-50',
@@ -39,10 +39,10 @@ const OPTIONS: Array<{
     id: 'auto_charge',
     icon: <CreditCard size={20} />,
     title: 'Cobrar excedente automaticamente',
-    subtitle: 'Nao bloqueia — voce paga R$ 0,03 por mensagem alem do plano',
+    subtitle: 'Nao bloqueia — você paga R$ 0,03 por mensagem além do plano',
     bullets: [
-      'Operacao nao para nunca, mesmo em picos',
-      'Voce pode definir teto mensal pra limitar gasto',
+      'Operação nao para nunca, mesmo em picos',
+      'Você pode definir teto mensal pra limitar gasto',
       'Ideal pra quem tem campanha ativa ou alta sazonalidade',
     ],
     gradient: 'from-emerald-50 to-teal-50',
@@ -52,10 +52,10 @@ const OPTIONS: Array<{
     id: 'hard_block',
     icon: <ShieldCheck size={20} />,
     title: 'Bloquear ao atingir 100%',
-    subtitle: 'Sem surpresas no cartao — bot pausa ate o proximo ciclo',
+    subtitle: 'Sem surpresas no cartao — bot pausa até o próximo ciclo',
     bullets: [
       'Custo previsivel garantido',
-      'Voce pode comprar pacote extra (5k/10k/50k msgs) manualmente',
+      'Você pode comprar pacote extra (5k/10k/50k msgs) manualmente',
       'Recomendado pra quem precisa de previsao orcamentaria rigida',
     ],
     gradient: 'from-amber-50 to-orange-50',
@@ -68,10 +68,10 @@ export function QuotaBehaviorStep({ value, onChange }: QuotaBehaviorStepProps) {
     <div className="space-y-3">
       <div className="mb-4">
         <h3 className="text-lg font-bold text-slate-900 mb-1">
-          O que voce quer que aconteca quando atingir o limite mensal?
+          O que você quer que aconteca quando atingir o limite mensal?
         </h3>
         <p className="text-sm text-slate-600">
-          Voce pode mudar isso depois em Configuracoes &gt; Cobranca.
+          Você pode mudar isso depois em Configurações &gt; Cobranca.
         </p>
       </div>
       {OPTIONS.map((opt) => {

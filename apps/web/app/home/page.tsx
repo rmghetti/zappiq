@@ -4,8 +4,8 @@
  * Durante o periodo de teaser (LAUNCH_MODE=prelaunch), a home V5 fica
  * acessivel direto em /home. Util pra time interno e pra preview.
  *
- * Apos o lancamento (LAUNCH_MODE=live), considerar adicionar redirect
- * 308 /home → / via next.config.js pra evitar conteudo duplicado.
+ * Após o lancamento (LAUNCH_MODE=live), considerar adicionar redirect
+ * 308 /home → / via next.config.js pra evitar conteúdo duplicado.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 'use client';

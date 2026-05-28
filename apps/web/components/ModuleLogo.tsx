@@ -8,7 +8,7 @@ import Image from 'next/image';
 //
 // V4 (2026-05-27): Brand unificado "ZappIQ" em TODAS as rotas — antes
 // renderizava 6 sub-produtos ficticios (NexusCRM, EchoCopilot, etc) e
-// gerava percepcao de "comprei 6 produtos". Agora cada rota mantem icone
+// gerava percepção de "comprei 6 produtos". Agora cada rota mantem icone
 // e cor distintos (contexto visual gostoso), mas o nome e sempre "ZappIQ"
 // + subtitle da secao.
 // ─────────────────────────────────────────────────────────────────────────────

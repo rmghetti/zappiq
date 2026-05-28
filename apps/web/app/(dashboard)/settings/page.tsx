@@ -80,7 +80,7 @@ const TONE_OPTIONS = [
 
 const SEGMENT_OPTIONS = [
   { value: 'dentista', label: 'Dentista' },
-  { value: 'psicologo', label: 'Psicólogo' },
+  { value: 'psicólogo', label: 'Psicólogo' },
   { value: 'academia', label: 'Academia' },
   { value: 'advogado', label: 'Advogado' },
   { value: 'salao', label: 'Salão de Beleza' },

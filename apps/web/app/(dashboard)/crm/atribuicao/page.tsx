@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * /crm/atribuicao — Atribuição campanha → venda (CRM Onda 4, PR #221)
+ * /crm/atribuição — Atribuição campanha → venda (CRM Onda 4, PR #221)
  *
  * Mostra o funil fim-a-fim de cada campanha:
  *   sent → reply → contact → deal → won → receita

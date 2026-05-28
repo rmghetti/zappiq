@@ -107,7 +107,7 @@ export default function BenchmarksPage() {
         <h2>6. Direito de resposta</h2>
         <p>
           Qualquer concorrente citado nesta página pode enviar pedido de correção por e-mail a{' '}
-          <a href="mailto:juridico@zappiq.com.br">juridico@zappiq.com.br</a>. Analisaremos em até 5 dias
+          <a href="mailto:jurídico@zappiq.com.br">jurídico@zappiq.com.br</a>. Analisaremos em até 5 dias
           úteis e publicaremos correção ou resposta fundamentada conforme autorregulação CONAR.
         </p>
       </article>

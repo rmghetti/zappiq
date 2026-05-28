@@ -44,7 +44,7 @@ export const articles: BlogArticle[] = [
     date: '2026-03-25',
     readingTime: '7 min',
     author: { name: 'Rodrigo Ghetti', initials: 'RG' },
-    relatedSlugs: ['roi-chatbots-ia-como-calcular', '5-fluxos-automacao-loja-virtual'],
+    relatedSlugs: ['roi-chatbots-ia-como-calcular', '5-fluxos-automação-loja-virtual'],
     /* PLACEHOLDER: substituir por conteúdo real do blog */
     content: `
 <h2>Por que leads somem no WhatsApp?</h2>
@@ -111,7 +111,7 @@ export const articles: BlogArticle[] = [
     `,
   },
   {
-    slug: 'guia-automacao-whatsapp-clinicas-2026',
+    slug: 'guia-automação-whatsapp-clínicas-2026',
     title: 'Guia de Automação WhatsApp para Clínicas e Consultórios em 2026',
     excerpt: 'Aprenda como clínicas médicas e odontológicas estão usando IA no WhatsApp para reduzir faltas, automatizar agendamentos e melhorar a experiência do paciente.',
     category: 'Saúde',
@@ -197,7 +197,7 @@ export const articles: BlogArticle[] = [
     date: '2026-03-18',
     readingTime: '6 min',
     author: { name: 'Lucas Mendes', initials: 'LM' },
-    relatedSlugs: ['guia-automacao-whatsapp-clinicas-2026', '5-fluxos-automacao-loja-virtual'],
+    relatedSlugs: ['guia-automação-whatsapp-clínicas-2026', '5-fluxos-automação-loja-virtual'],
     /* PLACEHOLDER: substituir por conteúdo real do blog */
     content: `
 <h2>Dois produtos, uma marca: entenda a diferença</h2>
@@ -261,7 +261,7 @@ export const articles: BlogArticle[] = [
     `,
   },
   {
-    slug: '5-fluxos-automacao-loja-virtual',
+    slug: '5-fluxos-automação-loja-virtual',
     title: '5 Fluxos de Automação WhatsApp que Toda Loja Virtual Precisa',
     excerpt: 'Conheça os 5 fluxos de automação no WhatsApp que aumentam vendas, reduzem abandono de carrinho e fidelizam clientes no e-commerce.',
     category: 'E-commerce',
@@ -353,7 +353,7 @@ export const articles: BlogArticle[] = [
     date: '2026-03-10',
     readingTime: '8 min',
     author: { name: 'Rodrigo Ghetti', initials: 'RG' },
-    relatedSlugs: ['como-recuperar-leads-perdidos-whatsapp', 'guia-automacao-whatsapp-clinicas-2026'],
+    relatedSlugs: ['como-recuperar-leads-perdidos-whatsapp', 'guia-automação-whatsapp-clínicas-2026'],
     /* PLACEHOLDER: substituir por conteúdo real do blog */
     content: `
 <h2>Por que calcular o ROI do chatbot é essencial</h2>

@@ -42,7 +42,7 @@ interface FormData {
 const PLAN_OPTIONS: { id: PlanId; label: string; price: string; sub: string; highlight?: boolean }[] = [
   { id: 'IZA_LITE', label: 'Lite', price: 'R$ 249,90', sub: '14 dias gratis · entrada', highlight: true },
   { id: 'GROWTH', label: 'Growth', price: 'R$ 497', sub: 'Para crescer' },
-  { id: 'SCALE', label: 'Scale', price: 'R$ 1.497', sub: 'Operacao seria com SLA' },
+  { id: 'SCALE', label: 'Scale', price: 'R$ 1.497', sub: 'Operação seria com SLA' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -118,7 +118,7 @@ export function Cadastro() {
         localStorage.setItem('zappiq_oauth_provider', isGoogle ? 'google' : 'magic_link');
         // HOTFIX 2026-05-19 — persistir access_token Supabase pra /onboarding usar
         // ao chamar /api/auth/set-password (caminho magic_link). TTL ~1h
-        // (Supabase JWT default), cliente termina onboarding antes disso na pratica.
+        // (Supabase JWT default), cliente termina onboarding antes disso na prática.
         localStorage.setItem('zappiq_supabase_access_token', accessToken);
         if (refreshToken) localStorage.setItem('zappiq_supabase_refresh_token', refreshToken);
       }
@@ -381,7 +381,7 @@ export function Cadastro() {
                     type="email"
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    placeholder="voce@suaempresa.com.br"
+                    placeholder="você@suaempresa.com.br"
                     required
                     className="w-full px-4 py-3 bg-white border border-line rounded-[12px] text-[14px] text-ink placeholder:text-muted-2 focus:outline-none focus:border-accent transition-colors"
                   />

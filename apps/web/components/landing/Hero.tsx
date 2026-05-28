@@ -9,9 +9,9 @@
  *
  * 8 cenários intercalados (sempre WA → IG → WA → IG):
  *   1. WA · Sorriso & Cia          (clínica odonto)
- *   2. IG · @horizonte.imoveis     (imobiliária — DM após story)
+ *   2. IG · @horizonte.imóveis     (imobiliária — DM após story)
  *   3. WA · Torque Auto Center     (mecânica — áudio)
- *   4. IG · @clinica.allure        (estética — DM lead)
+ *   4. IG · @clínica.allure        (estética — DM lead)
  *   5. WA · Moda Viva              (e-commerce — status pedido)
  *   6. IG · @fitcorp.br            (academia — DM matrícula)
  *   7. WA · Vila Madá              (delivery)
@@ -64,8 +64,8 @@ const SCENARIOS: Scenario[] = [
   {
     channel: 'instagram',
     seg: 'Imobiliária · veio do anúncio',
-    name: 'horizonte.imoveis',
-    handle: '@horizonte.imoveis',
+    name: 'horizonte.imóveis',
+    handle: '@horizonte.imóveis',
     initials: 'HI',
     grad: 'linear-gradient(135deg,#4A52D0,#6B74E8)',
     sub: 'Ativo agora · responde com IA',
@@ -98,8 +98,8 @@ const SCENARIOS: Scenario[] = [
   {
     channel: 'instagram',
     seg: 'Estética · lead novo da bio',
-    name: 'clinica.allure',
-    handle: '@clinica.allure',
+    name: 'clínica.allure',
+    handle: '@clínica.allure',
     initials: 'AL',
     grad: 'linear-gradient(135deg,#EC4899,#8B5CF6)',
     sub: 'Resposta em 1s · IA Iza',

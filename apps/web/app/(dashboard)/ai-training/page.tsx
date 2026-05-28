@@ -116,7 +116,7 @@ const TAB_HASH: Record<TabKey, string> = {
 
 function hashToTab(hash: string): TabKey | null {
   const h = (hash || '').replace('#', '').toLowerCase();
-  if (h === 'survey' || h === 'qualificacao' || h === 'qualificação') return 'survey';
+  if (h === 'survey' || h === 'qualificação' || h === 'qualificação') return 'survey';
   if (h === 'documents' || h === 'documentos' || h === 'knowledge') return 'documents';
   if (h === 'qa' || h === 'q&a' || h === 'perguntas') return 'qa';
   if (h === 'identity' || h === 'identidade' || h === 'tom') return 'identity';

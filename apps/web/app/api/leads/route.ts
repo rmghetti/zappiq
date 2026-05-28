@@ -1,7 +1,7 @@
 /**
  * POST /api/leads — Early Access lead capture (V5.3 pre-launch)
  * --------------------------------------------------------------
- * Endpoint publico pra captura de leads do form Fundadores na pagina de
+ * Endpoint público pra captura de leads do form Fundadores na pagina de
  * pre-lancamento da ZappIQ.
  *
  * Fluxo:
@@ -12,7 +12,7 @@
  *
  * Tabela: criada via SQL no Supabase Dashboard (early_access_leads.sql).
  *
- * Anti-spam minimo: rate limit em memoria por IP (5 req/min). Pra producao
+ * Anti-spam mínimo: rate limit em memória por IP (5 req/min). Pra produção
  * de verdade trocar pra Upstash/Redis. Suficiente pro periodo de 8 dias.
  *
  * Env vars esperadas:

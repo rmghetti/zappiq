@@ -139,7 +139,7 @@ export function MaestroSection() {
               Cada bloco acima é um nó: <span className="text-slate-600 font-medium">cinza</span> é trilho fixo,{' '}
               <span className="text-blue-600 font-medium">azul</span> é a Iza decidindo,{' '}
               <span className="text-emerald-600 font-medium">verde</span> é ação,{' '}
-              <span className="text-amber-600 font-medium">âmbar</span> é humano. Você arrasta, conecta e publica — no WhatsApp, no Instagram e no chat do site, ao mesmo tempo.
+              <span className="text-amber-600 font-medium">âmbar</span> é humano. Você arrasta, conecta e pública — no WhatsApp, no Instagram e no chat do site, ao mesmo tempo.
             </p>
           </div>
         </div>

@@ -96,8 +96,8 @@ export default function BillingPage() {
             Lite — 14 dias gratis pra validar
           </h3>
           <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
-            Sem cartao no inicio. Conecta WhatsApp, treina a IA, deixa a Iza atender. Apos 14 dias,
-            R$ 249,90/mes (ou R$ 199,92/mes se voce trava o plano anual com 20% off antes do trial expirar).
+            Sem cartao no início. Conecta WhatsApp, treina a IA, deixa a Iza atender. Após 14 dias,
+            R$ 249,90/mes (ou R$ 199,92/mes se você trava o plano anual com 20% off antes do trial expirar).
           </p>
         </div>
       </div>
@@ -199,7 +199,7 @@ export default function BillingPage() {
       <div className="mt-10">
         <div className="flex items-center gap-2 mb-3">
           <Zap size={18} className="text-amber-500" />
-          <h3 className="text-base font-bold text-gray-900">Add-ons (cobrados alem do plano)</h3>
+          <h3 className="text-base font-bold text-gray-900">Add-ons (cobrados além do plano)</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {[
@@ -207,8 +207,8 @@ export default function BillingPage() {
             { name: 'Mensagens IA extras', desc: 'Pacote 10.000 mensagens', price: 'R$ 197 / pacote' },
             { name: 'Disparos extras', desc: 'Pacote 10.000 disparos', price: 'R$ 247 / pacote' },
             { name: 'Atendente extra', desc: 'Seat adicional', price: 'R$ 89/mes' },
-            { name: 'Numero WA adicional', desc: '+ 1 numero com fila propria', price: 'R$ 147/mes' },
-            { name: 'Integracao Meta gerenciada', desc: 'Embedded Signup + configuracao', price: 'R$ 297 setup' },
+            { name: 'Número WA adicional', desc: '+ 1 número com fila própria', price: 'R$ 147/mes' },
+            { name: 'Integração Meta gerenciada', desc: 'Embedded Signup + configuração', price: 'R$ 297 setup' },
           ].map((a) => (
             <div key={a.name} className="border border-gray-200 rounded-xl p-4">
               <p className="text-sm font-semibold text-gray-900">{a.name}</p>
@@ -226,7 +226,7 @@ export default function BillingPage() {
             <Sparkles size={16} /> Beta — Conversa Convertida (outcome-based)
           </h3>
           <p className="text-xs text-purple-800 mt-2 leading-relaxed">
-            Voce esta no beta privado de pricing por resultado. R$ 19,90 por lead qualificado
+            Você esta no beta privado de pricing por resultado. R$ 19,90 por lead qualificado
             (score &gt;60) ou R$ 89 por oportunidade criada pela Iza. Cap mensal R$ 1.997 durante
             os primeiros 60 dias pra calibrar.
           </p>

@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     // direto no hash da URL (#access_token=...&refresh_token=...) em vez de
     // PKCE (?code=). PKCE server-side sem storage não propaga code_verifier
     // pro browser, quebra o exchange. Implicit funciona porque a page
-    // /auth/login-callback ja tem codigo pra ler hash (igual Magic Link).
+    // /auth/login-callback ja tem código pra ler hash (igual Magic Link).
     const sb = createClient(supabaseUrl, anonKey, {
       auth: { flowType: 'implicit', persistSession: false },
     });

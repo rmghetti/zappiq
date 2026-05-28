@@ -9,8 +9,8 @@ import {
 import { api } from '../../../lib/api';
 
 // V4 fix (2026-05-27): qualquer card que tente bindar "undefined" cai
-// no "—". Antes, card AUTOMACAO mostrava "undefined%" em prod e quebrava
-// confianca executiva. Guard global pra todos os campos do overview.
+// no "—". Antes, card AUTOMAÇÃO mostrava "undefined%" em prod e quebrava
+// confiança executiva. Guard global pra todos os campos do overview.
 function fmtNum(v: unknown, opts: { suffix?: string; fallback?: string; decimals?: number } = {}): string {
   const { suffix = '', fallback = '—', decimals } = opts;
   if (v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v))) {
@@ -62,7 +62,7 @@ export default function AnalyticsPage() {
       color: 'text-blue-600',
     },
     {
-      label: 'Automacao',
+      label: 'Automação',
       value: fmtNum(overview?.automationRate, { suffix: '%', decimals: 0 }),
       icon: Bot,
       change: '+5%',

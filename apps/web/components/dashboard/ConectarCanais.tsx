@@ -6,7 +6,7 @@
  * ===========================================================================
  * MODELO ATUAL (2026-05-23) — "traga seu token" (token por org):
  *   O cliente escolhe o que ativar (WhatsApp, Instagram Direct ou ambos) e
- *   preenche as credenciais do PROPRIO app Meta. Salvamos nas colunas da org
+ *   preenche as credenciais do PRÓPRIO app Meta. Salvamos nas colunas da org
  *   (whatsapp e instagram) + settings.channelActivation. O backend
  *   (whatsappService e instagramService) usa ESSAS credenciais pra enviar:
  *   token por org, com fallback global so pra Iza dogfood. Conta pro AI Readiness.
@@ -37,11 +37,11 @@ const ONBOARD_ASSISTIDO_URL =
 const TUTORIAL_HTML_URL = '/tutoriais/tutorial-interativo.html';
 const TUTORIAL_PDF_URL = '/tutoriais/cadastrar-whatsapp-instagram.pdf';
 
-// Embedded Signup (Conectar em 1 clique) — App ID + config_id PUBLICOS da ZappIQ
+// Embedded Signup (Conectar em 1 clique) — App ID + config_id PÚBLICOS da ZappIQ
 // na Meta. Nao sao secretos (usados client-side no FB SDK). Fallback hardcoded
 // pra nao depender de env no Vercel. config_id criado 2026-05-24 (WhatsApp
-// Embedded Signup, token de 60 dias). Em prod, so conecta cliente externo apos
-// Advanced Access aprovado no App Review; ate la funciona pra test users do app.
+// Embedded Signup, token de 60 dias). Em prod, so conecta cliente externo após
+// Advanced Access aprovado no App Review; até la funciona pra test users do app.
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || '1603310040738671';
 const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '3990962534537609';
 const META_GRAPH_VERSION = 'v21.0';

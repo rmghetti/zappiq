@@ -73,7 +73,7 @@ export default function CookiesPage() {
         <h2>4. Como revogar consentimento</h2>
         <p>
           Você pode revogar analytics e marketing a qualquer momento em{' '}
-          <Link href="/configuracoes/privacidade">Configurações &gt; Privacidade</Link>. A revogação é
+          <Link href="/configurações/privacidade">Configurações &gt; Privacidade</Link>. A revogação é
           aplicada imediatamente e registrada em log imutável ({' '}
           <code>/api/consent/export</code> devolve a trilha completa assinada).
         </p>

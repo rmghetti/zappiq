@@ -10,10 +10,10 @@ import { PublicLayout } from '../../components/landing/PublicLayout';
 /* ------------------------------------------------------------------ */
 
 const SEGMENTS = [
-  'Academia', 'Dentista', 'Psicologo', 'Advogado', 'Nutricionista',
+  'Academia', 'Dentista', 'Psicólogo', 'Advogado', 'Nutricionista',
   'Salao de Beleza', 'Pet Shop', 'Imobiliaria', 'Restaurante', 'Escola',
-  'Servicos Tecnicos', 'Clinica Medica', 'Contabilidade', 'Oficina Mecanica',
-  'Agencia Digital', 'Loja / E-commerce',
+  'Servicos Técnicos', 'Clínica Medica', 'Contabilidade', 'Oficina Mecanica',
+  'Agência Digital', 'Loja / E-commerce',
 ];
 
 type Resource = {
@@ -27,28 +27,28 @@ type Resource = {
 const RESOURCES: Resource[] = [
   {
     id: 'ebook',
-    title: 'E-book: Guia Definitivo de Automacao WhatsApp para PMEs',
-    description: '42 paginas com estrategias, metricas e passo a passo para automatizar o atendimento da sua empresa pelo WhatsApp Business.',
+    title: 'E-book: Guia Definitivo de Automação WhatsApp para PMEs',
+    description: '42 paginas com estratégias, metricas e passo a passo para automatizar o atendimento da sua empresa pelo WhatsApp Business.',
     icon: <BookOpen size={28} />,
     color: 'bg-primary-100 text-primary-600',
   },
   {
     id: 'template',
-    title: 'Template: 10 Fluxos de Automacao Prontos para Usar',
-    description: 'Fluxos de boas-vindas, qualificacao de leads, agendamento, follow-up e mais. Copie e cole no seu chatbot.',
+    title: 'Template: 10 Fluxos de Automação Prontos para Usar',
+    description: 'Fluxos de boas-vindas, qualificação de leads, agendamento, follow-up e mais. Copie e cole no seu chatbot.',
     icon: <FileText size={28} />,
     color: 'bg-blue-100 text-blue-600',
   },
   {
     id: 'calculadora',
     title: 'Planilha: Calculadora de ROI para Chatbots',
-    description: 'Calcule quanto sua empresa pode economizar e faturar a mais com automacao inteligente. Inclui benchmarks por segmento.',
+    description: 'Calcule quanto sua empresa pode economizar e faturar a mais com automação inteligente. Inclui benchmarks por segmento.',
     icon: <Calculator size={28} />,
     color: 'bg-amber-100 text-amber-600',
   },
   {
     id: 'checklist',
-    title: 'Checklist: Migracao do WhatsApp App para API',
+    title: 'Checklist: Migração do WhatsApp App para API',
     description: 'Lista completa com 25 itens para migrar do WhatsApp Business App para a API oficial sem perder conversas.',
     icon: <ClipboardCheck size={28} />,
     color: 'bg-purple-100 text-purple-600',
@@ -108,7 +108,7 @@ export function RecursosPage() {
         <div className="text-center max-w-3xl mx-auto">
           <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">Recursos Gratuitos</p>
           <h1 className="font-display text-4xl lg:text-5xl font-extrabold text-gray-900 leading-tight mb-5">
-            Materiais para acelerar sua automacao
+            Materiais para acelerar sua automação
           </h1>
           <p className="text-lg text-gray-500">
             E-books, templates, planilhas e checklists — tudo gratis. Baixe e comece a aplicar hoje.
@@ -196,7 +196,7 @@ export function RecursosPage() {
                       value={form.email}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
                       className={`w-full border rounded-xl px-4 py-2.5 text-sm outline-none transition-colors ${errors.email ? 'border-red-400 focus:border-red-500' : 'border-gray-200 focus:border-primary-400'}`}
-                      placeholder="voce@empresa.com"
+                      placeholder="você@empresa.com"
                     />
                     {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
                   </div>
@@ -247,9 +247,9 @@ export function RecursosPage() {
       <section className="py-20 bg-[#1A1A2E]">
         <div className="max-w-3xl mx-auto px-6 text-center">
           <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-white mb-5">
-            Quer ver na pratica?
+            Quer ver na prática?
           </h2>
-          <p className="text-gray-400 mb-8">Alem dos materiais, teste o ZappIQ gratis por 14 dias.</p>
+          <p className="text-gray-400 mb-8">Além dos materiais, teste o ZappIQ gratis por 14 dias.</p>
           {/* PLACEHOLDER: substituir por dado real */}
           <Link
             href="/cadastro"

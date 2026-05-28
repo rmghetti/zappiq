@@ -144,7 +144,7 @@ export default function FairUsePage() {
         <p>
           Dúvidas sobre limites ou solicitações de upgrade custom:{' '}
           <Link href="/contato">vendas@zappiq.com.br</Link>. Para disputas:{' '}
-          <a href="mailto:juridico@zappiq.com.br">juridico@zappiq.com.br</a>.
+          <a href="mailto:jurídico@zappiq.com.br">jurídico@zappiq.com.br</a>.
         </p>
       </article>
     </PublicLayout>

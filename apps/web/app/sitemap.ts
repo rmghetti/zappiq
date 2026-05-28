@@ -60,7 +60,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/segmentos/educacao`,
+      url: `${baseUrl}/segmentos/educação`,
       lastModified: today,
       changeFrequency: 'monthly',
       priority: 0.8,

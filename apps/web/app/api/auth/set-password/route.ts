@@ -7,7 +7,7 @@
  *   1. Cliente faz signup com email -> recebe magic link -> clica
  *   2. Cadastro.tsx detecta hash #access_token, persiste em localStorage
  *   3. /onboarding Step 0 captura senha + confirmação (criterios NIST 800-63B)
- *   4. Ao avancar Step 0 OU no submit final, frontend chama este endpoint
+ *   4. Ao avançar Step 0 OU no submit final, frontend chama este endpoint
  *      passando access_token Supabase + nova senha
  *   5. Endpoint usa Supabase Admin (service role) pra setar a senha
  *   6. Cliente passa a poder logar com email + senha
@@ -15,7 +15,7 @@
  * Quando Google OAuth: este endpoint NAO e chamado (cliente loga sempre por Google)
  *
  * Critérios de senha (validados client e server):
- *   - min 12 chars, 1 maiuscula, 1 minuscula, 1 numero, 1 especial
+ *   - min 12 chars, 1 maiuscula, 1 minuscula, 1 número, 1 especial
  */
 
 import { NextResponse } from 'next/server';

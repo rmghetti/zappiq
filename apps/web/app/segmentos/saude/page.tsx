@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 /* PLACEHOLDER: substituir por dados reais do segmento saúde */
 const data: SegmentPageData = {
-  slug: 'saude',
+  slug: 'saúde',
   name: 'Saúde',
   businessType: 'Clínicas e Consultórios',
   heroTitle: 'ZappIQ para Saúde: Automação WhatsApp feita para clínicas e consultórios',
