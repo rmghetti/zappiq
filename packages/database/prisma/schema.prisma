@@ -88,6 +88,13 @@ enum FlowTriggerType {
   SCHEDULE
   MANUAL
   EVENT
+  // Adicionados em 2026-05-28 pra cobrir os templates Maestro V1
+  CUSTOM
+  CART_ABANDONED
+  TIMEOUT_24H
+  TIMEOUT_48H
+  TIMEOUT_14D
+  TIMEOUT_30D
 }
 
 enum Sentiment {

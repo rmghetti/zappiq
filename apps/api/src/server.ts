@@ -54,6 +54,8 @@ import adminOnboardingJourneyRoutes from './routes/adminOnboardingJourney.js'; /
 import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-page site usa Iza real
 import adminIzaFactsRoutes from './routes/adminIzaFacts.js'; // FASE 4 P7+ Admin Camada 2 CRUD
 import { initRetentionJob } from './services/retentionService.js';
+import { bootstrapFlowTemplatesIfEmpty } from './bootstrap/seedFlowTemplates';
+
 import { initTenantUsageJob } from './services/tenantUsageService.js'; // PR #149 — H10 unit economics
 import { initUsageReconciliationJob } from './services/usageReconciliationService.js'; // PR #149 — Quota Mgmt #6 audit-only
 import { initTrialFollowupJob } from './services/trialFollowupService.js'; // FASE 1.B #240 — onboarding D+1/D+3/D+7
@@ -313,6 +315,9 @@ initAgentEvalCronJob().catch((err) => {
 app.use(errorHandler);
 
 // ── Start Server ────────────────────────────────
+// Auto-seed flow_templates se vazia (bootstrap idempotente)
+bootstrapFlowTemplatesIfEmpty().catch((err) => console.error('[bootstrap] error:', err));
+
 httpServer.listen(env.PORT, () => {
   logger.info(`[Server] ZappIQ API v2 running on port ${env.PORT}`);
   logger.info(`[Server] Environment: ${env.NODE_ENV}`);
