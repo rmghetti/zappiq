@@ -108,6 +108,25 @@ export async function getEffectivePlan(orgId: string): Promise<{
 }
 
 /**
+ * Onda 1.C — Soft block 60d primeiros.
+ * Orgs com createdAt < 60 dias ganham grace period: NAO sao bloqueadas
+ * mesmo com autoOverage=false. Apos D+60, comportamento normal.
+ */
+export async function isInGracePeriod(orgId: string): Promise<boolean> {
+  try {
+    const org = (await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { createdAt: true },
+    })) as any;
+    if (!org?.createdAt) return false;
+    const ageDays = (Date.now() - new Date(org.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+    return ageDays < 60;
+  } catch {
+    return false; // fail-safe: nao concede grace se nao conseguir ler
+  }
+}
+
+/**
  * Checa se uma operação pode prosseguir sem violar o limite.
  * Retorna detalhes da decisão para resposta estruturada.
  */
@@ -176,6 +195,22 @@ export async function checkLimit(
   const hardCeilingBrl: number | null = billing.hardCeilingBrl ?? null;
 
   if (!autoOverage) {
+    // Onda 1.C — Soft block: orgs < 60d ganham grace (permite + log warning)
+    const inGrace = await isInGracePeriod(orgId);
+    if (inGrace) {
+      logger.warn(`[planLimits] SOFT BLOCK org=${orgId} kind=${kind} ${current}/${limit} (grace 60d ativa)`);
+      return {
+        allowed: true,
+        limit,
+        current,
+        remaining: 0,
+        planId,
+        isTrialing,
+        isOverage: true,
+        overageDelta: delta,
+        // Soft mode: nao reporta pro Stripe (autoOverage=false), mas permite uso
+      };
+    }
     return {
       allowed: false,
       limit,
