@@ -316,6 +316,8 @@ export default function OnboardingPage() {
       segment: '',
       // Step 2 - Subsegmentos
       subsegments: [] as string[],
+      // #150 — escolha de comportamento ao atingir limite
+      quotaLimitBehavior: 'notify_decide' as 'notify_decide' | 'auto_charge' | 'hard_block',
       // Step 3 - Global survey answers
       globalAnswers: {} as Record<string, any>,
       // Step 4 - Segment-specific answers

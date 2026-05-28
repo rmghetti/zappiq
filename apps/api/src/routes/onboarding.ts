@@ -36,7 +36,13 @@ const onboardingSchema = z.object({
   // Step 4 — Survey answers
   surveyAnswers: z.record(z.any()).optional(),
 
-  // Step 5 — Website
+  // Step 5 — Quota limit behavior (#150)
+  // 'notify_decide' (default) -> avisa em 95%, deixa decidir
+  // 'auto_charge' -> autoOverage on, cobra excedente automatico
+  // 'hard_block' -> bloqueia em 100%, sem excedente
+  quotaLimitBehavior: z.enum(['notify_decide', 'auto_charge', 'hard_block']).optional(),
+
+  // Step 6 — Website
   websiteUrl: z.string().url().optional().or(z.literal('')),
 });
 
@@ -81,7 +87,7 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
     const {
       name, businessName, email, password, phone,
       niche, segmento, subsegmentos, agentName, tone, businessHours, greetingMessage, handoffMessage,
-      surveyAnswers, websiteUrl,
+      surveyAnswers, websiteUrl, quotaLimitBehavior,
     } = req.body;
 
     // Check duplicate email
@@ -132,6 +138,17 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
             // viravam só doc RAG e sumiam — o "Responder agora" não tinha
             // de onde ler as respostas atuais.
             surveyAnswers: surveyAnswers || {},
+            // #150 — billing behavior escolhido no signup
+            billing: (() => {
+              const b = (quotaLimitBehavior as string) || 'notify_decide';
+              if (b === 'auto_charge') {
+                return { autoOverage: true, hardCeilingBrl: null, notifyAtPercent: 80, quotaLimitBehavior: 'auto_charge' };
+              }
+              if (b === 'hard_block') {
+                return { autoOverage: false, hardCeilingBrl: null, notifyAtPercent: 90, quotaLimitBehavior: 'hard_block' };
+              }
+              return { autoOverage: false, hardCeilingBrl: null, notifyAtPercent: 95, quotaLimitBehavior: 'notify_decide' };
+            })(),
           },
         } as any,
       });
