@@ -1120,6 +1120,13 @@ export default function OnboardingPage() {
           {/* ──────── Step 6: Agente IA ──────── */}
           {step === 6 && (
             <div className="space-y-6">
+              {/* #150 — Cliente escolhe comportamento ao atingir limite */}
+              <div className="bg-gradient-to-br from-violet-50/40 via-white to-blue-50/40 rounded-2xl p-6 border border-violet-100">
+                <QuotaBehaviorStep
+                  value={form.quotaLimitBehavior}
+                  onChange={(v) => setForm((f) => ({ ...f, quotaLimitBehavior: v }))}
+                />
+              </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-900 mb-1">Configure seu Agente de IA</h2>
                 <p className="text-sm text-gray-500">Personalize como sua IA vai atender seus clientes</p>
