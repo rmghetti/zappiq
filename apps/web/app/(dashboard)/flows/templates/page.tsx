@@ -15,6 +15,8 @@ import Link from 'next/link';
 import {
   ArrowLeft, Sparkles, Loader2, Copy, Check, Eye, Wand2, Target, Clock,
   Stethoscope, Scissors, Dumbbell, PawPrint, ShoppingBag, Filter, AlertCircle,
+  Brain, Scale, Apple, Home, UtensilsCrossed, GraduationCap, Wrench,
+  Activity, Calculator, Car, Megaphone,
 } from 'lucide-react';
 import { api } from '../../../../lib/api';
 import { useAuthStore } from '../../../../stores/authStore';
@@ -41,6 +43,17 @@ const VERTICAL_ICON: Record<FlowTemplateVertical, React.ReactNode> = {
   ACADEMIA: <Dumbbell size={16} />,
   PETSHOP: <PawPrint size={16} />,
   ECOMMERCE_MODA: <ShoppingBag size={16} />,
+  'PSICÓLOGO': <Brain size={16} />,
+  ADVOGADO: <Scale size={16} />,
+  NUTRICIONISTA: <Apple size={16} />,
+  IMOBILIARIA: <Home size={16} />,
+  RESTAURANTE: <UtensilsCrossed size={16} />,
+  ESCOLA: <GraduationCap size={16} />,
+  SERVICOS_TECNICOS: <Wrench size={16} />,
+  CLINICA_MEDICA: <Activity size={16} />,
+  CONTABILIDADE: <Calculator size={16} />,
+  OFICINA: <Car size={16} />,
+  AGENCIA_DIGITAL: <Megaphone size={16} />,
 };
 
 const VERTICAL_GRADIENT: Record<FlowTemplateVertical, string> = {
@@ -49,6 +62,17 @@ const VERTICAL_GRADIENT: Record<FlowTemplateVertical, string> = {
   ACADEMIA: 'from-amber-50 to-orange-50 border-amber-200',
   PETSHOP: 'from-emerald-50 to-teal-50 border-emerald-200',
   ECOMMERCE_MODA: 'from-violet-50 to-purple-50 border-violet-200',
+  'PSICÓLOGO': 'from-indigo-50 to-purple-50 border-indigo-200',
+  ADVOGADO: 'from-slate-50 to-gray-50 border-slate-200',
+  NUTRICIONISTA: 'from-lime-50 to-green-50 border-lime-200',
+  IMOBILIARIA: 'from-stone-50 to-amber-50 border-stone-200',
+  RESTAURANTE: 'from-red-50 to-orange-50 border-red-200',
+  ESCOLA: 'from-blue-50 to-indigo-50 border-blue-200',
+  SERVICOS_TECNICOS: 'from-zinc-50 to-slate-50 border-zinc-200',
+  CLINICA_MEDICA: 'from-sky-50 to-cyan-50 border-sky-200',
+  CONTABILIDADE: 'from-neutral-50 to-stone-50 border-neutral-200',
+  OFICINA: 'from-gray-50 to-zinc-50 border-gray-200',
+  AGENCIA_DIGITAL: 'from-fuchsia-50 to-pink-50 border-fuchsia-200',
 };
 
 export default function TemplatesPage() {
