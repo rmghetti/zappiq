@@ -27,7 +27,7 @@ export function PrelaunchFooter() {
           </div>
           <nav className={s.footRight}>
             <a href="mailto:marketing@zappiq.com.br">Imprensa</a>
-            <a href="mailto:rodrigo.ghetti@zappiq.com.br">DPO</a>
+            <a href="mailto:dpo@zappiq.com.br">DPO</a>
             <Link href="/legal/privacidade">Privacidade</Link>
             <Link href="/home">ver home →</Link>
           </nav>

@@ -183,7 +183,7 @@ const FAQS: FaqItem[] = [
   {
     group: 'LGPD',
     q: 'Quem é o DPO do ZappIQ?',
-    a: 'Rodrigo Ghetti, Encarregado de Dados — contato direto em rodrigo.ghetti@zappiq.com.br. Resposta em 15 dias úteis (48h nos planos Business e Enterprise). Em caso de incidente crítico, notificamos autoridade e cliente em até 72 horas, como a LGPD exige.',
+    a: 'Encarregado de Dados (DPO) — contato direto em dpo@zappiq.com.br. Resposta em 15 dias úteis (48h nos planos Business e Enterprise). Em caso de incidente crítico, notificamos autoridade e cliente em até 72 horas, como a LGPD exige.',
   },
   {
     group: 'LGPD',
