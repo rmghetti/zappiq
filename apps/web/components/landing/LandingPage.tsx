@@ -48,6 +48,7 @@ import { CTAFinal } from './CTAFinal';
 import { Footer } from './LandingFooter';
 import { WhatsAppButton } from './WhatsAppButton';
 import { SocialProofToast } from './SocialProofToast';
+import { MetaNovidadesPopup } from './MetaNovidadesPopup';
 
 export function LandingPage() {
   return (
@@ -73,6 +74,7 @@ export function LandingPage() {
       <Footer />
       <WhatsAppButton />
       <SocialProofToast />
+      <MetaNovidadesPopup />
     </div>
   );
 }
