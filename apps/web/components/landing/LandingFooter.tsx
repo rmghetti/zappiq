@@ -74,7 +74,7 @@ const COLUMNS = [
       { label: 'Parceria WhatsApp Business', href: '/legal/parceria-meta' },
       { label: 'Deletar meus dados (LGPD)', href: '/legal/deletar-dados' },
       { label: 'Benchmarks concorrentes', href: '/legal/benchmarks-concorrentes' },
-      { label: 'Contato DPO', href: 'mailto:rodrigo.ghetti@zappiq.com.br' },
+      { label: 'Contato DPO', href: 'mailto:dpo@zappiq.com.br' },
     ],
   },
 ];
@@ -205,10 +205,10 @@ export function Footer() {
             <p className="mt-3">
               Encarregado de Dados (DPO):{' '}
               <a
-                href="mailto:rodrigo.ghetti@zappiq.com.br"
+                href="mailto:dpo@zappiq.com.br"
                 className="text-white/70 hover:text-white"
               >
-                rodrigo.ghetti@zappiq.com.br
+                dpo@zappiq.com.br
               </a>
               {' · '}
               <Link href="/legal/privacidade" className="text-white/70 hover:text-white">
