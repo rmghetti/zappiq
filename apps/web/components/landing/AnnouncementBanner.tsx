@@ -3,20 +3,24 @@
 /* ══════════════════════════════════════════════════════════════════════════
  * AnnouncementBanner — Top-of-page ribbon
  *
+ * V3 (10/06/2026): Pivô pra anunciar os lançamentos Meta (Conversations
+ * Brasil 2026): Meta Business Agent + usernames + pagamentos. Link pra
+ * /novidades-meta. Pioneirismo LATAM com pilotos junto a clientes e à Meta.
+ *
  * V2 (17/05/2026): Pivô pra anunciar Instagram Direct em rollout — narrativa
  * multichannel reforçada pra demos enterprise/investidores.
  *
  * V1 (29/04/2026): Meta Ads AI Connectors first-mover LATAM (PR #96).
  *
  * Aparece logo após Navbar, acima do Hero. Dismissível via localStorage.
- * STORAGE_KEY bumped pra _v2 pra reaparecer pra quem já dispensou o V1.
+ * STORAGE_KEY bumped pra _v3 pra reaparecer pra quem já dispensou o V2.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Sparkles, ArrowRight, X } from 'lucide-react';
 
-const STORAGE_KEY = 'zappiq_multichannel_ig_banner_dismissed_v2';
+const STORAGE_KEY = 'zappiq_meta_business_agent_banner_dismissed_v3';
 
 export function AnnouncementBanner() {
   const [visible, setVisible] = useState(false);
@@ -82,16 +86,16 @@ export function AnnouncementBanner() {
           </span>
 
           <p className="text-[12.5px] lg:text-[14px] font-medium leading-snug">
-            <strong className="text-white uppercase tracking-wide">Instagram Direct</strong>{' '}
-            <span className="text-white/85">chegando ao ZappIQ.</span>
-            <span className="hidden md:inline text-white/85"> Mesma Iza, mesmo cérebro,</span>
-            {' '}<span className="text-emerald-300">agora também no Instagram (rollout pra novos clientes)</span>
-            <span className="hidden lg:inline text-white/85"> — atende DMs de prospecção e pós-venda 24/7</span>
+            <strong className="text-white uppercase tracking-wide">Meta Business Agent</strong>{' '}
+            <span className="text-white/85">chegou.</span>{' '}
+            <span className="text-emerald-300">A ZappIQ é uma das primeiras da América Latina a implementar</span>
+            <span className="hidden md:inline text-white/85"> — com pilotos junto a clientes e à Meta</span>
+            <span className="hidden lg:inline text-white/85">. Usernames, busca por nome e pagamentos no chat</span>
             <span className="text-white/60">.</span>
           </p>
 
           <Link
-            href="/blog/meta-ads-ai-connectors-zappiq"
+            href="/novidades-meta"
             className="inline-flex items-center gap-1 text-[12px] lg:text-[13px] font-semibold text-emerald-300 hover:text-emerald-200 transition-colors whitespace-nowrap underline-offset-4 hover:underline"
           >
             Saber mais <ArrowRight size={12} />
