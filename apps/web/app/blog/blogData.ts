@@ -16,6 +16,9 @@ export interface BlogArticle {
   date: string;
   readingTime: string;
   author: BlogAuthor;
+  /* Tema visual da capa (BlogCover.tsx): meta-agent | meta-ads |
+     whatsapp-leads | saude | api-tech | ecommerce | roi | zappiq */
+  coverTheme?: string;
   content: string;
   relatedSlugs: string[];
 }
@@ -25,6 +28,7 @@ export const categories = ['Todos', 'Vendas', 'Saúde', 'Tecnologia', 'E-commerc
 export const articles: BlogArticle[] = [
   {
     slug: 'meta-business-agent-platform-o-que-muda',
+    coverTheme: 'meta-agent',
     title: 'Meta Business Agent: o WhatsApp ganhou um vendedor de IA. O que muda para o seu negócio — e como transformar o lançamento em receita',
     excerpt:
       'Em 3 de junho a Meta lançou globalmente o Business Agent e a Business Agent Platform. Em 10 de junho, no Conversations Brasil, mostrou a estratégia para o país. Análise completa: o que foi lançado, cenários de aplicação com a ZappIQ e um business case com as premissas na mesa.',
@@ -124,6 +128,7 @@ export const articles: BlogArticle[] = [
   },
   {
     slug: 'meta-ads-ai-connectors-zappiq',
+    coverTheme: 'meta-ads',
     title: 'Meta Ads AI Connectors + ZappIQ: a primeira integração ponta-a-ponta da América Latina',
     excerpt:
       'A Meta lançou Ads AI Connectors em 29/04/2026 — o gerador de leads agora é AI-driven. Mas ela deixou um gap proposital: receber e converter o lead. ZappIQ é a primeira plataforma da LATAM a fechar essa ponte. 6 business cases reais por vertical com ROI calculado.',
@@ -132,11 +137,106 @@ export const articles: BlogArticle[] = [
     readingTime: '9 min',
     author: { name: 'Rodrigo Ghetti', initials: 'RG' },
     relatedSlugs: ['como-recuperar-leads-perdidos-whatsapp', 'roi-chatbots-ia-como-calcular'],
-    /* Página dedicada em app/blog/meta-ads-ai-connectors-zappiq/page.tsx */
-    content: `<p>Lançamento Meta Ads AI Connectors + ZappIQ Iza = primeiro funil 100% AI-driven da LATAM. <a href="/blog/meta-ads-ai-connectors-zappiq">Ler análise completa</a>.</p>`,
+    /* Conteúdo completo migrado da antiga página dedicada (removida em
+       11/06/2026 por conflito de rota com /blog/[slug] — produção servia só
+       o teaser). Preços atualizados pro pricing V4 (Lite R$ 247). */
+    content: `
+<p><em>Por Rodrigo Ghetti, CEO da ZappIQ.</em></p>
+
+<p>Em 29 de abril de 2026 a Meta lançou os <strong>Ads AI Connectors</strong> — um servidor MCP oficial que permite a qualquer agente de IA gerenciar campanhas no Meta Ads. Mas a Meta resolveu metade do problema: <strong>gerar lead inteligente</strong>. A outra metade — receber, qualificar e converter esse lead no WhatsApp — ficou em aberto. A ZappIQ é a primeira plataforma da América Latina a fechar essa ponte, formando o primeiro funil ponta-a-ponta conduzido por IA: a Meta gera, a Iza converte, seu time fecha.</p>
+
+<h2>O que é o Meta Ads AI Connectors (e por que chegou agora)</h2>
+<p>É um servidor <strong>MCP oficial</strong> + CLI que conecta agentes de IA (Claude, ChatGPT e similares) diretamente à Marketing API da Meta. Na prática: você pede em linguagem natural e o agente executa na conta de anúncios — sem código, sem integração customizada, sem esperar o relatório da semana.</p>
+<p><strong>Model Context Protocol (MCP)</strong> é um padrão aberto criado pela Anthropic em novembro/2024 e adotado pela OpenAI em março/2025. Funciona como uma tomada universal entre modelos de IA e plataformas externas: antes, cada integração era artesanal; agora, qualquer IA compatível pluga em qualquer ferramenta compatível.</p>
+<p>O conector entrega quatro categorias de operação na conta:</p>
+<ul>
+<li><strong>Performance Reporting:</strong> perguntas em linguagem natural sobre CPL, CPC, ROAS e conversões</li>
+<li><strong>Campaign Management:</strong> criar campanhas, ajustar orçamento, pausar o que não performa, modificar copy</li>
+<li><strong>Catalog Management:</strong> construir e diagnosticar catálogos de produtos</li>
+<li><strong>Signal Diagnostics:</strong> validar a saúde do Pixel e da Conversions API</li>
+</ul>
+<blockquote><p>Antes, você gerenciava anúncios manualmente. Agora, um agente gerencia. A diferença não é incremental — é estrutural.</p></blockquote>
+
+<div class="ab-card ab-card-accent">
+<span class="ab-kicker">Rollout gradual — a ZappIQ já está dentro</span>
+<p>A Meta libera os Ads AI Connectors por ondas; nem toda conta da América Latina tem acesso ainda. A ZappIQ já recebeu a liberação e foi a primeira plataforma da região a operar a integração ponta-a-ponta na prática (Meta Ads → Iza → WhatsApp → conversão). Cliente ZappIQ não espera fila: a infraestrutura de captação inteligente já está pronta — com a Iza do outro lado, qualificando lead por lead.</p>
+</div>
+
+<h2>Por que a América Latina é o mercado privilegiado</h2>
+<div class="ab-grid">
+<div class="ab-stat"><span class="n">58%</span><span class="l">das PMEs brasileiras usam Meta Ads (vs 42% Google Ads)</span></div>
+<div class="ab-stat"><span class="n">R$ 3–15</span><span class="l">CPL médio no Meta Ads Brasil, variando por vertical</span></div>
+<div class="ab-stat"><span class="n">#1</span><span class="l">WhatsApp é o app mais presente nos smartphones brasileiros</span></div>
+<div class="ab-stat"><span class="n">+40% a/a</span><span class="l">crescimento do Click-to-WhatsApp — o formato que mais cresce</span></div>
+</div>
+<p>Anúncios Click-to-WhatsApp (CTWA) convertem na ordem de <strong>40% mais que landing pages tradicionais</strong> no Brasil: eliminam a fricção do formulário, mantêm a conversa onde o lead já está e abrem uma janela de 72 horas de mensagens gratuitas para nutrição automática. Para uma PME que já investe R$ 1.500–3.000/mês em Meta Ads, integrar o anúncio ao WhatsApp não é diferencial — é condição de competitividade.</p>
+
+<h2>O gap que a Meta deixou de propósito</h2>
+<p>Lendo o lançamento com atenção, fica claro o que o Ads AI Connectors <strong>não</strong> inclui: sincronização de leads para CRMs externos, recuperação de dados de Lead Forms, gerenciamento direto de anúncios Click-to-WhatsApp, notificações de novos leads e qualquer coisa parecida com qualificação conversacional ou transbordo humano.</p>
+<p>Isso não é falha de roadmap — é decisão estratégica. A Meta resolve <strong>o anúncio</strong>. Quem resolve <strong>o lead</strong> captura o resto da cadeia de valor. E sem um agente inteligente recebendo o lead que clicou, o investimento em mídia vira vela acesa: a maior parte dos leads esfria nas primeiras 48 horas — principalmente os gerados fora do horário comercial, quando ninguém responde.</p>
+<blockquote><p>O Ads AI Connectors é o momento em que o gerador de demanda finalmente conversa com o receptor. Uma IA capta, outra IA qualifica — e seu time entra só quando o lead está pronto.</p></blockquote>
+
+<h2>Por que ZappIQ + Meta = funil ponta-a-ponta com IA</h2>
+<p>O funil completo tem três camadas, cada uma com um dono claro:</p>
+<ul>
+<li><strong>Gerador — Meta Ads AI Connectors:</strong> segmenta por intenção, otimiza orçamento em tempo real, testa criativos e escala o vencedor.</li>
+<li><strong>Receptor — ZappIQ (Iza):</strong> responde 24/7 em segundos, qualifica por conversa natural (texto e áudio), agenda automaticamente, nutre o lead e coleta dados em conformidade com a LGPD.</li>
+<li><strong>Fechador — seu time + CRM:</strong> recebe o lead já contextualizado, negocia e fecha. Comercial vira closer, não triador.</li>
+</ul>
+<p>A matemática para uma PME média (CPL R$ 10, 100 leads/mês, 15% de conversão lead→venda, ticket R$ 300):</p>
+<div class="ab-grid">
+<div class="ab-stat"><span class="n">R$ 4.500</span><span class="l">Sem receptor inteligente: R$ 1.000 de mídia, 15% de conversão, 15 vendas/mês</span></div>
+<div class="ab-stat"><span class="n">R$ 8.400</span><span class="l">Com a Iza (plano Lite, R$ 247/mês): conversão na casa de 28%, 28 vendas/mês — +86% de receita</span></div>
+</div>
+<p>O payback do plano vem na primeira venda incremental. Os números acima são projeção com premissas declaradas — e é exatamente por isso que a nossa recomendação é medir 30 dias de baseline antes de escalar.</p>
+
+<h2>6 cenários por vertical (premissas na mesa)</h2>
+<p><em>Os cenários abaixo são ilustrativos, construídos sobre benchmarks de mercado e perfis típicos de PMEs com investimento ativo em Meta Ads. Resultados individuais variam conforme setor, base de conhecimento e operação.</em></p>
+
+<div class="ab-card">
+<span class="ab-kicker">Clínica odontológica · São Paulo · R$ 1.000/mês em Meta Ads</span>
+<p><strong>Antes:</strong> CPL R$ 12 · conversão 35% · receita do canal R$ 13 mil/mês. <strong>Depois:</strong> CPL R$ 7 · conversão 62% · R$ 21 mil/mês. O ganho escondido: no-show de 23% para 8% com confirmação automática — agenda cheia vale tanto quanto lead novo.</p>
+</div>
+<div class="ab-card">
+<span class="ab-kicker">E-commerce de moda · Rio de Janeiro · R$ 3.000/mês</span>
+<p><strong>Antes:</strong> CPL R$ 8 · conversão 8% · R$ 5,4 mil/mês. <strong>Depois:</strong> CPL R$ 3,50 · conversão 18% · R$ 12,4 mil/mês. Recuperação de carrinho via janela de mensagem fez o trabalho que remarketing caro não fazia.</p>
+</div>
+<div class="ab-card">
+<span class="ab-kicker">Escola de idiomas · Brasília · R$ 2.500/mês</span>
+<p><strong>Antes:</strong> 16 matrículas/mês, conversão 22%. <strong>Depois:</strong> 50 matrículas/mês, conversão 55%. Resposta em segundos no pico de campanha (quando a concorrência responde no dia seguinte) decide a matrícula.</p>
+</div>
+<div class="ab-card">
+<span class="ab-kicker">Consultoria jurídica · Curitiba · R$ 1.500/mês</span>
+<p><strong>Antes:</strong> 16 clientes novos/mês, conversão 18%. <strong>Depois:</strong> 54 clientes/mês, conversão 58%. A triagem conversacional elimina o trabalho repetitivo da secretaria e entrega ao advogado só o caso qualificado.</p>
+</div>
+<div class="ab-card">
+<span class="ab-kicker">Academia · Salvador · R$ 2.000/mês</span>
+<p><strong>Antes:</strong> 30 matrículas/mês. <strong>Depois:</strong> 87 matrículas/mês — e retenção maior: aluno que recebe acompanhamento no WhatsApp permanece mais.</p>
+</div>
+<div class="ab-card">
+<span class="ab-kicker">Restaurante delivery · Recife · R$ 1.200/mês</span>
+<p><strong>Antes:</strong> 33 pedidos/mês vindos de anúncio, conversão 22%. <strong>Depois:</strong> 96 pedidos/mês, conversão 64% — com a IA sugerindo acompanhamento e sobremesa no fluxo do pedido (ticket médio sobe junto).</p>
+</div>
+
+<h2>Como começar em 24 horas</h2>
+<ol>
+<li><strong>Hora 0:</strong> cadastre-se na ZappIQ — 14 dias grátis, sem cartão e sem setup fee.</li>
+<li><strong>Hora 2:</strong> conecte seu número de WhatsApp Business pelo wizard guiado. Zero código, sem trocar de número.</li>
+<li><strong>Hora 4:</strong> treine sua IA com seus documentos e 2–3 variações de primeira mensagem (templates por vertical já vêm prontos).</li>
+<li><strong>Hora 6:</strong> crie seu primeiro anúncio Click-to-WhatsApp no Gerenciador de Anúncios da Meta.</li>
+<li><strong>Hora 24:</strong> rode a primeira campanha com orçamento de validação — a IA atende cada lead em segundos.</li>
+<li><strong>Dia 7:</strong> otimize a campanha via Ads AI Connectors: o agente reduz CPL e realoca orçamento para o que converte.</li>
+</ol>
+
+<h2>A pergunta executiva desta semana</h2>
+<p>A pergunta não é se o funil conduzido por IA vai virar padrão — os dois lados dele acabam de ficar prontos. A pergunta é: você quer ser <strong>um gerador de leads caros que esfriam em 48 horas</strong>, ou <strong>um funil que qualifica, nutre e só te chama quando o lead está pronto para fechar</strong>?</p>
+
+<p><em>Notas: cenários e projeções são ilustrativos, com premissas declaradas no texto; resultados individuais variam. Preços ZappIQ conforme tabela vigente em zappiq.com.br. Disponibilidade dos Meta Ads AI Connectors sujeita ao rollout da Meta por conta de anúncios.</em></p>
+    `,
   },
   {
     slug: 'como-recuperar-leads-perdidos-whatsapp',
+    coverTheme: 'whatsapp-leads',
     title: 'Como Recuperar Leads Perdidos no WhatsApp: Guia Completo 2026',
     excerpt: 'Descubra estratégias comprovadas para reengajar leads que deixaram de responder no WhatsApp e transforme oportunidades perdidas em vendas concretas.',
     category: 'Vendas',
@@ -211,6 +311,7 @@ export const articles: BlogArticle[] = [
   },
   {
     slug: 'guia-automação-whatsapp-clínicas-2026',
+    coverTheme: 'saude',
     title: 'Guia de Automação WhatsApp para Clínicas e Consultórios em 2026',
     excerpt: 'Aprenda como clínicas médicas e odontológicas estão usando IA no WhatsApp para reduzir faltas, automatizar agendamentos e melhorar a experiência do paciente.',
     category: 'Saúde',
@@ -290,6 +391,7 @@ export const articles: BlogArticle[] = [
   },
   {
     slug: 'whatsapp-business-api-vs-app',
+    coverTheme: 'api-tech',
     title: 'WhatsApp Business API vs. App: Qual Escolher para Sua Empresa?',
     excerpt: 'Entenda as diferenças entre o WhatsApp Business App gratuito e a API oficial, e descubra qual é a melhor opção para escalar seu atendimento.',
     category: 'Tecnologia',
@@ -361,6 +463,7 @@ export const articles: BlogArticle[] = [
   },
   {
     slug: '5-fluxos-automação-loja-virtual',
+    coverTheme: 'ecommerce',
     title: '5 Fluxos de Automação WhatsApp que Toda Loja Virtual Precisa',
     excerpt: 'Conheça os 5 fluxos de automação no WhatsApp que aumentam vendas, reduzem abandono de carrinho e fidelizam clientes no e-commerce.',
     category: 'E-commerce',
@@ -446,6 +549,7 @@ export const articles: BlogArticle[] = [
   },
   {
     slug: 'roi-chatbots-ia-como-calcular',
+    coverTheme: 'roi',
     title: 'ROI de Chatbots com IA: Como Calcular o Retorno do Seu Investimento',
     excerpt: 'Aprenda a calcular o ROI real de um chatbot com IA para WhatsApp e descubra por que empresas brasileiras estão obtendo retorno de 300% a 800% em 6 meses.',
     category: 'Gestão',
