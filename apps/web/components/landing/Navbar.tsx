@@ -78,11 +78,13 @@ export function Navbar() {
   };
 
   return (
+    /* Navbar SEMPRE clara (fix 11/06/2026): antes era bg-transparent até
+       scrollY > 12, o que sumia com logo e menu (escuros) sobre heroes
+       escuros como o do /blog. Fundo glass claro permanente; a sombra/borda
+       continua aparecendo só após o scroll pra manter o visual no topo. */
     <nav
-      className={`fixed left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'bg-[rgba(250,250,250,0.85)] backdrop-blur-xl border-b border-line'
-          : 'bg-transparent'
+      className={`fixed left-0 right-0 z-50 bg-[rgba(250,250,250,0.88)] backdrop-blur-xl transition-all duration-300 ${
+        scrolled ? 'border-b border-line shadow-[0_4px_16px_-8px_rgba(17,17,17,0.08)]' : ''
       }`}
       style={{ top: 'var(--zappiq-banner-h, 0px)' }}
     >
