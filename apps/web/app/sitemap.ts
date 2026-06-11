@@ -113,5 +113,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'monthly',
       priority: 0.7,
     },
+    {
+      url: `${baseUrl}/blog/meta-business-agent-platform-o-que-muda`,
+      lastModified: '2026-06-10',
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/novidades-meta`,
+      lastModified: '2026-06-10',
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
   ];
 }
