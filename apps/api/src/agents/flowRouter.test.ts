@@ -40,4 +40,31 @@ describe('pickFlowForMessage', () => {
     const kw = f({ id: 'kw', triggerType: 'KEYWORD', triggerConfig: { keywords: ['preço'] } });
     expect(pickFlowForMessage([kw], 'bom dia', { conversationEnded: false })).toBeNull();
   });
+
+  // --- testes adicionados pela review Task 4 ---
+
+  it('keyword maiúscula no config casa mensagem minúscula (exact)', () => {
+    const kw = f({ id: 'kw', triggerType: 'KEYWORD', triggerConfig: { keywords: ['PROMO'] } });
+    expect(pickFlowForMessage([kw], 'promo', { conversationEnded: false })?.id).toBe('kw');
+  });
+
+  it('legacy triggerConfig.keyword (string) casa mensagem', () => {
+    const kw = f({ id: 'kw', triggerType: 'KEYWORD', triggerConfig: { keyword: 'oi' } });
+    expect(pickFlowForMessage([kw], 'oi', { conversationEnded: false })?.id).toBe('kw');
+  });
+
+  it('keywords vazio → null', () => {
+    const kw = f({ id: 'kw', triggerType: 'KEYWORD', triggerConfig: { keywords: [] } });
+    expect(pickFlowForMessage([kw], 'oi', { conversationEnded: false })).toBeNull();
+  });
+
+  it('empate total (rank/priority/updatedAt iguais) → vence menor id independente da ordem', () => {
+    const ts = new Date('2026-06-10');
+    const a = f({ id: 'aaa', triggerType: 'KEYWORD', triggerConfig: { keywords: ['oi'] }, priority: 5, updatedAt: ts });
+    const z = f({ id: 'zzz', triggerType: 'KEYWORD', triggerConfig: { keywords: ['oi'] }, priority: 5, updatedAt: ts });
+    // ordem [a, z]
+    expect(pickFlowForMessage([a, z], 'oi', { conversationEnded: false })?.id).toBe('aaa');
+    // ordem [z, a] — resultado deve ser o mesmo
+    expect(pickFlowForMessage([z, a], 'oi', { conversationEnded: false })?.id).toBe('aaa');
+  });
 });
