@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeRunAt, validateTimerFire } from './flowScheduler.js';
+import { computeRunAt, validateTimerFire, buildStoredFlowState } from './flowScheduler.js';
 
 const NOW = new Date('2026-06-11T12:00:00.000Z');
 
@@ -56,5 +56,20 @@ describe('validateTimerFire', () => {
   it('fora da janela de 24h da Meta → expired (não envia mensagem livre)', () => {
     expect(validateTimerFire({ ...base, lastInboundAt: new Date('2026-06-10T11:00:00.000Z'), timerCreatedAt: new Date('2026-06-10T11:05:00.000Z') } as any))
       .toEqual({ ok: false, status: 'expired', reason: 'meta_24h_window' });
+  });
+});
+
+describe('buildStoredFlowState (mesma regra de persistência do flowRuntime)', () => {
+  it('cursor non-null → salva com flowId (próximo inbound continua no fluxo)', () => {
+    expect(buildStoredFlowState({ cursor: 'node-7', vars: { nome: 'Ana' } }, 'flow-1'))
+      .toEqual({ cursor: 'node-7', vars: { nome: 'Ana' }, flowId: 'flow-1' });
+  });
+  it('cursor null → ENDED (Iza pura assume; timer retoma do snapshot)', () => {
+    expect(buildStoredFlowState({ cursor: null, vars: { nome: 'Ana' } }, 'flow-1'))
+      .toEqual({ cursor: '__ended__', vars: { nome: 'Ana' } });
+  });
+  it('state undefined → ENDED com vars vazio (defensivo)', () => {
+    expect(buildStoredFlowState(undefined, 'flow-1'))
+      .toEqual({ cursor: '__ended__', vars: {} });
   });
 });

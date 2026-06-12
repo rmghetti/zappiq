@@ -10,7 +10,14 @@
  *   Fail-closed: qualquer condição inválida cancela/expira o timer em vez
  *   de mandar mensagem — um timer nunca "vaza" mensagem indevida.
  *
- * Partes puras (testáveis sem infra): computeRunAt + validateTimerFire.
+ *   ENCADEAMENTO DE TIMERS: se a retomada para em OUTRO wait/schedule, o
+ *   worker agenda o próximo timer — sequências drip (mensagem → wait →
+ *   mensagem → wait → mensagem) avançam sozinhas, sem depender de inbound.
+ *   Retomada que para em nó-IA NÃO chama o LLM (limitação documentada):
+ *   o cursor é persistido e o próximo inbound continua pelo orchestrator.
+ *
+ * Partes puras (testáveis sem infra): computeRunAt + validateTimerFire +
+ * buildStoredFlowState.
  * ============================================================================
  */
 import { Queue, Worker, Job } from 'bullmq';
@@ -149,6 +156,22 @@ export function validateTimerFire(ctx: TimerFireContext): TimerFireVerdict {
     return { ok: false, status: 'expired', reason: 'meta_24h_window' };
   }
   return { ok: true };
+}
+
+/**
+ * Decide o estado a persistir no cache após um walk — MESMA regra do
+ * flowRuntime (manter em sincronia): cursor non-null → conversa continua no
+ * fluxo (salva COM flowId pro próximo inbound retomar no lugar certo);
+ * cursor null → ENDED (Iza pura assume; timers futuros retomam do snapshot
+ * do FlowTimer, não do cache).
+ */
+export function buildStoredFlowState(
+  state: FlowState | undefined,
+  flowId: string,
+): Record<string, unknown> {
+  const cursor = state?.cursor ?? null;
+  if (cursor !== null) return { ...state, flowId };
+  return { cursor: FLOW_ENDED, vars: state?.vars || {} };
 }
 
 // ── Agendamento ──────────────────────────────────
@@ -347,15 +370,40 @@ export function initFlowTimerWorker(): void {
           effects: result.effects.filter((e) => e.kind !== 'goto_flow'),
         });
 
-        // Persiste o cursor no MESMO formato do flowRuntime: próximo inbound
-        // continua do ponto certo (ou marca ENDED pra Iza pura assumir).
-        const stateKey = flowStateKey(timer.organizationId, timer.conversationId);
-        const nextCursor = result.state?.cursor ?? null;
-        if (result.next === 'end' || nextCursor === null) {
-          await cache.set(stateKey, JSON.stringify({ cursor: FLOW_ENDED, vars: result.state?.vars || {} }), FLOW_STATE_TTL);
-        } else {
-          await cache.set(stateKey, JSON.stringify({ ...result.state, flowId: timer.flowId }), FLOW_STATE_TTL);
+        // ── Encadeamento de timers (drip) ───────────────────────────────
+        // A retomada pode parar em OUTRO wait/schedule (mensagem → wait →
+        // mensagem → wait → ...). Agenda o próximo timer aqui, senão a
+        // sequência estaciona após a primeira retomada.
+        if (result.next === 'scheduled' && result.schedule) {
+          await scheduleFlowTimer({
+            organizationId: timer.organizationId,
+            conversationId: timer.conversationId,
+            flowId: timer.flowId,
+            flowVersion: timer.flowVersion,
+            schedule: result.schedule,
+            state: result.state,
+          });
         }
+
+        // Nó-IA na retomada: o worker não tem LLM — o aiPrompt NÃO é
+        // processado aqui (limitação documentada). O cursor é persistido
+        // abaixo (non-null no caso 'ai'), então o PRÓXIMO inbound do cliente
+        // continua dali pelo caminho normal do orchestrator.
+        if (result.next === 'ai') {
+          logger.warn('[FlowScheduler] retomada parou em nó-IA — prompt não processado na retomada por timer (limitação documentada); cursor persistido para o próximo inbound', {
+            timerId: timer.id,
+            organizationId: timer.organizationId,
+            conversationId: timer.conversationId,
+            flowId: timer.flowId,
+            cursor: result.state?.cursor ?? null,
+          });
+        }
+
+        // Persiste o cursor no MESMO formato/regra do flowRuntime: cursor
+        // non-null → próximo inbound continua do ponto certo (com flowId);
+        // null → ENDED (Iza pura assume; timer encadeado retoma do snapshot).
+        const stateKey = flowStateKey(timer.organizationId, timer.conversationId);
+        await cache.set(stateKey, JSON.stringify(buildStoredFlowState(result.state, timer.flowId)), FLOW_STATE_TTL);
       } catch (effectErr) {
         // Claim já queimado — NÃO reverter para pending (evita retry BullMQ inútil).
         // Registra falha como statusReason sem mudar o status 'fired'.
