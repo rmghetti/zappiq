@@ -48,7 +48,14 @@ CREATE POLICY flow_versions_tenant_isolation ON "flow_versions"
   USING ("organizationId" = current_setting('app.current_organization_id', true))
   WITH CHECK ("organizationId" = current_setting('app.current_organization_id', true));
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON "flow_versions" TO app_user;
+-- GRANT condicional: prod (Supabase baseline) não tem o role app_user;
+-- em ambientes que o têm (dev/local RLS), o GRANT é aplicado normalmente.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON "flow_versions" TO app_user;
+  END IF;
+END $$;
 
 -- ─── RLS + GRANTs — flow_timers ──────────────────────────────────────────────
 ALTER TABLE "flow_timers" ENABLE ROW LEVEL SECURITY;
@@ -58,4 +65,11 @@ CREATE POLICY flow_timers_tenant_isolation ON "flow_timers"
   USING ("organizationId" = current_setting('app.current_organization_id', true))
   WITH CHECK ("organizationId" = current_setting('app.current_organization_id', true));
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON "flow_timers" TO app_user;
+-- GRANT condicional: prod (Supabase baseline) não tem o role app_user;
+-- em ambientes que o têm (dev/local RLS), o GRANT é aplicado normalmente.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON "flow_timers" TO app_user;
+  END IF;
+END $$;
