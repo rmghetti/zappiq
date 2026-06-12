@@ -77,3 +77,13 @@ Pra contornar (PRs cosméticos): adicione label `no-iza-impact` no PR.
 ---
 
 <!-- Próximas entradas aqui. Não delete entradas antigas (histórico). -->
+
+### 2026-06-11 · PR #249 · Navbar sempre clara (cosmetico)
+
+**O que mudou:** Navbar com fundo glass claro permanente. Antes era transparente ate scrollY > 12px, o que sumia com logo e itens de menu (escuros) sobre heroes escuros como o do /blog V2. Borda + sombra continuam condicionadas ao scroll.
+
+**Impacto na Iza:** Nenhum — mudanca puramente visual de UI. Label `no-iza-impact` tambem aplicado no PR.
+
+**Acao no /admin/iza-knowledge:** Nenhuma.
+
+**Smoke esperado:** N/A.
