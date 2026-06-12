@@ -152,6 +152,87 @@ describe('flowEngine.resolveFlowStep', () => {
   });
 });
 
+describe('flowEngine wait/schedule (Maestro v2, Fase 3)', () => {
+  it('wait para o walk e devolve schedule com ramo de timeout e cursor de resposta', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'm', type: 'message', data: { text: 'Posso te ajudar em algo mais?' } },
+        { id: 'w', type: 'wait', data: { delayMinutes: 60 } },
+        { id: 'reply', type: 'condition' },
+        { id: 'nudge', type: 'message', data: { text: 'Ainda está aí? 😊' } },
+      ],
+      edges: [
+        { source: 's', target: 'm' },
+        { source: 'm', target: 'w' },
+        { source: 'w', target: 'reply' },
+        { source: 'w', target: 'nudge', data: { when: { match: 'timeout' } } as any },
+      ],
+    };
+    const r = resolveFlowStep(graph, EMPTY_STATE, 'oi');
+    expect(r.next).toBe('scheduled');
+    expect(r.schedule).toEqual({ kind: 'wait', delayMinutes: 60, runAt: null, resumeNodeId: 'nudge' });
+    expect(r.state.cursor).toBe('reply');
+  });
+  it('wait com uma única aresta usa-a como timeout e cursor null (reply cancela e Iza assume)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'w', type: 'wait', data: { delayMinutes: 30 } },
+        { id: 'n', type: 'message', data: { text: 'follow-up' } },
+      ],
+      edges: [{ source: 's', target: 'w' }, { source: 'w', target: 'n' }],
+    };
+    const r = resolveFlowStep(graph, EMPTY_STATE, 'oi');
+    expect(r.next).toBe('scheduled');
+    expect(r.schedule?.resumeNodeId).toBe('n');
+    expect(r.state.cursor).toBeNull();
+  });
+  it('schedule usa runAt do nó e segue aresta única', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'sc', type: 'schedule', data: { runAt: '2026-06-12T13:00:00.000Z' } },
+        { id: 'm', type: 'message', data: { text: 'lembrete!' } },
+      ],
+      edges: [{ source: 's', target: 'sc' }, { source: 'sc', target: 'm' }],
+    };
+    const r = resolveFlowStep(graph, EMPTY_STATE, 'oi');
+    expect(r.next).toBe('scheduled');
+    expect(r.schedule).toEqual({ kind: 'schedule', delayMinutes: null, runAt: '2026-06-12T13:00:00.000Z', resumeNodeId: 'm' });
+  });
+  it('wait sem config de tempo passa direto (compat com fluxos antigos)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'w', type: 'wait' },
+        { id: 'm', type: 'message', data: { text: 'direto' } },
+      ],
+      edges: [{ source: 's', target: 'w' }, { source: 'w', target: 'm' }],
+    };
+    const r = resolveFlowStep(graph, EMPTY_STATE, 'oi');
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'direto' }]);
+    expect(r.next).toBe('end');
+  });
+  it('retomada por timer: hasIncomingMessage=false faz condition aguardar em vez de ramificar com texto vazio', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'm', type: 'message', data: { text: 'voltei!' } },
+        { id: 'c', type: 'condition' },
+      ],
+      edges: [
+        { source: 's', target: 'm' }, { source: 'm', target: 'c' },
+        { source: 'c', target: 'm', data: { when: { match: 'contains', value: '' } } as any },
+      ],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'm', vars: {} }, '', { hasIncomingMessage: false });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'voltei!' }]);
+    expect(r.next).toBe('await_input');
+    expect(r.state.cursor).toBe('c');
+  });
+});
+
 describe('flowEngine goto_flow (Maestro v2)', () => {
   it('goto_flow emite efeito e encerra o walk neste fluxo', () => {
     const graph: FlowGraph = {

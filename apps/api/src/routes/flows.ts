@@ -256,7 +256,7 @@ router.post('/:id/test', async (req: Request, res: Response, next: NextFunction)
     const turns: Array<{
       input: string;
       effects: { kind: string; [k: string]: any }[];
-      next: 'await_input' | 'ai' | 'end';
+      next: 'await_input' | 'ai' | 'end' | 'scheduled';
       aiPrompt: string | null;
     }> = [];
 

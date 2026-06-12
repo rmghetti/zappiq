@@ -21,7 +21,12 @@ export interface FlowNode {
 }
 
 export interface FlowCondition {
-  match: 'contains' | 'equals' | 'starts_with' | 'regex' | 'else';
+  /**
+   * 'timeout' é exclusivo de arestas de saída de nós 'wait': marca o ramo que
+   * o timer retoma. Nunca deve chegar ao matchCondition de um nó 'condition'
+   * (o default: return false garante que não ramifica inadvertidamente).
+   */
+  match: 'contains' | 'equals' | 'starts_with' | 'regex' | 'else' | 'timeout';
   value?: string;
 }
 
@@ -51,14 +56,30 @@ export type FlowEffect =
   | { kind: 'handoff' }
   | { kind: 'goto_flow'; targetFlowId: string };
 
+export interface FlowSchedule {
+  kind: 'wait' | 'schedule';
+  delayMinutes: number | null;
+  runAt: string | null;
+  /** Nó onde o TIMER retoma (ramo de timeout / próximo nó do schedule). */
+  resumeNodeId: string | null;
+}
+
 export interface FlowStepResult {
   effects: FlowEffect[];
-  /** await_input: parou num condition esperando próxima msg. ai: entrega pro LLM. end: terminou. */
-  next: 'await_input' | 'ai' | 'end';
+  /** await_input: parou num condition esperando próxima msg. ai: entrega pro LLM. end: terminou. scheduled: agendamento emitido. */
+  next: 'await_input' | 'ai' | 'end' | 'scheduled';
   state: FlowState;
   /** Presente quando next==='ai': prompt do nó-IA pra injetar no systemPrompt. */
   aiPrompt?: string;
   aiModelHint?: string;
+  /** Presente quando next==='scheduled': dados do agendamento. */
+  schedule?: FlowSchedule;
+}
+
+/** Opções de controle para resolveFlowStep. */
+export interface ResolveOptions {
+  /** false na retomada por timer: nenhum texto novo do usuário disponível. */
+  hasIncomingMessage?: boolean;
 }
 
 // ── Helpers de grafo ──────────────────────────────────────────────────────────
@@ -119,6 +140,7 @@ export function resolveFlowStep(
   graph: FlowGraph,
   state: FlowState,
   incomingText: string,
+  options?: ResolveOptions,
 ): FlowStepResult {
   const effects: FlowEffect[] = [];
   const vars = { ...(state.vars || {}) };
@@ -135,7 +157,9 @@ export function resolveFlowStep(
   // ainda não respondeu neste walk: depois de enviar um texto, um condition
   // seguinte tem que aguardar a PRÓXIMA mensagem do usuário (não dá pra ramificar
   // sobre a resposta a uma pergunta que acabamos de fazer no mesmo turno).
-  let messageAvailable = true;
+  // Na retomada por timer (hasIncomingMessage=false), nenhuma msg nova está
+  // disponível — o condition que encontrarmos no walk deve aguardar input.
+  let messageAvailable = options?.hasIncomingMessage !== false;
   let sentMessageThisWalk = false;
 
   for (let guard = 0; guard < MAX_WALK; guard++) {
@@ -199,10 +223,28 @@ export function resolveFlowStep(
       }
 
       case 'wait':
-      case 'schedule':
-        // Fase 1: timing não implementado — passa direto. TODO Fase 3.
-        current = firstTargetFrom(graph, node.id);
-        break;
+      case 'schedule': {
+        const delayMinutes = Number(node.data?.delayMinutes) > 0 ? Number(node.data!.delayMinutes) : null;
+        const runAt = typeof node.data?.runAt === 'string' && node.data.runAt ? node.data.runAt : null;
+        if (!delayMinutes && !runAt) {
+          // Sem config de tempo → compat: passa direto (comportamento pré-v2).
+          current = firstTargetFrom(graph, node.id);
+          break;
+        }
+        const outgoing = graph.edges.filter((e) => e.source === node.id);
+        const timeoutEdge = outgoing.find((e) => (e.data?.when as any)?.match === 'timeout');
+        const replyEdge = outgoing.find((e) => (e.data?.when as any)?.match !== 'timeout');
+        // wait com 2 saídas: timeout explícito + ramo de resposta.
+        // wait/schedule com 1 saída: ela é o destino do timer; reply cancela (cursor null → ENDED).
+        const resumeNodeId = timeoutEdge?.target ?? replyEdge?.target ?? null;
+        const replyCursor = node.type === 'wait' && timeoutEdge ? (replyEdge?.target ?? null) : null;
+        return {
+          effects,
+          next: 'scheduled',
+          schedule: { kind: node.type as 'wait' | 'schedule', delayMinutes, runAt, resumeNodeId },
+          state: { cursor: replyCursor, vars },
+        };
+      }
 
       case 'condition':
         if (messageAvailable && !sentMessageThisWalk) {
