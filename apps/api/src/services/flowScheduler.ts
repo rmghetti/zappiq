@@ -284,6 +284,7 @@ export function initFlowTimerWorker(): void {
       let aiPaused = false;
       const contactPhone = conversation?.contact?.phone;
       if (contactPhone) {
+        // Redis indisponível → cache.get retorna null → considera não-pausado (fail-open consciente; janela pequena e baixa severidade).
         const pauseValue = await cache.get(`ai_paused:${timer.organizationId}:${contactPhone}`);
         aiPaused = !!pauseValue && pauseValue !== 'autoreply';
       }
@@ -298,6 +299,14 @@ export function initFlowTimerWorker(): void {
       });
 
       if (!verdict.ok) {
+        // not_pending: timer já está em status terminal (fired/cancelled) — não
+        // sobrescrever o status com update, apenas logar e sair.
+        if (verdict.reason === 'not_pending') {
+          logger.info('[FlowScheduler] Timer já tratado — ignorado (not_pending)', {
+            timerId: timer.id, currentStatus: timer.status,
+          });
+          return;
+        }
         await prisma.flowTimer.update({
           where: { id: timer.id },
           data: { status: verdict.status, statusReason: verdict.reason },
@@ -305,6 +314,18 @@ export function initFlowTimerWorker(): void {
         logger.info('[FlowScheduler] Timer não disparado (fail-closed)', {
           timerId: timer.id, status: verdict.status, reason: verdict.reason,
         });
+        return;
+      }
+
+      // Claim atômico pending→fired ANTES de enviar efeitos: retry do BullMQ ou
+      // corrida com cancelPendingWaitTimers nunca pode reenviar mensagem ao cliente.
+      // Falha após o claim = retomada perdida (fail-closed), nunca mensagem duplicada.
+      const claimed = await prisma.flowTimer.updateMany({
+        where: { id: timer.id, status: 'pending' },
+        data: { status: 'fired', firedAt: new Date() },
+      });
+      if (claimed.count === 0) {
+        logger.info('[Maestro] timer já tratado por outro caminho — bail', { timerId: timer.id });
         return;
       }
 
@@ -316,29 +337,35 @@ export function initFlowTimerWorker(): void {
       const snapshot = (timer.stateSnapshot ?? { cursor: timer.resumeNodeId, vars: {} }) as unknown as FlowState;
       const result = resolveFlowStep(graph, snapshot, '', { hasIncomingMessage: false });
 
-      // goto_flow em retomada por timer não é suportado (troca de fluxo é papel
-      // do runtime de inbound) — filtra pra não vazar pro executor.
-      await executeFlowEffects({
-        organizationId: timer.organizationId,
-        conversationId: timer.conversationId,
-        contactId: conversation?.contactId ?? null,
-        effects: result.effects.filter((e) => e.kind !== 'goto_flow'),
-      });
+      try {
+        // goto_flow em retomada por timer não é suportado (troca de fluxo é papel
+        // do runtime de inbound) — filtra pra não vazar pro executor.
+        await executeFlowEffects({
+          organizationId: timer.organizationId,
+          conversationId: timer.conversationId,
+          contactId: conversation?.contactId ?? null,
+          effects: result.effects.filter((e) => e.kind !== 'goto_flow'),
+        });
 
-      // Persiste o cursor no MESMO formato do flowRuntime: próximo inbound
-      // continua do ponto certo (ou marca ENDED pra Iza pura assumir).
-      const stateKey = flowStateKey(timer.organizationId, timer.conversationId);
-      const nextCursor = result.state?.cursor ?? null;
-      if (result.next === 'end' || nextCursor === null) {
-        await cache.set(stateKey, JSON.stringify({ cursor: FLOW_ENDED, vars: result.state?.vars || {} }), FLOW_STATE_TTL);
-      } else {
-        await cache.set(stateKey, JSON.stringify({ ...result.state, flowId: timer.flowId }), FLOW_STATE_TTL);
+        // Persiste o cursor no MESMO formato do flowRuntime: próximo inbound
+        // continua do ponto certo (ou marca ENDED pra Iza pura assumir).
+        const stateKey = flowStateKey(timer.organizationId, timer.conversationId);
+        const nextCursor = result.state?.cursor ?? null;
+        if (result.next === 'end' || nextCursor === null) {
+          await cache.set(stateKey, JSON.stringify({ cursor: FLOW_ENDED, vars: result.state?.vars || {} }), FLOW_STATE_TTL);
+        } else {
+          await cache.set(stateKey, JSON.stringify({ ...result.state, flowId: timer.flowId }), FLOW_STATE_TTL);
+        }
+      } catch (effectErr) {
+        // Claim já queimado — NÃO reverter para pending (evita retry BullMQ inútil).
+        // Registra falha como statusReason sem mudar o status 'fired'.
+        logger.error('[FlowScheduler] Erro ao executar efeitos pós-claim', { timerId: timer.id, effectErr });
+        await prisma.flowTimer.update({
+          where: { id: timer.id },
+          data: { statusReason: 'effects_failed' },
+        });
+        return;
       }
-
-      await prisma.flowTimer.update({
-        where: { id: timer.id },
-        data: { status: 'fired', firedAt: new Date() },
-      });
 
       logger.info('[FlowScheduler] Timer disparado', {
         timerId: timer.id,
