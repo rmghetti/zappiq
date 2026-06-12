@@ -13,7 +13,8 @@
  *   ENCADEAMENTO DE TIMERS: se a retomada para em OUTRO wait/schedule, o
  *   worker agenda o próximo timer — sequências drip (mensagem → wait →
  *   mensagem → wait → mensagem) avançam sozinhas, sem depender de inbound.
- *   Retomada que para em nó-IA NÃO chama o LLM (limitação documentada):
+ *   Retomada que para em nó-IA gera a resposta via flowAiResume (caminho
+ *   leve de LLM) e envia como send_text; se a geração falhar (fail-closed),
  *   o cursor é persistido e o próximo inbound continua pelo orchestrator.
  *
  * Partes puras (testáveis sem infra): computeRunAt + validateTimerFire +
@@ -34,6 +35,9 @@ import {
   type FlowSchedule,
 } from '../agents/flowEngine.js';
 import { executeFlowEffects } from '../agents/flowEffects.js';
+// Retomada em nó-IA: caminho leve de geração (contexto do negócio + histórico
+// + instrução do nó). Fail-closed: null em falha → warn + cursor persistido.
+import { generateAiResumeReply } from '../agents/flowAiResume.js';
 
 // ── Conexão Redis para BullMQ ────────────────────
 // Espelha queueService.ts (BullMQ requer conexão própria, não reutiliza
@@ -385,18 +389,44 @@ export function initFlowTimerWorker(): void {
           });
         }
 
-        // Nó-IA na retomada: o worker não tem LLM — o aiPrompt NÃO é
-        // processado aqui (limitação documentada). O cursor é persistido
-        // abaixo (non-null no caso 'ai'), então o PRÓXIMO inbound do cliente
-        // continua dali pelo caminho normal do orchestrator.
+        // ── Nó-IA na retomada ───────────────────────────────────────────
+        // Gera a resposta via flowAiResume (caminho leve: contexto do negócio
+        // + persona live + histórico + instrução do nó) e envia como send_text
+        // (aiConfidence 0.9 — texto de LLM, não trilho fixo). Fail-closed: se
+        // a geração falhar (LLM fora, prompt vazio, conversa purgada), nenhuma
+        // mensagem sai — o cursor é persistido abaixo (non-null no caso 'ai')
+        // e o PRÓXIMO inbound continua dali pelo caminho normal do orchestrator.
         if (result.next === 'ai') {
-          logger.warn('[FlowScheduler] retomada parou em nó-IA — prompt não processado na retomada por timer (limitação documentada); cursor persistido para o próximo inbound', {
-            timerId: timer.id,
+          const reply = await generateAiResumeReply({
             organizationId: timer.organizationId,
             conversationId: timer.conversationId,
-            flowId: timer.flowId,
-            cursor: result.state?.cursor ?? null,
+            aiPrompt: result.aiPrompt ?? '',
+            aiModelHint: result.aiModelHint,
           });
+          if (reply) {
+            await executeFlowEffects({
+              organizationId: timer.organizationId,
+              conversationId: timer.conversationId,
+              contactId: conversation?.contactId ?? null,
+              effects: [{ kind: 'send_text', text: reply }],
+              aiConfidence: 0.9,
+            });
+            logger.info('[FlowScheduler] retomada em nó-IA — resposta gerada e enviada', {
+              timerId: timer.id,
+              organizationId: timer.organizationId,
+              conversationId: timer.conversationId,
+              flowId: timer.flowId,
+              replyChars: reply.length,
+            });
+          } else {
+            logger.warn('[FlowScheduler] retomada parou em nó-IA — geração falhou/indisponível (fail-closed, nenhuma mensagem enviada); cursor persistido para o próximo inbound', {
+              timerId: timer.id,
+              organizationId: timer.organizationId,
+              conversationId: timer.conversationId,
+              flowId: timer.flowId,
+              cursor: result.state?.cursor ?? null,
+            });
+          }
         }
 
         // Persiste o cursor no MESMO formato/regra do flowRuntime: cursor

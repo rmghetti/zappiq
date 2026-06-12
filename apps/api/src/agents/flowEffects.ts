@@ -15,10 +15,16 @@ export interface ExecuteEffectsInput {
   effects: FlowEffect[];
   /** Handler de handoff (precisa de io/orgSettings) — opcional; sem ele, handoff vira log. */
   onHandoff?: () => Promise<void>;
+  /**
+   * Confiança gravada no Message de send_text. Default 1.0 (trilho fixo
+   * determinístico). A retomada por timer em nó-IA passa 0.9 — texto gerado
+   * por LLM, não determinístico.
+   */
+  aiConfidence?: number;
 }
 
 export async function executeFlowEffects(input: ExecuteEffectsInput): Promise<void> {
-  const { organizationId, conversationId, contactId, effects, onHandoff } = input;
+  const { organizationId, conversationId, contactId, effects, onHandoff, aiConfidence = 1.0 } = input;
   for (const eff of effects) {
     if (eff.kind === 'send_text') {
       await sendReplyText({ organizationId, conversationId, content: eff.text });
@@ -30,7 +36,7 @@ export async function executeFlowEffects(input: ExecuteEffectsInput): Promise<vo
           status: 'SENT',
           conversationId,
           isFromBot: true,
-          aiConfidence: 1.0, // nó determinístico (trilho fixo)
+          aiConfidence, // 1.0 = trilho fixo; <1.0 = texto gerado por LLM (retomada nó-IA)
         },
       });
     } else if (eff.kind === 'handoff') {
