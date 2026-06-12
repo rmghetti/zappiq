@@ -15,7 +15,7 @@
 // ── Tipos do grafo (alinhados ao model Flow {nodes,edges} + mock /flows) ──────
 export interface FlowNode {
   id: string;
-  type: string; // 'start' | 'message' | 'condition' | 'ai' | 'transfer' | 'tag' | 'update_lead' | 'wait' | 'schedule'
+  type: string; // 'start' | 'message' | 'condition' | 'ai' | 'transfer' | 'tag' | 'update_lead' | 'wait' | 'schedule' | 'goto_flow'
   label?: string;
   data?: Record<string, any>;
 }
@@ -48,7 +48,8 @@ export type FlowEffect =
   | { kind: 'send_text'; text: string }
   | { kind: 'set_tag'; tag: string }
   | { kind: 'update_lead'; field: string; value: any }
-  | { kind: 'handoff' };
+  | { kind: 'handoff' }
+  | { kind: 'goto_flow'; targetFlowId: string };
 
 export interface FlowStepResult {
   effects: FlowEffect[];
@@ -183,6 +184,19 @@ export function resolveFlowStep(
           aiModelHint: node.data?.model ? String(node.data.model) : undefined,
           state: { cursor: firstTargetFrom(graph, node.id), vars },
         };
+
+      case 'goto_flow': {
+        const target = (node.data?.targetFlowId ?? '').toString();
+        if (target) {
+          // Handoff entre fluxos (Frente 3): o runtime troca a conversa pro
+          // fluxo alvo (com proteção anti-loop). Encerra o walk DESTE fluxo.
+          effects.push({ kind: 'goto_flow', targetFlowId: target });
+          return { effects, next: 'end', state: { cursor: null, vars } };
+        }
+        // Sem alvo configurado → fallback: segue a aresta de saída.
+        current = firstTargetFrom(graph, node.id);
+        break;
+      }
 
       case 'wait':
       case 'schedule':

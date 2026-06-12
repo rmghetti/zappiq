@@ -151,3 +151,35 @@ describe('flowEngine.resolveFlowStep', () => {
     expect(r.next).toBe('end');
   });
 });
+
+describe('flowEngine goto_flow (Maestro v2)', () => {
+  it('goto_flow emite efeito e encerra o walk neste fluxo', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'm', type: 'message', data: { text: 'Te levo pro time de vendas!' } },
+        { id: 'g', type: 'goto_flow', data: { targetFlowId: 'flow-vendas' } },
+      ],
+      edges: [{ source: 's', target: 'm' }, { source: 'm', target: 'g' }],
+    };
+    const r = resolveFlowStep(graph, EMPTY_STATE, 'quero comprar');
+    expect(r.effects).toEqual([
+      { kind: 'send_text', text: 'Te levo pro time de vendas!' },
+      { kind: 'goto_flow', targetFlowId: 'flow-vendas' },
+    ]);
+    expect(r.next).toBe('end');
+    expect(r.state.cursor).toBeNull();
+  });
+  it('goto_flow sem targetFlowId segue a aresta de saída (fallback)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'g', type: 'goto_flow', data: {} },
+        { id: 'm', type: 'message', data: { text: 'seguindo aqui mesmo' } },
+      ],
+      edges: [{ source: 's', target: 'g' }, { source: 'g', target: 'm' }],
+    };
+    const r = resolveFlowStep(graph, EMPTY_STATE, 'oi');
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'seguindo aqui mesmo' }]);
+  });
+});
