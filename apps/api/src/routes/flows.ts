@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
+import { snapshotFlowVersion } from '../services/flowVersionService.js';
 // ZappIQ Maestro (#280) — engine PURO compartilhado com a produção
 // (agentOrchestrator → flowRuntime → flowEngine). O /test usa o MESMO motor pra
 // que "testar fluxo" reflita exatamente o comportamento real, sem simulação
@@ -162,30 +163,24 @@ router.post('/:id/refresh-suggestion', async (req: Request, res: Response, next:
 });
 
 // POST /api/flows/:id/publish
-// Garante 1 fluxo ATIVO por org: desativa os demais e ativa este. O runtime
-// (resolveActiveFlowStep) faz findFirst({isActive:true}); com 2 ativos o
-// comportamento ficaria ambíguo, por isso o invariante de exclusividade.
+// Maestro v2 (spec 2026-06-11): múltiplos fluxos ATIVOS por org são suportados —
+// o flowRouter (Frente 3) decide qual atende cada conversa. Ao publicar, um
+// snapshot imutável é gravado ANTES da ativação (garante rollback via /restore).
+// O bump de versão ocorre dentro de snapshotFlowVersion (transação serializável).
 router.post('/:id/publish', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.organizationId!;
     const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
     if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
 
-    // desativa os outros fluxos da org (scoped por orgId — RLS-safe)
-    await prisma.flow.updateMany({
-      where: { organizationId: orgId, isActive: true, NOT: { id: flow.id } },
-      data: { isActive: false },
-    });
-    // ativa este (+ bump de versão)
+    // Maestro v2: snapshot ANTES de ativar (rollback garantido) + multi-ativo
+    // (não desativa mais os demais — o flowRouter decide quem atende; spec 2026-06-11).
+    const version = await snapshotFlowVersion(flow.id, orgId, 'publish', req.user?.userId ?? null);
     const published = await prisma.flow.update({
       where: { id: flow.id },
-      data: { isActive: true, version: { increment: 1 } },
+      data: { isActive: true },
     });
 
-    // GA self-serve: publicar TAMBÉM liga o Maestro para a org. Sem isto, o
-    // runtime (resolveActiveFlowStep) exige settings.maestro.enabled e o fluxo
-    // publicado não rodaria — cliente publicaria e "nada aconteceria". Merge
-    // preservando o resto do settings.
     const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
     const settings = (org?.settings as Record<string, any>) || {};
     const maestro = { ...(settings.maestro || {}), enabled: true };
@@ -194,7 +189,41 @@ router.post('/:id/publish', async (req: Request, res: Response, next: NextFuncti
       data: { settings: { ...settings, maestro } as any },
     });
 
-    res.json({ success: true, message: 'Flow published (demais desativados; Maestro ativado na org)', data: published });
+    res.json({ success: true, message: `Flow publicado (versão ${version})`, data: published });
+  } catch (err) { next(err); }
+});
+
+// GET /api/flows/:id/versions — histórico (imutável) do fluxo
+router.get('/:id/versions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId }, select: { id: true } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const versions = await prisma.flowVersion.findMany({
+      where: { flowId: flow.id, organizationId: orgId },
+      orderBy: { version: 'desc' },
+      select: { id: true, version: true, name: true, source: true, createdById: true, createdAt: true },
+      take: 50,
+    });
+    res.json({ success: true, data: versions });
+  } catch (err) { next(err); }
+});
+
+// POST /api/flows/:id/restore/:versionId — restaura como NOVA versão (histórico nunca reescreve)
+router.post('/:id/restore/:versionId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const target = await prisma.flowVersion.findFirst({
+      where: { id: req.params.versionId, flowId: req.params.id, organizationId: orgId },
+    });
+    if (!target) { res.status(404).json({ error: 'Version not found' }); return; }
+    await prisma.flow.update({
+      where: { id: req.params.id },
+      data: { name: target.name, nodes: target.nodes as any, edges: target.edges as any, triggerType: target.triggerType, triggerConfig: target.triggerConfig as any },
+    });
+    const version = await snapshotFlowVersion(req.params.id, orgId, 'restore', req.user?.userId ?? null);
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
+    res.json({ success: true, message: `Versão ${target.version} restaurada como versão ${version}`, data: flow });
   } catch (err) { next(err); }
 });
 
