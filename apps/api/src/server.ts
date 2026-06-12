@@ -17,6 +17,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
 import { rlsTenantMiddleware } from './middleware/rlsTenant.js';
 import { initQueues, closeQueues } from './services/queueService.js';
+import { initFlowTimerWorker } from './services/flowScheduler.js';
 import { prisma } from '@zappiq/database';
 
 // Routes
@@ -149,6 +150,13 @@ io.on('connection', (socket) => {
 initQueues().catch((err) => {
   logger.error('[Server] Failed to initialize queues:', err);
 });
+
+// Maestro v2 — worker de timers de fluxo (wait/schedule)
+try {
+  initFlowTimerWorker();
+} catch (err) {
+  logger.error('[Server] Failed to initialize flow-timer worker:', err);
+}
 
 // ── Stripe Webhook (raw body, must be before express.json) ──
 app.use('/api/stripe-webhook', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
