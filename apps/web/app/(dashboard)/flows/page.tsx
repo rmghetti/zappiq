@@ -38,7 +38,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
-  MessageSquare, GitBranch, Sparkles, Tag, BarChart2, Headset, Clock, PlayCircle, Info,
+  MessageSquare, GitBranch, Sparkles, Tag, BarChart2, Headset, Clock, CalendarClock, PlayCircle, Info,
   BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -61,6 +61,9 @@ const NODE_META: Record<string, { kind: NodeKind; label: string; icon: any; pale
   update_lead: { kind: 'action', label: 'Atualizar lead', icon: BarChart2,     palette: true },
   transfer:    { kind: 'human',  label: 'Humano',         icon: Headset,       palette: true },
   wait:        { kind: 'fixed',  label: 'Aguardar',       icon: Clock,         palette: true },
+  // Maestro v2 — timing real (engine: wait/schedule com data.delayMinutes/runAt).
+  // Mesma família visual do wait (trilho fixo): controla QUANDO o fluxo retoma.
+  schedule:    { kind: 'fixed',  label: 'Agendar retomada', icon: CalendarClock, palette: true },
   // Maestro v2 — salto entre fluxos (engine: goto_flow com data.targetFlowId).
   // Família âmbar (mesma do transfer/humano): "sai deste fluxo".
   goto_flow:   { kind: 'human',  label: 'Enviar para outro fluxo', icon: Workflow, palette: true },
@@ -103,7 +106,19 @@ function nodeSummary(type: string, data: any): string {
     case 'update_lead': return data?.field ? `${data.field} = ${data.value ?? ''}` : '(sem campo)';
     case 'transfer': return 'Passa pro time';
     case 'goto_flow': return data?.targetFlowName ? `→ ${data.targetFlowName}` : '(sem fluxo de destino)';
-    case 'wait': return data?.seconds ? `${data.seconds}s` : 'Pausa';
+    case 'wait': {
+      const m = Number(data?.delayMinutes);
+      return m > 0 ? `⏳ espera ${m} min` : 'Passa direto (sem espera)';
+    }
+    case 'schedule': {
+      // runAt vence sobre delayMinutes (mesma regra do engine).
+      if (typeof data?.runAt === 'string' && data.runAt) {
+        const d = new Date(data.runAt);
+        if (!Number.isNaN(d.getTime())) return `⏰ ${d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+      }
+      const m = Number(data?.delayMinutes);
+      return m > 0 ? `⏰ ${m} min` : '(sem agendamento)';
+    }
     case 'start': return 'Cliente inicia conversa';
     default: return '';
   }
@@ -155,10 +170,16 @@ const NODE_DOCS: Record<string, NodeDoc> = {
     example: 'No fluxo de Atendimento, se o cliente quer agendar, envie para o fluxo "Agendamento".',
   },
   wait: {
-    short: 'Faz uma pausa antes do próximo passo — para dar ritmo natural à conversa ou esperar um intervalo.',
-    whatFor: 'Use para não disparar tudo de uma vez: aguardar alguns segundos entre mensagens ou pausar antes de um follow-up.',
-    how: 'Defina o tempo de espera. O fluxo retoma sozinho depois do intervalo.',
-    example: 'Enviar boas-vindas, aguardar 3s e então mandar o menu de opções.',
+    short: 'Espera a resposta do cliente por um prazo. Se ele não responder, o fluxo segue pelo ramo "Sem resposta" — perfeito pra follow-up automático.',
+    whatFor: 'Use pra recuperar conversas paradas: pergunta enviada, cliente sumiu, o fluxo cobra sozinho depois do prazo. Com duas saídas, você define o caminho da resposta e o caminho do silêncio.',
+    how: 'Defina o prazo em minutos. Conecte duas saídas: clique em cada conexão e marque uma como "Resposta do cliente" e a outra como "Sem resposta (timeout)". Com uma saída só, ela vira o destino do timer.',
+    example: 'Enviar proposta → aguardar 60 min → sem resposta? → "Oi! Conseguiu ver a proposta? 😊"',
+  },
+  schedule: {
+    short: 'Agenda a retomada do fluxo para depois: em X minutos ou numa data/hora específica.',
+    whatFor: 'Use pra mensagens com hora marcada: lembrete de consulta, cobrança pós-evento, follow-up no dia seguinte. O fluxo dorme e acorda sozinho no momento certo.',
+    how: 'Defina em quantos minutos retomar OU escolha data/hora exata (se preencher os dois, a data/hora vence). Conecte uma saída: é por ela que o fluxo continua quando o timer dispara.',
+    example: 'Cliente agendou demonstração → agendar retomada pra véspera → "Lembrete: sua demonstração é amanhã às 14h!"',
   },
 };
 
@@ -375,7 +396,8 @@ function apiEdgesToCanvas(apiEdges: any[]): Edge[] {
     id: e.id || genId('e'),
     source: e.source,
     target: e.target,
-    label: e.data?.when?.value || undefined,
+    // Ramo de timeout (saída de nó wait) não tem value — rotula "sem resposta".
+    label: e.data?.when?.match === 'timeout' ? 'sem resposta' : (e.data?.when?.value || undefined),
     data: e.data || {},
   }));
 }
@@ -439,6 +461,22 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
       eds.map((e) =>
         e.id === selectedEdgeId
           ? { ...e, label: value || undefined, data: { ...e.data, when: value ? { match: 'contains', value } : undefined } }
+          : e,
+      ),
+    );
+  }
+
+  // Maestro v2 — saídas de nó 'wait': ramo de resposta vs ramo de timeout.
+  // timeout → data.when = { match: 'timeout' } (engine dispara o timer por ela);
+  // resposta → sem when (engine segue por ela quando o cliente responde).
+  function setEdgeWaitBranch(branch: 'reply' | 'timeout') {
+    if (!selectedEdgeId) return;
+    setEdges((eds) =>
+      eds.map((e) =>
+        e.id === selectedEdgeId
+          ? (branch === 'timeout'
+              ? { ...e, label: 'sem resposta', data: { ...e.data, when: { match: 'timeout' } } }
+              : { ...e, label: undefined, data: { ...e.data, when: undefined } })
           : e,
       ),
     );
@@ -526,6 +564,11 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
   const selectedEdge = edges.find((e) => e.id === selectedEdgeId) || null;
+  // Tipo do nó de ORIGEM da aresta selecionada — saídas de 'wait' editam o ramo
+  // (resposta vs timeout) em vez da condição por palavra-chave.
+  const selectedEdgeSourceType = selectedEdge
+    ? (nodes.find((n) => n.id === selectedEdge.source)?.type ?? null)
+    : null;
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">
@@ -624,7 +667,25 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
             />
           )}
 
-          {selectedEdge && (
+          {selectedEdge && selectedEdgeSourceType === 'wait' && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-2">Conexão</p>
+              <label className="block text-xs text-gray-600 mb-1">Ramo deste caminho:</label>
+              <select
+                value={selectedEdge.data?.when?.match === 'timeout' ? 'timeout' : 'reply'}
+                onChange={(e) => setEdgeWaitBranch(e.target.value as 'reply' | 'timeout')}
+                className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-primary-400"
+              >
+                <option value="reply">Resposta do cliente</option>
+                <option value="timeout">Sem resposta (timeout)</option>
+              </select>
+              <p className="text-[10px] text-gray-400 mt-1.5">
+                "Sem resposta" é o caminho seguido quando o prazo do nó Aguardar vence sem o cliente responder. "Resposta do cliente" é o caminho seguido quando ele responde a tempo.
+              </p>
+            </div>
+          )}
+
+          {selectedEdge && selectedEdgeSourceType !== 'wait' && (
             <div>
               <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-2">Conexão</p>
               <label className="block text-xs text-gray-600 mb-1">Seguir por aqui quando a mensagem contiver:</label>
@@ -742,6 +803,24 @@ function AutoGrowTextarea({ value, onChange, className, placeholder }: {
   );
 }
 
+// ISO (engine, data.runAt) ↔ valor do <input type="datetime-local"> (hora local).
+function isoToLocalInput(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Minutos de timing (wait/schedule): vazio = sem valor; senão inteiro 1..20160 (14 dias).
+const MAX_DELAY_MINUTES = 20160;
+function parseDelayMinutes(raw: string): number | undefined {
+  if (raw === '') return undefined;
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(MAX_DELAY_MINUTES, Math.max(1, n));
+}
+
 // ─── Painel de propriedades por tipo de nó ───────────────────────────────────
 function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
   type: string; data: any; otherFlows?: { id: string; name: string }[];
@@ -829,9 +908,45 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
 
       {type === 'wait' && (
         <>
-          <label className="block text-xs text-gray-600 mb-1">Segundos de pausa</label>
-          <input type="number" value={data?.seconds || ''} onChange={(e) => onChange({ seconds: e.target.value })} className={inputCls} />
-          <p className="text-[10px] text-gray-400 mt-1.5">Obs: timing entra na Fase 3 — hoje o motor passa direto.</p>
+          <label className="block text-xs text-gray-600 mb-1">Esperar resposta por (minutos)</label>
+          <input
+            type="number"
+            min={1}
+            max={MAX_DELAY_MINUTES}
+            value={data?.delayMinutes ?? ''}
+            onChange={(e) => onChange({ delayMinutes: parseDelayMinutes(e.target.value) })}
+            placeholder="ex: 60"
+            className={inputCls}
+          />
+          <p className="text-[10px] text-gray-400 mt-1.5">
+            Se o cliente não responder nesse prazo, o fluxo segue pelo ramo "Sem resposta". Fora da janela de 24h da Meta a mensagem não é enviada.
+          </p>
+          <p className="text-[10px] text-gray-400 mt-1.5">Vazio = sem espera real (o fluxo passa direto). Máximo: 20160 min (14 dias).</p>
+        </>
+      )}
+
+      {type === 'schedule' && (
+        <>
+          <label className="block text-xs text-gray-600 mb-1">Retomar em (minutos)</label>
+          <input
+            type="number"
+            min={1}
+            max={MAX_DELAY_MINUTES}
+            value={data?.delayMinutes ?? ''}
+            onChange={(e) => onChange({ delayMinutes: parseDelayMinutes(e.target.value) })}
+            placeholder="ex: 60"
+            className={`${inputCls} mb-2`}
+          />
+          <label className="block text-xs text-gray-600 mb-1">Ou em data/hora específica</label>
+          <input
+            type="datetime-local"
+            value={isoToLocalInput(data?.runAt)}
+            onChange={(e) => onChange({ runAt: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+            className={inputCls}
+          />
+          <p className="text-[10px] text-gray-400 mt-1.5">
+            Se os dois estiverem preenchidos, a data/hora específica vence. O fluxo retoma pelo caminho conectado à saída deste nó. Fora da janela de 24h da Meta a mensagem não é enviada.
+          </p>
         </>
       )}
     </div>
