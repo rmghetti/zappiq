@@ -205,14 +205,16 @@ export function decideReconcileAction(
     }
   }
 
-  // Se o cliente customizou notifyAtPercent pra algo entre os hardcoded (ex: 90),
-  // ainda capturamos via threshold 80.
+  // Se o cliente customizou notifyAtPercent pra abaixo dos hardcoded (ex: 50),
+  // mapeamos pro nivel mais leve do canon (70 = "Aviso preventivo"): os copies
+  // de email/WA e o emoji Slack sao keyed por QuotaAlertThreshold (70..100),
+  // entao um valor fora do canon quebraria o dispatch downstream.
   if (
     thresholdReached === null &&
     billing.notifyAtPercent < 80 &&
     usagePercent >= billing.notifyAtPercent
   ) {
-    thresholdReached = 50;
+    thresholdReached = 70;
   }
 
   // Decisão da ação (audit-only — não executa)

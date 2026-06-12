@@ -138,9 +138,11 @@ export async function dispatchMultiChannelQuotaAlert(
         role: { in: ['ADMIN', 'SUPERADMIN'] },
       },
       orderBy: { createdAt: 'asc' },
-      select: { email: true, phone: true },
+      // User nao tem campo `phone` no schema — telefone de cadastro ainda
+      // nao e coletado no signup. phone=null => canal WA e pulado (fail-soft).
+      select: { email: true },
     })) as any;
-    admin = u;
+    admin = u ? { email: u.email, phone: null } : null;
   } catch (err: any) {
     logger.warn(`[quotaAlerts] falhou ao buscar admin org=${payload.orgId}: ${err?.message}`);
   }
@@ -153,7 +155,10 @@ export async function dispatchMultiChannelQuotaAlert(
   // EMAIL
   try {
     const { subject, html } = buildEmailContent(payload);
-    const r = await sendEmail({ to: admin.email, subject, html });
+    // SendEmailInput exige `text` — versao plain-text reusa o copy do WhatsApp
+    // (mesmo conteudo, sem markup) como fallback pra clientes sem HTML.
+    const text = buildWaText(payload).replace(/\*/g, '');
+    const r = await sendEmail({ to: admin.email, subject, html, text });
     result.emailSent = Boolean((r as any)?.success ?? r);
   } catch (err: any) {
     result.emailError = err?.message ?? 'unknown';

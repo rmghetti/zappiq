@@ -274,7 +274,7 @@ app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, messagesRoute
 app.use('/api/campaigns', authMiddleware, rlsTenantMiddleware, campaignsRoutes);
 app.use('/api/analytics', authMiddleware, rlsTenantMiddleware, analyticsRoutes);
 app.use('/api/flows', authMiddleware, rlsTenantMiddleware, flowsRoutes);
-  app.use('/api/flows/templates', authenticateToken, rlsTenantMiddleware, flowTemplatesRoutes);
+app.use('/api/flows/templates', authMiddleware, rlsTenantMiddleware, flowTemplatesRoutes);
 app.use('/api/kb', authMiddleware, rlsTenantMiddleware, knowledgeBaseRoutes);
 app.use('/api/ai-training', authMiddleware, rlsTenantMiddleware, aiTrainingRoutes); // PR #106.1
 app.use('/api/templates', authMiddleware, rlsTenantMiddleware, templatesRoutes);
