@@ -273,8 +273,11 @@ app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, conversations
 app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, messagesRoutes);
 app.use('/api/campaigns', authMiddleware, rlsTenantMiddleware, campaignsRoutes);
 app.use('/api/analytics', authMiddleware, rlsTenantMiddleware, analyticsRoutes);
-app.use('/api/flows', authMiddleware, rlsTenantMiddleware, flowsRoutes);
+// IMPORTANT: /api/flows/templates MUST be mounted before /api/flows, otherwise
+// GET /api/flows/templates would be captured by GET /:id in flowsRoutes (id="templates")
+// and return 404 'Flow not found' instead of the templates list.
 app.use('/api/flows/templates', authMiddleware, rlsTenantMiddleware, flowTemplatesRoutes);
+app.use('/api/flows', authMiddleware, rlsTenantMiddleware, flowsRoutes);
 app.use('/api/kb', authMiddleware, rlsTenantMiddleware, knowledgeBaseRoutes);
 app.use('/api/ai-training', authMiddleware, rlsTenantMiddleware, aiTrainingRoutes); // PR #106.1
 app.use('/api/templates', authMiddleware, rlsTenantMiddleware, templatesRoutes);
