@@ -453,6 +453,7 @@ model FlowVersion {
 model FlowTimer {
   id             String    @id @default(cuid())
   organizationId String
+  /// Sem FK para conversations: intencional. Timers são limpos via cascade do flow e validados no momento do disparo; uma purga de conversa deixa apenas linhas inertes.
   conversationId String
   flowId         String
   flow           Flow      @relation(fields: [flowId], references: [id], onDelete: Cascade)

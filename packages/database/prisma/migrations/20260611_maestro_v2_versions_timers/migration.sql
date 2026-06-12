@@ -1,6 +1,6 @@
-ALTER TABLE "flows" ADD COLUMN "priority" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "flows" ADD COLUMN IF NOT EXISTS "priority" INTEGER NOT NULL DEFAULT 0;
 
-CREATE TABLE "flow_versions" (
+CREATE TABLE IF NOT EXISTS "flow_versions" (
   "id" TEXT NOT NULL,
   "flowId" TEXT NOT NULL,
   "organizationId" TEXT NOT NULL,
@@ -16,10 +16,10 @@ CREATE TABLE "flow_versions" (
   CONSTRAINT "flow_versions_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "flow_versions_flowId_fkey" FOREIGN KEY ("flowId") REFERENCES "flows"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
-CREATE UNIQUE INDEX "flow_versions_flowId_version_key" ON "flow_versions"("flowId", "version");
-CREATE INDEX "flow_versions_organizationId_idx" ON "flow_versions"("organizationId");
+CREATE UNIQUE INDEX IF NOT EXISTS "flow_versions_flowId_version_key" ON "flow_versions"("flowId", "version");
+CREATE INDEX IF NOT EXISTS "flow_versions_organizationId_idx" ON "flow_versions"("organizationId");
 
-CREATE TABLE "flow_timers" (
+CREATE TABLE IF NOT EXISTS "flow_timers" (
   "id" TEXT NOT NULL,
   "organizationId" TEXT NOT NULL,
   "conversationId" TEXT NOT NULL,
@@ -37,5 +37,25 @@ CREATE TABLE "flow_timers" (
   CONSTRAINT "flow_timers_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "flow_timers_flowId_fkey" FOREIGN KEY ("flowId") REFERENCES "flows"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
-CREATE INDEX "flow_timers_status_runAt_idx" ON "flow_timers"("status", "runAt");
-CREATE INDEX "flow_timers_organizationId_conversationId_status_idx" ON "flow_timers"("organizationId", "conversationId", "status");
+CREATE INDEX IF NOT EXISTS "flow_timers_status_runAt_idx" ON "flow_timers"("status", "runAt");
+CREATE INDEX IF NOT EXISTS "flow_timers_organizationId_conversationId_status_idx" ON "flow_timers"("organizationId", "conversationId", "status");
+
+-- ─── RLS + GRANTs — flow_versions ────────────────────────────────────────────
+ALTER TABLE "flow_versions" ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS flow_versions_tenant_isolation ON "flow_versions";
+CREATE POLICY flow_versions_tenant_isolation ON "flow_versions"
+  USING ("organizationId" = current_setting('app.current_organization_id', true))
+  WITH CHECK ("organizationId" = current_setting('app.current_organization_id', true));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON "flow_versions" TO app_user;
+
+-- ─── RLS + GRANTs — flow_timers ──────────────────────────────────────────────
+ALTER TABLE "flow_timers" ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS flow_timers_tenant_isolation ON "flow_timers";
+CREATE POLICY flow_timers_tenant_isolation ON "flow_timers"
+  USING ("organizationId" = current_setting('app.current_organization_id', true))
+  WITH CHECK ("organizationId" = current_setting('app.current_organization_id', true));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON "flow_timers" TO app_user;
