@@ -39,7 +39,7 @@ import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
   MessageSquare, GitBranch, Sparkles, Tag, BarChart2, Headset, Clock, PlayCircle, Info,
-  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow,
+  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 
@@ -61,6 +61,9 @@ const NODE_META: Record<string, { kind: NodeKind; label: string; icon: any; pale
   update_lead: { kind: 'action', label: 'Atualizar lead', icon: BarChart2,     palette: true },
   transfer:    { kind: 'human',  label: 'Humano',         icon: Headset,       palette: true },
   wait:        { kind: 'fixed',  label: 'Aguardar',       icon: Clock,         palette: true },
+  // Maestro v2 — salto entre fluxos (engine: goto_flow com data.targetFlowId).
+  // Família âmbar (mesma do transfer/humano): "sai deste fluxo".
+  goto_flow:   { kind: 'human',  label: 'Enviar para outro fluxo', icon: Workflow, palette: true },
 };
 
 const KIND_STYLE: Record<NodeKind, string> = {
@@ -99,6 +102,7 @@ function nodeSummary(type: string, data: any): string {
     case 'tag': return data?.tag ? `tag: ${data.tag}` : '(sem tag)';
     case 'update_lead': return data?.field ? `${data.field} = ${data.value ?? ''}` : '(sem campo)';
     case 'transfer': return 'Passa pro time';
+    case 'goto_flow': return data?.targetFlowName ? `→ ${data.targetFlowName}` : '(sem fluxo de destino)';
     case 'wait': return data?.seconds ? `${data.seconds}s` : 'Pausa';
     case 'start': return 'Cliente inicia conversa';
     default: return '';
@@ -143,6 +147,12 @@ const NODE_DOCS: Record<string, NodeDoc> = {
     whatFor: 'Use quando o caso exige uma pessoa: negociação sensível, reclamação, fechamento. Evita que a IA force algo fora do seu alcance.',
     how: 'Conecte no ponto de handoff. A conversa entra na fila do time e a IA para de responder até um humano assumir.',
     example: 'Se o cliente diz "quero falar com alguém", transfira para o time comercial.',
+  },
+  goto_flow: {
+    short: 'Envia a conversa para outro fluxo da sua operação — o atendimento continua de lá, sem o cliente perceber a troca.',
+    whatFor: 'Use para interligar especialistas: o fluxo de atendimento detecta intenção de compra e passa o bastão pro fluxo de vendas, por exemplo.',
+    how: 'Conecte no ponto do salto e escolha o fluxo de destino no painel da direita. O motor segue no outro fluxo a partir do início dele.',
+    example: 'No fluxo de Atendimento, se o cliente quer agendar, envie para o fluxo "Agendamento".',
   },
   wait: {
     short: 'Faz uma pausa antes do próximo passo — para dar ritmo natural à conversa ou esperar um intervalo.',
@@ -303,6 +313,8 @@ interface ApiFlow {
   isActive: boolean;
   triggerType: string;
   version: number;
+  // Maestro v2 — desempate do roteador multi-fluxo (0–999, maior ganha).
+  priority?: number;
   // MAESTRO INTELIGENTE (Onda 3): treinamento mudou depois do fluxo ser gerado/editado.
   stale?: boolean;
 }
@@ -316,6 +328,24 @@ type FlowRefresh = {
   newWelcome?: string;
   oldWelcome?: string;
   source: 'ai' | 'fallback';
+  // Maestro v2 — diff campo a campo do refresh multi-nó (quando disponível).
+  diff?: { nodeId: string; field: string; before: string; after: string }[];
+};
+
+// Item do histórico de versões (GET /api/flows/:id/versions).
+type FlowVersionItem = {
+  id: string;
+  version: number;
+  name: string;
+  source: string; // publish | refresh | restore
+  createdById?: string | null;
+  createdAt: string;
+};
+
+const VERSION_SOURCE_LABEL: Record<string, string> = {
+  publish: 'Publicação',
+  refresh: 'Atualização inteligente',
+  restore: 'Restauração',
 };
 
 interface TestTurn {
@@ -331,25 +361,30 @@ function genId(prefix: string) {
 }
 
 // ─── Editor (canvas) ─────────────────────────────────────────────────────────
-function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => void; onSaved: () => void }) {
+// API → React Flow (mesmo mapeamento do estado inicial; reusado pelo restore).
+function apiNodesToCanvas(apiNodes: any[]): Node[] {
+  return (apiNodes || []).map((n: any, i: number): Node => ({
+    id: n.id || genId('n'),
+    type: NODE_META[n.type] ? n.type : 'message',
+    position: n.position && typeof n.position.x === 'number' ? n.position : { x: 120, y: 60 + i * 110 },
+    data: { ...(n.data || {}), label: n.data?.label || n.label || metaFor(n.type).label },
+  }));
+}
+function apiEdgesToCanvas(apiEdges: any[]): Edge[] {
+  return (apiEdges || []).map((e: any): Edge => ({
+    id: e.id || genId('e'),
+    source: e.source,
+    target: e.target,
+    label: e.data?.when?.value || undefined,
+    data: e.data || {},
+  }));
+}
+
+function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlows: ApiFlow[]; onBack: () => void; onSaved: () => void }) {
   const [name, setName] = useState(flow.name);
-  const [nodes, setNodes, onNodesChange] = useNodesState(
-    (flow.nodes || []).map((n: any, i: number): Node => ({
-      id: n.id || genId('n'),
-      type: NODE_META[n.type] ? n.type : 'message',
-      position: n.position && typeof n.position.x === 'number' ? n.position : { x: 120, y: 60 + i * 110 },
-      data: { ...(n.data || {}), label: n.data?.label || n.label || metaFor(n.type).label },
-    })),
-  );
-  const [edges, setEdges, onEdgesChange] = useEdgesState(
-    (flow.edges || []).map((e: any): Edge => ({
-      id: e.id || genId('e'),
-      source: e.source,
-      target: e.target,
-      label: e.data?.when?.value || undefined,
-      data: e.data || {},
-    })),
-  );
+  const [priority, setPriority] = useState<number>(flow.priority ?? 0);
+  const [nodes, setNodes, onNodesChange] = useNodesState(apiNodesToCanvas(flow.nodes || []));
+  const [edges, setEdges, onEdgesChange] = useEdgesState(apiEdgesToCanvas(flow.edges || []));
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -359,6 +394,12 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
   const [testTurns, setTestTurns] = useState<TestTurn[] | null>(null);
   const [docType, setDocType] = useState<string | null>(null); // popup didático do nó
   const [error, setError] = useState<string | null>(null);
+  // Maestro v2 — histórico de versões + restore (modal)
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [versions, setVersions] = useState<FlowVersionItem[] | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   const nodeTypes = useMemo(
     () => Object.fromEntries(Object.keys(NODE_META).map((t) => [t, MaestroNode])),
@@ -415,7 +456,7 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
     setSaving(true); setError(null);
     try {
       const g = toApiGraph();
-      await api.put(`/api/flows/${flow.id}`, { name, nodes: g.nodes, edges: g.edges });
+      await api.put(`/api/flows/${flow.id}`, { name, priority, nodes: g.nodes, edges: g.edges });
       onSaved();
     } catch (e: any) {
       setError(e?.message || 'Falha ao salvar');
@@ -426,7 +467,7 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
     setPublishing(true); setError(null);
     try {
       const g = toApiGraph();
-      await api.put(`/api/flows/${flow.id}`, { name, nodes: g.nodes, edges: g.edges });
+      await api.put(`/api/flows/${flow.id}`, { name, priority, nodes: g.nodes, edges: g.edges });
       await api.post(`/api/flows/${flow.id}/publish`);
       onSaved();
     } catch (e: any) {
@@ -438,7 +479,7 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
     setTesting(true); setError(null); setTestTurns(null);
     try {
       const g = toApiGraph();
-      await api.put(`/api/flows/${flow.id}`, { name, nodes: g.nodes, edges: g.edges });
+      await api.put(`/api/flows/${flow.id}`, { name, priority, nodes: g.nodes, edges: g.edges });
       const messages = testInput.split('\n').map((s) => s.trim()).filter(Boolean);
       const res = await api.post<{ success: boolean; data: { turns: TestTurn[] } }>(
         `/api/flows/${flow.id}/test`, { messages },
@@ -447,6 +488,40 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
     } catch (e: any) {
       setError(e?.message || 'Falha ao testar');
     } finally { setTesting(false); }
+  }
+
+  // Maestro v2 — abre o histórico (snapshots imutáveis publish/refresh/restore).
+  async function openHistory() {
+    setHistoryOpen(true); setVersions(null); setHistoryError(null); setHistoryLoading(true);
+    try {
+      const res = await api.get<{ success: boolean; data: FlowVersionItem[] }>(`/api/flows/${flow.id}/versions`);
+      setVersions(res?.data || []);
+    } catch (e: any) {
+      setHistoryError(e?.message || 'Falha ao carregar o histórico');
+    } finally { setHistoryLoading(false); }
+  }
+
+  // Restaura uma versão (vira NOVA versão no histórico) e recarrega o canvas.
+  async function restoreVersion(v: FlowVersionItem) {
+    const ok = window.confirm(`Restaurar a versão ${v.version} ("${v.name}")? O fluxo atual vira uma nova versão no histórico — nada se perde.`);
+    if (!ok) return;
+    setRestoringId(v.id); setHistoryError(null);
+    try {
+      const res = await api.post<{ success: boolean; data: ApiFlow }>(`/api/flows/${flow.id}/restore/${v.id}`);
+      const restored = res?.data;
+      if (restored) {
+        // Recarrega o fluxo restaurado no canvas (mesmo mapeamento do load inicial).
+        setName(restored.name);
+        setPriority(restored.priority ?? 0);
+        setNodes(apiNodesToCanvas(restored.nodes || []));
+        setEdges(apiEdgesToCanvas(restored.edges || []));
+        setSelectedNodeId(null); setSelectedEdgeId(null);
+      }
+      setHistoryOpen(false); setVersions(null);
+      onSaved();
+    } catch (e: any) {
+      setHistoryError(e?.message || 'Falha ao restaurar a versão');
+    } finally { setRestoringId(null); }
   }
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
@@ -471,6 +546,9 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
           </button>
           <button onClick={save} disabled={saving} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar
+          </button>
+          <button onClick={openHistory} disabled={historyLoading} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
+            {historyLoading ? <Loader2 size={14} className="animate-spin" /> : <History size={14} />} Histórico
           </button>
           <button onClick={publish} disabled={publishing} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 flex items-center gap-1.5 disabled:opacity-50">
             {publishing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Publicar
@@ -516,7 +594,23 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
         {/* Propriedades */}
         <div className="w-64 border-l border-gray-200 bg-white p-3 overflow-y-auto">
           {!selectedNode && !selectedEdge && (
-            <p className="text-xs text-gray-400">Selecione um nó ou uma conexão para editar.</p>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-2">Configurações do fluxo</p>
+              <label className="block text-xs text-gray-600 mb-1">Prioridade (desempate do roteador)</label>
+              <input
+                type="number"
+                min={0}
+                max={999}
+                value={priority}
+                onChange={(e) => {
+                  const n = Math.round(Number(e.target.value));
+                  setPriority(Number.isFinite(n) ? Math.min(999, Math.max(0, n)) : 0);
+                }}
+                className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-primary-400"
+              />
+              <p className="text-[10px] text-gray-400 mt-1.5 mb-4">Quando mais de um fluxo ativo pode atender a conversa, o de maior prioridade ganha. 0 a 999.</p>
+              <p className="text-xs text-gray-400">Selecione um nó ou uma conexão para editar.</p>
+            </div>
           )}
 
           {selectedNode && (
@@ -524,6 +618,7 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
               key={selectedNode.id}
               type={selectedNode.type || 'message'}
               data={selectedNode.data}
+              otherFlows={allFlows.filter((f) => f.id !== flow.id)}
               onChange={updateNodeData}
               onDelete={deleteSelectedNode}
             />
@@ -573,6 +668,52 @@ function FlowEditor({ flow, onBack, onSaved }: { flow: ApiFlow; onBack: () => vo
 
       {/* Popup didático do nó (#289) */}
       {docType && <NodeDocModal type={docType} onClose={() => setDocType(null)} />}
+
+      {/* Maestro v2 — Histórico de versões + restore */}
+      {historyOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!restoringId) { setHistoryOpen(false); setVersions(null); } }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 shrink-0"><History size={18} /></div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-gray-900">Histórico de versões</h3>
+                <p className="text-sm text-gray-600 mt-0.5">Cada publicação, atualização inteligente ou restauração vira uma versão. Restaurar nunca apaga nada — cria uma versão nova.</p>
+              </div>
+              <button onClick={() => { if (!restoringId) { setHistoryOpen(false); setVersions(null); } }} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+            <div className="p-5">
+              {historyError && <div className="mb-3 px-3 py-2 bg-red-50 text-red-700 text-xs rounded-lg border border-red-100">{historyError}</div>}
+              {historyLoading && (
+                <div className="flex items-center gap-2 text-gray-500 py-6 justify-center"><Loader2 size={18} className="animate-spin" /> Carregando histórico…</div>
+              )}
+              {!historyLoading && versions && versions.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-6">Ainda não há versões. Publique o fluxo pra criar a primeira.</p>
+              )}
+              {!historyLoading && versions && versions.length > 0 && (
+                <ul className="space-y-2">
+                  {versions.map((v) => (
+                    <li key={v.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 p-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">v{v.version} · {v.name}</p>
+                        <p className="text-xs text-gray-400">
+                          {VERSION_SOURCE_LABEL[v.source] || v.source} · {new Date(v.createdAt).toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => restoreVersion(v)}
+                        disabled={!!restoringId}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+                      >
+                        {restoringId === v.id ? <Loader2 size={13} className="animate-spin" /> : <History size={13} />} Restaurar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -602,8 +743,9 @@ function AutoGrowTextarea({ value, onChange, className, placeholder }: {
 }
 
 // ─── Painel de propriedades por tipo de nó ───────────────────────────────────
-function NodeProperties({ type, data, onChange, onDelete }: {
-  type: string; data: any; onChange: (p: Record<string, any>) => void; onDelete: () => void;
+function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
+  type: string; data: any; otherFlows?: { id: string; name: string }[];
+  onChange: (p: Record<string, any>) => void; onDelete: () => void;
 }) {
   const meta = metaFor(type);
   const inputCls = 'w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-primary-400';
@@ -663,6 +805,26 @@ function NodeProperties({ type, data, onChange, onDelete }: {
 
       {type === 'transfer' && (
         <p className="text-[11px] text-gray-500">Transfere a conversa pro time, com todo o contexto. Sem campos.</p>
+      )}
+
+      {type === 'goto_flow' && (
+        <>
+          <label className="block text-xs text-gray-600 mb-1">Fluxo de destino</label>
+          <select
+            value={data?.targetFlowId || ''}
+            onChange={(e) => {
+              const target = (otherFlows || []).find((f) => f.id === e.target.value);
+              onChange({ targetFlowId: e.target.value || undefined, targetFlowName: target?.name || undefined });
+            }}
+            className={inputCls}
+          >
+            <option value="">— escolher fluxo —</option>
+            {(otherFlows || []).map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
+          <p className="text-[10px] text-gray-400 mt-1.5">A conversa continua no fluxo escolhido, sem o cliente perceber a troca.</p>
+        </>
       )}
 
       {type === 'wait' && (
@@ -1091,6 +1253,7 @@ export default function FlowsPage() {
       const res = await api.post<{ success: boolean; data: ApiFlow }>('/api/flows', {
         name: 'Novo fluxo',
         triggerType: 'FIRST_CONTACT',
+        priority: 0,
         nodes: [{ id: genId('n'), type: 'start', label: 'Início', data: { label: 'Início' }, position: { x: 120, y: 40 } }],
         edges: [],
       });
@@ -1252,7 +1415,7 @@ export default function FlowsPage() {
   if (editing) {
     return (
       <ReactFlowProvider>
-        <FlowEditor flow={editing} onBack={() => { setEditing(null); load(); }} onSaved={load} />
+        <FlowEditor flow={editing} allFlows={flows || []} onBack={() => { setEditing(null); load(); }} onSaved={load} />
       </ReactFlowProvider>
     );
   }
@@ -1555,7 +1718,22 @@ export default function FlowsPage() {
               {refreshPreview && (
                 <>
                   <p className="text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2">{refreshPreview.changeNote}</p>
-                  {refreshPreview.oldWelcome !== undefined && refreshPreview.newWelcome !== undefined && refreshPreview.oldWelcome !== refreshPreview.newWelcome && (
+                  {/* Maestro v2 — diff campo a campo (multi-nó). Quando ausente, cai no antes/depois da mensagem de boas-vindas. */}
+                  {Array.isArray(refreshPreview.diff) && refreshPreview.diff.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">O que muda ({refreshPreview.diff.length} {refreshPreview.diff.length === 1 ? 'alteração' : 'alterações'})</p>
+                      <ul className="space-y-2">
+                        {refreshPreview.diff.map((d, i) => (
+                          <li key={i} className="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5">
+                            <p className="text-[11px] font-semibold text-gray-500 mb-1">{d.nodeId} · {d.field}</p>
+                            <p className="text-sm line-through text-gray-400">{d.before || '(vazio)'}</p>
+                            <p className="text-sm text-emerald-700">{d.after || '(vazio)'}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {(!refreshPreview.diff || refreshPreview.diff.length === 0) && refreshPreview.oldWelcome !== undefined && refreshPreview.newWelcome !== undefined && refreshPreview.oldWelcome !== refreshPreview.newWelcome && (
                     <div className="space-y-2">
                       <div>
                         <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Mensagem antes</p>

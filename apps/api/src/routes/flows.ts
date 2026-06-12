@@ -24,6 +24,8 @@ const createFlowSchema = z.object({
   triggerConfig: z.record(z.any()).optional(),
   nodes: z.array(z.any()).default([]),
   edges: z.array(z.any()).default([]),
+  // Maestro v2 — desempate do roteador multi-fluxo (maior ganha).
+  priority: z.number().int().min(0).max(999).optional(),
 });
 
 // PUT: campos editáveis (NUNCA organizationId/id). Zod remove chaves desconhecidas.
@@ -35,6 +37,8 @@ const updateFlowSchema = z.object({
   nodes: z.array(z.any()).optional(),
   edges: z.array(z.any()).optional(),
   isActive: z.boolean().optional(),
+  // Maestro v2 — desempate do roteador multi-fluxo (maior ganha).
+  priority: z.number().int().min(0).max(999).optional(),
 });
 
 // POST /api/flows/generate — "Maestro monta pra você" (#288)
