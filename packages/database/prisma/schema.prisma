@@ -414,17 +414,63 @@ model Flow {
   edges          Json
   isActive       Boolean         @default(false)
   version        Int             @default(1)
+  priority       Int             @default(0)
   triggerType    FlowTriggerType
   triggerConfig  Json?
   organizationId String
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+  versions       FlowVersion[]
+  timers         FlowTimer[]
 
   @@index([organizationId])
   @@map("flows")
 }
 
+/// Maestro v2 — snapshot imutável por publicação/refresh/restore. Nunca editar nem deletar (só cascata da org via Flow).
+model FlowVersion {
+  id             String          @id @default(cuid())
+  flowId         String
+  flow           Flow            @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  organizationId String
+  version        Int
+  name           String
+  nodes          Json
+  edges          Json
+  triggerType    FlowTriggerType
+  triggerConfig  Json?
+  source         String          // 'publish' | 'refresh' | 'restore'
+  createdById    String?
+  createdAt      DateTime        @default(now())
+
+  @@unique([flowId, version])
+  @@index([organizationId])
+  @@map("flow_versions")
+}
+
+/// Maestro v2 — espera durável de wait/schedule (fonte de verdade; o job BullMQ é só o despertador).
+model FlowTimer {
+  id             String    @id @default(cuid())
+  organizationId String
+  conversationId String
+  flowId         String
+  flow           Flow      @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  flowVersion    Int
+  kind           String    // 'wait' | 'schedule'
+  resumeNodeId   String
+  stateSnapshot  Json
+  runAt          DateTime
+  status         String    @default("pending") // 'pending' | 'fired' | 'cancelled' | 'expired'
+  statusReason   String?
+  jobId          String?
+  createdAt      DateTime  @default(now())
+  firedAt        DateTime?
+
+  @@index([status, runAt])
+  @@index([organizationId, conversationId, status])
+  @@map("flow_timers")
+}
 
 model FlowTemplate {
   id            String                  @id @default(cuid())
