@@ -18,6 +18,7 @@ import { getIzaFactsBlock } from '../services/izaFactsService.js';
 // ZappIQ Maestro (#280) — flow runtime híbrido. Aditivo: só atua se a org tem
 // flag maestro.enabled + Flow ativo; senão devolve null e a Iza pura roda igual.
 import { resolveActiveFlowStep } from './flowRuntime.js';
+import { executeFlowEffects } from './flowEffects.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
 export interface ProcessMessageInput {
@@ -199,70 +200,14 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       orgSettings,
     });
     if (flowStep) {
-      for (const eff of flowStep.effects) {
-        if (eff.kind === 'send_text') {
-          await sendReplyText({ organizationId, conversationId, content: eff.text });
-          await prisma.message.create({
-            data: {
-              direction: 'OUTBOUND',
-              type: 'TEXT',
-              content: eff.text,
-              status: 'SENT',
-              conversationId,
-              isFromBot: true,
-              aiConfidence: 1.0, // nó determinístico (trilho fixo)
-            },
-          });
-        } else if (eff.kind === 'handoff') {
-          await handleHandoff(organizationId, contactPhone, contactId, orgSettings, io);
-        } else if (eff.kind === 'set_tag') {
-          // Trilho fixo (Bloco 3): adiciona a tag ao contato, com dedup. Fail-soft:
-          // erro aqui nunca derruba o turno (Maestro é aditivo).
-          try {
-            if (contactId && eff.tag) {
-              const c = await prisma.contact.findUnique({
-                where: { id: contactId }, select: { tags: true },
-              });
-              const current = c?.tags ?? [];
-              if (!current.includes(eff.tag)) {
-                await prisma.contact.update({
-                  where: { id: contactId }, data: { tags: { push: eff.tag } },
-                });
-              }
-            }
-          } catch (e) {
-            logger.warn('[Maestro] set_tag falhou (fail-soft)', { organizationId, contactId, err: String(e) });
-          }
-        } else if (eff.kind === 'update_lead') {
-          // Trilho fixo (Bloco 3): grava campo do lead. Colunas escalares conhecidas
-          // e seguras vão direto; qualquer outro campo cai em customFields (Json),
-          // evitando crash de enum/coluna inexistente. Fail-soft.
-          try {
-            if (contactId && eff.field) {
-              const SCALAR_FIELDS = new Set(['name', 'email', 'company', 'funnelStage', 'leadScore']);
-              if (SCALAR_FIELDS.has(eff.field)) {
-                const data: Record<string, any> = {};
-                data[eff.field] = eff.field === 'leadScore' ? Number(eff.value) : eff.value;
-                await prisma.contact.update({ where: { id: contactId }, data });
-              } else {
-                const c = await prisma.contact.findUnique({
-                  where: { id: contactId }, select: { customFields: true },
-                });
-                const cf = { ...((c?.customFields as Record<string, any>) ?? {}) };
-                cf[eff.field] = eff.value;
-                await prisma.contact.update({
-                  where: { id: contactId }, data: { customFields: cf as any },
-                });
-              }
-            }
-          } catch (e) {
-            logger.warn('[Maestro] update_lead falhou (fail-soft)', { organizationId, contactId, err: String(e) });
-          }
-        } else {
-          logger.info('[Maestro] efeito não reconhecido', {
-            organizationId, contactPhone, effect: (eff as any).kind,
-          });
-        }
+      await executeFlowEffects({
+        organizationId, conversationId, contactId,
+        effects: flowStep.effects,
+        onHandoff: () => handleHandoff(organizationId, contactPhone, contactId, orgSettings, io),
+      });
+      if (flowStep.next === 'scheduled') {
+        // Timer já foi persistido/enfileirado pelo flowRuntime. Turno resolvido.
+        return;
       }
       if (flowStep.next !== 'ai') {
         // await_input (aguardando próxima msg) ou end (fluxo terminou) →
