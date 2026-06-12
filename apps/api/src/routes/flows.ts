@@ -11,6 +11,7 @@ import { resolveFlowStep, type FlowGraph, type FlowState } from '../agents/flowE
 // Maestro "monta pra você" (#288) — gerador híbrido: estrutura determinística
 // + IA preenche conteúdo. Devolve um DRAFT (não persiste); o cliente edita e salva.
 import { generateFlowDraft, generateSmartFlows, regenerateFlowContent, generateJourney } from '../agents/flowGenerator.js';
+import { sameStructure } from './flowsRefreshValidation.js';
 
 const router = Router();
 
@@ -159,6 +160,27 @@ router.post('/:id/refresh-suggestion', async (req: Request, res: Response, next:
       flow: { name: flow.name, nodes: (flow.nodes as any) || [], edges: (flow.edges as any) || [] },
     });
     res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+});
+
+// POST /api/flows/:id/refresh-apply — aplica a atualização inteligente com
+// snapshot prévio (rollback garantido) e validação de estrutura travada (409).
+router.post('/:id/refresh-apply', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const { nodes, edges } = req.body ?? {};
+    if (!sameStructure((flow.nodes as any) ?? [], nodes)) {
+      res.status(409).json({ error: 'Estrutura divergente — gere a sugestão novamente.' });
+      return;
+    }
+    await snapshotFlowVersion(flow.id, orgId, 'refresh', req.user?.userId ?? null);
+    const updated = await prisma.flow.update({
+      where: { id: flow.id },
+      data: { nodes: nodes as any, edges: (edges ?? flow.edges) as any },
+    });
+    res.json({ success: true, message: 'Atualização aplicada', data: updated });
   } catch (err) { next(err); }
 });
 

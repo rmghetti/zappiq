@@ -1232,12 +1232,13 @@ export default function FlowsPage() {
     } finally { setRefreshing(false); }
   }
 
-  // Onda 3: aplica a atualização (1 clique = autorização). Persiste via PUT.
+  // Onda 3: aplica a atualização (1 clique = autorização). Persiste via POST /refresh-apply
+  // (snapshot prévio + validação de estrutura travada — 409 se divergente).
   async function applyRefresh() {
     if (!refreshTarget || !refreshPreview) return;
     setRefreshing(true); setError(null);
     try {
-      await api.put(`/api/flows/${refreshTarget.id}`, {
+      await api.post(`/api/flows/${refreshTarget.id}/refresh-apply`, {
         nodes: refreshPreview.nodes,
         edges: refreshPreview.edges,
       });
