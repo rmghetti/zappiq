@@ -170,6 +170,7 @@ describe('flowEngine wait/schedule (Maestro v2, Fase 3)', () => {
       ],
     };
     const r = resolveFlowStep(graph, EMPTY_STATE, 'oi');
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Posso te ajudar em algo mais?' }]);
     expect(r.next).toBe('scheduled');
     expect(r.schedule).toEqual({ kind: 'wait', delayMinutes: 60, runAt: null, resumeNodeId: 'nudge' });
     expect(r.state.cursor).toBe('reply');
