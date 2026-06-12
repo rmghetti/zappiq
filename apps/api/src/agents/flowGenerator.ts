@@ -29,6 +29,12 @@ import {
   type BlueprintGoal,
   type BlueprintContent,
 } from './flowBlueprints.js';
+import {
+  extractEditableContent,
+  applyContentPatch,
+  diffContent,
+  type ContentField,
+} from './flowContentPatch.js';
 
 export interface FlowDraft {
   name: string;
@@ -503,6 +509,8 @@ export interface FlowRefreshResult {
   newWelcome?: string;
   oldWelcome?: string;
   source: 'ai' | 'fallback';
+  /** Diff campo a campo (apenas o que mudou) — Maestro v2. */
+  diff?: { nodeId: string; field: string; before: string; after: string }[];
 }
 
 export async function regenerateFlowContent(input: {
@@ -513,13 +521,10 @@ export async function regenerateFlowContent(input: {
   const ctx = await loadBusinessContext(organizationId);
   const nodes = Array.isArray(flow.nodes) ? flow.nodes : [];
 
-  const msgIdx = nodes.findIndex((n) => n?.type === 'message');
-  const tagIdx = nodes.findIndex((n) => n?.type === 'tag');
-  const aiIdx = nodes.findIndex((n) => n?.type === 'ai');
-
-  const curWelcome = (msgIdx >= 0 && nodes[msgIdx]?.data?.text) || '';
-  const curTag = (tagIdx >= 0 && nodes[tagIdx]?.data?.tag) || '';
-  const curAi = (aiIdx >= 0 && nodes[aiIdx]?.data?.prompt) || '';
+  // Maestro v2: TODOS os nós de conteúdo (não só o primeiro de cada tipo).
+  const editable = extractEditableContent(nodes);
+  const fieldOf = new Map(editable.map((c) => [c.nodeId, c.field]));
+  const oldWelcome = editable.find((c) => c.field === 'text')?.value || '';
 
   const unchanged = (): FlowRefreshResult => ({
     name: flow.name, nodes: flow.nodes, edges: flow.edges,
@@ -527,9 +532,12 @@ export async function regenerateFlowContent(input: {
     source: 'fallback',
   });
 
+  if (editable.length === 0) return unchanged();
+
   const system = [
     'Você é o MAESTRO INTELIGENTE da ZappIQ. O cliente atualizou o treinamento da IA e este fluxo pode estar desatualizado.',
-    'Sua tarefa: REESCREVER apenas o CONTEÚDO textual (mensagem de boas-vindas, tag, instrução do nó-IA) pra refletir o treinamento ATUAL, mantendo o mesmo objetivo/estrutura do fluxo.',
+    'Sua tarefa: REESCREVER apenas o CONTEÚDO textual dos nós listados (mensagens, tags, instruções de nó-IA) pra refletir o treinamento ATUAL, mantendo o mesmo objetivo/estrutura do fluxo.',
+    'A ESTRUTURA é TRAVADA: você só pode alterar o valor dos campos listados, nunca criar/remover nós.',
     'Use o contexto do negócio (serviços, horários, jeito de falar reais). Responda EXCLUSIVAMENTE com JSON válido, sem cercas.',
   ].join(' ');
 
@@ -538,15 +546,12 @@ export async function regenerateFlowContent(input: {
     ctx.brief,
     '',
     '=== CONTEÚDO ATUAL DO FLUXO (pode estar desatualizado) ===',
-    `Mensagem de boas-vindas: ${curWelcome || '(vazia)'}`,
-    `Tag: ${curTag || '(vazia)'}`,
-    `Instrução do nó-IA: ${curAi || '(vazia)'}`,
+    ...editable.map((c) => `[${c.nodeId} · ${c.field}]: ${c.value || '(vazio)'}`),
     '',
-    'Reescreva refletindo o treinamento atual. Devolva este JSON:',
+    'Reescreva refletindo o treinamento atual. Regras por campo: text = mensagem curta (1-2 frases, pode 1 emoji); tag = kebab-case; prompt = instrução do nó-IA (2-4 frases, citando serviços/horários reais).',
+    'Devolva este JSON (inclua em "items" APENAS os nodeIds listados acima que você quer alterar):',
     '{',
-    '  "welcomeText": "boas-vindas atualizada (1-2 frases, pode 1 emoji)",',
-    '  "tag": "tag-em-kebab-case",',
-    '  "aiPrompt": "instrução do nó-IA atualizada (2-4 frases, citando serviços/horários reais)",',
+    '  "items": [{"nodeId": "...", "value": "novo conteúdo"}],',
     '  "changeNote": "1-2 frases pro dono do negócio explicando o que mudou e por quê"',
     '}',
   ].join('\n');
@@ -558,7 +563,7 @@ export async function regenerateFlowContent(input: {
     const resp = await llmRouter.complete({
       system,
       messages: [{ role: 'user', content: user }],
-      maxTokens: 900,
+      maxTokens: 1800,
       temperature: 0.4,
       tier,
       forceProvider: 'anthropic-sonnet' as LLMProviderId,
@@ -572,17 +577,30 @@ export async function regenerateFlowContent(input: {
   }
   if (!parsed || typeof parsed !== 'object') return unchanged();
 
-  const newWelcome = String(parsed.welcomeText || curWelcome).slice(0, 600);
-  const newTag = (String(parsed.tag || curTag).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)) || curTag;
-  const newAi = String(parsed.aiPrompt || curAi).slice(0, 900);
+  // Post-process: items → ContentField com limites por campo; estrutura travada
+  // (nodeIds desconhecidos são ignorados em applyContentPatch/diffContent).
+  const items: any[] = Array.isArray(parsed.items) ? parsed.items : [];
+  const patch: ContentField[] = [];
+  for (const item of items) {
+    const nodeId = String(item?.nodeId ?? '');
+    const field = fieldOf.get(nodeId);
+    if (!field) continue;
+    let value = String(item?.value ?? '').trim();
+    if (field === 'text') value = value.slice(0, 600);
+    else if (field === 'tag') value = value.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    else value = value.slice(0, 900);
+    if (!value) continue;
+    patch.push({ nodeId, field, value });
+  }
 
-  // Patch SÓ os nós de conteúdo, preservando todo o resto (estrutura/posições).
-  const newNodes = nodes.map((n, i) => {
-    if (i === msgIdx) return { ...n, data: { ...n.data, text: newWelcome } };
-    if (i === tagIdx) return { ...n, data: { ...n.data, tag: newTag } };
-    if (i === aiIdx) return { ...n, data: { ...n.data, prompt: newAi } };
-    return n;
-  });
+  const newNodes = applyContentPatch(nodes, patch);
+  const diff = diffContent(nodes, patch);
+
+  // Boas-vindas (primeiro nó message) antes/depois, pro preview existente.
+  const welcomeId = editable.find((c) => c.field === 'text')?.nodeId;
+  const newWelcome = welcomeId
+    ? (patch.find((p) => p.nodeId === welcomeId)?.value ?? oldWelcome)
+    : undefined;
 
   return {
     name: flow.name,
@@ -590,8 +608,9 @@ export async function regenerateFlowContent(input: {
     edges: flow.edges,
     changeNote: String(parsed.changeNote || 'Atualizei os textos do fluxo com base no seu treinamento mais recente.').slice(0, 400),
     newWelcome,
-    oldWelcome: curWelcome,
+    oldWelcome: welcomeId ? oldWelcome : undefined,
     source: 'ai',
+    diff,
   };
 }
 
