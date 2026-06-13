@@ -42,6 +42,7 @@ import {
   BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { AskNodeFields } from './_components/AskNodeFields';
 
 // Tutorial interativo "Reja sua IA" (HTML self-contained do Claude Design) + PDF
 // baixável. Servidos estaticamente de apps/web/public/tutoriais/. Mesmo padrão do
@@ -56,6 +57,7 @@ const NODE_META: Record<string, { kind: NodeKind; label: string; icon: any; pale
   start:       { kind: 'start',  label: 'Início',         icon: PlayCircle,    palette: false },
   message:     { kind: 'fixed',  label: 'Mensagem',       icon: MessageSquare, palette: true },
   condition:   { kind: 'fixed',  label: 'Condição',       icon: GitBranch,     palette: true },
+  ask:         { kind: 'fixed',  label: 'Perguntar e capturar', icon: MessageSquare, palette: true },
   ai:          { kind: 'ai',     label: 'Nó-IA',          icon: Sparkles,      palette: true },
   tag:         { kind: 'action', label: 'Marcar tag',     icon: Tag,           palette: true },
   update_lead: { kind: 'action', label: 'Atualizar lead', icon: BarChart2,     palette: true },
@@ -101,6 +103,7 @@ function nodeSummary(type: string, data: any): string {
   switch (type) {
     case 'message': return data?.text || '(mensagem vazia)';
     case 'condition': return 'Ramifica pela resposta';
+    case 'ask': return data?.varName ? `→ {{${data.varName}}}` : 'captura resposta';
     case 'ai': return data?.prompt || '(sem instrução)';
     case 'tag': return data?.tag ? `tag: ${data.tag}` : '(sem tag)';
     case 'update_lead': return data?.field ? `${data.field} = ${data.value ?? ''}` : '(sem campo)';
@@ -168,6 +171,12 @@ const NODE_DOCS: Record<string, NodeDoc> = {
     whatFor: 'Use para interligar especialistas: o fluxo de atendimento detecta intenção de compra e passa o bastão pro fluxo de vendas, por exemplo.',
     how: 'Conecte no ponto do salto e escolha o fluxo de destino no painel da direita. O motor segue no outro fluxo a partir do início dele.',
     example: 'No fluxo de Atendimento, se o cliente quer agendar, envie para o fluxo "Agendamento".',
+  },
+  ask: {
+    short: 'Faz uma pergunta, espera a resposta do cliente, valida e salva numa variável (e opcionalmente no CRM).',
+    whatFor: 'Use para coletar dados estruturados: nome, e-mail, telefone, empresa ou qualquer informação que precise ser guardada e reutilizada. Depois use {{a_variavel}} para personalizar mensagens.',
+    how: 'Defina a pergunta, o nome da variável para salvar a resposta e, opcionalmente, um campo do CRM para gravar automaticamente. Ative a validação para checar o formato (texto, número, e-mail ou telefone) antes de avançar.',
+    example: 'Pergunta: "Qual seu e-mail?" → salvar em {{email}} e gravar no campo "email" do lead.',
   },
   wait: {
     short: 'Espera a resposta do cliente por um prazo. Se ele não responder, o fluxo segue pelo ramo "Sem resposta" — perfeito pra follow-up automático.',
@@ -880,6 +889,10 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
 
       {type === 'condition' && (
         <p className="text-[11px] text-gray-500">Conecte este nó a vários destinos e clique em cada conexão para definir a palavra-chave que leva por ela.</p>
+      )}
+
+      {type === 'ask' && (
+        <AskNodeFields data={data ?? {}} onChange={onChange} />
       )}
 
       {type === 'transfer' && (
