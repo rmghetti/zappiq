@@ -326,4 +326,71 @@ describe('flowEngine goto_flow (Maestro v2)', () => {
     const r = resolveFlowStep(graph, { cursor: 'c', vars: {} }, 'x', { ctx });
     expect(r.effects).toEqual([{ kind: 'send_text', text: 'ramo VIP' }]);
   });
+
+  it('ask: primeira passada pergunta (interpolada) e aguarda input', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'q', type: 'ask', data: { question: 'Qual seu nome, {{vars.saud}}?', varName: 'nome' } },
+        { id: 'fim', type: 'message', data: { text: 'Obrigado {{vars.nome}}' } },
+      ],
+      edges: [{ source: 's', target: 'q' }, { source: 'q', target: 'fim' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: null, vars: { saud: 'cliente' } }, '', { ctx: DEFAULT_CTX, hasIncomingMessage: false });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Qual seu nome, cliente?' }]);
+    expect(r.next).toBe('await_input');
+    expect(r.state.cursor).toBe('q');
+  });
+
+  it('ask: resposta válida grava var, emite update_lead (crmField) e avança', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'q', type: 'ask', data: { question: 'Seu nome?', varName: 'nome', crmField: 'name' } },
+        { id: 'fim', type: 'message', data: { text: 'Oi {{vars.nome}}' } },
+      ],
+      edges: [{ source: 's', target: 'q' }, { source: 'q', target: 'fim' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: {} }, 'Ana', { ctx: DEFAULT_CTX });
+    expect(r.state.vars.nome).toBe('Ana');
+    expect(r.effects).toEqual([
+      { kind: 'update_lead', field: 'name', value: 'Ana' },
+      { kind: 'send_text', text: 'Oi Ana' },
+    ]);
+    expect(r.next).toBe('end');
+  });
+
+  it('ask: resposta inválida re-pergunta e decrementa retries', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'q', type: 'ask', data: { question: 'Seu email?', varName: 'email',
+          validation: { type: 'email', errorMessage: 'Email inválido, tente de novo', maxRetries: 2 } } },
+        { id: 'fim', type: 'message', data: { text: 'ok' } },
+      ],
+      edges: [{ source: 'q', target: 'fim' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: {} }, 'não é email', { ctx: DEFAULT_CTX });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Email inválido, tente de novo' }]);
+    expect(r.next).toBe('await_input');
+    expect(r.state.cursor).toBe('q');
+    expect(r.state.vars._askRetries).toBe(1);
+  });
+
+  it('ask: retries esgotados caem no ramo else', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'q', type: 'ask', data: { question: 'Email?', varName: 'email',
+          validation: { type: 'email', errorMessage: 'inválido', maxRetries: 1 } } },
+        { id: 'ok', type: 'message', data: { text: 'capturado' } },
+        { id: 'desiste', type: 'message', data: { text: 'tudo bem, sem email' } },
+      ],
+      edges: [
+        { source: 'q', target: 'ok' },
+        { source: 'q', target: 'desiste', data: { when: { match: 'else' } } },
+      ],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: { _askRetries: 0 } }, 'xxx', { ctx: DEFAULT_CTX });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'tudo bem, sem email' }]);
+    expect(r.state.vars._askRetries).toBeUndefined();
+  });
 });

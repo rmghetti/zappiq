@@ -197,6 +197,27 @@ function pickConditionBranch(
   return bare ? bare.target : null;
 }
 
+function validateAnswer(text: string, type?: 'text' | 'number' | 'email' | 'phone'): boolean {
+  const t = (text ?? '').trim();
+  if (!t) return false;
+  switch (type) {
+    case 'number': return /^-?\d+([.,]\d+)?$/.test(t);
+    case 'email': return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
+    case 'phone': return (t.match(/\d/g)?.length ?? 0) >= 8;
+    case 'text':
+    default: return true;
+  }
+}
+
+/** Ramo else/default de saída de um nó (sem casar predicados). */
+function pickElseBranch(graph: FlowGraph, nodeId: string): string | null {
+  const outgoing = graph.edges.filter((e) => e.source === nodeId);
+  const elseEdge = outgoing.find((e) => e.data?.when?.match === 'else');
+  if (elseEdge) return elseEdge.target;
+  const bare = outgoing.find((e) => !e.data?.when && !e.data?.predicates);
+  return bare ? bare.target : (outgoing[0]?.target ?? null);
+}
+
 // ── MOTOR PURO ─────────────────────────────────────────────────────────────────
 const MAX_WALK = 100; // trava anti-loop infinito em grafos malformados
 
@@ -319,6 +340,40 @@ export function resolveFlowStep(
           schedule: { kind: node.type as 'wait' | 'schedule', delayMinutes, runAt, resumeNodeId },
           state: { cursor: replyCursor, vars },
         };
+      }
+
+      case 'ask': {
+        const d = (node.data ?? {}) as Partial<AskNodeData>;
+        const resuming = state.cursor === node.id;
+        if (resuming && messageAvailable && !sentMessageThisWalk) {
+          // a mensagem deste turno é a resposta
+          messageAvailable = false;
+          const ans = incomingText;
+          if (!validateAnswer(ans, d.validation?.type)) {
+            const start = typeof d.validation?.maxRetries === 'number' ? d.validation.maxRetries : 3;
+            const left = (typeof vars._askRetries === 'number' ? vars._askRetries : start) - 1;
+            if (left >= 0) {
+              vars._askRetries = left;
+              const msg = render(d.validation?.errorMessage ?? d.question ?? '');
+              if (msg.trim()) effects.push({ kind: 'send_text', text: msg });
+              return { effects, next: 'await_input', state: { cursor: node.id, vars } };
+            }
+            // esgotou → ramo else
+            delete vars._askRetries;
+            current = pickElseBranch(graph, node.id);
+            break;
+          }
+          // resposta válida
+          delete vars._askRetries;
+          if (d.varName) vars[d.varName] = ans;
+          if (d.crmField) effects.push({ kind: 'update_lead', field: d.crmField, value: ans });
+          current = firstTargetFrom(graph, node.id);
+          break;
+        }
+        // primeira passada (ou já enviamos algo neste walk) → pergunta e aguarda
+        const q = render(d.question ?? node.label ?? '');
+        if (q.trim()) effects.push({ kind: 'send_text', text: q });
+        return { effects, next: 'await_input', state: { cursor: node.id, vars } };
       }
 
       case 'condition':
