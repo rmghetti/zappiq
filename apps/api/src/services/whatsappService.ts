@@ -278,6 +278,8 @@ export interface ParsedWebhookEvent {
   recipient?: string;
   buttonTitle?: string;
   listTitle?: string;
+  buttonId?: string;
+  listId?: string;
   mediaId?: string;
 }
 
@@ -309,12 +311,18 @@ export function parseWebhookEvent(body: any): ParsedWebhookEvent | null {
       phoneNumberId: value.metadata?.phone_number_id,
       from: message.from,
       senderName: contactInfo?.profile?.name || message.from,
-      text: message.text?.body || message.caption || '',
+      text: message.text?.body
+        || message.caption
+        || message.interactive?.button_reply?.title
+        || message.interactive?.list_reply?.title
+        || '',
       msgType: message.type,
       messageId: message.id,
       timestamp: message.timestamp,
       buttonTitle: message.interactive?.button_reply?.title,
       listTitle: message.interactive?.list_reply?.title,
+      buttonId: message.interactive?.button_reply?.id,
+      listId: message.interactive?.list_reply?.id,
       mediaId: message.image?.id || message.audio?.id || message.document?.id || message.video?.id,
     };
   } catch {
