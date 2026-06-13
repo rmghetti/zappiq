@@ -4,6 +4,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import { aiProcessQueue } from '../services/queueService.js';
+import { inboundContentFromMessage } from '../services/inboundContent.js';
 
 const router = Router();
 
@@ -168,7 +169,7 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
     }
 
     // Save incoming message
-    const content = message.text?.body || message.caption || `[${message.type}]`;
+    const content = inboundContentFromMessage(message);
 
     await prisma.message.create({
       data: {

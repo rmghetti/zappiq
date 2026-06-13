@@ -205,7 +205,7 @@ export async function sendList(
       action: {
         button: buttonLabel || 'Ver opções',
         sections: sections.map((sec) => ({
-          title: sec.title,
+          ...(sec.title && sec.title.trim() ? { title: sec.title } : {}),
           rows: sec.rows.slice(0, 10).map((r) => ({
             id: r.id,
             title: r.title.slice(0, 24),
