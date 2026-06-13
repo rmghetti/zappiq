@@ -146,3 +146,75 @@ export async function markIncomingAsRead(input: {
     phoneNumberId: waOrg?.whatsappPhoneNumberId ?? undefined,
   }).catch(() => {});
 }
+
+/** Envia botões/lista pelo WhatsApp. IG não suporta interactive → fallback texto. */
+export async function sendReplyInteractive(input: {
+  organizationId: string;
+  conversationId: string;
+  kind: 'button' | 'list';
+  body: string;
+  options: { id: string; title: string }[];
+}): Promise<SendReplyResult> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: input.conversationId },
+    select: { channel: true, contact: { select: { whatsappId: true, phone: true } } },
+  });
+  if (!conversation) throw new Error(`Conversation ${input.conversationId} not found`);
+
+  // IG: degrada para texto (corpo + opções numeradas).
+  if (conversation.channel === 'instagram') {
+    const lines = [input.body, ...input.options.map((o, i) => `${i + 1}. ${o.title}`)].join('\n');
+    return sendReplyText({ organizationId: input.organizationId, conversationId: input.conversationId, content: lines });
+  }
+
+  const phone = conversation.contact?.whatsappId || conversation.contact?.phone || '';
+  if (!phone) throw new Error(`Conversation ${input.conversationId} sem phone/whatsappId`);
+  const waOrg = await prisma.organization.findUnique({
+    where: { id: input.organizationId },
+    select: { whatsappPhoneNumberId: true, whatsappAccessToken: true },
+  });
+  const creds = { accessToken: waOrg?.whatsappAccessToken ?? undefined, phoneNumberId: waOrg?.whatsappPhoneNumberId ?? undefined };
+
+  let result: any;
+  if (input.kind === 'button') {
+    result = await waService.sendButtons(phone, null, input.body, input.options.slice(0, 3), creds);
+  } else {
+    const rows = input.options.slice(0, 10).map((o) => ({ id: o.id, title: o.title }));
+    result = await waService.sendList(phone, ' ', input.body, null, 'Ver opções', [{ title: ' ', rows }], creds);
+  }
+  return { channel: 'whatsapp', externalMessageId: result?.messages?.[0]?.id };
+}
+
+/** Envia mídia por link pelo WhatsApp. IG → fallback texto (caption + url). */
+export async function sendReplyMedia(input: {
+  organizationId: string;
+  conversationId: string;
+  mediaType: 'image' | 'audio' | 'document';
+  url: string;
+  caption?: string;
+}): Promise<SendReplyResult> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: input.conversationId },
+    select: { channel: true, contact: { select: { whatsappId: true, phone: true } } },
+  });
+  if (!conversation) throw new Error(`Conversation ${input.conversationId} not found`);
+
+  if (conversation.channel === 'instagram') {
+    const txt = [input.caption, input.url].filter(Boolean).join('\n');
+    return sendReplyText({ organizationId: input.organizationId, conversationId: input.conversationId, content: txt });
+  }
+
+  const phone = conversation.contact?.whatsappId || conversation.contact?.phone || '';
+  if (!phone) throw new Error(`Conversation ${input.conversationId} sem phone/whatsappId`);
+  const waOrg = await prisma.organization.findUnique({
+    where: { id: input.organizationId },
+    select: { whatsappPhoneNumberId: true, whatsappAccessToken: true },
+  });
+  const creds = { accessToken: waOrg?.whatsappAccessToken ?? undefined, phoneNumberId: waOrg?.whatsappPhoneNumberId ?? undefined };
+
+  let result: any;
+  if (input.mediaType === 'image') result = await waService.sendImage(phone, input.url, input.caption, creds);
+  else if (input.mediaType === 'document') result = await waService.sendDocument(phone, input.url, input.caption, undefined, creds);
+  else throw new Error(`sendReplyMedia: áudio por link não suportado (use mediaId)`); // áudio fica fora da 1A
+  return { channel: 'whatsapp', externalMessageId: result?.messages?.[0]?.id };
+}
