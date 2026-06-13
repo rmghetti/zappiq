@@ -426,4 +426,34 @@ describe('flowEngine goto_flow (Maestro v2)', () => {
     expect(r.next).toBe('await_input');
     expect(r.state.cursor).toBe('q');
   });
+
+  it('message com botões emite send_interactive (titles interpolados)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'm', type: 'message', data: {
+          text: 'Escolha {{vars.nome}}:',
+          interactive: { type: 'button', options: [{ id: 'planos', title: 'Planos' }, { id: 'sup', title: 'Suporte' }] },
+        } },
+      ],
+      edges: [],
+    };
+    const r = resolveFlowStep(graph, { cursor: null, vars: { nome: 'Ana' } }, 'oi', { ctx: DEFAULT_CTX });
+    expect(r.effects).toEqual([{
+      kind: 'send_interactive', type: 'button', body: 'Escolha Ana:',
+      options: [{ id: 'planos', title: 'Planos' }, { id: 'sup', title: 'Suporte' }],
+    }]);
+  });
+
+  it('message com mídia emite send_media com caption interpolada', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'm', type: 'message', data: {
+          media: { type: 'image', url: 'https://x/y.png', caption: 'Catálogo {{vars.nome}}' },
+        } },
+      ],
+      edges: [],
+    };
+    const r = resolveFlowStep(graph, { cursor: null, vars: { nome: 'Ana' } }, 'oi', { ctx: DEFAULT_CTX });
+    expect(r.effects).toEqual([{ kind: 'send_media', mediaType: 'image', url: 'https://x/y.png', caption: 'Catálogo Ana' }]);
+  });
 });

@@ -54,6 +54,8 @@ export interface FlowState {
 
 export type FlowEffect =
   | { kind: 'send_text'; text: string }
+  | { kind: 'send_interactive'; type: 'button' | 'list'; body: string; options: { id: string; title: string }[] }
+  | { kind: 'send_media'; mediaType: 'image' | 'audio' | 'document'; url: string; caption?: string }
   | { kind: 'set_tag'; tag: string }
   | { kind: 'update_lead'; field: string; value: any }
   | { kind: 'handoff' }
@@ -269,11 +271,24 @@ export function resolveFlowStep(
         break;
 
       case 'message': {
-        const raw = (node.data?.text ?? node.label ?? '').toString();
-        const text = render(raw);
-        if (text.trim()) {
-          effects.push({ kind: 'send_text', text });
+        const d = node.data ?? {};
+        const media = d.media as { type: 'image'|'audio'|'document'; url: string; caption?: string } | undefined;
+        const interactive = d.interactive as { type: 'button'|'list'; options: { id: string; title: string }[] } | undefined;
+        if (media?.url) {
+          effects.push({ kind: 'send_media', mediaType: media.type, url: media.url, caption: media.caption ? render(media.caption) : undefined });
           sentMessageThisWalk = true;
+        } else if (interactive?.options?.length) {
+          effects.push({
+            kind: 'send_interactive', type: interactive.type, body: render((d.text ?? node.label ?? '').toString()),
+            options: interactive.options.slice(0, interactive.type === 'button' ? 3 : 10).map((o) => ({ id: o.id, title: render(o.title) })),
+          });
+          sentMessageThisWalk = true;
+        } else {
+          const text = render((d.text ?? node.label ?? '').toString());
+          if (text.trim()) {
+            effects.push({ kind: 'send_text', text });
+            sentMessageThisWalk = true;
+          }
         }
         current = firstTargetFrom(graph, node.id);
         break;
