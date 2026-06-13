@@ -302,4 +302,28 @@ describe('flowEngine goto_flow (Maestro v2)', () => {
     const r = resolveFlowStep(graph, { cursor: null, vars: { plano: 'pro' } }, 'oi', { ctx });
     expect(r.effects).toEqual([{ kind: 'send_text', text: 'Oi Ana, plano pro' }]);
   });
+
+  it('condition: aresta com predicates vazio não vence o else explícito', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'c', type: 'condition' },
+        { id: 'bare', type: 'message', data: { text: 'ramo vazio' } },
+        { id: 'real', type: 'message', data: { text: 'ramo VIP' } },
+        { id: 'fim', type: 'message', data: { text: 'else' } },
+      ],
+      edges: [
+        // aresta de predicates vazio aparece ANTES da real e do else
+        { source: 'c', target: 'bare', data: { predicates: [] } },
+        { source: 'c', target: 'real', data: { predicates: [{ kind: 'contact_attr', field: 'tags', op: 'contains', value: 'vip' }] } },
+        { source: 'c', target: 'fim', data: { when: { match: 'else' } } },
+      ],
+    };
+    const ctx = {
+      contact: { name: null, tags: ['vip'], leadStatus: null, leadScore: 0, funnelStage: null, customFields: {} },
+      now: null, businessHours: null,
+    };
+    // contato é VIP → deve seguir a aresta 'real', não a de predicates vazio
+    const r = resolveFlowStep(graph, { cursor: 'c', vars: {} }, 'x', { ctx });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'ramo VIP' }]);
+  });
 });

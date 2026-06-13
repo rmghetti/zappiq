@@ -184,7 +184,8 @@ function pickConditionBranch(
   const outgoing = graph.edges.filter((e) => e.source === nodeId);
   // 1) primeira aresta NÃO-else cujos predicados/when casam
   for (const e of outgoing) {
-    const isElse = e.data?.when?.match === 'else' || (!e.data?.predicates && !e.data?.when);
+    const hasPreds = Array.isArray(e.data?.predicates) && e.data.predicates.length > 0;
+    const isElse = e.data?.when?.match === 'else' || (!hasPreds && !e.data?.when);
     if (isElse) continue;
     if (evalEdge(e, ctx, vars, text)) return e.target;
   }
