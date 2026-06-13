@@ -76,4 +76,53 @@ describe('assemble', () => {
     });
     expect(r.ok).toBe(true);
   });
+
+  it('else-completion sem nenhum nó ai: cria ai_fallback e liga o else nele', () => {
+    const r = assemble({
+      flowName: 'NF', entry: 'b1',
+      blocks: [
+        { id: 'b1', type: 'ask_buttons', question: 'Q?', options: [{ title: 'A', next: 'b2' }] },
+        { id: 'b2', type: 'tag', tag: 'x' }, // sem nó ai no plano
+      ],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const fallback = r.graph.nodes.find((n) => n.type === 'ai');
+    expect(fallback).toBeTruthy(); // ai_fallback criado
+    const cond = r.graph.nodes.find((n) => n.type === 'condition');
+    const elseEdge = r.graph.edges.find((e) => e.source === cond.id && e.data?.when?.match === 'else');
+    expect(elseEdge!.target).toBe(fallback.id);
+  });
+
+  it('branch_hours: open vai ao destino, closed (else) é completado', () => {
+    const r = assemble({
+      flowName: 'H', entry: 'b1',
+      blocks: [
+        { id: 'b1', type: 'branch_hours', openNext: 'b2', closedNext: 'b3' },
+        { id: 'b2', type: 'ai', prompt: 'aberto' },
+        { id: 'b3', type: 'ai', prompt: 'fechado' },
+      ],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const cond = r.graph.nodes.find((n) => n.type === 'condition');
+    const out = r.graph.edges.filter((e) => e.source === cond.id);
+    expect(out.some((e) => e.data?.predicates?.[0]?.kind === 'business_hours')).toBe(true);
+    expect(out.some((e) => e.data?.when?.match === 'else')).toBe(true);
+  });
+
+  it('handoff encerra (transfer sem saída)', () => {
+    const r = assemble({
+      flowName: 'HO', entry: 'b1',
+      blocks: [
+        { id: 'b1', type: 'message', text: 'tchau', next: 'b2' },
+        { id: 'b2', type: 'handoff' },
+      ],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const transfer = r.graph.nodes.find((n) => n.type === 'transfer');
+    expect(transfer).toBeTruthy();
+    expect(r.graph.edges.some((e) => e.source === transfer.id)).toBe(false); // sem saída
+  });
 });

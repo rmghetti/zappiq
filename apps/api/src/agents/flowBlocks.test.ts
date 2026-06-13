@@ -65,7 +65,7 @@ describe('expandBlock', () => {
     expect(shown.length).toBeLessThanOrEqual(20);
     const optExit = f.exits.find((e) => e.key === 'opt:0');
     // predicate value deve ser EXATAMENTE o título mostrado no botão
-    expect(optExit.edgeData.predicates[0].value).toBe(shown);
+    expect(optExit!.edgeData.predicates[0].value).toBe(shown);
   });
 
   it('ask_buttons: ids de opção são únicos mesmo com títulos que colidem no slug', () => {
