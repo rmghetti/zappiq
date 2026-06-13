@@ -10,7 +10,7 @@
  *   ✓ grafo cíclico não trava (MAX_WALK encerra)
  * ══════════════════════════════════════════════════════════════════════ */
 import { describe, it, expect } from 'vitest';
-import { resolveFlowStep, type FlowGraph, type FlowState } from './flowEngine.js';
+import { resolveFlowStep, DEFAULT_CTX, type FlowGraph, type FlowState } from './flowEngine.js';
 
 const EMPTY_STATE: FlowState = { cursor: null, vars: {} };
 
@@ -263,5 +263,43 @@ describe('flowEngine goto_flow (Maestro v2)', () => {
     };
     const r = resolveFlowStep(graph, EMPTY_STATE, 'oi');
     expect(r.effects).toEqual([{ kind: 'send_text', text: 'seguindo aqui mesmo' }]);
+  });
+
+  it('condition ramifica por atributo do contato (predicates em E)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'c', type: 'condition' },
+        { id: 'vip', type: 'message', data: { text: 'Atendimento VIP' } },
+        { id: 'comum', type: 'message', data: { text: 'Atendimento padrão' } },
+      ],
+      edges: [
+        { source: 's', target: 'c' },
+        { source: 'c', target: 'vip', data: { predicates: [{ kind: 'contact_attr', field: 'tags', op: 'contains', value: 'vip' }] } },
+        { source: 'c', target: 'comum', data: { when: { match: 'else' } } },
+      ],
+    };
+    const ctx = {
+      contact: { name: null, tags: ['vip'], leadStatus: null, leadScore: 0, funnelStage: null, customFields: {} },
+      now: null, businessHours: null,
+    };
+    const r = resolveFlowStep(graph, { cursor: 'c', vars: {} }, 'qualquer', { ctx });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Atendimento VIP' }]);
+  });
+
+  it('message interpola {{vars}} e {{contact.name}}', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'm', type: 'message', data: { text: 'Oi {{contact.name}}, plano {{vars.plano}}' } },
+      ],
+      edges: [{ source: 's', target: 'm' }],
+    };
+    const ctx = {
+      contact: { name: 'Ana', tags: [], leadStatus: null, leadScore: 0, funnelStage: null, customFields: {} },
+      now: null, businessHours: null,
+    };
+    const r = resolveFlowStep(graph, { cursor: null, vars: { plano: 'pro' } }, 'oi', { ctx });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Oi Ana, plano pro' }]);
   });
 });

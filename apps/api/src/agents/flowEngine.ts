@@ -12,6 +12,9 @@
  * ============================================================================
  */
 
+import { renderTemplate, type RenderScope } from './flowInterpolate.js';
+import { evalEdge } from './flowPredicates.js';
+
 // ── Tipos do grafo (alinhados ao model Flow {nodes,edges} + mock /flows) ──────
 export interface FlowNode {
   id: string;
@@ -171,18 +174,25 @@ export function matchCondition(cond: FlowCondition | undefined, text: string): b
 }
 
 /** Escolhe a aresta de saída de um nó 'condition' conforme a mensagem. */
-function pickConditionBranch(graph: FlowGraph, nodeId: string, text: string): string | null {
+function pickConditionBranch(
+  graph: FlowGraph,
+  nodeId: string,
+  text: string,
+  ctx: EvalContext,
+  vars: Record<string, any>,
+): string | null {
   const outgoing = graph.edges.filter((e) => e.source === nodeId);
-  // 1) primeira aresta cuja condição casa (ignora 'else' nesta passada)
+  // 1) primeira aresta NÃO-else cujos predicados/when casam
   for (const e of outgoing) {
-    const when = e.data?.when;
-    if (when && when.match !== 'else' && matchCondition(when, text)) return e.target;
+    const isElse = e.data?.when?.match === 'else' || (!e.data?.predicates && !e.data?.when);
+    if (isElse) continue;
+    if (evalEdge(e, ctx, vars, text)) return e.target;
   }
   // 2) aresta 'else' explícita
   const elseEdge = outgoing.find((e) => e.data?.when?.match === 'else');
   if (elseEdge) return elseEdge.target;
   // 3) aresta sem condição declarada (fallback default)
-  const bare = outgoing.find((e) => !e.data?.when);
+  const bare = outgoing.find((e) => !e.data?.when && !e.data?.predicates);
   return bare ? bare.target : null;
 }
 
@@ -204,6 +214,9 @@ export function resolveFlowStep(
 ): FlowStepResult {
   const effects: FlowEffect[] = [];
   const vars = { ...(state.vars || {}) };
+  const ctx = options?.ctx ?? DEFAULT_CTX;
+  const scope: RenderScope = { vars, contact: ctx.contact, system: ctx.system };
+  const render = (t: string) => renderTemplate(t, scope);
 
   let current: string | null;
   if (state.cursor) {
@@ -234,7 +247,8 @@ export function resolveFlowStep(
         break;
 
       case 'message': {
-        const text = (node.data?.text ?? node.label ?? '').toString();
+        const raw = (node.data?.text ?? node.label ?? '').toString();
+        const text = render(raw);
         if (text.trim()) {
           effects.push({ kind: 'send_text', text });
           sentMessageThisWalk = true;
@@ -310,7 +324,7 @@ export function resolveFlowStep(
         if (messageAvailable && !sentMessageThisWalk) {
           // ramifica sobre a mensagem que chegou aguardando aqui
           messageAvailable = false;
-          current = pickConditionBranch(graph, node.id, incomingText);
+          current = pickConditionBranch(graph, node.id, incomingText, ctx, vars);
         } else {
           // já respondemos algo neste turno (ou a msg já foi consumida) →
           // aguarda a PRÓXIMA mensagem do usuário neste condition
