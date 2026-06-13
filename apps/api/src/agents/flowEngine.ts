@@ -56,6 +56,57 @@ export type FlowEffect =
   | { kind: 'handoff' }
   | { kind: 'goto_flow'; targetFlowId: string };
 
+// ── Contexto de avaliação (injetado pela camada IO; mantém o motor puro) ──────
+export interface BusinessHoursConfig {
+  /** IANA tz, ex 'America/Sao_Paulo'. */
+  timezone: string;
+  /** 0=domingo … 6=sábado. null = fechado nesse dia. Horários 'HH:mm' 24h. */
+  days: Record<number, { open: string; close: string } | null>;
+}
+
+export interface EvalContact {
+  name: string | null;
+  tags: string[];
+  leadStatus: string | null;
+  leadScore: number;
+  funnelStage: string | null;
+  customFields: Record<string, any>;
+}
+
+export interface EvalContext {
+  contact: EvalContact;
+  /** 'agora' injetado pelo runtime — o motor NUNCA chama Date. */
+  now: Date | null;
+  businessHours: BusinessHoursConfig | null;
+  /** id do botão/lista tocado (normalizado do inbound). Reservado p/ uso futuro. */
+  selectedId?: string;
+  /** Identidade do negócio para interpolação {{system.*}}. */
+  system?: { businessName?: string; agentName?: string };
+}
+
+/** Predicado de aresta (Spec 1A — avaliados em E). */
+export type PredicateOp =
+  | 'eq' | 'neq' | 'gt' | 'lt' | 'gte' | 'lte'
+  | 'contains' | 'exists' | 'not_exists';
+
+export type Predicate =
+  | { kind: 'keyword'; match: 'contains' | 'equals' | 'starts_with' | 'regex'; value: string }
+  | { kind: 'contact_attr'; field: string; op: PredicateOp; value?: any }
+  | { kind: 'var'; name: string; op: PredicateOp; value?: any }
+  | { kind: 'business_hours'; expect: 'open' | 'closed' };
+
+/** Dados do nó 'ask' (captura de resposta). */
+export interface AskNodeData {
+  question: string;
+  varName: string;
+  crmField?: string;
+  validation?: {
+    type: 'text' | 'number' | 'email' | 'phone';
+    errorMessage: string;
+    maxRetries: number;
+  };
+}
+
 export interface FlowSchedule {
   kind: 'wait' | 'schedule';
   delayMinutes: number | null;
@@ -80,7 +131,16 @@ export interface FlowStepResult {
 export interface ResolveOptions {
   /** false na retomada por timer: nenhum texto novo do usuário disponível. */
   hasIncomingMessage?: boolean;
+  /** Contexto de avaliação (contato, horário, agora). Ausente → defaults seguros. */
+  ctx?: EvalContext;
 }
+
+/** Contexto default fail-closed quando o caller não injeta ctx (ex: testes legados). Exportado p/ uso nos testes. */
+export const DEFAULT_CTX: EvalContext = {
+  contact: { name: null, tags: [], leadStatus: null, leadScore: 0, funnelStage: null, customFields: {} },
+  now: null,
+  businessHours: null,
+};
 
 // ── Helpers de grafo ──────────────────────────────────────────────────────────
 function nodeById(graph: FlowGraph, id: string | null): FlowNode | undefined {
