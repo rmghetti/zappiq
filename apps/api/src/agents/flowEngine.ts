@@ -106,6 +106,7 @@ export interface AskNodeData {
   validation?: {
     type: 'text' | 'number' | 'email' | 'phone';
     errorMessage: string;
+    /** Re-tentativas após a 1ª resposta inválida. Ex.: maxRetries:2 → até 3 inválidas antes do else. */
     maxRetries: number;
   };
 }
@@ -209,13 +210,12 @@ function validateAnswer(text: string, type?: 'text' | 'number' | 'email' | 'phon
   }
 }
 
-/** Ramo else/default de saída de um nó (sem casar predicados). */
+/** Ramo 'else' EXPLÍCITO de saída de um nó; null se não houver (→ encerra).
+ *  Usado na exaustão de retries do nó 'ask': fail-closed, nunca segue o caminho
+ *  feliz com a variável não capturada. */
 function pickElseBranch(graph: FlowGraph, nodeId: string): string | null {
-  const outgoing = graph.edges.filter((e) => e.source === nodeId);
-  const elseEdge = outgoing.find((e) => e.data?.when?.match === 'else');
-  if (elseEdge) return elseEdge.target;
-  const bare = outgoing.find((e) => !e.data?.when && !e.data?.predicates);
-  return bare ? bare.target : (outgoing[0]?.target ?? null);
+  const elseEdge = graph.edges.find((e) => e.source === nodeId && e.data?.when?.match === 'else');
+  return elseEdge ? elseEdge.target : null;
 }
 
 // ── MOTOR PURO ─────────────────────────────────────────────────────────────────
@@ -350,8 +350,8 @@ export function resolveFlowStep(
           messageAvailable = false;
           const ans = incomingText;
           if (!validateAnswer(ans, d.validation?.type)) {
-            const start = typeof d.validation?.maxRetries === 'number' ? d.validation.maxRetries : 3;
-            const left = (typeof vars._askRetries === 'number' ? vars._askRetries : start) - 1;
+            const budget = typeof d.validation?.maxRetries === 'number' ? d.validation.maxRetries : 3;
+            const left = (typeof vars._askRetries === 'number' ? vars._askRetries : budget) - 1;
             if (left >= 0) {
               vars._askRetries = left;
               const msg = render(d.validation?.errorMessage ?? d.question ?? '');

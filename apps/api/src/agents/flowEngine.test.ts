@@ -393,4 +393,37 @@ describe('flowEngine goto_flow (Maestro v2)', () => {
     expect(r.effects).toEqual([{ kind: 'send_text', text: 'tudo bem, sem email' }]);
     expect(r.state.vars._askRetries).toBeUndefined();
   });
+
+  it('ask: exaustão sem else explícito encerra o fluxo (não segue caminho feliz com var vazia)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'q', type: 'ask', data: { question: 'Email?', varName: 'email',
+          validation: { type: 'email', errorMessage: 'inválido', maxRetries: 1 } } },
+        { id: 'fim', type: 'message', data: { text: 'Obrigado {{vars.email}}' } },
+      ],
+      edges: [
+        // só a aresta do caminho feliz (bare), SEM else
+        { source: 'q', target: 'fim' },
+      ],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: { _askRetries: 0 } }, 'xxx', { ctx: DEFAULT_CTX });
+    expect(r.next).toBe('end');
+    expect(r.effects).toEqual([]); // não envia o "Obrigado" do caminho feliz
+    expect(r.state.vars.email).toBeUndefined();
+    expect(r.state.vars._askRetries).toBeUndefined();
+  });
+
+  it('ask: retomada por timer (sem mensagem) re-emite a pergunta e aguarda', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'q', type: 'ask', data: { question: 'Seu nome?', varName: 'nome' } },
+        { id: 'fim', type: 'message', data: { text: 'ok' } },
+      ],
+      edges: [{ source: 'q', target: 'fim' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: {} }, '', { ctx: DEFAULT_CTX, hasIncomingMessage: false });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Seu nome?' }]);
+    expect(r.next).toBe('await_input');
+    expect(r.state.cursor).toBe('q');
+  });
 });
