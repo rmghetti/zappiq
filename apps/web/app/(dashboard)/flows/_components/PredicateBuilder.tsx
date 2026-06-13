@@ -100,8 +100,8 @@ export function summarizePredicates(predicates: Predicate[]): string {
   if (!predicates?.length) return '';
   const one = (p: Predicate): string => {
     if (p.kind === 'keyword') return `texto ${p.match} "${p.value}"`;
-    if (p.kind === 'contact_attr') return `${p.field} ${p.op}${p.value != null && p.value !== '' ? ' ' + p.value : ''}`;
-    if (p.kind === 'var') return `${p.name} ${p.op}${p.value != null && p.value !== '' ? ' ' + p.value : ''}`;
+    if (p.kind === 'contact_attr') return `${p.field} ${OP_LABEL[p.op]}${p.value != null && p.value !== '' ? ' ' + p.value : ''}`;
+    if (p.kind === 'var') return `${p.name} ${OP_LABEL[p.op]}${p.value != null && p.value !== '' ? ' ' + p.value : ''}`;
     return p.expect === 'open' ? 'no horário' : 'fora do horário';
   };
   return predicates.map(one).join(' e ');

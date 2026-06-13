@@ -39,7 +39,7 @@ import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
   MessageSquare, GitBranch, Sparkles, Tag, BarChart2, Headset, Clock, CalendarClock, PlayCircle, Info,
-  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History,
+  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History, HelpCircle,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { AskNodeFields } from './_components/AskNodeFields';
@@ -59,7 +59,7 @@ const NODE_META: Record<string, { kind: NodeKind; label: string; icon: any; pale
   start:       { kind: 'start',  label: 'Início',         icon: PlayCircle,    palette: false },
   message:     { kind: 'fixed',  label: 'Mensagem',       icon: MessageSquare, palette: true },
   condition:   { kind: 'fixed',  label: 'Condição',       icon: GitBranch,     palette: true },
-  ask:         { kind: 'fixed',  label: 'Perguntar e capturar', icon: MessageSquare, palette: true },
+  ask:         { kind: 'fixed',  label: 'Perguntar e capturar', icon: HelpCircle,    palette: true },
   ai:          { kind: 'ai',     label: 'Nó-IA',          icon: Sparkles,      palette: true },
   tag:         { kind: 'action', label: 'Marcar tag',     icon: Tag,           palette: true },
   update_lead: { kind: 'action', label: 'Atualizar lead', icon: BarChart2,     palette: true },
@@ -479,17 +479,6 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
     setSelectedNodeId(null);
   }
 
-  function setEdgeCondition(value: string) {
-    if (!selectedEdgeId) return;
-    setEdges((eds) =>
-      eds.map((e) =>
-        e.id === selectedEdgeId
-          ? { ...e, label: value || undefined, data: { ...e.data, when: value ? { match: 'contains', value } : undefined } }
-          : e,
-      ),
-    );
-  }
-
   function setEdgePredicates(preds: Predicate[]) {
     setEdges((eds) => eds.map((e) => e.id === selectedEdgeId
       ? { ...e, label: preds.length ? summarizePredicates(preds) : undefined, data: { ...e.data, predicates: preds.length ? preds : undefined, when: undefined } }
@@ -556,6 +545,7 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
       const hasDefault = out.some((e) => {
         const w = (e.data as any)?.when;
         const preds = (e.data as any)?.predicates;
+        if (n.type === 'ask') return w?.match === 'else';
         return w?.match === 'else' || (!w && (!preds || preds.length === 0));
       });
       if (!hasDefault) warnings.push(`Nó "${labelOf(n)}": sem ramo padrão (else). Se nada casar, o fluxo encerra.`);
