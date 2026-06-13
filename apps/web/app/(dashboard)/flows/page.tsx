@@ -44,6 +44,7 @@ import {
 import { api } from '../../../lib/api';
 import { AskNodeFields } from './_components/AskNodeFields';
 import { PredicateBuilder, summarizePredicates, type Predicate } from './_components/PredicateBuilder';
+import { MessageRichFields } from './_components/MessageRichFields';
 
 // Tutorial interativo "Reja sua IA" (HTML self-contained do Claude Design) + PDF
 // baixável. Servidos estaticamente de apps/web/public/tutoriais/. Mesmo padrão do
@@ -102,7 +103,10 @@ function metaFor(type: string) {
 
 function nodeSummary(type: string, data: any): string {
   switch (type) {
-    case 'message': return data?.text || '(mensagem vazia)';
+    case 'message':
+      if (data?.media) return data.media.type === 'image' ? '🖼 imagem' : data.media.type === 'document' ? '📄 documento' : '🔊 áudio';
+      if (data?.interactive) return `${data.interactive.options.length} ${data.interactive.type === 'list' ? 'itens' : 'botões'}`;
+      return data?.text || '(mensagem vazia)';
     case 'condition': return 'Ramifica pela resposta';
     case 'ask': return data?.varName ? `→ {{${data.varName}}}` : 'captura resposta';
     case 'ai': return data?.prompt || '(sem instrução)';
@@ -885,6 +889,7 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
         <>
           <label className="block text-xs text-gray-600 mb-1">Texto enviado ao cliente</label>
           <AutoGrowTextarea value={data?.text || ''} onChange={(v) => onChange({ text: v })} className={inputCls} />
+          <MessageRichFields data={data ?? {}} onChange={onChange} />
         </>
       )}
 
