@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { AskNodeFields } from './_components/AskNodeFields';
+import { PredicateBuilder, summarizePredicates, type Predicate } from './_components/PredicateBuilder';
 
 // Tutorial interativo "Reja sua IA" (HTML self-contained do Claude Design) + PDF
 // baixável. Servidos estaticamente de apps/web/public/tutoriais/. Mesmo padrão do
@@ -405,8 +406,18 @@ function apiEdgesToCanvas(apiEdges: any[]): Edge[] {
     id: e.id || genId('e'),
     source: e.source,
     target: e.target,
-    // Ramo de timeout (saída de nó wait) não tem value — rotula "sem resposta".
-    label: e.data?.when?.match === 'timeout' ? 'sem resposta' : (e.data?.when?.value || undefined),
+    // Label derivation:
+    // - predicates → summarize
+    // - else → 'padrão'
+    // - timeout → 'sem resposta'
+    // - legacy keyword when → value
+    label: e.data?.predicates?.length
+      ? summarizePredicates(e.data.predicates as Predicate[])
+      : e.data?.when?.match === 'else'
+        ? 'padrão'
+        : e.data?.when?.match === 'timeout'
+          ? 'sem resposta'
+          : (e.data?.when?.value || undefined),
     data: e.data || {},
   }));
 }
@@ -473,6 +484,17 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
           : e,
       ),
     );
+  }
+
+  function setEdgePredicates(preds: Predicate[]) {
+    setEdges((eds) => eds.map((e) => e.id === selectedEdgeId
+      ? { ...e, label: preds.length ? summarizePredicates(preds) : undefined, data: { ...e.data, predicates: preds.length ? preds : undefined, when: undefined } }
+      : e));
+  }
+  function setEdgeAsElse(on: boolean) {
+    setEdges((eds) => eds.map((e) => e.id === selectedEdgeId
+      ? { ...e, label: on ? 'padrão' : undefined, data: { ...e.data, predicates: undefined, when: on ? { match: 'else' } : undefined } }
+      : e));
   }
 
   // Maestro v2 — saídas de nó 'wait': ramo de resposta vs ramo de timeout.
@@ -697,14 +719,24 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
           {selectedEdge && selectedEdgeSourceType !== 'wait' && (
             <div>
               <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-2">Conexão</p>
-              <label className="block text-xs text-gray-600 mb-1">Seguir por aqui quando a mensagem contiver:</label>
-              <input
-                value={selectedEdge.data?.when?.value || ''}
-                onChange={(e) => setEdgeCondition(e.target.value)}
-                placeholder="ex: sim"
-                className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-primary-400"
-              />
-              <p className="text-[10px] text-gray-400 mt-1.5">Vazio = conexão padrão (sem condição).</p>
+              {/* Else checkbox */}
+              <label className="flex items-center gap-1.5 text-xs text-gray-600 mb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedEdge.data?.when?.match === 'else'}
+                  onChange={(e) => setEdgeAsElse(e.target.checked)}
+                  className="rounded"
+                />
+                Aresta padrão (else)
+              </label>
+              {selectedEdge.data?.when?.match !== 'else' && (() => {
+                const legacyWhen = selectedEdge.data?.when as { match: string; value?: string } | undefined;
+                const currentPreds: Predicate[] = (selectedEdge.data?.predicates as Predicate[] | undefined)
+                  ?? (legacyWhen && legacyWhen.match !== 'else' && legacyWhen.match !== 'timeout'
+                       ? [{ kind: 'keyword', match: legacyWhen.match as Extract<Predicate, { kind: 'keyword' }>['match'], value: legacyWhen.value ?? '' }]
+                       : []);
+                return <PredicateBuilder predicates={currentPreds} onChange={setEdgePredicates} />;
+              })()}
             </div>
           )}
         </div>
