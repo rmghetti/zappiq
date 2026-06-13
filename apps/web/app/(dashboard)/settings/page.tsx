@@ -16,13 +16,14 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Users, Smartphone, Brain, Plus, Trash2,
-  CheckCircle2, AlertCircle, Loader2, CreditCard, Plug,
+  CheckCircle2, AlertCircle, Loader2, CreditCard, Plug, Clock,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import ConectarCanais from '../../../components/dashboard/ConectarCanais';
+import { BusinessHoursEditor, defaultBusinessHours, type BusinessHoursConfig } from '../flows/_components/BusinessHoursEditor';
 
-type Tab = 'general' | 'team' | 'canais' | 'whatsapp' | 'ai' | 'billing';
+type Tab = 'general' | 'team' | 'canais' | 'whatsapp' | 'ai' | 'billing' | 'flows';
 
 interface BillingSettings {
   autoOverage?: boolean;
@@ -47,6 +48,7 @@ interface AgentSettings {
 
 interface OrgSettings {
   agent?: AgentSettings;
+  businessHoursConfig?: BusinessHoursConfig;
   [key: string]: unknown;
 }
 
@@ -102,7 +104,7 @@ export default function SettingsPage() {
       const h = window.location.hash.replace('#', '').toLowerCase();
       // #whatsapp foi unificado em "Canais" — deep-links antigos caem lá.
       if (h === 'whatsapp') { setTab('canais'); return; }
-      if (h === 'team' || h === 'ai' || h === 'general' || h === 'billing' || h === 'canais') {
+      if (h === 'team' || h === 'ai' || h === 'general' || h === 'billing' || h === 'canais' || h === 'flows') {
         setTab(h as Tab);
       }
     };
@@ -132,6 +134,10 @@ export default function SettingsPage() {
     'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido!'
   );
   const [savingAI, setSavingAI] = useState(false);
+
+  // Business hours (Maestro 1A — E4)
+  const [businessHours, setBusinessHours] = useState<BusinessHoursConfig>(defaultBusinessHours());
+  const [savingBusinessHours, setSavingBusinessHours] = useState(false);
 
   // Billing tab (Onda 6 — Quota Mgmt #4 + #5)
   const [autoOverage, setAutoOverage] = useState(false);
@@ -189,6 +195,9 @@ export default function SettingsPage() {
             typeof billing.notifyAtPercent === 'number' ? billing.notifyAtPercent : 80
           );
         }
+
+        // Maestro 1A — business hours
+        setBusinessHours(orgRes.data.settings?.businessHoursConfig ?? defaultBusinessHours());
       }
       setTeam(teamRes.data || []);
     } finally {
@@ -299,6 +308,25 @@ export default function SettingsPage() {
     }
   }
 
+  // ─── Business hours (Maestro 1A — E4) ────────────────────────
+  async function handleSaveBusinessHours() {
+    setSavingBusinessHours(true);
+    try {
+      const mergedSettings: OrgSettings = {
+        ...(org?.settings || {}),
+        businessHoursConfig: businessHours,
+      };
+      const res = await api.put<{ data: Organization }>('/api/settings', { settings: mergedSettings });
+      if (res.data) setOrg(res.data);
+      showToast('success', 'Horário comercial salvo');
+    } catch (err) {
+      const msg = (err as { message?: string })?.message || 'Erro ao salvar';
+      showToast('error', msg);
+    } finally {
+      setSavingBusinessHours(false);
+    }
+  }
+
   // ─── Team handlers ────────────────────────────────────────────
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -354,6 +382,7 @@ export default function SettingsPage() {
     { key: 'canais', label: 'Canais', icon: Plug },
     { key: 'ai', label: 'IA / Agente', icon: Brain },
     { key: 'billing', label: 'Cobrança & Limites', icon: CreditCard },
+    { key: 'flows', label: 'Fluxos', icon: Clock },
   ];
 
   if (loading) {
@@ -643,6 +672,27 @@ export default function SettingsPage() {
           >
             {savingAI && <Loader2 size={14} className="animate-spin" />}
             {savingAI ? 'Salvando...' : 'Salvar configurações'}
+          </button>
+        </div>
+      )}
+
+      {/* Fluxos — Horário comercial (Maestro 1A — E4) */}
+      {tab === 'flows' && (
+        <div className="bg-white rounded-xl border border-gray-100 p-6 max-w-2xl space-y-5">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Horário comercial</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Define os horários em que seu negócio está aberto. Usado pelas condições <span className="font-medium">"Horário comercial"</span> nos fluxos de automação.
+            </p>
+            <BusinessHoursEditor value={businessHours} onChange={setBusinessHours} />
+          </div>
+          <button
+            onClick={handleSaveBusinessHours}
+            disabled={savingBusinessHours}
+            className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {savingBusinessHours && <Loader2 size={14} className="animate-spin" />}
+            {savingBusinessHours ? 'Salvando...' : 'Salvar horário'}
           </button>
         </div>
       )}
