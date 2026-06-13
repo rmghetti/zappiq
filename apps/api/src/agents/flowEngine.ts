@@ -159,6 +159,13 @@ function firstTargetFrom(graph: FlowGraph, sourceId: string): string | null {
   return edge ? edge.target : null;
 }
 
+/** Primeira aresta de saída que NÃO é o ramo 'else' (fallback: primeira aresta). */
+function firstNonElseTargetFrom(graph: FlowGraph, sourceId: string): string | null {
+  const outgoing = graph.edges.filter((e) => e.source === sourceId);
+  const nonElse = outgoing.find((e) => e.data?.when?.match !== 'else');
+  return (nonElse ?? outgoing[0])?.target ?? null;
+}
+
 export function matchCondition(cond: FlowCondition | undefined, text: string): boolean {
   if (!cond) return false;
   if (cond.match === 'else') return true;
@@ -382,7 +389,7 @@ export function resolveFlowStep(
           delete vars._askRetries;
           if (d.varName) vars[d.varName] = ans;
           if (d.crmField) effects.push({ kind: 'update_lead', field: d.crmField, value: ans });
-          current = firstTargetFrom(graph, node.id);
+          current = firstNonElseTargetFrom(graph, node.id);
           break;
         }
         // primeira passada (ou já enviamos algo neste walk) → pergunta e aguarda

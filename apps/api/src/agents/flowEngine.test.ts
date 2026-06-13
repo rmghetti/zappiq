@@ -456,4 +456,23 @@ describe('flowEngine goto_flow (Maestro v2)', () => {
     const r = resolveFlowStep(graph, { cursor: null, vars: { nome: 'Ana' } }, 'oi', { ctx: DEFAULT_CTX });
     expect(r.effects).toEqual([{ kind: 'send_media', mediaType: 'image', url: 'https://x/y.png', caption: 'Catálogo Ana' }]);
   });
+
+  it('ask: resposta válida segue a aresta de sucesso mesmo com else ordenado antes', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'q', type: 'ask', data: { question: 'Seu nome?', varName: 'nome' } },
+        { id: 'desiste', type: 'message', data: { text: 'sem nome' } },
+        { id: 'ok', type: 'message', data: { text: 'Oi {{vars.nome}}' } },
+      ],
+      edges: [
+        // else aparece ANTES da aresta de sucesso na ordem do array
+        { source: 'q', target: 'desiste', data: { when: { match: 'else' } } },
+        { source: 'q', target: 'ok' },
+      ],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: {} }, 'Ana', { ctx: DEFAULT_CTX });
+    expect(r.state.vars.nome).toBe('Ana');
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Oi Ana' }]);
+    expect(r.next).toBe('end');
+  });
 });
