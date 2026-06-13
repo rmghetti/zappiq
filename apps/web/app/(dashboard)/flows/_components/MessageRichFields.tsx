@@ -66,7 +66,7 @@ export function MessageRichFields({ data, onChange }: { data: MessageData; onCha
           </select>
           <input className={inputCls} value={data.text ?? ''} onChange={(e) => onChange({ text: e.target.value })} placeholder="Texto da mensagem (corpo)" />
           {it.options.map((o, i) => (
-            <div key={i} className="flex items-center gap-1">
+            <div key={o.id} className="flex items-center gap-1">
               <input className={inputCls} value={o.title} onChange={(e) => setOpt(i, e.target.value)} placeholder={`Opção ${i + 1}`} />
               <button onClick={() => rmOpt(i)} className="text-gray-400 hover:text-red-500" title="Remover"><Trash2 size={13} /></button>
             </div>
