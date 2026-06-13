@@ -115,6 +115,34 @@ export async function sendAudio(to: string, mediaId: string, creds?: WaCreds) {
   return data;
 }
 
+export async function sendImage(to: string, link: string, caption?: string, creds?: WaCreds) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'image',
+    image: { link, ...(caption ? { caption } : {}) },
+  };
+
+  const { data } = await clientFor(creds).post(`/${phoneIdFor(creds)}/messages`, payload);
+  logger.info(`[WA] Image sent to ${to}`, { messageId: data.messages?.[0]?.id });
+  return data;
+}
+
+export async function sendDocument(to: string, link: string, caption?: string, filename?: string, creds?: WaCreds) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'document',
+    document: { link, ...(caption ? { caption } : {}), ...(filename ? { filename } : {}) },
+  };
+
+  const { data } = await clientFor(creds).post(`/${phoneIdFor(creds)}/messages`, payload);
+  logger.info(`[WA] Document sent to ${to}`, { messageId: data.messages?.[0]?.id });
+  return data;
+}
+
 export async function sendTemplate(to: string, templateName: string, languageCode: string, components: any[] = [], creds?: WaCreds) {
   const payload = {
     messaging_product: 'whatsapp',
