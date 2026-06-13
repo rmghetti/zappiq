@@ -525,6 +525,51 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
     };
   }
 
+  // ─── Validação de publicação (E5 — guard-rails client-side) ─────────────────
+  function validateGraph(ns: Node[], es: Edge[]): { errors: string[]; warnings: string[] } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const labelOf = (n: Node) => (n.data?.label as string) || n.type || n.id;
+    for (const n of ns) {
+      const d: any = n.data ?? {};
+      if (n.type === 'ask') {
+        if (!d.varName || !String(d.varName).trim()) errors.push(`Nó "${labelOf(n)}": defina a variável onde salvar a resposta.`);
+      }
+      if (n.type === 'message') {
+        if (d.media && (!d.media.url || !String(d.media.url).trim())) errors.push(`Nó "${labelOf(n)}": a mídia precisa de uma URL.`);
+        if (d.interactive) {
+          const opts = (d.interactive.options ?? []) as { id: string; title: string }[];
+          const lim = d.interactive.type === 'list' ? 10 : 3;
+          if (opts.length === 0) errors.push(`Nó "${labelOf(n)}": adicione ao menos uma opção.`);
+          if (opts.length > lim) errors.push(`Nó "${labelOf(n)}": ${d.interactive.type === 'list' ? 'listas' : 'botões'} aceitam no máximo ${lim} opções.`);
+          if (opts.some((o) => !o.title || !o.title.trim())) errors.push(`Nó "${labelOf(n)}": toda opção precisa de um texto.`);
+          const ids = opts.map((o) => o.id);
+          if (new Set(ids).size !== ids.length) errors.push(`Nó "${labelOf(n)}": há opções com id duplicado.`);
+        }
+      }
+    }
+    // Nós que ramificam: condition/ask com saídas mas sem ramo padrão (else/bare) → aviso
+    for (const n of ns) {
+      if (n.type !== 'condition' && n.type !== 'ask') continue;
+      const out = es.filter((e) => e.source === n.id);
+      if (out.length === 0) continue;
+      const hasDefault = out.some((e) => {
+        const w = (e.data as any)?.when;
+        const preds = (e.data as any)?.predicates;
+        return w?.match === 'else' || (!w && (!preds || preds.length === 0));
+      });
+      if (!hasDefault) warnings.push(`Nó "${labelOf(n)}": sem ramo padrão (else). Se nada casar, o fluxo encerra.`);
+    }
+    // Predicado custom field sem nome de campo
+    for (const e of es) {
+      const preds = ((e.data as any)?.predicates ?? []) as any[];
+      for (const p of preds) {
+        if (p.kind === 'contact_attr' && p.field === 'customFields.') errors.push('Uma condição de campo custom está sem o nome do campo.');
+      }
+    }
+    return { errors, warnings };
+  }
+
   async function save() {
     setSaving(true); setError(null);
     try {
@@ -537,6 +582,15 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
   }
 
   async function publish() {
+    const { errors: pubErrors, warnings: pubWarnings } = validateGraph(nodes, edges);
+    if (pubErrors.length) {
+      window.alert('Não foi possível publicar:\n\n' + pubErrors.map((e) => '• ' + e).join('\n'));
+      return;
+    }
+    if (pubWarnings.length) {
+      const ok = window.confirm('Avisos antes de publicar:\n\n' + pubWarnings.map((w) => '• ' + w).join('\n') + '\n\nPublicar mesmo assim?');
+      if (!ok) return;
+    }
     setPublishing(true); setError(null);
     try {
       const g = toApiGraph();
