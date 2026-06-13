@@ -198,6 +198,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       conversationId,
       messageContent,
       orgSettings,
+      contactId,
     });
     if (flowStep) {
       await executeFlowEffects({

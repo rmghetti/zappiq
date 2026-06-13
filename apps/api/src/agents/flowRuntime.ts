@@ -35,6 +35,8 @@ import {
   type FlowEdge,
   type FlowState,
   type FlowStepResult,
+  type EvalContext,
+  type BusinessHoursConfig,
 } from './flowEngine.js';
 import { pickFlowForMessage, type RoutableFlow } from './flowRouter.js';
 import { scheduleFlowTimer, cancelPendingWaitTimers } from '../services/flowScheduler.js';
@@ -66,6 +68,8 @@ export interface ActiveFlowStepInput {
   conversationId: string;
   messageContent: string;
   orgSettings: any;
+  /** Contato da conversa, p/ montar o EvalContext (atributos/CRM). Opcional. */
+  contactId?: string | null;
 }
 
 /**
@@ -145,6 +149,38 @@ export async function resolveActiveFlowStep(
       state = ended ? { cursor: null, vars: {} } : { cursor: null, vars: state.vars ?? {} };
     }
 
+    // ── Monta EvalContext (atributos do contato + horário comercial) ─────
+    let evalContact: EvalContext['contact'] = {
+      name: null, tags: [], leadStatus: null, leadScore: 0, funnelStage: null, customFields: {},
+    };
+    if (input.contactId) {
+      try {
+        const c = await prisma.contact.findUnique({
+          where: { id: input.contactId },
+          select: { name: true, tags: true, leadStatus: true, leadScore: true, funnelStage: true, customFields: true },
+        });
+        if (c) {
+          evalContact = {
+            name: c.name ?? null,
+            tags: c.tags ?? [],
+            leadStatus: c.leadStatus ? String(c.leadStatus) : null,
+            leadScore: typeof c.leadScore === 'number' ? c.leadScore : 0,
+            funnelStage: c.funnelStage ?? null,
+            customFields: (c.customFields as Record<string, any>) ?? {},
+          };
+        }
+      } catch { /* fail-soft: ctx com defaults */ }
+    }
+    const bhRaw = orgSettings?.businessHoursConfig;
+    const businessHours: BusinessHoursConfig | null =
+      bhRaw && typeof bhRaw === 'object' && bhRaw.days ? (bhRaw as BusinessHoursConfig) : null;
+    const ctx: EvalContext = {
+      contact: evalContact,
+      now: new Date(),
+      businessHours,
+      system: { businessName: orgSettings?.businessName ?? orgSettings?.niche ?? undefined, agentName: orgSettings?.agentName ?? undefined },
+    };
+
     // ── Walk com handoff goto_flow (anti-loop) ───────────────────────────
     // A mensagem do turno alimenta SÓ o primeiro resolve (consumedMessage):
     // fluxos alvo de goto_flow começam do start com hasIncomingMessage=false —
@@ -163,7 +199,7 @@ export async function resolveActiveFlowStep(
       };
       if (graph.nodes.length === 0) return null;
 
-      result = resolveFlowStep(graph, currentState, messageContent, { hasIncomingMessage: !consumedMessage });
+      result = resolveFlowStep(graph, currentState, messageContent, { hasIncomingMessage: !consumedMessage, ctx });
       consumedMessage = true;
 
       const gotoEff = result.effects.find((e) => e.kind === 'goto_flow') as
