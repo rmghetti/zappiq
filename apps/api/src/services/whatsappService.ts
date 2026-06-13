@@ -185,7 +185,7 @@ export async function sendButtons(to: string, headerText: string | null, bodyTex
 
 export async function sendList(
   to: string,
-  headerText: string,
+  headerText: string | null,
   bodyText: string,
   footerText: string | null,
   buttonLabel: string,
@@ -199,7 +199,7 @@ export async function sendList(
     type: 'interactive',
     interactive: {
       type: 'list',
-      header: { type: 'text', text: headerText },
+      ...(headerText && headerText.trim() ? { header: { type: 'text', text: headerText } } : {}),
       body: { text: bodyText },
       ...(footerText ? { footer: { text: footerText } } : {}),
       action: {

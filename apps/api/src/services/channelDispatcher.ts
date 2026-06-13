@@ -180,7 +180,7 @@ export async function sendReplyInteractive(input: {
     result = await waService.sendButtons(phone, null, input.body, input.options.slice(0, 3), creds);
   } else {
     const rows = input.options.slice(0, 10).map((o) => ({ id: o.id, title: o.title }));
-    result = await waService.sendList(phone, ' ', input.body, null, 'Ver opções', [{ title: ' ', rows }], creds);
+    result = await waService.sendList(phone, '', input.body, null, 'Ver opções', [{ title: '', rows }], creds);
   }
   return { channel: 'whatsapp', externalMessageId: result?.messages?.[0]?.id };
 }
