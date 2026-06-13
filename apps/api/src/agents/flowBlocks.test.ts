@@ -56,4 +56,22 @@ describe('expandBlock', () => {
     expect(h.nodes[0].type).toBe('transfer');
     expect(h.exits).toEqual([]);
   });
+
+  it('ask_buttons: predicate usa o título TRUNCADO (≤20) igual ao botão', () => {
+    const longTitle = 'Quero saber sobre os planos premium';
+    const f = expandBlock({ id: 'b9', type: 'ask_buttons', question: 'Q?', options: [{ title: longTitle }] });
+    const msg = f.nodes.find((n) => n.type === 'message');
+    const shown = msg.data.interactive.options[0].title;
+    expect(shown.length).toBeLessThanOrEqual(20);
+    const optExit = f.exits.find((e) => e.key === 'opt:0');
+    // predicate value deve ser EXATAMENTE o título mostrado no botão
+    expect(optExit.edgeData.predicates[0].value).toBe(shown);
+  });
+
+  it('ask_buttons: ids de opção são únicos mesmo com títulos que colidem no slug', () => {
+    const f = expandBlock({ id: 'b10', type: 'ask_buttons', question: 'Q?', options: [{ title: 'Sim!' }, { title: 'Sim' }] });
+    const msg = f.nodes.find((n) => n.type === 'message');
+    const ids = msg.data.interactive.options.map((o: any) => o.id);
+    expect(new Set(ids).size).toBe(ids.length); // todos distintos
+  });
 });

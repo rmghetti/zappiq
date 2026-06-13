@@ -112,9 +112,13 @@ export function expandBlock(block: any): Fragment {
       const question = (block.question ?? '').slice(0, 600);
       const rawOptions: Array<{ title: string }> = block.options ?? [];
 
-      const options = rawOptions.map((opt, i) => {
-        const title = (opt.title ?? '').slice(0, 20);
-        const optId = slug(title) || `opt_${i}`;
+      // Compute options ONCE: truncated title + unique id
+      const seen = new Set<string>();
+      const opts = rawOptions.map((opt, i) => {
+        const title = String(opt?.title ?? '').slice(0, 20);
+        let optId = slug(title) || `opt_${i}`;
+        while (seen.has(optId)) optId = `${optId}_${i}`;
+        seen.add(optId);
         return { id: optId, title };
       });
 
@@ -124,7 +128,7 @@ export function expandBlock(block: any): Fragment {
         data: {
           label: 'Botões',
           text: question,
-          interactive: { type: 'button', options },
+          interactive: { type: 'button', options: opts },
         },
       };
 
@@ -140,11 +144,11 @@ export function expandBlock(block: any): Fragment {
         target: condId,
       };
 
-      const optExits: BlockExit[] = rawOptions.map((opt, i) => ({
+      const optExits: BlockExit[] = opts.map((o, i) => ({
         key: `opt:${i}`,
         from: condId,
         edgeData: {
-          predicates: [{ kind: 'keyword', match: 'equals', value: opt.title }],
+          predicates: [{ kind: 'keyword', match: 'equals', value: o.title }],
         },
       }));
 
