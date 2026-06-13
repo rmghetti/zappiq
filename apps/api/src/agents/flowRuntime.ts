@@ -35,11 +35,10 @@ import {
   type FlowEdge,
   type FlowState,
   type FlowStepResult,
-  type EvalContext,
-  type BusinessHoursConfig,
 } from './flowEngine.js';
 import { pickFlowForMessage, type RoutableFlow } from './flowRouter.js';
 import { scheduleFlowTimer, cancelPendingWaitTimers } from '../services/flowScheduler.js';
+import { buildEvalContext } from './evalContextBuilder.js';
 
 export type {
   FlowGraph, FlowNode, FlowEdge, FlowState, FlowStepResult, FlowEffect,
@@ -150,36 +149,7 @@ export async function resolveActiveFlowStep(
     }
 
     // ── Monta EvalContext (atributos do contato + horário comercial) ─────
-    let evalContact: EvalContext['contact'] = {
-      name: null, tags: [], leadStatus: null, leadScore: 0, funnelStage: null, customFields: {},
-    };
-    if (input.contactId) {
-      try {
-        const c = await prisma.contact.findUnique({
-          where: { id: input.contactId },
-          select: { name: true, tags: true, leadStatus: true, leadScore: true, funnelStage: true, customFields: true },
-        });
-        if (c) {
-          evalContact = {
-            name: c.name ?? null,
-            tags: c.tags ?? [],
-            leadStatus: c.leadStatus ? String(c.leadStatus) : null,
-            leadScore: typeof c.leadScore === 'number' ? c.leadScore : 0,
-            funnelStage: c.funnelStage ?? null,
-            customFields: (c.customFields as Record<string, any>) ?? {},
-          };
-        }
-      } catch { /* fail-soft: ctx com defaults */ }
-    }
-    const bhRaw = orgSettings?.businessHoursConfig;
-    const businessHours: BusinessHoursConfig | null =
-      bhRaw && typeof bhRaw === 'object' && bhRaw.days ? (bhRaw as BusinessHoursConfig) : null;
-    const ctx: EvalContext = {
-      contact: evalContact,
-      now: new Date(),
-      businessHours,
-      system: { businessName: orgSettings?.businessName ?? orgSettings?.niche ?? undefined, agentName: orgSettings?.agentName ?? undefined },
-    };
+    const ctx = await buildEvalContext({ contactId: input.contactId, orgSettings });
 
     // ── Walk com handoff goto_flow (anti-loop) ───────────────────────────
     // A mensagem do turno alimenta SÓ o primeiro resolve (consumedMessage):

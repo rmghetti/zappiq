@@ -38,6 +38,7 @@ import { executeFlowEffects } from '../agents/flowEffects.js';
 // Retomada em nó-IA: caminho leve de geração (contexto do negócio + histórico
 // + instrução do nó). Fail-closed: null em falha → warn + cursor persistido.
 import { generateAiResumeReply } from '../agents/flowAiResume.js';
+import { buildEvalContext } from '../agents/evalContextBuilder.js';
 
 // ── Conexão Redis para BullMQ ────────────────────
 // Espelha queueService.ts (BullMQ requer conexão própria, não reutiliza
@@ -362,7 +363,12 @@ export function initFlowTimerWorker(): void {
         edges: Array.isArray(flow!.edges) ? (flow!.edges as unknown as FlowEdge[]) : [],
       };
       const snapshot = (timer.stateSnapshot ?? { cursor: timer.resumeNodeId, vars: {} }) as unknown as FlowState;
-      const result = resolveFlowStep(graph, snapshot, '', { hasIncomingMessage: false });
+      const orgRow = await prisma.organization.findUnique({
+        where: { id: timer.organizationId },
+        select: { settings: true },
+      });
+      const ctx = await buildEvalContext({ contactId: conversation?.contactId, orgSettings: orgRow?.settings });
+      const result = resolveFlowStep(graph, snapshot, '', { hasIncomingMessage: false, ctx });
 
       try {
         // goto_flow em retomada por timer não é suportado (troca de fluxo é papel
