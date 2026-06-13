@@ -23,7 +23,13 @@ export function MessageRichFields({ data, onChange }: { data: MessageData; onCha
   const max = it?.type === 'list' ? 10 : 3;
   const setOpt = (i: number, title: string) =>
     onChange({ interactive: { ...it!, options: it!.options.map((o, j) => (j === i ? { id: o.id || slug(title) || `opt_${i + 1}`, title } : o)) } });
-  const addOpt = () => it && it.options.length < max && onChange({ interactive: { ...it, options: [...it.options, { id: `opt_${it.options.length + 1}`, title: '' }] } });
+  const nextOptId = () => {
+    const used = new Set(it!.options.map((o) => o.id));
+    let n = it!.options.length + 1;
+    while (used.has(`opt_${n}`)) n++;
+    return `opt_${n}`;
+  };
+  const addOpt = () => it && it.options.length < max && onChange({ interactive: { ...it, options: [...it.options, { id: nextOptId(), title: '' }] } });
   const rmOpt = (i: number) => it && onChange({ interactive: { ...it, options: it.options.filter((_, j) => j !== i) } });
 
   return (
