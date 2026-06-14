@@ -205,6 +205,7 @@ model Organization {
   pipelineStages     PipelineStage[]
   activities         Activity[]
   tasks              Task[]
+  flowNodeStats      FlowNodeStat[]
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
@@ -423,6 +424,7 @@ model Flow {
   updatedAt      DateTime        @updatedAt
   versions       FlowVersion[]
   timers         FlowTimer[]
+  nodeStats      FlowNodeStat[]
 
   @@index([organizationId])
   @@map("flows")
@@ -447,6 +449,27 @@ model FlowVersion {
   @@unique([flowId, version])
   @@index([organizationId])
   @@map("flow_versions")
+}
+
+/// Maestro 1B-analytics — contadores por nó/dia (funil/drop-off).
+model FlowNodeStat {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  flowId         String
+  flow           Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  nodeId         String
+  nodeType       String
+  nodeLabel      String?
+  period         String   // 'YYYY-MM-DD' UTC
+  entries        Int      @default(0)
+  ends           Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([flowId, nodeId, period])
+  @@index([organizationId, flowId])
+  @@map("flow_node_stats")
 }
 
 /// Maestro v2 — espera durável de wait/schedule (fonte de verdade; o job BullMQ é só o despertador).
