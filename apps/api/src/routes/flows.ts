@@ -12,6 +12,7 @@ import { resolveFlowStep, type FlowGraph, type FlowState } from '../agents/flowE
 // + IA preenche conteúdo. Devolve um DRAFT (não persiste); o cliente edita e salva.
 import { generateFlowDraft, generateSmartFlows, regenerateFlowContent, generateJourney } from '../agents/flowGenerator.js';
 import { sameStructure } from './flowsRefreshValidation.js';
+import { aggregate } from '../services/flowAnalytics.js';
 
 const router = Router();
 
@@ -122,6 +123,25 @@ router.post('/', validate(createFlowSchema), async (req: Request, res: Response,
       data: { ...req.body, organizationId: req.organizationId! },
     });
     res.status(201).json({ success: true, data: flow });
+  } catch (err) { next(err); }
+});
+
+// GET /api/flows/:id/analytics — funil por nó (1B-analytics A5)
+// Retorna entradas/saídas por nó agrupadas sobre os últimos N dias (default 7, max 90).
+// Scope duplo por orgId: flow lookup + stats query (defesa em profundidade + RLS).
+router.get('/:id/analytics', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const days = Math.min(Math.max(parseInt(String(req.query.days ?? '7'), 10) || 7, 1), 90);
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const rows = await prisma.flowNodeStat.findMany({
+      where: { flowId: flow.id, organizationId: orgId, period: { gte: since } },
+      select: { nodeId: true, nodeType: true, nodeLabel: true, entries: true, ends: true },
+    });
+    const data = aggregate(rows);
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 });
 
