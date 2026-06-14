@@ -567,8 +567,9 @@ async function generateDraftForObjective(
   try {
     // generateRichDraft já faz fallback interno para generateContentFillDraft.
     return await generateRichDraft(ctx, blueprint, organizationId, multiAgent);
-  } catch {
+  } catch (e) {
     // Camada extra de segurança: se generateRichDraft explodir de forma não prevista.
+    logger.warn('[Maestro] generateDraftForObjective: rica falhou — content-fill', { organizationId, err: String(e) });
     return generateContentFillDraft(ctx, blueprint, organizationId, multiAgent);
   }
 }
