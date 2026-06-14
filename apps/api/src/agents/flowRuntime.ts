@@ -216,8 +216,16 @@ export async function resolveActiveFlowStep(
         continue;
       }
 
-      // intent === 'return': subfluxo terminou — volta ao chamador.
-      const frame = callStack.pop()!;
+      // intent === 'return': desempilha. Frames com returnNodeId null = chamador
+      // sem nó após o goto_flow → ele também encerra → sobe para o chamador dele.
+      let frame = callStack.pop()!;
+      while (frame.returnNodeId === null && callStack.length > 0) {
+        frame = callStack.pop()!;
+      }
+      if (frame.returnNodeId === null) {
+        // pilha esgotou sem ponto de retorno → a conversa encerra
+        break;
+      }
       const caller = flows.find((f) => f.id === frame.flowId && f.isActive);
       if (!caller) {
         logger.warn('[Maestro] subfluxo: chamador inexistente/inativo — encerrando', { organizationId, callerId: frame.flowId });
