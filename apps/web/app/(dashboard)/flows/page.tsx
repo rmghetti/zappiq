@@ -38,7 +38,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
-  MessageSquare, GitBranch, Sparkles, Tag, BarChart2, Headset, Clock, CalendarClock, PlayCircle, Info,
+  MessageSquare, GitBranch, Sparkles, Tag, BarChart2, BarChart3, Headset, Clock, CalendarClock, PlayCircle, Info,
   BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History, HelpCircle,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -324,6 +324,12 @@ function MaestroNode({ id, type, data, selected }: NodeProps) {
           ×
         </button>
       )}
+      {data._metrics && (
+        <div className="absolute -bottom-2 -right-2 flex gap-1 z-10">
+          <span className="px-1.5 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-semibold shadow">▶ {data._metrics.entries}</span>
+          {data._metrics.ends > 0 && <span className="px-1.5 py-0.5 rounded-full bg-gray-700 text-white text-[10px] shadow">⏹ {data._metrics.ends}</span>}
+        </div>
+      )}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
         <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm" style={{ background: KIND_BADGE[meta.kind] }}>
           <Icon size={17} color="#fff" />
@@ -447,9 +453,40 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
+  // 1B-analytics — toggle de métricas + badges por nó
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [metrics, setMetrics] = useState<{ total: number; byNode: Record<string, { entries: number; ends: number }> } | null>(null);
+
   const nodeTypes = useMemo(
     () => Object.fromEntries(Object.keys(NODE_META).map((t) => [t, MaestroNode])),
     [],
+  );
+
+  // 1B-analytics — busca métricas quando o toggle liga
+  useEffect(() => {
+    if (!showMetrics || !flow?.id) { return; }
+    let cancelled = false;
+    api.get<{ success: boolean; data: { totalEntries: number; byNode: { nodeId: string; entries: number; ends: number }[] } }>(
+      `/api/flows/${flow.id}/analytics?days=7`,
+    )
+      .then((res: any) => {
+        if (cancelled) return;
+        const d = res?.data ?? res;
+        const byNode: Record<string, { entries: number; ends: number }> = {};
+        for (const n of (d?.byNode ?? [])) byNode[n.nodeId] = { entries: n.entries, ends: n.ends };
+        setMetrics({ total: d?.totalEntries ?? 0, byNode });
+      })
+      .catch(() => { if (!cancelled) setMetrics(null); });
+    return () => { cancelled = true; };
+  }, [showMetrics, flow?.id]);
+
+  // 1B-analytics — displayNodes injeta _metrics sem mutar o estado editável
+  const displayNodes = useMemo(
+    () =>
+      showMetrics && metrics
+        ? nodes.map((n) => ({ ...n, data: { ...n.data, _metrics: metrics.byNode[n.id] ?? { entries: 0, ends: 0 } } }))
+        : nodes,
+    [nodes, showMetrics, metrics],
   );
 
   const onConnect = useCallback(
@@ -666,6 +703,12 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
           <button onClick={runTest} disabled={testing} className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {testing ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Testar
           </button>
+          <button
+            onClick={() => setShowMetrics((v) => !v)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 ${showMetrics ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+          >
+            <BarChart3 size={13} /> Métricas{showMetrics && metrics ? ` · ${metrics.total} (7d)` : ''}
+          </button>
           <button onClick={save} disabled={saving} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar
           </button>
@@ -692,7 +735,7 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
         {/* Canvas */}
         <div className="flex-1 min-w-0" style={{ background: CANVAS_BG }}>
           <ReactFlow
-            nodes={nodes}
+            nodes={displayNodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
