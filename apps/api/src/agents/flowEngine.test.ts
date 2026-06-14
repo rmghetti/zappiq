@@ -475,4 +475,35 @@ describe('flowEngine goto_flow (Maestro v2)', () => {
     expect(r.effects).toEqual([{ kind: 'send_text', text: 'Oi Ana' }]);
     expect(r.next).toBe('end');
   });
+
+  it('retorna visitedNodeIds na ordem do walk', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'm', type: 'message', data: { text: 'oi' } },
+        { id: 'a', type: 'ai', data: { prompt: 'p' } },
+      ],
+      edges: [{ source: 's', target: 'm' }, { source: 'm', target: 'a' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: null, vars: {} }, 'oi', { ctx: DEFAULT_CTX });
+    expect(r.visitedNodeIds).toEqual(['s', 'm', 'a']);
+  });
+
+  it('condition: visitedNodeIds inclui o condition e o ramo seguido, não o outro', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'c', type: 'condition' },
+        { id: 'sim', type: 'message', data: { text: 'sim' } },
+        { id: 'nao', type: 'message', data: { text: 'nao' } },
+      ],
+      edges: [
+        { source: 'c', target: 'sim', data: { when: { match: 'contains', value: 'quero' } } },
+        { source: 'c', target: 'nao', data: { when: { match: 'else' } } },
+      ],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'c', vars: {} }, 'quero', { ctx: DEFAULT_CTX });
+    expect(r.visitedNodeIds).toContain('c');
+    expect(r.visitedNodeIds).toContain('sim');
+    expect(r.visitedNodeIds).not.toContain('nao');
+  });
 });

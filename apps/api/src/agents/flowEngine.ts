@@ -131,6 +131,8 @@ export interface FlowStepResult {
   aiModelHint?: string;
   /** Presente quando next==='scheduled': dados do agendamento. */
   schedule?: FlowSchedule;
+  /** Ids dos nós visitados neste walk, na ordem de visita. */
+  visitedNodeIds: string[];
 }
 
 /** Opções de controle para resolveFlowStep. */
@@ -244,6 +246,7 @@ export function resolveFlowStep(
   options?: ResolveOptions,
 ): FlowStepResult {
   const effects: FlowEffect[] = [];
+  const visited: string[] = [];
   const vars = { ...(state.vars || {}) };
   const ctx = options?.ctx ?? DEFAULT_CTX;
   const scope: RenderScope = { vars, contact: ctx.contact, system: ctx.system };
@@ -254,7 +257,9 @@ export function resolveFlowStep(
     current = state.cursor; // retoma no condition que aguardava
   } else {
     const start = graph.nodes.find((n) => n.type === 'start');
-    current = start ? firstTargetFrom(graph, start.id) : (graph.nodes[0]?.id ?? null);
+    // Inicia pelo próprio nó start (o case 'start' avança para o primeiro filho),
+    // para que o start apareça em visitedNodeIds. Sem start, usa o primeiro nó.
+    current = start ? start.id : (graph.nodes[0]?.id ?? null);
   }
 
   // A mensagem deste turno alimenta no máx. 1 condition, E só enquanto o bot
@@ -269,8 +274,9 @@ export function resolveFlowStep(
   for (let guard = 0; guard < MAX_WALK; guard++) {
     const node = nodeById(graph, current);
     if (!current || !node) {
-      return { effects, next: 'end', state: { cursor: null, vars } };
+      return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
     }
+    visited.push(node.id);
 
     switch (node.type) {
       case 'start':
@@ -315,7 +321,7 @@ export function resolveFlowStep(
 
       case 'transfer':
         effects.push({ kind: 'handoff' });
-        return { effects, next: 'end', state: { cursor: null, vars } };
+        return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
 
       case 'ai':
         // Entrega pro LLM. Cursor avança pro próximo nó (próximo turno retoma lá).
@@ -325,6 +331,7 @@ export function resolveFlowStep(
           aiPrompt: (node.data?.prompt ?? node.label ?? '').toString() || undefined,
           aiModelHint: node.data?.model ? String(node.data.model) : undefined,
           state: { cursor: firstTargetFrom(graph, node.id), vars },
+          visitedNodeIds: visited,
         };
 
       case 'goto_flow': {
@@ -333,7 +340,7 @@ export function resolveFlowStep(
           // Handoff entre fluxos (Frente 3): o runtime troca a conversa pro
           // fluxo alvo (com proteção anti-loop). Encerra o walk DESTE fluxo.
           effects.push({ kind: 'goto_flow', targetFlowId: target });
-          return { effects, next: 'end', state: { cursor: null, vars } };
+          return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
         }
         // Sem alvo configurado → fallback: segue a aresta de saída.
         current = firstTargetFrom(graph, node.id);
@@ -361,6 +368,7 @@ export function resolveFlowStep(
           next: 'scheduled',
           schedule: { kind: node.type as 'wait' | 'schedule', delayMinutes, runAt, resumeNodeId },
           state: { cursor: replyCursor, vars },
+          visitedNodeIds: visited,
         };
       }
 
@@ -378,7 +386,7 @@ export function resolveFlowStep(
               vars._askRetries = left;
               const msg = render(d.validation?.errorMessage ?? d.question ?? '');
               if (msg.trim()) effects.push({ kind: 'send_text', text: msg });
-              return { effects, next: 'await_input', state: { cursor: node.id, vars } };
+              return { effects, next: 'await_input', state: { cursor: node.id, vars }, visitedNodeIds: visited };
             }
             // esgotou → ramo else
             delete vars._askRetries;
@@ -395,7 +403,7 @@ export function resolveFlowStep(
         // primeira passada (ou já enviamos algo neste walk) → pergunta e aguarda
         const q = render(d.question ?? node.label ?? '');
         if (q.trim()) effects.push({ kind: 'send_text', text: q });
-        return { effects, next: 'await_input', state: { cursor: node.id, vars } };
+        return { effects, next: 'await_input', state: { cursor: node.id, vars }, visitedNodeIds: visited };
       }
 
       case 'condition':
@@ -406,16 +414,16 @@ export function resolveFlowStep(
         } else {
           // já respondemos algo neste turno (ou a msg já foi consumida) →
           // aguarda a PRÓXIMA mensagem do usuário neste condition
-          return { effects, next: 'await_input', state: { cursor: node.id, vars } };
+          return { effects, next: 'await_input', state: { cursor: node.id, vars }, visitedNodeIds: visited };
         }
         break;
 
       default:
         // nó desconhecido: encerra com segurança
-        return { effects, next: 'end', state: { cursor: null, vars } };
+        return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
     }
   }
 
   // estourou MAX_WALK (grafo provavelmente cíclico) — encerra defensivamente
-  return { effects, next: 'end', state: { cursor: null, vars } };
+  return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
 }
