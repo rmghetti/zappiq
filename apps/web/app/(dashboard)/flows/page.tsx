@@ -113,7 +113,10 @@ function nodeSummary(type: string, data: any): string {
     case 'tag': return data?.tag ? `tag: ${data.tag}` : '(sem tag)';
     case 'update_lead': return data?.field ? `${data.field} = ${data.value ?? ''}` : '(sem campo)';
     case 'transfer': return 'Passa pro time';
-    case 'goto_flow': return data?.targetFlowName ? `→ ${data.targetFlowName}` : '(sem fluxo de destino)';
+    case 'goto_flow': {
+      const name = data?.targetFlowName || '(sem fluxo de destino)';
+      return data?.mode === 'call' ? `↪ chamar: ${name}` : `→ ${name}`;
+    }
     case 'wait': {
       const m = Number(data?.delayMinutes);
       return m > 0 ? `⏳ espera ${m} min` : 'Passa direto (sem espera)';
@@ -1039,6 +1042,13 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
+          <div className="mt-2">
+            <label className="text-[10px] text-gray-500">Comportamento</label>
+            <select className={inputCls} value={(data?.mode as string) || 'goto'} onChange={(e) => onChange({ mode: e.target.value })}>
+              <option value="goto">Enviar para o fluxo (não volta)</option>
+              <option value="call">Chamar e voltar quando terminar</option>
+            </select>
+          </div>
           <p className="text-[10px] text-gray-400 mt-1.5">A conversa continua no fluxo escolhido, sem o cliente perceber a troca.</p>
         </>
       )}
