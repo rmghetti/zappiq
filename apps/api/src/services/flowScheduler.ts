@@ -39,6 +39,7 @@ import { executeFlowEffects } from '../agents/flowEffects.js';
 // + instrução do nó). Fail-closed: null em falha → warn + cursor persistido.
 import { generateAiResumeReply } from '../agents/flowAiResume.js';
 import { buildEvalContext } from '../agents/evalContextBuilder.js';
+import { recordNodeStats } from './flowAnalytics.js';
 
 // ── Conexão Redis para BullMQ ────────────────────
 // Espelha queueService.ts (BullMQ requer conexão própria, não reutiliza
@@ -369,6 +370,16 @@ export function initFlowTimerWorker(): void {
       });
       const ctx = await buildEvalContext({ contactId: conversation?.contactId, orgSettings: orgRow?.settings });
       const result = resolveFlowStep(graph, snapshot, '', { hasIncomingMessage: false, ctx });
+
+      try {
+        await recordNodeStats({
+          organizationId: timer.organizationId,
+          flowId: timer.flowId,
+          graph: { nodes: Array.isArray(flow?.nodes) ? (flow!.nodes as any[]) : [] },
+          visitedNodeIds: result.visitedNodeIds ?? [],
+          ended: result.next === 'end',
+        });
+      } catch { /* fail-soft */ }
 
       try {
         // goto_flow em retomada por timer não é suportado (troca de fluxo é papel

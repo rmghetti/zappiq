@@ -28,6 +28,7 @@
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { cache } from '../services/cloud/index.js';
+import { recordNodeStats } from '../services/flowAnalytics.js';
 import {
   resolveFlowStep,
   type FlowGraph,
@@ -222,6 +223,17 @@ export async function resolveActiveFlowStep(
     } else {
       await cache.set(stateKey, JSON.stringify({ cursor: FLOW_ENDED, vars: result.state?.vars || {} }), FLOW_STATE_TTL);
     }
+
+    // Analytics por nó (fail-soft, aditivo)
+    try {
+      await recordNodeStats({
+        organizationId,
+        flowId: currentFlow.id,
+        graph: { nodes: Array.isArray(currentFlow.nodes) ? (currentFlow.nodes as any[]) : [] },
+        visitedNodeIds: result.visitedNodeIds ?? [],
+        ended: result.next === 'end',
+      });
+    } catch { /* fail-soft */ }
 
     logger.info('[Maestro] Flow step resolvido', {
       organizationId,
