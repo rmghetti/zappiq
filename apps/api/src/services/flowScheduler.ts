@@ -171,13 +171,11 @@ export function validateTimerFire(ctx: TimerFireContext): TimerFireVerdict {
  * cursor null → ENDED (Iza pura assume; timers futuros retomam do snapshot
  * do FlowTimer, não do cache).
  */
-export function buildStoredFlowState(
-  state: FlowState | undefined,
-  flowId: string,
-): Record<string, unknown> {
+export function buildStoredFlowState(state: FlowState | undefined, flowId: string): Record<string, unknown> {
   const cursor = state?.cursor ?? null;
-  if (cursor !== null) return { ...state, flowId };
-  return { cursor: FLOW_ENDED, vars: state?.vars || {} };
+  const callStack = (state as any)?.callStack ?? [];
+  if (cursor !== null) return { ...state, flowId, callStack };
+  return { cursor: FLOW_ENDED, vars: state?.vars || {}, callStack: [] };
 }
 
 // ── Agendamento ──────────────────────────────────
@@ -207,6 +205,10 @@ export async function scheduleFlowTimer(input: ScheduleFlowTimerInput): Promise<
   const now = new Date();
   const runAt = computeRunAt(schedule, now);
 
+  if (Array.isArray((state as any).callStack) && (state as any).callStack.length > 0) {
+    logger.warn('[FlowScheduler] timer agendado dentro de um subfluxo — o retorno ao chamador NÃO dispara automaticamente na retomada por timer (limitação 1C v1); o callStack é preservado para retomada por inbound.', { organizationId, conversationId, flowId, depth: (state as any).callStack.length });
+  }
+
   const timer = await prisma.flowTimer.create({
     data: {
       organizationId,
@@ -215,7 +217,7 @@ export async function scheduleFlowTimer(input: ScheduleFlowTimerInput): Promise<
       flowVersion,
       kind: schedule.kind,
       resumeNodeId: schedule.resumeNodeId,
-      stateSnapshot: { cursor: schedule.resumeNodeId, vars: state.vars ?? {} },
+      stateSnapshot: { cursor: schedule.resumeNodeId, vars: state.vars ?? {}, callStack: (state as any).callStack ?? [] },
       runAt,
     },
   });

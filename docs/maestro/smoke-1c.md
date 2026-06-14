@@ -30,3 +30,4 @@
 - Anti-loop `MAX_FLOW_HOPS` limita call/return infinitos (recursão acidental encerra com aviso).
 - `vars` são compartilhadas entre chamador e subfluxo (o subfluxo pode capturar dados que o chamador usa depois).
 - A pilha vive no cache (TTL 7d); se expira no meio, a conversa recomeça pelo roteador.
+- **Limitação 1C v1:** um subfluxo (chamado via `call`) que contém um nó `wait`/`schedule` durável e termina na **retomada por timer** não auto-retorna ao chamador. O `callStack` é preservado no snapshot do timer e no estado do cache, mas o retorno automático só dispara no caminho de inbound/await_input. Um aviso (`logger.warn`) é emitido pelo `flowScheduler` quando um timer é agendado dentro de um subfluxo (depth > 0). Follow-up: portar o loop de call/return para o worker de timer.

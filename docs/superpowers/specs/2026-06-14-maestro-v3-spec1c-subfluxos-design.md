@@ -65,6 +65,7 @@ No inspetor do nó `goto_flow` (`NodeProperties`), além do `targetFlowId`, um s
 ## 9. Escopo / YAGNI
 - **Dentro**: callStack, goto_flow `call`, return no runtime, toggle no editor.
 - **Fora**: passagem de parâmetros isolados por subfluxo (hoje `vars` são compartilhadas — suficiente), namespacing de vars, recursão profunda intencional (limitada pelo anti-loop), visualização da pilha no canvas.
+- **Auto-retorno de subfluxo na retomada por timer durável** (`wait`/`schedule` dentro de um subfluxo): o `callStack` é preservado no snapshot do timer e propagado através do `buildStoredFlowState`, mas o retorno automático ao chamador **só dispara no caminho inbound** — a retomada por timer não percorre o loop call/return. Um aviso de runtime é emitido quando um timer é agendado com profundidade de pilha > 0. Follow-up: portar o loop de call/return para o worker de timer.
 
 ## 10. Referências
 - `flowEngine.ts` (`FlowState`, `FlowEffect` goto_flow, `case 'goto_flow'`, `firstTargetFrom`).

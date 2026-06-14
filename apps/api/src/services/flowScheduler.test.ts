@@ -60,16 +60,20 @@ describe('validateTimerFire', () => {
 });
 
 describe('buildStoredFlowState (mesma regra de persistência do flowRuntime)', () => {
-  it('cursor non-null → salva com flowId (próximo inbound continua no fluxo)', () => {
+  it('cursor non-null → salva com flowId e callStack (próximo inbound continua no fluxo)', () => {
     expect(buildStoredFlowState({ cursor: 'node-7', vars: { nome: 'Ana' } }, 'flow-1'))
-      .toEqual({ cursor: 'node-7', vars: { nome: 'Ana' }, flowId: 'flow-1' });
+      .toEqual({ cursor: 'node-7', vars: { nome: 'Ana' }, flowId: 'flow-1', callStack: [] });
   });
-  it('cursor null → ENDED (Iza pura assume; timer retoma do snapshot)', () => {
+  it('cursor non-null com callStack → preserva callStack (subfluxo com timer)', () => {
+    expect(buildStoredFlowState({ cursor: 'node-7', vars: {}, callStack: [{ flowId: 'caller', returnNodeId: 'ret-1' }] } as any, 'flow-1'))
+      .toEqual({ cursor: 'node-7', vars: {}, flowId: 'flow-1', callStack: [{ flowId: 'caller', returnNodeId: 'ret-1' }] });
+  });
+  it('cursor null → ENDED com callStack:[] (Iza pura assume; timer retoma do snapshot)', () => {
     expect(buildStoredFlowState({ cursor: null, vars: { nome: 'Ana' } }, 'flow-1'))
-      .toEqual({ cursor: '__ended__', vars: { nome: 'Ana' } });
+      .toEqual({ cursor: '__ended__', vars: { nome: 'Ana' }, callStack: [] });
   });
-  it('state undefined → ENDED com vars vazio (defensivo)', () => {
+  it('state undefined → ENDED com vars vazio e callStack:[] (defensivo)', () => {
     expect(buildStoredFlowState(undefined, 'flow-1'))
-      .toEqual({ cursor: '__ended__', vars: {} });
+      .toEqual({ cursor: '__ended__', vars: {}, callStack: [] });
   });
 });

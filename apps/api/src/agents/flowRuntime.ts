@@ -246,7 +246,7 @@ export async function resolveActiveFlowStep(
         flowId: currentFlow.id,
         flowVersion: currentFlow.version,
         schedule: result.schedule,
-        state: result.state,
+        state: { ...result.state, callStack },
       });
     }
 
