@@ -162,6 +162,7 @@ export async function resolveActiveFlowStep(
     let result: FlowStepResult | null = null;
     const aggregated: FlowStepResult['effects'] = [];
     let consumedMessage = false;
+    const hopRecords: { flowId: string; nodes: any[]; visitedNodeIds: string[] }[] = [];
 
     for (let hop = 0; hop <= MAX_FLOW_HOPS; hop++) {
       const graph: FlowGraph = {
@@ -172,6 +173,12 @@ export async function resolveActiveFlowStep(
 
       result = resolveFlowStep(graph, currentState, messageContent, { hasIncomingMessage: !consumedMessage, ctx });
       consumedMessage = true;
+
+      hopRecords.push({
+        flowId: currentFlow.id,
+        nodes: Array.isArray(currentFlow.nodes) ? (currentFlow.nodes as any[]) : [],
+        visitedNodeIds: result.visitedNodeIds ?? [],
+      });
 
       const gotoEff = result.effects.find((e) => e.kind === 'goto_flow') as
         | { kind: 'goto_flow'; targetFlowId: string }
@@ -224,15 +231,19 @@ export async function resolveActiveFlowStep(
       await cache.set(stateKey, JSON.stringify({ cursor: FLOW_ENDED, vars: result.state?.vars || {} }), FLOW_STATE_TTL);
     }
 
-    // Analytics por nó (fail-soft, aditivo)
+    // Analytics por nó (fail-soft, aditivo) — registra todos os fluxos da cadeia de hops
     try {
-      await recordNodeStats({
-        organizationId,
-        flowId: currentFlow.id,
-        graph: { nodes: Array.isArray(currentFlow.nodes) ? (currentFlow.nodes as any[]) : [] },
-        visitedNodeIds: result.visitedNodeIds ?? [],
-        ended: result.next === 'end',
-      });
+      for (let i = 0; i < hopRecords.length; i++) {
+        const rec = hopRecords[i];
+        const isLast = i === hopRecords.length - 1;
+        await recordNodeStats({
+          organizationId,
+          flowId: rec.flowId,
+          graph: { nodes: rec.nodes },
+          visitedNodeIds: rec.visitedNodeIds,
+          ended: isLast && result.next === 'end',
+        });
+      }
     } catch { /* fail-soft */ }
 
     logger.info('[Maestro] Flow step resolvido', {
