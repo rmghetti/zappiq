@@ -506,4 +506,26 @@ describe('flowEngine goto_flow (Maestro v2)', () => {
     expect(r.visitedNodeIds).toContain('sim');
     expect(r.visitedNodeIds).not.toContain('nao');
   });
+
+  it('goto_flow mode call emite efeito com mode e returnNodeId (nó seguinte do chamador)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'g', type: 'goto_flow', data: { targetFlowId: 'SUB', mode: 'call' } },
+        { id: 'depois', type: 'message', data: { text: 'voltei' } },
+      ],
+      edges: [{ source: 'g', target: 'depois' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'g', vars: {} }, '', { ctx: DEFAULT_CTX, hasIncomingMessage: false });
+    const eff = r.effects.find((e) => e.kind === 'goto_flow') as any;
+    expect(eff).toMatchObject({ kind: 'goto_flow', targetFlowId: 'SUB', mode: 'call', returnNodeId: 'depois' });
+    expect(r.next).toBe('end');
+  });
+
+  it('goto_flow sem mode = one-way (efeito sem mode/returnNodeId não-call)', () => {
+    const graph: FlowGraph = { nodes: [{ id: 'g', type: 'goto_flow', data: { targetFlowId: 'X' } }], edges: [] };
+    const r = resolveFlowStep(graph, { cursor: 'g', vars: {} }, '', { ctx: DEFAULT_CTX, hasIncomingMessage: false });
+    const eff = r.effects.find((e) => e.kind === 'goto_flow') as any;
+    expect(eff.targetFlowId).toBe('X');
+    expect(eff.mode === undefined || eff.mode === 'goto').toBe(true);
+  });
 });

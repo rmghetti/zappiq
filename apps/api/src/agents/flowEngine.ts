@@ -50,6 +50,8 @@ export interface FlowGraph {
 export interface FlowState {
   cursor: string | null;
   vars: Record<string, any>;
+  /** Pilha de retorno para subfluxos (modo 'call'). Manipulada pelo runtime (C2). */
+  callStack?: { flowId: string; returnNodeId: string | null }[];
 }
 
 export type FlowEffect =
@@ -59,7 +61,7 @@ export type FlowEffect =
   | { kind: 'set_tag'; tag: string }
   | { kind: 'update_lead'; field: string; value: any }
   | { kind: 'handoff' }
-  | { kind: 'goto_flow'; targetFlowId: string };
+  | { kind: 'goto_flow'; targetFlowId: string; mode?: 'goto' | 'call'; returnNodeId?: string | null };
 
 // ── Contexto de avaliação (injetado pela camada IO; mantém o motor puro) ──────
 export interface BusinessHoursConfig {
@@ -339,7 +341,12 @@ export function resolveFlowStep(
         if (target) {
           // Handoff entre fluxos (Frente 3): o runtime troca a conversa pro
           // fluxo alvo (com proteção anti-loop). Encerra o walk DESTE fluxo.
-          effects.push({ kind: 'goto_flow', targetFlowId: target });
+          if (node.data?.mode === 'call') {
+            const returnNodeId = firstTargetFrom(graph, node.id);
+            effects.push({ kind: 'goto_flow', targetFlowId: target, mode: 'call', returnNodeId });
+          } else {
+            effects.push({ kind: 'goto_flow', targetFlowId: target });
+          }
           return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
         }
         // Sem alvo configurado → fallback: segue a aresta de saída.
