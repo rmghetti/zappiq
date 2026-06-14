@@ -20,6 +20,11 @@ DO $$ BEGIN
     ALTER TABLE "flow_node_stats" ADD CONSTRAINT "flow_node_stats_flowId_fkey" FOREIGN KEY ("flowId") REFERENCES "flows"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
 END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'flow_node_stats_organizationId_fkey') THEN
+    ALTER TABLE "flow_node_stats" ADD CONSTRAINT "flow_node_stats_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
 
 -- ─── RLS + GRANTs — flow_node_stats ─────────────────────────────────────────
 ALTER TABLE "flow_node_stats" ENABLE ROW LEVEL SECURITY;
