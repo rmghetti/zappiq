@@ -12,7 +12,7 @@ echo "▶ Branch: $(git branch --show-current)"
 read -r -p "Fazer deploy do Web no Vercel (produção) agora? (digite 's') " ok
 [ "$ok" = "s" ] || { echo "Cancelado."; read -r; exit 0; }
 
-cd "$REPO/apps/web" && npx vercel deploy --prod
+cd "$REPO" && npx vercel deploy --prod
 echo
 echo "Deploy do Web concluído (ou veja erros acima)."
 echo "Confira o editor de fluxos: nó 'ask', condições por chips, botões/mídia,"
