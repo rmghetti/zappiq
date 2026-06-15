@@ -20,7 +20,8 @@ Depois do deploy, rode os roteiros de smoke (cada um lista os passos):
 - `docs/maestro/smoke-1c.md` — subfluxos call/return
 - `docs/maestro/smoke-pacote2-autootimizacao.md` — botão "Otimizar" (fluxo que se melhora sozinho)
 
-## Além do Pacote 1 (também já implementado na branch)
+## Além do Pacote 1 — **Pacote 2 (Cérebro) 100%** + Qualidade da IA
+- **AI step agêntico** (Pacote 2.6): o nó-IA pode usar uma **ferramenta webhook** (configurada no editor) — o agente chama o endpoint do cliente, recebe o resultado e responde. SSRF-guarded, gated (só com tools) e fail-soft (sem regressão). Webhook nativo no fluxo: nenhum concorrente verificado tem.
 - **Auto-otimização de fluxo** (Pacote 2.7): botão "Otimizar" no editor lê o funil e propõe reescrita do nó de maior abandono, com diff. Diferencial exclusivo.
 - **Simulação por personas sintéticas** (Pacote 2.8): botão "Simular" no editor testa o fluxo com clientes gerados por IA antes de publicar e reporta passRate + falhas. Reusa o juiz da Qualidade da IA.
 - **Maestro reativo** (Pacote 2.9): ao mudar identidade/treino (na tela de configurações ou no treinamento da IA), os fluxos afetados ficam "desatualizados" e ganham o botão "Atualizar com o Maestro" (re-proposta com diff). Antes, mudanças via configurações não marcavam os fluxos — agora marcam.

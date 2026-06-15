@@ -1,6 +1,6 @@
 # Maestro v3 + Qualidade da IA — Estado e Roadmap
 
-> Atualizado em 14/06/2026 · branch `maestro-v3-spec1a-motor` (73 commits, só Maestro/Qualidade) · API **405/405 testes verdes** · web `tsc` + `next build` verdes.
+> Atualizado em 14/06/2026 · branch `maestro-v3-spec1a-motor` (82 commits, só Maestro/Qualidade) · API **420/420 testes verdes** · web `tsc` + `next build` verdes.
 
 ## ✅ Entregue (pronto para merge/deploy via `comandos/`)
 
@@ -13,9 +13,10 @@
 | 1B Analytics | Funil/drop-off por nó (`FlowNodeStat`, upsert atômico, RLS) + badges "Métricas" no canvas | ✅ TDD |
 | 1C Subfluxos | `goto_flow` "chamar e voltar" (`callStack` no runtime, cross-turn) | ✅ TDD (limitação: timer durável dentro de subfluxo — documentada) |
 
-### Pacote 2 — Cérebro (4 de 5)
+### Pacote 2 — Cérebro (100% — 5 de 5)
 | Item | O quê | Status |
 |---|---|---|
+| 2.6 AI step agêntico | Nó-IA com **tools/function-calling** (webhook SSRF-guarded como tool universal): loop agêntico LLM↔ferramenta. Gated (só com tools) + fail-soft (cai no caminho normal). | ✅ TDD |
 | 2.7 Auto-otimização | "Fluxo que se melhora sozinho": lê o funil, acha o nó de maior abandono, propõe reescrita com diff (botão "Otimizar") | ✅ TDD |
 | 2.8 Simulação | Testa o fluxo com personas sintéticas (geradas do brief) antes de publicar; juiz da Qualidade da IA pontua; report (botão "Simular") | ✅ TDD |
 | 2.9 Maestro reativo | Mudou identidade/treino → fluxos afetados ficam "desatualizados" → badge "Atualizar com o Maestro" (re-proposta com diff). Fechado o gap do `PUT /settings` | ✅ TDD |
@@ -32,8 +33,7 @@
 
 ## ⏳ Roadmap restante (trabalho estratégico — precisa de build grande e/ou decisão sua)
 
-### Pacote 2 — falta 1
-- **2.6 AI step agêntico** (o maior diferencial restante): nó-IA com **function calling/tools** (consultar pedido, agendar, chamar webhook), KB escopada por nó, saída estruturada que decide o ramo. **Build grande** — exige infra de definição de tools + nó de webhook + RAG por nó. *Recomendo como próximo grande passo do Cérebro.*
+> **Pacotes 1 e 2 completos.** O que resta é o Pacote 3 (Receita) + melhorias incrementais — todos com decisão de produto sua.
 
 ### Pacote 3 — Receita (decisões de produto + build)
 - **3.10 A/B com traffic split** sobre o versionamento (duas `FlowVersion` ativas com % de tráfego + métrica de conversão por variante). *Decisão: qual métrica de conversão e % default.*
