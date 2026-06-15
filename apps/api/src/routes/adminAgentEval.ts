@@ -39,7 +39,8 @@ import {
   type EvalScenario,
 } from '../agents/agentEvalSet.js';
 // V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
-import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
+// Q1: computeReverifyVerdict exportado pra teste unitário puro.
+import { executeAgentEvalRun, computeReverifyVerdict } from '../services/agentEvalRunner.js';
 // FASE 2.1 (#241): Slack notify reusável entre cron e route manual.
 import {
   notifySlackQualityIssue,
@@ -744,6 +745,58 @@ router.post(
         decisionId: decision.id,
       });
 
+      // ── Q1: re-verifica o cenário com o prompt recém-aplicado ──────────────
+      // Fail-soft: erro no re-verify NÃO falha o apply (fix já persistido).
+      let reverify: {
+        scenarioId: string;
+        before: 'pass' | 'partial' | 'fail' | null;
+        after: 'pass' | 'partial' | 'fail';
+        improved: boolean;
+      } | { error: true } | null = null;
+
+      // Encontra o cenário no golden set
+      const scenarioDef = AGENT_EVAL_SET.find((s) => s.id === scenarioId);
+      if (scenarioDef) {
+        try {
+          // Extrai o combined anterior da run (results JSONB)
+          const priorResult = Array.isArray(run.results)
+            ? (run.results as any[]).find((r: any) => r.scenarioId === scenarioId)
+            : null;
+          const before: 'pass' | 'partial' | 'fail' | null =
+            priorResult?.combined ?? null;
+
+          // Re-run com o prompt recém-aplicado (1 LLM call)
+          const { results: rerunResults } = await executeAgentEvalRun(
+            [scenarioDef],
+            {
+              id: run.agentId,
+              name: run.agent.name,
+              systemPrompt: result.promptAfter,
+            },
+          );
+          const afterCombined = rerunResults[0]?.combined ?? 'fail';
+          const verdict = computeReverifyVerdict(before, afterCombined);
+
+          reverify = { scenarioId, ...verdict };
+
+          logger.info('[AgentEval] re-verify pós-fix', {
+            agentId: run.agentId,
+            scenarioId,
+            before: verdict.before,
+            after: verdict.after,
+            improved: verdict.improved,
+          });
+        } catch (reverifyErr: any) {
+          logger.warn('[AgentEval] re-verify falhou (não afeta o apply)', {
+            runId,
+            scenarioId,
+            err: reverifyErr?.message,
+          });
+          reverify = { error: true };
+        }
+      }
+      // ── fim re-verify ───────────────────────────────────────────────────────
+
       res.json({
         ok: true,
         decision,
@@ -751,6 +804,7 @@ router.post(
         insertedAtLine: result.insertedAtLine,
         promptLengthBefore: result.promptBefore.length,
         promptLengthAfter: result.promptAfter.length,
+        reverify,
       });
     } catch (err: any) {
       // FASE 2.2c (#246): dedup — patch duplicado vira 409 com mensagem clara
