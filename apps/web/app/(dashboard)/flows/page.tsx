@@ -39,7 +39,7 @@ import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
   MessageSquare, GitBranch, Sparkles, Tag, BarChart2, BarChart3, Headset, Clock, CalendarClock, PlayCircle, Info,
-  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History, HelpCircle, TrendingUp,
+  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History, HelpCircle, TrendingUp, Users,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { AskNodeFields } from './_components/AskNodeFields';
@@ -456,6 +456,10 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
+  // S3 — simulação com personas sintéticas
+  const [simReport, setSimReport] = useState<any | null>(null);
+  const [simulating, setSimulating] = useState(false);
+
   // 1B-analytics — toggle de métricas + badges por nó
   const [showMetrics, setShowMetrics] = useState(false);
   const [metrics, setMetrics] = useState<{ total: number; byNode: Record<string, { entries: number; ends: number }> } | null>(null);
@@ -647,6 +651,22 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
     } finally { setTesting(false); }
   }
 
+  // S3 — roda simulação com personas sintéticas (draft atual, sem salvar)
+  async function runSimulation() {
+    if (!flow?.id) return;
+    setSimulating(true);
+    setError(null);
+    try {
+      const g = toApiGraph();
+      const res: any = await api.post(`/api/flows/${flow.id}/simulate`, { nodes: g.nodes, edges: g.edges, personaCount: 3 });
+      setSimReport(res?.data ?? res);
+    } catch (e: any) {
+      setError(e?.message || 'Não consegui simular agora. Tente de novo.');
+    } finally {
+      setSimulating(false);
+    }
+  }
+
   // Maestro v2 — abre o histórico (snapshots imutáveis publish/refresh/restore).
   async function openHistory() {
     setHistoryOpen(true); setVersions(null); setHistoryError(null); setHistoryLoading(true);
@@ -711,6 +731,9 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 ${showMetrics ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
           >
             <BarChart3 size={13} /> Métricas{showMetrics && metrics ? ` · ${metrics.total} (7d)` : ''}
+          </button>
+          <button onClick={runSimulation} disabled={simulating} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
+            {simulating ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />} {simulating ? 'Simulando…' : 'Simular'}
           </button>
           <button onClick={save} disabled={saving} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar
@@ -864,6 +887,89 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
 
       {/* Popup didático do nó (#289) */}
       {docType && <NodeDocModal type={docType} onClose={() => setDocType(null)} />}
+
+      {/* S3 — Relatório de simulação com personas sintéticas */}
+      {simReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSimReport(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-5 border-b border-gray-100 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
+                <Users size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-gray-900">Simulação com clientes sintéticos</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {simReport.passed}/{simReport.total} personas atendidas bem
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* passRate badge */}
+                {typeof simReport.passRate === 'number' && (
+                  <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+                    simReport.passRate >= 70
+                      ? 'bg-green-100 text-green-700'
+                      : simReport.passRate >= 40
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-red-100 text-red-700'
+                  }`}>
+                    {Math.round(simReport.passRate)}%
+                  </span>
+                )}
+                <button onClick={() => setSimReport(null)} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4">
+              {/* byPersona list */}
+              {Array.isArray(simReport.byPersona) && simReport.byPersona.length > 0 && (
+                <ul className="space-y-2">
+                  {simReport.byPersona.map((p: any, i: number) => (
+                    <li key={i} className="rounded-xl border border-gray-100 p-3 flex items-start gap-3">
+                      <span className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${p.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                        {p.passed ? '✓' : '✗'}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-gray-900 leading-tight">
+                          {p.persona?.name || 'Persona'}
+                          {p.persona?.intent && (
+                            <span className="ml-1.5 font-normal text-gray-400">{p.persona.intent}</span>
+                          )}
+                        </p>
+                        {p.reason && <p className="text-xs text-gray-600 mt-0.5 leading-snug">{p.reason}</p>}
+                        {typeof p.turns === 'number' && (
+                          <p className="text-[10px] text-gray-400 mt-1">{p.turns} {p.turns === 1 ? 'turno' : 'turnos'}</p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Recommendations */}
+              {Array.isArray(simReport.recommendations) && simReport.recommendations.length > 0 && (
+                <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-4">
+                  <p className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide mb-2">Sugestões</p>
+                  <ul className="space-y-1">
+                    {simReport.recommendations.map((r: string, i: number) => (
+                      <li key={i} className="text-xs text-amber-800 flex items-start gap-1.5">
+                        <span className="shrink-0 mt-0.5">•</span>
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Disclaimer */}
+              <p className="text-[10px] text-gray-400 leading-snug border-t border-gray-100 pt-3">
+                Simulação aproximada (clientes gerados por IA) — use como sinal, não como garantia.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Maestro v2 — Histórico de versões + restore */}
       {historyOpen && (
