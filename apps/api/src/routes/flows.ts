@@ -13,6 +13,7 @@ import { resolveFlowStep, type FlowGraph, type FlowState } from '../agents/flowE
 import { generateFlowDraft, generateSmartFlows, regenerateFlowContent, generateJourney } from '../agents/flowGenerator.js';
 import { sameStructure } from './flowsRefreshValidation.js';
 import { aggregate } from '../services/flowAnalytics.js';
+import { computeAbResults, type Experiment } from '../agents/flowExperiment.js';
 import { generateOptimizationSuggestion } from '../agents/flowOptimizer.js';
 import { executeFlowSimulation } from '../agents/flowSimulation.js';
 
@@ -144,6 +145,67 @@ router.get('/:id/analytics', async (req: Request, res: Response, next: NextFunct
     });
     const data = aggregate(rows);
     res.json({ success: true, data });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/flows/:id/experiment — salva config do experimento em org.settings.experiments[flowId]
+// (Pacote 3.10 — Task AB3)
+router.put('/:id/experiment', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flowId = req.params.id;
+    const flow = await prisma.flow.findFirst({ where: { id: flowId, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const { active, variantFlowId, splitPercent, conversionNodeId } = req.body ?? {};
+    // validações
+    if (active) {
+      if (!variantFlowId || variantFlowId === flowId) { res.status(400).json({ error: 'variantFlowId inválido (precisa ser outro fluxo)' }); return; }
+      const variant = await prisma.flow.findFirst({ where: { id: String(variantFlowId), organizationId: orgId } });
+      if (!variant) { res.status(400).json({ error: 'Fluxo variante (B) não encontrado nesta organização' }); return; }
+    }
+    const exp: Experiment = {
+      active: !!active,
+      variantFlowId: String(variantFlowId || ''),
+      splitPercent: Math.max(0, Math.min(100, parseInt(String(splitPercent ?? 50), 10) || 0)),
+      ...(conversionNodeId ? { conversionNodeId: String(conversionNodeId) } : {}),
+    };
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const settings = ((org?.settings as any) || {});
+    const experiments = { ...(settings.experiments || {}), [flowId]: exp };
+    await prisma.organization.update({ where: { id: orgId }, data: { settings: { ...settings, experiments } as any } });
+    res.json({ success: true, data: exp });
+  } catch (err) { next(err); }
+});
+
+// GET /api/flows/:id/experiment — config + resultados A/B
+// (Pacote 3.10 — Task AB3)
+router.get('/:id/experiment', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flowId = req.params.id;
+    const flow = await prisma.flow.findFirst({ where: { id: flowId, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const exp = ((org?.settings as any)?.experiments?.[flowId]) as Experiment | undefined;
+    if (!exp || !exp.variantFlowId) { res.json({ success: true, data: { experiment: exp ?? null, results: null } }); return; }
+    const days = Math.min(Math.max(parseInt(String(req.query.days ?? '14'), 10) || 14, 1), 90);
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const sel = { nodeId: true, nodeType: true, nodeLabel: true, entries: true, ends: true } as const;
+    const [aRows, bRows] = await Promise.all([
+      prisma.flowNodeStat.findMany({ where: { flowId, organizationId: orgId, period: { gte: since } }, select: sel }),
+      prisma.flowNodeStat.findMany({ where: { flowId: exp.variantFlowId, organizationId: orgId, period: { gte: since } }, select: sel }),
+    ]);
+    // entryNodeId = o nó 'start' do fluxo A (ou o de maior entries se start não rastreado)
+    const aNodes = Array.isArray(flow.nodes) ? (flow.nodes as any[]) : [];
+    const startNode = aNodes.find((n) => n?.type === 'start');
+    const entryNodeId = startNode?.id || '';
+    const results = computeAbResults({
+      aStats: aggregate(aRows).byNode,
+      bStats: aggregate(bRows).byNode,
+      conversionNodeId: exp.conversionNodeId,
+      entryNodeId,
+    });
+    res.json({ success: true, data: { experiment: exp, results } });
   } catch (err) { next(err); }
 });
 
