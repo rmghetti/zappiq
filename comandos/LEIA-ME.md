@@ -18,6 +18,11 @@ Depois do deploy, rode os roteiros de smoke (cada um lista os passos):
 - `docs/maestro/smoke-1b.md` — geração rica por IA
 - `docs/maestro/smoke-1b-analytics.md` — funil por nó (toggle "Métricas")
 - `docs/maestro/smoke-1c.md` — subfluxos call/return
+- `docs/maestro/smoke-pacote2-autootimizacao.md` — botão "Otimizar" (fluxo que se melhora sozinho)
+
+## Além do Pacote 1 (também já implementado na branch)
+- **Auto-otimização de fluxo** (Pacote 2.7): botão "Otimizar" no editor lê o funil e propõe reescrita do nó de maior abandono, com diff. Diferencial exclusivo.
+- **Qualidade da IA — loop fechado:** ao aplicar um fix no prompt de um agente (em `/admin/agent-quality`), o sistema re-roda automaticamente o cenário e devolve o veredito (`reverify: { before, after, improved }`) na resposta do apply-fix. (O dashboard pode exibir esse veredito — pequena melhoria de UI pendente, opcional.)
 
 ## Observações
 - A branch `maestro-v3-spec1a-motor` tem **56 commits só do Maestro v3** — limpos.
