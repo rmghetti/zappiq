@@ -115,7 +115,7 @@ Critérios:
 Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
 {"passed": true|false, "confidence": 0-100, "reason": "explicação curta em pt-BR"}`;
 
-async function runJudge(
+export async function runJudge(
   expectedBehavior: string,
   agentResponse: string,
 ): Promise<{ passed: boolean; confidence: number; reason: string }> {

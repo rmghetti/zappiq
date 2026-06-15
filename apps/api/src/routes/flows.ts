@@ -14,6 +14,7 @@ import { generateFlowDraft, generateSmartFlows, regenerateFlowContent, generateJ
 import { sameStructure } from './flowsRefreshValidation.js';
 import { aggregate } from '../services/flowAnalytics.js';
 import { generateOptimizationSuggestion } from '../agents/flowOptimizer.js';
+import { executeFlowSimulation } from '../agents/flowSimulation.js';
 
 const router = Router();
 
@@ -210,6 +211,28 @@ router.post('/:id/optimize-suggestion', async (req: Request, res: Response, next
       byNode,
     });
     res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+});
+
+// POST /api/flows/:id/simulate — MAESTRO SIMULADOR (Pacote 2.8)
+// Gera personas sintéticas com base no contexto do negócio e simula cada uma
+// pelo fluxo (real motor). Aceita { nodes?, edges?, personaCount? } no body
+// (usa o draft em edição se enviado, senão o grafo salvo). NÃO persiste.
+router.post('/:id/simulate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    // usa o grafo do body (draft em edição) se enviado, senão o salvo
+    const nodes = Array.isArray(req.body?.nodes) ? req.body.nodes : ((flow.nodes as any) || []);
+    const edges = Array.isArray(req.body?.edges) ? req.body.edges : ((flow.edges as any) || []);
+    const personaCount = Math.min(Math.max(parseInt(String(req.body?.personaCount ?? 3), 10) || 3, 1), 8);
+    const report = await executeFlowSimulation({
+      organizationId: orgId,
+      flow: { name: flow.name, nodes, edges },
+      personaCount,
+    });
+    res.json({ success: true, data: report });
   } catch (err) { next(err); }
 });
 
