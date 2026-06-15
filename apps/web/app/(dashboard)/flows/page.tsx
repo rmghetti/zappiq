@@ -45,6 +45,7 @@ import { api } from '../../../lib/api';
 import { AskNodeFields } from './_components/AskNodeFields';
 import { PredicateBuilder, summarizePredicates, type Predicate } from './_components/PredicateBuilder';
 import { MessageRichFields } from './_components/MessageRichFields';
+import { AiToolsFields, type WebhookTool } from './_components/AiToolsFields';
 
 // Tutorial interativo "Reja sua IA" (HTML self-contained do Claude Design) + PDF
 // baixável. Servidos estaticamente de apps/web/public/tutoriais/. Mesmo padrão do
@@ -567,6 +568,19 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
       const d: any = n.data ?? {};
       if (n.type === 'ask') {
         if (!d.varName || !String(d.varName).trim()) errors.push(`Nó "${labelOf(n)}": defina a variável onde salvar a resposta.`);
+      }
+      if (n.type === 'ai' && Array.isArray(d.tools)) {
+        for (const t of d.tools as any[]) {
+          if (t?.type === 'webhook') {
+            if (!t.name || !String(t.name).trim()) errors.push(`Nó "${labelOf(n)}": a ferramenta webhook precisa de um nome.`);
+            const url = String(t.url ?? '').trim();
+            if (!url) {
+              errors.push(`Nó "${labelOf(n)}": a ferramenta webhook precisa de uma URL.`);
+            } else if (!/^https?:\/\//i.test(url)) {
+              errors.push(`Nó "${labelOf(n)}": URL da ferramenta webhook deve começar com http:// ou https://.`);
+            }
+          }
+        }
       }
       if (n.type === 'message') {
         if (d.media && (!d.media.url || !String(d.media.url).trim())) errors.push(`Nó "${labelOf(n)}": a mídia precisa de uma URL.`);
@@ -1101,6 +1115,10 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
           <p className="text-[10px] text-gray-400 mt-1">
             A Iza usa o modelo de IA automaticamente (otimizado pela ZappIQ) e reaproveita a identidade + conhecimento (RAG) que você treinou. Você não precisa escolher modelo.
           </p>
+          <AiToolsFields
+            tools={data?.tools as WebhookTool[] | undefined}
+            onChange={onChange}
+          />
         </>
       )}
 
