@@ -169,9 +169,10 @@ describe('routeIzaTurn — intent escalation (handoff/objection/enterprise)', ()
       expect(result.escalated).toBe(true);
       expect(result.response.provider).toBe('anthropic-sonnet');
     }
-    // Confirma forceProvider=Sonnet, tier=undefined (já forçou)
+    // PR #216: escalada por intent usa preferProvider (com fallback), não forceProvider
     const call = mockComplete.mock.calls[0][0];
-    expect(call.forceProvider).toBe('anthropic-sonnet');
+    expect(call.preferProvider).toBe('anthropic-sonnet');
+    expect(call.forceProvider).toBeUndefined();
     expect(call.tier).toBeUndefined();
   });
 
