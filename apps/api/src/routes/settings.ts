@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@zappiq/database';
 import { requireRole } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
+import { trainingFieldsChanged } from '../services/trainingChange.js';
+import { refreshAIReadiness } from '../services/aiReadinessService.js';
 
 const router = Router();
 
@@ -16,10 +18,17 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
 router.put('/', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const orgId = req.organizationId!;
+    const before = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
     const org = await prisma.organization.update({
-      where: { id: req.organizationId! },
+      where: { id: orgId },
       data: req.body,
     });
+    // Maestro reativo: identidade/treino mudou → marca os fluxos como desatualizados
+    const newSettings = req.body?.settings;
+    if (newSettings && trainingFieldsChanged((before?.settings as any) || {}, newSettings)) {
+      await refreshAIReadiness(orgId).catch(() => null);
+    }
     res.json({ success: true, data: org });
   } catch (err) { next(err); }
 });
