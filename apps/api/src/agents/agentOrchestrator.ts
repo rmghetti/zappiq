@@ -10,15 +10,19 @@ import * as ragService from '../services/ragService.js';
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
 import { syncContactToCrm } from '../services/crmAutomationService.js'; // CRM Onda 1 — IA preenche o pipeline
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
-import type { LLMTier, LLMProviderId } from '../services/llm/LLMRouter.js';
+import { llmRouter, type LLMTier, type LLMProviderId, type LLMMessage as RouterLLMMessage, type ToolDefinition } from '../services/llm/LLMRouter.js';
 import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
+import { applyVozHumanaFilter } from './vozHumanaFilter.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
 // ZappIQ Maestro (#280) — flow runtime híbrido. Aditivo: só atua se a org tem
 // flag maestro.enabled + Flow ativo; senão devolve null e a Iza pura roda igual.
 import { resolveActiveFlowStep } from './flowRuntime.js';
 import { executeFlowEffects } from './flowEffects.js';
+// Maestro Pacote 2.6 — agentic loop + webhook tools (AG3/AG4)
+import { runAgenticTurn } from './flowAiAgent.js';
+import { buildWebhookToolDef, executeWebhook, type WebhookToolConfig } from './webhookTool.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
 export interface ProcessMessageInput {
@@ -263,6 +267,84 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       content: msg.content,
     }));
 
+    // ── 8.5. Maestro Pacote 2.6 — caminho agêntico (gated + fail-soft) ────
+    // Ativado apenas quando o nó-IA tem tools do tipo 'webhook' configuradas.
+    // Qualquer erro cai silenciosamente pro caminho normal (routeIzaTurn).
+    // O no-tools path (e todos os caminhos não-flow) são byte-a-byte inalterados.
+    const { tier, forceProvider } = await pickTierAndOverride(organizationId);
+    if (flowStep?.next === 'ai' && Array.isArray(flowStep.aiTools) && flowStep.aiTools.length > 0) {
+      const aiTools = flowStep.aiTools as WebhookToolConfig[];
+      const webhookTools = aiTools.filter((t) => t && t.type === 'webhook');
+      if (webhookTools.length > 0) {
+        try {
+          const toolDefs: ToolDefinition[] = webhookTools.map(buildWebhookToolDef);
+          // Mapeia nome sanitizado → config (buildWebhookToolDef sanitiza o name)
+          const byName = new Map(webhookTools.map((t) => [buildWebhookToolDef(t).name, t]));
+          const agentResult = await runAgenticTurn({
+            system: systemPrompt,
+            userMessage: messageContent,
+            history,
+            tools: toolDefs,
+            deps: {
+              callLLM: async (messages: RouterLLMMessage[], tools: ToolDefinition[], system: string) => {
+                const resp = await llmRouter.complete({
+                  system,
+                  messages,
+                  tools: tools.length ? tools : undefined,
+                  maxTokens: 1024,
+                  temperature: 0.3,
+                  tier,
+                  forceProvider,
+                  orgId: organizationId,
+                  conversationId,
+                  operation: 'chat',
+                });
+                return { text: resp.text, toolCalls: resp.toolCalls, stopReason: resp.stopReason };
+              },
+              runTool: async (name: string, toolInput: any) => {
+                const cfg = byName.get(name);
+                if (!cfg) return `Ferramenta desconhecida: ${name}`;
+                const r = await executeWebhook(cfg, toolInput || {});
+                return r.ok ? (r.body || '(sem corpo)') : `Erro na ferramenta: ${r.error || r.status}`;
+              },
+              maxIterations: 3,
+            },
+          });
+          // Envia a resposta agêntica pelo mesmo caminho do path normal (sendReplyText +
+          // prisma.message.create), sem TTS (loop agêntico é text-only por design):
+          const agenticReplyText = agentResult.text
+            ? applyVozHumanaFilter(stripLeakedPrefixes(stripStructuredTags(agentResult.text)))
+            : '';
+          if (agenticReplyText) {
+            await sendReplyText({ organizationId, conversationId, content: agenticReplyText });
+            await prisma.message.create({
+              data: {
+                direction: 'OUTBOUND',
+                type: 'TEXT',
+                content: agenticReplyText,
+                status: 'SENT',
+                conversationId,
+                isFromBot: true,
+                aiConfidence: 0.95,
+              },
+            });
+            logger.info('[Maestro] caminho agêntico OK', { organizationId, conversationId, toolsUsed: agentResult.toolsUsed });
+            if (io) {
+              io.to(`org:${organizationId}`).emit('new_message', {
+                conversationId,
+                message: { content: agenticReplyText, direction: 'OUTBOUND', isFromBot: true, createdAt: new Date().toISOString() },
+              });
+            }
+            return;
+          }
+          // replyText vazio → cai no fallback abaixo
+        } catch (e) {
+          logger.warn('[Maestro] caminho agêntico falhou — fallback p/ caminho normal', { organizationId, conversationId, err: String(e) });
+          // fall-through para routeIzaTurn
+        }
+      }
+    }
+
     // ── 9. V4 routing: pre-filter + classify + tier-based ─────
     // V4 #V4-001 + #143 (2026-04-30): routeIzaTurn aplica defesa em camadas:
     //   1. Pre-filter regex de verticais bloqueadas (apostas/cripto/MLM/porn) —
@@ -274,7 +356,6 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // Per-org override via organizations.settings.llm_routing (#133):
     //   { forceProvider: "anthropic-sonnet" | ... } → bypassa tier-based
     //   { useDefaultCascade: true }                 → cascade default (Iza)
-    const { tier, forceProvider } = await pickTierAndOverride(organizationId);
     const turnResult = await routeIzaTurn({
       systemPrompt,
       userMessage: messageContent,
@@ -616,6 +697,7 @@ function parseAgentResponse(rawResponse: string): ParsedResponse {
   let candidate = replyMatch ? replyMatch[1].trim() : rawResponse.trim();
   candidate = stripStructuredTags(candidate);
   candidate = stripLeakedPrefixes(candidate);
+  candidate = applyVozHumanaFilter(candidate);
   result.replyText = candidate;
 
   return result;

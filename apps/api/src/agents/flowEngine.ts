@@ -131,6 +131,8 @@ export interface FlowStepResult {
   /** Presente quando next==='ai': prompt do nó-IA pra injetar no systemPrompt. */
   aiPrompt?: string;
   aiModelHint?: string;
+  /** Presente quando next==='ai': tools configuradas no nó-IA (ex: webhook tools). */
+  aiTools?: any[];
   /** Presente quando next==='scheduled': dados do agendamento. */
   schedule?: FlowSchedule;
   /** Ids dos nós visitados neste walk, na ordem de visita. */
@@ -332,6 +334,7 @@ export function resolveFlowStep(
           next: 'ai',
           aiPrompt: (node.data?.prompt ?? node.label ?? '').toString() || undefined,
           aiModelHint: node.data?.model ? String(node.data.model) : undefined,
+          aiTools: Array.isArray(node.data?.tools) ? node.data.tools : undefined,
           state: { cursor: firstTargetFrom(graph, node.id), vars },
           visitedNodeIds: visited,
         };
