@@ -38,6 +38,7 @@ import {
   type FlowStepResult,
 } from './flowEngine.js';
 import { pickFlowForMessage, type RoutableFlow } from './flowRouter.js';
+import { assignVariant, type Experiment } from './flowExperiment.js';
 import { scheduleFlowTimer, cancelPendingWaitTimers } from '../services/flowScheduler.js';
 import { buildEvalContext } from './evalContextBuilder.js';
 import { nextHopIntent } from './flowHop.js';
@@ -155,6 +156,21 @@ export async function resolveActiveFlowStep(
       // Conversa ENDED re-disparando (keyword): rodada limpa, vars zeradas.
       // Conversa nova: preserva vars existentes (se houver) por segurança.
       state = ended ? { cursor: null, vars: {} } : { cursor: null, vars: state.vars ?? {} };
+
+      // ── A/B traffic split (Pacote 3.10) — só no primeiro contato, gated + fail-soft ──
+      try {
+        const exp = orgSettings?.experiments?.[flow.id] as Experiment | undefined;
+        if (exp && exp.active && exp.variantFlowId && exp.variantFlowId !== flow.id) {
+          const variant = assignVariant(exp, conversationId);
+          if (variant === 'B') {
+            const bFlow = flows.find((f) => f.id === exp.variantFlowId && f.isActive);
+            if (bFlow) {
+              flow = bFlow; // a atribuição persiste via flowId no cache (turnos seguintes ficam em B)
+              logger.info('[Maestro] A/B: conversa atribuída à variante B', { organizationId, conversationId, expFlow: exp.variantFlowId });
+            }
+          }
+        }
+      } catch (e) { logger.warn('[Maestro] A/B assign falhou — segue na variante A', { organizationId, err: String(e) }); }
     }
 
     // ── Monta EvalContext (atributos do contato + horário comercial) ─────
