@@ -23,6 +23,7 @@ Depois do deploy, rode os roteiros de smoke (cada um lista os passos):
 ## Além do Pacote 1 (também já implementado na branch)
 - **Auto-otimização de fluxo** (Pacote 2.7): botão "Otimizar" no editor lê o funil e propõe reescrita do nó de maior abandono, com diff. Diferencial exclusivo.
 - **Simulação por personas sintéticas** (Pacote 2.8): botão "Simular" no editor testa o fluxo com clientes gerados por IA antes de publicar e reporta passRate + falhas. Reusa o juiz da Qualidade da IA.
+- **Maestro reativo** (Pacote 2.9): ao mudar identidade/treino (na tela de configurações ou no treinamento da IA), os fluxos afetados ficam "desatualizados" e ganham o botão "Atualizar com o Maestro" (re-proposta com diff). Antes, mudanças via configurações não marcavam os fluxos — agora marcam.
 - **Qualidade da IA — loop fechado:** ao aplicar um fix no prompt de um agente (em `/admin/agent-quality`), o sistema re-roda automaticamente o cenário e mostra o veredito (`✓ verificado` / `⚠ ainda falha`) no dashboard. A suíte da API ficou **100% verde** (corrigido o teste obsoleto do izaTurnRouter).
 
 ## Observações
