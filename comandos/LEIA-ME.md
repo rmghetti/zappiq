@@ -27,6 +27,10 @@ Depois do deploy, rode os roteiros de smoke (cada um lista os passos):
 - **Maestro reativo** (Pacote 2.9): ao mudar identidade/treino (na tela de configurações ou no treinamento da IA), os fluxos afetados ficam "desatualizados" e ganham o botão "Atualizar com o Maestro" (re-proposta com diff). Antes, mudanças via configurações não marcavam os fluxos — agora marcam.
 - **Qualidade da IA — loop fechado:** ao aplicar um fix no prompt de um agente (em `/admin/agent-quality`), o sistema re-roda automaticamente o cenário e mostra o veredito (`✓ verificado` / `⚠ ainda falha`) no dashboard. A suíte da API ficou **100% verde** (corrigido o teste obsoleto do izaTurnRouter).
 
+## Pacote 3 (Receita) — iniciado
+- **A/B traffic split** (Pacote 3.10): botão **"A/B"** no editor abre o painel de experimento — escolhe um fluxo variante (B), define % do tráfego pra B e o nó de conversão; mostra os resultados (conversão por variante + vencedor). Atribuição determinística por conversa (não troca de variante no meio). Sem migração de banco (vive em `org.settings`). Smoke: `docs/maestro/smoke-pacote3-ab-testing.md`.
+- ⏸ **Pix/e-commerce (3.12) adiado** (aguardando definição do parceiro Pix). 3.11 (handoff) e 3.13 (broadcast) dependem de decisão de produto — documentados no `docs/maestro/ESTADO-E-ROADMAP.md`.
+
 ## Observações
 - A branch `maestro-v3-spec1a-motor` tem **56 commits só do Maestro v3** — limpos.
 - Arquivos não-commitados (`vozHumanaFilter.ts`, `agentOrchestrator.ts`, `coreAgentRules.ts`) são da skill **voz-humana** (trabalho paralelo) e **não entram** no merge da branch.

@@ -36,7 +36,7 @@
 > **Pacotes 1 e 2 completos.** O que resta é o Pacote 3 (Receita) + melhorias incrementais — todos com decisão de produto sua.
 
 ### Pacote 3 — Receita
-- **3.10 A/B com traffic split** — **EM ANDAMENTO** (métrica padrão = taxa de conclusão do fluxo, configurável).
+- **3.10 A/B com traffic split** — ✅ **ENTREGUE** (TDD). `flowExperiment.ts` (`assignVariant` hash determinístico FNV-1a por conversa + `computeAbResults` puros), runtime gated/fail-soft (só no 1º contato; sem experimento = caminho idêntico), rotas `PUT/GET /flows/:id/experiment` (sem migração — vive em `org.settings.experiments`), painel "A/B" no editor (config + resultados por variante + vencedor). Conversão reusa o funil 1B-analytics. Smoke: `docs/maestro/smoke-pacote3-ab-testing.md`.
 - **3.11 Handoff estruturado** com fila/ticket e retomada do fluxo quando o atendente encerra. *Precisa do fluxo de atendimento humano.*
 - **3.12 E-commerce / Pix nativo** — ⏸ **ADIADO por decisão do Rodrigo (14/06/2026): aguardando definição do parceiro/provedor Pix.** Quando definir, retomar (catálogo WhatsApp, carrinho, Pix, trigger `CART_ABANDONED`).
 - **3.13 Broadcast integrado** — campanha HSM que injeta o respondente direto num fluxo; fallback de timer fora da janela 24h → template HSM.
