@@ -39,7 +39,7 @@ import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
   MessageSquare, GitBranch, Sparkles, Tag, BarChart2, BarChart3, Headset, Clock, CalendarClock, PlayCircle, Info,
-  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History, HelpCircle,
+  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History, HelpCircle, TrendingUp,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { AskNodeFields } from './_components/AskNodeFields';
@@ -1475,6 +1475,9 @@ export default function FlowsPage() {
   const [refreshTarget, setRefreshTarget] = useState<ApiFlow | null>(null);
   const [refreshPreview, setRefreshPreview] = useState<FlowRefresh | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Pacote 2.7 — auto-otimização por funil (reusa o mesmo preview/apply do refresh)
+  const [optimizing, setOptimizing] = useState(false);
+  const [refreshMode, setRefreshMode] = useState<'refresh' | 'optimize'>('refresh');
   // tutorial interativo (modal iframe)
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
@@ -1647,7 +1650,7 @@ export default function FlowsPage() {
 
   // Onda 3: pede ao Maestro a sugestão de atualização (preview, não persiste).
   async function requestRefresh(flow: ApiFlow) {
-    setRefreshTarget(flow); setRefreshPreview(null); setRefreshing(true); setError(null);
+    setRefreshTarget(flow); setRefreshPreview(null); setRefreshing(true); setRefreshMode('refresh'); setError(null);
     try {
       const res = await api.post<{ success: boolean; data: FlowRefresh }>(`/api/flows/${flow.id}/refresh-suggestion`, {});
       if (res?.data) setRefreshPreview(res.data);
@@ -1655,6 +1658,18 @@ export default function FlowsPage() {
       setError(e?.message || 'Não consegui gerar a sugestão agora.');
       setRefreshTarget(null);
     } finally { setRefreshing(false); }
+  }
+
+  // Pacote 2.7 — auto-otimização por funil (reusa preview/apply do refresh).
+  async function requestOptimize(flow: ApiFlow) {
+    setRefreshTarget(flow); setRefreshPreview(null); setOptimizing(true); setRefreshMode('optimize'); setError(null);
+    try {
+      const res = await api.post<{ success: boolean; data: FlowRefresh }>(`/api/flows/${flow.id}/optimize-suggestion`, {});
+      if (res?.data) setRefreshPreview(res.data);
+    } catch (e: any) {
+      setError(e?.message || 'Não consegui gerar a otimização agora.');
+      setRefreshTarget(null);
+    } finally { setOptimizing(false); }
   }
 
   // Onda 3: aplica a atualização (1 clique = autorização). Persiste via POST /refresh-apply
@@ -1954,6 +1969,14 @@ export default function FlowsPage() {
                   <Sparkles size={12} /> Atualizar com o Maestro
                 </button>
               )}
+              <button
+                onClick={() => requestOptimize(f)}
+                disabled={optimizing}
+                title="O Maestro analisa o funil e sugere melhorias de conversão"
+                className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                {optimizing ? <Loader2 size={12} className="animate-spin" /> : <TrendingUp size={12} />} Otimizar
+              </button>
               {f.isActive && <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700">Ativo</span>}
               <button onClick={() => removeFlow(f.id)} className="p-1.5 text-gray-400 hover:text-red-500" title="Excluir"><Trash2 size={14} /></button>
             </div>
@@ -1961,21 +1984,32 @@ export default function FlowsPage() {
         ))}
       </div>
 
-      {/* Modal: preview da atualização inteligente (Onda 3) */}
+      {/* Modal: preview da atualização/otimização inteligente (Onda 3 + Pacote 2.7) */}
       {refreshTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!refreshing) { setRefreshTarget(null); setRefreshPreview(null); } }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!refreshing && !optimizing) { setRefreshTarget(null); setRefreshPreview(null); } }}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-100 flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shrink-0"><Sparkles size={18} /></div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-semibold text-gray-900">Atualizar &quot;{refreshTarget.name}&quot;</h3>
-                <p className="text-sm text-gray-600 mt-0.5">Seu treinamento mudou. O Maestro preparou uma atualização — você decide se aplica.</p>
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white shrink-0 ${refreshMode === 'optimize' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-indigo-500 to-blue-600'}`}>
+                {refreshMode === 'optimize' ? <TrendingUp size={18} /> : <Sparkles size={18} />}
               </div>
-              <button onClick={() => { if (!refreshing) { setRefreshTarget(null); setRefreshPreview(null); } }} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-gray-900">
+                  {refreshMode === 'optimize' ? 'Otimizar' : 'Atualizar'} &quot;{refreshTarget.name}&quot;
+                </h3>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  {refreshMode === 'optimize'
+                    ? 'O Maestro analisou o funil e preparou sugestões de otimização de conversão — você decide se aplica.'
+                    : 'Seu treinamento mudou. O Maestro preparou uma atualização — você decide se aplica.'}
+                </p>
+              </div>
+              <button onClick={() => { if (!refreshing && !optimizing) { setRefreshTarget(null); setRefreshPreview(null); } }} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
             </div>
             <div className="p-5 space-y-4">
               {!refreshPreview && (
-                <div className="flex items-center gap-2 text-gray-500 py-6 justify-center"><Loader2 size={18} className="animate-spin" /> O Maestro está revisando seu fluxo…</div>
+                <div className="flex items-center gap-2 text-gray-500 py-6 justify-center">
+                  <Loader2 size={18} className="animate-spin" />
+                  {refreshMode === 'optimize' ? 'O Maestro está analisando o funil…' : 'O Maestro está revisando seu fluxo…'}
+                </div>
               )}
               {refreshPreview && (
                 <>
@@ -2014,9 +2048,10 @@ export default function FlowsPage() {
               )}
             </div>
             <div className="p-5 border-t border-gray-100 flex justify-end gap-2">
-              <button onClick={() => { setRefreshTarget(null); setRefreshPreview(null); }} disabled={refreshing} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">Agora não</button>
-              <button onClick={applyRefresh} disabled={refreshing || !refreshPreview || refreshPreview.source === 'fallback'} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
-                {refreshing ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} Aplicar atualização
+              <button onClick={() => { setRefreshTarget(null); setRefreshPreview(null); }} disabled={refreshing || optimizing} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">Agora não</button>
+              <button onClick={applyRefresh} disabled={refreshing || optimizing || !refreshPreview || refreshPreview.source === 'fallback'} className={`px-4 py-2 text-white rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50 ${refreshMode === 'optimize' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                {(refreshing || optimizing) ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                {refreshMode === 'optimize' ? 'Aplicar otimização' : 'Aplicar atualização'}
               </button>
             </div>
           </div>
