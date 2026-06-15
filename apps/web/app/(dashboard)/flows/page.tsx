@@ -39,7 +39,7 @@ import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
   MessageSquare, GitBranch, Sparkles, Tag, BarChart2, BarChart3, Headset, Clock, CalendarClock, PlayCircle, Info,
-  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History, HelpCircle, TrendingUp, Users,
+  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History, HelpCircle, TrendingUp, Users, FlaskConical,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { AskNodeFields } from './_components/AskNodeFields';
@@ -461,6 +461,52 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
   const [simReport, setSimReport] = useState<any | null>(null);
   const [simulating, setSimulating] = useState(false);
 
+  // Pacote 3.10 — Experimento A/B
+  type AbExperiment = { active: boolean; variantFlowId: string; splitPercent: number; conversionNodeId?: string };
+  type AbVariant = { variant: 'A' | 'B'; entries: number; conversions: number; conversionRate: number };
+  type AbResults = { variants: AbVariant[]; winner: 'A' | 'B' | null; note: string } | null;
+  const [abOpen, setAbOpen] = useState(false);
+  const [abLoading, setAbLoading] = useState(false);
+  const [abSaving, setAbSaving] = useState(false);
+  const [abExperiment, setAbExperiment] = useState<AbExperiment>({ active: false, variantFlowId: '', splitPercent: 50 });
+  const [abResults, setAbResults] = useState<AbResults>(null);
+
+  async function openAbPanel() {
+    setAbOpen(true);
+    setAbLoading(true);
+    try {
+      const res = await api.get<{ success: boolean; data: { experiment: AbExperiment | null; results: AbResults } }>(
+        `/api/flows/${flow.id}/experiment?days=14`,
+      );
+      const d = res?.data;
+      if (d?.experiment) {
+        setAbExperiment({
+          active: !!d.experiment.active,
+          variantFlowId: d.experiment.variantFlowId || '',
+          splitPercent: typeof d.experiment.splitPercent === 'number' ? d.experiment.splitPercent : 50,
+          conversionNodeId: d.experiment.conversionNodeId,
+        });
+      }
+      setAbResults(d?.results ?? null);
+    } catch { /* fail-soft: leave defaults */ }
+    finally { setAbLoading(false); }
+  }
+
+  async function saveAbExperiment() {
+    setAbSaving(true);
+    try {
+      await api.put(`/api/flows/${flow.id}/experiment`, {
+        active: abExperiment.active,
+        variantFlowId: abExperiment.variantFlowId || null,
+        splitPercent: abExperiment.splitPercent,
+        conversionNodeId: abExperiment.conversionNodeId || null,
+      });
+      setAbOpen(false);
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao salvar experimento A/B');
+    } finally { setAbSaving(false); }
+  }
+
   // 1B-analytics — toggle de métricas + badges por nó
   const [showMetrics, setShowMetrics] = useState(false);
   const [metrics, setMetrics] = useState<{ total: number; byNode: Record<string, { entries: number; ends: number }> } | null>(null);
@@ -755,6 +801,9 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
           <button onClick={openHistory} disabled={historyLoading} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {historyLoading ? <Loader2 size={14} className="animate-spin" /> : <History size={14} />} Histórico
           </button>
+          <button onClick={openAbPanel} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-violet-200 text-violet-700 hover:bg-violet-50 flex items-center gap-1.5">
+            <FlaskConical size={14} /> A/B
+          </button>
           <button onClick={publish} disabled={publishing} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 flex items-center gap-1.5 disabled:opacity-50">
             {publishing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Publicar
           </button>
@@ -981,6 +1030,148 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
                 Simulação aproximada (clientes gerados por IA) — use como sinal, não como garantia.
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pacote 3.10 — Experimento A/B */}
+      {abOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!abSaving) setAbOpen(false); }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-5 border-b border-gray-100 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center text-violet-600 shrink-0"><FlaskConical size={18} /></div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-gray-900">Experimento A/B</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Divida o tráfego entre este fluxo (A) e um fluxo variante (B) para comparar conversões.</p>
+              </div>
+              <button onClick={() => { if (!abSaving) setAbOpen(false); }} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4">
+              {abLoading ? (
+                <div className="flex items-center gap-2 text-gray-500 py-6 justify-center"><Loader2 size={18} className="animate-spin" /> Carregando…</div>
+              ) : (
+                <>
+                  {/* Toggle ativo */}
+                  <label className="flex items-center gap-3 cursor-pointer rounded-xl border border-gray-200 p-3 hover:border-gray-300">
+                    <div
+                      onClick={() => setAbExperiment((p) => ({ ...p, active: !p.active }))}
+                      className={`relative w-9 h-5 rounded-full transition-colors shrink-0 cursor-pointer ${abExperiment.active ? 'bg-violet-600' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${abExperiment.active ? 'translate-x-4' : ''}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Ativar teste A/B</p>
+                      <p className="text-xs text-gray-500">Quando ativo, o tráfego é dividido entre este fluxo e a variante B.</p>
+                    </div>
+                  </label>
+
+                  {/* Fluxo variante B */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Fluxo variante (B)</label>
+                    <select
+                      value={abExperiment.variantFlowId}
+                      onChange={(e) => setAbExperiment((p) => ({ ...p, variantFlowId: e.target.value }))}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-violet-400"
+                    >
+                      <option value="">— escolher fluxo variante —</option>
+                      {allFlows.filter((f) => f.id !== flow.id && f.isActive).map((f) => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">Apenas fluxos ativos da sua organização (exceto este).</p>
+                  </div>
+
+                  {/* % tráfego para B */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      % do tráfego para B — <span className="text-violet-600 font-bold">{abExperiment.splitPercent}%</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={abExperiment.splitPercent}
+                      onChange={(e) => setAbExperiment((p) => ({ ...p, splitPercent: Number(e.target.value) }))}
+                      className="w-full accent-violet-600"
+                    />
+                    <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+                      <span>A: {100 - abExperiment.splitPercent}%</span>
+                      <span>B: {abExperiment.splitPercent}%</span>
+                    </div>
+                  </div>
+
+                  {/* Nó de conversão */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Nó de conversão (opcional)</label>
+                    <select
+                      value={abExperiment.conversionNodeId || ''}
+                      onChange={(e) => setAbExperiment((p) => ({ ...p, conversionNodeId: e.target.value || undefined }))}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-violet-400"
+                    >
+                      <option value="">Conclusão do fluxo (padrão)</option>
+                      {nodes.filter((n) => n.type !== 'start').map((n) => (
+                        <option key={n.id} value={n.id}>{n.data?.label || n.type} ({n.id})</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">O nó atingido conta como conversão. Vazio = fim do fluxo.</p>
+                  </div>
+
+                  {/* Resultados */}
+                  {abResults && (
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Resultados (últimos 14 dias)</p>
+                      {abResults.note && !abResults.variants?.length && (
+                        <p className="text-sm text-gray-500">{abResults.note}</p>
+                      )}
+                      {abResults.variants && abResults.variants.length > 0 && (
+                        <>
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            {abResults.variants.map((v) => {
+                              const isWinner = abResults.winner === v.variant;
+                              return (
+                                <div
+                                  key={v.variant}
+                                  className={`rounded-lg border p-3 ${isWinner ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'}`}
+                                >
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className={`text-xs font-bold ${isWinner ? 'text-green-700' : 'text-gray-600'}`}>
+                                      Variante {v.variant}
+                                    </span>
+                                    {isWinner && <span className="text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">Vencedor</span>}
+                                  </div>
+                                  <p className={`text-2xl font-bold ${isWinner ? 'text-green-700' : 'text-gray-800'}`}>
+                                    {(v.conversionRate * 100).toFixed(1)}%
+                                  </p>
+                                  <p className="text-[10px] text-gray-500 mt-0.5">
+                                    {v.conversions} conv. / {v.entries} entradas
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {abResults.note && (
+                            <p className="text-[11px] text-gray-500 border-t border-gray-100 pt-2">{abResults.note}</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            {!abLoading && (
+              <div className="p-5 border-t border-gray-100 flex justify-end gap-2">
+                <button onClick={() => { if (!abSaving) setAbOpen(false); }} disabled={abSaving} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
+                <button onClick={saveAbExperiment} disabled={abSaving} className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 flex items-center gap-2 disabled:opacity-50">
+                  {abSaving ? <Loader2 size={15} className="animate-spin" /> : <FlaskConical size={15} />} Salvar experimento
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
