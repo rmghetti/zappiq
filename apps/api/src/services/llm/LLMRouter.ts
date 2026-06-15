@@ -60,7 +60,61 @@ import {
   __resetBreakersForTest as __resetBreakersForTestRedis,
 } from './redisBreaker.js';
 
-export type LLMMessage = { role: 'user' | 'assistant' | 'system'; content: string };
+/**
+ * AG1: Content blocks para suporte a multi-turn tool loop (Pacote 2.6).
+ * Additive: `content: string` continua válido em todos os callers existentes.
+ */
+export type LLMContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: any }
+  | { type: 'tool_result'; tool_use_id: string; content: string };
+
+export type LLMMessage = { role: 'user' | 'assistant' | 'system'; content: string | LLMContentBlock[] };
+
+/**
+ * Converte `content: string | LLMContentBlock[]` para string.
+ * Junta blocos de texto; ignora tool_use e tool_result.
+ * Usado nos providers não-Anthropic (OpenAI/Gemini) para degradar
+ * gracefully caso um caller passe content blocks — esses providers
+ * não são usados no agentic loop mas o tipo não deve quebrá-los.
+ */
+export function contentToString(c: string | LLMContentBlock[]): string {
+  if (typeof c === 'string') return c;
+  return c
+    .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+}
+
+/**
+ * Converte LLMMessage[] para o formato nativo da Anthropic Messages API,
+ * filtrando mensagens 'system' (que vão em campo separado).
+ *
+ * - content string → passa como string (comportamento idêntico ao anterior)
+ * - content LLMContentBlock[] → passa array com cada bloco no formato Anthropic:
+ *     text       → { type: 'text', text }
+ *     tool_use   → { type: 'tool_use', id, name, input }
+ *     tool_result → { type: 'tool_result', tool_use_id, content }
+ *
+ * Exportado para teste unitário (llmContentBlocks.test.ts).
+ */
+export function toAnthropicMessages(messages: LLMMessage[]): any[] {
+  return messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => {
+      if (typeof m.content === 'string') {
+        return { role: m.role, content: m.content };
+      }
+      // array de blocks: mapeia para formato nativo Anthropic
+      const blocks = m.content.map((b) => {
+        if (b.type === 'text') return { type: 'text', text: b.text };
+        if (b.type === 'tool_use') return { type: 'tool_use', id: b.id, name: b.name, input: b.input };
+        // tool_result
+        return { type: 'tool_result', tool_use_id: b.tool_use_id, content: b.content };
+      });
+      return { role: m.role, content: blocks };
+    });
+}
 
 export type LLMOperation = 'chat' | 'classify' | 'sentiment';
 
@@ -261,12 +315,13 @@ class AnthropicProvider implements LLMProvider {
 
     // V4-006: tools support. Anthropic aceita `tools` no body; formato:
     // [{ name, description, input_schema }]. Mapeamos do nosso ToolDefinition.
+    // AG1: toAnthropicMessages suporta content string | LLMContentBlock[] (additive).
     const body: any = {
       model: this.model,
       max_tokens: req.maxTokens ?? 1024,
       temperature: req.temperature ?? 0.3,
       system: req.system,
-      messages: req.messages.filter((m) => m.role !== 'system'),
+      messages: toAnthropicMessages(req.messages),
     };
     if (req.tools && req.tools.length > 0) {
       body.tools = req.tools.map((t) => ({
@@ -338,12 +393,13 @@ class AnthropicProvider implements LLMProvider {
     if (!apiKey) throw new ProviderError('missing ANTHROPIC_API_KEY', 'client');
     const t0 = Date.now();
 
+    // AG1: toAnthropicMessages suporta content string | LLMContentBlock[] (additive).
     const body: any = {
       model: this.model,
       max_tokens: req.maxTokens ?? 1024,
       temperature: req.temperature ?? 0.3,
       system: req.system,
-      messages: req.messages.filter((m) => m.role !== 'system'),
+      messages: toAnthropicMessages(req.messages),
       stream: true,
     };
     if (req.tools && req.tools.length > 0) {
@@ -401,11 +457,12 @@ class GoogleProvider implements LLMProvider {
     const t0 = Date.now();
     // Gemini usa role 'model' em vez de 'assistant'. Mensagens 'system' viram
     // systemInstruction em campo separado.
+    // AG1: contentToString degrada content blocks para texto (Gemini não é usado no agentic loop).
     const contents = req.messages
       .filter((m) => m.role !== 'system')
       .map((m) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
+        parts: [{ text: contentToString(m.content) }],
       }));
     const body: any = {
       contents,
@@ -450,9 +507,12 @@ class OpenAIProvider implements LLMProvider {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new ProviderError('missing OPENAI_API_KEY', 'client');
     const t0 = Date.now();
+    // AG1: contentToString degrada content blocks para texto (OpenAI não é usado no agentic loop).
     const openaiMessages: any[] = [];
     if (req.system) openaiMessages.push({ role: 'system', content: req.system });
-    openaiMessages.push(...req.messages);
+    openaiMessages.push(
+      ...req.messages.map((m) => ({ role: m.role, content: contentToString(m.content) })),
+    );
 
     // V4-006: tools support. OpenAI usa formato function wrapper:
     // [{ type: 'function', function: { name, description, parameters } }]
