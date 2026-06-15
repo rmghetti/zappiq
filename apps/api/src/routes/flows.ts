@@ -13,6 +13,7 @@ import { resolveFlowStep, type FlowGraph, type FlowState } from '../agents/flowE
 import { generateFlowDraft, generateSmartFlows, regenerateFlowContent, generateJourney } from '../agents/flowGenerator.js';
 import { sameStructure } from './flowsRefreshValidation.js';
 import { aggregate } from '../services/flowAnalytics.js';
+import { generateOptimizationSuggestion } from '../agents/flowOptimizer.js';
 
 const router = Router();
 
@@ -182,6 +183,31 @@ router.post('/:id/refresh-suggestion', async (req: Request, res: Response, next:
     const result = await regenerateFlowContent({
       organizationId: req.organizationId!,
       flow: { name: flow.name, nodes: (flow.nodes as any) || [], edges: (flow.edges as any) || [] },
+    });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+});
+
+// POST /api/flows/:id/optimize-suggestion — MAESTRO AUTO-OTIMIZADOR (Pacote 2.7)
+// Identifica o nó com maior abandono nos últimos N dias (default 7, max 90) e
+// devolve uma reescrita sugerida com shape idêntico ao refresh-suggestion.
+// NÃO persiste — o cliente aplica via refresh-apply (1 clique = autorização).
+router.post('/:id/optimize-suggestion', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const days = Math.min(Math.max(parseInt(String(req.query.days ?? '7'), 10) || 7, 1), 90);
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const rows = await prisma.flowNodeStat.findMany({
+      where: { flowId: flow.id, organizationId: orgId, period: { gte: since } },
+      select: { nodeId: true, nodeType: true, nodeLabel: true, entries: true, ends: true },
+    });
+    const { byNode } = aggregate(rows);
+    const result = await generateOptimizationSuggestion({
+      organizationId: orgId,
+      flow: { name: flow.name, nodes: (flow.nodes as any) || [], edges: (flow.edges as any) || [] },
+      byNode,
     });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
