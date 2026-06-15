@@ -35,10 +35,10 @@
 
 > **Pacotes 1 e 2 completos.** O que resta é o Pacote 3 (Receita) + melhorias incrementais — todos com decisão de produto sua.
 
-### Pacote 3 — Receita (decisões de produto + build)
-- **3.10 A/B com traffic split** sobre o versionamento (duas `FlowVersion` ativas com % de tráfego + métrica de conversão por variante). *Decisão: qual métrica de conversão e % default.*
+### Pacote 3 — Receita
+- **3.10 A/B com traffic split** — **EM ANDAMENTO** (métrica padrão = taxa de conclusão do fluxo, configurável).
 - **3.11 Handoff estruturado** com fila/ticket e retomada do fluxo quando o atendente encerra. *Precisa do fluxo de atendimento humano.*
-- **3.12 E-commerce no fluxo** — catálogo WhatsApp, carrinho, **Pix nativo** (gap aberto: nenhum concorrente verificado tem Pix no fluxo), trigger `CART_ABANDONED`. *Decisão: provedor Pix, modelo de cobrança.*
+- **3.12 E-commerce / Pix nativo** — ⏸ **ADIADO por decisão do Rodrigo (14/06/2026): aguardando definição do parceiro/provedor Pix.** Quando definir, retomar (catálogo WhatsApp, carrinho, Pix, trigger `CART_ABANDONED`).
 - **3.13 Broadcast integrado** — campanha HSM que injeta o respondente direto num fluxo; fallback de timer fora da janela 24h → template HSM.
 
 ### Qualidade da IA — melhorias incrementais (do mapeamento)
