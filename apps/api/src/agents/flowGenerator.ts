@@ -71,7 +71,7 @@ function stripControlChars(s: string): string {
  * LLM: cercas de código, prosa antes/depois, vírgulas sobrando antes de }/] e
  * caracteres de controle inválidos (Gemini Flash erra muito nesses pontos).
  */
-function extractJson(text: string): any | null {
+export function extractJson(text: string): any | null {
   if (!text) return null;
   const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
   const start = cleaned.indexOf('{');
