@@ -861,6 +861,13 @@ function FixSuggestionCard({
   const [loadingAction, setLoadingAction] = useState<'apply' | 'reject' | 'revert' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [reverify, setReverify] = useState<{
+    scenarioId?: string;
+    before?: 'pass' | 'partial' | 'fail' | null;
+    after?: 'pass' | 'partial' | 'fail' | null;
+    improved?: boolean;
+    error?: boolean;
+  } | null>(null);
 
   // Reset edited diff quando suggestion muda
   useEffect(() => {
@@ -868,6 +875,7 @@ function FixSuggestionCard({
     setEditing(false);
     setActionError(null);
     setActionSuccess(null);
+    setReverify(null);
   }, [initialDiff, scenario.scenarioId]);
 
   const hasSuggestion = !!scenario.suggestedFix && scenario.suggestedFix.patches.length > 0;
@@ -888,6 +896,10 @@ function FixSuggestionCard({
       setActionSuccess(
         `✓ Aplicado via ${result.strategy} na linha ${result.insertedAtLine}. Prompt: ${result.decision.id.slice(0, 8)}...`,
       );
+      // Captura veredito da re-verificação automática (pode ser null se não disponível)
+      if ((result as any).reverify !== undefined) {
+        setReverify((result as any).reverify);
+      }
       setTimeout(onAfterAction, 1200);
     } catch (err: any) {
       // FASE 2.2c (#246): trata DUPLICATE_PATCH com mensagem orientativa.
@@ -1109,6 +1121,28 @@ function FixSuggestionCard({
             {actionSuccess && (
               <div className="mt-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
                 {actionSuccess}
+              </div>
+            )}
+
+            {/* Veredito da re-verificação automática pós-apply */}
+            {reverify === null && actionSuccess && (
+              <div className="mt-1.5 text-[10px] px-2 py-1 rounded bg-neutral-100 border border-neutral-200 text-neutral-600 inline-flex items-center gap-1">
+                Fix aplicado
+              </div>
+            )}
+            {reverify && reverify.improved === true && (
+              <div className="mt-1.5 text-[10px] px-2 py-1 rounded bg-green-100 border border-green-200 text-green-800 inline-flex items-center gap-1">
+                ✓ Fix verificado — o cenário agora passa
+              </div>
+            )}
+            {reverify && reverify.improved === false && !reverify.error && (
+              <div className="mt-1.5 text-[10px] px-2 py-1 rounded bg-amber-100 border border-amber-200 text-amber-800 inline-flex items-center gap-1">
+                ⚠ Fix aplicado, mas o cenário ainda não passa (era: {reverify.before ?? '?'} · agora: {reverify.after ?? '?'})
+              </div>
+            )}
+            {reverify && reverify.error === true && (
+              <div className="mt-1.5 text-[10px] px-2 py-1 rounded bg-neutral-100 border border-neutral-300 text-neutral-600 inline-flex items-center gap-1">
+                Fix aplicado (re-verificação indisponível)
               </div>
             )}
 
