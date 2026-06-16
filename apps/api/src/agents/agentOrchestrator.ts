@@ -14,6 +14,7 @@ import { llmRouter, type LLMTier, type LLMProviderId, type LLMMessage as RouterL
 import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
+import { applyVozHumanaFilter } from './vozHumanaFilter.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
 // ZappIQ Maestro (#280) — flow runtime híbrido. Aditivo: só atua se a org tem
 // flag maestro.enabled + Flow ativo; senão devolve null e a Iza pura roda igual.
@@ -696,6 +697,7 @@ function parseAgentResponse(rawResponse: string): ParsedResponse {
   let candidate = replyMatch ? replyMatch[1].trim() : rawResponse.trim();
   candidate = stripStructuredTags(candidate);
   candidate = stripLeakedPrefixes(candidate);
+  candidate = applyVozHumanaFilter(candidate);
   result.replyText = candidate;
 
   return result;
