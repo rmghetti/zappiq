@@ -35,6 +35,8 @@ import {
   diffContent,
   type ContentField,
 } from './flowContentPatch.js';
+import { assemble } from './flowAssembler.js';
+import { BLOCK_SPEC, FEW_SHOT, RECIPES } from './flowRecipes.js';
 
 export interface FlowDraft {
   name: string;
@@ -48,8 +50,8 @@ export interface FlowDraft {
   summary: string;
   blueprintId: string;
   blueprintLabel: string;
-  /** 'ai' = personalizado pela IA; 'fallback' = conteúdo-padrão do blueprint. */
-  source: 'ai' | 'fallback';
+  /** 'ai' = personalizado pela IA; 'fallback' = conteúdo-padrão do blueprint; 'ai-rich' = grafo rico montado pelo assembler. */
+  source: 'ai' | 'fallback' | 'ai-rich';
 }
 
 const VALID_TIERS: LLMTier[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
@@ -69,7 +71,7 @@ function stripControlChars(s: string): string {
  * LLM: cercas de código, prosa antes/depois, vírgulas sobrando antes de }/] e
  * caracteres de controle inválidos (Gemini Flash erra muito nesses pontos).
  */
-function extractJson(text: string): any | null {
+export function extractJson(text: string): any | null {
   if (!text) return null;
   const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
   const start = cleaned.indexOf('{');
@@ -341,8 +343,9 @@ export function recommendObjectives(niche: string | null, segmento: string | nul
   return recommended;
 }
 
-/** Gera UM draft pra um objetivo específico, usando o brief completo do negócio. */
-async function generateDraftForObjective(
+/** Gera UM draft pra um objetivo específico, usando o brief completo do negócio.
+ *  ATENÇÃO: função INTERNA — não chamar generateDraftForObjective daqui (evita recursão). */
+async function generateContentFillDraft(
   ctx: BusinessContext,
   blueprint: Blueprint,
   organizationId: string,
@@ -442,6 +445,133 @@ async function generateDraftForObjective(
     blueprintLabel: blueprint.label,
     source: 'ai',
   };
+}
+
+/**
+ * Gera um draft RICO pedindo ao LLM um block plan e montando o grafo via assembler.
+ * Em qualquer falha (LLM, parse, assembly) cai para generateContentFillDraft.
+ * CRITICAL: chama generateContentFillDraft (não generateDraftForObjective) para
+ * evitar recursão infinita.
+ */
+export async function generateRichDraft(
+  ctx: BusinessContext,
+  blueprint: Blueprint,
+  organizationId: string,
+  multiAgent: boolean,
+): Promise<FlowDraft> {
+  const tier = VALID_TIERS.includes(ctx.plan as LLMTier) ? (ctx.plan as LLMTier) : undefined;
+
+  const system = [
+    'Você é o MAESTRO INTELIGENTE da ZappIQ: seu trabalho é montar um fluxo de atendimento no WhatsApp escolhendo e encadeando blocos de uma LISTA FECHADA.',
+    'Responda SOMENTE com um objeto JSON válido (o block plan). Nunca escreva nós/arestas diretamente — apenas o plano de blocos.',
+    'Sem texto antes ou depois, sem cercas de código, sem vírgula sobrando.',
+  ].join(' ');
+
+  const recipe = (RECIPES as Record<string, string>)[blueprint.goal] ?? '';
+
+  const user = [
+    '=== CONTEXTO DO NEGÓCIO ===',
+    ctx.brief,
+    '',
+    `=== OBJETIVO DO FLUXO: ${blueprint.label} — ${blueprint.description} ===`,
+    multiAgent
+      ? 'Este é UM de vários fluxos especialistas. Foque exclusivamente neste objetivo.'
+      : 'Este é o fluxo principal do negócio.',
+    '',
+    BLOCK_SPEC,
+    '',
+    'Exemplo de plano:',
+    FEW_SHOT,
+    '',
+    `Receita sugerida para este objetivo:\n${recipe}`,
+    '',
+    'Regras obrigatórias:',
+    '- ask_buttons: máximo 3 botões; sempre ofereça "Outro" ou elseNext.',
+    '- Textos em pt-BR, curtos e naturais para WhatsApp.',
+    '- Não invente tipos de bloco fora da lista.',
+    '- Devolva SOMENTE o JSON (sem texto extra, sem cercas).',
+  ].join('\n');
+
+  try {
+    const resp = await llmRouter.complete({
+      system,
+      messages: [{ role: 'user', content: user }],
+      maxTokens: 1500,
+      temperature: 0.5,
+      tier,
+      forceProvider: 'anthropic-sonnet' as LLMProviderId,
+      orgId: organizationId,
+      operation: 'chat',
+    });
+
+    const plan = extractJson(resp.text);
+    if (!plan) {
+      logger.warn('[Maestro] generateRichDraft: JSON não parseável — fallback', {
+        organizationId,
+        sample: (resp.text || '').slice(0, 200),
+      });
+      return generateContentFillDraft(ctx, blueprint, organizationId, multiAgent);
+    }
+
+    const res = assemble(plan);
+    if (!res.ok) {
+      logger.warn('[Maestro] plano rico inválido — fallback', {
+        organizationId,
+        errors: res.errors,
+        objetivo: blueprint.goal,
+      });
+      return generateContentFillDraft(ctx, blueprint, organizationId, multiAgent);
+    }
+
+    const rationale = Array.isArray(plan.rationale)
+      ? plan.rationale
+          .filter((r: any) => r && r.node && r.why)
+          .map((r: any) => ({ node: String(r.node).slice(0, 40), why: String(r.why).slice(0, 300) }))
+      : [];
+
+    const genericRationale = [
+      { node: 'Início', why: 'Ponto de entrada: dispara quando o cliente inicia a conversa.' },
+      { node: blueprint.label, why: `Fluxo rico montado pelo Maestro para o objetivo: ${blueprint.label}.` },
+    ];
+
+    return {
+      name: String(plan.flowName || blueprint.defaults.flowName).slice(0, 80),
+      nodes: res.graph.nodes,
+      edges: res.graph.edges,
+      triggerType: 'FIRST_CONTACT',
+      triggerConfig: {},
+      rationale: rationale.length > 0 ? rationale : genericRationale,
+      summary: String(
+        plan.summary || `Montei um fluxo rico de "${blueprint.label}" para ${ctx.businessName}.`,
+      ).slice(0, 500),
+      blueprintId: blueprint.id,
+      blueprintLabel: blueprint.label,
+      source: 'ai-rich',
+    };
+  } catch (e) {
+    logger.warn('[Maestro] generateRichDraft: erro inesperado — fallback', {
+      organizationId,
+      err: String(e),
+    });
+    return generateContentFillDraft(ctx, blueprint, organizationId, multiAgent);
+  }
+}
+
+/** Gera UM draft para um objetivo, tentando rich-first, com fallback para content-fill. */
+async function generateDraftForObjective(
+  ctx: BusinessContext,
+  blueprint: Blueprint,
+  organizationId: string,
+  multiAgent: boolean,
+): Promise<FlowDraft> {
+  try {
+    // generateRichDraft já faz fallback interno para generateContentFillDraft.
+    return await generateRichDraft(ctx, blueprint, organizationId, multiAgent);
+  } catch (e) {
+    // Camada extra de segurança: se generateRichDraft explodir de forma não prevista.
+    logger.warn('[Maestro] generateDraftForObjective: rica falhou — content-fill', { organizationId, err: String(e) });
+    return generateContentFillDraft(ctx, blueprint, organizationId, multiAgent);
+  }
 }
 
 export interface SmartFlowsResult {

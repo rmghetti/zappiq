@@ -38,10 +38,14 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
-  MessageSquare, GitBranch, Sparkles, Tag, BarChart2, Headset, Clock, CalendarClock, PlayCircle, Info,
-  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History,
+  MessageSquare, GitBranch, Sparkles, Tag, BarChart2, BarChart3, Headset, Clock, CalendarClock, PlayCircle, Info,
+  BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History, HelpCircle, TrendingUp, Users, FlaskConical,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { AskNodeFields } from './_components/AskNodeFields';
+import { PredicateBuilder, summarizePredicates, type Predicate } from './_components/PredicateBuilder';
+import { MessageRichFields } from './_components/MessageRichFields';
+import { AiToolsFields, type WebhookTool } from './_components/AiToolsFields';
 
 // Tutorial interativo "Reja sua IA" (HTML self-contained do Claude Design) + PDF
 // baixável. Servidos estaticamente de apps/web/public/tutoriais/. Mesmo padrão do
@@ -56,6 +60,7 @@ const NODE_META: Record<string, { kind: NodeKind; label: string; icon: any; pale
   start:       { kind: 'start',  label: 'Início',         icon: PlayCircle,    palette: false },
   message:     { kind: 'fixed',  label: 'Mensagem',       icon: MessageSquare, palette: true },
   condition:   { kind: 'fixed',  label: 'Condição',       icon: GitBranch,     palette: true },
+  ask:         { kind: 'fixed',  label: 'Perguntar e capturar', icon: HelpCircle,    palette: true },
   ai:          { kind: 'ai',     label: 'Nó-IA',          icon: Sparkles,      palette: true },
   tag:         { kind: 'action', label: 'Marcar tag',     icon: Tag,           palette: true },
   update_lead: { kind: 'action', label: 'Atualizar lead', icon: BarChart2,     palette: true },
@@ -99,13 +104,20 @@ function metaFor(type: string) {
 
 function nodeSummary(type: string, data: any): string {
   switch (type) {
-    case 'message': return data?.text || '(mensagem vazia)';
+    case 'message':
+      if (data?.media) return data.media.type === 'image' ? '🖼 imagem' : data.media.type === 'document' ? '📄 documento' : '🔊 áudio';
+      if (data?.interactive) return `${data.interactive.options.length} ${data.interactive.type === 'list' ? 'itens' : 'botões'}`;
+      return data?.text || '(mensagem vazia)';
     case 'condition': return 'Ramifica pela resposta';
+    case 'ask': return data?.varName ? `→ {{${data.varName}}}` : 'captura resposta';
     case 'ai': return data?.prompt || '(sem instrução)';
     case 'tag': return data?.tag ? `tag: ${data.tag}` : '(sem tag)';
     case 'update_lead': return data?.field ? `${data.field} = ${data.value ?? ''}` : '(sem campo)';
     case 'transfer': return 'Passa pro time';
-    case 'goto_flow': return data?.targetFlowName ? `→ ${data.targetFlowName}` : '(sem fluxo de destino)';
+    case 'goto_flow': {
+      const name = data?.targetFlowName || '(sem fluxo de destino)';
+      return data?.mode === 'call' ? `↪ chamar: ${name}` : `→ ${name}`;
+    }
     case 'wait': {
       const m = Number(data?.delayMinutes);
       return m > 0 ? `⏳ espera ${m} min` : 'Passa direto (sem espera)';
@@ -168,6 +180,12 @@ const NODE_DOCS: Record<string, NodeDoc> = {
     whatFor: 'Use para interligar especialistas: o fluxo de atendimento detecta intenção de compra e passa o bastão pro fluxo de vendas, por exemplo.',
     how: 'Conecte no ponto do salto e escolha o fluxo de destino no painel da direita. O motor segue no outro fluxo a partir do início dele.',
     example: 'No fluxo de Atendimento, se o cliente quer agendar, envie para o fluxo "Agendamento".',
+  },
+  ask: {
+    short: 'Faz uma pergunta, espera a resposta do cliente, valida e salva numa variável (e opcionalmente no CRM).',
+    whatFor: 'Use para coletar dados estruturados: nome, e-mail, telefone, empresa ou qualquer informação que precise ser guardada e reutilizada. Depois use {{a_variavel}} para personalizar mensagens.',
+    how: 'Defina a pergunta, o nome da variável para salvar a resposta e, opcionalmente, um campo do CRM para gravar automaticamente. Ative a validação para checar o formato (texto, número, e-mail ou telefone) antes de avançar.',
+    example: 'Pergunta: "Qual seu e-mail?" → salvar em {{email}} e gravar no campo "email" do lead.',
   },
   wait: {
     short: 'Espera a resposta do cliente por um prazo. Se ele não responder, o fluxo segue pelo ramo "Sem resposta" — perfeito pra follow-up automático.',
@@ -310,6 +328,12 @@ function MaestroNode({ id, type, data, selected }: NodeProps) {
           ×
         </button>
       )}
+      {data._metrics && (
+        <div className="absolute -bottom-2 -right-2 flex gap-1 z-10">
+          <span className="px-1.5 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-semibold shadow">▶ {data._metrics.entries}</span>
+          {data._metrics.ends > 0 && <span className="px-1.5 py-0.5 rounded-full bg-gray-700 text-white text-[10px] shadow">⏹ {data._metrics.ends}</span>}
+        </div>
+      )}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
         <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm" style={{ background: KIND_BADGE[meta.kind] }}>
           <Icon size={17} color="#fff" />
@@ -396,8 +420,18 @@ function apiEdgesToCanvas(apiEdges: any[]): Edge[] {
     id: e.id || genId('e'),
     source: e.source,
     target: e.target,
-    // Ramo de timeout (saída de nó wait) não tem value — rotula "sem resposta".
-    label: e.data?.when?.match === 'timeout' ? 'sem resposta' : (e.data?.when?.value || undefined),
+    // Label derivation:
+    // - predicates → summarize
+    // - else → 'padrão'
+    // - timeout → 'sem resposta'
+    // - legacy keyword when → value
+    label: e.data?.predicates?.length
+      ? summarizePredicates(e.data.predicates as Predicate[])
+      : e.data?.when?.match === 'else'
+        ? 'padrão'
+        : e.data?.when?.match === 'timeout'
+          ? 'sem resposta'
+          : (e.data?.when?.value || undefined),
     data: e.data || {},
   }));
 }
@@ -423,9 +457,90 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
+  // S3 — simulação com personas sintéticas
+  const [simReport, setSimReport] = useState<any | null>(null);
+  const [simulating, setSimulating] = useState(false);
+
+  // Pacote 3.10 — Experimento A/B
+  type AbExperiment = { active: boolean; variantFlowId: string; splitPercent: number; conversionNodeId?: string };
+  type AbVariant = { variant: 'A' | 'B'; entries: number; conversions: number; conversionRate: number };
+  type AbResults = { variants: AbVariant[]; winner: 'A' | 'B' | null; note: string } | null;
+  const [abOpen, setAbOpen] = useState(false);
+  const [abLoading, setAbLoading] = useState(false);
+  const [abSaving, setAbSaving] = useState(false);
+  const [abExperiment, setAbExperiment] = useState<AbExperiment>({ active: false, variantFlowId: '', splitPercent: 50 });
+  const [abResults, setAbResults] = useState<AbResults>(null);
+
+  async function openAbPanel() {
+    setAbOpen(true);
+    setAbLoading(true);
+    try {
+      const res = await api.get<{ success: boolean; data: { experiment: AbExperiment | null; results: AbResults } }>(
+        `/api/flows/${flow.id}/experiment?days=14`,
+      );
+      const d = res?.data;
+      if (d?.experiment) {
+        setAbExperiment({
+          active: !!d.experiment.active,
+          variantFlowId: d.experiment.variantFlowId || '',
+          splitPercent: typeof d.experiment.splitPercent === 'number' ? d.experiment.splitPercent : 50,
+          conversionNodeId: d.experiment.conversionNodeId,
+        });
+      }
+      setAbResults(d?.results ?? null);
+    } catch { /* fail-soft: leave defaults */ }
+    finally { setAbLoading(false); }
+  }
+
+  async function saveAbExperiment() {
+    setAbSaving(true);
+    try {
+      await api.put(`/api/flows/${flow.id}/experiment`, {
+        active: abExperiment.active,
+        variantFlowId: abExperiment.variantFlowId || null,
+        splitPercent: abExperiment.splitPercent,
+        conversionNodeId: abExperiment.conversionNodeId || null,
+      });
+      setAbOpen(false);
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao salvar experimento A/B');
+    } finally { setAbSaving(false); }
+  }
+
+  // 1B-analytics — toggle de métricas + badges por nó
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [metrics, setMetrics] = useState<{ total: number; byNode: Record<string, { entries: number; ends: number }> } | null>(null);
+
   const nodeTypes = useMemo(
     () => Object.fromEntries(Object.keys(NODE_META).map((t) => [t, MaestroNode])),
     [],
+  );
+
+  // 1B-analytics — busca métricas quando o toggle liga
+  useEffect(() => {
+    if (!showMetrics || !flow?.id) { return; }
+    let cancelled = false;
+    api.get<{ success: boolean; data: { totalEntries: number; byNode: { nodeId: string; entries: number; ends: number }[] } }>(
+      `/api/flows/${flow.id}/analytics?days=7`,
+    )
+      .then((res: any) => {
+        if (cancelled) return;
+        const d = res?.data ?? res;
+        const byNode: Record<string, { entries: number; ends: number }> = {};
+        for (const n of (d?.byNode ?? [])) byNode[n.nodeId] = { entries: n.entries, ends: n.ends };
+        setMetrics({ total: d?.totalEntries ?? 0, byNode });
+      })
+      .catch(() => { if (!cancelled) setMetrics(null); });
+    return () => { cancelled = true; };
+  }, [showMetrics, flow?.id]);
+
+  // 1B-analytics — displayNodes injeta _metrics sem mutar o estado editável
+  const displayNodes = useMemo(
+    () =>
+      showMetrics && metrics
+        ? nodes.map((n) => ({ ...n, data: { ...n.data, _metrics: metrics.byNode[n.id] ?? { entries: 0, ends: 0 } } }))
+        : nodes,
+    [nodes, showMetrics, metrics],
   );
 
   const onConnect = useCallback(
@@ -455,15 +570,15 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
     setSelectedNodeId(null);
   }
 
-  function setEdgeCondition(value: string) {
-    if (!selectedEdgeId) return;
-    setEdges((eds) =>
-      eds.map((e) =>
-        e.id === selectedEdgeId
-          ? { ...e, label: value || undefined, data: { ...e.data, when: value ? { match: 'contains', value } : undefined } }
-          : e,
-      ),
-    );
+  function setEdgePredicates(preds: Predicate[]) {
+    setEdges((eds) => eds.map((e) => e.id === selectedEdgeId
+      ? { ...e, label: preds.length ? summarizePredicates(preds) : undefined, data: { ...e.data, predicates: preds.length ? preds : undefined, when: undefined } }
+      : e));
+  }
+  function setEdgeAsElse(on: boolean) {
+    setEdges((eds) => eds.map((e) => e.id === selectedEdgeId
+      ? { ...e, label: on ? 'padrão' : undefined, data: { ...e.data, predicates: undefined, when: on ? { match: 'else' } : undefined } }
+      : e));
   }
 
   // Maestro v2 — saídas de nó 'wait': ramo de resposta vs ramo de timeout.
@@ -490,6 +605,65 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
     };
   }
 
+  // ─── Validação de publicação (E5 — guard-rails client-side) ─────────────────
+  function validateGraph(ns: Node[], es: Edge[]): { errors: string[]; warnings: string[] } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const labelOf = (n: Node) => (n.data?.label as string) || n.type || n.id;
+    for (const n of ns) {
+      const d: any = n.data ?? {};
+      if (n.type === 'ask') {
+        if (!d.varName || !String(d.varName).trim()) errors.push(`Nó "${labelOf(n)}": defina a variável onde salvar a resposta.`);
+      }
+      if (n.type === 'ai' && Array.isArray(d.tools)) {
+        for (const t of d.tools as any[]) {
+          if (t?.type === 'webhook') {
+            if (!t.name || !String(t.name).trim()) errors.push(`Nó "${labelOf(n)}": a ferramenta webhook precisa de um nome.`);
+            const url = String(t.url ?? '').trim();
+            if (!url) {
+              errors.push(`Nó "${labelOf(n)}": a ferramenta webhook precisa de uma URL.`);
+            } else if (!/^https?:\/\//i.test(url)) {
+              errors.push(`Nó "${labelOf(n)}": URL da ferramenta webhook deve começar com http:// ou https://.`);
+            }
+          }
+        }
+      }
+      if (n.type === 'message') {
+        if (d.media && (!d.media.url || !String(d.media.url).trim())) errors.push(`Nó "${labelOf(n)}": a mídia precisa de uma URL.`);
+        if (d.interactive) {
+          const opts = (d.interactive.options ?? []) as { id: string; title: string }[];
+          const lim = d.interactive.type === 'list' ? 10 : 3;
+          if (opts.length === 0) errors.push(`Nó "${labelOf(n)}": adicione ao menos uma opção.`);
+          if (opts.length > lim) errors.push(`Nó "${labelOf(n)}": ${d.interactive.type === 'list' ? 'listas' : 'botões'} aceitam no máximo ${lim} opções.`);
+          if (opts.some((o) => !o.title || !o.title.trim())) errors.push(`Nó "${labelOf(n)}": toda opção precisa de um texto.`);
+          const ids = opts.map((o) => o.id);
+          if (new Set(ids).size !== ids.length) errors.push(`Nó "${labelOf(n)}": há opções com id duplicado.`);
+        }
+      }
+    }
+    // Nós que ramificam: condition/ask com saídas mas sem ramo padrão (else/bare) → aviso
+    for (const n of ns) {
+      if (n.type !== 'condition' && n.type !== 'ask') continue;
+      const out = es.filter((e) => e.source === n.id);
+      if (out.length === 0) continue;
+      const hasDefault = out.some((e) => {
+        const w = (e.data as any)?.when;
+        const preds = (e.data as any)?.predicates;
+        if (n.type === 'ask') return w?.match === 'else';
+        return w?.match === 'else' || (!w && (!preds || preds.length === 0));
+      });
+      if (!hasDefault) warnings.push(`Nó "${labelOf(n)}": sem ramo padrão (else). Se nada casar, o fluxo encerra.`);
+    }
+    // Predicado custom field sem nome de campo
+    for (const e of es) {
+      const preds = ((e.data as any)?.predicates ?? []) as any[];
+      for (const p of preds) {
+        if (p.kind === 'contact_attr' && p.field === 'customFields.') errors.push('Uma condição de campo custom está sem o nome do campo.');
+      }
+    }
+    return { errors, warnings };
+  }
+
   async function save() {
     setSaving(true); setError(null);
     try {
@@ -502,6 +676,15 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
   }
 
   async function publish() {
+    const { errors: pubErrors, warnings: pubWarnings } = validateGraph(nodes, edges);
+    if (pubErrors.length) {
+      window.alert('Não foi possível publicar:\n\n' + pubErrors.map((e) => '• ' + e).join('\n'));
+      return;
+    }
+    if (pubWarnings.length) {
+      const ok = window.confirm('Avisos antes de publicar:\n\n' + pubWarnings.map((w) => '• ' + w).join('\n') + '\n\nPublicar mesmo assim?');
+      if (!ok) return;
+    }
     setPublishing(true); setError(null);
     try {
       const g = toApiGraph();
@@ -526,6 +709,22 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
     } catch (e: any) {
       setError(e?.message || 'Falha ao testar');
     } finally { setTesting(false); }
+  }
+
+  // S3 — roda simulação com personas sintéticas (draft atual, sem salvar)
+  async function runSimulation() {
+    if (!flow?.id) return;
+    setSimulating(true);
+    setError(null);
+    try {
+      const g = toApiGraph();
+      const res: any = await api.post(`/api/flows/${flow.id}/simulate`, { nodes: g.nodes, edges: g.edges, personaCount: 3 });
+      setSimReport(res?.data ?? res);
+    } catch (e: any) {
+      setError(e?.message || 'Não consegui simular agora. Tente de novo.');
+    } finally {
+      setSimulating(false);
+    }
   }
 
   // Maestro v2 — abre o histórico (snapshots imutáveis publish/refresh/restore).
@@ -587,11 +786,23 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
           <button onClick={runTest} disabled={testing} className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {testing ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Testar
           </button>
+          <button
+            onClick={() => setShowMetrics((v) => !v)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 ${showMetrics ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+          >
+            <BarChart3 size={13} /> Métricas{showMetrics && metrics ? ` · ${metrics.total} (7d)` : ''}
+          </button>
+          <button onClick={runSimulation} disabled={simulating} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
+            {simulating ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />} {simulating ? 'Simulando…' : 'Simular'}
+          </button>
           <button onClick={save} disabled={saving} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar
           </button>
           <button onClick={openHistory} disabled={historyLoading} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {historyLoading ? <Loader2 size={14} className="animate-spin" /> : <History size={14} />} Histórico
+          </button>
+          <button onClick={openAbPanel} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-violet-200 text-violet-700 hover:bg-violet-50 flex items-center gap-1.5">
+            <FlaskConical size={14} /> A/B
           </button>
           <button onClick={publish} disabled={publishing} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 flex items-center gap-1.5 disabled:opacity-50">
             {publishing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Publicar
@@ -613,7 +824,7 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
         {/* Canvas */}
         <div className="flex-1 min-w-0" style={{ background: CANVAS_BG }}>
           <ReactFlow
-            nodes={nodes}
+            nodes={displayNodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
@@ -688,14 +899,24 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
           {selectedEdge && selectedEdgeSourceType !== 'wait' && (
             <div>
               <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-2">Conexão</p>
-              <label className="block text-xs text-gray-600 mb-1">Seguir por aqui quando a mensagem contiver:</label>
-              <input
-                value={selectedEdge.data?.when?.value || ''}
-                onChange={(e) => setEdgeCondition(e.target.value)}
-                placeholder="ex: sim"
-                className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-primary-400"
-              />
-              <p className="text-[10px] text-gray-400 mt-1.5">Vazio = conexão padrão (sem condição).</p>
+              {/* Else checkbox */}
+              <label className="flex items-center gap-1.5 text-xs text-gray-600 mb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedEdge.data?.when?.match === 'else'}
+                  onChange={(e) => setEdgeAsElse(e.target.checked)}
+                  className="rounded"
+                />
+                Aresta padrão (else)
+              </label>
+              {selectedEdge.data?.when?.match !== 'else' && (() => {
+                const legacyWhen = selectedEdge.data?.when as { match: string; value?: string } | undefined;
+                const currentPreds: Predicate[] = (selectedEdge.data?.predicates as Predicate[] | undefined)
+                  ?? (legacyWhen && legacyWhen.match !== 'else' && legacyWhen.match !== 'timeout'
+                       ? [{ kind: 'keyword', match: legacyWhen.match as Extract<Predicate, { kind: 'keyword' }>['match'], value: legacyWhen.value ?? '' }]
+                       : []);
+                return <PredicateBuilder predicates={currentPreds} onChange={setEdgePredicates} />;
+              })()}
             </div>
           )}
         </div>
@@ -729,6 +950,231 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
 
       {/* Popup didático do nó (#289) */}
       {docType && <NodeDocModal type={docType} onClose={() => setDocType(null)} />}
+
+      {/* S3 — Relatório de simulação com personas sintéticas */}
+      {simReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSimReport(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-5 border-b border-gray-100 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
+                <Users size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-gray-900">Simulação com clientes sintéticos</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {simReport.passed}/{simReport.total} personas atendidas bem
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* passRate badge */}
+                {typeof simReport.passRate === 'number' && (
+                  <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+                    simReport.passRate >= 70
+                      ? 'bg-green-100 text-green-700'
+                      : simReport.passRate >= 40
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-red-100 text-red-700'
+                  }`}>
+                    {Math.round(simReport.passRate)}%
+                  </span>
+                )}
+                <button onClick={() => setSimReport(null)} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4">
+              {/* byPersona list */}
+              {Array.isArray(simReport.byPersona) && simReport.byPersona.length > 0 && (
+                <ul className="space-y-2">
+                  {simReport.byPersona.map((p: any, i: number) => (
+                    <li key={i} className="rounded-xl border border-gray-100 p-3 flex items-start gap-3">
+                      <span className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${p.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                        {p.passed ? '✓' : '✗'}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-gray-900 leading-tight">
+                          {p.persona?.name || 'Persona'}
+                          {p.persona?.intent && (
+                            <span className="ml-1.5 font-normal text-gray-400">{p.persona.intent}</span>
+                          )}
+                        </p>
+                        {p.reason && <p className="text-xs text-gray-600 mt-0.5 leading-snug">{p.reason}</p>}
+                        {typeof p.turns === 'number' && (
+                          <p className="text-[10px] text-gray-400 mt-1">{p.turns} {p.turns === 1 ? 'turno' : 'turnos'}</p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Recommendations */}
+              {Array.isArray(simReport.recommendations) && simReport.recommendations.length > 0 && (
+                <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-4">
+                  <p className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide mb-2">Sugestões</p>
+                  <ul className="space-y-1">
+                    {simReport.recommendations.map((r: string, i: number) => (
+                      <li key={i} className="text-xs text-amber-800 flex items-start gap-1.5">
+                        <span className="shrink-0 mt-0.5">•</span>
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Disclaimer */}
+              <p className="text-[10px] text-gray-400 leading-snug border-t border-gray-100 pt-3">
+                Simulação aproximada (clientes gerados por IA) — use como sinal, não como garantia.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pacote 3.10 — Experimento A/B */}
+      {abOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!abSaving) setAbOpen(false); }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-5 border-b border-gray-100 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center text-violet-600 shrink-0"><FlaskConical size={18} /></div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-gray-900">Experimento A/B</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Divida o tráfego entre este fluxo (A) e um fluxo variante (B) para comparar conversões.</p>
+              </div>
+              <button onClick={() => { if (!abSaving) setAbOpen(false); }} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4">
+              {abLoading ? (
+                <div className="flex items-center gap-2 text-gray-500 py-6 justify-center"><Loader2 size={18} className="animate-spin" /> Carregando…</div>
+              ) : (
+                <>
+                  {/* Toggle ativo */}
+                  <label className="flex items-center gap-3 cursor-pointer rounded-xl border border-gray-200 p-3 hover:border-gray-300">
+                    <div
+                      onClick={() => setAbExperiment((p) => ({ ...p, active: !p.active }))}
+                      className={`relative w-9 h-5 rounded-full transition-colors shrink-0 cursor-pointer ${abExperiment.active ? 'bg-violet-600' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${abExperiment.active ? 'translate-x-4' : ''}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Ativar teste A/B</p>
+                      <p className="text-xs text-gray-500">Quando ativo, o tráfego é dividido entre este fluxo e a variante B.</p>
+                    </div>
+                  </label>
+
+                  {/* Fluxo variante B */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Fluxo variante (B)</label>
+                    <select
+                      value={abExperiment.variantFlowId}
+                      onChange={(e) => setAbExperiment((p) => ({ ...p, variantFlowId: e.target.value }))}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-violet-400"
+                    >
+                      <option value="">— escolher fluxo variante —</option>
+                      {allFlows.filter((f) => f.id !== flow.id && f.isActive).map((f) => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">Apenas fluxos ativos da sua organização (exceto este).</p>
+                  </div>
+
+                  {/* % tráfego para B */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      % do tráfego para B — <span className="text-violet-600 font-bold">{abExperiment.splitPercent}%</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={abExperiment.splitPercent}
+                      onChange={(e) => setAbExperiment((p) => ({ ...p, splitPercent: Number(e.target.value) }))}
+                      className="w-full accent-violet-600"
+                    />
+                    <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+                      <span>A: {100 - abExperiment.splitPercent}%</span>
+                      <span>B: {abExperiment.splitPercent}%</span>
+                    </div>
+                  </div>
+
+                  {/* Nó de conversão */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Nó de conversão (opcional)</label>
+                    <select
+                      value={abExperiment.conversionNodeId || ''}
+                      onChange={(e) => setAbExperiment((p) => ({ ...p, conversionNodeId: e.target.value || undefined }))}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-violet-400"
+                    >
+                      <option value="">Conclusão do fluxo (padrão)</option>
+                      {nodes.filter((n) => n.type !== 'start').map((n) => (
+                        <option key={n.id} value={n.id}>{n.data?.label || n.type} ({n.id})</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">O nó atingido conta como conversão. Vazio = fim do fluxo.</p>
+                  </div>
+
+                  {/* Resultados */}
+                  {abResults && (
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Resultados (últimos 14 dias)</p>
+                      {abResults.note && !abResults.variants?.length && (
+                        <p className="text-sm text-gray-500">{abResults.note}</p>
+                      )}
+                      {abResults.variants && abResults.variants.length > 0 && (
+                        <>
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            {abResults.variants.map((v) => {
+                              const isWinner = abResults.winner === v.variant;
+                              return (
+                                <div
+                                  key={v.variant}
+                                  className={`rounded-lg border p-3 ${isWinner ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'}`}
+                                >
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className={`text-xs font-bold ${isWinner ? 'text-green-700' : 'text-gray-600'}`}>
+                                      Variante {v.variant}
+                                    </span>
+                                    {isWinner && <span className="text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">Vencedor</span>}
+                                  </div>
+                                  <p className={`text-2xl font-bold ${isWinner ? 'text-green-700' : 'text-gray-800'}`}>
+                                    {(v.conversionRate * 100).toFixed(1)}%
+                                  </p>
+                                  <p className="text-[10px] text-gray-500 mt-0.5">
+                                    {v.conversions} conv. / {v.entries} entradas
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {abResults.note && (
+                            <p className="text-[11px] text-gray-500 border-t border-gray-100 pt-2">{abResults.note}</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            {!abLoading && (
+              <div className="p-5 border-t border-gray-100 flex justify-end gap-2">
+                <button onClick={() => { if (!abSaving) setAbOpen(false); }} disabled={abSaving} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
+                <button onClick={saveAbExperiment} disabled={abSaving} className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 flex items-center gap-2 disabled:opacity-50">
+                  {abSaving ? <Loader2 size={15} className="animate-spin" /> : <FlaskConical size={15} />} Salvar experimento
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Maestro v2 — Histórico de versões + restore */}
       {historyOpen && (
@@ -844,6 +1290,7 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
         <>
           <label className="block text-xs text-gray-600 mb-1">Texto enviado ao cliente</label>
           <AutoGrowTextarea value={data?.text || ''} onChange={(v) => onChange({ text: v })} className={inputCls} />
+          <MessageRichFields data={data ?? {}} onChange={onChange} />
         </>
       )}
 
@@ -859,6 +1306,10 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
           <p className="text-[10px] text-gray-400 mt-1">
             A Iza usa o modelo de IA automaticamente (otimizado pela ZappIQ) e reaproveita a identidade + conhecimento (RAG) que você treinou. Você não precisa escolher modelo.
           </p>
+          <AiToolsFields
+            tools={data?.tools as WebhookTool[] | undefined}
+            onChange={onChange}
+          />
         </>
       )}
 
@@ -882,6 +1333,10 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
         <p className="text-[11px] text-gray-500">Conecte este nó a vários destinos e clique em cada conexão para definir a palavra-chave que leva por ela.</p>
       )}
 
+      {type === 'ask' && (
+        <AskNodeFields data={data ?? {}} onChange={onChange} />
+      )}
+
       {type === 'transfer' && (
         <p className="text-[11px] text-gray-500">Transfere a conversa pro time, com todo o contexto. Sem campos.</p>
       )}
@@ -902,6 +1357,13 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
+          <div className="mt-2">
+            <label className="text-[10px] text-gray-500">Comportamento</label>
+            <select className={inputCls} value={(data?.mode as string) || 'goto'} onChange={(e) => onChange({ mode: e.target.value })}>
+              <option value="goto">Enviar para o fluxo (não volta)</option>
+              <option value="call">Chamar e voltar quando terminar</option>
+            </select>
+          </div>
           <p className="text-[10px] text-gray-400 mt-1.5">A conversa continua no fluxo escolhido, sem o cliente perceber a troca.</p>
         </>
       )}
@@ -1328,6 +1790,9 @@ export default function FlowsPage() {
   const [refreshTarget, setRefreshTarget] = useState<ApiFlow | null>(null);
   const [refreshPreview, setRefreshPreview] = useState<FlowRefresh | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Pacote 2.7 — auto-otimização por funil (reusa o mesmo preview/apply do refresh)
+  const [optimizing, setOptimizing] = useState(false);
+  const [refreshMode, setRefreshMode] = useState<'refresh' | 'optimize'>('refresh');
   // tutorial interativo (modal iframe)
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
@@ -1500,7 +1965,7 @@ export default function FlowsPage() {
 
   // Onda 3: pede ao Maestro a sugestão de atualização (preview, não persiste).
   async function requestRefresh(flow: ApiFlow) {
-    setRefreshTarget(flow); setRefreshPreview(null); setRefreshing(true); setError(null);
+    setRefreshTarget(flow); setRefreshPreview(null); setRefreshing(true); setRefreshMode('refresh'); setError(null);
     try {
       const res = await api.post<{ success: boolean; data: FlowRefresh }>(`/api/flows/${flow.id}/refresh-suggestion`, {});
       if (res?.data) setRefreshPreview(res.data);
@@ -1508,6 +1973,18 @@ export default function FlowsPage() {
       setError(e?.message || 'Não consegui gerar a sugestão agora.');
       setRefreshTarget(null);
     } finally { setRefreshing(false); }
+  }
+
+  // Pacote 2.7 — auto-otimização por funil (reusa preview/apply do refresh).
+  async function requestOptimize(flow: ApiFlow) {
+    setRefreshTarget(flow); setRefreshPreview(null); setOptimizing(true); setRefreshMode('optimize'); setError(null);
+    try {
+      const res = await api.post<{ success: boolean; data: FlowRefresh }>(`/api/flows/${flow.id}/optimize-suggestion`, {});
+      if (res?.data) setRefreshPreview(res.data);
+    } catch (e: any) {
+      setError(e?.message || 'Não consegui gerar a otimização agora.');
+      setRefreshTarget(null);
+    } finally { setOptimizing(false); }
   }
 
   // Onda 3: aplica a atualização (1 clique = autorização). Persiste via POST /refresh-apply
@@ -1807,6 +2284,14 @@ export default function FlowsPage() {
                   <Sparkles size={12} /> Atualizar com o Maestro
                 </button>
               )}
+              <button
+                onClick={() => requestOptimize(f)}
+                disabled={optimizing}
+                title="O Maestro analisa o funil e sugere melhorias de conversão"
+                className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+              >
+                {optimizing ? <Loader2 size={12} className="animate-spin" /> : <TrendingUp size={12} />} Otimizar
+              </button>
               {f.isActive && <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700">Ativo</span>}
               <button onClick={() => removeFlow(f.id)} className="p-1.5 text-gray-400 hover:text-red-500" title="Excluir"><Trash2 size={14} /></button>
             </div>
@@ -1814,21 +2299,32 @@ export default function FlowsPage() {
         ))}
       </div>
 
-      {/* Modal: preview da atualização inteligente (Onda 3) */}
+      {/* Modal: preview da atualização/otimização inteligente (Onda 3 + Pacote 2.7) */}
       {refreshTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!refreshing) { setRefreshTarget(null); setRefreshPreview(null); } }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!refreshing && !optimizing) { setRefreshTarget(null); setRefreshPreview(null); } }}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-100 flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shrink-0"><Sparkles size={18} /></div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-semibold text-gray-900">Atualizar &quot;{refreshTarget.name}&quot;</h3>
-                <p className="text-sm text-gray-600 mt-0.5">Seu treinamento mudou. O Maestro preparou uma atualização — você decide se aplica.</p>
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white shrink-0 ${refreshMode === 'optimize' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-indigo-500 to-blue-600'}`}>
+                {refreshMode === 'optimize' ? <TrendingUp size={18} /> : <Sparkles size={18} />}
               </div>
-              <button onClick={() => { if (!refreshing) { setRefreshTarget(null); setRefreshPreview(null); } }} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-gray-900">
+                  {refreshMode === 'optimize' ? 'Otimizar' : 'Atualizar'} &quot;{refreshTarget.name}&quot;
+                </h3>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  {refreshMode === 'optimize'
+                    ? 'O Maestro analisou o funil e preparou sugestões de otimização de conversão — você decide se aplica.'
+                    : 'Seu treinamento mudou. O Maestro preparou uma atualização — você decide se aplica.'}
+                </p>
+              </div>
+              <button onClick={() => { if (!refreshing && !optimizing) { setRefreshTarget(null); setRefreshPreview(null); } }} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
             </div>
             <div className="p-5 space-y-4">
               {!refreshPreview && (
-                <div className="flex items-center gap-2 text-gray-500 py-6 justify-center"><Loader2 size={18} className="animate-spin" /> O Maestro está revisando seu fluxo…</div>
+                <div className="flex items-center gap-2 text-gray-500 py-6 justify-center">
+                  <Loader2 size={18} className="animate-spin" />
+                  {refreshMode === 'optimize' ? 'O Maestro está analisando o funil…' : 'O Maestro está revisando seu fluxo…'}
+                </div>
               )}
               {refreshPreview && (
                 <>
@@ -1867,9 +2363,10 @@ export default function FlowsPage() {
               )}
             </div>
             <div className="p-5 border-t border-gray-100 flex justify-end gap-2">
-              <button onClick={() => { setRefreshTarget(null); setRefreshPreview(null); }} disabled={refreshing} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">Agora não</button>
-              <button onClick={applyRefresh} disabled={refreshing || !refreshPreview || refreshPreview.source === 'fallback'} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
-                {refreshing ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} Aplicar atualização
+              <button onClick={() => { setRefreshTarget(null); setRefreshPreview(null); }} disabled={refreshing || optimizing} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">Agora não</button>
+              <button onClick={applyRefresh} disabled={refreshing || optimizing || !refreshPreview || refreshPreview.source === 'fallback'} className={`px-4 py-2 text-white rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50 ${refreshMode === 'optimize' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                {(refreshing || optimizing) ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                {refreshMode === 'optimize' ? 'Aplicar otimização' : 'Aplicar atualização'}
               </button>
             </div>
           </div>

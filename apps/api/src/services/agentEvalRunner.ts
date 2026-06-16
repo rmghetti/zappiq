@@ -115,7 +115,7 @@ Critérios:
 Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
 {"passed": true|false, "confidence": 0-100, "reason": "explicação curta em pt-BR"}`;
 
-async function runJudge(
+export async function runJudge(
   expectedBehavior: string,
   agentResponse: string,
 ): Promise<{ passed: boolean; confidence: number; reason: string }> {
@@ -412,6 +412,30 @@ export function computeSummary(results: ScenarioResult[]): RunSummary {
     failed,
     criticalFailed,
     scorePercent: results.length > 0 ? Math.round((passed / results.length) * 100) : 0,
+  };
+}
+
+// ─── Re-verify verdict helper (Q1 — fecha o loop pós-fix) ────────
+
+/**
+ * Computa o veredicto de re-verificação comparando o resultado anterior
+ * (before) com o novo resultado (after) de um re-run pós-fix.
+ *
+ * Pure function — sem I/O, testável em isolamento.
+ *
+ * @param before - combined anterior (do results JSONB da run), ou null se
+ *                 não disponível (runs antigas).
+ * @param afterResult - combined retornado pelo executeAgentEvalRun após o fix.
+ * @returns { scenarioId, before, after, improved } — improved = after === 'pass'.
+ */
+export function computeReverifyVerdict(
+  before: 'pass' | 'partial' | 'fail' | null,
+  afterResult: 'pass' | 'partial' | 'fail',
+): { before: typeof before; after: typeof afterResult; improved: boolean } {
+  return {
+    before,
+    after: afterResult,
+    improved: afterResult === 'pass',
   };
 }
 

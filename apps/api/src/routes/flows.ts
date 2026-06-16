@@ -12,6 +12,10 @@ import { resolveFlowStep, type FlowGraph, type FlowState } from '../agents/flowE
 // + IA preenche conteúdo. Devolve um DRAFT (não persiste); o cliente edita e salva.
 import { generateFlowDraft, generateSmartFlows, regenerateFlowContent, generateJourney } from '../agents/flowGenerator.js';
 import { sameStructure } from './flowsRefreshValidation.js';
+import { aggregate } from '../services/flowAnalytics.js';
+import { computeAbResults, type Experiment } from '../agents/flowExperiment.js';
+import { generateOptimizationSuggestion } from '../agents/flowOptimizer.js';
+import { executeFlowSimulation } from '../agents/flowSimulation.js';
 
 const router = Router();
 
@@ -125,6 +129,86 @@ router.post('/', validate(createFlowSchema), async (req: Request, res: Response,
   } catch (err) { next(err); }
 });
 
+// GET /api/flows/:id/analytics — funil por nó (1B-analytics A5)
+// Retorna entradas/saídas por nó agrupadas sobre os últimos N dias (default 7, max 90).
+// Scope duplo por orgId: flow lookup + stats query (defesa em profundidade + RLS).
+router.get('/:id/analytics', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const days = Math.min(Math.max(parseInt(String(req.query.days ?? '7'), 10) || 7, 1), 90);
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const rows = await prisma.flowNodeStat.findMany({
+      where: { flowId: flow.id, organizationId: orgId, period: { gte: since } },
+      select: { nodeId: true, nodeType: true, nodeLabel: true, entries: true, ends: true },
+    });
+    const data = aggregate(rows);
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/flows/:id/experiment — salva config do experimento em org.settings.experiments[flowId]
+// (Pacote 3.10 — Task AB3)
+router.put('/:id/experiment', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flowId = req.params.id;
+    const flow = await prisma.flow.findFirst({ where: { id: flowId, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const { active, variantFlowId, splitPercent, conversionNodeId } = req.body ?? {};
+    // validações
+    if (active) {
+      if (!variantFlowId || variantFlowId === flowId) { res.status(400).json({ error: 'variantFlowId inválido (precisa ser outro fluxo)' }); return; }
+      const variant = await prisma.flow.findFirst({ where: { id: String(variantFlowId), organizationId: orgId } });
+      if (!variant) { res.status(400).json({ error: 'Fluxo variante (B) não encontrado nesta organização' }); return; }
+    }
+    const exp: Experiment = {
+      active: !!active,
+      variantFlowId: String(variantFlowId || ''),
+      splitPercent: Math.max(0, Math.min(100, parseInt(String(splitPercent ?? 50), 10) || 0)),
+      ...(conversionNodeId ? { conversionNodeId: String(conversionNodeId) } : {}),
+    };
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const settings = ((org?.settings as any) || {});
+    const experiments = { ...(settings.experiments || {}), [flowId]: exp };
+    await prisma.organization.update({ where: { id: orgId }, data: { settings: { ...settings, experiments } as any } });
+    res.json({ success: true, data: exp });
+  } catch (err) { next(err); }
+});
+
+// GET /api/flows/:id/experiment — config + resultados A/B
+// (Pacote 3.10 — Task AB3)
+router.get('/:id/experiment', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flowId = req.params.id;
+    const flow = await prisma.flow.findFirst({ where: { id: flowId, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const exp = ((org?.settings as any)?.experiments?.[flowId]) as Experiment | undefined;
+    if (!exp || !exp.variantFlowId) { res.json({ success: true, data: { experiment: exp ?? null, results: null } }); return; }
+    const days = Math.min(Math.max(parseInt(String(req.query.days ?? '14'), 10) || 14, 1), 90);
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const sel = { nodeId: true, nodeType: true, nodeLabel: true, entries: true, ends: true } as const;
+    const [aRows, bRows] = await Promise.all([
+      prisma.flowNodeStat.findMany({ where: { flowId, organizationId: orgId, period: { gte: since } }, select: sel }),
+      prisma.flowNodeStat.findMany({ where: { flowId: exp.variantFlowId, organizationId: orgId, period: { gte: since } }, select: sel }),
+    ]);
+    // entryNodeId = o nó 'start' do fluxo A (ou o de maior entries se start não rastreado)
+    const aNodes = Array.isArray(flow.nodes) ? (flow.nodes as any[]) : [];
+    const startNode = aNodes.find((n) => n?.type === 'start');
+    const entryNodeId = startNode?.id || '';
+    const results = computeAbResults({
+      aStats: aggregate(aRows).byNode,
+      bStats: aggregate(bRows).byNode,
+      conversionNodeId: exp.conversionNodeId,
+      entryNodeId,
+    });
+    res.json({ success: true, data: { experiment: exp, results } });
+  } catch (err) { next(err); }
+});
+
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: req.organizationId! } });
@@ -164,6 +248,53 @@ router.post('/:id/refresh-suggestion', async (req: Request, res: Response, next:
       flow: { name: flow.name, nodes: (flow.nodes as any) || [], edges: (flow.edges as any) || [] },
     });
     res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+});
+
+// POST /api/flows/:id/optimize-suggestion — MAESTRO AUTO-OTIMIZADOR (Pacote 2.7)
+// Identifica o nó com maior abandono nos últimos N dias (default 7, max 90) e
+// devolve uma reescrita sugerida com shape idêntico ao refresh-suggestion.
+// NÃO persiste — o cliente aplica via refresh-apply (1 clique = autorização).
+router.post('/:id/optimize-suggestion', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const days = Math.min(Math.max(parseInt(String(req.query.days ?? '7'), 10) || 7, 1), 90);
+    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const rows = await prisma.flowNodeStat.findMany({
+      where: { flowId: flow.id, organizationId: orgId, period: { gte: since } },
+      select: { nodeId: true, nodeType: true, nodeLabel: true, entries: true, ends: true },
+    });
+    const { byNode } = aggregate(rows);
+    const result = await generateOptimizationSuggestion({
+      organizationId: orgId,
+      flow: { name: flow.name, nodes: (flow.nodes as any) || [], edges: (flow.edges as any) || [] },
+      byNode,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+});
+
+// POST /api/flows/:id/simulate — MAESTRO SIMULADOR (Pacote 2.8)
+// Gera personas sintéticas com base no contexto do negócio e simula cada uma
+// pelo fluxo (real motor). Aceita { nodes?, edges?, personaCount? } no body
+// (usa o draft em edição se enviado, senão o grafo salvo). NÃO persiste.
+router.post('/:id/simulate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    // usa o grafo do body (draft em edição) se enviado, senão o salvo
+    const nodes = Array.isArray(req.body?.nodes) ? req.body.nodes : ((flow.nodes as any) || []);
+    const edges = Array.isArray(req.body?.edges) ? req.body.edges : ((flow.edges as any) || []);
+    const personaCount = Math.min(Math.max(parseInt(String(req.body?.personaCount ?? 3), 10) || 3, 1), 8);
+    const report = await executeFlowSimulation({
+      organizationId: orgId,
+      flow: { name: flow.name, nodes, edges },
+      personaCount,
+    });
+    res.json({ success: true, data: report });
   } catch (err) { next(err); }
 });
 

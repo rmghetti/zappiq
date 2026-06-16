@@ -115,6 +115,34 @@ export async function sendAudio(to: string, mediaId: string, creds?: WaCreds) {
   return data;
 }
 
+export async function sendImage(to: string, link: string, caption?: string, creds?: WaCreds) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'image',
+    image: { link, ...(caption ? { caption } : {}) },
+  };
+
+  const { data } = await clientFor(creds).post(`/${phoneIdFor(creds)}/messages`, payload);
+  logger.info(`[WA] Image sent to ${to}`, { messageId: data.messages?.[0]?.id });
+  return data;
+}
+
+export async function sendDocument(to: string, link: string, caption?: string, filename?: string, creds?: WaCreds) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'document',
+    document: { link, ...(caption ? { caption } : {}), ...(filename ? { filename } : {}) },
+  };
+
+  const { data } = await clientFor(creds).post(`/${phoneIdFor(creds)}/messages`, payload);
+  logger.info(`[WA] Document sent to ${to}`, { messageId: data.messages?.[0]?.id });
+  return data;
+}
+
 export async function sendTemplate(to: string, templateName: string, languageCode: string, components: any[] = [], creds?: WaCreds) {
   const payload = {
     messaging_product: 'whatsapp',
@@ -157,7 +185,7 @@ export async function sendButtons(to: string, headerText: string | null, bodyTex
 
 export async function sendList(
   to: string,
-  headerText: string,
+  headerText: string | null,
   bodyText: string,
   footerText: string | null,
   buttonLabel: string,
@@ -171,13 +199,13 @@ export async function sendList(
     type: 'interactive',
     interactive: {
       type: 'list',
-      header: { type: 'text', text: headerText },
+      ...(headerText && headerText.trim() ? { header: { type: 'text', text: headerText } } : {}),
       body: { text: bodyText },
       ...(footerText ? { footer: { text: footerText } } : {}),
       action: {
         button: buttonLabel || 'Ver opções',
         sections: sections.map((sec) => ({
-          title: sec.title,
+          ...(sec.title && sec.title.trim() ? { title: sec.title } : {}),
           rows: sec.rows.slice(0, 10).map((r) => ({
             id: r.id,
             title: r.title.slice(0, 24),
@@ -250,6 +278,8 @@ export interface ParsedWebhookEvent {
   recipient?: string;
   buttonTitle?: string;
   listTitle?: string;
+  buttonId?: string;
+  listId?: string;
   mediaId?: string;
 }
 
@@ -281,12 +311,18 @@ export function parseWebhookEvent(body: any): ParsedWebhookEvent | null {
       phoneNumberId: value.metadata?.phone_number_id,
       from: message.from,
       senderName: contactInfo?.profile?.name || message.from,
-      text: message.text?.body || message.caption || '',
+      text: message.text?.body
+        || message.caption
+        || message.interactive?.button_reply?.title
+        || message.interactive?.list_reply?.title
+        || '',
       msgType: message.type,
       messageId: message.id,
       timestamp: message.timestamp,
       buttonTitle: message.interactive?.button_reply?.title,
       listTitle: message.interactive?.list_reply?.title,
+      buttonId: message.interactive?.button_reply?.id,
+      listId: message.interactive?.list_reply?.id,
       mediaId: message.image?.id || message.audio?.id || message.document?.id || message.video?.id,
     };
   } catch {

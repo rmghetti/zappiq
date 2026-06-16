@@ -28,6 +28,7 @@
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { cache } from '../services/cloud/index.js';
+import { recordNodeStats } from '../services/flowAnalytics.js';
 import {
   resolveFlowStep,
   type FlowGraph,
@@ -37,7 +38,10 @@ import {
   type FlowStepResult,
 } from './flowEngine.js';
 import { pickFlowForMessage, type RoutableFlow } from './flowRouter.js';
+import { assignVariant, type Experiment } from './flowExperiment.js';
 import { scheduleFlowTimer, cancelPendingWaitTimers } from '../services/flowScheduler.js';
+import { buildEvalContext } from './evalContextBuilder.js';
+import { nextHopIntent } from './flowHop.js';
 
 export type {
   FlowGraph, FlowNode, FlowEdge, FlowState, FlowStepResult, FlowEffect,
@@ -55,10 +59,15 @@ function flowStateKey(orgId: string, conversationId: string): string {
 /** Marcador de "fluxo já concluído nesta conversa" — evita re-disparo. */
 const FLOW_ENDED = '__ended__';
 
-/** Estado persistido no cache: FlowState + fluxo dono do cursor (v2). */
+/** Frame de retorno para subfluxos (call/return). */
+type CallFrame = { flowId: string; returnNodeId: string | null };
+
+/** Estado persistido no cache: FlowState + fluxo dono do cursor (v2) + pilha de subfluxos (1C). */
 interface StoredFlowState extends FlowState {
   /** Fluxo dono do cursor. Ausente em entradas legadas pré-v2. */
   flowId?: string;
+  /** Pilha de retorno de subfluxos (mode:'call'). Ausente em entradas legadas. */
+  callStack?: CallFrame[];
 }
 
 export interface ActiveFlowStepInput {
@@ -66,6 +75,8 @@ export interface ActiveFlowStepInput {
   conversationId: string;
   messageContent: string;
   orgSettings: any;
+  /** Contato da conversa, p/ montar o EvalContext (atributos/CRM). Opcional. */
+  contactId?: string | null;
 }
 
 /**
@@ -106,6 +117,8 @@ export async function resolveActiveFlowStep(
     }
     const ended = state.cursor === FLOW_ENDED;
     const midFlow = !!state.cursor && !ended;
+    // Pilha de retorno de subfluxos — restaurada do cache para suporte a subfluxos multi-turno.
+    let callStack: CallFrame[] = Array.isArray(state.callStack) ? state.callStack : [];
 
     // ── Seleção do fluxo ─────────────────────────────────────────────────
     let flow: (typeof flows)[number] | undefined;
@@ -143,7 +156,25 @@ export async function resolveActiveFlowStep(
       // Conversa ENDED re-disparando (keyword): rodada limpa, vars zeradas.
       // Conversa nova: preserva vars existentes (se houver) por segurança.
       state = ended ? { cursor: null, vars: {} } : { cursor: null, vars: state.vars ?? {} };
+
+      // ── A/B traffic split (Pacote 3.10) — só no primeiro contato, gated + fail-soft ──
+      try {
+        const exp = orgSettings?.experiments?.[flow.id] as Experiment | undefined;
+        if (exp && exp.active && exp.variantFlowId && exp.variantFlowId !== flow.id) {
+          const variant = assignVariant(exp, conversationId);
+          if (variant === 'B') {
+            const bFlow = flows.find((f) => f.id === exp.variantFlowId && f.isActive);
+            if (bFlow) {
+              flow = bFlow; // a atribuição persiste via flowId no cache (turnos seguintes ficam em B)
+              logger.info('[Maestro] A/B: conversa atribuída à variante B', { organizationId, conversationId, expFlow: exp.variantFlowId });
+            }
+          }
+        }
+      } catch (e) { logger.warn('[Maestro] A/B assign falhou — segue na variante A', { organizationId, err: String(e) }); }
     }
+
+    // ── Monta EvalContext (atributos do contato + horário comercial) ─────
+    const ctx = await buildEvalContext({ contactId: input.contactId, orgSettings });
 
     // ── Walk com handoff goto_flow (anti-loop) ───────────────────────────
     // A mensagem do turno alimenta SÓ o primeiro resolve (consumedMessage):
@@ -155,6 +186,7 @@ export async function resolveActiveFlowStep(
     let result: FlowStepResult | null = null;
     const aggregated: FlowStepResult['effects'] = [];
     let consumedMessage = false;
+    const hopRecords: { flowId: string; nodes: any[]; visitedNodeIds: string[] }[] = [];
 
     for (let hop = 0; hop <= MAX_FLOW_HOPS; hop++) {
       const graph: FlowGraph = {
@@ -163,32 +195,61 @@ export async function resolveActiveFlowStep(
       };
       if (graph.nodes.length === 0) return null;
 
-      result = resolveFlowStep(graph, currentState, messageContent, { hasIncomingMessage: !consumedMessage });
+      result = resolveFlowStep(graph, currentState, messageContent, { hasIncomingMessage: !consumedMessage, ctx });
       consumedMessage = true;
 
+      hopRecords.push({
+        flowId: currentFlow.id,
+        nodes: Array.isArray(currentFlow.nodes) ? (currentFlow.nodes as any[]) : [],
+        visitedNodeIds: result.visitedNodeIds ?? [],
+      });
+
       const gotoEff = result.effects.find((e) => e.kind === 'goto_flow') as
-        | { kind: 'goto_flow'; targetFlowId: string }
+        | { kind: 'goto_flow'; targetFlowId: string; mode?: 'goto' | 'call'; returnNodeId?: string | null }
         | undefined;
       aggregated.push(...result.effects.filter((e) => e.kind !== 'goto_flow'));
-      if (!gotoEff) break;
 
-      const target = flows.find((f) => f.id === gotoEff.targetFlowId && f.isActive);
-      if (!target) {
-        // Alvo inexistente/inativo: segue com o resultado atual (cursor null
-        // do goto → persistência abaixo grava ENDED corretamente).
-        logger.warn('[Maestro] goto_flow para fluxo inexistente/inativo — seguindo no atual', {
-          organizationId, from: currentFlow.id, target: gotoEff.targetFlowId,
-        });
-        break;
-      }
+      const intent = nextHopIntent(gotoEff, result.next, callStack.length > 0);
+      if (intent === 'stop') break;
       if (hop === MAX_FLOW_HOPS) {
-        logger.warn('[Maestro] limite de handoffs atingido — encerrando walk', {
-          organizationId, conversationId,
-        });
+        logger.warn('[Maestro] limite de hops atingido — encerrando walk', { organizationId, conversationId });
         break;
       }
-      currentFlow = target;
-      currentState = { cursor: null, vars: result.state?.vars ?? {} };
+
+      if (intent === 'call' || intent === 'switch') {
+        const target = flows.find((f) => f.id === gotoEff!.targetFlowId && f.isActive);
+        if (!target) {
+          // Alvo inexistente/inativo: segue com o resultado atual (cursor null
+          // do goto → persistência abaixo grava ENDED corretamente).
+          logger.warn('[Maestro] goto_flow para fluxo inexistente/inativo — seguindo no atual', {
+            organizationId, from: currentFlow.id, target: gotoEff!.targetFlowId,
+          });
+          break;
+        }
+        if (intent === 'call') callStack.push({ flowId: currentFlow.id, returnNodeId: gotoEff!.returnNodeId ?? null });
+        currentFlow = target;
+        currentState = { cursor: null, vars: result.state?.vars ?? {} };
+        continue;
+      }
+
+      // intent === 'return': desempilha. Frames com returnNodeId null = chamador
+      // sem nó após o goto_flow → ele também encerra → sobe para o chamador dele.
+      let frame = callStack.pop()!;
+      while (frame.returnNodeId === null && callStack.length > 0) {
+        frame = callStack.pop()!;
+      }
+      if (frame.returnNodeId === null) {
+        // pilha esgotou sem ponto de retorno → a conversa encerra
+        break;
+      }
+      const caller = flows.find((f) => f.id === frame.flowId && f.isActive);
+      if (!caller) {
+        logger.warn('[Maestro] subfluxo: chamador inexistente/inativo — encerrando', { organizationId, callerId: frame.flowId });
+        break;
+      }
+      currentFlow = caller;
+      currentState = { cursor: frame.returnNodeId, vars: result.state?.vars ?? {} };
+      continue;
     }
     if (!result) return null;
     result = { ...result, effects: aggregated };
@@ -201,21 +262,37 @@ export async function resolveActiveFlowStep(
         flowId: currentFlow.id,
         flowVersion: currentFlow.version,
         schedule: result.schedule,
-        state: result.state,
+        state: { ...result.state, callStack },
       });
     }
 
     // ── Persistência do cursor ───────────────────────────────────────────
-    // cursor null cobre: fim do fluxo, nó-IA final e wait de saída única →
-    // ENDED (o timer retoma a partir do snapshot do FlowTimer, não do cache).
-    // Cursor presente → salva COM flowId pro próximo turno continuar no
-    // fluxo certo.
+    // cursor null cobre: fim do fluxo, nó-IA final e wait de saída única.
+    // Só marca ENDED quando cursor null E a pilha de subfluxos está vazia
+    // (subfluxos em curso com callStack não-vazio ainda têm retorno pendente).
+    // Cursor presente → salva COM flowId e callStack pro próximo turno.
     const nextCursor = result.state?.cursor ?? null;
-    if (nextCursor !== null) {
-      await cache.set(stateKey, JSON.stringify({ ...result.state, flowId: currentFlow.id }), FLOW_STATE_TTL);
+    const endedReal = nextCursor === null && callStack.length === 0;
+    if (!endedReal) {
+      await cache.set(stateKey, JSON.stringify({ ...result.state, flowId: currentFlow.id, callStack }), FLOW_STATE_TTL);
     } else {
-      await cache.set(stateKey, JSON.stringify({ cursor: FLOW_ENDED, vars: result.state?.vars || {} }), FLOW_STATE_TTL);
+      await cache.set(stateKey, JSON.stringify({ cursor: FLOW_ENDED, vars: result.state?.vars || {}, callStack: [] }), FLOW_STATE_TTL);
     }
+
+    // Analytics por nó (fail-soft, aditivo) — registra todos os fluxos da cadeia de hops
+    try {
+      for (let i = 0; i < hopRecords.length; i++) {
+        const rec = hopRecords[i];
+        const isLast = i === hopRecords.length - 1;
+        await recordNodeStats({
+          organizationId,
+          flowId: rec.flowId,
+          graph: { nodes: rec.nodes },
+          visitedNodeIds: rec.visitedNodeIds,
+          ended: isLast && result.next === 'end',
+        });
+      }
+    } catch { /* fail-soft */ }
 
     logger.info('[Maestro] Flow step resolvido', {
       organizationId,

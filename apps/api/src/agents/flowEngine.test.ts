@@ -10,7 +10,7 @@
  *   ✓ grafo cíclico não trava (MAX_WALK encerra)
  * ══════════════════════════════════════════════════════════════════════ */
 import { describe, it, expect } from 'vitest';
-import { resolveFlowStep, type FlowGraph, type FlowState } from './flowEngine.js';
+import { resolveFlowStep, DEFAULT_CTX, type FlowGraph, type FlowState } from './flowEngine.js';
 
 const EMPTY_STATE: FlowState = { cursor: null, vars: {} };
 
@@ -263,5 +263,269 @@ describe('flowEngine goto_flow (Maestro v2)', () => {
     };
     const r = resolveFlowStep(graph, EMPTY_STATE, 'oi');
     expect(r.effects).toEqual([{ kind: 'send_text', text: 'seguindo aqui mesmo' }]);
+  });
+
+  it('condition ramifica por atributo do contato (predicates em E)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'c', type: 'condition' },
+        { id: 'vip', type: 'message', data: { text: 'Atendimento VIP' } },
+        { id: 'comum', type: 'message', data: { text: 'Atendimento padrão' } },
+      ],
+      edges: [
+        { source: 's', target: 'c' },
+        { source: 'c', target: 'vip', data: { predicates: [{ kind: 'contact_attr', field: 'tags', op: 'contains', value: 'vip' }] } },
+        { source: 'c', target: 'comum', data: { when: { match: 'else' } } },
+      ],
+    };
+    const ctx = {
+      contact: { name: null, tags: ['vip'], leadStatus: null, leadScore: 0, funnelStage: null, customFields: {} },
+      now: null, businessHours: null,
+    };
+    const r = resolveFlowStep(graph, { cursor: 'c', vars: {} }, 'qualquer', { ctx });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Atendimento VIP' }]);
+  });
+
+  it('message interpola {{vars}} e {{contact.name}}', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'm', type: 'message', data: { text: 'Oi {{contact.name}}, plano {{vars.plano}}' } },
+      ],
+      edges: [{ source: 's', target: 'm' }],
+    };
+    const ctx = {
+      contact: { name: 'Ana', tags: [], leadStatus: null, leadScore: 0, funnelStage: null, customFields: {} },
+      now: null, businessHours: null,
+    };
+    const r = resolveFlowStep(graph, { cursor: null, vars: { plano: 'pro' } }, 'oi', { ctx });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Oi Ana, plano pro' }]);
+  });
+
+  it('condition: aresta com predicates vazio não vence o else explícito', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'c', type: 'condition' },
+        { id: 'bare', type: 'message', data: { text: 'ramo vazio' } },
+        { id: 'real', type: 'message', data: { text: 'ramo VIP' } },
+        { id: 'fim', type: 'message', data: { text: 'else' } },
+      ],
+      edges: [
+        // aresta de predicates vazio aparece ANTES da real e do else
+        { source: 'c', target: 'bare', data: { predicates: [] } },
+        { source: 'c', target: 'real', data: { predicates: [{ kind: 'contact_attr', field: 'tags', op: 'contains', value: 'vip' }] } },
+        { source: 'c', target: 'fim', data: { when: { match: 'else' } } },
+      ],
+    };
+    const ctx = {
+      contact: { name: null, tags: ['vip'], leadStatus: null, leadScore: 0, funnelStage: null, customFields: {} },
+      now: null, businessHours: null,
+    };
+    // contato é VIP → deve seguir a aresta 'real', não a de predicates vazio
+    const r = resolveFlowStep(graph, { cursor: 'c', vars: {} }, 'x', { ctx });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'ramo VIP' }]);
+  });
+
+  it('ask: primeira passada pergunta (interpolada) e aguarda input', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'q', type: 'ask', data: { question: 'Qual seu nome, {{vars.saud}}?', varName: 'nome' } },
+        { id: 'fim', type: 'message', data: { text: 'Obrigado {{vars.nome}}' } },
+      ],
+      edges: [{ source: 's', target: 'q' }, { source: 'q', target: 'fim' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: null, vars: { saud: 'cliente' } }, '', { ctx: DEFAULT_CTX, hasIncomingMessage: false });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Qual seu nome, cliente?' }]);
+    expect(r.next).toBe('await_input');
+    expect(r.state.cursor).toBe('q');
+  });
+
+  it('ask: resposta válida grava var, emite update_lead (crmField) e avança', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'q', type: 'ask', data: { question: 'Seu nome?', varName: 'nome', crmField: 'name' } },
+        { id: 'fim', type: 'message', data: { text: 'Oi {{vars.nome}}' } },
+      ],
+      edges: [{ source: 's', target: 'q' }, { source: 'q', target: 'fim' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: {} }, 'Ana', { ctx: DEFAULT_CTX });
+    expect(r.state.vars.nome).toBe('Ana');
+    expect(r.effects).toEqual([
+      { kind: 'update_lead', field: 'name', value: 'Ana' },
+      { kind: 'send_text', text: 'Oi Ana' },
+    ]);
+    expect(r.next).toBe('end');
+  });
+
+  it('ask: resposta inválida re-pergunta e decrementa retries', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'q', type: 'ask', data: { question: 'Seu email?', varName: 'email',
+          validation: { type: 'email', errorMessage: 'Email inválido, tente de novo', maxRetries: 2 } } },
+        { id: 'fim', type: 'message', data: { text: 'ok' } },
+      ],
+      edges: [{ source: 'q', target: 'fim' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: {} }, 'não é email', { ctx: DEFAULT_CTX });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Email inválido, tente de novo' }]);
+    expect(r.next).toBe('await_input');
+    expect(r.state.cursor).toBe('q');
+    expect(r.state.vars._askRetries).toBe(1);
+  });
+
+  it('ask: retries esgotados caem no ramo else', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'q', type: 'ask', data: { question: 'Email?', varName: 'email',
+          validation: { type: 'email', errorMessage: 'inválido', maxRetries: 1 } } },
+        { id: 'ok', type: 'message', data: { text: 'capturado' } },
+        { id: 'desiste', type: 'message', data: { text: 'tudo bem, sem email' } },
+      ],
+      edges: [
+        { source: 'q', target: 'ok' },
+        { source: 'q', target: 'desiste', data: { when: { match: 'else' } } },
+      ],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: { _askRetries: 0 } }, 'xxx', { ctx: DEFAULT_CTX });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'tudo bem, sem email' }]);
+    expect(r.state.vars._askRetries).toBeUndefined();
+  });
+
+  it('ask: exaustão sem else explícito encerra o fluxo (não segue caminho feliz com var vazia)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'q', type: 'ask', data: { question: 'Email?', varName: 'email',
+          validation: { type: 'email', errorMessage: 'inválido', maxRetries: 1 } } },
+        { id: 'fim', type: 'message', data: { text: 'Obrigado {{vars.email}}' } },
+      ],
+      edges: [
+        // só a aresta do caminho feliz (bare), SEM else
+        { source: 'q', target: 'fim' },
+      ],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: { _askRetries: 0 } }, 'xxx', { ctx: DEFAULT_CTX });
+    expect(r.next).toBe('end');
+    expect(r.effects).toEqual([]); // não envia o "Obrigado" do caminho feliz
+    expect(r.state.vars.email).toBeUndefined();
+    expect(r.state.vars._askRetries).toBeUndefined();
+  });
+
+  it('ask: retomada por timer (sem mensagem) re-emite a pergunta e aguarda', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'q', type: 'ask', data: { question: 'Seu nome?', varName: 'nome' } },
+        { id: 'fim', type: 'message', data: { text: 'ok' } },
+      ],
+      edges: [{ source: 'q', target: 'fim' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: {} }, '', { ctx: DEFAULT_CTX, hasIncomingMessage: false });
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Seu nome?' }]);
+    expect(r.next).toBe('await_input');
+    expect(r.state.cursor).toBe('q');
+  });
+
+  it('message com botões emite send_interactive (titles interpolados)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'm', type: 'message', data: {
+          text: 'Escolha {{vars.nome}}:',
+          interactive: { type: 'button', options: [{ id: 'planos', title: 'Planos' }, { id: 'sup', title: 'Suporte' }] },
+        } },
+      ],
+      edges: [],
+    };
+    const r = resolveFlowStep(graph, { cursor: null, vars: { nome: 'Ana' } }, 'oi', { ctx: DEFAULT_CTX });
+    expect(r.effects).toEqual([{
+      kind: 'send_interactive', type: 'button', body: 'Escolha Ana:',
+      options: [{ id: 'planos', title: 'Planos' }, { id: 'sup', title: 'Suporte' }],
+    }]);
+  });
+
+  it('message com mídia emite send_media com caption interpolada', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'm', type: 'message', data: {
+          media: { type: 'image', url: 'https://x/y.png', caption: 'Catálogo {{vars.nome}}' },
+        } },
+      ],
+      edges: [],
+    };
+    const r = resolveFlowStep(graph, { cursor: null, vars: { nome: 'Ana' } }, 'oi', { ctx: DEFAULT_CTX });
+    expect(r.effects).toEqual([{ kind: 'send_media', mediaType: 'image', url: 'https://x/y.png', caption: 'Catálogo Ana' }]);
+  });
+
+  it('ask: resposta válida segue a aresta de sucesso mesmo com else ordenado antes', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'q', type: 'ask', data: { question: 'Seu nome?', varName: 'nome' } },
+        { id: 'desiste', type: 'message', data: { text: 'sem nome' } },
+        { id: 'ok', type: 'message', data: { text: 'Oi {{vars.nome}}' } },
+      ],
+      edges: [
+        // else aparece ANTES da aresta de sucesso na ordem do array
+        { source: 'q', target: 'desiste', data: { when: { match: 'else' } } },
+        { source: 'q', target: 'ok' },
+      ],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'q', vars: {} }, 'Ana', { ctx: DEFAULT_CTX });
+    expect(r.state.vars.nome).toBe('Ana');
+    expect(r.effects).toEqual([{ kind: 'send_text', text: 'Oi Ana' }]);
+    expect(r.next).toBe('end');
+  });
+
+  it('retorna visitedNodeIds na ordem do walk', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 's', type: 'start' },
+        { id: 'm', type: 'message', data: { text: 'oi' } },
+        { id: 'a', type: 'ai', data: { prompt: 'p' } },
+      ],
+      edges: [{ source: 's', target: 'm' }, { source: 'm', target: 'a' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: null, vars: {} }, 'oi', { ctx: DEFAULT_CTX });
+    expect(r.visitedNodeIds).toEqual(['s', 'm', 'a']);
+  });
+
+  it('condition: visitedNodeIds inclui o condition e o ramo seguido, não o outro', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'c', type: 'condition' },
+        { id: 'sim', type: 'message', data: { text: 'sim' } },
+        { id: 'nao', type: 'message', data: { text: 'nao' } },
+      ],
+      edges: [
+        { source: 'c', target: 'sim', data: { when: { match: 'contains', value: 'quero' } } },
+        { source: 'c', target: 'nao', data: { when: { match: 'else' } } },
+      ],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'c', vars: {} }, 'quero', { ctx: DEFAULT_CTX });
+    expect(r.visitedNodeIds).toContain('c');
+    expect(r.visitedNodeIds).toContain('sim');
+    expect(r.visitedNodeIds).not.toContain('nao');
+  });
+
+  it('goto_flow mode call emite efeito com mode e returnNodeId (nó seguinte do chamador)', () => {
+    const graph: FlowGraph = {
+      nodes: [
+        { id: 'g', type: 'goto_flow', data: { targetFlowId: 'SUB', mode: 'call' } },
+        { id: 'depois', type: 'message', data: { text: 'voltei' } },
+      ],
+      edges: [{ source: 'g', target: 'depois' }],
+    };
+    const r = resolveFlowStep(graph, { cursor: 'g', vars: {} }, '', { ctx: DEFAULT_CTX, hasIncomingMessage: false });
+    const eff = r.effects.find((e) => e.kind === 'goto_flow') as any;
+    expect(eff).toMatchObject({ kind: 'goto_flow', targetFlowId: 'SUB', mode: 'call', returnNodeId: 'depois' });
+    expect(r.next).toBe('end');
+  });
+
+  it('goto_flow sem mode = one-way (efeito sem mode/returnNodeId não-call)', () => {
+    const graph: FlowGraph = { nodes: [{ id: 'g', type: 'goto_flow', data: { targetFlowId: 'X' } }], edges: [] };
+    const r = resolveFlowStep(graph, { cursor: 'g', vars: {} }, '', { ctx: DEFAULT_CTX, hasIncomingMessage: false });
+    const eff = r.effects.find((e) => e.kind === 'goto_flow') as any;
+    expect(eff.targetFlowId).toBe('X');
+    expect(eff.mode === undefined || eff.mode === 'goto').toBe(true);
   });
 });

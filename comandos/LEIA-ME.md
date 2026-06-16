@@ -1,0 +1,37 @@
+# Comandos clicáveis — Maestro v3
+
+Clique 2x em cada `.command` (na ordem). Cada um pede confirmação antes de qualquer ação que altere/publique algo.
+
+| Ordem | Arquivo | O que faz | Altera algo? |
+|---|---|---|---|
+| 1 | `1-validar-maestro.command` | Roda testes da API + typecheck/build do Web | Não (só lê) |
+| 2 | `2-merge-maestro-na-main.command` | Mescla a branch na `main` **local** e valida (sem push) | Sim (git local) |
+| 3 | `3-aplicar-migracao-db.command` | `prisma migrate deploy` (cria `flow_node_stats`) | Sim (banco) |
+| 4 | `4-deploy-api-fly.command` | Deploy da API no Fly (migrações rodam no release) | Sim (publica) |
+| 5 | `5-deploy-web-vercel.command` | Deploy do Web no Vercel (produção) | Sim (publica) |
+
+**Fluxo típico para publicar o Pacote 1:** 1 → 2 → 4 → 5. (O passo 3 é opcional/manual; o deploy da API já aplica as migrações.)
+
+## Validação manual (WhatsApp sandbox) — não dá para automatizar
+Depois do deploy, rode os roteiros de smoke (cada um lista os passos):
+- `docs/maestro/smoke-1a.md` — fluxos ricos (ask, botões, condições, horário, mídia)
+- `docs/maestro/smoke-1b.md` — geração rica por IA
+- `docs/maestro/smoke-1b-analytics.md` — funil por nó (toggle "Métricas")
+- `docs/maestro/smoke-1c.md` — subfluxos call/return
+- `docs/maestro/smoke-pacote2-autootimizacao.md` — botão "Otimizar" (fluxo que se melhora sozinho)
+
+## Além do Pacote 1 — **Pacote 2 (Cérebro) 100%** + Qualidade da IA
+- **AI step agêntico** (Pacote 2.6): o nó-IA pode usar uma **ferramenta webhook** (configurada no editor) — o agente chama o endpoint do cliente, recebe o resultado e responde. SSRF-guarded, gated (só com tools) e fail-soft (sem regressão). Webhook nativo no fluxo: nenhum concorrente verificado tem.
+- **Auto-otimização de fluxo** (Pacote 2.7): botão "Otimizar" no editor lê o funil e propõe reescrita do nó de maior abandono, com diff. Diferencial exclusivo.
+- **Simulação por personas sintéticas** (Pacote 2.8): botão "Simular" no editor testa o fluxo com clientes gerados por IA antes de publicar e reporta passRate + falhas. Reusa o juiz da Qualidade da IA.
+- **Maestro reativo** (Pacote 2.9): ao mudar identidade/treino (na tela de configurações ou no treinamento da IA), os fluxos afetados ficam "desatualizados" e ganham o botão "Atualizar com o Maestro" (re-proposta com diff). Antes, mudanças via configurações não marcavam os fluxos — agora marcam.
+- **Qualidade da IA — loop fechado:** ao aplicar um fix no prompt de um agente (em `/admin/agent-quality`), o sistema re-roda automaticamente o cenário e mostra o veredito (`✓ verificado` / `⚠ ainda falha`) no dashboard. A suíte da API ficou **100% verde** (corrigido o teste obsoleto do izaTurnRouter).
+
+## Pacote 3 (Receita) — iniciado
+- **A/B traffic split** (Pacote 3.10): botão **"A/B"** no editor abre o painel de experimento — escolhe um fluxo variante (B), define % do tráfego pra B e o nó de conversão; mostra os resultados (conversão por variante + vencedor). Atribuição determinística por conversa (não troca de variante no meio). Sem migração de banco (vive em `org.settings`). Smoke: `docs/maestro/smoke-pacote3-ab-testing.md`.
+- ⏸ **Pix/e-commerce (3.12) adiado** (aguardando definição do parceiro Pix). 3.11 (handoff) e 3.13 (broadcast) dependem de decisão de produto — documentados no `docs/maestro/ESTADO-E-ROADMAP.md`.
+
+## Observações
+- A branch `maestro-v3-spec1a-motor` tem **56 commits só do Maestro v3** — limpos.
+- Arquivos não-commitados (`vozHumanaFilter.ts`, `agentOrchestrator.ts`, `coreAgentRules.ts`) são da skill **voz-humana** (trabalho paralelo) e **não entram** no merge da branch.
+- A única falha de teste esperada é `izaTurnRouter` (pré-existente, não relacionada).

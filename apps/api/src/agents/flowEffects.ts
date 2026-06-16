@@ -5,7 +5,7 @@
  */
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
-import { sendReplyText } from '../services/channelDispatcher.js';
+import { sendReplyText, sendReplyInteractive, sendReplyMedia } from '../services/channelDispatcher.js';
 import type { FlowEffect } from './flowEngine.js';
 
 export interface ExecuteEffectsInput {
@@ -39,6 +39,31 @@ export async function executeFlowEffects(input: ExecuteEffectsInput): Promise<vo
           aiConfidence, // 1.0 = trilho fixo; <1.0 = texto gerado por LLM (retomada nó-IA)
         },
       });
+    } else if (eff.kind === 'send_interactive') {
+      try {
+        await sendReplyInteractive({ organizationId, conversationId, kind: eff.type, body: eff.body, options: eff.options });
+        await prisma.message.create({
+          data: {
+            direction: 'OUTBOUND', type: 'INTERACTIVE',
+            content: eff.body, status: 'SENT', conversationId, isFromBot: true, aiConfidence,
+          },
+        });
+      } catch (e) {
+        logger.warn('[Maestro] send_interactive falhou (fail-soft)', { organizationId, conversationId, err: String(e) });
+      }
+    } else if (eff.kind === 'send_media') {
+      try {
+        await sendReplyMedia({ organizationId, conversationId, mediaType: eff.mediaType, url: eff.url, caption: eff.caption });
+        const typeMap = { image: 'IMAGE', audio: 'AUDIO', document: 'DOCUMENT' } as const;
+        await prisma.message.create({
+          data: {
+            direction: 'OUTBOUND', type: typeMap[eff.mediaType],
+            content: eff.caption ?? eff.url, status: 'SENT', conversationId, isFromBot: true, aiConfidence,
+          },
+        });
+      } catch (e) {
+        logger.warn('[Maestro] send_media falhou (fail-soft)', { organizationId, conversationId, err: String(e) });
+      }
     } else if (eff.kind === 'handoff') {
       if (onHandoff) await onHandoff();
       else logger.info('[Maestro] handoff em retomada por timer — sem handler, ignorado', { organizationId, conversationId });

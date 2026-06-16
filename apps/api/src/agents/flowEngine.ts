@@ -12,6 +12,9 @@
  * ============================================================================
  */
 
+import { renderTemplate, type RenderScope } from './flowInterpolate.js';
+import { evalEdge } from './flowPredicates.js';
+
 // ── Tipos do grafo (alinhados ao model Flow {nodes,edges} + mock /flows) ──────
 export interface FlowNode {
   id: string;
@@ -47,14 +50,70 @@ export interface FlowGraph {
 export interface FlowState {
   cursor: string | null;
   vars: Record<string, any>;
+  /** Pilha de retorno para subfluxos (modo 'call'). Manipulada pelo runtime (C2). */
+  callStack?: { flowId: string; returnNodeId: string | null }[];
 }
 
 export type FlowEffect =
   | { kind: 'send_text'; text: string }
+  | { kind: 'send_interactive'; type: 'button' | 'list'; body: string; options: { id: string; title: string }[] }
+  | { kind: 'send_media'; mediaType: 'image' | 'audio' | 'document'; url: string; caption?: string }
   | { kind: 'set_tag'; tag: string }
   | { kind: 'update_lead'; field: string; value: any }
   | { kind: 'handoff' }
-  | { kind: 'goto_flow'; targetFlowId: string };
+  | { kind: 'goto_flow'; targetFlowId: string; mode?: 'goto' | 'call'; returnNodeId?: string | null };
+
+// ── Contexto de avaliação (injetado pela camada IO; mantém o motor puro) ──────
+export interface BusinessHoursConfig {
+  /** IANA tz, ex 'America/Sao_Paulo'. */
+  timezone: string;
+  /** 0=domingo … 6=sábado. null = fechado nesse dia. Horários 'HH:mm' 24h. */
+  days: Record<number, { open: string; close: string } | null>;
+}
+
+export interface EvalContact {
+  name: string | null;
+  tags: string[];
+  leadStatus: string | null;
+  leadScore: number;
+  funnelStage: string | null;
+  customFields: Record<string, any>;
+}
+
+export interface EvalContext {
+  contact: EvalContact;
+  /** 'agora' injetado pelo runtime — o motor NUNCA chama Date. */
+  now: Date | null;
+  businessHours: BusinessHoursConfig | null;
+  /** id do botão/lista tocado (normalizado do inbound). Reservado p/ uso futuro. */
+  selectedId?: string;
+  /** Identidade do negócio para interpolação {{system.*}}. */
+  system?: { businessName?: string; agentName?: string };
+}
+
+/** Predicado de aresta (Spec 1A — avaliados em E). */
+export type PredicateOp =
+  | 'eq' | 'neq' | 'gt' | 'lt' | 'gte' | 'lte'
+  | 'contains' | 'exists' | 'not_exists';
+
+export type Predicate =
+  | { kind: 'keyword'; match: 'contains' | 'equals' | 'starts_with' | 'regex'; value: string }
+  | { kind: 'contact_attr'; field: string; op: PredicateOp; value?: any }
+  | { kind: 'var'; name: string; op: PredicateOp; value?: any }
+  | { kind: 'business_hours'; expect: 'open' | 'closed' };
+
+/** Dados do nó 'ask' (captura de resposta). */
+export interface AskNodeData {
+  question: string;
+  varName: string;
+  crmField?: string;
+  validation?: {
+    type: 'text' | 'number' | 'email' | 'phone';
+    errorMessage: string;
+    /** Re-tentativas após a 1ª resposta inválida. Ex.: maxRetries:2 → até 3 inválidas antes do else. */
+    maxRetries: number;
+  };
+}
 
 export interface FlowSchedule {
   kind: 'wait' | 'schedule';
@@ -72,15 +131,28 @@ export interface FlowStepResult {
   /** Presente quando next==='ai': prompt do nó-IA pra injetar no systemPrompt. */
   aiPrompt?: string;
   aiModelHint?: string;
+  /** Presente quando next==='ai': tools configuradas no nó-IA (ex: webhook tools). */
+  aiTools?: any[];
   /** Presente quando next==='scheduled': dados do agendamento. */
   schedule?: FlowSchedule;
+  /** Ids dos nós visitados neste walk, na ordem de visita. */
+  visitedNodeIds: string[];
 }
 
 /** Opções de controle para resolveFlowStep. */
 export interface ResolveOptions {
   /** false na retomada por timer: nenhum texto novo do usuário disponível. */
   hasIncomingMessage?: boolean;
+  /** Contexto de avaliação (contato, horário, agora). Ausente → defaults seguros. */
+  ctx?: EvalContext;
 }
+
+/** Contexto default fail-closed quando o caller não injeta ctx (ex: testes legados). Exportado p/ uso nos testes. */
+export const DEFAULT_CTX: EvalContext = {
+  contact: { name: null, tags: [], leadStatus: null, leadScore: 0, funnelStage: null, customFields: {} },
+  now: null,
+  businessHours: null,
+};
 
 // ── Helpers de grafo ──────────────────────────────────────────────────────────
 function nodeById(graph: FlowGraph, id: string | null): FlowNode | undefined {
@@ -91,6 +163,13 @@ function nodeById(graph: FlowGraph, id: string | null): FlowNode | undefined {
 function firstTargetFrom(graph: FlowGraph, sourceId: string): string | null {
   const edge = graph.edges.find((e) => e.source === sourceId);
   return edge ? edge.target : null;
+}
+
+/** Primeira aresta de saída que NÃO é o ramo 'else' (fallback: primeira aresta). */
+function firstNonElseTargetFrom(graph: FlowGraph, sourceId: string): string | null {
+  const outgoing = graph.edges.filter((e) => e.source === sourceId);
+  const nonElse = outgoing.find((e) => e.data?.when?.match !== 'else');
+  return (nonElse ?? outgoing[0])?.target ?? null;
 }
 
 export function matchCondition(cond: FlowCondition | undefined, text: string): boolean {
@@ -111,19 +190,47 @@ export function matchCondition(cond: FlowCondition | undefined, text: string): b
 }
 
 /** Escolhe a aresta de saída de um nó 'condition' conforme a mensagem. */
-function pickConditionBranch(graph: FlowGraph, nodeId: string, text: string): string | null {
+function pickConditionBranch(
+  graph: FlowGraph,
+  nodeId: string,
+  text: string,
+  ctx: EvalContext,
+  vars: Record<string, any>,
+): string | null {
   const outgoing = graph.edges.filter((e) => e.source === nodeId);
-  // 1) primeira aresta cuja condição casa (ignora 'else' nesta passada)
+  // 1) primeira aresta NÃO-else cujos predicados/when casam
   for (const e of outgoing) {
-    const when = e.data?.when;
-    if (when && when.match !== 'else' && matchCondition(when, text)) return e.target;
+    const hasPreds = Array.isArray(e.data?.predicates) && e.data.predicates.length > 0;
+    const isElse = e.data?.when?.match === 'else' || (!hasPreds && !e.data?.when);
+    if (isElse) continue;
+    if (evalEdge(e, ctx, vars, text)) return e.target;
   }
   // 2) aresta 'else' explícita
   const elseEdge = outgoing.find((e) => e.data?.when?.match === 'else');
   if (elseEdge) return elseEdge.target;
   // 3) aresta sem condição declarada (fallback default)
-  const bare = outgoing.find((e) => !e.data?.when);
+  const bare = outgoing.find((e) => !e.data?.when && !e.data?.predicates);
   return bare ? bare.target : null;
+}
+
+function validateAnswer(text: string, type?: 'text' | 'number' | 'email' | 'phone'): boolean {
+  const t = (text ?? '').trim();
+  if (!t) return false;
+  switch (type) {
+    case 'number': return /^-?\d+([.,]\d+)?$/.test(t);
+    case 'email': return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
+    case 'phone': return (t.match(/\d/g)?.length ?? 0) >= 8;
+    case 'text':
+    default: return true;
+  }
+}
+
+/** Ramo 'else' EXPLÍCITO de saída de um nó; null se não houver (→ encerra).
+ *  Usado na exaustão de retries do nó 'ask': fail-closed, nunca segue o caminho
+ *  feliz com a variável não capturada. */
+function pickElseBranch(graph: FlowGraph, nodeId: string): string | null {
+  const elseEdge = graph.edges.find((e) => e.source === nodeId && e.data?.when?.match === 'else');
+  return elseEdge ? elseEdge.target : null;
 }
 
 // ── MOTOR PURO ─────────────────────────────────────────────────────────────────
@@ -143,14 +250,20 @@ export function resolveFlowStep(
   options?: ResolveOptions,
 ): FlowStepResult {
   const effects: FlowEffect[] = [];
+  const visited: string[] = [];
   const vars = { ...(state.vars || {}) };
+  const ctx = options?.ctx ?? DEFAULT_CTX;
+  const scope: RenderScope = { vars, contact: ctx.contact, system: ctx.system };
+  const render = (t: string) => renderTemplate(t, scope);
 
   let current: string | null;
   if (state.cursor) {
     current = state.cursor; // retoma no condition que aguardava
   } else {
     const start = graph.nodes.find((n) => n.type === 'start');
-    current = start ? firstTargetFrom(graph, start.id) : (graph.nodes[0]?.id ?? null);
+    // Inicia pelo próprio nó start (o case 'start' avança para o primeiro filho),
+    // para que o start apareça em visitedNodeIds. Sem start, usa o primeiro nó.
+    current = start ? start.id : (graph.nodes[0]?.id ?? null);
   }
 
   // A mensagem deste turno alimenta no máx. 1 condition, E só enquanto o bot
@@ -165,8 +278,9 @@ export function resolveFlowStep(
   for (let guard = 0; guard < MAX_WALK; guard++) {
     const node = nodeById(graph, current);
     if (!current || !node) {
-      return { effects, next: 'end', state: { cursor: null, vars } };
+      return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
     }
+    visited.push(node.id);
 
     switch (node.type) {
       case 'start':
@@ -174,10 +288,24 @@ export function resolveFlowStep(
         break;
 
       case 'message': {
-        const text = (node.data?.text ?? node.label ?? '').toString();
-        if (text.trim()) {
-          effects.push({ kind: 'send_text', text });
+        const d = node.data ?? {};
+        const media = d.media as { type: 'image'|'audio'|'document'; url: string; caption?: string } | undefined;
+        const interactive = d.interactive as { type: 'button'|'list'; options: { id: string; title: string }[] } | undefined;
+        if (media?.url) {
+          effects.push({ kind: 'send_media', mediaType: media.type, url: media.url, caption: media.caption ? render(media.caption) : undefined });
           sentMessageThisWalk = true;
+        } else if (interactive?.options?.length) {
+          effects.push({
+            kind: 'send_interactive', type: interactive.type, body: render((d.text ?? node.label ?? '').toString()),
+            options: interactive.options.slice(0, interactive.type === 'button' ? 3 : 10).map((o) => ({ id: o.id, title: render(o.title) })),
+          });
+          sentMessageThisWalk = true;
+        } else {
+          const text = render((d.text ?? node.label ?? '').toString());
+          if (text.trim()) {
+            effects.push({ kind: 'send_text', text });
+            sentMessageThisWalk = true;
+          }
         }
         current = firstTargetFrom(graph, node.id);
         break;
@@ -197,7 +325,7 @@ export function resolveFlowStep(
 
       case 'transfer':
         effects.push({ kind: 'handoff' });
-        return { effects, next: 'end', state: { cursor: null, vars } };
+        return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
 
       case 'ai':
         // Entrega pro LLM. Cursor avança pro próximo nó (próximo turno retoma lá).
@@ -206,7 +334,9 @@ export function resolveFlowStep(
           next: 'ai',
           aiPrompt: (node.data?.prompt ?? node.label ?? '').toString() || undefined,
           aiModelHint: node.data?.model ? String(node.data.model) : undefined,
+          aiTools: Array.isArray(node.data?.tools) ? node.data.tools : undefined,
           state: { cursor: firstTargetFrom(graph, node.id), vars },
+          visitedNodeIds: visited,
         };
 
       case 'goto_flow': {
@@ -214,8 +344,13 @@ export function resolveFlowStep(
         if (target) {
           // Handoff entre fluxos (Frente 3): o runtime troca a conversa pro
           // fluxo alvo (com proteção anti-loop). Encerra o walk DESTE fluxo.
-          effects.push({ kind: 'goto_flow', targetFlowId: target });
-          return { effects, next: 'end', state: { cursor: null, vars } };
+          if (node.data?.mode === 'call') {
+            const returnNodeId = firstTargetFrom(graph, node.id);
+            effects.push({ kind: 'goto_flow', targetFlowId: target, mode: 'call', returnNodeId });
+          } else {
+            effects.push({ kind: 'goto_flow', targetFlowId: target });
+          }
+          return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
         }
         // Sem alvo configurado → fallback: segue a aresta de saída.
         current = firstTargetFrom(graph, node.id);
@@ -243,27 +378,62 @@ export function resolveFlowStep(
           next: 'scheduled',
           schedule: { kind: node.type as 'wait' | 'schedule', delayMinutes, runAt, resumeNodeId },
           state: { cursor: replyCursor, vars },
+          visitedNodeIds: visited,
         };
+      }
+
+      case 'ask': {
+        const d = (node.data ?? {}) as Partial<AskNodeData>;
+        const resuming = state.cursor === node.id;
+        if (resuming && messageAvailable && !sentMessageThisWalk) {
+          // a mensagem deste turno é a resposta
+          messageAvailable = false;
+          const ans = incomingText;
+          if (!validateAnswer(ans, d.validation?.type)) {
+            const budget = typeof d.validation?.maxRetries === 'number' ? d.validation.maxRetries : 3;
+            const left = (typeof vars._askRetries === 'number' ? vars._askRetries : budget) - 1;
+            if (left >= 0) {
+              vars._askRetries = left;
+              const msg = render(d.validation?.errorMessage ?? d.question ?? '');
+              if (msg.trim()) effects.push({ kind: 'send_text', text: msg });
+              return { effects, next: 'await_input', state: { cursor: node.id, vars }, visitedNodeIds: visited };
+            }
+            // esgotou → ramo else
+            delete vars._askRetries;
+            current = pickElseBranch(graph, node.id);
+            break;
+          }
+          // resposta válida
+          delete vars._askRetries;
+          if (d.varName) vars[d.varName] = ans;
+          if (d.crmField) effects.push({ kind: 'update_lead', field: d.crmField, value: ans });
+          current = firstNonElseTargetFrom(graph, node.id);
+          break;
+        }
+        // primeira passada (ou já enviamos algo neste walk) → pergunta e aguarda
+        const q = render(d.question ?? node.label ?? '');
+        if (q.trim()) effects.push({ kind: 'send_text', text: q });
+        return { effects, next: 'await_input', state: { cursor: node.id, vars }, visitedNodeIds: visited };
       }
 
       case 'condition':
         if (messageAvailable && !sentMessageThisWalk) {
           // ramifica sobre a mensagem que chegou aguardando aqui
           messageAvailable = false;
-          current = pickConditionBranch(graph, node.id, incomingText);
+          current = pickConditionBranch(graph, node.id, incomingText, ctx, vars);
         } else {
           // já respondemos algo neste turno (ou a msg já foi consumida) →
           // aguarda a PRÓXIMA mensagem do usuário neste condition
-          return { effects, next: 'await_input', state: { cursor: node.id, vars } };
+          return { effects, next: 'await_input', state: { cursor: node.id, vars }, visitedNodeIds: visited };
         }
         break;
 
       default:
         // nó desconhecido: encerra com segurança
-        return { effects, next: 'end', state: { cursor: null, vars } };
+        return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
     }
   }
 
   // estourou MAX_WALK (grafo provavelmente cíclico) — encerra defensivamente
-  return { effects, next: 'end', state: { cursor: null, vars } };
+  return { effects, next: 'end', state: { cursor: null, vars }, visitedNodeIds: visited };
 }
