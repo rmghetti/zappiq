@@ -306,6 +306,57 @@ class ProviderError extends Error {
   }
 }
 
+/**
+ * Lê o corpo de uma resposta de erro de um provedor LLM e extrai a mensagem
+ * legível. Anthropic/OpenAI/Gemini compartilham o shape `{ error: { message } }`.
+ * Fail-soft: nunca lança (retorna '' se não der pra ler). Trunca p/ não poluir
+ * logs. Sem isso, um 400 de billing ("credit balance too low") fica
+ * indistinguível de um 400 de request malformado.
+ */
+async function readLlmErrorBody(res: Response): Promise<string> {
+  try {
+    const raw = await res.text();
+    if (!raw) return '';
+    try {
+      const parsed = JSON.parse(raw);
+      const msg = parsed?.error?.message ?? parsed?.message;
+      if (typeof msg === 'string' && msg) return msg.slice(0, 300);
+    } catch {
+      /* corpo não-JSON — usa texto cru */
+    }
+    return raw.slice(0, 300);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Sinais de que um 4xx é uma condição de billing/saldo/quota da CONTA daquele
+ * provedor — e não um request malformado. Cobre Anthropic ("credit balance is
+ * too low"), OpenAI ("exceeded your current quota"/"billing"), etc.
+ */
+const BILLING_4XX_RE =
+  /credit balance|billing|insufficient|quota|spend limit|usage limit|too low|exceeded your current|payment/i;
+
+/**
+ * Classifica a falha HTTP de um provedor no `kind` do ProviderError.
+ *
+ * Crucial: um 400 de billing/saldo é específico DAQUELA conta — o próximo
+ * provedor da cascata é outra conta e provavelmente funciona. Por isso ele é
+ * 'quota' (CAI no fallback), e NÃO 'client' (que aborta a cascata como se
+ * fosse request malformado — ver loop em complete()). Um 4xx genuíno de
+ * request continua 'client' (falharia igual em todo provedor; não adianta
+ * tentar o próximo).
+ */
+function classifyHttpKind(status: number, body: string): ProviderError['kind'] {
+  if (status === 429) return '429';
+  if (status >= 500) return '5xx';
+  if ((status === 400 || status === 402 || status === 403) && BILLING_4XX_RE.test(body)) {
+    return 'quota';
+  }
+  return 'client';
+}
+
 class AnthropicProvider implements LLMProvider {
   constructor(public id: LLMProviderId, public label: string, public model: string) {}
   async invoke(req: LLMCompletionRequest): Promise<LLMCompletionResponse> {
@@ -342,8 +393,12 @@ class AnthropicProvider implements LLMProvider {
     });
     const latencyMs = Date.now() - t0;
     if (!res.ok) {
-      const kind = res.status === 429 ? '429' : res.status >= 500 ? '5xx' : 'client';
-      throw new ProviderError(`Anthropic ${res.status}`, kind, latencyMs);
+      // Captura o corpo do erro para que a causa real (ex.: "credit balance too
+      // low", modelo inválido, prompt longo) fique visível no log/auditoria e
+      // para classificar billing 4xx como 'quota' (cai no fallback).
+      const detail = await readLlmErrorBody(res);
+      const kind = classifyHttpKind(res.status, detail);
+      throw new ProviderError(`Anthropic ${res.status}${detail ? `: ${detail}` : ''}`, kind, latencyMs);
     }
     const data: any = await res.json();
 
@@ -422,8 +477,9 @@ class AnthropicProvider implements LLMProvider {
     });
     if (!res.ok || !res.body) {
       const latencyMs = Date.now() - t0;
-      const kind = res.status === 429 ? '429' : res.status >= 500 ? '5xx' : 'client';
-      throw new ProviderError(`Anthropic stream ${res.status}`, kind, latencyMs);
+      const detail = await readLlmErrorBody(res);
+      const kind = classifyHttpKind(res.status, detail);
+      throw new ProviderError(`Anthropic stream ${res.status}${detail ? `: ${detail}` : ''}`, kind, latencyMs);
     }
     yield* parseAnthropicSSE(res.body, this.id, this.model, t0);
   }
@@ -453,7 +509,7 @@ class GoogleProvider implements LLMProvider {
   constructor(public id: LLMProviderId, public label: string, public model: string) {}
   async invoke(req: LLMCompletionRequest): Promise<LLMCompletionResponse> {
     const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) throw new ProviderError('missing GOOGLE_API_KEY', 'client');
+    if (!apiKey) throw new ProviderError('missing GOOGLE_API_KEY', 'quota');
     const t0 = Date.now();
     // Gemini usa role 'model' em vez de 'assistant'. Mensagens 'system' viram
     // systemInstruction em campo separado.
@@ -482,8 +538,9 @@ class GoogleProvider implements LLMProvider {
     );
     const latencyMs = Date.now() - t0;
     if (!res.ok) {
-      const kind = res.status === 429 ? '429' : res.status >= 500 ? '5xx' : 'client';
-      throw new ProviderError(`Gemini ${res.status}`, kind, latencyMs);
+      const detail = await readLlmErrorBody(res);
+      const kind = classifyHttpKind(res.status, detail);
+      throw new ProviderError(`Gemini ${res.status}${detail ? `: ${detail}` : ''}`, kind, latencyMs);
     }
     const data: any = await res.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
@@ -543,8 +600,9 @@ class OpenAIProvider implements LLMProvider {
     });
     const latencyMs = Date.now() - t0;
     if (!res.ok) {
-      const kind = res.status === 429 ? '429' : res.status >= 500 ? '5xx' : 'client';
-      throw new ProviderError(`OpenAI ${res.status}`, kind, latencyMs);
+      const detail = await readLlmErrorBody(res);
+      const kind = classifyHttpKind(res.status, detail);
+      throw new ProviderError(`OpenAI ${res.status}${detail ? `: ${detail}` : ''}`, kind, latencyMs);
     }
     const data: any = await res.json();
     const choice = data?.choices?.[0];
