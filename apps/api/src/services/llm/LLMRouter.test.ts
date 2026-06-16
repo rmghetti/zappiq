@@ -123,6 +123,23 @@ function httpError(status: number): Response {
   return new Response(JSON.stringify({ error: 'simulated' }), { status });
 }
 
+// Incidente 06/2026: Anthropic devolve 400 com mensagem de saldo quando a conta
+// fica sem créditos. Diferente de um 400 de request malformado, é específico
+// daquela conta — deve CAIR no fallback (kind 'quota'), não abortar a cascade.
+function billingError(): Response {
+  return new Response(
+    JSON.stringify({
+      type: 'error',
+      error: {
+        type: 'invalid_request_error',
+        message:
+          'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.',
+      },
+    }),
+    { status: 400, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
 // V4 #V4-001: helper Gemini-like response (Generative Language API v1beta).
 function geminiOk(text: string, promptTok = 100, candidatesTok = 50): Response {
   return new Response(
@@ -270,6 +287,20 @@ describe('LLMRouter', () => {
       ).rejects.toThrow(ProviderError);
       // Só uma chamada feita — não tentou fallback
       expect(fetchSpy).toHaveBeenCalledOnce();
+    });
+
+    it('400 de billing (credit balance too low) CAI no fallback (não aborta)', async () => {
+      // Cascade default: Sonnet → Haiku (ambos Anthropic, sem créditos) → OpenAI.
+      fetchSpy
+        .mockResolvedValueOnce(billingError())               // Sonnet 400 billing
+        .mockResolvedValueOnce(billingError())               // Haiku 400 billing
+        .mockResolvedValueOnce(openaiOk('Resposta GPT-4o')); // OpenAI salva
+      const router = new LLMRouter();
+      const res = await router.complete({ messages: [{ role: 'user', content: 'oi' }] });
+      expect(res.text).toBe('Resposta GPT-4o');
+      expect(res.provider).toBe('openai-mini');
+      // 3 chamadas: tentou Sonnet, Haiku e por fim OpenAI (fallback funcionou)
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
     });
   });
 
