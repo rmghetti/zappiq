@@ -8,9 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import type { PlanId } from '@zappiq/shared';
-
-const VALID_PLANS: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS'];
+import { isSelfSignupPlan, type PlanId } from '@zappiq/shared';
 
 // PR #105 — Helper pra resolver baseUrl do redirectTo.
 // Em prod: hardcoded zappiq.com.br (custom domain, sem Vercel Auth).
@@ -27,7 +25,7 @@ export async function POST(req: Request) {
   try {
     const { plan } = (await req.json()) as { plan: PlanId };
 
-    if (!VALID_PLANS.includes(plan)) {
+    if (!isSelfSignupPlan(plan)) {
       return NextResponse.json({ error: 'Plano inválido' }, { status: 400 });
     }
 

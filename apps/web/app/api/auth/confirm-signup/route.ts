@@ -15,9 +15,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import type { PlanId } from '@zappiq/shared';
-
-const VALID_PLANS: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS'];
+import { isSelfSignupPlan, type PlanId } from '@zappiq/shared';
 
 interface Body {
   access_token: string;
@@ -125,12 +123,11 @@ export async function POST(req: Request) {
       const trialEnds = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
       const meta = payload.user_metadata || {};
       const planFromBody = body.plan;
-      const plan: PlanId =
-        planFromBody && VALID_PLANS.includes(planFromBody as PlanId)
-          ? (planFromBody as PlanId)
-          : meta.plan_chosen && VALID_PLANS.includes(meta.plan_chosen as PlanId)
-          ? (meta.plan_chosen as PlanId)
-          : 'GROWTH';
+      const plan: PlanId = isSelfSignupPlan(planFromBody)
+        ? planFromBody
+        : isSelfSignupPlan(meta.plan_chosen)
+        ? meta.plan_chosen
+        : 'GROWTH';
 
       const name = meta.full_name || meta.name || email.split('@')[0];
 

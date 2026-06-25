@@ -13,9 +13,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import type { PlanId } from '@zappiq/shared';
-
-const VALID_PLANS: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
+import { isSelfSignupPlan, type PlanId } from '@zappiq/shared';
 
 interface SignupBody {
   name: string;
@@ -44,14 +42,14 @@ export async function POST(req: Request) {
     if (body.name.trim().length < 2) {
       return NextResponse.json({ error: 'Nome muito curto' }, { status: 400 });
     }
-    if (!VALID_PLANS.includes(body.plan)) {
-      return NextResponse.json({ error: 'Plano inválido' }, { status: 400 });
-    }
     if (body.plan === 'ENTERPRISE') {
       return NextResponse.json(
         { error: 'Plano Enterprise é por contato comercial. Acesse /enterprise.' },
         { status: 400 }
       );
+    }
+    if (!isSelfSignupPlan(body.plan)) {
+      return NextResponse.json({ error: 'Plano inválido' }, { status: 400 });
     }
 
     // ─── Supabase admin client (server-side) ────────────────────

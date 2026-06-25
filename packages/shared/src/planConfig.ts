@@ -691,6 +691,28 @@ export const VOICE_ADDON_DEPRECATED_STRIPE_IDS = {
 
 export const PLAN_IDS: PlanId[] = ['IZA_LITE', 'STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
 
+// ─────────────────────────────────────────────────────────
+// Self-signup — fonte única de verdade pra validação de plano.
+//
+// Planos aceitos no wizard /cadastro (Magic Link + Google OAuth) =
+// planos ATIVOS (não deprecated) e COM preço (Enterprise é "por contato
+// comercial", priceMonthly null). Hoje resolve pra [IZA_LITE, GROWTH, SCALE],
+// batendo exatamente com PLAN_OPTIONS do Cadastro.tsx.
+//
+// DERIVE daqui — NUNCA hardcode a lista de novo. Bug 2026-06-25: as 4 rotas
+// de signup tinham VALID_PLANS = ['STARTER','GROWTH','SCALE','BUSINESS'] sem
+// IZA_LITE (o tier default/entry pré-selecionado), bloqueando "Plano inválido"
+// / "Falha ao iniciar Google" pra todo lead que mantinha o plano padrão.
+// ─────────────────────────────────────────────────────────
+export const SELF_SIGNUP_PLAN_IDS: PlanId[] = PLAN_IDS.filter(
+  (id) => !PLAN_CONFIG[id].deprecated && PLAN_CONFIG[id].priceMonthly !== null
+);
+
+/** Type guard: o plano é aceito no self-signup? Aceita null/undefined com segurança. */
+export function isSelfSignupPlan(plan: string | null | undefined): plan is PlanId {
+  return plan != null && (SELF_SIGNUP_PLAN_IDS as string[]).includes(plan);
+}
+
 export function getPlan(id: PlanId): PlanConfig {
   return PLAN_CONFIG[id];
 }

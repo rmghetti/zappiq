@@ -14,9 +14,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import type { PlanId } from '@zappiq/shared';
-
-const VALID_PLANS: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS'];
+import { isSelfSignupPlan, type PlanId } from '@zappiq/shared';
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -71,9 +69,7 @@ export async function GET(req: Request) {
         .eq('id', existing.id);
     } else {
       // Google OAuth path: row não existe, cria com defaults
-      const plan: PlanId = (planParam && VALID_PLANS.includes(planParam as PlanId))
-        ? (planParam as PlanId)
-        : 'GROWTH';
+      const plan: PlanId = isSelfSignupPlan(planParam) ? planParam : 'GROWTH';
 
       const meta = data.user.user_metadata || {};
       const name =
