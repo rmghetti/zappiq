@@ -1159,6 +1159,12 @@ export const SEGMENTS: Segment[] = [
           'Conselho consultivo ou administrativo compartilhado para empresas, no modelo Board as a Service (BaaS) e formação de conselheiros',
       },
       {
+        key: 'consultoria_ia',
+        label: 'Consultoria e Implementação de IA',
+        description:
+          'Diagnóstico, implementação de agentes e aplicações de IA, plataformas e educação executiva para empresas que querem transformar IA em produtividade mensurável',
+      },
+      {
         key: 'consultoria_gestao',
         label: 'Consultoria de Gestão',
         description:
