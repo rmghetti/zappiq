@@ -1144,4 +1144,50 @@ export const SEGMENTS: Segment[] = [
       },
     ],
   },
+
+  // ── 17. Serviços B2B ───────────────────────────────────────────────
+  {
+    key: 'servicos_b2b',
+    icon: '🤝',
+    label: 'Serviços B2B',
+    description: 'Consultorias, conselhos, treinamento executivo e serviços para empresas',
+    subsegments: [
+      {
+        key: 'consultoria_conselho',
+        label: 'Conselho / Board as a Service',
+        description:
+          'Conselho consultivo ou administrativo compartilhado para empresas, no modelo Board as a Service (BaaS) e formação de conselheiros',
+      },
+      {
+        key: 'consultoria_gestao',
+        label: 'Consultoria de Gestão',
+        description:
+          'Consultoria empresarial em estratégia, gestão, processos, finanças e transformação organizacional',
+      },
+      {
+        key: 'treinamento_corporativo',
+        label: 'Treinamento e Educação Executiva',
+        description:
+          'Cursos, formações e treinamentos voltados para empresas, executivos e desenvolvimento de lideranças',
+      },
+      {
+        key: 'headhunting_rh',
+        label: 'Recrutamento Executivo e RH',
+        description:
+          'Headhunting, recrutamento e seleção de executivos e consultoria de recursos humanos para empresas',
+      },
+      {
+        key: 'assessoria_ma',
+        label: 'Assessoria em M&A e Captação',
+        description:
+          'Assessoria em fusões e aquisições, venda de empresas, captação de recursos e estruturação societária',
+      },
+      {
+        key: 'servicos_profissionais',
+        label: 'Serviços Profissionais B2B',
+        description:
+          'Demais serviços profissionais recorrentes ou por projeto prestados a outras empresas',
+      },
+    ],
+  },
 ];
