@@ -15,39 +15,48 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
   try {
     const period = (req.query.period as string) || '7d';
     const orgId = req.organizationId!;
-    const cacheKey = `analytics:overview:${orgId}:${period}`;
+    const cacheKey = `analytics:overview:v2:${orgId}:${period}`;
 
     const cached = await redis.get(cacheKey).catch(() => null);
     if (cached) { res.json(JSON.parse(cached)); return; }
 
     const since = getSince(period);
 
-    const [totalMessages, botMessages, openConvos, contacts, closedConvos] = await Promise.all([
+    const [totalMessages, botMessages, openConvos, contacts, closedConvos, aiResolved, humanResolved] = await Promise.all([
       prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'INBOUND', createdAt: { gte: since } } }),
       prisma.message.count({ where: { conversation: { organizationId: orgId }, isFromBot: true, createdAt: { gte: since } } }),
       prisma.conversation.count({ where: { organizationId: orgId, status: { in: ['OPEN', 'WAITING', 'ASSIGNED'] } } }),
       prisma.contact.count({ where: { organizationId: orgId, createdAt: { gte: since } } }),
       prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: since } } }),
+      // Resolvido pela IA = fechada sem nenhum humano atribuído (mesma semântica do TenantUsageMonthly).
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: since }, assignedToId: null } }),
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: since }, assignedToId: { not: null } } }),
     ]);
 
     // Calcular tempo médio de resposta (diff entre mensagem INBOUND e próxima OUTBOUND)
-    const responsePairs = await prisma.$queryRaw<{ avg_ms: number | null }[]>`
-      SELECT AVG(EXTRACT(EPOCH FROM (ob.created_at - ib.created_at)) * 1000)::float AS avg_ms
-      FROM messages ib
-      JOIN messages ob ON ob.conversation_id = ib.conversation_id
-        AND ob.direction = 'OUTBOUND'
-        AND ob.created_at = (
-          SELECT MIN(m2.created_at) FROM messages m2
-          WHERE m2.conversation_id = ib.conversation_id
-            AND m2.direction = 'OUTBOUND'
-            AND m2.created_at > ib.created_at
-        )
-      JOIN conversations c ON c.id = ib.conversation_id
-      WHERE ib.direction = 'INBOUND'
-        AND c.organization_id = ${orgId}
-        AND ib.created_at >= ${since}
+    const responseStats = await prisma.$queryRaw<{ avg_ms: number | null; p95_ms: number | null }[]>`
+      WITH pairs AS (
+        SELECT EXTRACT(EPOCH FROM (ob.created_at - ib.created_at)) * 1000 AS ms
+        FROM messages ib
+        JOIN messages ob ON ob.conversation_id = ib.conversation_id
+          AND ob.direction = 'OUTBOUND'
+          AND ob.created_at = (
+            SELECT MIN(m2.created_at) FROM messages m2
+            WHERE m2.conversation_id = ib.conversation_id
+              AND m2.direction = 'OUTBOUND'
+              AND m2.created_at > ib.created_at
+          )
+        JOIN conversations c ON c.id = ib.conversation_id
+        WHERE ib.direction = 'INBOUND'
+          AND c.organization_id = ${orgId}
+          AND ib.created_at >= ${since}
+      )
+      SELECT AVG(ms)::float AS avg_ms,
+             percentile_cont(0.95) WITHIN GROUP (ORDER BY ms)::float AS p95_ms
+      FROM pairs
     `;
-    const avgResponseTimeMs = Math.round(responsePairs[0]?.avg_ms ?? 0);
+    const avgResponseTimeMs = Math.round(responseStats[0]?.avg_ms ?? 0);
+    const p95ResponseTimeMs = Math.round(responseStats[0]?.p95_ms ?? 0);
 
     // CSAT médio das conversas que possuem avaliação
     const csatResult = await prisma.conversation.aggregate({
@@ -58,6 +67,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       ? Math.round(csatResult._avg.csatScore * 10) / 10
       : null;
 
+    const totalResolved = aiResolved + humanResolved;
     const data = {
       totalMessages,
       botMessages,
@@ -65,7 +75,11 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       openConversations: openConvos,
       newContacts: contacts,
       closedConversations: closedConvos,
+      aiResolved,
+      humanResolved,
+      aiResolvedRate: totalResolved > 0 ? Math.round((aiResolved / totalResolved) * 100) : 0,
       avgResponseTimeMs,
+      p95ResponseTimeMs,
       csat,
       period,
     };
