@@ -10,30 +10,47 @@ function getSince(period: string): Date {
   return new Date(Date.now() - (map[period] || map['7d']));
 }
 
+// Janela [since, until). Suporta período pré-definido (24h/7d/30d) OU intervalo
+// customizado via from/to ('YYYY-MM-DD', inclusivo no dia final).
+function getRange(q: any): { since: Date; until: Date; label: string } {
+  const from = typeof q.from === 'string' ? q.from : '';
+  const to = typeof q.to === 'string' ? q.to : '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    const since = new Date(`${from}T00:00:00.000Z`);
+    const until = new Date(new Date(`${to}T00:00:00.000Z`).getTime() + 86400000);
+    if (!isNaN(since.getTime()) && !isNaN(until.getTime()) && until > since) {
+      return { since, until, label: `${from}_${to}` };
+    }
+  }
+  const period = typeof q.period === 'string' ? q.period : '7d';
+  const map: Record<string, number> = { '24h': 86400000, '7d': 7 * 86400000, '30d': 30 * 86400000 };
+  const until = new Date();
+  const since = new Date(until.getTime() - (map[period] || map['7d']));
+  return { since, until, label: period };
+}
+
 // GET /api/analytics/overview
 router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const period = (req.query.period as string) || '7d';
     const orgId = req.organizationId!;
-    const cacheKey = `analytics:overview:v3:${orgId}:${period}`;
+    const { since, until, label } = getRange(req.query);
+    const cacheKey = `analytics:overview:v4:${orgId}:${label}`;
 
     const cached = await redis.get(cacheKey).catch(() => null);
     if (cached) { res.json(JSON.parse(cached)); return; }
 
-    const since = getSince(period);
-
     const [totalMessages, botMessages, openConvos, contacts, closedConvos, aiResolved, humanResolved] = await Promise.all([
-      prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'INBOUND', createdAt: { gte: since } } }),
-      prisma.message.count({ where: { conversation: { organizationId: orgId }, isFromBot: true, createdAt: { gte: since } } }),
+      prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'INBOUND', createdAt: { gte: since, lt: until } } }),
+      prisma.message.count({ where: { conversation: { organizationId: orgId }, isFromBot: true, createdAt: { gte: since, lt: until } } }),
       prisma.conversation.count({ where: { organizationId: orgId, status: { in: ['OPEN', 'WAITING', 'ASSIGNED'] } } }),
-      prisma.contact.count({ where: { organizationId: orgId, createdAt: { gte: since } } }),
-      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: since } } }),
+      prisma.contact.count({ where: { organizationId: orgId, createdAt: { gte: since, lt: until } } }),
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: since, lt: until } } }),
       // Resolvido pela IA = fechada sem nenhum humano atribuído (mesma semântica do TenantUsageMonthly).
-      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: since }, assignedToId: null } }),
-      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: since }, assignedToId: { not: null } } }),
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: since, lt: until }, assignedToId: null } }),
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: since, lt: until }, assignedToId: { not: null } } }),
     ]);
 
-    // Calcular tempo médio de resposta (diff entre mensagem INBOUND e próxima OUTBOUND)
+    // Tempo de resposta (diff INBOUND → próxima OUTBOUND): média + p95.
     const responseStats = await prisma.$queryRaw<{ avg_ms: number | null; p95_ms: number | null }[]>`
       WITH pairs AS (
         SELECT EXTRACT(EPOCH FROM (ob.created_at - ib.created_at)) * 1000 AS ms
@@ -50,6 +67,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
         WHERE ib.direction = 'INBOUND'
           AND c.organization_id = ${orgId}
           AND ib.created_at >= ${since}
+          AND ib.created_at < ${until}
       )
       SELECT AVG(ms)::float AS avg_ms,
              percentile_cont(0.95) WITHIN GROUP (ORDER BY ms)::float AS p95_ms
@@ -58,28 +76,40 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
     const avgResponseTimeMs = Math.round(responseStats[0]?.avg_ms ?? 0);
     const p95ResponseTimeMs = Math.round(responseStats[0]?.p95_ms ?? 0);
 
-    // CSAT médio das conversas que possuem avaliação
+    // Volume por dia (ou por hora se janela <= 2 dias). Série temporal real —
+    // serve o gráfico (inclusive períodos custom) e o drill-down por data.
+    const rangeMs = until.getTime() - since.getTime();
+    const byHour = rangeMs <= 2 * 86400000;
+    const truncUnit = byHour ? 'hour' : 'day';
+    const fmt = byHour ? 'YYYY-MM-DD"T"HH24' : 'YYYY-MM-DD';
+    const volRows = await prisma.$queryRawUnsafe<{ bucket: string; cnt: number }[]>(
+      `SELECT to_char(date_trunc('${truncUnit}', m.created_at), '${fmt}') AS bucket, COUNT(*)::int AS cnt
+       FROM messages m JOIN conversations c ON c.id = m.conversation_id
+       WHERE c.organization_id = $1 AND m.direction = 'INBOUND' AND m.created_at >= $2 AND m.created_at < $3
+       GROUP BY 1 ORDER BY 1`,
+      orgId, since, until,
+    );
+    const volumeByDay = volRows.map((r) => ({ bucket: r.bucket, count: Number(r.cnt) }));
+
     const csatResult = await prisma.conversation.aggregate({
-      where: { organizationId: orgId, csatScore: { not: null }, createdAt: { gte: since } },
+      where: { organizationId: orgId, csatScore: { not: null }, createdAt: { gte: since, lt: until } },
       _avg: { csatScore: true },
     });
-    const csat = csatResult._avg.csatScore
-      ? Math.round(csatResult._avg.csatScore * 10) / 10
-      : null;
+    const csat = csatResult._avg.csatScore ? Math.round(csatResult._avg.csatScore * 10) / 10 : null;
 
     const totalResolved = aiResolved + humanResolved;
 
-    // Período anterior (mesma duração) para deltas vs. período passado.
-    const periodMs = Date.now() - since.getTime();
-    const prevSince = new Date(since.getTime() - periodMs);
+    // Período anterior (mesma duração, imediatamente antes) para os deltas.
+    const prevUntil = since;
+    const prevSince = new Date(since.getTime() - rangeMs);
     const [pTotal, pBot, pContacts, pClosed, pAiResolved, pHumanResolved, pCsatAgg] = await Promise.all([
-      prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'INBOUND', createdAt: { gte: prevSince, lt: since } } }),
-      prisma.message.count({ where: { conversation: { organizationId: orgId }, isFromBot: true, createdAt: { gte: prevSince, lt: since } } }),
-      prisma.contact.count({ where: { organizationId: orgId, createdAt: { gte: prevSince, lt: since } } }),
-      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: since } } }),
-      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: since }, assignedToId: null } }),
-      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: since }, assignedToId: { not: null } } }),
-      prisma.conversation.aggregate({ where: { organizationId: orgId, csatScore: { not: null }, createdAt: { gte: prevSince, lt: since } }, _avg: { csatScore: true } }),
+      prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'INBOUND', createdAt: { gte: prevSince, lt: prevUntil } } }),
+      prisma.message.count({ where: { conversation: { organizationId: orgId }, isFromBot: true, createdAt: { gte: prevSince, lt: prevUntil } } }),
+      prisma.contact.count({ where: { organizationId: orgId, createdAt: { gte: prevSince, lt: prevUntil } } }),
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: prevUntil } } }),
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: prevUntil }, assignedToId: null } }),
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: prevUntil }, assignedToId: { not: null } } }),
+      prisma.conversation.aggregate({ where: { organizationId: orgId, csatScore: { not: null }, createdAt: { gte: prevSince, lt: prevUntil } }, _avg: { csatScore: true } }),
     ]);
     const pTotalResolved = pAiResolved + pHumanResolved;
     const prev = {
@@ -104,7 +134,11 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       p95ResponseTimeMs,
       csat,
       prev,
-      period,
+      volumeByDay,
+      granularity: byHour ? 'hour' : 'day',
+      rangeStart: since.toISOString(),
+      rangeEnd: until.toISOString(),
+      period: label,
     };
 
     await redis.setex(cacheKey, 300, JSON.stringify(data)).catch(() => {});
@@ -147,12 +181,11 @@ router.get('/campaigns', async (req: Request, res: Response, next: NextFunction)
 // GET /api/analytics/sentiment
 router.get('/sentiment', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const period = (req.query.period as string) || '7d';
-    const since = getSince(period);
+    const { since, until } = getRange(req.query);
 
     const conversations = await prisma.conversation.groupBy({
       by: ['sentiment'],
-      where: { organizationId: req.organizationId!, sentiment: { not: null }, createdAt: { gte: since } },
+      where: { organizationId: req.organizationId!, sentiment: { not: null }, createdAt: { gte: since, lt: until } },
       _count: true,
     });
 
@@ -163,11 +196,10 @@ router.get('/sentiment', async (req: Request, res: Response, next: NextFunction)
 // GET /api/analytics/heatmap
 router.get('/heatmap', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const period = (req.query.period as string) || '7d';
-    const since = getSince(period);
+    const { since, until } = getRange(req.query);
 
     const messages = await prisma.message.findMany({
-      where: { conversation: { organizationId: req.organizationId! }, direction: 'INBOUND', createdAt: { gte: since } },
+      where: { conversation: { organizationId: req.organizationId! }, direction: 'INBOUND', createdAt: { gte: since, lt: until } },
       select: { createdAt: true },
     });
 
@@ -181,6 +213,55 @@ router.get('/heatmap', async (req: Request, res: Response, next: NextFunction) =
     }
 
     res.json({ success: true, data: heatmap });
+  } catch (err) { next(err); }
+});
+
+// GET /api/analytics/drilldown — abre os dados por trás de um ponto do analytics.
+//   kind=messages&start=ISO&end=ISO              → mensagens da janela (clique no gráfico de volume)
+//   kind=conversations&sentiment=X&start&end     → conversas (clique numa fatia de sentimento)
+router.get('/drilldown', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const kind = (req.query.kind as string) || 'messages';
+    const start = req.query.start ? new Date(String(req.query.start)) : null;
+    const end = req.query.end ? new Date(String(req.query.end)) : null;
+    if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+      res.status(400).json({ success: false, error: 'parâmetros start/end inválidos' });
+      return;
+    }
+
+    if (kind === 'conversations') {
+      const sentiment = req.query.sentiment as string | undefined;
+      const items = await prisma.conversation.findMany({
+        where: {
+          organizationId: orgId,
+          deletedAt: null,
+          ...(sentiment ? { sentiment: sentiment as any } : {}),
+          createdAt: { gte: start, lt: end },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true, status: true, sentiment: true, createdAt: true,
+          contact: { select: { name: true, phone: true } },
+          _count: { select: { messages: true } },
+          messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { content: true, direction: true, createdAt: true } },
+        },
+      });
+      res.json({ success: true, data: { kind, items } });
+      return;
+    }
+
+    const items = await prisma.message.findMany({
+      where: { conversation: { organizationId: orgId }, createdAt: { gte: start, lt: end } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        id: true, direction: true, isFromBot: true, type: true, content: true, createdAt: true,
+        conversation: { select: { id: true, contact: { select: { name: true, phone: true } } } },
+      },
+    });
+    res.json({ success: true, data: { kind: 'messages', items } });
   } catch (err) { next(err); }
 });
 
