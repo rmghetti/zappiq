@@ -206,6 +206,8 @@ model Organization {
   activities         Activity[]
   tasks              Task[]
   flowNodeStats      FlowNodeStat[]
+  analyticsMetricsDaily AnalyticsMetricDaily[]  // Fase 2 Pulso — snapshots diários
+  analyticsInsights     AnalyticsInsight[]      // Fase 2 Pulso — narrativas/anomalias
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
@@ -470,6 +472,55 @@ model FlowNodeStat {
   @@unique([flowId, nodeId, period])
   @@index([organizationId, flowId])
   @@map("flow_node_stats")
+}
+
+/// Analytics "Pulso" (Fase 2) — snapshot diário de métricas por org. Baseline para
+/// detecção de anomalia determinística + trend rápido. Populado pelo cron noturno.
+model AnalyticsMetricDaily {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  date                String   // 'YYYY-MM-DD' UTC (dia de referência)
+  messagesIn          Int      @default(0)
+  messagesOut         Int      @default(0)
+  botMessages         Int      @default(0)
+  automationRate      Int      @default(0)
+  newContacts         Int      @default(0)
+  openConversations   Int      @default(0)
+  closedConversations Int      @default(0)
+  avgFirstResponseMs  Int?
+  csatAvg             Float?
+  csatCount           Int      @default(0)
+  sentimentPos        Int      @default(0)
+  sentimentNeu        Int      @default(0)
+  sentimentNeg        Int      @default(0)
+  qualifiedLeads      Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([organizationId, date])
+  @@index([organizationId, date])
+  @@map("analytics_metric_daily")
+}
+
+/// Analytics "Pulso" (Fase 2) — insight narrado por org. A IA SÓ redige sobre os
+/// fatos em `facts` (nunca inventa número); `source='rule'` é o fallback determinístico.
+model AnalyticsInsight {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  period             String   // 'YYYY-MM-DD' (dia de referência)
+  kind               String   @default("daily_summary")
+  severity           String   @default("info") // info | attention | critical
+  title              String
+  narrative          String   @db.Text
+  facts              Json     @default("{}")
+  recommendedActions Json     @default("[]")
+  source             String   @default("llm") // llm | rule
+  createdAt          DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@map("analytics_insights")
 }
 
 /// Maestro v2 — espera durável de wait/schedule (fonte de verdade; o job BullMQ é só o despertador).

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   TrendingUp, Bot, Users, MessageSquare, Clock, Sparkles,
-  Send, CheckCheck, Eye, Reply, CircleDot, Gauge, Smile,
+  Send, CheckCheck, Eye, Reply, CircleDot, Gauge, Smile, RefreshCw,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -46,8 +46,10 @@ export default function AnalyticsPage() {
   const [heatmap, setHeatmap] = useState<Record<string, Record<string, number>>>({});
   const [agents, setAgents] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [insight, setInsight] = useState<any>(null);
   const [period, setPeriod] = useState('7d');
   const [loading, setLoading] = useState(true);
+  const [refreshingPulse, setRefreshingPulse] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -57,14 +59,28 @@ export default function AnalyticsPage() {
       api.get(`/api/analytics/heatmap?period=${period}`).catch(() => null),
       api.get(`/api/analytics/agents`).catch(() => null),
       api.get(`/api/analytics/campaigns`).catch(() => null),
-    ]).then(([ov, sent, heat, ag, camp]: any[]) => {
+      api.get(`/api/analytics/insights`).catch(() => null),
+    ]).then(([ov, sent, heat, ag, camp, ins]: any[]) => {
       setOverview(ov?.data ?? ov ?? null);
       setSentiment((sent?.data ?? sent ?? []) as any[]);
       setHeatmap((heat?.data ?? heat ?? {}) as Record<string, Record<string, number>>);
       setAgents((ag?.data ?? ag ?? []) as any[]);
       setCampaigns((camp?.data ?? camp ?? []) as any[]);
+      setInsight(ins?.data ?? null);
     }).finally(() => setLoading(false));
   }, [period]);
+
+  async function handleRefreshPulse() {
+    setRefreshingPulse(true);
+    try {
+      const res = await api.post(`/api/analytics/insights/refresh?today=1`);
+      setInsight((res as any)?.data ?? null);
+    } catch {
+      // silencioso — mantém o fallback determinístico na tela
+    } finally {
+      setRefreshingPulse(false);
+    }
+  }
 
   // ---- Derivações ----
   const automationRate = overview?.automationRate;
@@ -164,30 +180,67 @@ export default function AnalyticsPage() {
         </select>
       </div>
 
-      {/* Resumo (semente do Pulso) */}
-      <div
-        className={`rounded-xl border p-5 mb-8 ${
-          resumo.tone === 'warn' ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'
-        }`}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <Sparkles size={16} className={resumo.tone === 'warn' ? 'text-amber-600' : 'text-emerald-700'} />
-          <span className={`text-sm font-semibold ${resumo.tone === 'warn' ? 'text-amber-800' : 'text-emerald-800'}`}>
-            Resumo da operação
-          </span>
-          <span className="ml-auto text-[11px] px-2 py-0.5 rounded-full bg-white/70 text-gray-500 border border-gray-200">
-            Pulso · narrativa com IA em breve
-          </span>
-        </div>
-        {loading ? (
-          <div className="h-4 bg-white/60 rounded w-2/3 animate-pulse" />
-        ) : (
-          <>
-            <p className="text-[15px] leading-relaxed text-gray-800">{resumo.main}</p>
-            {resumo.note && <p className="text-sm text-gray-600 mt-2">{resumo.note}</p>}
-          </>
-        )}
-      </div>
+      {/* Pulso — insight narrado pela IA (com fallback determinístico) */}
+      {(() => {
+        const sev: string = insight?.severity || (resumo.tone === 'warn' ? 'attention' : 'info');
+        const tone =
+          sev === 'critical'
+            ? { box: 'bg-red-50 border-red-200', icon: 'text-red-600', title: 'text-red-800' }
+            : sev === 'attention'
+            ? { box: 'bg-amber-50 border-amber-200', icon: 'text-amber-600', title: 'text-amber-800' }
+            : { box: 'bg-emerald-50 border-emerald-200', icon: 'text-emerald-700', title: 'text-emerald-800' };
+        const actions: Array<{ label: string; prompt: string }> = Array.isArray(insight?.recommendedActions)
+          ? insight.recommendedActions
+          : [];
+        return (
+          <div className={`rounded-xl border p-5 mb-8 ${tone.box}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles size={16} className={tone.icon} />
+              <span className={`text-sm font-semibold ${tone.title}`}>
+                {insight?.title || 'Resumo da operação'}
+              </span>
+              <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-white/70 text-gray-500 border border-gray-200">
+                {insight ? (insight.source === 'llm' ? 'Pulso · IA' : 'Pulso · automático') : 'Pulso'}
+              </span>
+              <button
+                onClick={handleRefreshPulse}
+                disabled={refreshingPulse}
+                className="ml-auto flex items-center gap-1 text-[12px] text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                title="Gerar análise do dia com a IA"
+              >
+                <RefreshCw size={13} className={refreshingPulse ? 'animate-spin' : ''} />
+                {refreshingPulse ? 'Analisando…' : insight ? 'Atualizar' : 'Gerar com IA'}
+              </button>
+            </div>
+            {loading ? (
+              <div className="h-4 bg-white/60 rounded w-2/3 animate-pulse" />
+            ) : insight ? (
+              <>
+                <p className="text-[15px] leading-relaxed text-gray-800">{insight.narrative}</p>
+                {actions.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {actions.map((a, i) => (
+                      <span key={i} className="text-[12px] px-2.5 py-1 rounded-full bg-white/80 text-gray-700 border border-gray-200">
+                        {a.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {insight.createdAt && (
+                  <p className="text-[11px] text-gray-400 mt-3">
+                    análise de {String(insight.period || '').split('-').reverse().join('/')} · gerada {new Date(insight.createdAt).toLocaleString('pt-BR')}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-[15px] leading-relaxed text-gray-800">{resumo.main}</p>
+                {resumo.note && <p className="text-sm text-gray-600 mt-2">{resumo.note}</p>}
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Camada 1 — Resultado */}
       <SectionTitle icon={TrendingUp} title="Resultado" hint="o que a operação entregou" />
