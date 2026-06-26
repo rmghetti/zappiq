@@ -85,6 +85,8 @@ export default function AnalyticsPage() {
   // ---- Derivações ----
   const automationRate = overview?.automationRate;
   const avgMs = overview?.avgResponseTimeMs;
+  const p95Ms = overview?.p95ResponseTimeMs;
+  const aiResolvedRate = overview?.aiResolvedRate;
   const closed = overview?.closedConversations;
   const open = overview?.openConversations;
   const newContacts = overview?.newContacts;
@@ -156,7 +158,7 @@ export default function AnalyticsPage() {
 
   const resultCards = [
     { label: 'Atendido pela IA', value: fmtNum(automationRate, { suffix: '%' }), icon: Bot, hint: 'das mensagens' },
-    { label: 'Conversas resolvidas', value: fmtNum(closed), icon: CheckCheck, hint: 'fechadas no período' },
+    { label: 'Conversas resolvidas', value: fmtNum(closed), icon: CheckCheck, hint: typeof aiResolvedRate === 'number' ? `${aiResolvedRate}% sem precisar de humano` : 'fechadas no período' },
     { label: 'Novos contatos', value: fmtNum(newContacts), icon: Users, hint: 'entraram no período' },
     { label: 'CSAT', value: fmtNum(csat, { decimals: 1 }), icon: Smile, hint: 'satisfação média (0–5)' },
   ];
@@ -288,7 +290,7 @@ export default function AnalyticsPage() {
 
         {/* Indicadores operacionais */}
         <div className="flex flex-col gap-4">
-          <MiniStat icon={Clock} label="1ª resposta (média)" value={fmtDuration(avgMs)} hint="p95 por janela vem na Fase 2" />
+          <MiniStat icon={Clock} label="1ª resposta (média)" value={fmtDuration(avgMs)} hint={typeof p95Ms === 'number' && p95Ms > 0 ? `p95: ${fmtDuration(p95Ms)}` : 'mediana do período'} />
           <MiniStat icon={MessageSquare} label="Conversas abertas" value={fmtNum(open)} hint="aguardando ou em andamento" />
           <MiniStat icon={MessageSquare} label="Mensagens totais" value={fmtNum(totalMessages)} hint="recebidas no período" />
         </div>
