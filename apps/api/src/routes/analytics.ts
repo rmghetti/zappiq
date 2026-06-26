@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@zappiq/database';
 import redis from '../utils/redis.js';
+import { generatePulseInsight } from '../services/analyticsPulse.js';
 
 const router = Router();
 
@@ -143,6 +144,34 @@ router.get('/heatmap', async (req: Request, res: Response, next: NextFunction) =
     }
 
     res.json({ success: true, data: heatmap });
+  } catch (err) { next(err); }
+});
+
+// GET /api/analytics/insights — último insight "Pulso" da org
+router.get('/insights', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const insight = await prisma.analyticsInsight.findFirst({
+      where: { organizationId: orgId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ success: true, data: insight });
+  } catch (err) { next(err); }
+});
+
+// POST /api/analytics/insights/refresh — gera o insight do dia sob demanda
+// (para o cliente ver o Pulso na hora, sem esperar o cron noturno).
+router.post('/insights/refresh', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    // Dia de referência = ontem por padrão (já fechado); ?today=1 força hoje.
+    const ref = req.query.today === '1' ? new Date() : new Date(Date.now() - 86400000);
+    await generatePulseInsight(orgId, ref);
+    const insight = await prisma.analyticsInsight.findFirst({
+      where: { organizationId: orgId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ success: true, data: insight });
   } catch (err) { next(err); }
 });
 
