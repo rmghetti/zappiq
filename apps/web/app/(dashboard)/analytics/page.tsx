@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  TrendingUp, Bot, Users, MessageSquare, Clock, Sparkles,
+  TrendingUp, TrendingDown, Bot, Users, MessageSquare, Clock, Sparkles,
   Send, CheckCheck, Eye, Reply, CircleDot, Gauge, Smile, RefreshCw,
 } from 'lucide-react';
 import {
@@ -156,11 +156,29 @@ export default function AnalyticsPage() {
   }
   const resumo = buildResumo();
 
+  const prev = overview?.prev;
+  type Delta = { text: string; dir: 'up' | 'down' | 'flat' } | null;
+  const deltaPP = (cur: any, prv: any): Delta => {
+    if (typeof cur !== 'number' || typeof prv !== 'number') return null;
+    const d = cur - prv;
+    return d === 0 ? { text: 'estável', dir: 'flat' } : { text: `${d > 0 ? '+' : ''}${d}pp`, dir: d > 0 ? 'up' : 'down' };
+  };
+  const deltaPct = (cur: any, prv: any): Delta => {
+    if (typeof cur !== 'number' || typeof prv !== 'number' || prv === 0) return null;
+    const d = Math.round(((cur - prv) / Math.abs(prv)) * 100);
+    return d === 0 ? { text: 'estável', dir: 'flat' } : { text: `${d > 0 ? '+' : ''}${d}%`, dir: d > 0 ? 'up' : 'down' };
+  };
+  const deltaAbs = (cur: any, prv: any): Delta => {
+    if (typeof cur !== 'number' || typeof prv !== 'number') return null;
+    const d = Math.round((cur - prv) * 10) / 10;
+    return d === 0 ? { text: 'estável', dir: 'flat' } : { text: `${d > 0 ? '+' : ''}${d.toLocaleString('pt-BR')}`, dir: d > 0 ? 'up' : 'down' };
+  };
+
   const resultCards = [
-    { label: 'Atendido pela IA', value: fmtNum(automationRate, { suffix: '%' }), icon: Bot, hint: 'das mensagens' },
-    { label: 'Conversas resolvidas', value: fmtNum(closed), icon: CheckCheck, hint: typeof aiResolvedRate === 'number' ? `${aiResolvedRate}% sem precisar de humano` : 'fechadas no período' },
-    { label: 'Novos contatos', value: fmtNum(newContacts), icon: Users, hint: 'entraram no período' },
-    { label: 'CSAT', value: fmtNum(csat, { decimals: 1 }), icon: Smile, hint: 'satisfação média (0–5)' },
+    { label: 'Atendido pela IA', value: fmtNum(automationRate, { suffix: '%' }), icon: Bot, hint: 'das mensagens', delta: prev ? deltaPP(automationRate, prev.automationRate) : null },
+    { label: 'Conversas resolvidas', value: fmtNum(closed), icon: CheckCheck, hint: typeof aiResolvedRate === 'number' ? `${aiResolvedRate}% sem precisar de humano` : 'fechadas no período', delta: prev ? deltaPct(closed, prev.closedConversations) : null },
+    { label: 'Novos contatos', value: fmtNum(newContacts), icon: Users, hint: 'entraram no período', delta: prev ? deltaPct(newContacts, prev.newContacts) : null },
+    { label: 'CSAT', value: fmtNum(csat, { decimals: 1 }), icon: Smile, hint: 'satisfação média (0–5)', delta: prev ? deltaAbs(csat, prev.csat) : null },
   ];
 
   return (
@@ -260,6 +278,15 @@ export default function AnalyticsPage() {
                   <kpi.icon size={16} className="text-[#1B6B3A]" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900">{kpi.value}</p>
+                {kpi.delta && (
+                  <p className={`text-xs mt-1 flex items-center gap-1 ${
+                    kpi.delta.dir === 'up' ? 'text-emerald-600' : kpi.delta.dir === 'down' ? 'text-red-500' : 'text-gray-400'
+                  }`}>
+                    {kpi.delta.dir === 'up' && <TrendingUp size={12} />}
+                    {kpi.delta.dir === 'down' && <TrendingDown size={12} />}
+                    {kpi.delta.text} vs. período anterior
+                  </p>
+                )}
                 <p className="text-xs text-gray-400 mt-1">{kpi.hint}</p>
               </div>
             ))}

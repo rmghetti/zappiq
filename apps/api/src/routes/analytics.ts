@@ -15,7 +15,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
   try {
     const period = (req.query.period as string) || '7d';
     const orgId = req.organizationId!;
-    const cacheKey = `analytics:overview:v2:${orgId}:${period}`;
+    const cacheKey = `analytics:overview:v3:${orgId}:${period}`;
 
     const cached = await redis.get(cacheKey).catch(() => null);
     if (cached) { res.json(JSON.parse(cached)); return; }
@@ -68,6 +68,28 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       : null;
 
     const totalResolved = aiResolved + humanResolved;
+
+    // Período anterior (mesma duração) para deltas vs. período passado.
+    const periodMs = Date.now() - since.getTime();
+    const prevSince = new Date(since.getTime() - periodMs);
+    const [pTotal, pBot, pContacts, pClosed, pAiResolved, pHumanResolved, pCsatAgg] = await Promise.all([
+      prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'INBOUND', createdAt: { gte: prevSince, lt: since } } }),
+      prisma.message.count({ where: { conversation: { organizationId: orgId }, isFromBot: true, createdAt: { gte: prevSince, lt: since } } }),
+      prisma.contact.count({ where: { organizationId: orgId, createdAt: { gte: prevSince, lt: since } } }),
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: since } } }),
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: since }, assignedToId: null } }),
+      prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: since }, assignedToId: { not: null } } }),
+      prisma.conversation.aggregate({ where: { organizationId: orgId, csatScore: { not: null }, createdAt: { gte: prevSince, lt: since } }, _avg: { csatScore: true } }),
+    ]);
+    const pTotalResolved = pAiResolved + pHumanResolved;
+    const prev = {
+      automationRate: pTotal > 0 ? Math.round((pBot / pTotal) * 100) : 0,
+      aiResolvedRate: pTotalResolved > 0 ? Math.round((pAiResolved / pTotalResolved) * 100) : 0,
+      newContacts: pContacts,
+      closedConversations: pClosed,
+      csat: pCsatAgg._avg.csatScore != null ? Math.round(pCsatAgg._avg.csatScore * 10) / 10 : null,
+    };
+
     const data = {
       totalMessages,
       botMessages,
@@ -81,6 +103,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       avgResponseTimeMs,
       p95ResponseTimeMs,
       csat,
+      prev,
       period,
     };
 
