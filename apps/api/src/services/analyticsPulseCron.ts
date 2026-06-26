@@ -73,6 +73,14 @@ export async function runAnalyticsPulseCycle(): Promise<{
 }
 
 export async function initAnalyticsPulseCronJob(): Promise<void> {
+  // Kill-switch: ANALYTICS_PULSE_CRON='0' desliga a geração diária (custo de LLM)
+  // sem redeploy de código — basta `fly secrets set` e restart. Endpoint manual
+  // /insights/refresh continua funcionando.
+  if (process.env.ANALYTICS_PULSE_CRON === '0') {
+    logger.warn('[analyticsPulseCron] desativado via ANALYTICS_PULSE_CRON=0');
+    return;
+  }
+
   analyticsPulseWorker = new Worker(
     'analytics-pulse-cron',
     async () => runAnalyticsPulseCycle(),
