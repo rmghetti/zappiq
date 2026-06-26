@@ -265,6 +265,59 @@ router.get('/drilldown', async (req: Request, res: Response, next: NextFunction)
   } catch (err) { next(err); }
 });
 
+// GET /api/analytics/sales-attribution — "Vendas atribuídas à IA" (Fase A, read-only).
+// Modelo de mercado: regra determinística + janela (last-touch). Para cada Deal GANHO
+// no período, classifica em 3 baldes pela presença de mensagens nas janelas antes do wonAt:
+//   - Fechada pela IA (ai_closed): houve msg da Iza em 7d E nenhum humano (outbound) em 24h
+//   - Assistida pela IA (ai_assisted): houve msg da Iza em 7d E também humano em 24h
+//   - Sem IA (none): nenhuma msg da Iza na janela
+router.get('/sales-attribution', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const { since, until } = getRange(req.query);
+    const IZA_MS = 7 * 86400000;
+    const HUMAN_MS = 24 * 3600000;
+
+    const wonDeals = await prisma.deal.findMany({
+      where: { organizationId: orgId, wonAt: { gte: since, lt: until }, value: { not: null } },
+      orderBy: { wonAt: 'desc' },
+      take: 500,
+      select: { id: true, title: true, value: true, wonAt: true, contactId: true, sourceAgentId: true, contact: { select: { name: true } } },
+    });
+
+    const classified = await Promise.all(wonDeals.map(async (d) => {
+      const won = d.wonAt as Date;
+      const [izaCount, humanCount] = await Promise.all([
+        prisma.message.count({ where: { isFromBot: true, conversation: { contactId: d.contactId, organizationId: orgId }, createdAt: { gte: new Date(won.getTime() - IZA_MS), lte: won } } }),
+        prisma.message.count({ where: { isFromBot: false, direction: 'OUTBOUND', conversation: { contactId: d.contactId, organizationId: orgId }, createdAt: { gte: new Date(won.getTime() - HUMAN_MS), lte: won } } }),
+      ]);
+      const bucket = izaCount > 0 ? (humanCount > 0 ? 'ai_assisted' : 'ai_closed') : 'none';
+      return { id: d.id, title: d.title, value: Number(d.value ?? 0), wonAt: d.wonAt, contactName: d.contact?.name ?? null, bucket, sourcedByIza: !!d.sourceAgentId };
+    }));
+
+    const sum = (arr: typeof classified) => arr.reduce((a, r) => a + (r.value || 0), 0);
+    const aiClosed = classified.filter((r) => r.bucket === 'ai_closed');
+    const aiAssisted = classified.filter((r) => r.bucket === 'ai_assisted');
+    const totalWonValue = sum(classified);
+    const attributedTotal = sum(aiClosed) + sum(aiAssisted);
+
+    res.json({
+      success: true,
+      data: {
+        attributedTotal,
+        aiClosedValue: sum(aiClosed),
+        aiAssistedValue: sum(aiAssisted),
+        noAiValue: sum(classified.filter((r) => r.bucket === 'none')),
+        totalWonValue,
+        attributedPct: totalWonValue > 0 ? Math.round((attributedTotal / totalWonValue) * 100) : 0,
+        dealsWon: classified.length,
+        deals: classified.filter((r) => r.bucket !== 'none').slice(0, 20),
+        window: { izaDays: 7, humanHours: 24 },
+      },
+    });
+  } catch (err) { next(err); }
+});
+
 // GET /api/analytics/insights — último insight "Pulso" da org
 router.get('/insights', async (req: Request, res: Response, next: NextFunction) => {
   try {

@@ -37,6 +37,11 @@ function fmtDuration(ms: unknown): string {
   return `${h}h ${m % 60}min`;
 }
 
+function fmtBRL(v: unknown): string {
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : 0;
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+}
+
 function bucketLabel(bucket: string, gran: string): string {
   if (!bucket) return '?';
   if (gran === 'hour') return `${bucket.slice(11, 13)}h`;
@@ -67,6 +72,7 @@ export default function AnalyticsPage() {
   const [agents, setAgents] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [insight, setInsight] = useState<any>(null);
+  const [salesAttr, setSalesAttr] = useState<any>(null);
   const [periodMode, setPeriodMode] = useState<'24h' | '7d' | '30d' | 'custom'>('7d');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -90,12 +96,14 @@ export default function AnalyticsPage() {
       api.get(`/api/analytics/agents`).catch(() => null),
       api.get(`/api/analytics/campaigns`).catch(() => null),
       api.get(`/api/analytics/insights`).catch(() => null),
-    ]).then(([ov, sent, ag, camp, ins]: any[]) => {
+      api.get(`/api/analytics/sales-attribution?${q}`).catch(() => null),
+    ]).then(([ov, sent, ag, camp, ins, sa]: any[]) => {
       setOverview(ov?.data ?? ov ?? null);
       setSentiment((sent?.data ?? sent ?? []) as any[]);
       setAgents((ag?.data ?? ag ?? []) as any[]);
       setCampaigns((camp?.data ?? camp ?? []) as any[]);
       setInsight(ins?.data ?? null);
+      setSalesAttr(sa?.data ?? null);
     }).finally(() => setLoading(false));
   }, [periodMode, from, to]);
 
@@ -366,6 +374,52 @@ export default function AnalyticsPage() {
                 <p className="text-xs text-gray-400 mt-1">{kpi.hint}</p>
               </div>
             ))}
+      </div>
+
+      {/* Vendas atribuídas à IA */}
+      <SectionTitle icon={Bot} title="Vendas atribuídas à IA" hint="quanto a IA fechou e assistiu" />
+      <div className="mb-8">
+        {salesAttr && salesAttr.dealsWon > 0 ? (
+          <div className="bg-white rounded-xl border border-gray-100 p-6">
+            <div className="flex flex-wrap items-end gap-6 mb-5">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">Receita atribuída à IA</div>
+                <div className="text-3xl font-bold text-gray-900">{fmtBRL(salesAttr.attributedTotal)}</div>
+                <div className="text-xs text-gray-400 mt-1">{salesAttr.attributedPct}% da receita ganha no período</div>
+              </div>
+              <div className="flex gap-3">
+                <div className="bg-emerald-50 rounded-lg px-4 py-3">
+                  <div className="flex items-center gap-1.5 text-emerald-700 text-xs font-medium mb-1"><Bot size={13} /> Fechada pela IA</div>
+                  <div className="text-lg font-bold text-gray-900">{fmtBRL(salesAttr.aiClosedValue)}</div>
+                </div>
+                <div className="bg-blue-50 rounded-lg px-4 py-3">
+                  <div className="flex items-center gap-1.5 text-blue-700 text-xs font-medium mb-1"><Users size={13} /> Assistida pela IA</div>
+                  <div className="text-lg font-bold text-gray-900">{fmtBRL(salesAttr.aiAssistedValue)}</div>
+                </div>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-100 border-t border-gray-100">
+              {salesAttr.deals.map((d: any) => (
+                <div key={d.id} className="flex items-center justify-between py-2.5 gap-3">
+                  <div className="text-sm text-gray-800 truncate">{d.contactName || 'Contato'}{d.title ? ` · ${d.title}` : ''}</div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full ${d.bucket === 'ai_closed' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {d.bucket === 'ai_closed' ? 'Fechada pela Iza' : 'Assistida'}
+                    </span>
+                    <span className="text-sm font-medium text-gray-900">{fmtBRL(d.value)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-3">
+              Regra: última conversa da IA dentro de 7 dias do ganho (sem humano nas 24h finais = fechada pela IA). Tendência, não prova causal.
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-100 p-6 text-sm text-gray-400 text-center">
+            Quando você marcar vendas como ganhas no CRM, mostramos aqui quanto a IA fechou e assistiu — separando o que ela fechou sozinha do que ela ajudou a fechar.
+          </div>
+        )}
       </div>
 
       {/* Camada 2 — Operação */}
