@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   TrendingUp, TrendingDown, Bot, Users, MessageSquare, Clock, Sparkles,
-  Send, CheckCheck, Eye, Reply, CircleDot, Gauge, Smile, RefreshCw,
+  Send, CheckCheck, Eye, Reply, CircleDot, Gauge, Smile, RefreshCw, X, ArrowRight,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -37,38 +37,67 @@ function fmtDuration(ms: unknown): string {
   return `${h}h ${m % 60}min`;
 }
 
-const WEEK_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const WEEK_PT: Record<string, string> = { Mon: 'Seg', Tue: 'Ter', Wed: 'Qua', Thu: 'Qui', Fri: 'Sex', Sat: 'Sáb', Sun: 'Dom' };
+function bucketLabel(bucket: string, gran: string): string {
+  if (!bucket) return '?';
+  if (gran === 'hour') return `${bucket.slice(11, 13)}h`;
+  const p = bucket.slice(0, 10).split('-');
+  return `${p[2]}/${p[1]}`;
+}
+
+function bucketRange(bucket: string, gran: string): { start: string; end: string } {
+  if (gran === 'hour') {
+    const start = new Date(`${bucket}:00:00.000Z`);
+    return { start: start.toISOString(), end: new Date(start.getTime() + 3600000).toISOString() };
+  }
+  const start = new Date(`${bucket.slice(0, 10)}T00:00:00.000Z`);
+  return { start: start.toISOString(), end: new Date(start.getTime() + 86400000).toISOString() };
+}
+
+const SENTI = {
+  POSITIVE: { name: 'Positivo', color: '#10B981' },
+  NEUTRAL: { name: 'Neutro', color: '#6366F1' },
+  NEGATIVE: { name: 'Negativo', color: '#EF4444' },
+} as const;
+
+type DrawerState = { open: boolean; loading: boolean; title: string; kind: 'messages' | 'conversations'; items: any[] };
 
 export default function AnalyticsPage() {
   const [overview, setOverview] = useState<any>(null);
   const [sentiment, setSentiment] = useState<any[]>([]);
-  const [heatmap, setHeatmap] = useState<Record<string, Record<string, number>>>({});
   const [agents, setAgents] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [insight, setInsight] = useState<any>(null);
-  const [period, setPeriod] = useState('7d');
+  const [periodMode, setPeriodMode] = useState<'24h' | '7d' | '30d' | 'custom'>('7d');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshingPulse, setRefreshingPulse] = useState(false);
+  const [drawer, setDrawer] = useState<DrawerState>({ open: false, loading: false, title: '', kind: 'messages', items: [] });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const rangeQuery = periodMode === 'custom'
+    ? (from && to ? `from=${from}&to=${to}` : '')
+    : `period=${periodMode}`;
 
   useEffect(() => {
+    // Custom sem as duas datas: aguarda o usuário escolher.
+    if (periodMode === 'custom' && (!from || !to)) return;
+    const q = rangeQuery;
     setLoading(true);
     Promise.all([
-      api.get(`/api/analytics/overview?period=${period}`).catch(() => null),
-      api.get(`/api/analytics/sentiment?period=${period}`).catch(() => null),
-      api.get(`/api/analytics/heatmap?period=${period}`).catch(() => null),
+      api.get(`/api/analytics/overview?${q}`).catch(() => null),
+      api.get(`/api/analytics/sentiment?${q}`).catch(() => null),
       api.get(`/api/analytics/agents`).catch(() => null),
       api.get(`/api/analytics/campaigns`).catch(() => null),
       api.get(`/api/analytics/insights`).catch(() => null),
-    ]).then(([ov, sent, heat, ag, camp, ins]: any[]) => {
+    ]).then(([ov, sent, ag, camp, ins]: any[]) => {
       setOverview(ov?.data ?? ov ?? null);
       setSentiment((sent?.data ?? sent ?? []) as any[]);
-      setHeatmap((heat?.data ?? heat ?? {}) as Record<string, Record<string, number>>);
       setAgents((ag?.data ?? ag ?? []) as any[]);
       setCampaigns((camp?.data ?? camp ?? []) as any[]);
       setInsight(ins?.data ?? null);
     }).finally(() => setLoading(false));
-  }, [period]);
+  }, [periodMode, from, to]);
 
   async function handleRefreshPulse() {
     setRefreshingPulse(true);
@@ -82,6 +111,17 @@ export default function AnalyticsPage() {
     }
   }
 
+  async function openDrill(params: string, title: string, kind: 'messages' | 'conversations') {
+    setDrawer({ open: true, loading: true, title, kind, items: [] });
+    try {
+      const res = await api.get(`/api/analytics/drilldown?${params}`);
+      const items = (res as any)?.data?.items ?? (res as any)?.items ?? [];
+      setDrawer((d) => ({ ...d, loading: false, items }));
+    } catch {
+      setDrawer((d) => ({ ...d, loading: false, items: [] }));
+    }
+  }
+
   // ---- Derivações ----
   const automationRate = overview?.automationRate;
   const avgMs = overview?.avgResponseTimeMs;
@@ -92,14 +132,23 @@ export default function AnalyticsPage() {
   const newContacts = overview?.newContacts;
   const csat = overview?.csat;
   const totalMessages = overview?.totalMessages;
+  const granularity = overview?.granularity || 'day';
 
-  // Volume por dia derivado do heatmap (mensagens recebidas)
-  const volumeData = WEEK_ORDER.map((d) => {
-    const hours = heatmap?.[d] || {};
-    const total = Object.values(hours).reduce((a, b) => a + (Number(b) || 0), 0);
-    return { day: WEEK_PT[d], mensagens: total };
-  });
-  const hasVolume = volumeData.some((d) => d.mensagens > 0);
+  // Volume — série temporal real do backend (suporta período custom).
+  const volumeData = (Array.isArray(overview?.volumeByDay) ? overview.volumeByDay : []).map((v: any) => ({
+    bucket: v.bucket,
+    label: bucketLabel(v.bucket, granularity),
+    mensagens: v.count,
+  }));
+  const hasVolume = volumeData.some((d: any) => d.mensagens > 0);
+
+  function onBarClick(d: any) {
+    const bucket = d?.payload?.bucket ?? d?.bucket;
+    if (!bucket) return;
+    const { start, end } = bucketRange(bucket, granularity);
+    openDrill(`kind=messages&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      `Mensagens · ${bucketLabel(bucket, granularity)}`, 'messages');
+  }
 
   // Sentimento
   const sentCounts = sentiment.reduce(
@@ -114,10 +163,18 @@ export default function AnalyticsPage() {
   );
   const sentTotal = sentCounts.pos + sentCounts.neu + sentCounts.neg;
   const sentimentData = [
-    { name: 'Positivo', value: sentCounts.pos, color: '#10B981' },
-    { name: 'Neutro', value: sentCounts.neu, color: '#6366F1' },
-    { name: 'Negativo', value: sentCounts.neg, color: '#EF4444' },
+    { key: 'POSITIVE', name: 'Positivo', value: sentCounts.pos, color: '#10B981' },
+    { key: 'NEUTRAL', name: 'Neutro', value: sentCounts.neu, color: '#6366F1' },
+    { key: 'NEGATIVE', name: 'Negativo', value: sentCounts.neg, color: '#EF4444' },
   ].filter((s) => s.value > 0);
+
+  function onSentimentClick(slice: any) {
+    const key = slice?.key ?? slice?.payload?.key;
+    const name = slice?.name ?? slice?.payload?.name;
+    if (!key || !overview?.rangeStart || !overview?.rangeEnd) return;
+    openDrill(`kind=conversations&sentiment=${key}&start=${encodeURIComponent(overview.rangeStart)}&end=${encodeURIComponent(overview.rangeEnd)}`,
+      `Conversas · sentimento ${name}`, 'conversations');
+  }
 
   // Funil de campanhas (agregado)
   const camp = campaigns.reduce(
@@ -137,7 +194,7 @@ export default function AnalyticsPage() {
   ];
   const hasCampaigns = camp.sent > 0;
 
-  // ---- Resumo (semente determinística do "Pulso", sem LLM) ----
+  // ---- Resumo determinístico (fallback do Pulso, sem LLM) ----
   function buildResumo(): { tone: 'ok' | 'warn'; main: string; note?: string } {
     if (!overview) return { tone: 'ok', main: 'Sem dados suficientes no período selecionado.' };
     const main = `No período, a IA automatizou ${fmtNum(automationRate, { suffix: '%' })} do atendimento e ${fmtNum(closed)} conversas foram resolvidas. Tempo médio de 1ª resposta: ${fmtDuration(avgMs)}.`;
@@ -145,10 +202,10 @@ export default function AnalyticsPage() {
     let tone: 'ok' | 'warn' = 'ok';
     if (typeof avgMs === 'number' && avgMs > 300000) {
       tone = 'warn';
-      note = `Atenção: o tempo médio de 1ª resposta está em ${fmtDuration(avgMs)} — acima de 5 min. Vale revisar a fila ou reforçar a resposta automática nos fluxos.`;
+      note = `Atenção: o tempo médio de 1ª resposta está em ${fmtDuration(avgMs)} — acima de 5 min.`;
     } else if (typeof automationRate === 'number' && automationRate < 40) {
       tone = 'warn';
-      note = `A automação está em ${fmtNum(automationRate, { suffix: '%' })}: boa parte do atendimento ainda é manual. Há espaço para os fluxos do Maestro assumirem mais conversas.`;
+      note = `A automação está em ${fmtNum(automationRate, { suffix: '%' })}: boa parte do atendimento ainda é manual.`;
     } else if (typeof automationRate === 'number' && automationRate >= 70) {
       note = `Bom ritmo: a IA já segura a maior parte do atendimento sozinha.`;
     }
@@ -156,6 +213,7 @@ export default function AnalyticsPage() {
   }
   const resumo = buildResumo();
 
+  // ---- Deltas (vs. período anterior) ----
   const prev = overview?.prev;
   type Delta = { text: string; dir: 'up' | 'down' | 'flat' } | null;
   const deltaPP = (cur: any, prv: any): Delta => {
@@ -183,22 +241,40 @@ export default function AnalyticsPage() {
 
   return (
     <div className="pb-10">
-      {/* Cabeçalho */}
-      <div className="flex items-center justify-between mb-6">
+      {/* Cabeçalho + seletor de período */}
+      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
           <p className="text-sm text-gray-500 mt-1">Visão geral da sua operação</p>
         </div>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-        >
-          <option value="24h">24 horas</option>
-          <option value="7d">7 dias</option>
-          <option value="30d">30 dias</option>
-        </select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={periodMode}
+            onChange={(e) => setPeriodMode(e.target.value as any)}
+            className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
+          >
+            <option value="24h">Últimas 24 horas</option>
+            <option value="7d">Últimos 7 dias</option>
+            <option value="30d">Últimos 30 dias</option>
+            <option value="custom">Escolher período…</option>
+          </select>
+          {periodMode === 'custom' && (
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
+              <input type="date" value={from} max={to || today} onChange={(e) => setFrom(e.target.value)}
+                className="text-sm text-gray-700 outline-none" />
+              <ArrowRight size={14} className="text-gray-400" />
+              <input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)}
+                className="text-sm text-gray-700 outline-none" />
+            </div>
+          )}
+        </div>
       </div>
+
+      {periodMode === 'custom' && (!from || !to) && (
+        <div className="mb-6 text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-3">
+          Selecione a data de início e fim para carregar a análise do período.
+        </div>
+      )}
 
       {/* Pulso — insight narrado pela IA (com fallback determinístico) */}
       {(() => {
@@ -295,17 +371,20 @@ export default function AnalyticsPage() {
       {/* Camada 2 — Operação */}
       <SectionTitle icon={Gauge} title="Operação" hint="como está o atendimento" />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-4">
-        {/* Volume */}
+        {/* Volume (clicável) */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Volume de mensagens recebidas</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-900">Volume de mensagens recebidas</h3>
+            <span className="text-[11px] text-gray-400">clique numa barra para ver as mensagens</span>
+          </div>
           {hasVolume ? (
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={volumeData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="day" tick={{ fontSize: 12 }} />
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
                 <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="mensagens" fill="#1B6B3A" radius={[6, 6, 0, 0]} />
+                <Tooltip formatter={(v: any) => [v, 'mensagens']} />
+                <Bar dataKey="mensagens" fill="#1B6B3A" radius={[6, 6, 0, 0]} cursor="pointer" onClick={onBarClick} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -317,21 +396,26 @@ export default function AnalyticsPage() {
 
         {/* Indicadores operacionais */}
         <div className="flex flex-col gap-4">
-          <MiniStat icon={Clock} label="1ª resposta (média)" value={fmtDuration(avgMs)} hint={typeof p95Ms === 'number' && p95Ms > 0 ? `p95: ${fmtDuration(p95Ms)}` : 'mediana do período'} />
+          <MiniStat icon={Clock} label="1ª resposta (média)" value={fmtDuration(avgMs)}
+            hint={typeof p95Ms === 'number' && p95Ms > 0 ? `p95: ${fmtDuration(p95Ms)}` : 'mediana do período'} />
           <MiniStat icon={MessageSquare} label="Conversas abertas" value={fmtNum(open)} hint="aguardando ou em andamento" />
           <MiniStat icon={MessageSquare} label="Mensagens totais" value={fmtNum(totalMessages)} hint="recebidas no período" />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        {/* Sentimento */}
+        {/* Sentimento (clicável) */}
         <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Sentimento das conversas</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-900">Sentimento das conversas</h3>
+            <span className="text-[11px] text-gray-400">clique numa fatia</span>
+          </div>
           {sentimentData.length > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie data={sentimentData} cx="50%" cy="50%" innerRadius={45} outerRadius={75} dataKey="value"
+                    cursor="pointer" onClick={onSentimentClick}
                     label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}>
                     {sentimentData.map((s, i) => <Cell key={i} fill={s.color} />)}
                   </Pie>
@@ -398,6 +482,8 @@ export default function AnalyticsPage() {
           </div>
         )}
       </div>
+
+      {drawer.open && <DrillDrawer drawer={drawer} onClose={() => setDrawer((d) => ({ ...d, open: false }))} />}
     </div>
   );
 }
@@ -421,6 +507,69 @@ function MiniStat({ icon: Icon, label, value, hint }: { icon: any; label: string
       </div>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
       {hint && <p className="text-[11px] text-gray-400 mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function DrillDrawer({ drawer, onClose }: { drawer: DrawerState; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative w-full max-w-md h-full bg-white shadow-xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{drawer.title}</p>
+            <p className="text-[11px] text-gray-400">{drawer.loading ? 'carregando…' : `${drawer.items.length} ${drawer.kind === 'messages' ? 'mensagens' : 'conversas'}`}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700" aria-label="Fechar">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-3">
+          {drawer.loading ? (
+            <div className="space-y-3 mt-2">
+              {[...Array(6)].map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />)}
+            </div>
+          ) : drawer.items.length === 0 ? (
+            <div className="text-sm text-gray-400 text-center mt-10">Nada encontrado nesse recorte.</div>
+          ) : drawer.kind === 'messages' ? (
+            <div className="space-y-2">
+              {drawer.items.map((m: any) => (
+                <div key={m.id} className={`rounded-lg p-3 text-sm ${m.direction === 'INBOUND' ? 'bg-gray-50' : 'bg-emerald-50'}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[12px] font-medium text-gray-700">
+                      {m.conversation?.contact?.name || m.conversation?.contact?.phone || 'Contato'}
+                    </span>
+                    <span className="text-[11px] text-gray-400">
+                      {m.direction === 'INBOUND' ? 'recebida' : m.isFromBot ? 'IA' : 'equipe'} · {new Date(m.createdAt).toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                  <p className="text-gray-800 break-words">{m.content || `[${(m.type || 'mídia').toLowerCase()}]`}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {drawer.items.map((c: any) => {
+                const senti = (SENTI as any)[c.sentiment];
+                return (
+                  <div key={c.id} className="rounded-lg border border-gray-100 p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[13px] font-medium text-gray-800">{c.contact?.name || c.contact?.phone || 'Contato'}</span>
+                      <span className="text-[11px] text-gray-400">{new Date(c.createdAt).toLocaleDateString('pt-BR')}</span>
+                    </div>
+                    <p className="text-[13px] text-gray-600 break-words line-clamp-2">{c.messages?.[0]?.content || 'sem mensagens'}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      {senti && <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: `${senti.color}22`, color: senti.color }}>{senti.name}</span>}
+                      <span className="text-[11px] text-gray-400">{c._count?.messages ?? 0} mensagens · {String(c.status || '').toLowerCase()}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
