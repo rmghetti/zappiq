@@ -413,8 +413,8 @@ export default function AnalyticsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => confirmLink(s.dealId, s.conversationId)} className="text-[12px] px-2.5 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700">Vincular</button>
-                    <button onClick={() => rejectLink(s.dealId)} className="text-[12px] px-2.5 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">Ignorar</button>
+                    <button onClick={() => confirmLink(s.dealId, s.conversationId)} className="text-[12px] px-2.5 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700" title="Atribuir esta venda à conversa da Iza">Sim, foi a Iza</button>
+                    <button onClick={() => rejectLink(s.dealId)} className="text-[12px] px-2.5 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50" title="Esta venda não veio da IA — remover a sugestão">Não foi</button>
                   </div>
                 </div>
               ))}
