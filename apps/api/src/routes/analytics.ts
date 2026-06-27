@@ -274,14 +274,18 @@ router.get('/drilldown', async (req: Request, res: Response, next: NextFunction)
 router.get('/sales-attribution', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.organizationId!;
-    const { since, until } = getRange(req.query);
+    const { since, until, label } = getRange(req.query);
+    const cacheKey = `analytics:salesattr:v1:${orgId}:${label}`;
+    const cached = await redis.get(cacheKey).catch(() => null);
+    if (cached) { res.json(JSON.parse(cached)); return; }
+
     const IZA_MS = 7 * 86400000;
     const HUMAN_MS = 24 * 3600000;
 
     const wonDeals = await prisma.deal.findMany({
       where: { organizationId: orgId, wonAt: { gte: since, lt: until }, value: { not: null } },
       orderBy: { wonAt: 'desc' },
-      take: 500,
+      take: 300,
       select: { id: true, title: true, value: true, wonAt: true, contactId: true, sourceAgentId: true, contact: { select: { name: true } } },
     });
 
@@ -292,7 +296,7 @@ router.get('/sales-attribution', async (req: Request, res: Response, next: NextF
         prisma.message.count({ where: { isFromBot: false, direction: 'OUTBOUND', conversation: { contactId: d.contactId, organizationId: orgId }, createdAt: { gte: new Date(won.getTime() - HUMAN_MS), lte: won } } }),
       ]);
       const bucket = izaCount > 0 ? (humanCount > 0 ? 'ai_assisted' : 'ai_closed') : 'none';
-      return { id: d.id, title: d.title, value: Number(d.value ?? 0), wonAt: d.wonAt, contactName: d.contact?.name ?? null, bucket, sourcedByIza: !!d.sourceAgentId };
+      return { id: d.id, title: d.title, value: Number(d.value ?? 0), wonAt: d.wonAt as Date, contactId: d.contactId, contactName: d.contact?.name ?? null, bucket, sourcedByIza: !!d.sourceAgentId };
     }));
 
     const sum = (arr: typeof classified) => arr.reduce((a, r) => a + (r.value || 0), 0);
@@ -301,20 +305,39 @@ router.get('/sales-attribution', async (req: Request, res: Response, next: NextF
     const totalWonValue = sum(classified);
     const attributedTotal = sum(aiClosed) + sum(aiAssisted);
 
-    res.json({
-      success: true,
-      data: {
-        attributedTotal,
-        aiClosedValue: sum(aiClosed),
-        aiAssistedValue: sum(aiAssisted),
-        noAiValue: sum(classified.filter((r) => r.bucket === 'none')),
-        totalWonValue,
-        attributedPct: totalWonValue > 0 ? Math.round((attributedTotal / totalWonValue) * 100) : 0,
-        dealsWon: classified.length,
-        deals: classified.filter((r) => r.bucket !== 'none').slice(0, 20),
-        window: { izaDays: 7, humanHours: 24 },
-      },
-    });
+    // "Momentos que destravaram a venda": top mensagens da Iza (maior confiança;
+    // recência como desempate) na janela antes do ganho. Só para os deals exibidos.
+    const shown = classified.filter((r) => r.bucket !== 'none').slice(0, 20);
+    const deals = await Promise.all(shown.map(async (d) => {
+      const moments = await prisma.message.findMany({
+        where: {
+          isFromBot: true,
+          conversation: { contactId: d.contactId, organizationId: orgId },
+          createdAt: { gte: new Date(d.wonAt.getTime() - IZA_MS), lte: d.wonAt },
+          content: { not: '' },
+        },
+        orderBy: [{ aiConfidence: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+        take: 3,
+        select: { content: true, createdAt: true, aiConfidence: true },
+      });
+      const { contactId, ...rest } = d;
+      return { ...rest, moments };
+    }));
+
+    const data = {
+      attributedTotal,
+      aiClosedValue: sum(aiClosed),
+      aiAssistedValue: sum(aiAssisted),
+      noAiValue: sum(classified.filter((r) => r.bucket === 'none')),
+      totalWonValue,
+      attributedPct: totalWonValue > 0 ? Math.round((attributedTotal / totalWonValue) * 100) : 0,
+      dealsWon: classified.length,
+      deals,
+      window: { izaDays: 7, humanHours: 24 },
+    };
+
+    await redis.setex(cacheKey, 300, JSON.stringify({ success: true, data })).catch(() => {});
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 });
 

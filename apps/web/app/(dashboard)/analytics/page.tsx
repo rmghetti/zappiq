@@ -73,6 +73,7 @@ export default function AnalyticsPage() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [insight, setInsight] = useState<any>(null);
   const [salesAttr, setSalesAttr] = useState<any>(null);
+  const [expandedDeal, setExpandedDeal] = useState<string | null>(null);
   const [periodMode, setPeriodMode] = useState<'24h' | '7d' | '30d' | 'custom'>('7d');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -399,20 +400,46 @@ export default function AnalyticsPage() {
               </div>
             </div>
             <div className="divide-y divide-gray-100 border-t border-gray-100">
-              {salesAttr.deals.map((d: any) => (
-                <div key={d.id} className="flex items-center justify-between py-2.5 gap-3">
-                  <div className="text-sm text-gray-800 truncate">{d.contactName || 'Contato'}{d.title ? ` · ${d.title}` : ''}</div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full ${d.bucket === 'ai_closed' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {d.bucket === 'ai_closed' ? 'Fechada pela Iza' : 'Assistida'}
-                    </span>
-                    <span className="text-sm font-medium text-gray-900">{fmtBRL(d.value)}</span>
+              {salesAttr.deals.map((d: any) => {
+                const open = expandedDeal === d.id;
+                const moments = Array.isArray(d.moments) ? d.moments : [];
+                return (
+                  <div key={d.id}>
+                    <button
+                      onClick={() => setExpandedDeal(open ? null : d.id)}
+                      className="w-full flex items-center justify-between py-2.5 gap-3 text-left hover:bg-gray-50 -mx-2 px-2 rounded"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Sparkles size={13} className="text-amber-500 shrink-0" />
+                        <span className="text-sm text-gray-800 truncate">{d.contactName || 'Contato'}{d.title ? ` · ${d.title}` : ''}</span>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full ${d.bucket === 'ai_closed' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {d.bucket === 'ai_closed' ? 'Fechada pela Iza' : 'Assistida'}
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">{fmtBRL(d.value)}</span>
+                      </div>
+                    </button>
+                    {open && (
+                      <div className="pb-3 pl-5">
+                        <div className="text-[11px] text-gray-400 mb-2">Momentos que a Iza destravou</div>
+                        {moments.length > 0 ? moments.map((m: any, i: number) => (
+                          <div key={i} className="border-l-2 border-emerald-300 pl-3 mb-2">
+                            <p className="text-[13px] text-gray-800 break-words">{m.content}</p>
+                            <p className="text-[11px] text-gray-400">
+                              {new Date(m.createdAt).toLocaleString('pt-BR')}
+                              {typeof m.aiConfidence === 'number' ? ` · confiança ${m.aiConfidence.toFixed(2)}` : ''}
+                            </p>
+                          </div>
+                        )) : <p className="text-[12px] text-gray-400">Sem mensagens da IA registradas nessa janela.</p>}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <p className="text-[11px] text-gray-400 mt-3">
-              Regra: última conversa da IA dentro de 7 dias do ganho (sem humano nas 24h finais = fechada pela IA). Tendência, não prova causal.
+              Clique num deal para ver os momentos que a Iza destravou. Regra: última conversa da IA dentro de 7 dias do ganho (sem humano nas 24h finais = fechada pela IA). Tendência, não prova causal.
             </p>
           </div>
         ) : (
