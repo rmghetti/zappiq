@@ -337,6 +337,7 @@ model Conversation {
   organizationId   String
   organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   messages         Message[]
+  sourceDeals      Deal[]             @relation("DealSourceConversation")
   internalNotes    InternalNote[]
   activities       Activity[]
   currentFlowState Json?
@@ -677,6 +678,11 @@ model Deal {
   lossReason        LossReason?
   sourceCampaignId  String?
   sourceAgentId     String?
+  // Fase B (atribuição IA): conversa que originou/destravou a venda (vínculo
+  // conversa→deal). aiLinkReviewed = já confirmado/rejeitado por humano.
+  sourceConversationId String?
+  sourceConversation   Conversation? @relation("DealSourceConversation", fields: [sourceConversationId], references: [id], onDelete: SetNull)
+  aiLinkReviewed       Boolean       @default(false)
   wonAt             DateTime?
   lostAt            DateTime?
   contactId      String

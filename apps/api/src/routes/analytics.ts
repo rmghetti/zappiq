@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@zappiq/database';
 import redis from '../utils/redis.js';
 import { generatePulseInsight } from '../services/analyticsPulse.js';
+import { autoLinkWonDeals, computeInfluence } from '../services/dealAttribution.js';
 
 const router = Router();
 
@@ -287,9 +288,12 @@ router.get('/sales-attribution', async (req: Request, res: Response, next: NextF
   try {
     const orgId = req.organizationId!;
     const { since, until, label } = getRange(req.query);
-    const cacheKey = `analytics:salesattr:v1:${orgId}:${label}`;
+    const cacheKey = `analytics:salesattr:v2:${orgId}:${label}`;
     const cached = await redis.get(cacheKey).catch(() => null);
     if (cached) { res.json(JSON.parse(cached)); return; }
+
+    // Auto-vincula deals ganhos sem ambiguidade (persiste sourceConversationId). Fail-soft.
+    await autoLinkWonDeals(orgId).catch(() => 0);
 
     const IZA_MS = 7 * 86400000;
     const HUMAN_MS = 24 * 3600000;
@@ -332,8 +336,9 @@ router.get('/sales-attribution', async (req: Request, res: Response, next: NextF
         take: 3,
         select: { content: true, createdAt: true, aiConfidence: true },
       });
+      const influence = await computeInfluence(orgId, d.contactId, d.wonAt);
       const { contactId, ...rest } = d;
-      return { ...rest, moments };
+      return { ...rest, moments, influenceScore: influence.score, izaMsgs: influence.izaMsgs, humanMsgs: influence.humanMsgs };
     }));
 
     const data = {
