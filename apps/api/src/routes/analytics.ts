@@ -34,14 +34,16 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
   try {
     const orgId = req.organizationId!;
     const { since, until, label } = getRange(req.query);
-    const cacheKey = `analytics:overview:v4:${orgId}:${label}`;
+    const cacheKey = `analytics:overview:v5:${orgId}:${label}`;
 
     const cached = await redis.get(cacheKey).catch(() => null);
     if (cached) { res.json(JSON.parse(cached)); return; }
 
-    const [totalMessages, botMessages, openConvos, contacts, closedConvos, aiResolved, humanResolved] = await Promise.all([
+    const [totalMessages, botMessages, humanOutbound, openConvos, contacts, closedConvos, aiResolved, humanResolved] = await Promise.all([
       prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'INBOUND', createdAt: { gte: since, lt: until } } }),
-      prisma.message.count({ where: { conversation: { organizationId: orgId }, isFromBot: true, createdAt: { gte: since, lt: until } } }),
+      prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'OUTBOUND', isFromBot: true, createdAt: { gte: since, lt: until } } }),
+      // Respostas humanas = enviadas pela equipe (não-bot) via "digite uma mensagem".
+      prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'OUTBOUND', isFromBot: false, createdAt: { gte: since, lt: until } } }),
       prisma.conversation.count({ where: { organizationId: orgId, status: { in: ['OPEN', 'WAITING', 'ASSIGNED'] } } }),
       prisma.contact.count({ where: { organizationId: orgId, createdAt: { gte: since, lt: until } } }),
       prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: since, lt: until } } }),
@@ -102,9 +104,10 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
     // Período anterior (mesma duração, imediatamente antes) para os deltas.
     const prevUntil = since;
     const prevSince = new Date(since.getTime() - rangeMs);
-    const [pTotal, pBot, pContacts, pClosed, pAiResolved, pHumanResolved, pCsatAgg] = await Promise.all([
+    const [pTotal, pBot, pHumanOut, pContacts, pClosed, pAiResolved, pHumanResolved, pCsatAgg] = await Promise.all([
       prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'INBOUND', createdAt: { gte: prevSince, lt: prevUntil } } }),
-      prisma.message.count({ where: { conversation: { organizationId: orgId }, isFromBot: true, createdAt: { gte: prevSince, lt: prevUntil } } }),
+      prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'OUTBOUND', isFromBot: true, createdAt: { gte: prevSince, lt: prevUntil } } }),
+      prisma.message.count({ where: { conversation: { organizationId: orgId }, direction: 'OUTBOUND', isFromBot: false, createdAt: { gte: prevSince, lt: prevUntil } } }),
       prisma.contact.count({ where: { organizationId: orgId, createdAt: { gte: prevSince, lt: prevUntil } } }),
       prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: prevUntil } } }),
       prisma.conversation.count({ where: { organizationId: orgId, status: 'CLOSED', closedAt: { gte: prevSince, lt: prevUntil }, assignedToId: null } }),
@@ -112,17 +115,26 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       prisma.conversation.aggregate({ where: { organizationId: orgId, csatScore: { not: null }, createdAt: { gte: prevSince, lt: prevUntil } }, _avg: { csatScore: true } }),
     ]);
     const pTotalResolved = pAiResolved + pHumanResolved;
+    const pOutbound = pBot + pHumanOut;
     const prev = {
       automationRate: pTotal > 0 ? Math.min(100, Math.round((pBot / pTotal) * 100)) : 0,
+      iaShare: pOutbound > 0 ? Math.round((pBot / pOutbound) * 100) : 0,
       aiResolvedRate: pTotalResolved > 0 ? Math.round((pAiResolved / pTotalResolved) * 100) : 0,
       newContacts: pContacts,
       closedConversations: pClosed,
       csat: pCsatAgg._avg.csatScore != null ? Math.round(pCsatAgg._avg.csatScore * 10) / 10 : null,
     };
 
+    const outbound = botMessages + humanOutbound;
     const data = {
       totalMessages,
       botMessages,
+      // Respostas enviadas, separadas por autor (IA vs equipe humana).
+      botOutbound: botMessages,
+      humanOutbound,
+      outboundTotal: outbound,
+      iaShare: outbound > 0 ? Math.round((botMessages / outbound) * 100) : 0,
+      humanShare: outbound > 0 ? Math.round((humanOutbound / outbound) * 100) : 0,
       automationRate: totalMessages > 0 ? Math.min(100, Math.round((botMessages / totalMessages) * 100)) : 0,
       openConversations: openConvos,
       newContacts: contacts,
