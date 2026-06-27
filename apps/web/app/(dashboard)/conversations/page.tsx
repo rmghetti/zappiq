@@ -259,8 +259,8 @@ export default function ConversationsPage() {
                       {msg.isFromBot && (
                         <div className="flex items-center gap-1 text-[10px] text-accent-500 font-semibold mb-1"><Bot size={10} /> Agente IA</div>
                       )}
-                      {!msg.isFromBot && msg.direction === 'OUTBOUND' && msg.sender && (
-                        <div className="flex items-center gap-1 text-[10px] text-blue-600 font-semibold mb-1"><User size={10} /> {msg.sender.name}</div>
+                      {!msg.isFromBot && msg.direction === 'OUTBOUND' && (
+                        <div className="flex items-center gap-1 text-[10px] text-blue-600 font-semibold mb-1"><User size={10} /> {msg.sender?.name || 'Humano'}</div>
                       )}
                       <p className="whitespace-pre-wrap">{msg.content}</p>
                       <div className="flex items-center justify-end gap-1 mt-1">

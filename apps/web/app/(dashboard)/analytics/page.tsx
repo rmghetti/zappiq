@@ -133,6 +133,10 @@ export default function AnalyticsPage() {
 
   // ---- Derivações ----
   const automationRate = overview?.automationRate;
+  const iaShare = overview?.iaShare;
+  const humanShare = overview?.humanShare;
+  const botOutbound = overview?.botOutbound;
+  const humanOutbound = overview?.humanOutbound;
   const avgMs = overview?.avgResponseTimeMs;
   const p95Ms = overview?.p95ResponseTimeMs;
   const aiResolvedRate = overview?.aiResolvedRate;
@@ -242,7 +246,7 @@ export default function AnalyticsPage() {
   };
 
   const resultCards = [
-    { label: 'Atendido pela IA', value: fmtNum(automationRate, { suffix: '%' }), icon: Bot, hint: 'das mensagens', delta: prev ? deltaPP(automationRate, prev.automationRate) : null },
+    { label: 'Respostas pela IA', value: fmtNum(iaShare, { suffix: '%' }), icon: Bot, hint: `${fmtNum(botOutbound)} IA · ${fmtNum(humanOutbound)} humano`, delta: prev ? deltaPP(iaShare, prev.iaShare) : null },
     { label: 'Conversas resolvidas', value: fmtNum(closed), icon: CheckCheck, hint: typeof aiResolvedRate === 'number' ? `${aiResolvedRate}% sem precisar de humano` : 'fechadas no período', delta: prev ? deltaPct(closed, prev.closedConversations) : null },
     { label: 'Novos contatos', value: fmtNum(newContacts), icon: Users, hint: 'entraram no período', delta: prev ? deltaPct(newContacts, prev.newContacts) : null },
     { label: 'CSAT', value: fmtNum(csat, { decimals: 1 }), icon: Smile, hint: 'satisfação média (0–5)', delta: prev ? deltaAbs(csat, prev.csat) : null },
@@ -480,7 +484,26 @@ export default function AnalyticsPage() {
           <MiniStat icon={Clock} label="1ª resposta (média)" value={fmtDuration(avgMs)}
             hint={typeof p95Ms === 'number' && p95Ms > 0 ? `p95: ${fmtDuration(p95Ms)}` : 'mediana do período'} />
           <MiniStat icon={MessageSquare} label="Conversas abertas" value={fmtNum(open)} hint="aguardando ou em andamento" />
-          <MiniStat icon={MessageSquare} label="Mensagens totais" value={fmtNum(totalMessages)} hint="recebidas no período" />
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <Bot size={15} className="text-gray-400" />
+              <span className="text-xs text-gray-500">Respostas: IA vs humano</span>
+            </div>
+            {(botOutbound ?? 0) + (humanOutbound ?? 0) > 0 ? (
+              <>
+                <div className="flex gap-1 h-2.5 rounded-full overflow-hidden bg-gray-100">
+                  <div style={{ width: `${iaShare ?? 0}%`, background: '#1B6B3A' }} />
+                  <div style={{ width: `${humanShare ?? 0}%`, background: '#378ADD' }} />
+                </div>
+                <div className="flex justify-between text-[11px] mt-1.5">
+                  <span className="text-[#1B6B3A]">{fmtNum(botOutbound)} IA ({fmtNum(iaShare, { suffix: '%' })})</span>
+                  <span className="text-[#185FA5]">{fmtNum(humanOutbound)} humano ({fmtNum(humanShare, { suffix: '%' })})</span>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-gray-400 mt-1">Sem respostas enviadas no período</p>
+            )}
+          </div>
         </div>
       </div>
 
