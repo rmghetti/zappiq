@@ -53,21 +53,21 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
     // Tempo de resposta (diff INBOUND → próxima OUTBOUND): média + p95.
     const responseStats = await prisma.$queryRaw<{ avg_ms: number | null; p95_ms: number | null }[]>`
       WITH pairs AS (
-        SELECT EXTRACT(EPOCH FROM (ob.created_at - ib.created_at)) * 1000 AS ms
+        SELECT EXTRACT(EPOCH FROM (ob."createdAt" - ib."createdAt")) * 1000 AS ms
         FROM messages ib
-        JOIN messages ob ON ob.conversation_id = ib.conversation_id
+        JOIN messages ob ON ob."conversationId" = ib."conversationId"
           AND ob.direction = 'OUTBOUND'
-          AND ob.created_at = (
-            SELECT MIN(m2.created_at) FROM messages m2
-            WHERE m2.conversation_id = ib.conversation_id
+          AND ob."createdAt" = (
+            SELECT MIN(m2."createdAt") FROM messages m2
+            WHERE m2."conversationId" = ib."conversationId"
               AND m2.direction = 'OUTBOUND'
-              AND m2.created_at > ib.created_at
+              AND m2."createdAt" > ib."createdAt"
           )
-        JOIN conversations c ON c.id = ib.conversation_id
+        JOIN conversations c ON c.id = ib."conversationId"
         WHERE ib.direction = 'INBOUND'
-          AND c.organization_id = ${orgId}
-          AND ib.created_at >= ${since}
-          AND ib.created_at < ${until}
+          AND c."organizationId" = ${orgId}
+          AND ib."createdAt" >= ${since}
+          AND ib."createdAt" < ${until}
       )
       SELECT AVG(ms)::float AS avg_ms,
              percentile_cont(0.95) WITHIN GROUP (ORDER BY ms)::float AS p95_ms
@@ -83,9 +83,9 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
     const truncUnit = byHour ? 'hour' : 'day';
     const fmt = byHour ? 'YYYY-MM-DD"T"HH24' : 'YYYY-MM-DD';
     const volRows = await prisma.$queryRawUnsafe<{ bucket: string; cnt: number }[]>(
-      `SELECT to_char(date_trunc('${truncUnit}', m.created_at), '${fmt}') AS bucket, COUNT(*)::int AS cnt
-       FROM messages m JOIN conversations c ON c.id = m.conversation_id
-       WHERE c.organization_id = $1 AND m.direction = 'INBOUND' AND m.created_at >= $2 AND m.created_at < $3
+      `SELECT to_char(date_trunc('${truncUnit}', m."createdAt"), '${fmt}') AS bucket, COUNT(*)::int AS cnt
+       FROM messages m JOIN conversations c ON c.id = m."conversationId"
+       WHERE c."organizationId" = $1 AND m.direction = 'INBOUND' AND m."createdAt" >= $2 AND m."createdAt" < $3
        GROUP BY 1 ORDER BY 1`,
       orgId, since, until,
     );
