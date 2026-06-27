@@ -119,21 +119,21 @@ export async function computeOrgDayMetrics(orgId: string, ref: Date): Promise<Da
   }
 
   const responsePairs = await prisma.$queryRaw<{ avg_ms: number | null }[]>`
-    SELECT AVG(EXTRACT(EPOCH FROM (ob.created_at - ib.created_at)) * 1000)::float AS avg_ms
+    SELECT AVG(EXTRACT(EPOCH FROM (ob."createdAt" - ib."createdAt")) * 1000)::float AS avg_ms
     FROM messages ib
-    JOIN messages ob ON ob.conversation_id = ib.conversation_id
+    JOIN messages ob ON ob."conversationId" = ib."conversationId"
       AND ob.direction = 'OUTBOUND'
-      AND ob.created_at = (
-        SELECT MIN(m2.created_at) FROM messages m2
-        WHERE m2.conversation_id = ib.conversation_id
+      AND ob."createdAt" = (
+        SELECT MIN(m2."createdAt") FROM messages m2
+        WHERE m2."conversationId" = ib."conversationId"
           AND m2.direction = 'OUTBOUND'
-          AND m2.created_at > ib.created_at
+          AND m2."createdAt" > ib."createdAt"
       )
-    JOIN conversations c ON c.id = ib.conversation_id
+    JOIN conversations c ON c.id = ib."conversationId"
     WHERE ib.direction = 'INBOUND'
-      AND c.organization_id = ${orgId}
-      AND ib.created_at >= ${start}
-      AND ib.created_at < ${end}
+      AND c."organizationId" = ${orgId}
+      AND ib."createdAt" >= ${start}
+      AND ib."createdAt" < ${end}
   `;
   const avgFirstResponseMs = responsePairs[0]?.avg_ms != null ? Math.round(responsePairs[0].avg_ms) : null;
 
