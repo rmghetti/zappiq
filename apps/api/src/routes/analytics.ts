@@ -113,7 +113,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
     ]);
     const pTotalResolved = pAiResolved + pHumanResolved;
     const prev = {
-      automationRate: pTotal > 0 ? Math.round((pBot / pTotal) * 100) : 0,
+      automationRate: pTotal > 0 ? Math.min(100, Math.round((pBot / pTotal) * 100)) : 0,
       aiResolvedRate: pTotalResolved > 0 ? Math.round((pAiResolved / pTotalResolved) * 100) : 0,
       newContacts: pContacts,
       closedConversations: pClosed,
@@ -123,7 +123,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
     const data = {
       totalMessages,
       botMessages,
-      automationRate: totalMessages > 0 ? Math.round((botMessages / totalMessages) * 100) : 0,
+      automationRate: totalMessages > 0 ? Math.min(100, Math.round((botMessages / totalMessages) * 100)) : 0,
       openConversations: openConvos,
       newContacts: contacts,
       closedConversations: closedConvos,

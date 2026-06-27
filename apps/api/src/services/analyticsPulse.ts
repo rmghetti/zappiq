@@ -137,7 +137,7 @@ export async function computeOrgDayMetrics(orgId: string, ref: Date): Promise<Da
   `;
   const avgFirstResponseMs = responsePairs[0]?.avg_ms != null ? Math.round(responsePairs[0].avg_ms) : null;
 
-  const automationRate = messagesIn > 0 ? Math.round((botMessages / messagesIn) * 100) : 0;
+  const automationRate = messagesIn > 0 ? Math.min(100, Math.round((botMessages / messagesIn) * 100)) : 0;
 
   const metrics: DayMetrics = {
     date: key,
