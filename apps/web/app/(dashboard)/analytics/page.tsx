@@ -73,7 +73,9 @@ export default function AnalyticsPage() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [insight, setInsight] = useState<any>(null);
   const [salesAttr, setSalesAttr] = useState<any>(null);
+  const [salesSuggestions, setSalesSuggestions] = useState<any[]>([]);
   const [expandedDeal, setExpandedDeal] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [periodMode, setPeriodMode] = useState<'24h' | '7d' | '30d' | 'custom'>('7d');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -98,15 +100,27 @@ export default function AnalyticsPage() {
       api.get(`/api/analytics/campaigns`).catch(() => null),
       api.get(`/api/analytics/insights`).catch(() => null),
       api.get(`/api/analytics/sales-attribution?${q}`).catch(() => null),
-    ]).then(([ov, sent, ag, camp, ins, sa]: any[]) => {
+      api.get(`/api/deals/ia-suggestions`).catch(() => null),
+    ]).then(([ov, sent, ag, camp, ins, sa, sug]: any[]) => {
       setOverview(ov?.data ?? ov ?? null);
       setSentiment((sent?.data ?? sent ?? []) as any[]);
       setAgents((ag?.data ?? ag ?? []) as any[]);
       setCampaigns((camp?.data ?? camp ?? []) as any[]);
       setInsight(ins?.data ?? null);
       setSalesAttr(sa?.data ?? null);
+      setSalesSuggestions((sug?.data ?? []) as any[]);
     }).finally(() => setLoading(false));
-  }, [periodMode, from, to]);
+  }, [periodMode, from, to, refreshKey]);
+
+  async function confirmLink(dealId: string, conversationId: string) {
+    try { await api.post(`/api/deals/${dealId}/link-conversation`, { conversationId }); } catch {}
+    setSalesSuggestions((s) => s.filter((x) => x.dealId !== dealId));
+    setRefreshKey((k) => k + 1);
+  }
+  async function rejectLink(dealId: string) {
+    try { await api.post(`/api/deals/${dealId}/reject-ia-link`); } catch {}
+    setSalesSuggestions((s) => s.filter((x) => x.dealId !== dealId));
+  }
 
   async function handleRefreshPulse() {
     setRefreshingPulse(true);
@@ -384,6 +398,29 @@ export default function AnalyticsPage() {
       {/* Vendas atribuídas à IA */}
       <SectionTitle icon={Bot} title="Vendas atribuídas à IA" hint="quanto a IA fechou e assistiu" />
       <div className="mb-8">
+        {salesSuggestions.length > 0 && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-center gap-2 mb-3 text-amber-800 text-sm font-semibold">
+              <Sparkles size={15} /> Vínculos sugeridos pela IA · confirme para atribuir a venda
+            </div>
+            <div className="space-y-2">
+              {salesSuggestions.map((s: any) => (
+                <div key={s.dealId} className="flex items-center justify-between gap-3 bg-white rounded-lg border border-gray-100 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-sm text-gray-800 truncate">{s.contactName || 'Contato'}{s.title ? ` · ${s.title}` : ''} · {fmtBRL(s.value)}</div>
+                    <div className="text-[11px] text-gray-400 truncate">
+                      A Iza conversou com este contato{s.lastMessage ? ` — "${String(s.lastMessage.content).slice(0, 60)}"` : ''}{s.candidateCount > 1 ? ` (${s.candidateCount} conversas candidatas)` : ''}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => confirmLink(s.dealId, s.conversationId)} className="text-[12px] px-2.5 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700">Vincular</button>
+                    <button onClick={() => rejectLink(s.dealId)} className="text-[12px] px-2.5 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">Ignorar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {salesAttr && salesAttr.dealsWon > 0 ? (
           <div className="bg-white rounded-xl border border-gray-100 p-6">
             <div className="flex flex-wrap items-end gap-6 mb-5">
@@ -426,6 +463,12 @@ export default function AnalyticsPage() {
                     </button>
                     {open && (
                       <div className="pb-3 pl-5">
+                        {typeof d.influenceScore === 'number' && (
+                          <div className="text-[12px] text-gray-600 mb-2">
+                            Influência da Iza: <span className="font-semibold text-[#1B6B3A]">{d.influenceScore}%</span>
+                            <span className="text-gray-400"> ({fmtNum(d.izaMsgs)} msgs IA · {fmtNum(d.humanMsgs)} humanas)</span>
+                          </div>
+                        )}
                         <div className="text-[11px] text-gray-400 mb-2">Momentos que a Iza destravou</div>
                         {moments.length > 0 ? moments.map((m: any, i: number) => (
                           <div key={i} className="border-l-2 border-emerald-300 pl-3 mb-2">

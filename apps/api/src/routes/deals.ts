@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
+import { pendingSuggestions } from '../services/dealAttribution.js';
 
 const router = Router();
 
@@ -34,6 +35,45 @@ router.post('/', validate(createSchema), async (req: Request, res: Response, nex
       data: { ...req.body, organizationId: req.organizationId! },
     });
     res.status(201).json({ success: true, data: deal });
+  } catch (err) { next(err); }
+});
+
+// ── Fase B: atribuição IA — vínculo conversa→deal (human-in-the-loop) ──
+// GET /api/deals/ia-suggestions — deals com candidato de conversa aguardando confirmação
+router.get('/ia-suggestions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await pendingSuggestions(req.organizationId!);
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+});
+
+// POST /api/deals/:id/link-conversation { conversationId } — confirma o vínculo
+router.post('/:id/link-conversation', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const { conversationId } = req.body;
+    if (!conversationId) { res.status(400).json({ error: 'conversationId é obrigatório' }); return; }
+    const [deal, conv] = await Promise.all([
+      prisma.deal.findFirst({ where: { id: req.params.id, organizationId: orgId } }),
+      prisma.conversation.findFirst({ where: { id: conversationId, organizationId: orgId } }),
+    ]);
+    if (!deal || !conv) { res.status(404).json({ error: 'Deal ou conversa não encontrados' }); return; }
+    const updated = await prisma.deal.update({
+      where: { id: deal.id },
+      data: { sourceConversationId: conversationId, aiLinkReviewed: true },
+    });
+    res.json({ success: true, data: updated });
+  } catch (err) { next(err); }
+});
+
+// POST /api/deals/:id/reject-ia-link — rejeita a sugestão (não volta a sugerir)
+router.post('/:id/reject-ia-link', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const deal = await prisma.deal.findFirst({ where: { id: req.params.id, organizationId: orgId } });
+    if (!deal) { res.status(404).json({ error: 'Deal não encontrado' }); return; }
+    const updated = await prisma.deal.update({ where: { id: deal.id }, data: { aiLinkReviewed: true } });
+    res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 });
 
