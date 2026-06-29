@@ -7,7 +7,7 @@
  *
  * Backend: POST /api/dsr/request (a ser implementado pelo dev lead antes do 14/05).
  * Se a rota ainda não existir em produção, o fallback no onSubmit aciona mailto
- * pra privacidade@zappiq.com.br com os dados pré-preenchidos no corpo do e-mail.
+ * pra dpo@zappiq.com.br com os dados pré-preenchidos no corpo do e-mail.
  *
  * Evidência de aprovação: ZappIQ_V32_Actions/sprint_1_pricing_garantia_cloud_api/PRIVACY_V32_APROVADA_JURIDICO.md
  */
@@ -95,12 +95,12 @@ export default function DeletarDadosPage() {
         .filter(Boolean)
         .join('\n');
 
-      const mailto = `mailto:privacidade@zappiq.com.br?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+      const mailto = `mailto:dpo@zappiq.com.br?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
       window.location.href = mailto;
 
       setStatus('error');
       setErrorMsg(
-        'Não conseguimos registrar a solicitação automaticamente. Abrimos seu cliente de e-mail como alternativa. Se não abrir, envie o pedido diretamente para privacidade@zappiq.com.br.',
+        'Não conseguimos registrar a solicitação automaticamente. Abrimos seu cliente de e-mail como alternativa. Se não abrir, envie o pedido diretamente para dpo@zappiq.com.br.',
       );
     }
   }
@@ -148,10 +148,10 @@ export default function DeletarDadosPage() {
               Você receberá uma confirmação no e-mail informado. Guarde o protocolo para
               acompanhamento. Em caso de urgência ou dúvida, escreva para{' '}
               <a
-                href="mailto:privacidade@zappiq.com.br"
+                href="mailto:dpo@zappiq.com.br"
                 className="underline font-medium"
               >
-                privacidade@zappiq.com.br
+                dpo@zappiq.com.br
               </a>
               .
             </p>

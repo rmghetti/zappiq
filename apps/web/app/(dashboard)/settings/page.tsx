@@ -459,6 +459,32 @@ export default function SettingsPage() {
             {savingGeneral && <Loader2 size={14} className="animate-spin" />}
             {savingGeneral ? 'Salvando...' : 'Salvar alterações'}
           </button>
+
+          {/* Privacidade e dados (LGPD) */}
+          <div className="border-t border-gray-100 pt-5 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900">Privacidade e dados (LGPD)</h3>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              <a href="/legal/privacidade" target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700 underline">
+                Política de Privacidade
+              </a>
+              <a href="/legal/termos" target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700 underline">
+                Termos de Uso
+              </a>
+              <a href="/legal/cookies" target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700 underline">
+                Cookies
+              </a>
+            </div>
+            <p className="text-xs text-gray-500">
+              Para acessar, corrigir, exportar ou excluir seus dados (art. 18 da LGPD), use o canal
+              abaixo. As solicitações são registradas e acompanhadas pelo nosso Encarregado (DPO).
+            </p>
+            <a
+              href="/legal/deletar-dados"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50"
+            >
+              <Trash2 size={14} /> Excluir minha conta e meus dados
+            </a>
+          </div>
         </div>
       )}
 
