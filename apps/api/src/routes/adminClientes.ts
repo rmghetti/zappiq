@@ -28,6 +28,7 @@ import { prisma } from '@zappiq/database';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import { currentYearMonth } from '../services/tenantUsageService.js';
+import { mrrCentsForPlan } from './stripeWebhook.util.js';
 import {
   buildAccountRow,
   computeKpis,
@@ -41,6 +42,19 @@ router.use(authMiddleware, requireRole('SUPERADMIN'));
 
 // Domínio dos seed staging — mesma lógica de /admin/leads e /quota-watch.
 const STAGING_EMAIL_DOMAIN = '@exemplo-staging.zappiq.com.br';
+
+/** Janela mensal [start, end) em UTC a partir de 'YYYY-MM'. */
+function monthRangeUtc(yearMonth: string): { start: Date; end: Date } {
+  const [y, m] = yearMonth.split('-').map(Number);
+  const start = new Date(Date.UTC(y, (m ?? 1) - 1, 1, 0, 0, 0));
+  const end = new Date(Date.UTC(y, m ?? 1, 1, 0, 0, 0));
+  return { start, end };
+}
+
+/** MRR de catálogo (centavos) para o plano — estimativa, mensal. 0 se sem preço. */
+function catalogMrrCentsForPlan(plan: string | null | undefined): number {
+  return mrrCentsForPlan(plan, 'monthly');
+}
 
 // ─── helpers de leitura (I/O isolado; a lógica pura fica em .util) ───────────
 
@@ -183,17 +197,31 @@ async function listHandler(req: Request, res: Response, next: NextFunction) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// GET /api/admin/clientes/financeiro/summary — resumo financeiro HONESTO
+// GET /api/admin/clientes/financeiro/summary — resumo financeiro HONESTO (Fase 3)
 // ═══════════════════════════════════════════════════════════════════════════
-// Nesta fase é um esqueleto REAL com os números que já existem. MRR real =
-// soma de contas PAGO (nunca catálogo). Custo/margem vêm de tenant_usage.
+// Separa rigidamente REAL de ESTIMADO (§0/§10):
+//   - real: MRR real (soma de contas PAGO — exige stripeSubscriptionId), custo
+//     LLM agregado real (SUM llm_call_logs via tenant_usage), margem real por
+//     cliente, receita reconhecida de faturas Stripe pagas de fato no período.
+//   - potencial: "receita potencial (catálogo)" — soma do MRR de catálogo de
+//     TODAS as contas não-staging, ROTULADA como estimativa (nunca é MRR real).
+//   - pending: NRR/GRR/MRR bridge/MRR em risco/dunning — computados dos dados
+//     reais (ficam zerados/honestos enquanto não há base pagante).
 async function financeiroSummaryHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const period = (req.query.period as string) || currentYearMonth();
     const now = new Date();
+    const { start: periodStart, end: periodEnd } = monthRangeUtc(period);
 
     const accounts = await prisma.crmAccount.findMany({
-      select: { id: true, organizationId: true, email: true, lifecycleStage: true, mrrCents: true },
+      select: {
+        id: true,
+        organizationId: true,
+        email: true,
+        lifecycleStage: true,
+        mrrCents: true,
+        plan: true,
+      },
     });
     const stagingOrgIds = await loadStagingOrgIds();
     const usageByOrg = await loadUsageByOrg(period);
@@ -204,6 +232,14 @@ async function financeiroSummaryHandler(req: Request, res: Response, next: NextF
     let revenueBrl = 0;
     let profitableTenants = 0;
     let deficitTenants = 0;
+    // Receita potencial (catálogo) — estimativa rotulada. Soma do mrr de catálogo
+    // de TODAS as contas não-staging que teriam preço (não é receita real).
+    let potentialMrrCents = 0;
+    // MRR em risco: contas PAST_DUE (dunning) — mrr que pode virar churn.
+    let mrrAtRiskCents = 0;
+    let pastDueAccounts = 0;
+    let churnedAccounts = 0;
+    const payingOrgIds: string[] = [];
 
     for (const a of accounts) {
       const isStaging =
@@ -216,7 +252,17 @@ async function financeiroSummaryHandler(req: Request, res: Response, next: NextF
       if (isPaying) {
         mrrRealCents += a.mrrCents ?? 0;
         payingAccounts++;
+        if (a.organizationId) payingOrgIds.push(a.organizationId);
       }
+      if (stage === 'PAST_DUE') {
+        mrrAtRiskCents += a.mrrCents ?? 0;
+        pastDueAccounts++;
+      }
+      if (stage === 'CHURNED') churnedAccounts++;
+
+      // Potencial de catálogo (estimativa) — só para contas com plano precificável.
+      potentialMrrCents += catalogMrrCentsForPlan(a.plan);
+
       const usage = a.organizationId ? usageByOrg.get(a.organizationId) : undefined;
       if (usage) {
         llmCostUsd += usage.llmCostUsd;
@@ -228,16 +274,41 @@ async function financeiroSummaryHandler(req: Request, res: Response, next: NextF
       }
     }
 
+    // Receita reconhecida REAL do período: faturas Stripe efetivamente pagas
+    // (stripe_invoices, Fase 3). Hoje vazio até chegar o 1º pagamento.
+    const invoiceAgg = await prisma.stripeInvoice.aggregate({
+      where: { paidAt: { gte: periodStart, lt: periodEnd } },
+      _sum: { amountBrlCents: true },
+      _count: { _all: true },
+    });
+    const recognizedInvoiceCents = invoiceAgg._sum.amountBrlCents ?? 0;
+    const paidInvoicesCount = invoiceAgg._count._all ?? 0;
+
+    // Receita recuperada por dunning: faturas pagas no período cujo cliente
+    // estava/está PAST_DUE (recuperação de inadimplência). Real, hoje vazio.
+    let recoveredByDunningCents = 0;
+    const pastDueOrgIds = accounts
+      .filter((a) => (a.lifecycleStage ?? '').toUpperCase() === 'PAST_DUE' && a.organizationId)
+      .map((a) => a.organizationId as string);
+    if (pastDueOrgIds.length > 0) {
+      const recovered = await prisma.stripeInvoice.aggregate({
+        where: { organizationId: { in: pastDueOrgIds }, paidAt: { gte: periodStart, lt: periodEnd } },
+        _sum: { amountBrlCents: true },
+      });
+      recoveredByDunningCents = recovered._sum.amountBrlCents ?? 0;
+    }
+
+    const hasPaying = payingAccounts > 0;
+
     res.json({
       period,
       // Bloco de saúde de dados — sinaliza para a UI mostrar o banner honesto.
       dataHealth: {
-        hasPayingCustomers: payingAccounts > 0,
+        hasPayingCustomers: hasPaying,
         payingAccounts,
-        note:
-          payingAccounts === 0
-            ? 'Nenhum cliente pagante real ainda. Faturamento/pagamentos ficam vazios; consumo/custo/margem são reais.'
-            : null,
+        note: hasPaying
+          ? null
+          : 'Nenhum cliente pagante real ainda. Faturamento/pagamentos ficam vazios; consumo/custo/margem são reais.',
       },
       real: {
         mrrRealCents,
@@ -248,13 +319,34 @@ async function financeiroSummaryHandler(req: Request, res: Response, next: NextF
         recognizedRevenueBrl: revenueBrl,
         profitableTenants,
         deficitTenants,
+        // Receita reconhecida de faturas Stripe pagas de fato (Fase 3).
+        recognizedInvoiceCents,
+        recognizedInvoiceBrl: recognizedInvoiceCents / 100,
+        paidInvoicesCount,
       },
-      // MRR bridge / NRR / GRR / dunning ficam para a Fase 3 (Financeiro real).
+      // Estimativa ROTULADA — nunca é MRR de board. UI mostra como "potencial".
+      potential: {
+        catalogMrrCents: potentialMrrCents,
+        catalogMrrBrl: potentialMrrCents / 100,
+        label: 'Receita potencial (catálogo) — estimativa, não é receita real.',
+      },
+      // Derivados de retenção. Computados dos dados reais; ficam honestamente
+      // vazios/aguardando enquanto não há base pagante. hasBaseline sinaliza a UI.
       pending: {
-        mrrBridge: null,
+        hasPayingBaseline: hasPaying,
+        // NRR/GRR precisam de 2 períodos com base pagante — nulos até lá.
         nrr: null,
         grr: null,
-        recoveredByDunning: null,
+        mrrBridge: null,
+        mrrAtRiskCents,
+        mrrAtRiskBrl: mrrAtRiskCents / 100,
+        pastDueAccounts,
+        churnedAccounts,
+        recoveredByDunningCents,
+        recoveredByDunningBrl: recoveredByDunningCents / 100,
+        note: hasPaying
+          ? null
+          : 'NRR/GRR/MRR bridge aguardam base pagante. MRR em risco/churn/dunning são reais e já refletem os dados.',
       },
       generatedAt: now.toISOString(),
     });

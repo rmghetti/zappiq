@@ -1,21 +1,28 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════
- * /admin/clientes/financeiro — Financeiro (Área Clientes / Fase 2, §5).
+ * /admin/clientes/financeiro — Financeiro (Área Clientes / Fase 3, §5).
  * --------------------------------------------------------------------
- * Esqueleto HONESTO: banner de saúde de dados no topo (não induzir decisão
- * com número inflado). MRR real (R$0 honesto) + custo/margem reais que já
- * existem. MRR bridge / NRR / GRR / dunning ficam para a Fase 3.
+ * REAL e transparente (§10). MRR real (R$0 honesto hoje) é a métrica primária.
+ * "Receita potencial (catálogo)" aparece rotulada como ESTIMATIVA, nunca como
+ * MRR de board. Custo LLM e margem são reais (SUM llm_call_logs, Fase 0),
+ * excluindo staging. NRR/GRR/MRR bridge/dunning: computados dos dados reais,
+ * mostrados como "aguardando base pagante" enquanto vazios.
  *
+ * Banner de saúde de dados no topo enquanto não há pagante.
  * Guard de role repetido.
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { DollarSign, AlertCircle, Info, TrendingUp, Zap } from 'lucide-react';
+import { DollarSign, AlertCircle, Info, TrendingUp, Zap, ShieldAlert, RotateCcw, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '../../../../../stores/authStore';
 import { MetricCard } from '../../unit-economics/MetricCard';
 import { clientesApi, ClientesFinanceiroSummary } from '../../../../../lib/adminApi';
+
+function brl(v: number): string {
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
 
 export default function ClientesFinanceiroPage() {
   const router = useRouter();
@@ -47,6 +54,8 @@ export default function ClientesFinanceiroPage() {
 
   if (user?.role !== 'SUPERADMIN') return null;
 
+  const hasBaseline = data?.pending.hasPayingBaseline ?? false;
+
   return (
     <div className="space-y-6">
       <div>
@@ -55,7 +64,7 @@ export default function ClientesFinanceiroPage() {
           Financeiro
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          MRR real e transparente · custo/margem reais · faturamento entra na Fase 3
+          MRR real e transparente · custo/margem reais · receita potencial rotulada como estimativa
         </p>
       </div>
 
@@ -80,11 +89,11 @@ export default function ClientesFinanceiroPage() {
         </div>
       )}
 
-      {/* Agregados REAIS que já existem */}
+      {/* MÉTRICA PRIMÁRIA: MRR real (R$0 honesto hoje) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           label="MRR real"
-          value={loading || !data ? '—' : `R$ ${data.real.mrrRealBrl.toFixed(2)}`}
+          value={loading || !data ? '—' : brl(data.real.mrrRealBrl)}
           icon={DollarSign}
           loading={loading}
         />
@@ -97,43 +106,130 @@ export default function ClientesFinanceiroPage() {
         />
         <MetricCard
           label="Receita reconhecida (BRL)"
-          value={loading || !data ? '—' : `R$ ${data.real.recognizedRevenueBrl.toFixed(2)}`}
+          value={loading || !data ? '—' : brl(data.real.recognizedRevenueBrl)}
           loading={loading}
         />
       </div>
 
-      {/* Tenants lucrativos vs deficitários (excluindo staging) */}
+      {/* Receita potencial (catálogo) — ESTIMATIVA rotulada, nunca MRR de board */}
       {data && (
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Margem por tenant (real, sem staging)</h3>
-          <div className="flex gap-6 text-sm">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-2xl font-bold text-green-600">{data.real.profitableTenants}</p>
-              <p className="text-xs text-gray-500">lucrativos</p>
+              <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Receita potencial (catálogo)</p>
+              <p className="text-2xl font-bold text-gray-400 mt-1">{brl(data.potential.catalogMrrBrl)}</p>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-red-600">{data.real.deficitTenants}</p>
-              <p className="text-xs text-gray-500">deficitários</p>
+            <span className="text-[11px] font-semibold bg-gray-100 text-gray-500 rounded-full px-2 py-1 whitespace-nowrap">
+              estimativa
+            </span>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">{data.potential.label}</p>
+        </div>
+      )}
+
+      {/* Faturas Stripe pagas de fato (Fase 3) + margem por tenant (real) */}
+      {data && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Faturas Stripe pagas (período)</h3>
+            <div className="flex gap-6 text-sm">
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{brl(data.real.recognizedInvoiceBrl)}</p>
+                <p className="text-xs text-gray-500">reconhecido em faturas</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{data.real.paidInvoicesCount}</p>
+                <p className="text-xs text-gray-500">faturas pagas</p>
+              </div>
+            </div>
+            {data.real.paidInvoicesCount === 0 && (
+              <p className="text-xs text-gray-400 mt-2">Sem faturas pagas ainda — entra automaticamente quando o Stripe confirmar o 1º pagamento.</p>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Margem por tenant (real, sem staging)</h3>
+            <div className="flex gap-6 text-sm">
+              <div>
+                <p className="text-2xl font-bold text-green-600">{data.real.profitableTenants}</p>
+                <p className="text-xs text-gray-500">lucrativos</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-red-600">{data.real.deficitTenants}</p>
+                <p className="text-xs text-gray-500">deficitários</p>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Métricas pendentes (Fase 3) — mostradas como placeholder honesto */}
-      <div className="bg-gray-50 rounded-xl border border-gray-200 p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Chega na Fase 3 (Financeiro completo)</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          {['MRR bridge (New/Expansion/Contraction/Churn)', 'NRR / GRR', 'Churn logo vs receita', 'Receita recuperada por dunning'].map((label) => (
-            <div key={label} className="bg-white rounded-lg border border-gray-100 p-3">
-              <p className="text-xs text-gray-500">{label}</p>
-              <p className="text-lg font-bold text-gray-300 mt-1">em breve</p>
-            </div>
-          ))}
+      {/* Retenção & risco — REAL, honesto: mostra "aguardando base pagante" quando vazio */}
+      {data && (
+        <div className="bg-white rounded-xl border border-gray-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-900">Retenção & risco de receita</h3>
+            {!hasBaseline && (
+              <span className="text-[11px] font-semibold bg-amber-50 text-amber-700 rounded-full px-2 py-1">
+                aguardando base pagante
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <RetentionStat label="NRR" value={data.pending.nrr != null ? `${data.pending.nrr}%` : null} />
+            <RetentionStat label="GRR" value={data.pending.grr != null ? `${data.pending.grr}%` : null} />
+            <RetentionStat
+              label="MRR em risco (past due)"
+              value={brl(data.pending.mrrAtRiskBrl)}
+              sub={`${data.pending.pastDueAccounts} conta(s)`}
+              icon={ShieldAlert}
+              real
+            />
+            <RetentionStat
+              label="Recuperado por dunning"
+              value={brl(data.pending.recoveredByDunningBrl)}
+              icon={RotateCcw}
+              real
+            />
+          </div>
+          {data.pending.note && (
+            <p className="text-xs text-gray-400 mt-3">{data.pending.note}</p>
+          )}
+          <p className="text-xs text-gray-400 mt-1">
+            Churn acumulado: <span className="font-semibold text-gray-500">{data.pending.churnedAccounts}</span> conta(s).
+            NRR/GRR e MRR bridge exigem 2 períodos com base pagante para serem verdadeiros — por isso ficam vazios até lá,
+            em vez de exibirmos um número que induza decisão.
+          </p>
         </div>
-        <p className="text-xs text-gray-400 mt-3">
-          Requer a reescrita do stripeWebhook + tabela de invoices (Fase 3). Não exibimos número estimado para não induzir decisão.
-        </p>
-      </div>
+      )}
+    </div>
+  );
+}
+
+function RetentionStat({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  real,
+}: {
+  label: string;
+  value: string | null;
+  sub?: string;
+  icon?: LucideIcon;
+  real?: boolean;
+}) {
+  return (
+    <div className="bg-gray-50 rounded-lg border border-gray-100 p-3">
+      <p className="text-xs text-gray-500 flex items-center gap-1">
+        {Icon && <Icon size={12} className="text-gray-400" />}
+        {label}
+      </p>
+      {value == null ? (
+        <p className="text-sm font-semibold text-gray-300 mt-1">aguardando base</p>
+      ) : (
+        <p className={`text-lg font-bold mt-1 ${real ? 'text-gray-900' : 'text-gray-400'}`}>{value}</p>
+      )}
+      {sub && <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );
 }

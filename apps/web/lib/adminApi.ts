@@ -754,12 +754,29 @@ export interface ClientesFinanceiroSummary {
     recognizedRevenueBrl: number;
     profitableTenants: number;
     deficitTenants: number;
+    // Receita reconhecida de faturas Stripe pagas de fato (Fase 3).
+    recognizedInvoiceCents: number;
+    recognizedInvoiceBrl: number;
+    paidInvoicesCount: number;
+  };
+  // Estimativa ROTULADA — nunca é MRR real.
+  potential: {
+    catalogMrrCents: number;
+    catalogMrrBrl: number;
+    label: string;
   };
   pending: {
+    hasPayingBaseline: boolean;
+    nrr: number | null;
+    grr: number | null;
     mrrBridge: null;
-    nrr: null;
-    grr: null;
-    recoveredByDunning: null;
+    mrrAtRiskCents: number;
+    mrrAtRiskBrl: number;
+    pastDueAccounts: number;
+    churnedAccounts: number;
+    recoveredByDunningCents: number;
+    recoveredByDunningBrl: number;
+    note: string | null;
   };
   generatedAt: string;
 }
