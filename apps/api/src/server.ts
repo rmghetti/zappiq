@@ -62,6 +62,7 @@ import { initUsageReconciliationJob } from './services/usageReconciliationServic
 import { initTrialFollowupJob } from './services/trialFollowupService.js'; // FASE 1.B #240 — onboarding D+1/D+3/D+7
 import { initAgentEvalCronJob } from './services/agentEvalCronService.js'; // FASE 2 / V5 #241 — eval diário + Slack alert
 import { initAnalyticsPulseCronJob } from './services/analyticsPulseCron.js'; // Analytics Pulso — insight diário por org
+import { initTrialExpirationCronJob } from './services/trialExpirationCron.js'; // Área Clientes Fase 1 — fecha trials vencidos + recomputa lifecycleStage
 
 const app = express();
 const httpServer = createServer(app);
@@ -326,6 +327,11 @@ initAgentEvalCronJob().catch((err) => {
 // ── Analytics "Pulso" cron diário (03:20 UTC) — insight narrado por org ──
 initAnalyticsPulseCronJob().catch((err) => {
   logger.error('[Server] Failed to initialize analytics pulse cron job:', err);
+});
+
+// ── Área Clientes Fase 1: expiração de trial + recompute lifecycle (03:40 UTC) ──
+initTrialExpirationCronJob().catch((err) => {
+  logger.error('[Server] Failed to initialize trial expiration cron job:', err);
 });
 
 // ── Error Handler (must be last) ────────────────
