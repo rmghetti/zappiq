@@ -99,6 +99,13 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
 
     const passwordHash = await bcrypt.hash(password, 12);
 
+    // Achado §0.6 — o onboarding forçava plan='STARTER' e ignorava o plano que
+    // o lead escolheu no site (signups.plan_chosen). Ex: Gustavo escolheu SCALE
+    // e isso se perdia na conclusão. Aqui lemos o plano declarado no signup
+    // (por email, case-insensitive) e o usamos quando for um PlanType válido.
+    const emailLower = email.toLowerCase();
+    const resolvedPlan = await resolvePlanFromSignup(emailLower);
+
     // Create org + user in transaction
     const result = await prisma.$transaction(async (tx) => {
       const slug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -113,7 +120,7 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
         data: {
           name: businessName,
           slug: `${slug}-${Date.now().toString(36)}`,
-          plan: 'STARTER',
+          plan: resolvedPlan,
           trialStartedAt,
           trialEndsAt,
           trialCostCapUsd: 15.0,
@@ -175,6 +182,20 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
       return { org, user };
     });
 
+    // ── Área Clientes / Fase 1 — liga o signup à org e cria o espelho CRM ──
+    // Fora da transação (a tabela signups vive fora do Prisma; acesso via raw
+    // SQL) e best-effort: uma falha aqui não pode derrubar o onboarding do
+    // cliente. Idempotente por natureza (UPDATE por email + upsert por org).
+    await linkSignupAndSeedCrmAccount({
+      orgId: result.org.id,
+      email: emailLower,
+      company: businessName,
+      plan: resolvedPlan,
+      trialEndsAt: (result.org as any).trialEndsAt ?? null,
+    }).catch((err: any) =>
+      logger.warn('[Onboarding] wire signup/crm_account falhou (não bloqueante):', err?.message),
+    );
+
     // Process survey answers -> RAG (async, non-blocking)
     if (surveyAnswers && Object.keys(surveyAnswers).length > 0) {
       const knowledgeBase = buildKnowledgeBase({ businessName, niche, surveyAnswers });
@@ -211,13 +232,103 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
         name: businessName,
         niche,
         agentName: agentName || 'Bia',
-        plan: 'STARTER',
+        plan: resolvedPlan,
       },
     });
   } catch (err) {
     next(err);
   }
 });
+
+/**
+ * Normaliza um plano declarado no signup (signups.plan_chosen, texto livre)
+ * para um PlanType válido do Prisma. Retorna null se não reconhecer.
+ * Pura e testável — usada pelo fix do §0.6.
+ */
+export function normalizePlanChosen(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const v = String(raw).trim().toUpperCase();
+  const valid = new Set(['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE']);
+  return valid.has(v) ? v : null;
+}
+
+/**
+ * Lê o plano escolhido pelo lead em signups.plan_chosen (por email) e devolve
+ * um PlanType válido, ou 'STARTER' como fallback. A tabela signups vive fora do
+ * Prisma; acessada por raw SQL. Best-effort: qualquer erro cai no fallback.
+ */
+async function resolvePlanFromSignup(emailLower: string): Promise<string> {
+  try {
+    const rows = (await prisma.$queryRawUnsafe(
+      `SELECT plan_chosen FROM signups WHERE lower(email) = lower($1)
+       ORDER BY created_at DESC LIMIT 1`,
+      emailLower,
+    )) as Array<{ plan_chosen: string | null }>;
+    const normalized = normalizePlanChosen(rows?.[0]?.plan_chosen);
+    return normalized ?? 'STARTER';
+  } catch (err: any) {
+    logger.warn('[Onboarding] resolvePlanFromSignup falhou, usando STARTER:', err?.message);
+    return 'STARTER';
+  }
+}
+
+/**
+ * Fase 1 — para de gerar signups órfãos e nasce o espelho CRM da conta:
+ *  (a) UPDATE signups: liga organization_id, seta onboarding_path='wizard'
+ *      (se ausente), status='active', updated_at=now(), casando por email.
+ *  (b) upsert em crm_accounts: 1 linha por org, lifecycleStage='NOVO'.
+ * Idempotente: reexecutar não duplica (UPDATE por email + upsert por org).
+ */
+async function linkSignupAndSeedCrmAccount(args: {
+  orgId: string;
+  email: string;
+  company: string | null;
+  plan: string | null;
+  trialEndsAt: Date | null;
+}): Promise<void> {
+  const { orgId, email, company, plan, trialEndsAt } = args;
+
+  // (a) liga o signup à org (best-effort — signups pode não ter a linha).
+  await prisma.$executeRawUnsafe(
+    `UPDATE signups
+        SET organization_id = $1,
+            onboarding_path = COALESCE(onboarding_path, 'wizard'),
+            status = 'active',
+            updated_at = now()
+      WHERE lower(email) = lower($2)`,
+    orgId,
+    email,
+  );
+
+  // pega o signupId (se existir) para gravar o elo em crm_accounts.
+  const sig = (await prisma.$queryRawUnsafe(
+    `SELECT id FROM signups WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    orgId,
+  )) as Array<{ id: string }>;
+  const signupId = sig?.[0]?.id ?? null;
+
+  // (b) upsert do espelho CRM (nasce NOVO). organizationId é único.
+  await prisma.crmAccount.upsert({
+    where: { organizationId: orgId },
+    create: {
+      organizationId: orgId,
+      signupId,
+      email,
+      company,
+      plan,
+      lifecycleStage: 'NOVO',
+      trialEndsAt,
+    },
+    update: {
+      // reexecução: mantém o estágio, só reforça os campos de identidade/elo.
+      signupId: signupId ?? undefined,
+      email,
+      company: company ?? undefined,
+      plan: plan ?? undefined,
+      trialEndsAt: trialEndsAt ?? undefined,
+    },
+  });
+}
 
 function mapTone(tone: string): string {
   const map: Record<string, string> = {
