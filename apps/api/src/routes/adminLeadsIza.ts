@@ -32,6 +32,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
+import { combineLeadRows } from './adminLeads.util.js';
 
 const router = Router();
 
@@ -104,69 +105,9 @@ async function leadsHandler(req: Request, res: Response) {
       stagingFilteredCount = orgsRaw.length - filteredOrgs.length;
     }
 
-    // 3) Combinação: status por org
-    const orgRows = filteredOrgs.map((o) => {
-      const msgCount = Number(o.msg_count);
-      const convCount = Number(o.conv_count);
-      const status: 'ativo' | 'cadastrado' = msgCount > 0 ? 'ativo' : 'cadastrado';
-      return {
-        kind: 'organization' as const,
-        id: o.id,
-        name: o.org_name,
-        ownerName: o.owner_name,
-        ownerEmail: o.owner_email,
-        plan: o.plan,
-        isTrialActive: o.isTrialActive,
-        subscriptionStatus: o.subscriptionStatus,
-        company: null,
-        cnpj: null,
-        utmSource: null,
-        utmMedium: null,
-        utmCampaign: null,
-        conversationsCount: convCount,
-        messagesCount: msgCount,
-        status,
-        createdAt: o.createdAt.toISOString(),
-        confirmedAt: o.createdAt.toISOString(),
-      };
-    });
-
-    // 4) Signups que NÃO viraram org (organization_id null)
-    const signupOnlyRows = signups
-      .filter((s) => !s.organization_id)
-      .map((s) => ({
-        kind: 'signup' as const,
-        id: s.id,
-        name: s.name,
-        ownerName: s.name,
-        ownerEmail: s.email,
-        plan: s.plan_chosen,
-        isTrialActive: false,
-        subscriptionStatus: s.status,
-        company: s.company,
-        cnpj: s.cnpj,
-        utmSource: s.utm_source,
-        utmMedium: s.utm_medium,
-        utmCampaign: s.utm_campaign,
-        conversationsCount: 0,
-        messagesCount: 0,
-        status: 'signup_only' as const,
-        createdAt: s.created_at.toISOString(),
-        confirmedAt: s.confirmed_at ? s.confirmed_at.toISOString() : null,
-      }));
-
-    const allRows = [...orgRows, ...signupOnlyRows].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-
-    const summary = {
-      totalLeads: allRows.length,
-      signupOnly: allRows.filter((r) => r.status === 'signup_only').length,
-      cadastrado: allRows.filter((r) => r.status === 'cadastrado').length,
-      ativo: allRows.filter((r) => r.status === 'ativo').length,
-      stagingFilteredCount,
-      periodDays: days,
-    };
+    // 3+4) Combinação dedup por email + enriquecimento (função pura testável)
+    const { rows: allRows, summary: baseSummary } = combineLeadRows(filteredOrgs as any, signups as any);
+    const summary = { ...baseSummary, stagingFilteredCount, periodDays: days };
 
     res.json({
       summary,
