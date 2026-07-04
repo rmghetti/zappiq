@@ -88,6 +88,11 @@ function revenueForPlan(planId: string): number {
   return Math.round(cfg.priceMonthly * 100);
 }
 
+// Receita reconhecida SÓ para assinatura Stripe ativa (nunca por catálogo/plano cru).
+export function payingRevenueBrlCents(plan: string, subscriptionStatus: string | null): number {
+  return subscriptionStatus === 'active' ? revenueForPlan(plan) : 0;
+}
+
 // Custo infra rateado por tenant. Placeholder conservador — ajustar conforme
 // cloud bill real (Fly.io, Neon, Upstash, Cloudflare R2).
 // Regra provisória: 5% do MRR do plano, com piso de US$ 1,50.
@@ -127,7 +132,7 @@ export async function aggregateOrgUsage(
   // Carrega plano atual para calcular revenue + infra
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, plan: true },
+    select: { id: true, plan: true, subscriptionStatus: true },
   });
   if (!org) return;
 
@@ -195,7 +200,7 @@ export async function aggregateOrgUsage(
 
   const llmCostUsd = await readLlmCostUsd(organizationId, start, end);
   const infraCostUsd = estimatedInfraCostUsd(org.plan);
-  const revenueBrlCents = revenueForPlan(org.plan);
+  const revenueBrlCents = payingRevenueBrlCents(org.plan, (org as any).subscriptionStatus ?? null);
 
   // Margem bruta = (receita BRL convertida em USD − custo variável USD) / receita USD
   // Usa câmbio fixo conservador; aceitável para sinalização executiva, não para contabilidade.
@@ -268,7 +273,22 @@ export async function runTenantUsageCycle(): Promise<{
     `[TenantUsage] Iniciando ciclo — períodos=${periods.join(',')}`,
   );
 
+  // Excluir orgs de staging (todos os users com domínio @exemplo-staging.*),
+  // mesma regra do adminLeadsIza — evita MRR/uso fantasma dos seeds de teste.
+  const STAGING_EMAIL_DOMAIN = '@exemplo-staging.zappiq.com.br';
+  const stagingRows = (await prisma.$queryRawUnsafe(`
+    SELECT o.id FROM organizations o
+    WHERE NOT EXISTS (
+      SELECT 1 FROM users u
+      WHERE u."organizationId" = o.id
+      AND u.email NOT LIKE '%${STAGING_EMAIL_DOMAIN}'
+    )
+    AND EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = o.id)
+  `)) as Array<{ id: string }>;
+  const stagingIds = stagingRows.map((r) => r.id);
+
   const orgs = await prisma.organization.findMany({
+    where: { id: { notIn: stagingIds } },
     select: { id: true },
   });
 
