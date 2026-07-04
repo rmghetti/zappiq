@@ -98,11 +98,20 @@ function estimatedInfraCostUsd(planId: string): number {
   return Math.max(1.5, mrrUsd * 0.05);
 }
 
-// Lê total acumulado de custo LLM do Redis (chave de trial cap já acumula).
-async function readLlmCostUsd(organizationId: string): Promise<number> {
+// SQL builder puro (testável): soma o custo real de LLM por org e janela.
+export function llmCostSql(): string {
+  return `SELECT COALESCE(SUM(cost_usd_estimate), 0)::float8 AS cost
+          FROM llm_call_logs
+          WHERE organization_id = $1 AND created_at >= $2 AND created_at < $3`;
+}
+
+// Custo LLM REAL do período: SUM(cost_usd_estimate) da llm_call_logs (não mais o Redis de trial).
+async function readLlmCostUsd(organizationId: string, start: Date, end: Date): Promise<number> {
   try {
-    const raw = await redis.get(`zappiq:trial_cost_usd:${organizationId}`);
-    return raw ? parseFloat(raw) || 0 : 0;
+    const rows = (await prisma.$queryRawUnsafe(
+      llmCostSql(), organizationId, start, end,
+    )) as Array<{ cost: number }>;
+    return rows?.[0]?.cost ?? 0;
   } catch {
     return 0;
   }
@@ -184,7 +193,7 @@ export async function aggregateOrgUsage(
     conversationsClosed - conversationsHumanResolved,
   );
 
-  const llmCostUsd = await readLlmCostUsd(organizationId);
+  const llmCostUsd = await readLlmCostUsd(organizationId, start, end);
   const infraCostUsd = estimatedInfraCostUsd(org.plan);
   const revenueBrlCents = revenueForPlan(org.plan);
 
