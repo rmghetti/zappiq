@@ -70,7 +70,8 @@ export function TenantDrawer({
 
   if (!isOpen) return null;
 
-  const stripeCustomerId = tenantId; // Placeholder — seria necesário campo no schema
+  // stripeCustomerId real vem do backend (settings.stripeCustomerId); ausente hoje em 100% das orgs.
+  const stripeCustomerId = (data as any)?.stripeCustomerId ?? null;
 
   return (
     <div className="fixed inset-0 z-50">
@@ -90,14 +91,18 @@ export function TenantDrawer({
               <span className="px-2.5 py-1 bg-primary-100 text-primary-700 text-xs font-semibold rounded">
                 {tenantPlan}
               </span>
-              <a
-                href={`https://dashboard.stripe.com/customers/${stripeCustomerId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-primary-600 hover:text-primary-700 underline"
-              >
-                Abrir no Stripe →
-              </a>
+              {stripeCustomerId ? (
+                <a
+                  href={`https://dashboard.stripe.com/customers/${stripeCustomerId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary-600 hover:text-primary-700 underline"
+                >
+                  Abrir no Stripe →
+                </a>
+              ) : (
+                <span className="text-xs text-gray-400">Sem assinatura Stripe</span>
+              )}
             </div>
           </div>
           <button
