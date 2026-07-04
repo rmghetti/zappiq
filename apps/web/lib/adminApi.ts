@@ -624,3 +624,184 @@ class IzaFactsApi {
 }
 
 export const izaFactsApi = new IzaFactsApi();
+
+// ─── Área Clientes (Fase 2 — Visão Geral + 360 + Financeiro) ─────────────
+
+export type UiLifecycleStage =
+  | 'NOVO'
+  | 'EM_TRIAL'
+  | 'ATIVO'
+  | 'TRIAL_EXPIRADO'
+  | 'PAGO'
+  | 'CHURNED'
+  | 'PAST_DUE';
+
+export interface ClienteAccountRow {
+  crmAccountId: string | null;
+  organizationId: string | null;
+  signupId: string | null;
+  name: string | null;
+  email: string;
+  company: string | null;
+  cnpj: string | null;
+  plan: string | null;
+  stage: UiLifecycleStage;
+  mrrCents: number;
+  healthScore: number;
+  healthColor: 'green' | 'amber' | 'red';
+  trialEndsAt: string | null;
+  trialDaysLeft: number | null;
+  lastActivityAt: string | null;
+  engaged: boolean;
+  ownerUserId: string | null;
+  isStaging: boolean;
+  createdAt: string;
+}
+
+export interface ClientesKpis {
+  contasAtivas: number;
+  emTrial: number;
+  trialVencendo: number;
+  novosLeads7d: number;
+  mrrRealCents: number;
+  contasEmRisco: number;
+  healthMedio: number;
+  byStage: Record<UiLifecycleStage, number>;
+}
+
+export interface ClientesListResponse {
+  period: string;
+  includeStaging: boolean;
+  stagingFilteredCount: number;
+  kpis: ClientesKpis;
+  rows: ClienteAccountRow[];
+  total: number;
+  generatedAt: string;
+}
+
+export interface ClienteDetailResponse {
+  identity: {
+    crmAccountId: string;
+    organizationId: string | null;
+    signupId: string | null;
+    name: string | null;
+    email: string;
+    company: string | null;
+    cnpj: string | null;
+    niche: string | null;
+    createdAt: string;
+    aiReadinessScore: number | null;
+  };
+  plan: {
+    plan: string | null;
+    stage: UiLifecycleStage;
+    healthScore: number;
+    healthColor: 'green' | 'amber' | 'red';
+    trialEndsAt: string | null;
+    trialDaysLeft: number | null;
+    isTrialActive: boolean | null;
+    trialCostCapUsd: number | null;
+  };
+  billing: {
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string | null;
+    subscriptionStatus: string | null;
+    paidAt: string | null;
+    churnedAt: string | null;
+    cardAddedAt: string | null;
+    mrrCents: number;
+  };
+  usage: {
+    current: {
+      period: string;
+      aiMessagesProcessed: number;
+      conversationsOpened: number;
+      conversationsAiResolved: number;
+      conversationsHumanResolved: number;
+      handoffsCount: number;
+      llmCostUsd: number;
+      grossMarginPercent: number | null;
+    } | null;
+    history: Array<{
+      period: string;
+      aiMessagesProcessed: number;
+      llmCostUsd: number;
+      grossMarginPercent: number | null;
+      conversationsOpened: number;
+      conversationsAiResolved: number;
+      conversationsHumanResolved: number;
+      handoffsCount: number;
+    }>;
+  };
+  activities: Array<{ id: string; type: string; payload: any; createdAt: string }>;
+  owner: {
+    ownerUserId: string | null;
+    candidates: Array<{ id: string; name: string | null; email: string; role: string }>;
+  };
+  nextAction: string;
+  links: { izaConversations: string | null };
+  generatedAt: string;
+}
+
+export interface ClientesFinanceiroSummary {
+  period: string;
+  dataHealth: { hasPayingCustomers: boolean; payingAccounts: number; note: string | null };
+  real: {
+    mrrRealCents: number;
+    mrrRealBrl: number;
+    payingAccounts: number;
+    llmCostUsd: number;
+    recognizedRevenueBrl: number;
+    profitableTenants: number;
+    deficitTenants: number;
+  };
+  pending: {
+    mrrBridge: null;
+    nrr: null;
+    grr: null;
+    recoveredByDunning: null;
+  };
+  generatedAt: string;
+}
+
+class ClientesApi {
+  /** GET /api/admin/clientes — lista unificada + KPIs. */
+  async getList(opts: { includeStaging?: boolean; period?: string } = {}): Promise<ClientesListResponse> {
+    const qs = new URLSearchParams();
+    if (opts.includeStaging) qs.set('includeStaging', 'true');
+    if (opts.period) qs.set('period', opts.period);
+    const q = qs.toString();
+    return api.get<ClientesListResponse>(`/api/admin/clientes${q ? '?' + q : ''}`);
+  }
+
+  /** GET /api/admin/clientes/:orgId — perfil 360 (aceita orgId OU crmAccountId). */
+  async getDetail(orgId: string, period?: string): Promise<ClienteDetailResponse> {
+    const q = period ? `?period=${encodeURIComponent(period)}` : '';
+    return api.get<ClienteDetailResponse>(`/api/admin/clientes/${encodeURIComponent(orgId)}${q}`);
+  }
+
+  /** GET /api/admin/clientes/financeiro/summary — resumo financeiro honesto. */
+  async getFinanceiroSummary(period?: string): Promise<ClientesFinanceiroSummary> {
+    const q = period ? `?period=${encodeURIComponent(period)}` : '';
+    return api.get<ClientesFinanceiroSummary>(`/api/admin/clientes/financeiro/summary${q}`);
+  }
+
+  /** POST /api/admin/clientes/:orgId/owner — seta ownerUserId. */
+  async setOwner(orgId: string, ownerUserId: string | null): Promise<{ ok: true; crmAccountId: string; ownerUserId: string | null }> {
+    return api.post(`/api/admin/clientes/${encodeURIComponent(orgId)}/owner`, { ownerUserId });
+  }
+
+  /** POST /api/admin/clientes/backfill — dispara o backfill idempotente (Fase 1). */
+  async backfill(opts: { dryRun?: boolean } = {}): Promise<{
+    ok: true;
+    linked: number;
+    orgAccounts: number;
+    signupAccounts: number;
+    durationMs: number;
+    dryRun: boolean;
+  }> {
+    return api.post('/api/admin/clientes/backfill', { dryRun: Boolean(opts.dryRun) });
+  }
+}
+
+export const clientesApi = new ClientesApi();

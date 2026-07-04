@@ -9,7 +9,7 @@ import {
   GitBranch, BookOpen, Settings, CreditCard, Target, LogOut, ChevronLeft, ChevronRight,
   ShieldCheck, FileLock, Sparkles,
   // Admin Plataforma (SUPERADMIN) icons
-  Activity, TrendingUp, Bot, UserCheck, DollarSign,
+  Activity, TrendingUp, Bot, UserCheck, DollarSign, Building2,
   // FASE 2.2b — Qualidade da IA (cliente)
   Gauge,
 } from 'lucide-react';
@@ -49,9 +49,17 @@ const platformAdminItems = [
   { href: '/admin/agent-quality', label: 'Qualidade do Agente', icon: Activity }, // FASE 2 / V4
   { href: '/admin/llm-health', label: 'LLM Health', icon: Bot },
   { href: '/admin/iza-conversations', label: 'Conversas Iza', icon: MessageSquare },
-  { href: '/admin/leads', label: 'Leads & Signups', icon: UserCheck },
   { href: '/admin/quota-watch', label: 'Quota Watch', icon: Activity },
   { href: '/admin/unit-economics', label: 'Unit Economics', icon: DollarSign },
+];
+
+// Sub-grupo "Clientes" (Área Clientes / Fase 2, §2 proposedNav) — gestão da
+// base instalada: contas, ciclo de vida, leads e financeiro. Absorve a antiga
+// /admin/leads (agora /admin/clientes/leads com a taxonomia nova).
+const platformClientesItems = [
+  { href: '/admin/clientes', label: 'Visão Geral', icon: Building2 },
+  { href: '/admin/clientes/leads', label: 'Leads & Signups', icon: UserCheck },
+  { href: '/admin/clientes/financeiro', label: 'Financeiro', icon: DollarSign },
 ];
 
 const bottomItems = [
@@ -174,6 +182,33 @@ export function Sidebar() {
                 {!sidebarCollapsed && <span>{label}</span>}
               </Link>
             ))}
+
+            {/* Sub-grupo Clientes — Área Clientes / Fase 2 */}
+            {!sidebarCollapsed && (
+              <p className="px-3 mt-4 mb-2 text-[11px] font-semibold text-amber-500 uppercase tracking-wider">
+                Clientes
+              </p>
+            )}
+            {platformClientesItems.map(({ href, label, icon: Icon }) => {
+              // /admin/clientes é prefixo dos filhos; usa exact-match nele.
+              const active =
+                href === '/admin/clientes' ? pathname === href : isActive(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-amber-50 text-amber-700'
+                      : 'text-gray-600 hover:bg-amber-50 hover:text-amber-700'
+                  }`}
+                  title={sidebarCollapsed ? label : undefined}
+                >
+                  <Icon size={20} className="flex-shrink-0" />
+                  {!sidebarCollapsed && <span>{label}</span>}
+                </Link>
+              );
+            })}
           </div>
         )}
       </nav>
