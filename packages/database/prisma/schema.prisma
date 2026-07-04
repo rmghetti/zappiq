@@ -225,6 +225,7 @@ model Organization {
   analyticsMetricsDaily AnalyticsMetricDaily[]  // Fase 2 Pulso — snapshots diários
   analyticsInsights     AnalyticsInsight[]      // Fase 2 Pulso — narrativas/anomalias
   crmAccount            CrmAccount?             // Área Clientes — espelho de conta (1:1 opcional)
+  stripeInvoices        StripeInvoice[]         // Área Clientes Fase 3 — faturas Stripe persistidas
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
@@ -292,6 +293,44 @@ model CrmAccountActivity {
 
   @@index([crmAccountId, createdAt])
   @@map("crm_account_activity")
+}
+
+// ═══════════════════════════════════════════════════════════
+// StripeInvoice — fatura Stripe persistida pelo webhook (Área Clientes / Fase 3)
+// -----------------------------------------------------------
+// 1 linha por invoice.paid / invoice.payment_succeeded. Tabela de PLATAFORMA
+// (faturamento da ZappIQ, gerida pelo Superadmin — sem RLS por tenant).
+// stripeInvoiceId é único → idempotência natural de reentrega de evento.
+// amountBrlCents = amount_paid do Stripe (centavos de BRL).
+// ═══════════════════════════════════════════════════════════
+model StripeInvoice {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stripeInvoiceId String   @unique
+  amountBrlCents  Int      @default(0)
+  status          String   // 'paid' | 'open' | 'void' | ...
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([organizationId, paidAt])
+  @@map("stripe_invoices")
+}
+
+// ═══════════════════════════════════════════════════════════
+// StripeWebhookEvent — idempotência por event id (Área Clientes / Fase 3)
+// -----------------------------------------------------------
+// Presença da linha = evento já processado. Evita dupla-gravação em reentrega.
+// Tabela de plataforma, sem RLS por tenant.
+// ═══════════════════════════════════════════════════════════
+model StripeWebhookEvent {
+  id          String   @id // evt_... (id do evento do Stripe)
+  type        String
+  processedAt DateTime @default(now())
+
+  @@map("stripe_webhook_events")
 }
 
 // ═══════════════════════════════════════════════════════════
