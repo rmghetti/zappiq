@@ -189,6 +189,22 @@ model Organization {
   billingCycle       String?     // "monthly" | "annual"
   subscriptionStatus String?     // active | past_due | canceled | trialing
 
+  // ── Ciclo de vida canônico (Área Clientes / Fase 1) ─────
+  // Colunas aditivas nullable. Antes só existiam no settings JSON — promovidas
+  // para colunas dedicadas para poder filtrar/ordenar e derivar lifecycleStage
+  // sem ler JSON. stripeCustomerId/stripeSubscriptionId aqui são a fonte real
+  // de "conta pagante" (nunca trialConverted). Preenchidas pelo webhook Stripe
+  // (Fase 3) e pelo backfill; hoje nascem NULL.
+  paidAt                DateTime?  // 1º pagamento confirmado
+  churnedAt             DateTime?  // cancelamento efetivo (subscription.deleted)
+  cardAddedAt           DateTime?  // cartão adicionado (setup intent ok)
+  stripeCustomerId      String?    // cus_...
+  stripeSubscriptionId  String?    // sub_... — ÂNCORA de ACTIVE
+  // Cache do estágio derivado por deriveLifecycleStage() (recomputado em cron
+  // diário + webhooks). Materializado para consulta rápida; a verdade continua
+  // sendo a função pura. crm_accounts.lifecycleStage é o espelho consumido pela UI.
+  accountLifecycleStage String?
+
   users              User[]
   contacts           Contact[]
   conversations      Conversation[]
@@ -208,6 +224,7 @@ model Organization {
   flowNodeStats      FlowNodeStat[]
   analyticsMetricsDaily AnalyticsMetricDaily[]  // Fase 2 Pulso — snapshots diários
   analyticsInsights     AnalyticsInsight[]      // Fase 2 Pulso — narrativas/anomalias
+  crmAccount            CrmAccount?             // Área Clientes — espelho de conta (1:1 opcional)
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
@@ -221,6 +238,60 @@ model Organization {
   aiTrainingReadyAt  DateTime?
 
   @@map("organizations")
+}
+
+// ═══════════════════════════════════════════════════════════
+// CrmAccount — espelho de conta da Área Clientes (plataforma, NÃO por tenant)
+// -----------------------------------------------------------
+// 1 linha por org OU por signup (signup pré-org tem organizationId NULL).
+// Fonte da verdade do CRM de plataforma. lifecycleStage é materializado por
+// deriveLifecycleStage() (Fase 1) e recomputado no cron diário + webhooks.
+// Sem RLS por tenant: é a base instalada da ZappIQ, gerida pelo Superadmin.
+// ═══════════════════════════════════════════════════════════
+model CrmAccount {
+  id             String   @id @default(cuid())
+  // 1:1 opcional com a org. Único quando presente (índice parcial no SQL).
+  organizationId String?  @unique
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  // Elo com a linha em signups (tabela fora do Prisma). Guardado como texto.
+  signupId       String?
+  email          String
+  company        String?
+  cnpj           String?
+  plan           String?
+  // NOVO | EM_TRIAL | TRIAL | ATIVO | ACTIVE | TRIAL_EXPIRADO | TRIAL_EXPIRED |
+  // PAGO | PAST_DUE | CHURNED — ver accountLifecycle.ts (valores canônicos EN).
+  lifecycleStage String   @default("NOVO")
+  ownerUserId    String?  // usuário ZappIQ dono da conta (SDR/CS)
+  mrrCents       Int      @default(0)
+  healthScore    Int?     // 0-100 (health v1 composto)
+  trialEndsAt    DateTime?
+  lastActivityAt DateTime?
+  pqlScore       Int?     // Fase 4 (PLG) — nasce NULL
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  activities     CrmAccountActivity[]
+
+  @@index([email])
+  @@index([lifecycleStage])
+  @@index([signupId])
+  @@map("crm_accounts")
+}
+
+// ═══════════════════════════════════════════════════════════
+// CrmAccountActivity — timeline da conta (reusa padrão Activity/ActivityType)
+// ═══════════════════════════════════════════════════════════
+model CrmAccountActivity {
+  id           String   @id @default(cuid())
+  crmAccountId String
+  crmAccount   CrmAccount @relation(fields: [crmAccountId], references: [id], onDelete: Cascade)
+  type         String   // ex: 'lifecycle_change' | 'owner_assigned' | 'note'
+  payload      Json?
+  createdAt    DateTime @default(now())
+
+  @@index([crmAccountId, createdAt])
+  @@map("crm_account_activity")
 }
 
 // ═══════════════════════════════════════════════════════════
