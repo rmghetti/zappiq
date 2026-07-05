@@ -13,12 +13,16 @@
  * — versão MVP. Refinamento de público (segments, tags) vira PR futuro.
  */
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { X, Loader2, Check, AlertCircle, Calendar, Send } from 'lucide-react';
 import { api } from '../../lib/api';
 
 interface Template {
   id: string;
   name: string;
+  category?: string;
+  metaStatus?: string;
+  isReengagement?: boolean;
 }
 
 interface Props {
@@ -178,16 +182,37 @@ export function CampaignFormModal({ open, onClose, onSaved }: Props) {
               disabled={loadingTemplates}
             >
               <option value="">— Sem template (mensagem livre) —</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
+              {templates.map((t) => {
+                const approved = (t.metaStatus || '').toUpperCase() === 'APPROVED';
+                const tags = [
+                  t.isReengagement ? 'reengajamento 24h' : null,
+                  !approved ? `${(t.metaStatus || 'pendente').toLowerCase()}` : null,
+                ].filter(Boolean).join(', ');
+                return (
+                  <option key={t.id} value={t.id}>
+                    {t.name}{tags ? ` (${tags})` : ''}
+                  </option>
+                );
+              })}
             </select>
             {loadingTemplates && (
               <p className="text-[10px] text-gray-400 mt-1">Carregando templates...</p>
             )}
             {!loadingTemplates && templates.length === 0 && (
               <p className="text-[10px] text-gray-400 mt-1">
-                Nenhum template cadastrado. Você pode prosseguir sem template.
+                Nenhum template cadastrado.{' '}
+                <Link href="/templates" className="text-primary-600 hover:underline font-medium">
+                  Criar um template
+                </Link>{' '}
+                ou prosseguir sem template (mensagem livre, só vale dentro da janela de 24h).
+              </p>
+            )}
+            {!loadingTemplates && templates.length > 0 && (
+              <p className="text-[10px] text-gray-400 mt-1">
+                Fora da janela de 24h a Meta só entrega templates aprovados.{' '}
+                <Link href="/templates" className="text-primary-600 hover:underline font-medium">
+                  Gerenciar templates
+                </Link>
               </p>
             )}
           </div>

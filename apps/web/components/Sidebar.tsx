@@ -7,7 +7,7 @@ import { Logo } from './Logo';
 import {
   LayoutDashboard, MessageSquare, Users, Megaphone, BarChart3,
   GitBranch, Settings, CreditCard, Target, LogOut, ChevronLeft, ChevronRight,
-  ShieldCheck, FileLock, Sparkles,
+  ShieldCheck, FileLock, Sparkles, FileText,
   // Admin Plataforma (SUPERADMIN) icons
   Activity, TrendingUp, Bot, UserCheck, DollarSign, Building2,
   // FASE 2.2b — Qualidade da IA (cliente)
@@ -22,6 +22,9 @@ const navItems = [
   { href: '/contacts', label: 'Contatos', icon: Users },
   { href: '/crm', label: 'CRM', icon: Target },
   { href: '/campaigns', label: 'Campanhas', icon: Megaphone },
+  // FEATURE 5b.2 — gestão de templates de WhatsApp (aprovados pela Meta;
+  // alimentam o seletor de campanha e o reengajamento fora da janela de 24h).
+  { href: '/templates', label: 'Templates', icon: FileText },
   // Maestro (GA 2026-05-22): builder de fluxos visível. Backend /api/flows pronto;
   // publicar liga maestro.enabled na org e o gate suporta FIRST_CONTACT/KEYWORD.
   { href: '/flows', label: 'Maestro', icon: GitBranch },

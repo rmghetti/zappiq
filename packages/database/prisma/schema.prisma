@@ -945,6 +945,10 @@ model MessageTemplate {
   buttons         Json?
   metaStatus      String   @default("PENDING")
   metaTemplateId  String?
+  // FEATURE 5b.2 — template usado pra REABRIR a janela de 24h da Meta.
+  // Fora da janela de 24h a Meta rejeita mensagem free-form; só templates
+  // aprovados passam. isReengagement marca os templates elegíveis pra esse uso.
+  isReengagement  Boolean  @default(false)
   organizationId  String
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   campaigns       Campaign[]

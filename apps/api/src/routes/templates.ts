@@ -4,18 +4,36 @@ import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { META_TEMPLATE_CATEGORIES } from '../utils/messageTemplate.js';
 
 const router = Router();
 
 const createSchema = z.object({
   name: z.string().min(2),
-  category: z.string(),
+  category: z.enum(META_TEMPLATE_CATEGORIES).default('MARKETING'),
   language: z.string().default('pt_BR'),
   headerType: z.string().optional(),
   headerContent: z.string().optional(),
   bodyText: z.string().min(1),
   footerText: z.string().optional(),
   buttons: z.any().optional(),
+  // FEATURE 5b.2 — template pra REABRIR a janela de 24h da Meta.
+  isReengagement: z.boolean().default(false),
+});
+
+// PUT aceita subconjunto editável. metaStatus/metaTemplateId NÃO são editáveis
+// aqui (só o fluxo /submit os altera). Evita que o cliente marque um template
+// como APPROVED sem passar pela Meta.
+const updateSchema = z.object({
+  name: z.string().min(2).optional(),
+  category: z.enum(META_TEMPLATE_CATEGORIES).optional(),
+  language: z.string().optional(),
+  headerType: z.string().nullable().optional(),
+  headerContent: z.string().nullable().optional(),
+  bodyText: z.string().min(1).optional(),
+  footerText: z.string().nullable().optional(),
+  buttons: z.any().optional(),
+  isReengagement: z.boolean().optional(),
 });
 
 // CRUD
@@ -46,7 +64,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   } catch (err) { next(err); }
 });
 
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', validate(updateSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await prisma.messageTemplate.updateMany({ where: { id: req.params.id, organizationId: req.organizationId! }, data: req.body });
     if (result.count === 0) { res.status(404).json({ error: 'Template not found' }); return; }
