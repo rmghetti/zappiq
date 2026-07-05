@@ -144,8 +144,20 @@ export async function ingestDocument(
   file: { filename: string; content: Buffer; mimeType: string },
 ) {
   const { path, form } = buildIngestForm(organizationId, file);
-  const { data } = await ragClient.post(path, form);
-  return data;
+  // IMPORTANTE: NAO usar o ragClient (axios) aqui — a instancia forca
+  // Content-Type: application/json em toda request, o que quebra o multipart
+  // do /ingest (o servico Python recebe o form com header errado -> 422).
+  // fetch/undici serializa o FormData+Blob com o boundary multipart correto.
+  const res = await fetch(`${env.RAG_SERVICE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'X-Service-Secret': env.RAG_SERVICE_SECRET || '' },
+    body: form as any,
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`RAG ingest ${res.status}: ${detail.slice(0, 200)}`);
+  }
+  return res.json();
 }
 
 // Block SSRF: reject internal/private network URLs
