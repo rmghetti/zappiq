@@ -1,25 +1,25 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { messageSendQueue } from '../services/queueService.js';
 import { withTenant } from '../middleware/rlsTenant.js';
+import {
+  messagesQuerySchema,
+  buildMessagesFindArgs,
+  buildMessagesPayload,
+} from './messages.pagination.js';
 
 const router = Router();
-
-const querySchema = z.object({
-  page: z.coerce.number().min(1).default(1),
-  limit: z.coerce.number().min(1).max(100).default(50),
-});
 
 // ── GET /api/conversations/:id/messages ─────────
 // V2-024: encapsulado em withTenant — verify conversation + load messages
 // na MESMA transaction (consistência + RLS no pgbouncer transaction-mode).
-router.get('/:id/messages', validate(querySchema, 'query'), async (req: Request, res: Response, next: NextFunction) => {
+// W2.3: retorna a JANELA MAIS RECENTE (desc + reverse → payload cronológico).
+// Suporta `?before=<messageId>` para "carregar anteriores" (cursor keyset).
+router.get('/:id/messages', validate(messagesQuerySchema, 'query'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { page, limit } = req.query as any;
-    const skip = (page - 1) * limit;
+    const query = req.query as any;
 
     const result = await withTenant(req, async (tx) => {
       // Verify conversation belongs to org
@@ -28,19 +28,11 @@ router.get('/:id/messages', validate(querySchema, 'query'), async (req: Request,
       });
       if (!conversation) return null;
 
-      const [messages, total] = await Promise.all([
-        tx.message.findMany({
-          where: { conversationId: req.params.id },
-          skip,
-          take: limit,
-          orderBy: { createdAt: 'asc' },
-          include: {
-            sender: { select: { id: true, name: true, avatar: true } },
-          },
-        }),
+      const [messagesDesc, total] = await Promise.all([
+        tx.message.findMany(buildMessagesFindArgs(req.params.id, query)),
         tx.message.count({ where: { conversationId: req.params.id } }),
       ]);
-      return { messages, total };
+      return { messagesDesc, total };
     });
 
     if (!result) {
@@ -48,13 +40,15 @@ router.get('/:id/messages', validate(querySchema, 'query'), async (req: Request,
       return;
     }
 
+    const { data, nextBefore, hasMore } = buildMessagesPayload(result.messagesDesc, query);
+
     res.json({
       success: true,
-      data: result.messages,
+      data,
       total: result.total,
-      page,
-      limit,
-      totalPages: Math.ceil(result.total / limit),
+      limit: query.limit,
+      nextBefore,
+      hasMore,
     });
   } catch (err) {
     next(err);

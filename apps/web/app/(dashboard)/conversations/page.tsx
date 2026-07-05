@@ -77,7 +77,14 @@ export default function ConversationsPage() {
   const [channelFilter, setChannelFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  // W2.3 — paginação: cursor para "carregar anteriores" + flag de fim do histórico.
+  const [nextBefore, setNextBefore] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  // Só rola pro fim no carregamento inicial da conversa, não ao prepender antigas.
+  const shouldScrollToEnd = useRef(true);
 
   const loadList = useCallback(() => {
     api.get('/api/conversations?limit=50')
@@ -90,8 +97,17 @@ export default function ConversationsPage() {
 
   useEffect(() => {
     if (!selectedId) return;
-    api.get(`/api/conversations/${selectedId}/messages?limit=100`)
-      .then((res) => setMessages(res.data || []))
+    // Carrega a JANELA MAIS RECENTE (a API já devolve em ordem cronológica).
+    shouldScrollToEnd.current = true;
+    setMessages([]);
+    setNextBefore(null);
+    setHasMore(false);
+    api.get(`/api/conversations/${selectedId}/messages?limit=50`)
+      .then((res) => {
+        setMessages(res.data || []);
+        setNextBefore(res.nextBefore ?? null);
+        setHasMore(Boolean(res.hasMore));
+      })
       .catch(() => {});
     setCrm(null);
     setCrmLoading(true);
@@ -101,14 +117,41 @@ export default function ConversationsPage() {
       .finally(() => setCrmLoading(false));
   }, [selectedId]);
 
+  // "Carregar anteriores": busca a página imediatamente anterior via cursor e
+  // faz PREPEND, preservando a posição de scroll do usuário (sem pular pro fim).
+  async function loadEarlier() {
+    if (!selectedId || !nextBefore || loadingMore) return;
+    setLoadingMore(true);
+    const container = messagesScrollRef.current;
+    const prevHeight = container?.scrollHeight ?? 0;
+    const prevTop = container?.scrollTop ?? 0;
+    try {
+      const res = await api.get(`/api/conversations/${selectedId}/messages?limit=50&before=${encodeURIComponent(nextBefore)}`);
+      const older: Message[] = res.data || [];
+      shouldScrollToEnd.current = false;
+      setMessages((prev) => [...older, ...prev]);
+      setNextBefore(res.nextBefore ?? null);
+      setHasMore(Boolean(res.hasMore));
+      // Mantém o viewport ancorado na mesma mensagem após o prepend.
+      requestAnimationFrame(() => {
+        const c = messagesScrollRef.current;
+        if (c) c.scrollTop = prevTop + (c.scrollHeight - prevHeight);
+      });
+    } catch {}
+    setLoadingMore(false);
+  }
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (shouldScrollToEnd.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   useEffect(() => {
     const socket = getSocket();
     const handler = (data: any) => {
       if (data.conversationId === selectedId) {
+        shouldScrollToEnd.current = true;
         setMessages((prev) => [...prev, data.message]);
         // Atualiza o card de CRM (estágio/score podem ter mudado no turno).
         api.get(`/api/conversations/${selectedId}/context`).then((res) => setCrm(res.data || null)).catch(() => {});
@@ -124,6 +167,7 @@ export default function ConversationsPage() {
     setSending(true);
     try {
       await api.post(`/api/conversations/${selectedId}/messages`, { content: newMessage });
+      shouldScrollToEnd.current = true;
       setMessages((prev) => [...prev, {
         id: Date.now().toString(), content: newMessage, direction: 'OUTBOUND',
         type: 'TEXT', isFromBot: false, createdAt: new Date().toISOString(),
@@ -246,7 +290,17 @@ export default function ConversationsPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-5 py-4 bg-[#ECE5DD] space-y-2">
+            <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-5 py-4 bg-[#ECE5DD] space-y-2">
+              {hasMore && (
+                <div className="flex justify-center pb-2">
+                  <button
+                    onClick={loadEarlier}
+                    disabled={loadingMore}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/80 text-gray-600 hover:bg-white shadow-sm disabled:opacity-50 transition-colors">
+                    {loadingMore ? 'Carregando...' : 'Carregar anteriores'}
+                  </button>
+                </div>
+              )}
               {messages.map((msg, idx) => {
                 const previousInbound = msg.isFromBot
                   ? [...messages.slice(0, idx)].reverse().find((m) => m.direction === 'INBOUND')?.content || ''
