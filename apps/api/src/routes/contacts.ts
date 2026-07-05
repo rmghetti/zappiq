@@ -97,6 +97,37 @@ router.post('/', validate(createContactSchema), async (req: Request, res: Respon
   }
 });
 
+// ── GET /api/contacts/export ────────────────────
+// IMPORTANTE: precisa vir ANTES de GET /:id, senão a rota '/:id'
+// captura 'export' como id e devolve 404 (contato inexistente).
+router.get('/export', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const contacts = await withTenant(req, (tx) =>
+      tx.contact.findMany({
+        where: { organizationId: req.organizationId! },
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
+
+    // CSV export — sanitize values to prevent formula injection in Excel/Sheets
+    const sanitize = (val: string): string => {
+      if (/^[=+\-@\t\r]/.test(val)) return `'${val}`;
+      return val.replace(/"/g, '""');
+    };
+
+    const header = 'name,phone,email,company,leadStatus,tags,leadScore,createdAt\n';
+    const rows = contacts.map(c =>
+      `"${sanitize(c.name || '')}","${sanitize(c.phone)}","${sanitize(c.email || '')}","${sanitize(c.company || '')}","${c.leadStatus}","${sanitize(c.tags.join(';'))}",${c.leadScore},"${c.createdAt.toISOString()}"`
+    ).join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=contacts.csv');
+    res.send(header + rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── GET /api/contacts/:id ───────────────────────
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -159,35 +190,6 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
     }
 
     res.json({ success: true, message: 'Contact deleted' });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ── GET /api/contacts/export ────────────────────
-router.get('/export', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const contacts = await withTenant(req, (tx) =>
-      tx.contact.findMany({
-        where: { organizationId: req.organizationId! },
-        orderBy: { createdAt: 'desc' },
-      }),
-    );
-
-    // CSV export — sanitize values to prevent formula injection in Excel/Sheets
-    const sanitize = (val: string): string => {
-      if (/^[=+\-@\t\r]/.test(val)) return `'${val}`;
-      return val.replace(/"/g, '""');
-    };
-
-    const header = 'name,phone,email,company,leadStatus,tags,leadScore,createdAt\n';
-    const rows = contacts.map(c =>
-      `"${sanitize(c.name || '')}","${sanitize(c.phone)}","${sanitize(c.email || '')}","${sanitize(c.company || '')}","${c.leadStatus}","${sanitize(c.tags.join(';'))}",${c.leadScore},"${c.createdAt.toISOString()}"`
-    ).join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=contacts.csv');
-    res.send(header + rows);
   } catch (err) {
     next(err);
   }

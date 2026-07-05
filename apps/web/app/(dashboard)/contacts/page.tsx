@@ -22,7 +22,27 @@ export default function ContactsPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [exporting, setExporting] = useState(false);
   const limit = 20;
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const blob = await api.getBlob('/api/contacts/export');
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'contacts.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // silencioso — falha de export não deve quebrar a página
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const fetchContacts = useCallback(() => {
     setLoading(true);
@@ -61,9 +81,13 @@ export default function ContactsPage() {
           <p className="text-sm text-gray-500 mt-1">{total} contatos no total</p>
         </div>
         <div className="flex gap-2">
-          <a href="/api/contacts/export" className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
-            <Download size={16} /> Exportar
-          </a>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            <Download size={16} /> {exporting ? 'Exportando...' : 'Exportar'}
+          </button>
           <button
             onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600"

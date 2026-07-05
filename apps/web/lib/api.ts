@@ -184,6 +184,44 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'GET' });
   }
 
+  // W2.2: download autenticado. O <a href> não manda Authorization e aponta
+  // para o Next server, não para a API. Aqui fazemos fetch com Bearer token,
+  // repassamos o override de org e devolvemos o Blob para o caller disparar
+  // o download no browser.
+  async getBlob(endpoint: string): Promise<Blob> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (typeof window !== 'undefined') {
+      const override = localStorage.getItem('zappiq_org_override');
+      if (override) headers['X-Organization-Override'] = override;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, { method: 'GET', headers });
+    } catch (err) {
+      const networkError: ApiError = {
+        status: 0,
+        message: 'Erro de conexão com o servidor. Verifique se o backend está rodando.',
+        details: err,
+      };
+      throw networkError;
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Download falhou' }));
+      const apiError: ApiError = {
+        status: response.status,
+        message: errorData.error || errorData.message || `HTTP ${response.status}`,
+        details: errorData,
+      };
+      throw apiError;
+    }
+
+    return response.blob();
+  }
+
   post<T = any>(endpoint: string, data?: any) {
     return this.request<T>(endpoint, { method: 'POST', data });
   }
