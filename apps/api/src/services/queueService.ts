@@ -184,6 +184,9 @@ export async function processMessageSendJob(
     }
     conversationId = conversation.id;
     // Cria a mensagem OUTBOUND da campanha pra rastrear status (SENT/FAILED).
+    // W2.4: grava campaignId como COLUNA (FK), não só metadata — habilita os
+    // contadores reais delivered/read via webhook de status da Meta, que resolve
+    // a campanha a partir da Message pelo whatsappMessageId.
     const created = await prisma.message.create({
       data: {
         direction: 'OUTBOUND',
@@ -192,7 +195,7 @@ export async function processMessageSendJob(
         status: 'SENT', // provisório; ajustado após o envio real abaixo
         conversationId,
         isFromBot: false,
-        ...(data.campaignId ? { metadata: { campaignId: data.campaignId } } : {}),
+        ...(data.campaignId ? { campaignId: data.campaignId } : {}),
       },
       select: { id: true },
     });
@@ -224,6 +227,13 @@ export async function processMessageSendJob(
       },
     });
 
+    // ── 3c. W2.4: contador REAL de envio da campanha ────────────────
+    // sentCount só cresce quando a mensagem SAIU de fato (aqui), não no
+    // enfileiramento. delivered/read chegam depois via webhook de status.
+    if (data.campaignId) {
+      await bumpCampaignCounter(prisma, data.campaignId, 'sentCount');
+    }
+
     logger.info(
       `[Queue:MessageSend] Message ${messageId} sent via ${result.channel} (extId=${result.externalMessageId ?? 'n/a'})`,
     );
@@ -241,9 +251,125 @@ export async function processMessageSendJob(
           },
         },
       });
+      // W2.4: contador REAL de falha da campanha (best-effort).
+      if (data.campaignId) {
+        await bumpCampaignCounter(prisma, data.campaignId, 'failedCount');
+      }
     } catch (updateErr) {
       logger.error(`[Queue:MessageSend] Também falhou ao marcar FAILED ${messageId}:`, updateErr);
     }
+    throw error;
+  }
+}
+
+/**
+ * Incrementa (atomicamente) um contador da campanha. Best-effort: nunca
+ * derruba o envio se a campanha sumiu (deleteMany durante o disparo).
+ * W2.4 — usado pelo dispatch (sentCount/failedCount) e webhook (delivered/read).
+ */
+export async function bumpCampaignCounter(
+  prisma: any,
+  campaignId: string,
+  field: 'sentCount' | 'deliveredCount' | 'readCount' | 'repliedCount' | 'failedCount',
+  by = 1,
+): Promise<void> {
+  try {
+    await prisma.campaign.update({
+      where: { id: campaignId },
+      data: { [field]: { increment: by } },
+    });
+  } catch (err) {
+    logger.warn(`[Campaign] Falha ao incrementar ${field} da campanha ${campaignId}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Despacha uma campanha: resolve audiência (contatos com consentMarketing),
+ * enfileira uma mensagem por contato na message-send queue e transiciona o
+ * status. W2.4 — os contadores REAIS (sentCount/failedCount) são incrementados
+ * pelo processMessageSendJob quando cada envio de fato sai; delivered/read
+ * chegam depois via webhook de status da Meta. Por isso aqui NÃO setamos mais
+ * sentCount=contatos no enfileiramento (era o contador falso).
+ *
+ * Exportado pra teste unitário.
+ */
+export async function dispatchCampaignJob(
+  data: { campaignId: string; organizationId: string },
+  onProgress?: (pct: number) => unknown,
+): Promise<{ success: true; totalEnqueued: number }> {
+  const { campaignId, organizationId } = data;
+  const { prisma } = await import('@zappiq/database');
+  try {
+    logger.info(`[Queue:CampaignDispatch] Dispatching campaign ${campaignId}`);
+
+    const campaign = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      include: { template: true },
+    });
+    if (!campaign) {
+      throw new Error(`Campaign ${campaignId} not found`);
+    }
+
+    // Audiência: contatos da org com consentimento LGPD de marketing.
+    const contacts = await prisma.contact.findMany({
+      where: { organizationId, consentMarketing: true },
+      select: { id: true, whatsappId: true, name: true },
+    });
+    logger.info(`[Queue:CampaignDispatch] Found ${contacts.length} contacts for campaign ${campaignId}`);
+
+    // W2.4: zera contadores e marca SENDING no início do disparo — os
+    // contadores reais crescem à medida que os envios saem.
+    await prisma.campaign.update({
+      where: { id: campaignId },
+      data: {
+        status: 'SENDING',
+        sentCount: 0,
+        deliveredCount: 0,
+        readCount: 0,
+        repliedCount: 0,
+        failedCount: 0,
+        completedAt: null,
+      },
+    });
+
+    const batchSize = 50;
+    let enqueued = 0;
+    for (let i = 0; i < contacts.length; i += batchSize) {
+      const batch = contacts.slice(i, i + batchSize);
+      const jobs = batch.map((contact) => ({
+        name: 'send',
+        data: {
+          campaignId,
+          contactId: contact.id,
+          to: contact.whatsappId,
+          content: campaign.template?.bodyText || '',
+          organizationId,
+        },
+      }));
+      await messageSendQueue.addBulk(jobs);
+      enqueued += batch.length;
+      if (contacts.length > 0) {
+        await onProgress?.(Math.round((enqueued / contacts.length) * 100));
+      }
+    }
+
+    // Enfileiramento concluído → COMPLETED. sentCount/failedCount refletem os
+    // envios REAIS (incrementados no message-send worker), não este número.
+    await prisma.campaign.update({
+      where: { id: campaignId },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+
+    logger.info(`[Queue:CampaignDispatch] Campaign ${campaignId} dispatched: ${enqueued} messages enqueued`);
+    return { success: true, totalEnqueued: enqueued };
+  } catch (error) {
+    logger.error(`[Queue:CampaignDispatch] Failed to dispatch campaign ${campaignId}:`, error);
+    try {
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { status: 'CANCELLED' },
+      });
+    } catch (_) { /* melhor esforço */ }
     throw error;
   }
 }
@@ -287,88 +413,10 @@ export async function initQueues(): Promise<void> {
   );
 
   // ── Campaign Dispatch Worker ─────────────────
+  // W2.4: lógica extraída pra dispatchCampaignJob (testável isolado).
   campaignDispatchWorker = new Worker(
     'campaign-dispatch',
-    async (job: Job) => {
-      const { campaignId, organizationId } = job.data;
-      try {
-        logger.info(`[Queue:CampaignDispatch] Dispatching campaign ${campaignId}`);
-
-        const { prisma } = await import('@zappiq/database');
-
-        // Busca campanha com template
-        const campaign = await prisma.campaign.findUnique({
-          where: { id: campaignId },
-          include: { template: true },
-        });
-
-        if (!campaign) {
-          throw new Error(`Campaign ${campaignId} not found`);
-        }
-
-        // Busca contatos da organização (filtro de audiência pode ser aplicado aqui).
-        // Marketing campaigns require explicit LGPD consent (consentMarketing).
-        const contacts = await prisma.contact.findMany({
-          where: {
-            organizationId,
-            consentMarketing: true,
-          },
-          select: { id: true, whatsappId: true, name: true },
-        });
-
-        logger.info(`[Queue:CampaignDispatch] Found ${contacts.length} contacts for campaign ${campaignId}`);
-
-        // Enfileira mensagens individuais em lotes de 50
-        const batchSize = 50;
-        let enqueued = 0;
-
-        for (let i = 0; i < contacts.length; i += batchSize) {
-          const batch = contacts.slice(i, i + batchSize);
-          const jobs = batch.map((contact) => ({
-            name: 'send',
-            data: {
-              campaignId,
-              contactId: contact.id,
-              to: contact.whatsappId,
-              content: campaign.template?.bodyText || '',
-              organizationId,
-            },
-          }));
-
-          await messageSendQueue.addBulk(jobs);
-          enqueued += batch.length;
-
-          // Atualiza progresso
-          await job.updateProgress(Math.round((enqueued / contacts.length) * 100));
-        }
-
-        // Atualiza estatísticas da campanha
-        await prisma.campaign.update({
-          where: { id: campaignId },
-          data: {
-            sentCount: contacts.length,
-            status: 'COMPLETED',
-            completedAt: new Date(),
-          },
-        });
-
-        logger.info(`[Queue:CampaignDispatch] Campaign ${campaignId} dispatched: ${enqueued} messages enqueued`);
-        return { success: true, totalEnqueued: enqueued };
-      } catch (error) {
-        logger.error(`[Queue:CampaignDispatch] Failed to dispatch campaign ${campaignId}:`, error);
-
-        // Marca campanha como falha
-        try {
-          const { prisma } = await import('@zappiq/database');
-          await prisma.campaign.update({
-            where: { id: campaignId },
-            data: { status: 'CANCELLED' },
-          });
-        } catch (_) { /* melhor esforço */ }
-
-        throw error;
-      }
-    },
+    async (job: Job) => dispatchCampaignJob(job.data, (p) => job.updateProgress(p)),
     {
       connection,
       concurrency: 2,

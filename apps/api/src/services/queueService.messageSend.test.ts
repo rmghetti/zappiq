@@ -45,6 +45,7 @@ const messageUpdate = vi.fn();
 const messageCreate = vi.fn();
 const conversationFindFirst = vi.fn();
 const conversationCreate = vi.fn();
+const campaignUpdate = vi.fn();
 vi.mock('@zappiq/database', () => ({
   prisma: {
     message: {
@@ -56,6 +57,9 @@ vi.mock('@zappiq/database', () => ({
       findFirst: (...a: any[]) => conversationFindFirst(...a),
       create: (...a: any[]) => conversationCreate(...a),
     },
+    campaign: {
+      update: (...a: any[]) => campaignUpdate(...a),
+    },
   },
 }));
 
@@ -65,6 +69,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   messageUpdate.mockResolvedValue({});
   messageCreate.mockResolvedValue({ id: 'msg-created' });
+  campaignUpdate.mockResolvedValue({});
 });
 
 describe('processMessageSendJob — inbox humano (messageId)', () => {
@@ -168,12 +173,13 @@ describe('processMessageSendJob — campanha (sem messageId)', () => {
     });
 
     expect(conversationCreate).toHaveBeenCalled();
+    // W2.4: campaignId gravado como COLUNA (FK), não mais em metadata.
     expect(messageCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           direction: 'OUTBOUND',
           conversationId: 'conv-new',
-          metadata: { campaignId: 'camp-1' },
+          campaignId: 'camp-1',
         }),
       }),
     );
@@ -186,7 +192,37 @@ describe('processMessageSendJob — campanha (sem messageId)', () => {
       where: { id: 'msg-camp' },
       data: { status: 'SENT', whatsappMessageId: 'wamid.CAMP' },
     });
+    // W2.4: contador REAL de envio incrementado no send bem-sucedido.
+    expect(campaignUpdate).toHaveBeenCalledWith({
+      where: { id: 'camp-1' },
+      data: { sentCount: { increment: 1 } },
+    });
     expect(res.externalMessageId).toBe('wamid.CAMP');
+  });
+
+  it('incrementa failedCount da campanha quando o envio falha', async () => {
+    conversationFindFirst.mockResolvedValue({ id: 'conv-x' });
+    messageCreate.mockResolvedValue({ id: 'msg-fail' });
+    sendReplyText.mockRejectedValue(new Error('WA down'));
+
+    await expect(
+      processMessageSendJob({
+        campaignId: 'camp-9',
+        contactId: 'contact-9',
+        organizationId: 'org-1',
+        content: 'promo',
+      }),
+    ).rejects.toThrow('WA down');
+
+    // Marcou FAILED e incrementou failedCount (não sentCount).
+    expect(campaignUpdate).toHaveBeenCalledWith({
+      where: { id: 'camp-9' },
+      data: { failedCount: { increment: 1 } },
+    });
+    const sentBumps = campaignUpdate.mock.calls.filter(
+      ([arg]: any[]) => arg?.data?.sentCount,
+    );
+    expect(sentBumps).toHaveLength(0);
   });
 
   it('lança se job de campanha vier sem organizationId/contactId', async () => {
