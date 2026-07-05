@@ -34,6 +34,9 @@ import {
   Gauge,
   ClipboardList,
   History,
+  Bot,
+  Send,
+  BookOpen,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import ReadinessMilestoneNudge from '../../../components/shared/ReadinessMilestoneNudge';
@@ -103,7 +106,7 @@ const LEVEL_META: Record<Readiness['level'], { label: string; color: string; bg:
   expert: { label: 'Expert', color: 'text-primary-700', bg: 'bg-primary-50 border-primary-200' },
 };
 
-type TabKey = 'survey' | 'documents' | 'qa' | 'identity';
+type TabKey = 'survey' | 'documents' | 'qa' | 'identity' | 'playground';
 
 // Hash ↔ tab. Permite deep-link a partir do FAB (Treinar IA), do Breakdown e
 // das Próximas ações. Ex.: /ai-training#survey abre direto a Qualificação.
@@ -112,6 +115,7 @@ const TAB_HASH: Record<TabKey, string> = {
   documents: '#documents',
   qa: '#qa',
   identity: '#identity',
+  playground: '#playground',
 };
 
 function hashToTab(hash: string): TabKey | null {
@@ -120,6 +124,7 @@ function hashToTab(hash: string): TabKey | null {
   if (h === 'documents' || h === 'documentos' || h === 'knowledge') return 'documents';
   if (h === 'qa' || h === 'q&a' || h === 'perguntas') return 'qa';
   if (h === 'identity' || h === 'identidade' || h === 'tom') return 'identity';
+  if (h === 'playground' || h === 'testar' || h === 'teste' || h === 'test') return 'playground';
   return null;
 }
 
@@ -167,7 +172,7 @@ export default function AITrainingPage() {
   // Navega para uma aba interna OU para outra rota (ex.: WhatsApp em /settings).
   const navigate = useCallback(
     (target: TabKey | string) => {
-      if (target === 'survey' || target === 'documents' || target === 'qa' || target === 'identity') {
+      if (target === 'survey' || target === 'documents' || target === 'qa' || target === 'identity' || target === 'playground') {
         setTab(target);
         if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
@@ -215,6 +220,9 @@ export default function AITrainingPage() {
         <TabButton active={tab === 'identity'} onClick={() => setTab('identity')}>
           <User size={16} /> Identidade do agente
         </TabButton>
+        <TabButton active={tab === 'playground'} onClick={() => setTab('playground')}>
+          <Bot size={16} /> Testar minha IA
+        </TabButton>
       </div>
 
       {/* Tab panels */}
@@ -222,6 +230,7 @@ export default function AITrainingPage() {
       {tab === 'documents' && <DocumentsPanel onChange={refreshReadiness} />}
       {tab === 'qa' && <QAPanel onChange={refreshReadiness} />}
       {tab === 'identity' && <IdentityPanel onChange={refreshReadiness} />}
+      {tab === 'playground' && <PlaygroundPanel />}
 
       {/* Milestone nudge — dispara uma vez quando score cruza 60 */}
       <ReadinessMilestoneNudge score={readiness?.score} />
@@ -936,6 +945,174 @@ function IdentityPanel({ onChange }: { onChange: () => void }) {
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : 'Salvar identidade'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════
+// Playground "Testar minha IA"
+// ─────────────────────────────────────────────────────────
+// O dono do negócio testa o treino ANTES de conectar o WhatsApp: digita uma
+// mensagem, ela roda pela MESMA IA da org (prompt do Agent + retrieval RAG
+// real) e volta a resposta — sem WhatsApp e sem criar conversa/contato reais.
+// O badge "usou seus documentos" mostra que o RAG está sendo consultado.
+// ═════════════════════════════════════════════════════════
+interface PlaygroundSource {
+  source: string;
+  similarity: number;
+  snippet: string;
+}
+interface PlaygroundTurn {
+  role: 'user' | 'assistant';
+  text: string;
+  usedContext?: boolean;
+  sources?: PlaygroundSource[];
+}
+
+function PlaygroundPanel() {
+  const [input, setInput] = useState('');
+  const [turns, setTurns] = useState<PlaygroundTurn[]>([]);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [turns, sending]);
+
+  const send = async () => {
+    const message = input.trim();
+    if (!message || sending) return;
+    setError(null);
+    setInput('');
+    setTurns((prev) => [...prev, { role: 'user', text: message }]);
+    setSending(true);
+    try {
+      const res = await api.post<{ reply: string; usedContext: boolean; sources: PlaygroundSource[] }>(
+        '/api/ai-training/test',
+        { message },
+      );
+      setTurns((prev) => [
+        ...prev,
+        { role: 'assistant', text: res.reply, usedContext: res.usedContext, sources: res.sources || [] },
+      ]);
+    } catch (err: any) {
+      setError(err?.message || 'Não consegui testar agora. Tente de novo em instantes.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col" style={{ height: '32rem' }}>
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+          <Bot size={18} className="text-primary-600" />
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Testar minha IA</h3>
+            <p className="text-xs text-gray-500">
+              Fale como se fosse um cliente. A IA responde com o mesmo cérebro do WhatsApp. Nada é enviado nem salvo.
+            </p>
+          </div>
+        </div>
+
+        {/* Histórico */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4 bg-gray-50">
+          {turns.length === 0 && !sending && (
+            <div className="h-full flex flex-col items-center justify-center text-center text-gray-400">
+              <Bot size={40} className="mb-3 opacity-40" />
+              <p className="text-sm max-w-sm">
+                Mande uma pergunta que um cliente faria, como "vocês entregam no sábado?" ou "quanto custa o plano básico?".
+                Veja se a IA responde certo antes de ligar o WhatsApp.
+              </p>
+            </div>
+          )}
+
+          {turns.map((t, i) => (
+            <div key={i} className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] ${t.role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
+                <div
+                  className={`rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                    t.role === 'user'
+                      ? 'bg-primary-500 text-white rounded-br-sm'
+                      : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm'
+                  }`}
+                >
+                  {t.text || <span className="italic opacity-60">(resposta vazia)</span>}
+                </div>
+
+                {t.role === 'assistant' && (
+                  <div className="mt-1.5 space-y-1.5">
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                        t.usedContext
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : 'bg-gray-100 text-gray-500 border border-gray-200'
+                      }`}
+                    >
+                      <BookOpen size={11} />
+                      {t.usedContext ? 'Usou seus documentos' : 'Sem contexto dos seus documentos'}
+                    </span>
+                    {t.usedContext && t.sources && t.sources.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {t.sources.map((s, j) => (
+                          <span
+                            key={j}
+                            title={s.snippet}
+                            className="inline-flex items-center gap-1 text-[11px] text-gray-600 bg-white border border-gray-200 rounded px-2 py-0.5 max-w-[16rem] truncate"
+                          >
+                            <FileText size={11} className="shrink-0" />
+                            <span className="truncate">{s.source}</span>
+                            <span className="text-gray-400">{Math.round(s.similarity * 100)}%</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {sending && (
+            <div className="flex justify-start">
+              <div className="bg-white border border-gray-200 text-gray-500 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm inline-flex items-center gap-2">
+                <Loader2 size={14} className="animate-spin" /> A IA está pensando...
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input */}
+        <div className="border-t border-gray-100 p-3">
+          {error && <p className="text-xs text-red-600 mb-2 px-1">{error}</p>}
+          <div className="flex items-end gap-2">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKeyDown}
+              rows={1}
+              placeholder="Escreva como um cliente escreveria..."
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-primary-500 focus:outline-none resize-none max-h-32"
+            />
+            <button
+              onClick={send}
+              disabled={sending || !input.trim()}
+              className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              Enviar
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import {
   namespaceFor,
   buildQueryRequest,
   parseQueryContext,
+  parseQuerySources,
   buildIngestForm,
 } from './ragService.js';
 
@@ -63,6 +64,52 @@ describe('parseQueryContext', () => {
       ],
     };
     expect(parseQueryContext(data)).toBe('ok');
+  });
+});
+
+describe('parseQuerySources', () => {
+  it('extrai fontes distintas ordenadas por similaridade desc', () => {
+    const data = {
+      results: [
+        { id: '1', text: 'chunk A', similarity: 0.7, source: 'faq.md', chunk_idx: 0 },
+        { id: '2', text: 'chunk B', similarity: 0.9, source: 'precos.md', chunk_idx: 0 },
+      ],
+    };
+    const out = parseQuerySources(data);
+    expect(out.map((s) => s.source)).toEqual(['precos.md', 'faq.md']);
+    expect(out[0].similarity).toBe(0.9);
+  });
+
+  it('dedupe por source: mantém o chunk de maior similaridade', () => {
+    const data = {
+      results: [
+        { id: '1', text: 'baixa', similarity: 0.4, source: 'faq.md', chunk_idx: 0 },
+        { id: '2', text: 'alta', similarity: 0.95, source: 'faq.md', chunk_idx: 1 },
+      ],
+    };
+    const out = parseQuerySources(data);
+    expect(out).toHaveLength(1);
+    expect(out[0].source).toBe('faq.md');
+    expect(out[0].similarity).toBe(0.95);
+    expect(out[0].snippet).toBe('alta');
+  });
+
+  it('trunca o snippet longo com reticências', () => {
+    const longText = 'x'.repeat(300);
+    const out = parseQuerySources({ results: [{ id: '1', text: longText, similarity: 0.8, source: 'doc.md', chunk_idx: 0 }] });
+    expect(out[0].snippet.endsWith('…')).toBe(true);
+    expect(out[0].snippet.length).toBeLessThanOrEqual(161);
+  });
+
+  it('usa "(sem origem)" quando source é null/vazio', () => {
+    const out = parseQuerySources({ results: [{ id: '1', text: 'x', similarity: 0.5, source: null, chunk_idx: 0 }] });
+    expect(out[0].source).toBe('(sem origem)');
+  });
+
+  it('retorna lista vazia quando results ausente/nulo', () => {
+    expect(parseQuerySources(null)).toEqual([]);
+    expect(parseQuerySources({})).toEqual([]);
+    expect(parseQuerySources({ results: [] })).toEqual([]);
   });
 });
 

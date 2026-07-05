@@ -632,7 +632,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 // Sem org → fallback pra cascade default (Sonnet primário).
 const VALID_TIERS: LLMTier[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
 
-async function pickTierAndOverride(orgId: string): Promise<{
+export async function pickTierAndOverride(orgId: string): Promise<{
   tier?: LLMTier;
   forceProvider?: LLMProviderId;
 }> {

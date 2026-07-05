@@ -94,6 +94,67 @@ export function parseQueryContext(data: unknown): string {
     .join('\n\n---\n\n');
 }
 
+/**
+ * Fonte de contexto normalizada para exibição (playground "Testar minha IA").
+ * `source` é o filename/URL usado na ingestão; `similarity` ajuda o dono do
+ * negócio a ver o quão relevante foi o trecho recuperado.
+ */
+export interface RagSource {
+  source: string;
+  similarity: number;
+  snippet: string;
+}
+
+/**
+ * Extrai as fontes distintas da response do /query, ordenadas por similaridade
+ * desc. Puro (sem axios) para teste. Dedupe por `source`: mantém o trecho de
+ * maior similaridade por documento — o dono do negócio quer ver QUAIS docs a IA
+ * usou, não cada chunk. `snippet` é um recorte curto pra prévia na UI.
+ */
+export function parseQuerySources(data: unknown, maxSnippet = 160): RagSource[] {
+  const results = (data as { results?: RagQueryResult[] } | null)?.results ?? [];
+  const bySource = new Map<string, RagSource>();
+  for (const r of results) {
+    const source = (r?.source ?? '').trim() || '(sem origem)';
+    const similarity = typeof r?.similarity === 'number' ? r.similarity : 0;
+    const text = typeof r?.text === 'string' ? r.text.trim() : '';
+    const existing = bySource.get(source);
+    if (!existing || similarity > existing.similarity) {
+      bySource.set(source, {
+        source,
+        similarity,
+        snippet: text.length > maxSnippet ? `${text.slice(0, maxSnippet)}…` : text,
+      });
+    }
+  }
+  return [...bySource.values()].sort((a, b) => b.similarity - a.similarity);
+}
+
+/**
+ * Igual a `search`, mas devolve o contexto textual JUNTO com as fontes
+ * estruturadas. Usado pelo playground "Testar minha IA" (/ai-training) para
+ * mostrar ao dono do negócio QUAIS documentos foram usados. Não usa cache
+ * (queremos sempre o retrieval fresco no teste) e é fail-soft: em erro devolve
+ * contexto vazio e lista de fontes vazia.
+ */
+export async function searchWithSources(
+  organizationId: string,
+  query: string,
+  topK = 5,
+): Promise<{ context: string; sources: RagSource[] }> {
+  try {
+    const { path, body } = buildQueryRequest(organizationId, query, topK);
+    const { data } = await ragClient.post(path, body);
+    return {
+      context: parseQueryContext(data),
+      sources: parseQuerySources(data),
+    };
+  } catch (err: any) {
+    logger.warn('[RAG] searchWithSources failed:', err.message);
+    return { context: '', sources: [] };
+  }
+}
+
 export async function search(organizationId: string, query: string, topK = 5): Promise<string> {
   const namespace = namespaceFor(organizationId);
   const cacheKey = `rag:${namespace}:${Buffer.from(query).toString('base64').slice(0, 40)}`;

@@ -33,6 +33,9 @@ import * as ragService from '../services/ragService.js';
 import { computeAIReadiness, refreshAIReadiness } from '../services/aiReadinessService.js';
 import { buildKnowledgeBase, surveyDocFilename, countAnsweredQuestions } from '../services/knowledgeBaseBuilder.js';
 import { logAuditEvent } from '../services/auditService.js';
+import { buildSystemPromptForContact, pickTierAndOverride } from '../agents/agentOrchestrator.js';
+import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
+import { testMessageSchema, buildPlaygroundResult } from './aiTraining.playground.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -93,6 +96,77 @@ router.get('/status', async (req: Request, res: Response, next: NextFunction) =>
     const result = await computeAIReadiness(orgId);
     res.json(result);
   } catch (err) {
+    next(err);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// POST /api/ai-training/test — Playground "Testar minha IA"
+// ─────────────────────────────────────────────────────────
+// FEATURE 5a.2. O dono do negócio testa o treino ANTES de conectar o
+// WhatsApp: manda uma mensagem, ela roda pela MESMA IA da org (prompt do
+// Agent live + retrieval RAG real + roteamento de tier/provider), e volta a
+// resposta — SEM WhatsApp e SEM criar Conversation/Contact reais.
+//
+// Reuso deliberado do caminho de produção (agentOrchestrator):
+//   - buildSystemPromptForContact → CORE rules + facts gating + Agent live + RAG
+//   - pickTierAndOverride         → mesmo tier/forceProvider do bot real
+//   - routeIzaTurn                → mesmo pre-filter + classify + cascade LLM
+// A única diferença: usamos um contactId sintético que NÃO existe no banco.
+// O lookup de Contact retorna null (fail-soft no orchestrator) → o prompt cai
+// no comportamento de "primeiro contato", que é exatamente o teste desejado.
+// Nada é persistido: sem Message, sem Conversation, sem Contact.
+// ═══════════════════════════════════════════════════════════
+router.post('/test', validate(testMessageSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { message } = req.body as { message: string };
+
+    // Settings da org (niche/agentName/tone) pro fallback do promptEngine
+    // quando a org ainda não tem Agent seedado.
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { settings: true },
+    });
+    const orgSettings = (org?.settings as any) || {};
+
+    // 1. Retrieval RAG real (namespace da org) + fontes estruturadas pra UI.
+    const { context: ragContext, sources } = await ragService.searchWithSources(orgId, message, 5);
+
+    // 2. System prompt idêntico ao de produção. contactId sintético → sem DB write.
+    const systemPrompt = await buildSystemPromptForContact({
+      organizationId: orgId,
+      contactId: `playground:${orgId}`,
+      orgSettings,
+      ragContext,
+    });
+
+    // 3. Mesmo roteamento de tier/provider do bot real.
+    const { tier, forceProvider } = await pickTierAndOverride(orgId);
+
+    // 4. Mesmo turno da Iza (pre-filter + classify + cascade). history vazio:
+    // é um teste isolado, sem conversa prévia. conversationId null (sem persistência).
+    const turn = await routeIzaTurn({
+      systemPrompt,
+      userMessage: message,
+      history: [],
+      tier,
+      forceProvider,
+      orgId,
+      conversationId: null,
+    });
+
+    // Vertical bloqueada (apostas/cripto/...) devolve template estático, sem LLM.
+    const rawText = turn.kind === 'blocked' ? turn.response : turn.response.text;
+
+    const result = buildPlaygroundResult({ rawLlmText: rawText, sources });
+
+    await logTraining(req, 'kb.playground.test', 'ai_playground', undefined,
+      `Teste de IA executado (${result.usedContext ? 'com' : 'sem'} contexto RAG)`);
+
+    res.json(result);
+  } catch (err) {
+    logger.warn('[AITraining] Playground test falhou', { err: String(err) });
     next(err);
   }
 });
