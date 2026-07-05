@@ -1827,6 +1827,28 @@ export default function FlowsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Deep links (#W2.7): ?flowId=<id> abre o editor daquele fluxo; ?wizard=true
+  // abre o wizard do MAESTRO INTELIGENTE. Os links da home e da biblioteca de
+  // templates apontam pra cá. Roda uma vez no mount (lê window.location.search
+  // pra evitar o Suspense do useSearchParams).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('wizard') === 'true') {
+      setSmartOpen(true);
+      setSmartDrafts(null);
+      return;
+    }
+    const flowId = params.get('flowId');
+    if (flowId) {
+      let cancelled = false;
+      api.get<{ success: boolean; data: ApiFlow }>(`/api/flows/${flowId}`)
+        .then((res) => { if (!cancelled && res?.data) setEditing(res.data); })
+        .catch(() => { /* fluxo inexistente/sem acesso: fica na lista */ });
+      return () => { cancelled = true; };
+    }
+  }, []);
+
   async function createFlow() {
     setCreating(true); setError(null);
     try {

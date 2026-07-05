@@ -95,6 +95,16 @@ export default function ConversationsPage() {
 
   useEffect(() => { loadList(); }, [loadList]);
 
+  // Deep link (#W2.7): ?id=<conversaId> abre a conversa direto. Os links da home
+  // (dashboard) apontam pra cá. Roda uma vez no mount; setar selectedId dispara o
+  // efeito que carrega mensagens/contexto. Lê window.location.search pra evitar o
+  // Suspense exigido pelo useSearchParams.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const id = new URLSearchParams(window.location.search).get('id');
+    if (id) setSelectedId(id);
+  }, []);
+
   useEffect(() => {
     if (!selectedId) return;
     // Carrega a JANELA MAIS RECENTE (a API já devolve em ordem cronológica).
