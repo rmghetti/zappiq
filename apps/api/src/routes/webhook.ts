@@ -5,6 +5,7 @@ import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import { aiProcessQueue } from '../services/queueService.js';
 import { inboundContentFromMessage } from '../services/inboundContent.js';
+import { applyMessageStatusUpdate, attributeCampaignReply } from './campaignStatus.util.js';
 
 const router = Router();
 
@@ -96,12 +97,14 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
     if (!value) return;
 
     // Handle status updates
+    // W2.4: além de gravar o status na Message, propaga delivered/read para os
+    // contadores da Campanha quando a mensagem pertence a uma (campaignId). A
+    // transição é monotônica (SENT→DELIVERED→READ), então só contamos na
+    // PRIMEIRA vez que a mensagem cruza cada patamar — Meta reenvia status e
+    // não podemos contar em dobro.
     if (value.statuses?.length) {
       for (const status of value.statuses) {
-        await prisma.message.updateMany({
-          where: { whatsappMessageId: status.id },
-          data: { status: status.status?.toUpperCase() === 'READ' ? 'READ' : status.status?.toUpperCase() === 'DELIVERED' ? 'DELIVERED' : 'SENT' },
-        });
+        await applyMessageStatusUpdate(prisma, status);
       }
       return;
     }
@@ -171,7 +174,7 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
     // Save incoming message
     const content = inboundContentFromMessage(message);
 
-    await prisma.message.create({
+    const inboundMsg = await prisma.message.create({
       data: {
         whatsappMessageId: message.id,
         direction: 'INBOUND',
@@ -183,7 +186,16 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
         mediaUrl: message.image?.id || message.audio?.id || message.document?.id || null,
         mediaType: message.type !== 'text' ? message.type : null,
       },
+      select: { id: true },
     });
+
+    // W2.4: se este INBOUND é a primeira resposta a uma campanha, conta reply.
+    // Best-effort — nunca derruba o webhook.
+    try {
+      await attributeCampaignReply(prisma, conversation.id, inboundMsg.id);
+    } catch (err) {
+      logger.warn(`[Webhook] falha ao atribuir reply de campanha: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     // Update conversation timestamp
     await prisma.conversation.update({
