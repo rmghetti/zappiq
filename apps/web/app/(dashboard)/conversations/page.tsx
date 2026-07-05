@@ -4,20 +4,28 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   MessageSquare, Send, Search, Bot, User, Instagram, Smartphone,
   Tag, Target, Flame, CheckSquare, Clock, TrendingUp, Sparkles, ArrowRightCircle,
-  UserPlus, FileText, DollarSign, X,
+  UserPlus, FileText, DollarSign, X, Hand, CheckCircle2, RotateCcw, PauseCircle, StickyNote,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { getSocket } from '../../../lib/socket';
+import { useAuthStore } from '../../../stores/authStore';
 import { AgentMessageActions } from '../../../components/conversations/AgentMessageActions';
 
 interface Conversation {
   id: string;
   status: string;
   channel?: string;
+  aiPaused?: boolean;
+  assignedToId?: string | null;
   contact: { id: string; name: string; phone: string; avatarUrl?: string; leadStatus: string };
   messages: Array<{ content: string; createdAt: string; direction: string }>;
   _count: { messages: number };
   updatedAt: string;
+}
+
+/** Feature 5a.1 — indicador de handoff: IA pausada quando aiPaused ou ASSIGNED. */
+function isHumanHandoffActive(conv?: { aiPaused?: boolean; status?: string } | null): boolean {
+  return !!conv && (conv.aiPaused === true || conv.status === 'ASSIGNED');
 }
 
 interface Message {
@@ -77,6 +85,12 @@ export default function ConversationsPage() {
   const [channelFilter, setChannelFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  // Feature 5a.1 — handoff humano ↔ IA.
+  const currentUser = useAuthStore((s) => s.user);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
   // W2.3 — paginação: cursor para "carregar anteriores" + flag de fim do histórico.
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -187,6 +201,73 @@ export default function ConversationsPage() {
     setSending(false);
   }
 
+  // Atualiza o item da lista localmente (feedback imediato) e recarrega do servidor.
+  function patchSelected(patch: Partial<Conversation>) {
+    setConversations((prev) => prev.map((c) => (c.id === selectedId ? { ...c, ...patch } : c)));
+  }
+
+  // ASSUMIR — atribui ao usuário logado e pausa a Iza.
+  async function handleAssume() {
+    if (!selectedId || !currentUser?.id || actionBusy) return;
+    setActionBusy(true);
+    try {
+      await api.put(`/api/conversations/${selectedId}/assign`, { agentId: currentUser.id });
+      patchSelected({ status: 'ASSIGNED', assignedToId: currentUser.id, aiPaused: true });
+      loadList();
+    } catch {}
+    setActionBusy(false);
+  }
+
+  // ENCERRAR — fecha a conversa.
+  async function handleClose() {
+    if (!selectedId || actionBusy) return;
+    setActionBusy(true);
+    try {
+      await api.put(`/api/conversations/${selectedId}/close`);
+      patchSelected({ status: 'CLOSED' });
+      loadList();
+    } catch {}
+    setActionBusy(false);
+  }
+
+  // REABRIR — reabre uma conversa fechada.
+  async function handleReopen() {
+    if (!selectedId || actionBusy) return;
+    setActionBusy(true);
+    try {
+      await api.put(`/api/conversations/${selectedId}/reopen`);
+      patchSelected({ status: selected?.assignedToId ? 'ASSIGNED' : 'OPEN' });
+      loadList();
+    } catch {}
+    setActionBusy(false);
+  }
+
+  // RETOMAR IZA — despausa a IA.
+  async function handleResumeAi() {
+    if (!selectedId || actionBusy) return;
+    setActionBusy(true);
+    try {
+      await api.put(`/api/conversations/${selectedId}/resume-ai`);
+      patchSelected({ aiPaused: false, status: 'OPEN' });
+      loadList();
+    } catch {}
+    setActionBusy(false);
+  }
+
+  // NOTA INTERNA — registra observação no histórico.
+  async function handleSaveNote() {
+    if (!selectedId || !noteText.trim() || noteSaving) return;
+    setNoteSaving(true);
+    try {
+      await api.post(`/api/conversations/${selectedId}/notes`, { content: noteText.trim() });
+      setNoteText('');
+      setNoteOpen(false);
+      // Recarrega o contexto de CRM (a nota vira atividade na timeline).
+      api.get(`/api/conversations/${selectedId}/context`).then((res) => setCrm(res.data || null)).catch(() => {});
+    } catch {}
+    setNoteSaving(false);
+  }
+
   const selected = conversations.find((c) => c.id === selectedId);
   const filtered = conversations.filter((c) => {
     if (statusFilter !== 'all' && c.status !== statusFilter) return false;
@@ -282,22 +363,79 @@ export default function ConversationsPage() {
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-white">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-secondary-500 flex items-center justify-center text-white text-sm font-bold">
-                  {selected.contact.name?.charAt(0)?.toUpperCase() || '?'}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{selected.contact.name || selected.contact.phone}</p>
-                  <div className="flex items-center gap-2">
-                    <ChannelIcon channel={selected.channel} />
-                    <span className="text-xs text-gray-500">{selected.contact.phone}</span>
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${selected.status === 'OPEN' ? 'bg-green-100 text-green-700' : selected.status === 'WAITING' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {selected.status}
-                    </span>
+            <div className="px-5 py-3 border-b border-gray-200 bg-white">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-full bg-secondary-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                    {selected.contact.name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{selected.contact.name || selected.contact.phone}</p>
+                    <div className="flex items-center gap-2">
+                      <ChannelIcon channel={selected.channel} />
+                      <span className="text-xs text-gray-500">{selected.contact.phone}</span>
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${selected.status === 'OPEN' ? 'bg-green-100 text-green-700' : selected.status === 'WAITING' ? 'bg-yellow-100 text-yellow-700' : selected.status === 'ASSIGNED' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {selected.status}
+                      </span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Feature 5a.1 — ações de handoff */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {selected.status !== 'CLOSED' && !isHumanHandoffActive(selected) && (
+                    <button onClick={handleAssume} disabled={actionBusy || !currentUser?.id}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                      <Hand size={13} /> Assumir
+                    </button>
+                  )}
+                  <button onClick={() => setNoteOpen((v) => !v)} disabled={actionBusy}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 transition-colors">
+                    <StickyNote size={13} /> Nota
+                  </button>
+                  {selected.status === 'CLOSED' ? (
+                    <button onClick={handleReopen} disabled={actionBusy}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition-colors">
+                      <RotateCcw size={13} /> Reabrir
+                    </button>
+                  ) : (
+                    <button onClick={handleClose} disabled={actionBusy}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 transition-colors">
+                      <CheckCircle2 size={13} /> Encerrar
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Indicador: IA pausada / atendimento humano */}
+              {isHumanHandoffActive(selected) && selected.status !== 'CLOSED' && (
+                <div className="mt-2 flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-amber-800">
+                    <PauseCircle size={14} /> IA pausada — em atendimento humano
+                  </span>
+                  <button onClick={handleResumeAi} disabled={actionBusy}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-accent-500 text-white hover:bg-accent-600 disabled:opacity-50 transition-colors">
+                    <Bot size={13} /> Retomar Iza
+                  </button>
+                </div>
+              )}
+
+              {/* Nota interna — campo inline */}
+              {noteOpen && (
+                <div className="mt-2 flex items-start gap-2">
+                  <textarea
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    placeholder="Nota interna (não enviada ao contato)..."
+                    rows={2}
+                    className="flex-1 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                  <button onClick={handleSaveNote} disabled={!noteText.trim() || noteSaving}
+                    className="px-3 py-2 rounded-lg text-xs font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors self-stretch">
+                    {noteSaving ? '...' : 'Salvar'}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-5 py-4 bg-[#ECE5DD] space-y-2">

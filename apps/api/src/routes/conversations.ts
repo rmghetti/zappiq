@@ -6,8 +6,31 @@ import { requireRole } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import { logAuditEvent } from '../services/auditService.js';
 import { cache } from '../services/cloud/index.js';
+import {
+  aiPauseCacheKey,
+  AI_PAUSE_HUMAN_VALUE,
+  AI_PAUSE_TTL_SECONDS,
+  planAssign,
+  planReopen,
+  planResumeAi,
+} from './conversations.handoff.js';
 
 const router = Router();
+
+/** Espelha o estado de pausa da IA no cache (fast-path). fail-soft por contrato. */
+async function mirrorPauseCache(
+  effect: 'pause' | 'resume' | 'none',
+  organizationId: string,
+  contactPhone: string,
+) {
+  if (effect === 'none') return;
+  const key = aiPauseCacheKey(organizationId, contactPhone);
+  if (effect === 'pause') {
+    await cache.set(key, AI_PAUSE_HUMAN_VALUE, AI_PAUSE_TTL_SECONDS);
+  } else {
+    await cache.del(key);
+  }
+}
 
 const querySchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -155,24 +178,15 @@ router.put('/:id/assign', async (req: Request, res: Response, next: NextFunction
 
     // W3.4 — atribuir a um humano PAUSA a Iza nesta conversa; desatribuir
     // (agentId vazio) devolve o atendimento à IA (aiPaused=false).
-    const assignedToHuman = !!agentId;
+    const transition = planAssign(agentId);
 
     const updated = await prisma.conversation.update({
       where: { id: req.params.id },
-      data: {
-        assignedToId: agentId || null,
-        status: agentId ? 'ASSIGNED' : 'OPEN',
-        aiPaused: assignedToHuman,
-      },
+      data: transition.data,
     });
 
     // Espelha no cache (fast-path que orchestrator/flowScheduler consultam).
-    const pauseKey = `ai_paused:${req.organizationId}:${existing.contact.whatsappId}`;
-    if (assignedToHuman) {
-      await cache.set(pauseKey, 'human', 60 * 60 * 24 * 7);
-    } else {
-      await cache.del(pauseKey);
-    }
+    await mirrorPauseCache(transition.cacheEffect, req.organizationId!, existing.contact.whatsappId);
 
     await logAuditEvent(req, {
       action: 'conversation.assign',
@@ -230,6 +244,98 @@ router.put('/:id/close', async (req: Request, res: Response, next: NextFunction)
     const io = req.app.get('io');
     if (io) {
       io.to(`org:${req.organizationId}`).emit('conversation_closed', {
+        conversationId: req.params.id,
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── PUT /api/conversations/:id/reopen ───────────
+// Feature 5a.1 — reabre uma conversa fechada. Se ainda houver humano
+// atribuído, volta como ASSIGNED (IA segue pausada); senão OPEN.
+router.put('/:id/reopen', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const existing = await prisma.conversation.findFirst({
+      where: { id: req.params.id, organizationId: req.organizationId!, deletedAt: null },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    const transition = planReopen(existing.assignedToId);
+
+    const updated = await prisma.conversation.update({
+      where: { id: req.params.id },
+      data: transition.data,
+    });
+
+    await logAuditEvent(req, {
+      action: 'conversation.reopen',
+      resource: 'conversation',
+      resourceId: updated.id,
+      dataSubjectId: existing.contactId,
+      purpose: 'Reabertura de atendimento',
+      legalBasis: 'CONTRACT',
+      before: { status: existing.status, closedAt: existing.closedAt },
+      after: { status: updated.status, closedAt: updated.closedAt },
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`org:${req.organizationId}`).emit('conversation_reopened', {
+        conversationId: req.params.id,
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── PUT /api/conversations/:id/resume-ai ────────
+// Feature 5a.1 — RETOMAR IZA: despausa a IA nesta conversa (aiPaused=false)
+// e limpa o espelho de pausa no cache. Se estava ASSIGNED, reabre para OPEN
+// para a IA voltar a responder; nunca "desfecha" uma CLOSED.
+router.put('/:id/resume-ai', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const existing = await prisma.conversation.findFirst({
+      where: { id: req.params.id, organizationId: req.organizationId!, deletedAt: null },
+      include: { contact: { select: { whatsappId: true } } },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    const transition = planResumeAi(existing.status);
+
+    const updated = await prisma.conversation.update({
+      where: { id: req.params.id },
+      data: transition.data,
+    });
+
+    await mirrorPauseCache(transition.cacheEffect, req.organizationId!, existing.contact.whatsappId);
+
+    await logAuditEvent(req, {
+      action: 'conversation.resume_ai',
+      resource: 'conversation',
+      resourceId: updated.id,
+      dataSubjectId: existing.contactId,
+      purpose: 'Retomada do atendimento pela IA',
+      legalBasis: 'CONTRACT',
+      before: { status: existing.status, aiPaused: existing.aiPaused },
+      after: { status: updated.status, aiPaused: updated.aiPaused },
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`org:${req.organizationId}`).emit('conversation_ai_resumed', {
         conversationId: req.params.id,
       });
     }
