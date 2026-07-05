@@ -8,6 +8,8 @@ import {
   computeKpis,
   computeHealthBreakdown,
   computeHealthAggregate,
+  isRiskRow,
+  filterRowsBySpecial,
   type AccountRawInput,
 } from './adminClientes.util.js';
 
@@ -309,6 +311,24 @@ describe('computeHealthAggregate', () => {
     expect(efforts).toEqual([...efforts].sort((a, b) => a - b));
   });
 
+  it('quick wins usam organizationId OU crmAccountId (a UI abre a conta por esse id)', () => {
+    const mkFull = (over: Partial<AccountRawInput>): AccountRawInput => ({
+      crmAccountId: null, organizationId: null, signupId: null,
+      name: null, email: `${Math.random()}@x.com`, company: null, cnpj: null,
+      plan: null, createdAt: NOW, ...over,
+    });
+    const row = buildAccountRow(
+      mkFull({ crmAccountId: 'crm-1', organizationId: 'org-1', materializedStage: 'PAGO', aiReadinessScore: 90, aiMessagesProcessed: 300, grossMarginPercent: 29 }),
+      NOW,
+    );
+    const agg = computeHealthAggregate([row]);
+    expect(agg.quickWins).toHaveLength(1);
+    // a UI faz `q.organizationId || q.crmAccountId` — ambos precisam estar presentes.
+    expect(agg.quickWins[0].organizationId).toBe('org-1');
+    expect(agg.quickWins[0].crmAccountId).toBe('crm-1');
+    expect(agg.quickWins[0].organizationId || agg.quickWins[0].crmAccountId).toBeTruthy();
+  });
+
   it('identifica quick win amber→green a <=10 pontos', () => {
     // total 66 (amber, a 4 do verde): adocao=90(36)+uso=60(21)+financeiro=36(9)=66
     // uso 300 msgs → 60; margem 29 → round(29/80*100)=36.
@@ -321,5 +341,43 @@ describe('computeHealthAggregate', () => {
     expect(agg.quickWins).toHaveLength(1);
     expect(agg.quickWins[0].nextTier).toBe('green');
     expect(agg.quickWins[0].pointsToNextTier).toBe(70 - amberRow.healthScore);
+  });
+});
+
+describe('isRiskRow / filterRowsBySpecial (filtros clicáveis da Visão Geral — Fase 2)', () => {
+  const mk = (over: Partial<AccountRawInput>): AccountRawInput => ({
+    crmAccountId: null, organizationId: null, signupId: null,
+    name: null, email: `${Math.random()}@x.com`, company: null, cnpj: null,
+    plan: null, createdAt: NOW, ...over,
+  });
+
+  const rows = [
+    buildAccountRow(mk({ materializedStage: 'PAGO', aiReadinessScore: 100, aiMessagesProcessed: 500, grossMarginPercent: 80 }), NOW), // verde
+    buildAccountRow(mk({ materializedStage: 'PAGO', aiReadinessScore: 60, aiMessagesProcessed: 250, grossMarginPercent: 40 }), NOW), // amarela (54)
+    buildAccountRow(mk({ materializedStage: 'PAGO', aiReadinessScore: 0, aiMessagesProcessed: 0, grossMarginPercent: -10 }), NOW), // vermelha
+    buildAccountRow(mk({ materializedStage: 'TRIAL_EXPIRADO' }), NOW), // risco por estágio
+    buildAccountRow(mk({ materializedStage: 'PAST_DUE' }), NOW), // risco por estágio
+  ];
+
+  it('isRiskRow: trial expirado, inadimplente ou health vermelho', () => {
+    expect(rows.filter(isRiskRow)).toHaveLength(3); // vermelha + TRIAL_EXPIRADO + PAST_DUE
+    expect(isRiskRow(rows[0])).toBe(false); // verde
+    expect(isRiskRow(rows[1])).toBe(false); // amarela
+  });
+
+  it('risco = mesma contagem do KPI contasEmRisco (fonte única)', () => {
+    const k = computeKpis(rows, NOW);
+    expect(filterRowsBySpecial(rows, { kind: 'risk' })).toHaveLength(k.contasEmRisco);
+  });
+
+  it('filtro por cor devolve só as contas daquela faixa', () => {
+    expect(filterRowsBySpecial(rows, { kind: 'color', color: 'red' }).every((r) => r.healthColor === 'red')).toBe(true);
+    expect(filterRowsBySpecial(rows, { kind: 'color', color: 'green' })).toHaveLength(
+      rows.filter((r) => r.healthColor === 'green').length,
+    );
+  });
+
+  it("'none' devolve a lista inteira sem cópia perdida", () => {
+    expect(filterRowsBySpecial(rows, { kind: 'none' })).toHaveLength(rows.length);
   });
 });

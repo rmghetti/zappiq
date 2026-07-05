@@ -334,6 +334,42 @@ export function computeKpis(rows: ClienteAccountRow[], now: Date = new Date()): 
   };
 }
 
+// ─── Filtros da Visão Geral (Fase 2 — "tudo clicável") ───────────────────────
+// Predicados PUROS reusados pela UI (page.tsx) para os KPIs/badges clicáveis.
+// Ficam aqui (junto de computeKpis) para que "conta em risco" tenha UMA única
+// definição — a mesma do KPI contasEmRisco — e seja testável por vitest.
+
+/** Uma conta está "em risco": trial expirado, inadimplente ou health vermelho. */
+export function isRiskRow(row: Pick<ClienteAccountRow, 'stage' | 'healthColor'>): boolean {
+  return row.stage === 'TRIAL_EXPIRADO' || row.stage === 'PAST_DUE' || row.healthColor === 'red';
+}
+
+/** Filtro transversal aplicado pelos cards/health da Visão Geral. */
+export type ClientesSpecialFilter =
+  | { kind: 'none' }
+  | { kind: 'risk' }
+  | { kind: 'color'; color: 'green' | 'amber' | 'red' };
+
+/**
+ * Aplica o filtro transversal a uma lista de linhas. Espelha exatamente o que
+ * a Visão Geral faz ao clicar em "Contas em risco" (risk) ou numa faixa da
+ * distribuição do card de saúde (color). 'none' devolve tudo.
+ */
+export function filterRowsBySpecial<T extends Pick<ClienteAccountRow, 'stage' | 'healthColor'>>(
+  rows: T[],
+  filter: ClientesSpecialFilter,
+): T[] {
+  switch (filter.kind) {
+    case 'risk':
+      return rows.filter(isRiskRow);
+    case 'color':
+      return rows.filter((r) => r.healthColor === filter.color);
+    case 'none':
+    default:
+      return rows;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Motor de Health estratégico (Fase 1) — breakdown por dimensão + playbook.
 // ─────────────────────────────────────────────────────────────────────────

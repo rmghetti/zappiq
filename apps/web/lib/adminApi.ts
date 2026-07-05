@@ -704,6 +704,37 @@ export interface HealthAggregate {
   }>;
 }
 
+/**
+ * Filtro transversal da Visão Geral (Fase 2). Espelha ClientesSpecialFilter
+ * de apps/api/src/routes/adminClientes.util.ts. 'risk' = KPI "Contas em risco";
+ * 'color' = faixa da distribuição do card de saúde da carteira.
+ */
+export type ClientesSpecialFilter =
+  | { kind: 'none' }
+  | { kind: 'risk' }
+  | { kind: 'color'; color: 'green' | 'amber' | 'red' };
+
+/** Uma conta está "em risco": trial expirado, inadimplente ou health vermelho. */
+export function isRiskRow(row: Pick<ClienteAccountRow, 'stage' | 'healthColor'>): boolean {
+  return row.stage === 'TRIAL_EXPIRADO' || row.stage === 'PAST_DUE' || row.healthColor === 'red';
+}
+
+/** Aplica o filtro transversal (mesma regra da API). */
+export function filterRowsBySpecial<T extends Pick<ClienteAccountRow, 'stage' | 'healthColor'>>(
+  rows: T[],
+  filter: ClientesSpecialFilter,
+): T[] {
+  switch (filter.kind) {
+    case 'risk':
+      return rows.filter(isRiskRow);
+    case 'color':
+      return rows.filter((r) => r.healthColor === filter.color);
+    case 'none':
+    default:
+      return rows;
+  }
+}
+
 export interface ClientesKpis {
   contasAtivas: number;
   emTrial: number;
