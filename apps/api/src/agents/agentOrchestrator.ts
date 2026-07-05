@@ -25,6 +25,13 @@ import { runAgenticTurn } from './flowAiAgent.js';
 import { buildWebhookToolDef, executeWebhook, type WebhookToolConfig } from './webhookTool.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
+/* ── Org canônica da Iza (dogfood ZappIQ) ─────────────────────────────
+ * W1.4 (vazamento de marca): os "FATOS ATUAIS" (preço, trial, links da
+ * ZappIQ) só podem entrar no prompt da PRÓPRIA ZappIQ. Injetar em toda org
+ * fazia o bot do CLIENTE falar da ZappIQ pro cliente final dele.
+ * Mesma constante usada em adminLeadsIza.ts / webChatService.ts. */
+const IZA_ORG_ID = 'cmo1ywwfe00ko1jskexiexsm4';
+
 export interface ProcessMessageInput {
   organizationId: string;
   conversationId: string;
@@ -895,7 +902,7 @@ async function resolveWaCreds(organizationId: string): Promise<waService.WaCreds
 // Se não existir (ex.: org criada antes da migration ou seed falhou),
 // faz fallback pro promptEngine antigo — preserva back-compat.
 // ═══════════════════════════════════════════════════════════════════
-async function buildSystemPromptForContact(input: {
+export async function buildSystemPromptForContact(input: {
   organizationId: string;
   contactId: string;
   contactPhone?: string;
@@ -955,7 +962,12 @@ async function buildSystemPromptForContact(input: {
   // (inviolável) e agent.systemPrompt (DB seedado, sujeito a drift).
   // Permite atualizar fatos da plataforma (canais, features, urls) sem
   // re-seedar prompts. Fail-soft: string vazia em erro de DB.
-  const factsBlock = await getIzaFactsBlock();
+  //
+  // W1.4 (vazamento de marca): os facts são fatos da ZappIQ (preço, trial,
+  // links). Só a org canônica da Iza pode recebê-los — senão o bot do
+  // CLIENTE passa a falar da ZappIQ pro cliente final dele. Demais orgs
+  // recebem string vazia (bloco não entra no prompt).
+  const factsBlock = organizationId === IZA_ORG_ID ? await getIzaFactsBlock() : '';
 
   // 2. Tentar carregar Agent live correspondente
   try {
