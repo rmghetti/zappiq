@@ -25,10 +25,14 @@ import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import redis from '../utils/redis.js';
 import { sendEmail } from './email/emailProvider.js';
-import { renderTrialSavingsFollowupEmail } from './email/templates/trialSavingsFollowup.js';
+import {
+  renderTrialSavingsFollowupEmail,
+  computeSavings,
+} from './email/templates/trialSavingsFollowup.js';
 import { renderTrialMidwayEmail } from './email/templates/trialMidway.js';
 import { renderTrialLastDayEmail } from './email/templates/trialLastDay.js';
 import { renderTrialConvertedEmail } from './email/templates/trialConverted.js';
+import { computeAIReadiness } from './aiReadinessService.js';
 
 const redisUrl = new URL(env.REDIS_URL);
 const isTLS = env.REDIS_URL.startsWith('rediss://');
@@ -121,25 +125,51 @@ async function markSent(
   }
 }
 
-// Placeholder: computar AI Readiness Score (se existir)
-async function getAIReadinessScore(orgId: string): Promise<number> {
+// W3.3 fix (2026-07): estes e-mails vão pra leads REAIS. NADA de número
+// inventado. Antes daqui saíam `50 + random` (readiness) e `R$10k + random`
+// (economia). Agora: readiness vem do computeAIReadiness real da org; a
+// economia é DERIVADA da mesma fonte do savingsEmail (computeSavings sobre a
+// baseline pública Blip vs. preço ZappIQ Starter). Se o dado real não existir,
+// retornamos `undefined` e o template OMITE a frase em vez de mentir.
+
+// Baseline pública (mediana Blip) — mesma fonte usada em routes/savingsEmail.ts.
+const DEFAULT_COMPETITOR_SETUP_BRL = 8000;
+const DEFAULT_COMPETITOR_MONTHLY_BRL = 1500;
+const ZAPPIQ_STARTER_MONTHLY_BRL = 197;
+
+/**
+ * AI Readiness Score REAL da org (0-100). Retorna `undefined` se não for
+ * possível computar — o template omite o bloco em vez de inventar um número.
+ */
+async function getAIReadinessScore(orgId: string): Promise<number | undefined> {
   try {
-    // TODO: chamar real computeAIReadiness se estiver disponível
-    // Por enquanto, retorna score dummy de 50-80
-    return 50 + Math.floor(Math.random() * 30);
-  } catch {
-    return 50;
+    const result = await computeAIReadiness(orgId);
+    return typeof result.score === 'number' && Number.isFinite(result.score)
+      ? result.score
+      : undefined;
+  } catch (err) {
+    logger.warn({ msg: 'trial_followup_readiness_failed', orgId, err: String(err) });
+    return undefined;
   }
 }
 
-// Calcula economia dummy (idealmente puxaria de savings real)
-async function getEstimatedSavings(orgId: string): Promise<number> {
+/**
+ * Economia estimada no 1º ano (R$), DERIVADA de dados reais — mesma fórmula e
+ * mesma fonte de baseline usada no savingsEmail (computeSavings). Não é
+ * aleatória: é a diferença entre o custo de referência do concorrente e o
+ * custo ZappIQ Starter no primeiro ano. Retorna `undefined` se der ≤ 0.
+ */
+async function getEstimatedSavings(orgId: string): Promise<number | undefined> {
   try {
-    // TODO: computar de verdade baseado em dados da org
-    // Por enquanto, retorna valores entre 10k e 30k
-    return 10000 + Math.floor(Math.random() * 20000);
-  } catch {
-    return 15000;
+    const { savings } = computeSavings(
+      DEFAULT_COMPETITOR_SETUP_BRL,
+      DEFAULT_COMPETITOR_MONTHLY_BRL,
+      ZAPPIQ_STARTER_MONTHLY_BRL,
+    );
+    return savings > 0 ? savings : undefined;
+  } catch (err) {
+    logger.warn({ msg: 'trial_followup_savings_failed', orgId, err: String(err) });
+    return undefined;
   }
 }
 

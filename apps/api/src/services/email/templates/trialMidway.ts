@@ -20,8 +20,17 @@
 export interface TrialMidwayEmailInput {
   firstName: string;
   daysRemaining: number;
-  aiReadinessScore: number;
-  savings: number;
+  /**
+   * AI Readiness real do tenant (0-100). Opcional — se omitido, o bloco de
+   * score some e o texto não menciona número inventado. NUNCA passe um valor
+   * aleatório/placeholder aqui: e-mails vão pra leads reais.
+   */
+  aiReadinessScore?: number;
+  /**
+   * Economia projetada no 1º ano (R$), derivada de dados reais. Opcional —
+   * se omitido (ou ≤ 0), o bloco de economia some.
+   */
+  savings?: number;
   ctaUrl: string;
 }
 
@@ -45,29 +54,36 @@ function brl(v: number): string {
 }
 
 export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEmail {
-  const { firstName, daysRemaining, aiReadinessScore, savings, ctaUrl } = input;
+  const { firstName, daysRemaining, aiReadinessScore, ctaUrl } = input;
 
-  // Subject dinâmico
-  const subject = aiReadinessScore >= 60
+  const hasScore = typeof aiReadinessScore === 'number' && Number.isFinite(aiReadinessScore);
+  const scoreReady = hasScore && (aiReadinessScore as number) >= 60;
+  // Só mostra o bloco de economia se houver um número real > 0.
+  const savings = typeof input.savings === 'number' && input.savings > 0 ? input.savings : 0;
+
+  // Subject dinâmico — só afirma "pronta" quando temos score real ≥ 60.
+  const subject = scoreReady
     ? 'Sua IA já está pronta — hora de converter antes do cupom expirar'
     : `Faltam ${daysRemaining} dias — veja o que sua IA já aprendeu`;
 
-  // Contexto do readiness score
-  const readinessLevel = aiReadinessScore >= 85
+  // Contexto do readiness score (só usado quando hasScore)
+  const readinessLevel = !hasScore
+    ? ''
+    : (aiReadinessScore as number) >= 85
     ? 'Expert'
-    : aiReadinessScore >= 60
+    : (aiReadinessScore as number) >= 60
     ? 'Pronta'
-    : aiReadinessScore >= 30
+    : (aiReadinessScore as number) >= 30
     ? 'Aprendendo'
     : 'Inicial';
 
-  const readinessColor = aiReadinessScore >= 60 ? '#22c55e' : '#f59e0b';
+  const readinessColor = scoreReady ? '#22c55e' : '#f59e0b';
 
-  const nextStepsTitle = aiReadinessScore >= 60
+  const nextStepsTitle = scoreReady
     ? 'Próximos passos para converter'
     : 'Como acelerar o treinamento';
 
-  const nextSteps = aiReadinessScore >= 60
+  const nextSteps = scoreReady
     ? [
         'Revisar os templates de resposta (Settings > AI Behavior)',
         'Testar com dados reais (envie uma mensagem pelo seu número)',
@@ -104,10 +120,11 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
               <td style="padding:32px;">
                 <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#374151;">
                   Oi, ${escapeHtml(firstName)}. Você está na metade do seu trial
-                  (${daysRemaining} dias ainda) e sua IA já está ${aiReadinessScore >= 60 ? 'muito boa' : 'aprendendo bem'}.
+                  (${daysRemaining} dias ainda)${hasScore ? ` e sua IA já está ${scoreReady ? 'muito boa' : 'aprendendo bem'}` : ' e sua IA já começou a aprender'}.
                 </p>
 
                 <!-- AI Readiness Score -->
+                ${hasScore ? `
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8faf9;border-radius:12px;padding:20px 24px;margin:20px 0;">
                   <tr>
                     <td align="center">
@@ -119,6 +136,7 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
                     </td>
                   </tr>
                 </table>
+                ` : ''}
 
                 <!-- Economia estimada -->
                 ${savings > 0 ? `
@@ -147,7 +165,7 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
                   <tr>
                     <td align="center">
                       <a href="${escapeHtml(ctaUrl)}" style="display:inline-block;padding:14px 28px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;box-shadow:0 4px 10px rgba(79,70,229,.35);">
-                        ${aiReadinessScore >= 60 ? 'Converter agora' : 'Ver dashboard'} →
+                        ${scoreReady ? 'Converter agora' : 'Ver dashboard'} →
                       </a>
                     </td>
                   </tr>
@@ -187,8 +205,8 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
     `Oi, ${firstName}.`,
     `Você tem ${daysRemaining} dias ainda de trial.`,
     '',
-    `AI Readiness Score: ${aiReadinessScore}/100 (${readinessLevel})`,
-    `Economia projetada (1º ano): ${brl(savings)}`,
+    hasScore ? `AI Readiness Score: ${aiReadinessScore}/100 (${readinessLevel})` : '',
+    savings > 0 ? `Economia projetada (1º ano): ${brl(savings)}` : '',
     '',
     nextStepsTitle,
     ...nextSteps.map((s, i) => `${i + 1}. ${s}`),

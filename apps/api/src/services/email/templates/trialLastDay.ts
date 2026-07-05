@@ -18,8 +18,13 @@
 
 export interface TrialLastDayEmailInput {
   firstName: string;
-  aiReadinessScore: number;
-  savings: number;
+  /** AI Readiness real do tenant (0-100). Opcional. Nunca inventar. */
+  aiReadinessScore?: number;
+  /**
+   * Economia projetada no 1º ano (R$), derivada de dados reais. Opcional —
+   * se omitido (ou ≤ 0), o e-mail some com o número em vez de inventar um.
+   */
+  savings?: number;
   ctaUrl: string;
 }
 
@@ -43,9 +48,16 @@ function brl(v: number): string {
 }
 
 export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): RenderedEmail {
-  const { firstName, aiReadinessScore, savings, ctaUrl } = input;
+  const { firstName, ctaUrl } = input;
 
-  const subject = `Último dia de trial · trave ${brl(savings)} de economia agora`;
+  // Só usa o número de economia se for real e positivo — nunca inventado.
+  const savings =
+    typeof input.savings === 'number' && input.savings > 0 ? input.savings : 0;
+  const hasSavings = savings > 0;
+
+  const subject = hasSavings
+    ? `Último dia de trial · trave ${brl(savings)} de economia agora`
+    : 'Último dia de trial · sua IA para de funcionar hoje';
 
   const html = `<!doctype html>
 <html lang="pt-br">
@@ -80,6 +92,7 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
                 </p>
 
                 <!-- O número grande -->
+                ${hasSavings ? `
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fef2f2;border:2px solid #fee2e2;border-radius:12px;padding:24px;margin:24px 0;">
                   <tr>
                     <td align="center">
@@ -91,6 +104,15 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
                     </td>
                   </tr>
                 </table>
+                ` : `
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fef2f2;border:2px solid #fee2e2;border-radius:12px;padding:24px;margin:24px 0;">
+                  <tr>
+                    <td align="center">
+                      <p style="margin:0;font-size:15px;font-weight:800;color:#dc2626;line-height:1.4;">Converta hoje com o cupom <code style="background:#f0f0f0;padding:3px 8px;border-radius:4px;font-family:monospace;">LASTDAY14</code> — 14% off no 1º ano</p>
+                    </td>
+                  </tr>
+                </table>
+                `}
 
                 <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#374151;">
                   Você treinou sua IA por 14 dias. Ela aprendeu seus documentos,
@@ -100,7 +122,7 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
                 <p style="margin:0 0 20px;font-size:14px;line-height:1.7;color:#6b7280;">
                   <strong>Sem setup fee. Sem mensalidade mínima.</strong>
                   Você paga apenas ${brl(247)}/mês no Starter, ou quanto usar.
-                  Cupom LASTDAY14 = 14% off no primeiro ano (já incluso no número acima).
+                  Cupom LASTDAY14 = 14% off no primeiro ano${hasSavings ? ' (já incluso no número acima)' : ''}.
                 </p>
 
                 <!-- CTA grande -->
@@ -156,8 +178,8 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
     '',
     'Este é seu último dia de trial. Depois de hoje, sua IA para de funcionar.',
     '',
-    `Sua economia no 1º ano: ${brl(savings)}`,
-    `Cupom LASTDAY14 = 14% off (já incluso).`,
+    hasSavings ? `Sua economia no 1º ano: ${brl(savings)}` : '',
+    hasSavings ? 'Cupom LASTDAY14 = 14% off (já incluso).' : 'Cupom LASTDAY14 = 14% off no 1º ano.',
     '',
     'Você treinou sua IA por 14 dias. Tudo que você construiu continua acessível — basta converter.',
     '',
