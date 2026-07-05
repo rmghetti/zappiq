@@ -187,7 +187,7 @@ export default function CrmPage() {
         <div className="flex items-center gap-2">
           {/* PR #221 CRM Onda 4 — Link pra página de atribuição/ROI */}
           <Link
-            href="/crm/atribuição"
+            href="/crm/atribuicao"
             className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
           >
             <BarChart3 size={14} /> Atribuição
