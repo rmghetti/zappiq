@@ -5,7 +5,7 @@
  *
  * Campos:
  *   - Nome (obrigatório, min 2 chars)
- *   - Tipo: BROADCAST | TRIGGER | SEQUENCE
+ *   - Tipo: BROADCAST (disparo único; TRIGGER/SEQUENCE ainda sem motor no backend)
  *   - Template (opcional, carrega /api/templates)
  *   - Agendamento (datetime opcional) — se vazio = DRAFT, se preenchido = SCHEDULED
  *
@@ -13,7 +13,7 @@
  * — versão MVP. Refinamento de público (segments, tags) vira PR futuro.
  */
 import { useState, useEffect } from 'react';
-import { X, Loader2, Check, AlertCircle, Calendar, Send, Repeat, GitBranch } from 'lucide-react';
+import { X, Loader2, Check, AlertCircle, Calendar, Send } from 'lucide-react';
 import { api } from '../../lib/api';
 
 interface Template {
@@ -34,23 +34,11 @@ const CAMPAIGN_TYPES = [
     description: 'Disparo único pra lista de contatos',
     icon: Send,
   },
-  {
-    value: 'TRIGGER',
-    label: 'Trigger',
-    description: 'Disparado por evento (ex: novo lead, abandono)',
-    icon: Repeat,
-  },
-  {
-    value: 'SEQUENCE',
-    label: 'Sequência',
-    description: 'Série de mensagens com intervalos definidos',
-    icon: GitBranch,
-  },
 ];
 
 export function CampaignFormModal({ open, onClose, onSaved }: Props) {
   const [name, setName] = useState('');
-  const [type, setType] = useState<'BROADCAST' | 'TRIGGER' | 'SEQUENCE'>('BROADCAST');
+  const [type, setType] = useState<'BROADCAST'>('BROADCAST');
   const [templateId, setTemplateId] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
