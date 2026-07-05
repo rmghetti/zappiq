@@ -299,9 +299,21 @@ app.use('/api/settings', authMiddleware, rlsTenantMiddleware, settingsRoutes);
 app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, auditLogsRoutes);
 app.use('/api/embedded-signup', authMiddleware, rlsTenantMiddleware, embeddedSignupRoutes); // #273/#274
 
-// DSR — POST público (titular não é usuário); demais exigem auth + RLS
+// DSR — POST público (titular não é usuário); demais exigem auth + RLS.
+// Rate-limit dedicado e agressivo nos endpoints públicos (sem auth): protege
+// contra abuso já que não há sessão para atribuir a cota.
+const dsrPublicLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas solicitações. Tente novamente mais tarde.' },
+});
+const DSR_PUBLIC_PATHS = new Set(['/', '/public']);
 app.use('/api/dsr', (req, res, next) => {
-  if (req.method === 'POST' && req.path === '/') return next();
+  if (req.method === 'POST' && DSR_PUBLIC_PATHS.has(req.path)) {
+    return dsrPublicLimiter(req, res, next);
+  }
   authMiddleware(req, res, (err?: any) => {
     if (err) return next(err);
     rlsTenantMiddleware(req, res, next);

@@ -3,10 +3,14 @@
  * ---------------------
  * Endpoint público para Direitos do Titular LGPD (Art. 18).
  *
- * Fluxo:
+ * Fluxo (W2.6 — unificado com a fila do admin):
  *   1. Valida payload (sem zod — validação manual para não adicionar dependências).
- *   2. Gera protocolo DSR-YYYYMMDD-XXXXXX (6 chars hex random, anti-race).
- *   3. Insere na tabela public.dsr_requests via Supabase REST (service_role).
+ *   2. PRIMÁRIO: encaminha para a API Express (POST /api/dsr/public), que grava
+ *      em data_subject_requests (MESMA fonte que o admin /dsr lê). É isso que
+ *      garante que a solicitação do titular VIRE 1 LINHA na fila do admin.
+ *   3. FALLBACK (só se a API estiver indisponível): grava em public.dsr_requests
+ *      via Supabase REST com protocolo DSR-YYYYMMDD-XXXXXX, mantendo o
+ *      comportamento antigo para não perder a solicitação.
  *   4. Dispara e-mail pro DPO e pro solicitante via Resend (fire-and-forget).
  *   5. Retorna { protocolo }.
  *
@@ -23,6 +27,7 @@
  *   RESEND_API_KEY                — key da Resend
  *   DPO_EMAIL                     — default rodrigo.ghetti@zappiq.com.br
  *   DSR_FROM_EMAIL                — from verificado na Resend (ex: privacidade@zappiq.com.br)
+ *   API_URL / NEXT_PUBLIC_API_URL — base da API Express (default http://localhost:3001)
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
@@ -202,6 +207,50 @@ async function insertDsrRequest(payload: DsrPayload, protocolo: string): Promise
 }
 
 // ============================================================================
+// Encaminhamento primário para a API do admin (data_subject_requests)
+// ============================================================================
+
+/**
+ * POST para a API Express /api/dsr/public, que grava na MESMA tabela que o
+ * admin lê (data_subject_requests). Retorna o protocolo gerado pela API.
+ * Se a API estiver indisponível/erro, retorna null e o handler cai no fallback
+ * Supabase — a solicitação nunca se perde.
+ */
+async function postToAdminApi(payload: DsrPayload): Promise<{ protocolo: string } | null> {
+  const base = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch(`${base.replace(/\/$/, '')}/api/dsr/public`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error('[DSR] API /api/dsr/public respondeu erro', res.status, text);
+      return null;
+    }
+
+    const json = (await res.json().catch(() => null)) as { protocolo?: string } | null;
+    if (!json?.protocolo) {
+      console.error('[DSR] API /api/dsr/public não retornou protocolo');
+      return null;
+    }
+    return { protocolo: json.protocolo };
+  } catch (err) {
+    console.error('[DSR] Falha ao encaminhar para a API do admin', err);
+    return null;
+  }
+}
+
+// ============================================================================
 // E-mails (fire-and-forget via Resend)
 // ============================================================================
 
@@ -301,15 +350,26 @@ export async function POST(req: NextRequest) {
   }
 
   const payload = validation.data;
-  const protocolo = generateProtocolo();
 
-  // Insert no Supabase (bloqueante — se falhar, retornamos erro pra client fazer fallback mailto)
-  const inserted = await insertDsrRequest(payload, protocolo);
-  if (!inserted.ok) {
-    return NextResponse.json(
-      { error: inserted.error ?? 'Falha ao registrar' },
-      { status: 500 }
-    );
+  // PRIMÁRIO (W2.6): encaminha para a API do admin, que grava em
+  // data_subject_requests — a MESMA fonte que a fila do admin /dsr lê.
+  // É isso que faz a solicitação do titular aparecer para o operador.
+  let protocolo: string;
+  const adminResult = await postToAdminApi(payload);
+
+  if (adminResult) {
+    protocolo = adminResult.protocolo;
+  } else {
+    // FALLBACK: API indisponível — grava em public.dsr_requests (Supabase) para
+    // não perder a solicitação. Comportamento antigo preservado.
+    protocolo = generateProtocolo();
+    const inserted = await insertDsrRequest(payload, protocolo);
+    if (!inserted.ok) {
+      return NextResponse.json(
+        { error: inserted.error ?? 'Falha ao registrar' },
+        { status: 500 }
+      );
+    }
   }
 
   // E-mails (fire-and-forget — não bloqueia a resposta)

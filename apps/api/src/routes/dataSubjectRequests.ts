@@ -12,6 +12,7 @@ import { requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { logAuditEvent } from '../services/auditService.js';
 import { logger } from '../utils/logger.js';
+import { createPublicDsr, validatePortalDsr } from '../services/dsrIntake.js';
 
 const router = Router();
 
@@ -74,6 +75,37 @@ router.post('/', validate(createSchema), async (req: Request, res: Response, nex
         protocol: created.id.slice(-8).toUpperCase(),
         dueDate,
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /api/dsr/public — ABERTO ao titular (sem auth) ──
+// Recebe o payload do PORTAL PÚBLICO (pt-BR: tipo/nomeCompleto/vinculo/...) e
+// grava na MESMA fonte do admin (data_subject_requests), resolvendo a org e o
+// SLA. Antes o portal gravava em public.dsr_requests (Supabase) e a solicitação
+// nunca aparecia na fila do admin (W2.6). Rate-limit aplicado no server.ts.
+router.post('/public', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const validation = validatePortalDsr(req.body);
+    if (!validation.ok) {
+      res.status(400).json({ error: validation.error });
+      return;
+    }
+
+    const result = await createPublicDsr(validation.data);
+
+    logger.info('[DSR] Solicitação pública registrada na fila do admin', {
+      id: result.id,
+      protocol: result.protocol,
+      tipo: validation.data.tipo,
+    });
+
+    res.status(201).json({
+      success: true,
+      protocolo: result.protocol,
+      data: { id: result.id, protocol: result.protocol, dueDate: result.dueDate },
     });
   } catch (err) {
     next(err);
