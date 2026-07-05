@@ -6,6 +6,8 @@ import {
   healthColor,
   buildAccountRow,
   computeKpis,
+  computeHealthBreakdown,
+  computeHealthAggregate,
   type AccountRawInput,
 } from './adminClientes.util.js';
 
@@ -153,5 +155,171 @@ describe('computeKpis', () => {
     ];
     const k = computeKpis(rows, NOW);
     expect(k.contasEmRisco).toBe(3);
+  });
+});
+
+describe('computeHealthBreakdown', () => {
+  it('conta VERDE: todas as dimensões no topo, sem playbook nem targetToGreen', () => {
+    const b = computeHealthBreakdown(
+      { aiReadinessScore: 100, aiMessagesProcessed: 500, grossMarginPercent: 80, stage: 'PAGO' },
+      'org-green',
+    );
+    expect(b.total).toBe(100);
+    expect(b.color).toBe('green');
+    expect(b.ceilingApplied).toBeNull();
+    // dimensões: adoção 0.40, uso 0.35, financeiro 0.25 — todas 100.
+    expect(b.dimensions.map((d) => d.key)).toEqual(['adocao', 'uso', 'financeiro']);
+    expect(b.dimensions.find((d) => d.key === 'adocao')!.weight).toBe(0.4);
+    expect(b.dimensions.find((d) => d.key === 'uso')!.weight).toBe(0.35);
+    expect(b.dimensions.find((d) => d.key === 'financeiro')!.weight).toBe(0.25);
+    expect(b.dimensions.every((d) => d.score === 100 && d.gapPoints === 0)).toBe(true);
+    expect(b.playbook).toEqual([]);
+    expect(b.nextAction).toBeNull();
+    expect(b.targetToGreen).toBeNull();
+  });
+
+  it('conta AMARELA: nextAction e targetToGreen apontam a dimensão de maior gap ponderado', () => {
+    // adocao=60, uso=50 (250 msgs), financeiro=50 (margem 40) → total 54.
+    const b = computeHealthBreakdown(
+      { aiReadinessScore: 60, aiMessagesProcessed: 250, grossMarginPercent: 40, stage: 'PAGO' },
+      'org-amber',
+    );
+    expect(b.total).toBe(54);
+    expect(b.color).toBe('amber');
+    expect(b.ceilingApplied).toBeNull();
+
+    const uso = b.dimensions.find((d) => d.key === 'uso')!;
+    expect(uso.score).toBe(50);
+    expect(uso.contributionPoints).toBe(18); // round(50*0.35)
+    expect(uso.gapPoints).toBe(18); // round(50*0.35) — maior gap ponderado
+
+    // playbook tem um item por dimensão abaixo do ideal (3 aqui).
+    expect(b.playbook).toHaveLength(3);
+    expect(b.playbook.some((p) => p.dimension === 'adocao' && p.linkHref === '/admin/iza-knowledge')).toBe(true);
+    expect(
+      b.playbook.some((p) => p.dimension === 'uso' && p.linkHref === '/admin/iza-conversations?org=org-amber'),
+    ).toBe(true);
+    expect(b.playbook.some((p) => p.dimension === 'financeiro' && p.linkHref === '/admin/unit-economics')).toBe(true);
+
+    // nextAction = maior gap ponderado (uso).
+    expect(b.nextAction).toEqual({
+      dimension: 'uso',
+      action: 'Ativar campanha, checar conexão do WhatsApp, agendar call',
+      linkHref: '/admin/iza-conversations?org=org-amber',
+    });
+    // targetToGreen: faltam 16 para 70; melhor ROI = uso.
+    expect(b.targetToGreen).toEqual({
+      pointsNeeded: 16,
+      bestDimension: 'uso',
+      message: 'Faltam 16 pontos para o verde. Maior ROI: Uso.',
+    });
+  });
+
+  it('conta VERMELHA: score baixo, semáforo red, playbook das 3 dimensões', () => {
+    const b = computeHealthBreakdown(
+      { aiReadinessScore: 20, aiMessagesProcessed: 0, grossMarginPercent: -10, stage: 'PAGO' },
+      'org-red',
+    );
+    expect(b.total).toBe(8);
+    expect(b.color).toBe('red');
+    expect(b.playbook).toHaveLength(3);
+    // maior gap ponderado = uso (100*0.35=35).
+    expect(b.nextAction!.dimension).toBe('uso');
+    expect(b.targetToGreen!.bestDimension).toBe('uso');
+    expect(b.targetToGreen!.pointsNeeded).toBe(62);
+  });
+
+  it('OVERLAY DE RISCO: trial expirado gera nextAction de risco + teto aplicado', () => {
+    const b = computeHealthBreakdown(
+      { aiReadinessScore: 100, aiMessagesProcessed: 500, grossMarginPercent: 80, stage: 'TRIAL_EXPIRADO' },
+      'org-risk',
+    );
+    // uncapped seria 100; teto de TRIAL_EXPIRADO puxa para 45.
+    expect(b.total).toBe(45);
+    expect(b.ceilingApplied).toEqual({ stage: 'TRIAL_EXPIRADO', cap: 45 });
+    // item de risco entra com prioridade máxima (0), no topo do playbook.
+    expect(b.playbook[0]).toEqual({
+      dimension: 'risco',
+      diagnosis: 'Ação comercial urgente',
+      action: 'Criar tarefa, atribuir dono ou fazer oferta',
+      linkHref: '#owner',
+      priority: 0,
+    });
+    // nextAction = o item de risco (ação no próprio drawer).
+    expect(b.nextAction).toEqual({
+      dimension: 'risco',
+      action: 'Criar tarefa, atribuir dono ou fazer oferta',
+      linkHref: '#owner',
+    });
+  });
+
+  it('OVERLAY DE RISCO: trial vencendo em <=3 dias também dispara risco', () => {
+    const b = computeHealthBreakdown(
+      { aiReadinessScore: 60, aiMessagesProcessed: 250, grossMarginPercent: 40, stage: 'EM_TRIAL', trialDaysLeft: 2 },
+      'org-trialend',
+    );
+    expect(b.nextAction!.dimension).toBe('risco');
+    expect(b.playbook[0].dimension).toBe('risco');
+  });
+
+  it('conta saudável (>=70): targetToGreen null com mensagem implícita ausente', () => {
+    const b = computeHealthBreakdown(
+      { aiReadinessScore: 90, aiMessagesProcessed: 450, grossMarginPercent: 70, stage: 'PAGO' },
+      'org-ok',
+    );
+    expect(b.total).toBeGreaterThanOrEqual(70);
+    expect(b.targetToGreen).toBeNull();
+  });
+});
+
+describe('computeHealthAggregate', () => {
+  const mk = (over: Partial<AccountRawInput>): AccountRawInput => ({
+    crmAccountId: null, organizationId: null, signupId: null,
+    name: null, email: `${Math.random()}@x.com`, company: null, cnpj: null,
+    plan: null, createdAt: NOW, ...over,
+  });
+
+  it('distribui semáforo, acha dimensão mais fraca e lista quick wins ordenados', () => {
+    const rows = [
+      // verde
+      buildAccountRow(mk({ materializedStage: 'PAGO', aiReadinessScore: 100, aiMessagesProcessed: 500, grossMarginPercent: 80 }), NOW),
+      // amber a 4 pontos do verde (total 66): adocao=90,uso=50,financeiro=40 → 36+17.5+10=63.5→64? ajusta abaixo
+      buildAccountRow(mk({ materializedStage: 'PAGO', aiReadinessScore: 95, aiMessagesProcessed: 350, grossMarginPercent: 40 }), NOW),
+      // vermelho: adocao=0,uso=0,financeiro=0 (nenhum sinal)
+      buildAccountRow(mk({ materializedStage: 'PAGO', aiReadinessScore: 0, aiMessagesProcessed: 0, grossMarginPercent: -10 }), NOW),
+      // staging não conta
+      buildAccountRow(mk({ materializedStage: 'PAGO', isStaging: true, aiReadinessScore: 100, aiMessagesProcessed: 500, grossMarginPercent: 80 }), NOW),
+    ];
+    const agg = computeHealthAggregate(rows);
+
+    // distribuição ignora staging (3 contas contadas).
+    expect(agg.distribution.green + agg.distribution.amber + agg.distribution.red).toBe(3);
+    expect(agg.distribution.green).toBeGreaterThanOrEqual(1);
+
+    // dimensão mais fraca é uma das três com avgScore numérico.
+    expect(['adocao', 'uso', 'financeiro']).toContain(agg.weakestDimension.key);
+    expect(typeof agg.weakestDimension.avgScore).toBe('number');
+
+    // quick wins: cada um está a <=10 pontos da próxima faixa e ordenado.
+    for (const q of agg.quickWins) {
+      expect(q.pointsToNextTier).toBeLessThanOrEqual(10);
+      expect(q.pointsToNextTier).toBeGreaterThanOrEqual(0);
+    }
+    const efforts = agg.quickWins.map((q) => q.pointsToNextTier);
+    expect(efforts).toEqual([...efforts].sort((a, b) => a - b));
+  });
+
+  it('identifica quick win amber→green a <=10 pontos', () => {
+    // total 66 (amber, a 4 do verde): adocao=90(36)+uso=60(21)+financeiro=36(9)=66
+    // uso 300 msgs → 60; margem 29 → round(29/80*100)=36.
+    const amberRow = buildAccountRow(
+      mk({ materializedStage: 'PAGO', aiReadinessScore: 90, aiMessagesProcessed: 300, grossMarginPercent: 29 }),
+      NOW,
+    );
+    expect(amberRow.healthColor).toBe('amber');
+    const agg = computeHealthAggregate([amberRow]);
+    expect(agg.quickWins).toHaveLength(1);
+    expect(agg.quickWins[0].nextTier).toBe('green');
+    expect(agg.quickWins[0].pointsToNextTier).toBe(70 - amberRow.healthScore);
   });
 });
