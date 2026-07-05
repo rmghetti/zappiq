@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   MessageSquare, Users, Bot, TrendingUp, ArrowRight,
-  ArrowUpRight, ArrowDownRight, Download, Plus, Sparkles, Send,
+  ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { computeDelta, buildAreaPath, type VolumePoint, type DeltaResult } from '@zappiq/shared';
@@ -148,19 +148,6 @@ export default function DashboardPage() {
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
-          <button
-            className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-            title="Em breve"
-            disabled
-          >
-            <Plus size={14} /> Add widget
-          </button>
-          <button
-            className="flex items-center gap-1.5 px-3 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600"
-            title="Em breve"
-          >
-            <Download size={14} /> Export
-          </button>
         </div>
       </div>
 
@@ -304,32 +291,6 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Satisfação (CSAT)</h3>
             <CsatGauge csat={data ? data.csat : null} loading={loading} />
-          </div>
-
-          {/* AI Assistant preview */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-700">AI Assistant</h3>
-              <Sparkles size={14} className="text-purple-500" />
-            </div>
-            <div className="flex items-center justify-center py-4">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 via-purple-400 to-pink-400 shadow-lg" />
-            </div>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Pergunte algo…"
-                className="w-full pl-3 pr-9 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
-                disabled
-                title="Em breve"
-              />
-              <button
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-md bg-primary-500 text-white flex items-center justify-center disabled:opacity-40"
-                disabled
-              >
-                <Send size={12} />
-              </button>
-            </div>
           </div>
         </div>
       </div>

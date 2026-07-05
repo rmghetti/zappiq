@@ -15,7 +15,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Settings, Users, Smartphone, Brain, Plus, Trash2,
+  Settings, Users, Brain, Plus, Trash2,
   CheckCircle2, AlertCircle, Loader2, CreditCard, Plug, Clock,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -23,7 +23,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import ConectarCanais from '../../../components/dashboard/ConectarCanais';
 import { BusinessHoursEditor, defaultBusinessHours, type BusinessHoursConfig } from '../flows/_components/BusinessHoursEditor';
 
-type Tab = 'general' | 'team' | 'canais' | 'whatsapp' | 'ai' | 'billing' | 'flows';
+type Tab = 'general' | 'team' | 'canais' | 'ai' | 'billing' | 'flows';
 
 interface BillingSettings {
   autoOverage?: boolean;
@@ -123,10 +123,6 @@ export default function SettingsPage() {
   const [orgName, setOrgName] = useState('');
   const [savingGeneral, setSavingGeneral] = useState(false);
 
-  const [waPhone, setWaPhone] = useState('');
-  const [waBiz, setWaBiz] = useState('');
-  const [savingWhatsApp, setSavingWhatsApp] = useState(false);
-
   const [agentName, setAgentName] = useState('');
   const [agentTone, setAgentTone] = useState('friendly');
   const [agentSegment, setAgentSegment] = useState('generic');
@@ -170,8 +166,6 @@ export default function SettingsPage() {
       if (orgRes.data) {
         setOrg(orgRes.data);
         setOrgName(orgRes.data.name || '');
-        setWaPhone(orgRes.data.whatsappPhoneNumberId || '');
-        setWaBiz(orgRes.data.whatsappBusinessAccountId || '');
 
         const agent = orgRes.data.settings?.agent;
         if (agent) {
@@ -227,23 +221,6 @@ export default function SettingsPage() {
       showToast('error', msg);
     } finally {
       setSavingGeneral(false);
-    }
-  }
-
-  async function handleSaveWhatsApp() {
-    setSavingWhatsApp(true);
-    try {
-      const res = await api.put<{ data: Organization }>('/api/settings', {
-        whatsappPhoneNumberId: waPhone.trim() || null,
-        whatsappBusinessAccountId: waBiz.trim() || null,
-      });
-      if (res.data) setOrg(res.data);
-      showToast('success', 'Configurações WhatsApp salvas');
-    } catch (err) {
-      const msg = (err as { message?: string })?.message || 'Erro ao salvar';
-      showToast('error', msg);
-    } finally {
-      setSavingWhatsApp(false);
     }
   }
 
@@ -572,46 +549,6 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* WhatsApp */}
-      {tab === 'whatsapp' && (
-        <div className="bg-white rounded-xl border border-gray-100 p-6 max-w-2xl space-y-5">
-          <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg border border-green-200">
-            <Smartphone className="text-green-600" size={24} />
-            <div>
-              <p className="text-sm font-semibold text-green-800">WhatsApp Business API</p>
-              <p className="text-xs text-green-600">Configurado via Meta Cloud API</p>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number ID</label>
-            <input
-              value={waPhone}
-              onChange={(e) => setWaPhone(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary-500 outline-none"
-              placeholder="Ex: 123456789012345"
-            />
-            <p className="text-xs text-gray-500 mt-1">Disponível no Meta Business Suite, em WhatsApp → API Setup.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Business Account ID</label>
-            <input
-              value={waBiz}
-              onChange={(e) => setWaBiz(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary-500 outline-none"
-              placeholder="Ex: 987654321098765"
-            />
-          </div>
-          <button
-            onClick={handleSaveWhatsApp}
-            disabled={savingWhatsApp}
-            className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 disabled:opacity-50 flex items-center gap-2"
-          >
-            {savingWhatsApp && <Loader2 size={14} className="animate-spin" />}
-            {savingWhatsApp ? 'Salvando...' : 'Salvar configurações'}
-          </button>
         </div>
       )}
 
