@@ -137,6 +137,111 @@ function sanitizeHistory(history: unknown): WebChatTurn[] {
     .slice(-MAX_HISTORY_TURNS);
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * FEATURE 5a.4 — Webchat vira lead no CRM
+ * --------------------------------------------------------------------------
+ * O visitante do chat in-page do site é um lead quente que hoje evapora.
+ * Aqui materializamos ESSE visitante como um Contact no CRM da org canonical
+ * da Iza + uma Conversation channel='web' ligada a ele.
+ *
+ * Idempotência (CRÍTICO): o identificador do lead é derivado do sessionId do
+ * webchat via `web:${sessionId}`, gravado em `whatsappId` (que tem unique
+ * [whatsappId, organizationId] na schema — mesmo truque do Instagram, que usa
+ * `ig:${igsid}`). Assim, upsert por essa chave NÃO duplica contato a cada
+ * mensagem da mesma sessão. A Conversation é find-or-create por (contact,
+ * org, channel='web', status aberto), também idempotente.
+ *
+ * source='webchat': a schema Contact não tem coluna `source` dedicada, então
+ * gravamos em customFields.source (padrão de metadados livres do modelo).
+ *
+ * NÃO pode quebrar o fluxo público: toda essa persistência roda dentro de um
+ * try/catch no handler — se o CRM falhar, o visitante ainda recebe a resposta
+ * da Iza normalmente.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/** Identidade determinística do lead de webchat a partir do sessionId.
+ *  Pura e testável — não toca DB. Espelha o padrão `ig:${igsid}` do Instagram. */
+export function buildWebChatLeadIdentity(sessionId: string): {
+  identifier: string;
+  organizationId: string;
+} {
+  const clean = String(sessionId || '').slice(0, 64) || 'anon';
+  return {
+    identifier: `web:${clean}`,
+    organizationId: IZA_CANONICAL_ORG_ID,
+  };
+}
+
+export interface WebChatLead {
+  contactId: string;
+  conversationId: string;
+}
+
+/**
+ * Cria/associa (idempotente) o Contact + Conversation do visitante do webchat.
+ * Idempotente por (whatsappId=`web:${sessionId}`, organizationId): chamar a
+ * cada mensagem NÃO duplica contato nem conversa.
+ */
+export async function ensureWebChatLead(sessionId: string): Promise<WebChatLead> {
+  const { identifier, organizationId } = buildWebChatLeadIdentity(sessionId);
+  const now = new Date();
+
+  // Upsert do Contact por (whatsappId, organizationId) — mesma estratégia do
+  // Instagram (webhookInstagram.ts). update só toca timestamps de touch pra
+  // não sobrescrever dados que um humano possa ter editado no CRM.
+  const contact = await prisma.contact.upsert({
+    where: {
+      whatsappId_organizationId: {
+        whatsappId: identifier,
+        organizationId,
+      },
+    },
+    update: {
+      lastInteractionAt: now,
+      lastTouchAt: now,
+    },
+    create: {
+      // phone é required na schema; sem telefone do visitante, usamos o mesmo
+      // identificador reconhecível (padrão do Instagram: phone `ig:${igsid}`).
+      whatsappId: identifier,
+      phone: identifier,
+      name: null,
+      organizationId,
+      leadStatus: 'NEW',
+      funnelStage: 'new',
+      customFields: { source: 'webchat', sessionId: String(sessionId || '').slice(0, 64) },
+      firstTouchAt: now,
+      lastTouchAt: now,
+      lastInteractionAt: now,
+    },
+  });
+
+  // Find-or-create da Conversation channel='web' (idempotente por sessão).
+  let conversation = await prisma.conversation.findFirst({
+    where: {
+      contactId: contact.id,
+      organizationId,
+      channel: 'web',
+      status: { in: ['OPEN', 'WAITING', 'ASSIGNED'] },
+    },
+    select: { id: true },
+  });
+
+  if (!conversation) {
+    conversation = await prisma.conversation.create({
+      data: {
+        contactId: contact.id,
+        organizationId,
+        status: 'OPEN',
+        channel: 'web',
+      },
+      select: { id: true },
+    });
+  }
+
+  return { contactId: contact.id, conversationId: conversation.id };
+}
+
 /* ── Handler principal ────────────────────────────── */
 
 export async function processWebChatTurn(input: WebChatRequest): Promise<WebChatResponse> {
@@ -147,6 +252,18 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     throw new Error('Mensagem vazia');
   }
   const history = sanitizeHistory(input.history);
+
+  // 0. FEATURE 5a.4 — materializa o visitante como lead no CRM (idempotente por
+  //    sessão). Best-effort: NUNCA bloqueia nem quebra a resposta pública da
+  //    Iza. Se o CRM falhar, logamos e seguimos com o chat normalmente.
+  try {
+    await ensureWebChatLead(sessionId);
+  } catch (err) {
+    logger.warn('[webChat] ensureWebChatLead failed (fluxo público segue)', {
+      sessionId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   // 1. systemPrompt = CORE_AGENT_RULES_V1 + FATOS ATUAIS (runtime) + Iza v7.x + canal
   //    Ordem importa: FATOS ATUAIS vêm DEPOIS de CORE_AGENT_RULES (que é
