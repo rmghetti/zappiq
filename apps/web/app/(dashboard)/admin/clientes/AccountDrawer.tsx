@@ -12,10 +12,10 @@
  * (crm_account_activity), H/I owner + próxima ação.
  * ══════════════════════════════════════════════════════════════════════ */
 
-import { useMemo, useState } from 'react';
-import { X, AlertTriangle, ExternalLink, User } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { X, ExternalLink, User, Target, ArrowRight, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
-import { ClienteDetailResponse, clientesApi } from '../../../../lib/adminApi';
+import { ClienteDetailResponse, HealthBreakdown, clientesApi } from '../../../../lib/adminApi';
 
 interface AccountDrawerProps {
   isOpen: boolean;
@@ -24,6 +24,8 @@ interface AccountDrawerProps {
   data: ClienteDetailResponse | null;
   loading: boolean;
   onOwnerChanged?: () => void;
+  /** quando 'health', o drawer rola até a seção "Saúde da conta" ao abrir. */
+  scrollTo?: 'health' | 'billing' | null;
 }
 
 const stageLabel: Record<string, { label: string; cls: string }> = {
@@ -58,12 +60,32 @@ export function AccountDrawer({
   data,
   loading,
   onOwnerChanged,
+  scrollTo = null,
 }: AccountDrawerProps) {
   const [savingOwner, setSavingOwner] = useState(false);
+  const healthRef = useRef<HTMLDivElement | null>(null);
+  const billingRef = useRef<HTMLDivElement | null>(null);
+  const ownerRef = useRef<HTMLDivElement | null>(null);
 
   const stripeCustomerId = data?.billing.stripeCustomerId ?? null;
   const stage = data?.plan.stage ?? 'NOVO';
   const badge = stageLabel[stage] ?? stageLabel.NOVO;
+
+  // Ao carregar o detalhe, rola até a seção pedida (Health / Cobrança).
+  useEffect(() => {
+    if (!isOpen || loading || !data) return;
+    const target = scrollTo === 'health' ? healthRef.current : scrollTo === 'billing' ? billingRef.current : null;
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [isOpen, loading, data, scrollTo]);
+
+  // Playbook aponta risco para '#owner' (ação no próprio drawer): rola pro owner.
+  const goToPlaybookLink = (href: string) => {
+    if (href === '#owner') {
+      ownerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false; // não navega
+    }
+    return true; // link real → deixa o <Link> navegar
+  };
 
   const handleSetOwner = async (ownerUserId: string) => {
     if (!accountId) return;
@@ -166,7 +188,13 @@ export function AccountDrawer({
                 <Row label="Teto de custo trial (USD)" value={data.plan.trialCostCapUsd != null ? `$${data.plan.trialCostCapUsd}` : '—'} />
               </Section>
 
+              {/* Saúde da conta — health decomposto + playbook (Fase 2) */}
+              <div ref={healthRef} className="scroll-mt-4">
+                <HealthSection health={data.health} onPlaybookClick={goToPlaybookLink} />
+              </div>
+
               {/* C — Cobrança Stripe (colunas reais Fase 1) */}
+              <div ref={billingRef} className="scroll-mt-4">
               <Section title="Cobrança Stripe">
                 {stripeCustomerId ? (
                   <a
@@ -185,6 +213,7 @@ export function AccountDrawer({
                 <Row label="Primeiro pagamento" value={data.billing.paidAt ? new Date(data.billing.paidAt).toLocaleDateString('pt-BR') : '—'} />
                 <Row label="Churn em" value={data.billing.churnedAt ? new Date(data.billing.churnedAt).toLocaleDateString('pt-BR') : '—'} />
               </Section>
+              </div>
 
               {/* D/E — Consumo real + custo/margem + mini-chart */}
               <Section title="Consumo & margem (real)">
@@ -214,16 +243,8 @@ export function AccountDrawer({
                 </Link>
               )}
 
-              {/* I — Próxima ação */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3 text-sm text-amber-900">
-                <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-[11px] uppercase tracking-wider mb-0.5">Próxima ação</p>
-                  <p>{data.nextAction}</p>
-                </div>
-              </div>
-
-              {/* H — Owner ZappIQ */}
+              {/* H — Owner ZappIQ (alvo do link de risco '#owner') */}
+              <div ref={ownerRef} id="owner" className="scroll-mt-4">
               <Section title="Owner ZappIQ">
                 {data.owner.candidates.length > 0 ? (
                   <div className="flex items-center gap-2">
@@ -246,6 +267,7 @@ export function AccountDrawer({
                   <p className="text-xs text-gray-400">Sem usuários candidatos (conta sem org)</p>
                 )}
               </Section>
+              </div>
 
               {/* G — Timeline */}
               <Section title="Atividades">
@@ -334,5 +356,179 @@ function UsageChart({
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-red-500 rounded" />Custo LLM</span>
       </div>
     </div>
+  );
+}
+
+// ─── Saúde da conta (Fase 2) — health decomposto + playbook acionável ────────
+
+const HEALTH_HEADER: Record<HealthBreakdown['color'], { bar: string; text: string; label: string }> = {
+  green: { bar: 'bg-green-500', text: 'text-green-700', label: 'Saudável' },
+  amber: { bar: 'bg-amber-500', text: 'text-amber-700', label: 'Atenção' },
+  red: { bar: 'bg-red-500', text: 'text-red-700', label: 'Em risco' },
+};
+
+const DIM_COLOR: Record<string, string> = {
+  adocao: 'bg-indigo-500',
+  uso: 'bg-sky-500',
+  financeiro: 'bg-emerald-500',
+};
+
+/**
+ * HealthSection — mostra o health como BARRA DECOMPOSTA nas 3 dimensões
+ * (adoção/uso/financeiro) com nota, peso e contribuição de cada; explica o teto
+ * de risco quando aplicado; lista o PLAYBOOK (diagnóstico → ação clicável); a
+ * NEXT ACTION em destaque; e a META PRO VERDE.
+ */
+function HealthSection({
+  health,
+  onPlaybookClick,
+}: {
+  health: HealthBreakdown;
+  /** retorna false quando o link é '#owner' (rola no drawer, não navega). */
+  onPlaybookClick: (href: string) => boolean;
+}) {
+  const hd = HEALTH_HEADER[health.color] ?? HEALTH_HEADER.amber;
+  // Ordena barra por contribuição (maior primeiro) só p/ leitura; larguras somam ≤100.
+  const dims = health.dimensions;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-900">Saúde da conta</h3>
+        <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${hd.text}`}>
+          <span className={`w-2.5 h-2.5 rounded-full ${hd.bar}`} />
+          {health.total} · {hd.label}
+        </span>
+      </div>
+
+      <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+        {/* Barra decomposta: cada segmento = contribuição da dimensão (score*peso) */}
+        <div>
+          <div className="flex h-3 w-full overflow-hidden rounded-full bg-gray-200">
+            {dims.map((d) =>
+              d.contributionPoints > 0 ? (
+                <div
+                  key={d.key}
+                  className={DIM_COLOR[d.key] ?? 'bg-gray-400'}
+                  style={{ width: `${d.contributionPoints}%` }}
+                  title={`${d.label}: ${d.contributionPoints} pts`}
+                />
+              ) : null,
+            )}
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1">
+            Barra = pontos que cada dimensão soma ao total (nota × peso).
+          </p>
+        </div>
+
+        {/* Detalhe por dimensão: nota, peso e contribuição */}
+        <div className="space-y-2.5">
+          {dims.map((d) => (
+            <div key={d.key} className="flex items-center gap-3">
+              <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${DIM_COLOR[d.key] ?? 'bg-gray-400'}`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-gray-800">{d.label}</span>
+                  <span className="text-[11px] text-gray-500">
+                    <span className="font-bold text-gray-800">{d.score}</span>/100 · peso {Math.round(d.weight * 100)}%
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
+                  <div className={`h-full ${DIM_COLOR[d.key] ?? 'bg-gray-400'}`} style={{ width: `${d.score}%` }} />
+                </div>
+                <p className="text-[10px] text-gray-500 mt-0.5">
+                  Contribui <span className="font-semibold">{d.contributionPoints} pts</span> · faltam {d.gapPoints} pts
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Teto de risco explicado (quando o estágio limitou o score) */}
+        {health.ceilingApplied && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3 text-[12px] text-red-800">
+            <ShieldAlert size={15} className="flex-shrink-0 mt-0.5" />
+            <p>
+              Teto de risco aplicado: o estágio{' '}
+              <span className="font-bold">{stageLabel[health.ceilingApplied.stage]?.label ?? health.ceilingApplied.stage}</span>{' '}
+              limita o health a <span className="font-bold">{health.ceilingApplied.cap}</span>. A conta não pode
+              ficar verde enquanto o risco comercial não for resolvido.
+            </p>
+          </div>
+        )}
+
+        {/* Next action em destaque */}
+        {health.nextAction && (
+          <div className="rounded-lg bg-primary-50 border border-primary-200 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-primary-700 mb-1 flex items-center gap-1">
+              <ArrowRight size={12} /> Próxima ação
+            </p>
+            <p className="text-[13px] text-primary-900 font-medium">{health.nextAction.action}</p>
+            <PlaybookLink href={health.nextAction.linkHref} onClick={onPlaybookClick} className="mt-1.5" />
+          </div>
+        )}
+
+        {/* Playbook completo (diagnóstico → ação) */}
+        {health.playbook.length > 0 && (
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">Playbook</p>
+            <ul className="space-y-2">
+              {health.playbook.map((p, i) => (
+                <li
+                  key={`${p.dimension}-${i}`}
+                  className={`rounded-lg border p-3 ${
+                    p.dimension === 'risco' ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  <p className="text-[12px] font-semibold text-gray-800">{p.diagnosis}</p>
+                  <p className="text-[12px] text-gray-600 mt-0.5">{p.action}</p>
+                  <PlaybookLink href={p.linkHref} onClick={onPlaybookClick} className="mt-1.5" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Meta pro verde */}
+        {health.targetToGreen && (
+          <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-[12px] text-amber-900">
+            <Target size={15} className="flex-shrink-0 mt-0.5" />
+            <p>
+              Faltam <span className="font-bold">{health.targetToGreen.pointsNeeded} pontos</span> para o verde.
+              Maior ganho investindo em{' '}
+              <span className="font-bold">
+                {dims.find((d) => d.key === health.targetToGreen!.bestDimension)?.label ?? health.targetToGreen.bestDimension}
+              </span>
+              .
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Link do playbook: '#owner' rola no drawer; qualquer outro navega via <Link>. */
+function PlaybookLink({
+  href,
+  onClick,
+  className = '',
+}: {
+  href: string;
+  onClick: (href: string) => boolean;
+  className?: string;
+}) {
+  const cls = `inline-flex items-center gap-1 text-[11px] font-semibold text-primary-600 hover:text-primary-700 hover:underline cursor-pointer ${className}`;
+  if (href === '#owner') {
+    return (
+      <button type="button" onClick={() => onClick(href)} className={cls}>
+        Atribuir dono / criar tarefa <ArrowRight size={11} />
+      </button>
+    );
+  }
+  return (
+    <Link href={href} onClick={() => onClick(href)} className={cls}>
+      Ir para a tela <ExternalLink size={11} />
+    </Link>
   );
 }
