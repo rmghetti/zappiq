@@ -18,12 +18,13 @@
  *   - Highlight visual da coluna alvo via state `dragOverStage`
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Target, Plus, DollarSign, User, TrendingUp, Clock, AlertTriangle, BarChart3 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { DealFormModal } from '../../../components/crm/DealFormModal';
 import { LossReasonModal } from '../../../components/crm/LossReasonModal'; // PR #220 CRM 3c
+import { DealDrawer } from '../../../components/crm/DealDrawer'; // Feature 5a.3 — detalhe/edição
 
 interface Deal {
   id: string;
@@ -97,6 +98,10 @@ export default function CrmPage() {
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   // PR #220: modal de motivo de perda quando arrasta pra "Perdido"
   const [lossModal, setLossModal] = useState<{ deal: Deal } | null>(null);
+  // Feature 5a.3: drawer de detalhe/edição do deal (aberto ao clicar no card).
+  const [openDealId, setOpenDealId] = useState<string | null>(null);
+  // Distingue clique de drag: se o card foi arrastado, o onClick não abre o drawer.
+  const draggedRef = useRef(false);
 
   const fetchDeals = useCallback(() => {
     setLoading(true);
@@ -140,6 +145,15 @@ export default function CrmPage() {
   function handleDragStart(e: React.DragEvent<HTMLDivElement>, dealId: string) {
     e.dataTransfer.setData('text/plain', dealId);
     e.dataTransfer.effectAllowed = 'move';
+    // Marca que houve arrasto pra o onClick subsequente NÃO abrir o drawer.
+    draggedRef.current = true;
+  }
+
+  // onClick do card: só abre o drawer se NÃO foi um arrasto (evita conflito com o
+  // drag-and-drop). handleDragStart seta a flag; onDragEnd/click a consultam.
+  function handleCardClick(dealId: string) {
+    if (draggedRef.current) { draggedRef.current = false; return; }
+    setOpenDealId(dealId);
   }
 
   function handleDragOver(e: React.DragEvent<HTMLDivElement>, stageKey: string) {
@@ -294,7 +308,12 @@ export default function CrmPage() {
                       key={deal.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, deal.id)}
-                      className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
+                      onDragEnd={() => { draggedRef.current = false; }}
+                      onClick={() => handleCardClick(deal.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter') setOpenDealId(deal.id); }}
+                      className="bg-white rounded-lg p-3 border border-gray-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer active:cursor-grabbing"
                     >
                       <p className="text-sm font-medium text-gray-900 mb-2">{deal.title}</p>
                       <div className="flex items-center justify-between">
@@ -448,6 +467,13 @@ export default function CrmPage() {
         onClose={() => setModalOpen(false)}
         onSaved={fetchDeals}
         initialStage={initialStage}
+      />
+
+      {/* Feature 5a.3 — Drawer de detalhe/edição do deal */}
+      <DealDrawer
+        dealId={openDealId}
+        onClose={() => setOpenDealId(null)}
+        onSaved={fetchDeals}
       />
 
       {/* PR #220 CRM 3c — Modal "Por que perdemos?" */}

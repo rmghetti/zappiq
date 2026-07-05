@@ -5,6 +5,7 @@ import { pendingSuggestions } from '../services/dealAttribution.js';
 import { normalizeLossReason } from './deals.lossreason.util.js';
 import { closingDatesForStage } from './deals.closedates.util.js';
 import { createDealSchema, updateDealSchema } from './deals.schema.js';
+import { buildDealDetail } from './deals.detail.util.js';
 
 const router = Router();
 
@@ -85,14 +86,37 @@ router.post('/:id/reject-ia-link', async (req: Request, res: Response, next: Nex
   } catch (err) { next(err); }
 });
 
+// GET /api/deals/:id — detalhe do deal p/ o drawer do kanban (Feature 5a.3):
+// deal + contato + timeline de activities + conversa de origem (se houver).
+// Activities já existem no banco (feed cronológico do CRM Onda 0); aqui só
+// filtramos as do deal e devolvemos as mais recentes primeiro.
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const orgId = req.organizationId!;
     const deal = await prisma.deal.findFirst({
-      where: { id: req.params.id, organizationId: req.organizationId! },
-      include: { contact: true },
+      where: { id: req.params.id, organizationId: orgId },
+      include: {
+        contact: { select: { id: true, name: true, phone: true, email: true, avatarUrl: true } },
+        // conversa que originou/destravou a venda (vínculo IA conversa→deal).
+        sourceConversation: {
+          select: { id: true, status: true, channel: true, summary: true, updatedAt: true },
+        },
+      },
     });
     if (!deal) { res.status(404).json({ error: 'Deal not found' }); return; }
-    res.json({ success: true, data: deal });
+
+    // Timeline: activities deste deal, mais recentes primeiro (limite defensivo).
+    const activities = await prisma.activity.findMany({
+      where: { dealId: deal.id, organizationId: orgId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        id: true, type: true, actor: true, title: true, body: true,
+        conversationId: true, createdAt: true,
+      },
+    });
+
+    res.json({ success: true, data: buildDealDetail(deal, activities) });
   } catch (err) { next(err); }
 });
 
