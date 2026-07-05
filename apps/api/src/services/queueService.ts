@@ -97,6 +97,157 @@ export const sentimentAnalysisQueue = new Queue('sentiment-analysis', {
   },
 });
 
+// ── Job handlers (exportados pra teste unitário) ──
+// W1.1: o envio real via WhatsApp/Instagram acontece aqui, reusando
+// channelDispatcher.sendReplyText — MESMO caminho que o agentOrchestrator
+// usa pra IA (resolve canal + credenciais por org a partir da conversa).
+// Antes, este handler era um STUB que marcava SENT sem enviar nada, então
+// resposta humana do inbox e broadcast de campanha nunca saíam de fato.
+
+/** Shape mínimo do payload aceito pelo message-send worker. */
+export interface MessageSendJobData {
+  /** Presente no caminho do inbox humano (messages.ts). */
+  messageId?: string;
+  /** Presente no inbox humano; resolvido do message no caminho de campanha. */
+  conversationId?: string;
+  /** Presente no caminho de campanha (campaigns.ts → campaignDispatch). */
+  campaignId?: string;
+  contactId?: string;
+  organizationId?: string;
+  content: string;
+  to?: string;
+}
+
+/**
+ * Processa um job de envio de mensagem outbound.
+ *
+ * Resolve org + conversa e delega o envio real ao channelDispatcher
+ * (mesma função da IA). Em sucesso, grava o externalMessageId e marca a
+ * mensagem SENT. Em falha, marca FAILED com o erro e relança pra BullMQ
+ * fazer retry — nunca marca SENT às cegas.
+ *
+ * Retorna o externalMessageId quando disponível.
+ */
+export async function processMessageSendJob(
+  data: MessageSendJobData,
+): Promise<{ success: true; messageId: string; externalMessageId?: string }> {
+  const { prisma } = await import('@zappiq/database');
+  const { sendReplyText } = await import('./channelDispatcher.js');
+
+  // ── 1. Resolve messageId, conversationId e organizationId ─────────
+  // Inbox humano: chega com messageId + conversationId, mas sem organizationId.
+  // Campanha: chega com organizationId + contactId + content, sem message/conversa.
+  let messageId = data.messageId ?? null;
+  let conversationId = data.conversationId ?? null;
+  let organizationId = data.organizationId ?? null;
+
+  if (messageId) {
+    // Caminho inbox humano — carrega a mensagem pra pegar org/conversa reais.
+    const msg = await prisma.message.findUnique({
+      where: { id: messageId },
+      select: {
+        conversationId: true,
+        conversation: { select: { organizationId: true } },
+      },
+    });
+    if (!msg) {
+      throw new Error(`[MessageSend] Message ${messageId} not found`);
+    }
+    conversationId = msg.conversationId;
+    organizationId = msg.conversation.organizationId;
+  } else {
+    // Caminho campanha — sem message/conversa ainda. Precisa de org + contato.
+    if (!organizationId || !data.contactId) {
+      throw new Error(
+        '[MessageSend] Campaign job sem organizationId/contactId — não é possível enviar',
+      );
+    }
+    // Get-or-create conversa aberta do contato (mesmo padrão do webhook inbound).
+    let conversation = await prisma.conversation.findFirst({
+      where: {
+        contactId: data.contactId,
+        organizationId,
+        status: { in: ['OPEN', 'WAITING', 'ASSIGNED'] },
+      },
+      select: { id: true },
+    });
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          contactId: data.contactId,
+          organizationId,
+          status: 'OPEN',
+          channel: 'whatsapp',
+        },
+        select: { id: true },
+      });
+    }
+    conversationId = conversation.id;
+    // Cria a mensagem OUTBOUND da campanha pra rastrear status (SENT/FAILED).
+    const created = await prisma.message.create({
+      data: {
+        direction: 'OUTBOUND',
+        type: 'TEXT',
+        content: data.content,
+        status: 'SENT', // provisório; ajustado após o envio real abaixo
+        conversationId,
+        isFromBot: false,
+        ...(data.campaignId ? { metadata: { campaignId: data.campaignId } } : {}),
+      },
+      select: { id: true },
+    });
+    messageId = created.id;
+  }
+
+  if (!organizationId || !conversationId || !messageId) {
+    throw new Error('[MessageSend] Não foi possível resolver org/conversa/mensagem');
+  }
+
+  // ── 2. Envio real via channelDispatcher (mesmo caminho da IA) ─────
+  try {
+    const result = await sendReplyText({
+      organizationId,
+      conversationId,
+      content: data.content,
+    });
+
+    // ── 3. Sucesso: grava externalMessageId + marca SENT ────────────
+    await prisma.message.update({
+      where: { id: messageId },
+      data: {
+        status: 'SENT',
+        ...(result.externalMessageId
+          ? result.channel === 'instagram'
+            ? { externalMessageId: result.externalMessageId }
+            : { whatsappMessageId: result.externalMessageId }
+          : {}),
+      },
+    });
+
+    logger.info(
+      `[Queue:MessageSend] Message ${messageId} sent via ${result.channel} (extId=${result.externalMessageId ?? 'n/a'})`,
+    );
+    return { success: true, messageId, externalMessageId: result.externalMessageId };
+  } catch (error) {
+    // ── 3b. Falha: marca FAILED com o erro; relança pra BullMQ retry ──
+    logger.error(`[Queue:MessageSend] Failed to send message ${messageId}:`, error);
+    try {
+      await prisma.message.update({
+        where: { id: messageId },
+        data: {
+          status: 'FAILED',
+          metadata: {
+            sendError: error instanceof Error ? error.message : String(error),
+          },
+        },
+      });
+    } catch (updateErr) {
+      logger.error(`[Queue:MessageSend] Também falhou ao marcar FAILED ${messageId}:`, updateErr);
+    }
+    throw error;
+  }
+}
+
 // ── Workers ──────────────────────────────────────
 
 let messageSendWorker: Worker;
@@ -117,32 +268,13 @@ export async function initQueues(): Promise<void> {
   messageSendWorker = new Worker(
     'message-send',
     async (job: Job) => {
-      const { messageId, conversationId, content, to } = job.data;
-      try {
-        logger.info(`[Queue:MessageSend] Sending message ${messageId} to ${to}`);
-
-        // Importação dinâmica para evitar dependência circular
-        const { prisma } = await import('@zappiq/database');
-
-        // TODO: Etapa 7 — chamar WhatsApp Cloud API para envio real
-        // const response = await whatsappService.sendText(to, content);
-        // const whatsappMessageId = response.messages[0].id;
-
-        // Atualiza status da mensagem no banco
-        await prisma.message.update({
-          where: { id: messageId },
-          data: {
-            status: 'SENT',
-            // whatsappMessageId: response.messages[0].id,
-          },
-        });
-
-        logger.info(`[Queue:MessageSend] Message ${messageId} sent successfully`);
-        return { success: true, messageId };
-      } catch (error) {
-        logger.error(`[Queue:MessageSend] Failed to send message ${messageId}:`, error);
-        throw error;
-      }
+      const data = job.data as MessageSendJobData;
+      const ref = data.messageId ?? data.campaignId ?? 'unknown';
+      logger.info(`[Queue:MessageSend] Sending message ref=${ref} to ${data.to ?? '?'}`);
+      // Envio real + persistência de status/externalMessageId centralizados
+      // em processMessageSendJob (reusa channelDispatcher, testável isolado).
+      // Erros relançam aqui pra BullMQ aplicar retry (3 tentativas c/ backoff).
+      return processMessageSendJob(data);
     },
     {
       connection,
