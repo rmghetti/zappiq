@@ -418,11 +418,12 @@ export async function initQueues(): Promise<void> {
 
       try {
         const { processIncomingMessage } = await import('../agents/agentOrchestrator.js');
-        // io não é serializável via Redis — worker não recebe Socket.io.
-        // agentOrchestrator usa io só pra notification UI (dashboard interno
-        // do operador). Em background processing, o caminho do WhatsApp
-        // (resposta ao cliente) é o crítico — Socket.io é cosmético aqui.
-        // Onda 3 follow-up: emit via Redis pub/sub se UI precisar live.
+        // W2.1: io não é serializável via Redis, mas o worker roda no MESMO
+        // processo do Socket.io server. Recupera a instância pelo singleton de
+        // módulo (setado em server.ts) pra que new_message/notification cheguem
+        // ao inbox em tempo real. Antes passávamos io: undefined e a UI só
+        // atualizava com F5. getIo() é undefined-safe (emits gated por if(io)).
+        const { getIo } = await import('../utils/socketRegistry.js');
         await processIncomingMessage({
           organizationId: data.organizationId,
           conversationId: data.conversationId,
@@ -437,7 +438,7 @@ export async function initQueues(): Promise<void> {
           channel: data.channel || 'whatsapp',
           orgSettings: data.orgSettings,
           mediaId: data.mediaId ?? null, // V4 #156
-          io: undefined,
+          io: getIo(),
         });
 
         const elapsed = Date.now() - t0;

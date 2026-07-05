@@ -18,6 +18,7 @@ import { authMiddleware } from './middleware/auth.js';
 import { rlsTenantMiddleware } from './middleware/rlsTenant.js';
 import { initQueues, closeQueues } from './services/queueService.js';
 import { initFlowTimerWorker } from './services/flowScheduler.js';
+import { setIo } from './utils/socketRegistry.js';
 import { prisma } from '@zappiq/database';
 
 // Routes
@@ -105,6 +106,11 @@ const io = new SocketIOServer(httpServer, {
 });
 
 app.set('io', io);
+
+// W2.1: expõe o io por singleton de módulo pra que o BullMQ worker (mesmo
+// processo, mas fora do contexto Express) consiga emitir new_message/notification.
+// Sem isso o worker passava io: undefined e o inbox só atualizava com F5.
+setIo(io);
 
 // ── Socket.io JWT authentication middleware ──
 io.use((socket, next) => {

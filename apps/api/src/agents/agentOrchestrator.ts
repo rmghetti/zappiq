@@ -23,6 +23,7 @@ import { executeFlowEffects } from './flowEffects.js';
 // Maestro Pacote 2.6 — agentic loop + webhook tools (AG3/AG4)
 import { runAgenticTurn } from './flowAiAgent.js';
 import { buildWebhookToolDef, executeWebhook, type WebhookToolConfig } from './webhookTool.js';
+import { getIo } from '../utils/socketRegistry.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
 /* ── Org canônica da Iza (dogfood ZappIQ) ─────────────────────────────
@@ -54,7 +55,11 @@ export interface ProcessMessageInput {
 }
 
 export async function processIncomingMessage(input: ProcessMessageInput): Promise<void> {
-  const { organizationId, conversationId, contactId, contactPhone, contactName, whatsappMessageId, orgSettings, io, mediaId } = input;
+  const { organizationId, conversationId, contactId, contactPhone, contactName, whatsappMessageId, orgSettings, mediaId } = input;
+  // W2.1: se o caller não passou io (ex.: worker BullMQ, onde io não é
+  // serializável via Redis), recupera do singleton de módulo setado no boot.
+  // Emits continuam gated por `if (io)`, então undefined segue no-op seguro.
+  const io = input.io ?? getIo();
 
   // V4 #156 — messageContent e messageType são mutáveis: áudio é transcrito via
   // Whisper e segue como texto pelo motor de venda padrão (RAG, intent, prompt).
