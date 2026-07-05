@@ -311,7 +311,10 @@ const dsrPublicLimiter = rateLimit({
 });
 const DSR_PUBLIC_PATHS = new Set(['/', '/public']);
 app.use('/api/dsr', (req, res, next) => {
-  if (req.method === 'POST' && DSR_PUBLIC_PATHS.has(req.path)) {
+  const isPublicPost = req.method === 'POST' && DSR_PUBLIC_PATHS.has(req.path);
+  // Consulta pública de protocolo (titular acompanha status sem login).
+  const isProtocolLookup = req.method === 'GET' && req.path.startsWith('/protocol/');
+  if (isPublicPost || isProtocolLookup) {
     return dsrPublicLimiter(req, res, next);
   }
   authMiddleware(req, res, (err?: any) => {

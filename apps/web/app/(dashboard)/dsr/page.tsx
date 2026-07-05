@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
-import { FileLock, Clock, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { FileLock, Clock, CheckCircle2, XCircle, AlertTriangle, Download, Trash2 } from 'lucide-react';
 
 interface DSR {
   id: string;
@@ -61,6 +61,8 @@ export default function DSRPage() {
     }
   }
 
+  const [busyId, setBusyId] = useState<string | null>(null);
+
   async function updateStatus(id: string, status: 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED', rejectionReason?: string) {
     try {
       await api.put(`/api/dsr/${id}`, { status, rejectionReason });
@@ -68,6 +70,68 @@ export default function DSRPage() {
     } catch (err) {
       alert('Falha ao atualizar requisição');
       console.error(err);
+    }
+  }
+
+  // Export é um download de arquivo (JSON/CSV cru), não passa pelo api.get que
+  // faz JSON.parse — usamos api.getBlob (fetch autenticado) e disparamos o
+  // download no browser.
+  async function exportData(id: string, format: 'json' | 'csv') {
+    setBusyId(id);
+    try {
+      const blob = await api.getBlob(`/api/dsr/${id}/export?format=${format}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `DSR-${id.slice(-8).toUpperCase()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Falha ao exportar dados do titular');
+      console.error(err);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function fulfillDeletion(id: string) {
+    if (
+      !window.confirm(
+        'Eliminar e ANONIMIZAR os dados do titular?\n\nNome, telefone e e-mail viram placeholders e as conversas são removidas (soft-delete). Métricas agregadas são preservadas. A ação marca a requisição como concluída e não pode ser desfeita.',
+      )
+    ) {
+      return;
+    }
+    setBusyId(id);
+    try {
+      const res = await api.post<{ data: { contactsAnonymized: number; conversationsSoftDeleted: number } }>(
+        `/api/dsr/${id}/delete`,
+        { notify: true },
+      );
+      alert(
+        `Concluído. Contatos anonimizados: ${res.data.contactsAnonymized}. Conversas removidas: ${res.data.conversationsSoftDeleted}.`,
+      );
+      load();
+    } catch (err) {
+      alert('Falha ao eliminar dados do titular');
+      console.error(err);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function completeExport(id: string) {
+    setBusyId(id);
+    try {
+      await api.post(`/api/dsr/${id}/complete-export`, { notify: true });
+      load();
+    } catch (err) {
+      alert('Falha ao concluir a solicitação de acesso/portabilidade');
+      console.error(err);
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -154,34 +218,84 @@ export default function DSRPage() {
                   <td className={`px-4 py-3 font-medium ${vencido ? 'text-red-600' : dias <= 3 ? 'text-yellow-600' : 'text-gray-700'}`}>
                     {vencido ? `Vencido há ${Math.abs(dias)}d` : `${dias}d`}
                   </td>
-                  <td className="px-4 py-3 space-x-1">
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1">
                     {r.status === 'PENDING' && (
                       <button
                         onClick={() => updateStatus(r.id, 'IN_PROGRESS')}
-                        className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
+                        disabled={busyId === r.id}
+                        className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100 disabled:opacity-50"
                       >
                         Iniciar
                       </button>
                     )}
-                    {(r.status === 'PENDING' || r.status === 'IN_PROGRESS') && (
+
+                    {/* Ações de export — sempre disponíveis p/ ACCESS/PORTABILITY */}
+                    {(r.type === 'ACCESS' || r.type === 'PORTABILITY') && (
                       <>
                         <button
-                          onClick={() => updateStatus(r.id, 'COMPLETED')}
-                          className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded hover:bg-green-100"
+                          onClick={() => exportData(r.id, 'json')}
+                          disabled={busyId === r.id}
+                          title="Baixar dados do titular em JSON"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 disabled:opacity-50"
                         >
-                          Concluir
+                          <Download size={12} /> JSON
                         </button>
+                        <button
+                          onClick={() => exportData(r.id, 'csv')}
+                          disabled={busyId === r.id}
+                          title="Baixar dados do titular em CSV"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 disabled:opacity-50"
+                        >
+                          <Download size={12} /> CSV
+                        </button>
+                      </>
+                    )}
+
+                    {(r.status === 'PENDING' || r.status === 'IN_PROGRESS') && (
+                      <>
+                        {/* Eliminação/anonimização automatizada p/ DELETION/ANONYMIZATION */}
+                        {(r.type === 'DELETION' || r.type === 'ANONYMIZATION') && (
+                          <button
+                            onClick={() => fulfillDeletion(r.id)}
+                            disabled={busyId === r.id}
+                            title="Anonimizar contato + soft-delete das conversas"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-red-50 text-red-700 rounded hover:bg-red-100 disabled:opacity-50"
+                          >
+                            <Trash2 size={12} /> Eliminar
+                          </button>
+                        )}
+
+                        {(r.type === 'ACCESS' || r.type === 'PORTABILITY') ? (
+                          <button
+                            onClick={() => completeExport(r.id)}
+                            disabled={busyId === r.id}
+                            className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded hover:bg-green-100 disabled:opacity-50"
+                          >
+                            Concluir + avisar
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => updateStatus(r.id, 'COMPLETED')}
+                            disabled={busyId === r.id}
+                            className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded hover:bg-green-100 disabled:opacity-50"
+                          >
+                            Concluir
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             const reason = window.prompt('Motivo da rejeição:');
                             if (reason) updateStatus(r.id, 'REJECTED', reason);
                           }}
-                          className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                          disabled={busyId === r.id}
+                          className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50"
                         >
                           Rejeitar
                         </button>
                       </>
                     )}
+                    </div>
                   </td>
                 </tr>
               );
