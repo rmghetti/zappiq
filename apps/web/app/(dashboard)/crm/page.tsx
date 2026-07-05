@@ -68,14 +68,16 @@ const STAGES = [
   { key: 'lost', label: 'Perdido', color: 'border-t-red-400' },
 ];
 
+// Chaves IDÊNTICAS ao enum LossReason (UPPERCASE). Mantém aliases minúsculos
+// legados por segurança (dados antigos, se houver).
 const LOSS_REASON_LABELS: Record<string, string> = {
-  price: 'Preço',
-  competitor: 'Concorrente',
-  timing: 'Timing',
-  no_response: 'Sem resposta',
-  not_qualified: 'Não qualificado',
-  other: 'Outro',
-  outro: 'Outro',
+  PRICE: 'Preço',
+  COMPETITOR: 'Concorrente',
+  TIMING: 'Timing',
+  NO_BUDGET: 'Sem orçamento',
+  NO_DECISION: 'Sem decisão',
+  NO_RESPONSE: 'Sem resposta',
+  OTHER: 'Outro',
 };
 
 function fmtBRL(n: number): string {

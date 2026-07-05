@@ -14,13 +14,15 @@
 import { useState } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 
+// Valores IDÊNTICOS ao enum LossReason (schema.prisma / Postgres, UPPERCASE).
 const REASONS: Array<{ value: string; label: string; emoji: string }> = [
-  { value: 'price', label: 'Preço', emoji: '💸' },
-  { value: 'competitor', label: 'Foi pra concorrente', emoji: '⚔️' },
-  { value: 'timing', label: 'Timing errado', emoji: '⏰' },
-  { value: 'no_response', label: 'Parou de responder', emoji: '🔕' },
-  { value: 'not_qualified', label: 'Não era qualificado', emoji: '🎯' },
-  { value: 'other', label: 'Outro motivo', emoji: '❓' },
+  { value: 'PRICE', label: 'Preço', emoji: '💸' },
+  { value: 'COMPETITOR', label: 'Foi pra concorrente', emoji: '⚔️' },
+  { value: 'TIMING', label: 'Timing errado', emoji: '⏰' },
+  { value: 'NO_BUDGET', label: 'Sem orçamento', emoji: '💰' },
+  { value: 'NO_DECISION', label: 'Não avançou a decisão', emoji: '🤔' },
+  { value: 'NO_RESPONSE', label: 'Parou de responder', emoji: '🔕' },
+  { value: 'OTHER', label: 'Outro motivo', emoji: '❓' },
 ];
 
 export interface LossReasonModalProps {

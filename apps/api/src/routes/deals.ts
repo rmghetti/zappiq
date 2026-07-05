@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { pendingSuggestions } from '../services/dealAttribution.js';
+import { normalizeLossReason } from './deals.lossreason.util.js';
 
 const router = Router();
 
@@ -121,16 +122,14 @@ const STAGE_KEY_TO_PIPELINE: Record<string, string> = {
 // PUT /api/deals/:id/stage
 router.put('/:id/stage', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // PR #220 (CRM 3c): lossReason opcional capturado pelo modal ao
-    // arrastar deal pra coluna 'Perdido'. Aceita enum: price | competitor |
-    // timing | no_response | not_qualified | other. Persistido no Deal.
+    // PR #220 (CRM 3c) + fix 05/07: lossReason opcional capturado pelo modal ao
+    // arrastar deal pra coluna 'Perdido'. Enum LossReason (UPPERCASE): PRICE |
+    // COMPETITOR | TIMING | NO_DECISION | NO_BUDGET | NO_RESPONSE | OTHER.
+    // normalizeLossReason aceita caixa qualquer e só grava valor real do enum
+    // (antes a lista era minúscula + tinha 'not_qualified' inexistente → 500).
     const { stage, lossReason } = req.body;
     if (!stage) { res.status(400).json({ error: 'stage is required' }); return; }
-    const VALID_LOSS_REASONS = ['price', 'competitor', 'timing', 'no_response', 'not_qualified', 'other'];
-    const validLossReason: string | null =
-      stage === 'lost' && lossReason && VALID_LOSS_REASONS.includes(lossReason)
-        ? lossReason
-        : null;
+    const validLossReason = normalizeLossReason(stage, lossReason);
 
     // Resolve o PipelineStage correspondente na org (mantém stageId em sincronia).
     const pipelineName = STAGE_KEY_TO_PIPELINE[stage as string];
