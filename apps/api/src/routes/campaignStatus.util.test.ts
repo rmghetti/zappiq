@@ -105,6 +105,7 @@ describe('attributeCampaignReply', () => {
           .mockResolvedValueOnce(priorReply),      // INBOUND anterior?
       },
       campaign: { update: vi.fn().mockResolvedValue({}) },
+      contact: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     };
   }
 
@@ -137,5 +138,38 @@ describe('attributeCampaignReply', () => {
     const res = await attributeCampaignReply(prisma, 'conv-3', 'in-new');
     expect(res).toBeNull();
     expect(prisma.campaign.update).not.toHaveBeenCalled();
+  });
+
+  // W2.8 — grava sourceCampaignId no Contact (first-touch, idempotente).
+  it('W2.8: com contactId, grava sourceCampaignId no Contact em first-touch', async () => {
+    const prisma = makeReplyPrisma(
+      { id: 'out-1', campaignId: 'camp-9', createdAt: new Date('2026-07-05T10:00:00Z') },
+      null,
+    );
+    const res = await attributeCampaignReply(prisma, 'conv-9', 'in-new', 'contact-9');
+
+    expect(res).toBe('camp-9');
+    expect(prisma.contact.updateMany).toHaveBeenCalledWith({
+      where: { id: 'contact-9', sourceCampaignId: null },
+      data: { sourceCampaignId: 'camp-9' },
+    });
+  });
+
+  it('W2.8: sem contactId, não toca no Contact (back-compat)', async () => {
+    const prisma = makeReplyPrisma(
+      { id: 'out-1', campaignId: 'camp-10', createdAt: new Date('2026-07-05T10:00:00Z') },
+      null,
+    );
+    const res = await attributeCampaignReply(prisma, 'conv-10', 'in-new');
+
+    expect(res).toBe('camp-10');
+    expect(prisma.contact.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('W2.8: reply não atribuído (sem OUTBOUND de campanha) não escreve no Contact', async () => {
+    const prisma = makeReplyPrisma(null, null);
+    const res = await attributeCampaignReply(prisma, 'conv-11', 'in-new', 'contact-11');
+    expect(res).toBeNull();
+    expect(prisma.contact.updateMany).not.toHaveBeenCalled();
   });
 });

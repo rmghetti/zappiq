@@ -44,7 +44,7 @@ export async function syncContactToCrm(input: SyncInput): Promise<void> {
     where: { id: contactId },
     select: {
       id: true, leadStatus: true, leadScore: true, funnelStage: true, firstTouchAt: true,
-      name: true, phone: true,
+      name: true, phone: true, sourceCampaignId: true,
     },
   });
   if (!contact) return;
@@ -134,6 +134,9 @@ export async function syncContactToCrm(input: SyncInput): Promise<void> {
       contactId,
       conversationId,
       contactLabel: contact.name || contact.phone || 'contato',
+      // W2.8 — propaga a origem de campanha do contato pro deal, pra a página
+      // de atribuição enxergar receita/ROI por campanha.
+      sourceCampaignId: contact.sourceCampaignId ?? null,
     });
   }
 }
@@ -147,8 +150,9 @@ async function ensureDealAndFollowUp(args: {
   contactId: string;
   conversationId?: string;
   contactLabel: string;
+  sourceCampaignId?: string | null;
 }): Promise<void> {
-  const { organizationId, contactId, conversationId, contactLabel } = args;
+  const { organizationId, contactId, conversationId, contactLabel, sourceCampaignId } = args;
 
   // Estágio-alvo: "Proposta" da org; fallback = último estágio não-ganho/perdido.
   const stage =
@@ -171,6 +175,8 @@ async function ensureDealAndFollowUp(args: {
         stageId: stage?.id ?? null,
         contactId,
         organizationId,
+        // W2.8 — herda a atribuição de campanha do contato (se houver).
+        ...(sourceCampaignId ? { sourceCampaignId } : {}),
       },
     });
     await prisma.activity.create({

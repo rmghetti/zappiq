@@ -192,7 +192,7 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
     // W2.4: se este INBOUND é a primeira resposta a uma campanha, conta reply.
     // Best-effort — nunca derruba o webhook.
     try {
-      await attributeCampaignReply(prisma, conversation.id, inboundMsg.id);
+      await attributeCampaignReply(prisma, conversation.id, inboundMsg.id, contact.id);
     } catch (err) {
       logger.warn(`[Webhook] falha ao atribuir reply de campanha: ${err instanceof Error ? err.message : String(err)}`);
     }

@@ -67,12 +67,19 @@ export async function applyMessageStatusUpdate(
  * campanha na conversa. Sem flag no schema — deduz olhando se já existe algum
  * INBOUND anterior depois do último OUTBOUND de campanha.
  *
+ * W2.8 — além de contar o reply, grava sourceCampaignId no Contact (first-touch:
+ * só se o contato ainda não tem origem atribuída). Esse é o único ponto onde
+ * sourceCampaignId passa a ser ESCRITO — antes era só lido, deixando a página
+ * de atribuição (receita/ROI) eternamente zerada. Do Contact a origem é
+ * propagada ao Deal criado por intenção de compra (crmAutomationService).
+ *
  * Retorna a campaignId contabilizada (ou null se nada foi contado).
  */
 export async function attributeCampaignReply(
   prisma: any,
   conversationId: string,
   inboundMessageId: string,
+  contactId?: string,
 ): Promise<string | null> {
   // Último OUTBOUND de campanha na conversa.
   const lastCampaignMsg = await prisma.message.findFirst({
@@ -100,5 +107,16 @@ export async function attributeCampaignReply(
   if (priorReply) return null;
 
   await bumpCampaignCounter(prisma, lastCampaignMsg.campaignId, 'repliedCount');
+
+  // W2.8 — grava a origem no Contact em first-touch. updateMany + filtro
+  // sourceCampaignId:null torna a escrita idempotente e não sobrescreve uma
+  // atribuição anterior (a primeira campanha que o contato respondeu vence).
+  if (contactId) {
+    await prisma.contact.updateMany({
+      where: { id: contactId, sourceCampaignId: null },
+      data: { sourceCampaignId: lastCampaignMsg.campaignId },
+    });
+  }
+
   return lastCampaignMsg.campaignId;
 }
