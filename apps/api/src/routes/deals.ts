@@ -1,18 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { pendingSuggestions } from '../services/dealAttribution.js';
 import { normalizeLossReason } from './deals.lossreason.util.js';
+import { createDealSchema, updateDealSchema } from './deals.schema.js';
 
 const router = Router();
-
-const createSchema = z.object({
-  title: z.string().min(2),
-  value: z.number().optional(),
-  stage: z.string().default('new'),
-  contactId: z.string(),
-});
 
 // CRUD
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -30,10 +23,19 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   } catch (err) { next(err); }
 });
 
-router.post('/', validate(createSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', validate(createDealSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const orgId = req.organizationId!;
+    const { title, value, stage, contactId } = req.body;
+    // IDOR: garante que o contato pertence à MESMA org antes de criar o deal.
+    // Sem isso dava pra criar um deal cross-tenant apontando pra contato alheio.
+    const contact = await prisma.contact.findFirst({
+      where: { id: contactId, organizationId: orgId },
+      select: { id: true },
+    });
+    if (!contact) { res.status(404).json({ error: 'Contact not found' }); return; }
     const deal = await prisma.deal.create({
-      data: { ...req.body, organizationId: req.organizationId! },
+      data: { title, value, stage, contactId, organizationId: orgId },
     });
     res.status(201).json({ success: true, data: deal });
   } catch (err) { next(err); }
@@ -89,11 +91,21 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   } catch (err) { next(err); }
 });
 
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', validate(updateDealSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const result = await prisma.deal.updateMany({ where: { id: req.params.id, organizationId: req.organizationId! }, data: req.body });
+    const orgId = req.organizationId!;
+    const data = req.body; // já validado + whitelistado (.strict()) pelo updateDealSchema
+    // Se estiver trocando o contato, o novo contato tem que ser da mesma org (IDOR).
+    if (data.contactId !== undefined) {
+      const contact = await prisma.contact.findFirst({
+        where: { id: data.contactId, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!contact) { res.status(404).json({ error: 'Contact not found' }); return; }
+    }
+    const result = await prisma.deal.updateMany({ where: { id: req.params.id, organizationId: orgId }, data });
     if (result.count === 0) { res.status(404).json({ error: 'Deal not found' }); return; }
-    const updated = await prisma.deal.findUnique({ where: { id: req.params.id } });
+    const updated = await prisma.deal.findFirst({ where: { id: req.params.id, organizationId: orgId } });
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 });
