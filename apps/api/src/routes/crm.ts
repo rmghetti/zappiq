@@ -22,6 +22,7 @@
 
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { prisma } from '@zappiq/database';
+import { computeConversaoPorEstagio } from './crm.funnel.util.js';
 
 const router = Router();
 
@@ -98,26 +99,12 @@ router.get('/metrics', async (req: Request, res: Response, next: NextFunction) =
         : 0;
 
     // ─── Conversão por estágio (acumulado: % que CHEGOU naquele stage) ─
-    // Pra cada stage na ordem, conta quantos deals já passaram nele.
-    // "Passou" = stage atual == X OU stage atual está mais à frente OU é won.
-    const totalCriados = allDeals.filter((d) => d.createdAt >= cutoff).length;
-    const conversaoPorEstagio = STAGE_ORDER.map((stageKey, idx) => {
-      const passou = allDeals.filter((d) => {
-        if (d.createdAt < cutoff) return false;
-        const dealIdx = STAGE_ORDER.indexOf(d.stage);
-        // Won conta como passou por todos. Lost conta no stage onde perdeu.
-        // Stage não na lista (legacy) ignora.
-        if (d.stage === 'won') return true;
-        if (dealIdx === -1) return false;
-        return dealIdx >= idx;
-      }).length;
-      return {
-        stage: stageKey,
-        passou,
-        total: totalCriados,
-        percentual: totalCriados > 0 ? passou / totalCriados : 0,
-      };
-    });
+    // Pra cada stage na ordem, conta quantos deals criados na janela já
+    // passaram nele. Won passou por todos; LOST entrou no funil e depois saiu
+    // (conta como saída, no estágio de entrada) — NÃO é ignorado (W3.7).
+    // Lógica pura e testada em crm.funnel.util.ts.
+    const dealsCriadosNaJanela = allDeals.filter((d) => d.createdAt >= cutoff);
+    const conversaoPorEstagio = computeConversaoPorEstagio(dealsCriadosNaJanela, STAGE_ORDER);
 
     // ─── Top 3 motivos de perda ──────────────────────────────────────
     const lossReasonCounts = new Map<string, number>();
