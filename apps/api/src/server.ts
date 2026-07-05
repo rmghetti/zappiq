@@ -64,6 +64,7 @@ import { initUsageReconciliationJob } from './services/usageReconciliationServic
 import { initTrialFollowupJob } from './services/trialFollowupService.js'; // FASE 1.B #240 — onboarding D+1/D+3/D+7
 import { initAgentEvalCronJob } from './services/agentEvalCronService.js'; // FASE 2 / V5 #241 — eval diário + Slack alert
 import { initAnalyticsPulseCronJob } from './services/analyticsPulseCron.js'; // Analytics Pulso — insight diário por org
+import { initCampaignSchedulerCronJob } from './services/campaignSchedulerCron.js'; // W2.4 — dispara campanhas agendadas
 import { initTrialExpirationCronJob } from './services/trialExpirationCron.js'; // Área Clientes Fase 1 — fecha trials vencidos + recomputa lifecycleStage
 
 const app = express();
@@ -340,6 +341,11 @@ initAnalyticsPulseCronJob().catch((err) => {
 // ── Área Clientes Fase 1: expiração de trial + recompute lifecycle (03:40 UTC) ──
 initTrialExpirationCronJob().catch((err) => {
   logger.error('[Server] Failed to initialize trial expiration cron job:', err);
+});
+
+// ── W2.4: sweep de campanhas agendadas (a cada minuto) — dispara SCHEDULED ──
+initCampaignSchedulerCronJob().catch((err) => {
+  logger.error('[Server] Failed to initialize campaign scheduler cron job:', err);
 });
 
 // ── Error Handler (must be last) ────────────────
