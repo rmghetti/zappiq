@@ -6,11 +6,6 @@ import { autoLinkWonDeals, computeInfluence } from '../services/dealAttribution.
 
 const router = Router();
 
-function getSince(period: string): Date {
-  const map: Record<string, number> = { '24h': 86400000, '7d': 7 * 86400000, '30d': 30 * 86400000 };
-  return new Date(Date.now() - (map[period] || map['7d']));
-}
-
 // Janela [since, until). Suporta período pré-definido (24h/7d/30d) OU intervalo
 // customizado via from/to ('YYYY-MM-DD', inclusivo no dia final).
 function getRange(q: any): { since: Date; until: Date; label: string } {
@@ -206,29 +201,6 @@ router.get('/sentiment', async (req: Request, res: Response, next: NextFunction)
     });
 
     res.json({ success: true, data: conversations });
-  } catch (err) { next(err); }
-});
-
-// GET /api/analytics/heatmap
-router.get('/heatmap', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { since, until } = getRange(req.query);
-
-    const messages = await prisma.message.findMany({
-      where: { conversation: { organizationId: req.organizationId! }, direction: 'INBOUND', createdAt: { gte: since, lt: until } },
-      select: { createdAt: true },
-    });
-
-    const heatmap: Record<string, Record<string, number>> = {};
-    for (const msg of messages) {
-      const d = new Date(msg.createdAt);
-      const day = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const hour = d.getHours().toString().padStart(2, '0');
-      if (!heatmap[day]) heatmap[day] = {};
-      heatmap[day][hour] = (heatmap[day][hour] || 0) + 1;
-    }
-
-    res.json({ success: true, data: heatmap });
   } catch (err) { next(err); }
 });
 

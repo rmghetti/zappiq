@@ -132,7 +132,7 @@ async function markSent(
 // baseline pública Blip vs. preço ZappIQ Starter). Se o dado real não existir,
 // retornamos `undefined` e o template OMITE a frase em vez de mentir.
 
-// Baseline pública (mediana Blip) — mesma fonte usada em routes/savingsEmail.ts.
+// Baseline pública (mediana Blip) — fonte canônica da estimativa de economia.
 const DEFAULT_COMPETITOR_SETUP_BRL = 8000;
 const DEFAULT_COMPETITOR_MONTHLY_BRL = 1500;
 const ZAPPIQ_STARTER_MONTHLY_BRL = 197;

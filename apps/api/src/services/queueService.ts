@@ -75,28 +75,6 @@ export const aiProcessQueue = new Queue('ai-process', {
   },
 });
 
-/** Fila de transcrição de áudio (Whisper API) */
-export const audioTranscriptionQueue = new Queue('audio-transcription', {
-  connection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 5000 },
-    removeOnComplete: { count: 1000 },
-    removeOnFail: { count: 500 },
-  },
-});
-
-/** Fila de análise de sentimento de conversas */
-export const sentimentAnalysisQueue = new Queue('sentiment-analysis', {
-  connection,
-  defaultJobOptions: {
-    attempts: 2,
-    backoff: { type: 'fixed', delay: 2000 },
-    removeOnComplete: { count: 2000 },
-    removeOnFail: { count: 500 },
-  },
-});
-
 // ── Job handlers (exportados pra teste unitário) ──
 // W1.1: o envio real via WhatsApp/Instagram acontece aqui, reusando
 // channelDispatcher.sendReplyText — MESMO caminho que o agentOrchestrator
@@ -379,8 +357,6 @@ export async function dispatchCampaignJob(
 let messageSendWorker: Worker;
 let campaignDispatchWorker: Worker;
 let aiProcessWorker: Worker;
-let audioTranscriptionWorker: Worker;
-let sentimentAnalysisWorker: Worker;
 
 /**
  * Inicializa todos os workers das filas.
@@ -504,63 +480,6 @@ export async function initQueues(): Promise<void> {
     },
   );
 
-  // ── Audio Transcription Worker ───────────────
-  // Placeholder — integração com Whisper API será implementada futuramente
-  audioTranscriptionWorker = new Worker(
-    'audio-transcription',
-    async (job: Job) => {
-      const { messageId, audioUrl, organizationId } = job.data;
-      try {
-        logger.info(`[Queue:AudioTranscription] Transcribing audio for message ${messageId} (URL: ${audioUrl})`);
-
-        // TODO: Etapa futura — integrar com OpenAI Whisper API
-        // const transcription = await openai.audio.transcriptions.create({
-        //   file: audioStream,
-        //   model: 'whisper-1',
-        //   language: 'pt',
-        // });
-
-        logger.info(`[Queue:AudioTranscription] Placeholder — transcription not yet implemented for message ${messageId}`);
-        return { success: true, messageId, transcription: null };
-      } catch (error) {
-        logger.error(`[Queue:AudioTranscription] Failed to transcribe message ${messageId}:`, error);
-        throw error;
-      }
-    },
-    {
-      connection,
-      concurrency: 3,
-    },
-  );
-
-  // ── Sentiment Analysis Worker ────────────────
-  // Placeholder — classificação de sentimento via Claude Haiku
-  sentimentAnalysisWorker = new Worker(
-    'sentiment-analysis',
-    async (job: Job) => {
-      const { conversationId, messageContent, organizationId } = job.data;
-      try {
-        logger.info(`[Queue:SentimentAnalysis] Analyzing sentiment for conversation ${conversationId}`);
-
-        // TODO: Etapa futura — classificar sentimento via Claude Haiku
-        // const sentiment = await anthropic.messages.create({
-        //   model: 'claude-haiku',
-        //   messages: [{ role: 'user', content: `Classify sentiment: ${messageContent}` }],
-        // });
-
-        logger.info(`[Queue:SentimentAnalysis] Placeholder — sentiment analysis not yet implemented for conversation ${conversationId}`);
-        return { success: true, conversationId, sentiment: 'neutral' };
-      } catch (error) {
-        logger.error(`[Queue:SentimentAnalysis] Failed sentiment analysis for conversation ${conversationId}:`, error);
-        throw error;
-      }
-    },
-    {
-      connection,
-      concurrency: 5,
-    },
-  );
-
   // ── Eventos globais dos workers ──────────────
   // V2-023 (Sprint 0 Blocker 2): registro OTel em cada job completed/failed
   // pra dashboard de fail rate e job duration p95 em Grafana.
@@ -568,8 +487,6 @@ export async function initQueues(): Promise<void> {
     { name: 'messageSend', queueName: 'message-send', worker: messageSendWorker },
     { name: 'campaignDispatch', queueName: 'campaign-dispatch', worker: campaignDispatchWorker },
     { name: 'aiProcess', queueName: 'ai-process', worker: aiProcessWorker },
-    { name: 'audioTranscription', queueName: 'audio-transcription', worker: audioTranscriptionWorker },
-    { name: 'sentimentAnalysis', queueName: 'sentiment-analysis', worker: sentimentAnalysisWorker },
   ];
 
   for (const { name, queueName, worker } of workers) {
@@ -631,8 +548,6 @@ function setupQueueObservableMetrics(): void {
     { name: 'message-send', queue: messageSendQueue },
     { name: 'campaign-dispatch', queue: campaignDispatchQueue },
     { name: 'ai-process', queue: aiProcessQueue },
-    { name: 'audio-transcription', queue: audioTranscriptionQueue },
-    { name: 'sentiment-analysis', queue: sentimentAnalysisQueue },
   ];
 
   queueDepth.addCallback(async (result) => {
@@ -674,8 +589,6 @@ export async function closeQueues(): Promise<void> {
     messageSendWorker,
     campaignDispatchWorker,
     aiProcessWorker,
-    audioTranscriptionWorker,
-    sentimentAnalysisWorker,
   ].filter(Boolean);
 
   await Promise.allSettled(workers.map((w) => w.close()));
@@ -684,8 +597,6 @@ export async function closeQueues(): Promise<void> {
     messageSendQueue,
     campaignDispatchQueue,
     aiProcessQueue,
-    audioTranscriptionQueue,
-    sentimentAnalysisQueue,
   ];
 
   await Promise.allSettled(queues.map((q) => q.close()));
