@@ -4,6 +4,7 @@ import { requireRole } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import { trainingFieldsChanged } from '../services/trainingChange.js';
 import { refreshAIReadiness } from '../services/aiReadinessService.js';
+import { updateSettingsSchema, redactOrgSecrets } from './settings.schema.js';
 
 const router = Router();
 
@@ -12,24 +13,35 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
     if (!org) { res.status(404).json({ error: 'Organization not found' }); return; }
-    res.json({ success: true, data: org });
+    // W1.3: nunca vazar segredos de canal (whatsapp/instagram token, metaAppSecret).
+    res.json({ success: true, data: redactOrgSecrets(org) });
   } catch (err) { next(err); }
 });
 
 router.put('/', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.organizationId!;
+    // W1.3: whitelist .strict() — bloqueia mass assignment de plan/trial/
+    // subscription/stripe*/quota. Campo desconhecido → 400 (nunca ignora em
+    // silêncio, pra o cliente não achar que "funcionou").
+    const parsed = updateSettingsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid settings payload', details: parsed.error.flatten() });
+      return;
+    }
+    const data = parsed.data;
     const before = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
     const org = await prisma.organization.update({
       where: { id: orgId },
-      data: req.body,
+      data,
     });
     // Maestro reativo: identidade/treino mudou → marca os fluxos como desatualizados
-    const newSettings = req.body?.settings;
+    const newSettings = data.settings;
     if (newSettings && trainingFieldsChanged((before?.settings as any) || {}, newSettings)) {
       await refreshAIReadiness(orgId).catch(() => null);
     }
-    res.json({ success: true, data: org });
+    // Consistência com o GET: resposta também sem segredos.
+    res.json({ success: true, data: redactOrgSecrets(org) });
   } catch (err) { next(err); }
 });
 
