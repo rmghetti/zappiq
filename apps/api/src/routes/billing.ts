@@ -6,6 +6,7 @@ import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { getUsage } from '../middleware/planLimits.js';
 import { computeBillingUsage } from './billingUsage.util.js';
+import { buildSubscriptionState } from './billingSubscription.util.js';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 const router = Router();
@@ -230,6 +231,82 @@ router.get('/usage', async (req: Request, res: Response, next: NextFunction) => 
     });
 
     res.json({ success: true, data: usage });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/billing/subscription
+// FEATURE 5b.1 — estado REAL da assinatura pra tela de billing.
+// Le as colunas ja existentes da Organization (subscriptionStatus, billingCycle,
+// trialEndsAt, paidAt, stripeCustomerId, stripeSubscriptionId, plan) + a fatura
+// paga mais recente das stripe_invoices. Estados honestos quando nao ha Stripe
+// (a maioria das orgs): 'trialing' (com countdown) ou 'no_subscription'.
+// Retorna { status, cycle, trialEndsAt, trialDaysLeft, nextInvoice?, lastInvoice?, plan }.
+router.get('/subscription', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId;
+    if (!orgId) {
+      res.status(401).json({ error: 'organization context missing' });
+      return;
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: {
+        plan: true,
+        subscriptionStatus: true,
+        billingCycle: true,
+        trialEndsAt: true,
+        paidAt: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+      },
+    });
+
+    if (!org) {
+      res.status(404).json({ error: 'organization not found' });
+      return;
+    }
+
+    // Fatura paga mais recente (maior paidAt) das stripe_invoices. Fail-soft:
+    // se a tabela ainda nao tem nada (org sem Stripe), lastInvoice = null.
+    const lastInvoice = await prisma.stripeInvoice
+      .findFirst({
+        where: { organizationId: orgId, status: 'paid' },
+        orderBy: { paidAt: 'desc' },
+        select: {
+          amountBrlCents: true,
+          status: true,
+          periodStart: true,
+          periodEnd: true,
+          paidAt: true,
+        },
+      })
+      .catch(() => null);
+
+    const state = buildSubscriptionState({
+      org: {
+        plan: org.plan,
+        subscriptionStatus: org.subscriptionStatus,
+        billingCycle: org.billingCycle,
+        trialEndsAt: org.trialEndsAt,
+        paidAt: org.paidAt,
+        stripeCustomerId: org.stripeCustomerId,
+        stripeSubscriptionId: org.stripeSubscriptionId,
+      },
+      lastInvoice: lastInvoice
+        ? {
+            amountBrlCents: lastInvoice.amountBrlCents,
+            status: lastInvoice.status,
+            periodStart: lastInvoice.periodStart,
+            periodEnd: lastInvoice.periodEnd,
+            paidAt: lastInvoice.paidAt,
+          }
+        : null,
+    });
+
+    res.json({ success: true, data: state });
   } catch (err) {
     next(err);
   }

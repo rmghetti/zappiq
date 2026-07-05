@@ -13,6 +13,11 @@ import {
   Gift,
   Sparkles,
   Zap,
+  CalendarClock,
+  Receipt,
+  AlertTriangle,
+  CheckCircle2,
+  CircleSlash,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
@@ -31,12 +36,34 @@ type BillingUsage = {
   aiMessages: UsageMetric;
 };
 
+// FEATURE 5b.1 — estado REAL da assinatura (GET /api/billing/subscription)
+type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'trialing' | 'no_subscription';
+type InvoiceView = {
+  amountBrlCents: number;
+  status: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  paidAt: string | null;
+};
+type SubscriptionState = {
+  status: SubscriptionStatus;
+  hasStripeSubscription: boolean;
+  cycle: 'monthly' | 'annual' | null;
+  plan: string;
+  trialEndsAt: string | null;
+  trialDaysLeft: number | null;
+  nextInvoice?: { dueAt: string };
+  lastInvoice?: InvoiceView;
+};
+
 export default function BillingPage() {
   const { organization } = useAuthStore();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [cycle, setCycle] = useState<BillingCycle>('monthly');
   const [usage, setUsage] = useState<BillingUsage | null>(null);
   const [usageLoading, setUsageLoading] = useState(true);
+  const [subscription, setSubscription] = useState<SubscriptionState | null>(null);
+  const [subLoading, setSubLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -48,6 +75,16 @@ export default function BillingPage() {
         // fail-soft: sem uso, a UI mostra estado vazio ao inves de mock
       } finally {
         if (active) setUsageLoading(false);
+      }
+    })();
+    (async () => {
+      try {
+        const res = await api.get('/api/billing/subscription');
+        if (active && res?.data) setSubscription(res.data as SubscriptionState);
+      } catch {
+        // fail-soft: sem assinatura carregada, a UI mostra estado neutro
+      } finally {
+        if (active) setSubLoading(false);
       }
     })();
     return () => {
@@ -115,7 +152,12 @@ export default function BillingPage() {
         </button>
       </div>
 
-      {/* Trial 14 dias HERO */}
+      {/* Estado REAL da assinatura (FEATURE 5b.1) */}
+      <SubscriptionCard loading={subLoading} sub={subscription} />
+
+      {/* Trial 14 dias HERO — so quando NAO ha assinatura paga real, pra nao
+          mostrar promo de trial a quem ja assinou. */}
+      {(!subscription || subscription.status === 'no_subscription' || subscription.status === 'trialing') && (
       <div className="mb-6 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border border-emerald-200 rounded-2xl p-5 flex items-start gap-4">
         <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
           <Gift size={20} className="text-white" />
@@ -130,6 +172,7 @@ export default function BillingPage() {
           </p>
         </div>
       </div>
+      )}
 
       {/* Billing cycle toggle */}
       <div className="mb-6 flex items-center justify-center gap-2">
@@ -278,6 +321,152 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const CYCLE_LABEL: Record<string, string> = { monthly: 'Mensal', annual: 'Anual' };
+
+function formatBRL(cents: number): string {
+  return (cents / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+const STATUS_META: Record<
+  SubscriptionStatus,
+  { label: string; badge: string; Icon: typeof CheckCircle2; note: string }
+> = {
+  active: {
+    label: 'Assinatura ativa',
+    badge: 'bg-emerald-100 text-emerald-700',
+    Icon: CheckCircle2,
+    note: 'Sua assinatura esta em dia.',
+  },
+  trialing: {
+    label: 'Em período de teste',
+    badge: 'bg-teal-100 text-teal-700',
+    Icon: Gift,
+    note: 'Você esta no trial. Sem cobrança até o fim do período.',
+  },
+  past_due: {
+    label: 'Pagamento pendente',
+    badge: 'bg-amber-100 text-amber-800',
+    Icon: AlertTriangle,
+    note: 'Houve um problema na última cobrança. Atualize o pagamento no portal.',
+  },
+  canceled: {
+    label: 'Assinatura cancelada',
+    badge: 'bg-gray-200 text-gray-700',
+    Icon: CircleSlash,
+    note: 'Sua assinatura foi cancelada. Escolha um plano abaixo para reativar.',
+  },
+  no_subscription: {
+    label: 'Sem assinatura',
+    badge: 'bg-gray-100 text-gray-600',
+    Icon: CircleSlash,
+    note: 'Você ainda não tem uma assinatura ativa. Escolha um plano abaixo.',
+  },
+};
+
+function SubscriptionCard({
+  loading,
+  sub,
+}: {
+  loading: boolean;
+  sub: SubscriptionState | null;
+}) {
+  if (loading) {
+    return (
+      <div className="mb-6 bg-white rounded-2xl border border-gray-100 p-5">
+        <p className="text-sm text-gray-400">Carregando assinatura...</p>
+      </div>
+    );
+  }
+  if (!sub) {
+    // fail-soft: nao inventa estado; deixa a tela seguir com os planos abaixo.
+    return null;
+  }
+
+  const meta = STATUS_META[sub.status];
+  const { Icon } = meta;
+  const cycleLabel = sub.cycle ? CYCLE_LABEL[sub.cycle] : null;
+
+  return (
+    <div className="mb-6 bg-white rounded-2xl border border-gray-100 p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center flex-shrink-0">
+            <Icon size={20} className="text-gray-700" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${meta.badge}`}
+              >
+                {meta.label}
+              </span>
+              <span className="text-sm font-semibold text-gray-900">{sub.plan}</span>
+              {cycleLabel && (
+                <span className="text-xs text-gray-500">· ciclo {cycleLabel}</span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-1 leading-relaxed max-w-xl">{meta.note}</p>
+          </div>
+        </div>
+
+        {sub.status === 'trialing' && sub.trialDaysLeft !== null && (
+          <div className="text-right">
+            <p className="text-2xl font-extrabold text-teal-600 leading-none">
+              {sub.trialDaysLeft}
+            </p>
+            <p className="text-[11px] text-gray-500 mt-1">
+              {sub.trialDaysLeft === 1 ? 'dia restante' : 'dias restantes'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Proxima / ultima fatura — dados reais das stripe_invoices */}
+      {(sub.nextInvoice || sub.lastInvoice) && (
+        <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {sub.nextInvoice && (
+            <div className="flex items-start gap-2">
+              <CalendarClock size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500">Próxima cobrança</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  {formatDate(sub.nextInvoice.dueAt)}
+                </p>
+              </div>
+            </div>
+          )}
+          {sub.lastInvoice && (
+            <div className="flex items-start gap-2">
+              <Receipt size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-500">Última fatura</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  {formatBRL(sub.lastInvoice.amountBrlCents)}
+                  {sub.lastInvoice.paidAt && (
+                    <span className="ml-1 text-xs font-normal text-gray-500">
+                      · paga em {formatDate(sub.lastInvoice.paidAt)}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
