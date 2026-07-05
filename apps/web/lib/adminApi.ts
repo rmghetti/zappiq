@@ -649,6 +649,8 @@ export interface ClienteAccountRow {
   mrrCents: number;
   healthScore: number;
   healthColor: 'green' | 'amber' | 'red';
+  /** scores brutos 0-100 por dimensão (Fase 1 — alimenta o agregado). */
+  healthDimensions: { adocao: number; uso: number; financeiro: number };
   trialEndsAt: string | null;
   trialDaysLeft: number | null;
   lastActivityAt: string | null;
@@ -656,6 +658,50 @@ export interface ClienteAccountRow {
   ownerUserId: string | null;
   isStaging: boolean;
   createdAt: string;
+}
+
+// ─── Motor de Health estratégico (Fase 1) ────────────────────────────────────
+export type HealthDimensionKey = 'adocao' | 'uso' | 'financeiro';
+
+export interface HealthDimension {
+  key: HealthDimensionKey;
+  label: string;
+  score: number;
+  weight: number;
+  contributionPoints: number;
+  gapPoints: number;
+}
+
+export interface HealthPlaybookItem {
+  dimension: HealthDimensionKey | 'risco';
+  diagnosis: string;
+  action: string;
+  linkHref: string;
+  priority: number;
+}
+
+export interface HealthBreakdown {
+  total: number;
+  color: 'green' | 'amber' | 'red';
+  ceilingApplied: { stage: UiLifecycleStage; cap: number } | null;
+  dimensions: HealthDimension[];
+  playbook: HealthPlaybookItem[];
+  nextAction: { dimension: HealthPlaybookItem['dimension']; action: string; linkHref: string } | null;
+  targetToGreen: { pointsNeeded: number; bestDimension: HealthDimensionKey; message: string } | null;
+}
+
+export interface HealthAggregate {
+  distribution: { green: number; amber: number; red: number };
+  weakestDimension: { key: HealthDimensionKey; label: string; avgScore: number };
+  quickWins: Array<{
+    crmAccountId: string | null;
+    organizationId: string | null;
+    name: string | null;
+    healthScore: number;
+    color: 'green' | 'amber' | 'red';
+    pointsToNextTier: number;
+    nextTier: 'green' | 'amber';
+  }>;
 }
 
 export interface ClientesKpis {
@@ -674,6 +720,8 @@ export interface ClientesListResponse {
   includeStaging: boolean;
   stagingFilteredCount: number;
   kpis: ClientesKpis;
+  /** Agregado de health da carteira (Fase 1). */
+  healthAggregate: HealthAggregate;
   rows: ClienteAccountRow[];
   total: number;
   generatedAt: string;
@@ -739,6 +787,8 @@ export interface ClienteDetailResponse {
     candidates: Array<{ id: string; name: string | null; email: string; role: string }>;
   };
   nextAction: string;
+  /** Motor de Health estratégico (Fase 1) — breakdown por dimensão + playbook. */
+  health: HealthBreakdown;
   links: { izaConversations: string | null };
   generatedAt: string;
 }
