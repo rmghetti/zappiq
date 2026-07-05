@@ -489,10 +489,15 @@ model Message {
   isFromBot         Boolean          @default(false)
   aiConfidence      Float?
   metadata          Json?
+  // W2.4 — vínculo da mensagem OUTBOUND com a campanha que a originou.
+  // ON DELETE SET NULL: apagar a campanha preserva o histórico de mensagens.
+  campaignId        String?
+  campaign          Campaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   createdAt         DateTime         @default(now())
 
   @@index([conversationId])
   @@index([createdAt])
+  @@index([campaignId])
   @@map("messages")
 }
 
@@ -512,6 +517,7 @@ model Campaign {
   failedCount    Int            @default(0)
   organizationId String
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messages       Message[]
   createdAt      DateTime       @default(now())
   completedAt    DateTime?
 
