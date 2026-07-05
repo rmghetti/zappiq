@@ -35,7 +35,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
   try {
     const orgId = req.organizationId!;
     const { since, until, label } = getRange(req.query);
-    const cacheKey = `analytics:overview:v5:${orgId}:${label}`;
+    const cacheKey = `analytics:overview:v6:${orgId}:${label}`;
 
     const cached = await redis.get(cacheKey).catch(() => null);
     if (cached) { res.json(JSON.parse(cached)); return; }
@@ -118,6 +118,9 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
     const pTotalResolved = pAiResolved + pHumanResolved;
     const pOutbound = pBot + pHumanOut;
     const prev = {
+      // Volume de mensagens da janela anterior — habilita o delta REAL do KPI
+      // "Mensagens" na home (antes era "+12,5%" hardcoded).
+      totalMessages: pTotal,
       automationRate: pTotal > 0 ? Math.min(100, Math.round((pBot / pTotal) * 100)) : 0,
       iaShare: pOutbound > 0 ? Math.round((pBot / pOutbound) * 100) : 0,
       aiResolvedRate: pTotalResolved > 0 ? Math.round((pAiResolved / pTotalResolved) * 100) : 0,
