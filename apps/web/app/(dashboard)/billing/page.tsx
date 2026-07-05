@@ -21,10 +21,39 @@ const PLANS: PlanConfig[] = listActivePlans();
 
 type BillingCycle = 'monthly' | 'annual';
 
+type UsageMetric = { used: number; limit: number };
+type BillingUsage = {
+  planId: string;
+  period: string;
+  conversas: UsageMetric;
+  atendentes: UsageMetric;
+  docs: UsageMetric;
+  aiMessages: UsageMetric;
+};
+
 export default function BillingPage() {
   const { organization } = useAuthStore();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [cycle, setCycle] = useState<BillingCycle>('monthly');
+  const [usage, setUsage] = useState<BillingUsage | null>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await api.get('/api/billing/usage');
+        if (active && res?.data) setUsage(res.data as BillingUsage);
+      } catch {
+        // fail-soft: sem uso, a UI mostra estado vazio ao inves de mock
+      } finally {
+        if (active) setUsageLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function handleCheckout(planId: string, billingCycle: BillingCycle) {
     setLoadingPlan(planId);
@@ -233,38 +262,54 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Usage info */}
+      {/* Usage info — dados REAIS via GET /api/billing/usage (FIX W3.1) */}
       <div className="mt-8 bg-white rounded-xl border border-gray-100 p-6">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Uso do plano atual</h3>
-        <div className="grid grid-cols-3 gap-6">
-          <div>
-            <p className="text-xs text-gray-500 mb-1">Conversas este mes</p>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-primary-500 rounded-full" style={{ width: '34%' }} />
-              </div>
-              <span className="text-sm font-semibold text-gray-700">340 / 1.000</span>
-            </div>
+        {usageLoading ? (
+          <p className="text-sm text-gray-400">Carregando uso...</p>
+        ) : !usage ? (
+          <p className="text-sm text-gray-400">Nao foi possivel carregar o uso agora.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+            <UsageBar label="Conversas este mes" metric={usage.conversas} colorClass="bg-primary-500" />
+            <UsageBar label="Atendentes" metric={usage.atendentes} colorClass="bg-secondary-500" />
+            <UsageBar label="Documentos na base" metric={usage.docs} colorClass="bg-accent-500" />
+            <UsageBar label="Mensagens de IA" metric={usage.aiMessages} colorClass="bg-primary-500" />
           </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-1">Atendentes</p>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-secondary-500 rounded-full" style={{ width: '20%' }} />
-              </div>
-              <span className="text-sm font-semibold text-gray-700">1 / 5</span>
-            </div>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-1">Documentos na base</p>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-accent-500 rounded-full" style={{ width: '60%' }} />
-              </div>
-              <span className="text-sm font-semibold text-gray-700">3 / 5</span>
-            </div>
-          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UsageBar({
+  label,
+  metric,
+  colorClass,
+}: {
+  label: string;
+  metric: { used: number; limit: number };
+  colorClass: string;
+}) {
+  const unlimited = metric.limit < 0;
+  const pct = unlimited
+    ? 0
+    : metric.limit === 0
+      ? metric.used > 0
+        ? 100
+        : 0
+      : Math.min(100, Math.round((metric.used / metric.limit) * 100));
+  const fmt = (n: number) => n.toLocaleString('pt-BR');
+  return (
+    <div>
+      <p className="text-xs text-gray-500 mb-1">{label}</p>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div className={`h-full ${colorClass} rounded-full`} style={{ width: `${unlimited ? 100 : pct}%` }} />
         </div>
+        <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">
+          {unlimited ? `${fmt(metric.used)} / ilimitado` : `${fmt(metric.used)} / ${fmt(metric.limit)}`}
+        </span>
       </div>
     </div>
   );

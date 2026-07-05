@@ -4,6 +4,8 @@ import { prisma } from '@zappiq/database';
 import { STRIPE_V4_PRICES, STRIPE_V4_MODE } from '@zappiq/shared';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import { getUsage } from '../middleware/planLimits.js';
+import { computeBillingUsage } from './billingUsage.util.js';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 const router = Router();
@@ -187,6 +189,47 @@ router.get('/portal', async (req: Request, res: Response, next: NextFunction) =>
     });
 
     res.json({ success: true, url: session.url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/billing/usage
+// FIX W3.1 — uso REAL do periodo corrente vs limite do plano do tenant.
+// Substitui o mock hardcoded (340/1000, 1/5, 3/5) do billing/page.tsx.
+// Retorna { conversas, atendentes, docs, aiMessages }, cada um { used, limit }.
+router.get('/usage', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId;
+    if (!orgId) {
+      res.status(401).json({ error: 'organization context missing' });
+      return;
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { plan: true },
+    });
+
+    const usage = await computeBillingUsage(org?.plan, {
+      // Conversas criadas no mes corrente.
+      countConversations: (start, end) =>
+        prisma.conversation
+          .count({ where: { organizationId: orgId, createdAt: { gte: start, lt: end } } })
+          .catch(() => 0),
+      // Atendentes = seats de usuario da org.
+      countAgents: () =>
+        prisma.user.count({ where: { organizationId: orgId } }).catch(() => 0),
+      // Docs na base RAG (KBDocument via KnowledgeBase da org).
+      countDocs: () =>
+        prisma.kBDocument
+          .count({ where: { knowledgeBase: { organizationId: orgId } } })
+          .catch(() => 0),
+      // Mensagens de IA no ciclo — mesmo contador Redis do enforcement de quota.
+      getAiMessagesUsage: () => getUsage(orgId, 'aiMessagesPerMonth').catch(() => 0),
+    });
+
+    res.json({ success: true, data: usage });
   } catch (err) {
     next(err);
   }
