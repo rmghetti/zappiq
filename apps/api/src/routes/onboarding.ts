@@ -9,6 +9,7 @@ import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
 import { buildKnowledgeBase, surveyDocFilename } from '../services/knowledgeBaseBuilder.js';
 import { ensureLiveAgentForOrg } from '../services/agentProvisioningService.js';
+import { seedDefaultPipelineStages } from '../services/pipelineStageProvisioningService.js';
 
 const router = Router();
 
@@ -188,6 +189,13 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
         organizationId: org.id,
         settings: (org.settings ?? {}) as Record<string, any>,
       });
+
+      // Fix W3.5 — semeia os 7 PipelineStage default na MESMA transação.
+      // Antes os estágios só existiam via backfill da migração 20260524, então
+      // orgs criadas depois (incl. CMJ) nasciam SEM estágios e o "mover pra
+      // Proposta" / sync de stageId em PUT /deals/:id/stage falhava em
+      // silêncio. Idempotente por org.
+      await seedDefaultPipelineStages(org.id, tx);
 
       return { org, user };
     });

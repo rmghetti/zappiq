@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js';
 import { signToken, signRefreshToken, verifyRefreshToken } from '../utils/token.js';
 import { validate } from '../middleware/validate.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { seedDefaultPipelineStages } from '../services/pipelineStageProvisioningService.js';
 
 const router = Router();
 
@@ -59,6 +60,12 @@ router.post('/register', validate(registerSchema), async (req: Request, res: Res
         },
         select: { id: true, email: true, name: true, role: true, organizationId: true },
       });
+
+      // Fix W3.5 — semeia os 7 PipelineStage default na MESMA transação.
+      // Antes os estágios só existiam via backfill da migração 20260524, então
+      // orgs criadas depois nasciam SEM estágios e o sync de stageId em
+      // PUT /deals/:id/stage falhava em silêncio. Idempotente por org.
+      await seedDefaultPipelineStages(org.id, tx);
 
       return { org, user };
     });
