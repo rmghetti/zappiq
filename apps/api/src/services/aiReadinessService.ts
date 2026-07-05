@@ -25,11 +25,27 @@
  *   20  —  Q&A estruturado ativo (4pt a cada 3 pares até 20pt, teto).
  *   5   —  WhatsApp conectado (1 ou mais números).
  *
+ * ── Gate de RAG real (W3.8) ─────────────────────────────
+ *   As linhas em kb_documents / qa_pairs no Postgres NÃO garantem que a IA
+ *   consegue usar aquele conteúdo — ela só o enxerga via retrieval no serviço
+ *   RAG (rag_chunks, namespace org_<orgId>). Antes deste fix, 45 dos 100 pontos
+ *   (25 docs + 20 Q&A) contavam linhas do Postgres que, com o RAG antes morto,
+ *   nunca viravam chunks — o score era "teatro". Agora docs/Q&A só pontuam se
+ *   houver CHUNKS REAIS no namespace da org. Assim o readiness (e o Health da
+ *   Área Clientes que lê esse score) reflete o que a IA REALMENTE usa.
+ *
+ *   Distinção doc vs Q&A por source: a rota de Q&A ingere com source
+ *   `qa-<id>.txt` (ver routes/aiTraining.ts); documentos usam o filename/URL.
+ *   Então gate de docs = existência de chunks de source NÃO-qa; gate de Q&A =
+ *   existência de chunks de source qa-*.
+ *
  * Recomendações geradas:
  *   O service também retorna a lista de próximas ações sugeridas — base
  *   para o "guia de maturação" no UI (checklist estilo Duolingo).
  */
 import { prisma } from '@zappiq/database';
+import { namespaceFor } from './ragService.js';
+import { logger } from '../utils/logger.js';
 
 export interface AIReadinessResult {
   score: number;                 // 0..100
@@ -54,7 +70,34 @@ export interface AIReadinessResult {
     qaPairsCount: number;
     surveyAnswers: number;
     whatsappConnections: number;
+    // Chunks REAIS indexados no RAG por namespace (o que a IA consegue usar).
+    // docChunks = chunks de documentos/URLs; qaChunks = chunks de Q&A (source qa-*).
+    docChunks: number;
+    qaChunks: number;
   };
+}
+
+/**
+ * Pontuação de documentos (0..25) a partir da contagem de docs.
+ * Gate W3.8: sem chunks REAIS de documento no RAG, a IA não enxerga nada —
+ * então o score é 0 mesmo que existam linhas em kb_documents. Puro (testável).
+ */
+export function documentsScoreFor(documentsCount: number, docChunks: number): number {
+  if (docChunks <= 0) return 0; // nada indexado no RAG → IA não usa → 0 pontos
+  let s = 0;
+  if (documentsCount >= 1) s += 10;
+  if (documentsCount >= 2) s += Math.min(15, (documentsCount - 1) * 5);
+  return Math.min(25, s);
+}
+
+/**
+ * Pontuação de Q&A (0..20) a partir da contagem de pares ativos.
+ * Gate W3.8: sem chunks REAIS de Q&A no RAG (source qa-*), a IA não recupera
+ * essas respostas — score 0. Puro (testável).
+ */
+export function qaScoreFor(qaPairsCount: number, qaChunks: number): number {
+  if (qaChunks <= 0) return 0; // nada indexado no RAG → IA não usa → 0 pontos
+  return Math.min(20, Math.floor(qaPairsCount / 3) * 4);
 }
 
 function levelFromScore(score: number): AIReadinessResult['level'] {
@@ -113,21 +156,23 @@ export async function computeAIReadiness(organizationId: string): Promise<AIRead
   }).length;
   const identityScore = Math.min(20, identityFilled * 4);
 
+  // Gate W3.8: chunks REAIS indexados no RAG por namespace. docs/Q&A só pontuam
+  // se a IA de fato consegue recuperar aquele conteúdo (senão o score é teatro).
+  const { docChunks, qaChunks } = await countRagChunksByNamespace(organizationId);
+
   // ── 3. Documentos/URLs ingeridos (até 25 pontos) ──────
   const documentsCount = await prisma.kBDocument.count({
     where: { knowledgeBase: { organizationId } },
   });
-  let documentsScore = 0;
-  if (documentsCount >= 1) documentsScore += 10;
-  if (documentsCount >= 2) documentsScore += Math.min(15, (documentsCount - 1) * 5);
-  documentsScore = Math.min(25, documentsScore);
+  // Só pontua se há chunks REAIS de documento no RAG (docChunks > 0).
+  const documentsScore = documentsScoreFor(documentsCount, docChunks);
 
   // ── 4. Q&A ativos (até 20 pontos) ─────────────────────
   const qaPairsCount = await (prisma as any).QAPair.count({
     where: { organizationId, isActive: true },
   });
-  // 4pt a cada 3 Q&As ativos, teto 20.
-  const qaScore = Math.min(20, Math.floor(qaPairsCount / 3) * 4);
+  // 4pt a cada 3 Q&As ativos, teto 20 — mas só se há chunks REAIS de Q&A no RAG.
+  const qaScore = qaScoreFor(qaPairsCount, qaChunks);
 
   // ── 5. Canal conectado (5 pontos) — WhatsApp e/ou Instagram ────────────
   // Conta a CONFIGURAÇÃO salva (phoneNumberId+token de WA, accountId+token de IG)
@@ -188,25 +233,36 @@ export async function computeAIReadiness(organizationId: string): Promise<AIRead
   }
 
   if (documentsScore < 25) {
+    // Caso "teatro": há docs no Postgres mas nenhum chunk indexado no RAG —
+    // a IA não consegue usar esse material. Sinaliza reindexação, não novo upload.
+    const docsNotIndexed = documentsCount > 0 && docChunks === 0;
     nextActions.push({
       id: 'upload_documents',
-      title: 'Envie documentos, contratos e materiais do seu negócio',
-      description:
-        'PDFs, URLs, planilhas, contratos, FAQ, políticas, catálogos. Tudo que sua equipe já consulta deve alimentar a IA. Sem limite de uploads no plano atual.',
+      title: docsNotIndexed
+        ? 'Reprocesse seus documentos para a IA'
+        : 'Envie documentos, contratos e materiais do seu negócio',
+      description: docsNotIndexed
+        ? 'Seus documentos foram enviados mas ainda não estão indexados na base da IA, então ela não consegue usá-los nas respostas. Reenvie ou reprocesse para que virem conhecimento consultável.'
+        : 'PDFs, URLs, planilhas, contratos, FAQ, políticas, catálogos. Tudo que sua equipe já consulta deve alimentar a IA. Sem limite de uploads no plano atual.',
       impact: 25 - documentsScore,
-      cta: 'Enviar documentos',
+      cta: docsNotIndexed ? 'Reprocessar documentos' : 'Enviar documentos',
       completed: false,
     });
   }
 
   if (qaScore < 20) {
+    // Caso "teatro": há Q&A no Postgres mas nenhum chunk qa-* no RAG.
+    const qaNotIndexed = qaPairsCount > 0 && qaChunks === 0;
     nextActions.push({
       id: 'add_qa_pairs',
-      title: 'Crie perguntas e respostas prontas',
-      description:
-        'Use Q&A para fixar respostas exatas a perguntas recorrentes — horário, preços, prazo de entrega. Garante consistência total, sem alucinação.',
+      title: qaNotIndexed
+        ? 'Reprocesse suas perguntas e respostas'
+        : 'Crie perguntas e respostas prontas',
+      description: qaNotIndexed
+        ? 'Suas perguntas e respostas foram cadastradas mas ainda não estão indexadas na base da IA. Reprocesse para que ela possa usá-las nas conversas.'
+        : 'Use Q&A para fixar respostas exatas a perguntas recorrentes — horário, preços, prazo de entrega. Garante consistência total, sem alucinação.',
       impact: 20 - qaScore,
-      cta: 'Criar Q&A',
+      cta: qaNotIndexed ? 'Reprocessar Q&A' : 'Criar Q&A',
       completed: false,
     });
   }
@@ -251,6 +307,8 @@ export async function computeAIReadiness(organizationId: string): Promise<AIRead
       qaPairsCount,
       surveyAnswers: surveyValuesCount,
       whatsappConnections: whatsappConnections > 0 ? 1 : 0,
+      docChunks,
+      qaChunks,
     },
   };
 }
@@ -279,6 +337,53 @@ export async function refreshAIReadiness(organizationId: string): Promise<AIRead
 }
 
 // ── helpers ─────────────────────────────────────────────
+
+export interface RagChunkCounts {
+  docChunks: number;
+  qaChunks: number;
+}
+
+/**
+ * Conta chunks REAIS indexados no serviço RAG para o namespace da org.
+ *
+ * A tabela rag_chunks vive no MESMO Postgres (Supabase) que o resto do schema
+ * (o serviço Python usa o mesmo DATABASE_URL — ver services/rag/main.py), então
+ * consultamos direto via SQL, sem depender de um endpoint de contagem no RAG.
+ *
+ * Separa em docChunks (documentos/URLs) e qaChunks (Q&A, source `qa-*`) porque
+ * o gate de docs e o de Q&A são independentes no score.
+ *
+ * FAIL-SOFT: se a tabela não existir (dev sem RAG provisionado) ou a query
+ * falhar, retorna 0/0. Isso NÃO derruba o readiness — apenas não concede os
+ * pontos de docs/Q&A, que é exatamente o comportamento seguro (não inflar o
+ * score com conteúdo que a IA comprovadamente não consegue recuperar).
+ */
+export async function countRagChunksByNamespace(
+  organizationId: string,
+): Promise<RagChunkCounts> {
+  const namespace = namespaceFor(organizationId);
+  try {
+    const rows = await prisma.$queryRaw<Array<{ is_qa: boolean; n: bigint | number }>>`
+      SELECT (source LIKE 'qa-%') AS is_qa, COUNT(*)::int AS n
+      FROM rag_chunks
+      WHERE namespace = ${namespace}
+      GROUP BY (source LIKE 'qa-%')
+    `;
+    let docChunks = 0;
+    let qaChunks = 0;
+    for (const r of rows) {
+      const n = Number(r.n) || 0;
+      if (r.is_qa) qaChunks += n;
+      else docChunks += n;
+    }
+    return { docChunks, qaChunks };
+  } catch (err: any) {
+    // Ex.: relação rag_chunks inexistente em ambientes sem RAG. Não é fatal.
+    logger.warn(`[AIReadiness] contagem de rag_chunks falhou (ns=${namespace}): ${err?.message}`);
+    return { docChunks: 0, qaChunks: 0 };
+  }
+}
+
 function countFilledAnswers(surveyAnswers: Record<string, any>): number {
   let count = 0;
   for (const value of Object.values(surveyAnswers || {})) {
