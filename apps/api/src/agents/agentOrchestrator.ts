@@ -78,6 +78,40 @@ export function shouldSkipForHumanHandoff(conv: {
   return false;
 }
 
+/**
+ * FEATURE 5a.5 — Opt-out automático no inbound (LGPD/Meta).
+ *
+ * Obrigação legal (LGPD) e proteção do número contra ban (política Meta): quando
+ * o cliente final manda uma palavra de descadastramento (SAIR, PARAR, STOP,
+ * CANCELAR, DESCADASTRAR), o sistema DEVE setar consentMarketing=false e parar de
+ * mandar marketing — sem passar pela IA.
+ *
+ * Regra de detecção (conservadora, pra evitar falso-positivo):
+ *   - case-insensitive
+ *   - a MENSAGEM INTEIRA (trimada) precisa ser SÓ a palavra-chave, opcionalmente
+ *     cercada de pontuação/espaços (ex.: "SAIR", "parar.", "  Stop!").
+ *   - uma frase que apenas CONTÉM a palavra no meio NÃO dispara
+ *     (ex.: "não quero sair de casa" → false).
+ *
+ * Função pura e testável — sem I/O. Retorna true se a mensagem é opt-out.
+ */
+const OPT_OUT_KEYWORDS = ['SAIR', 'PARAR', 'STOP', 'CANCELAR', 'DESCADASTRAR'] as const;
+
+export function isOptOutMessage(text: string | null | undefined): boolean {
+  if (!text) return false;
+  // Normaliza: remove acentos (DESCADASTRÁR → DESCADASTRAR), tira pontuação de
+  // borda e espaços, e compara maiúsculo. Só consideramos opt-out quando a
+  // mensagem inteira É a palavra — não quando ela aparece embutida numa frase.
+  const normalized = text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // strip diacríticos
+    .trim()
+    .replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '') // pontuação/espaço de borda
+    .toUpperCase();
+  if (!normalized) return false;
+  return (OPT_OUT_KEYWORDS as readonly string[]).includes(normalized);
+}
+
 export async function processIncomingMessage(input: ProcessMessageInput): Promise<void> {
   const { organizationId, conversationId, contactId, contactPhone, contactName, whatsappMessageId, orgSettings, mediaId } = input;
   // W2.1: se o caller não passou io (ex.: worker BullMQ, onde io não é
@@ -226,6 +260,63 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // ── 2.5. Handle outros não-textos (image, document, video, location) ─
     if (messageType !== 'text' && messageType !== 'button_reply' && messageType !== 'list_reply') {
       await handleNonTextMessage(contactPhone, messageType, waCreds);
+      return;
+    }
+
+    // ── 2.6. Opt-out de marketing (LGPD / política Meta) — FEATURE 5a.5 ──
+    // Obrigação legal + proteção do número contra ban: se o cliente mandou
+    // SAIR/PARAR/STOP/CANCELAR/DESCADASTRAR (palavra isolada), descadastra o
+    // contato (consentMarketing=false) e confirma o opt-out — SEM passar pela
+    // IA e SEM seguir mandando marketing. campaignDispatch já filtra por
+    // consentMarketing=true, então limpar a flag exclui o contato de campanhas.
+    if (isOptOutMessage(messageContent)) {
+      logger.info(`[Agent] Opt-out detectado de ${contactPhone} — descadastrando marketing`, {
+        organizationId, contactId,
+      });
+      try {
+        await prisma.contact.update({
+          where: { id: contactId },
+          data: { consentMarketing: false, consentMarketingAt: new Date() },
+        });
+      } catch (err) {
+        logger.warn('[Agent] Falha ao setar consentMarketing=false no opt-out', { err });
+      }
+
+      const optOutReply =
+        orgSettings?.optOutMessage ||
+        'Pronto, você foi descadastrado e não vai mais receber nossas mensagens de marketing. Se mudar de ideia, é só nos escrever.';
+
+      try {
+        // Channel-agnostic (WhatsApp / Instagram) — mesma via da resposta normal.
+        await sendReplyText({ organizationId, conversationId, content: optOutReply });
+        await prisma.message.create({
+          data: {
+            direction: 'OUTBOUND',
+            type: 'TEXT',
+            content: optOutReply,
+            status: 'SENT',
+            conversationId,
+            isFromBot: true,
+            aiConfidence: 1.0,
+          },
+        });
+      } catch (err) {
+        logger.error('[Agent] Falha ao enviar confirmação de opt-out', { err });
+      }
+
+      if (io) {
+        io.to(`org:${organizationId}`).emit('new_message', {
+          conversationId,
+          message: {
+            content: optOutReply,
+            direction: 'OUTBOUND',
+            isFromBot: true,
+            createdAt: new Date().toISOString(),
+          },
+        });
+      }
+
+      // Curto-circuito: não seguimos pro motor de venda / LLM.
       return;
     }
 
