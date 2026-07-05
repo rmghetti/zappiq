@@ -32,6 +32,8 @@ import { mrrCentsForPlan } from './stripeWebhook.util.js';
 import {
   buildAccountRow,
   computeKpis,
+  computeHealthBreakdown,
+  computeHealthAggregate,
   type AccountRawInput,
   type ClienteAccountRow,
 } from './adminClientes.util.js';
@@ -180,12 +182,14 @@ async function listHandler(req: Request, res: Response, next: NextFunction) {
     const stagingFilteredCount = allRows.length - rows.length;
 
     const kpis = computeKpis(rows, now);
+    const healthAggregate = computeHealthAggregate(rows);
 
     res.json({
       period,
       includeStaging,
       stagingFilteredCount,
       kpis,
+      healthAggregate,
       rows,
       total: rows.length,
       generatedAt: now.toISOString(),
@@ -442,6 +446,19 @@ async function detailHandler(req: Request, res: Response, next: NextFunction) {
     const stripeCustomerId = (org as any)?.stripeCustomerId ?? null;
     const stripeSubscriptionId = (org as any)?.stripeSubscriptionId ?? null;
 
+    // Motor de Health estratégico (Fase 1): breakdown por dimensão + playbook.
+    // Reusa os MESMOS sinais da row canônica (stage/uso/adoção/margem) + trial.
+    const health = computeHealthBreakdown(
+      {
+        aiReadinessScore: org?.aiReadinessScore ?? null,
+        aiMessagesProcessed: usage.aiMessagesProcessed,
+        grossMarginPercent: usage.grossMarginPercent,
+        stage: row.stage,
+        trialDaysLeft: row.trialDaysLeft,
+      },
+      account.organizationId ?? null,
+    );
+
     res.json({
       // A — identidade / firmográfico
       identity: {
@@ -515,6 +532,8 @@ async function detailHandler(req: Request, res: Response, next: NextFunction) {
         candidates: org?.users?.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role })) ?? [],
       },
       nextAction: buildNextAction(row),
+      // Motor de Health estratégico (Fase 1) — breakdown + playbook acionável.
+      health,
       // links úteis (F — conversas)
       links: {
         izaConversations: account.organizationId
