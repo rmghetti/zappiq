@@ -7,7 +7,7 @@ import { Logo } from './Logo';
 import {
   LayoutDashboard, MessageSquare, Users, Megaphone, BarChart3,
   GitBranch, Settings, CreditCard, Target, LogOut, ChevronLeft, ChevronRight,
-  ShieldCheck, FileLock, Sparkles, FileText,
+  ShieldCheck, FileLock, Sparkles, FileText, ListChecks,
   // Admin Plataforma (SUPERADMIN) icons
   Activity, TrendingUp, Bot, UserCheck, DollarSign, Building2,
   // FASE 2.2b — Qualidade da IA (cliente)
@@ -21,6 +21,9 @@ const navItems = [
   { href: '/conversations', label: 'Conversas', icon: MessageSquare },
   { href: '/contacts', label: 'Contatos', icon: Users },
   { href: '/crm', label: 'CRM', icon: Target },
+  // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA. A automação (crmAutomationService)
+  // já cria Tasks quando detecta intenção de compra; aqui a PME finalmente as vê e conclui.
+  { href: '/tasks', label: 'Tarefas', icon: ListChecks },
   { href: '/campaigns', label: 'Campanhas', icon: Megaphone },
   // FEATURE 5b.2 — gestão de templates de WhatsApp (aprovados pela Meta;
   // alimentam o seletor de campanha e o reengajamento fora da janela de 24h).
