@@ -4,6 +4,7 @@ import { PLAN_CONFIG, type PlanId, type PlanLimits } from '@zappiq/shared';
 import { cache } from '../services/cloud/index.js';
 import { logger } from '../utils/logger.js';
 import { reportOverageMeterEvent, estimateOverageBrl } from '../services/quotaOverageService.js';
+import { env } from '../config/env.js';
 
 // PR #V4-005.3: migrado de redis direto pra abstração cloud-agnostic (cache).
 // cache.incrby / cache.incrbyfloat / cache.get / cache.expire são fail-soft
@@ -250,6 +251,127 @@ export async function checkLimit(
     isOverage: true,
     overageDelta: delta,
   };
+}
+
+/**
+ * W2.5 — Gate de quota no pipeline de resposta da IA.
+ * ─────────────────────────────────────────────────────────────────
+ * Chamado de dentro do agentOrchestrator ANTES de gerar/enviar a
+ * resposta da IA ao inbound. Consome 1 crédito de aiMessagesPerMonth.
+ *
+ * Respeita QUOTA_OVERAGE_MODE (env, default 'audit_only'):
+ *   - 'audit_only': NUNCA bloqueia. Registra uso, e se estourou o
+ *     plano loga alerta + reporta meter_event (fail-soft). Retorna
+ *     sempre { allowed: true }. É o comportamento atual (audita, não
+ *     interrompe a resposta).
+ *   - 'enforce': honra a decisão de checkLimit. Se checkLimit negar
+ *     (limite atingido sem autoOverage/grace, ou teto hardCeiling
+ *     estourado), retorna { allowed: false } — o orchestrator pausa a
+ *     resposta. Se checkLimit permitir (dentro do plano, grace, ou
+ *     overage opt-in), consome o crédito e reporta overage quando for
+ *     o caso.
+ *
+ * Fail-soft: qualquer exceção interna libera a resposta (prefere
+ * servir a bloquear). Nunca lança.
+ */
+export async function enforceAiReplyQuota(
+  orgId: string,
+  delta = 1,
+): Promise<{
+  allowed: boolean;
+  mode: 'audit_only' | 'enforce';
+  reason?: string;
+  limit?: number;
+  current?: number;
+  planId?: PlanId;
+  isOverage?: boolean;
+}> {
+  const mode = env.QUOTA_OVERAGE_MODE;
+  try {
+    const check = await checkLimit(orgId, 'aiMessagesPerMonth', delta);
+
+    // ── audit_only: nunca bloqueia. Só registra/alerta. ──────────────
+    if (mode !== 'enforce') {
+      if (!check.allowed) {
+        // checkLimit negaria (block hard), mas em audit_only servimos e
+        // apenas auditamos que houve estouro.
+        logger.warn(
+          `[planLimits] AUDIT overage (não bloqueia) org=${orgId} kind=aiMessagesPerMonth ${check.current}/${check.limit} plan=${check.planId}`,
+        );
+      }
+      await incrementUsage(orgId, 'aiMessagesPerMonth', delta);
+      maybeReportOverage(orgId, check);
+      return {
+        allowed: true,
+        mode,
+        limit: check.limit,
+        current: check.current,
+        planId: check.planId,
+        isOverage: !check.allowed || check.isOverage,
+      };
+    }
+
+    // ── enforce: honra a decisão de checkLimit ───────────────────────
+    if (!check.allowed) {
+      logger.warn(
+        `[planLimits] ENFORCE block org=${orgId} kind=aiMessagesPerMonth ${check.current}/${check.limit} plan=${check.planId} reason=${check.reason}`,
+      );
+      return {
+        allowed: false,
+        mode,
+        reason: check.reason,
+        limit: check.limit,
+        current: check.current,
+        planId: check.planId,
+      };
+    }
+
+    await incrementUsage(orgId, 'aiMessagesPerMonth', delta);
+    maybeReportOverage(orgId, check);
+    return {
+      allowed: true,
+      mode,
+      limit: check.limit,
+      current: check.current,
+      planId: check.planId,
+      isOverage: check.isOverage,
+    };
+  } catch (err: any) {
+    // Fail-soft: nunca derruba a resposta da IA por erro de quota.
+    logger.error(`[planLimits] enforceAiReplyQuota error org=${orgId}: ${err?.message ?? err}`);
+    return { allowed: true, mode };
+  }
+}
+
+/**
+ * Dispara meter_event de overage (fire-and-forget, fail-soft) quando a
+ * checagem marcou overage. reportOverageMeterEvent já gateia por
+ * QUOTA_OVERAGE_MODE internamente (skip 'mode_audit_only' em audit).
+ */
+function maybeReportOverage(
+  orgId: string,
+  check: { isOverage?: boolean; overageDelta?: number; allowed?: boolean },
+): void {
+  const overageCount =
+    check.overageDelta && check.overageDelta > 0
+      ? check.overageDelta
+      : check.isOverage || check.allowed === false
+        ? 1
+        : 0;
+  if (overageCount <= 0) return;
+  reportOverageMeterEvent({ orgId, count: overageCount })
+    .then((r) => {
+      if (r.reported) {
+        logger.info(
+          `[planLimits] overage reportado org=${orgId} count=${overageCount} eventId=${r.meterEventId}`,
+        );
+      } else if (r.skipped !== 'mode_audit_only') {
+        logger.warn(`[planLimits] overage NAO reportado org=${orgId} reason=${r.skipped}`);
+      }
+    })
+    .catch((err) => {
+      logger.warn(`[planLimits] overage report exception: ${err?.message ?? err}`);
+    });
 }
 
 /**

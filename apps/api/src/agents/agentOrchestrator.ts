@@ -24,6 +24,7 @@ import { executeFlowEffects } from './flowEffects.js';
 import { runAgenticTurn } from './flowAiAgent.js';
 import { buildWebhookToolDef, executeWebhook, type WebhookToolConfig } from './webhookTool.js';
 import { getIo } from '../utils/socketRegistry.js';
+import { enforceAiReplyQuota } from '../middleware/planLimits.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
 /* ── Org canônica da Iza (dogfood ZappIQ) ─────────────────────────────
@@ -243,6 +244,21 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // ── 5. Check for handoff request ────────────────────
     if (intent === 'request_human') {
       await handleHandoff(organizationId, contactPhone, contactId, orgSettings, io);
+      return;
+    }
+
+    // ── 5.5. W2.5 — Gate de quota (aiMessagesPerMonth) ──────────────
+    // A IA decidiu responder ao inbound: consome 1 crédito do plano ANTES
+    // de gastar LLM. Respeita QUOTA_OVERAGE_MODE:
+    //   - audit_only (default): registra/alerta, NUNCA bloqueia.
+    //   - enforce: pausa a resposta ao exceder o limite do plano.
+    // Fail-soft por contrato (enforceAiReplyQuota nunca lança).
+    const quota = await enforceAiReplyQuota(organizationId);
+    if (!quota.allowed) {
+      logger.warn(
+        `[Agent] Resposta pausada por quota (enforce) org=${organizationId} ${quota.current}/${quota.limit} plan=${quota.planId}`,
+        { contactPhone },
+      );
       return;
     }
 
