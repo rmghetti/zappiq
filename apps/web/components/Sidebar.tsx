@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Logo } from './Logo';
 import {
   LayoutDashboard, MessageSquare, Users, Megaphone, BarChart3,
-  GitBranch, BookOpen, Settings, CreditCard, Target, LogOut, ChevronLeft, ChevronRight,
+  GitBranch, Settings, CreditCard, Target, LogOut, ChevronLeft, ChevronRight,
   ShieldCheck, FileLock, Sparkles,
   // Admin Plataforma (SUPERADMIN) icons
   Activity, TrendingUp, Bot, UserCheck, DollarSign, Building2,
@@ -26,7 +26,6 @@ const navItems = [
   // publicar liga maestro.enabled na org e o gate suporta FIRST_CONTACT/KEYWORD.
   { href: '/flows', label: 'Maestro', icon: GitBranch },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/knowledge-base', label: 'Base de Conhecimento', icon: BookOpen },
   // PR #106 — Treinar IA destacado: principal entry point pra evolução contínua do agente.
   { href: '/ai-training', label: 'Treinar IA', icon: Sparkles, highlight: true },
   // FASE 2.2b #244 — Qualidade da IA do cliente (dashboard + auto-fix + audit).

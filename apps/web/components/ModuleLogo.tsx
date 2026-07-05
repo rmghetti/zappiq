@@ -135,7 +135,6 @@ const ROUTE_MAP: Record<string, string | null> = {
   '/campaigns':         'spark',
   '/flows':             'forge',
   '/analytics':         'radar',
-  '/knowledge-base':    'pulse',
   '/ai-training':       'training',
   '/treinar/qualidade': 'quality',
   '/settings':          null,
