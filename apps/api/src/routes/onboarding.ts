@@ -8,6 +8,7 @@ import { signToken, signRefreshToken } from '../utils/token.js';
 import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
 import { buildKnowledgeBase, surveyDocFilename } from '../services/knowledgeBaseBuilder.js';
+import { ensureLiveAgentForOrg } from '../services/agentProvisioningService.js';
 
 const router = Router();
 
@@ -177,6 +178,15 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
           name: `Base Principal — ${businessName}`,
           organizationId: org.id,
         },
+      });
+
+      // W1.5 — semeia o Agent live 'comercial' da org na MESMA transação.
+      // Sem isto o orchestrator caía sempre no fallback do promptEngine e a
+      // tela /treinar/qualidade (que lista/edita o Agent) ficava inacessível.
+      // Dentro da tx: 1 Agent por org garantido na origem, sem duplicar.
+      await ensureLiveAgentForOrg(tx, {
+        organizationId: org.id,
+        settings: (org.settings ?? {}) as Record<string, any>,
       });
 
       return { org, user };
