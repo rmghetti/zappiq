@@ -11,6 +11,12 @@ interface MetricCardProps {
     isPositive: boolean;
   };
   loading?: boolean;
+  /** Torna o card clicável (aplica filtro / navega). */
+  onClick?: () => void;
+  /** Realça o card quando o filtro dele está ativo. */
+  active?: boolean;
+  /** Dica curta mostrada ao passar o mouse (o que o clique faz). */
+  hint?: string;
 }
 
 export function MetricCard({
@@ -19,6 +25,9 @@ export function MetricCard({
   icon: Icon,
   delta,
   loading = false,
+  onClick,
+  active = false,
+  hint,
 }: MetricCardProps) {
   if (loading) {
     return (
@@ -31,8 +40,23 @@ export function MetricCard({
     );
   }
 
+  const clickable = typeof onClick === 'function';
+  const Tag: any = clickable ? 'button' : 'div';
+
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+    <Tag
+      {...(clickable
+        ? {
+            type: 'button',
+            onClick,
+            title: hint,
+            'aria-pressed': active,
+          }
+        : {})}
+      className={`w-full text-left bg-white rounded-lg border p-6 transition-shadow transition-colors ${
+        clickable ? 'cursor-pointer hover:shadow-md hover:border-primary-300' : 'hover:shadow-md'
+      } ${active ? 'border-primary-500 ring-1 ring-primary-500 bg-primary-50/40' : 'border-gray-200'}`}
+    >
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
           <p className="text-sm font-medium text-gray-600 mb-1">{label}</p>
@@ -52,6 +76,6 @@ export function MetricCard({
           <span className="text-gray-500">vs. mês anterior</span>
         </div>
       )}
-    </div>
+    </Tag>
   );
 }
