@@ -26,6 +26,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Smartphone, Instagram, CheckCircle2, Loader2, X, BookOpen,
   CalendarClock, Download, ArrowRight, ShieldCheck, Save, AlertCircle,
+  Activity, PlugZap, RefreshCw,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 
@@ -47,6 +48,17 @@ const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '39909625345376
 const META_GRAPH_VERSION = 'v21.0';
 
 type Activation = 'whatsapp' | 'instagram' | 'both';
+
+// FEATURE 5b.3 — saúde do canal (vem de GET /api/settings/channels/health).
+type ChannelKey = 'whatsapp' | 'instagram';
+interface ChannelHealth {
+  channel: ChannelKey;
+  connected: boolean;
+  qualityRating?: string | null;
+  numberStatus?: string | null;
+  connectedAt?: string | null;
+  disconnectedAt?: string | null;
+}
 
 interface OrgSettingsResponse {
   whatsappPhoneNumberId?: string | null;
@@ -84,6 +96,12 @@ export default function ConectarCanais() {
   const [waConnecting, setWaConnecting] = useState(false);
   const [igConnecting, setIgConnecting] = useState(false);
   const sessionInfoRef = useRef<{ wabaId?: string; phoneNumberId?: string }>({});
+
+  // FEATURE 5b.3 — monitor de saúde + desconexão de canal.
+  const [health, setHealth] = useState<ChannelHealth[]>([]);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [disconnecting, setDisconnecting] = useState<ChannelKey | null>(null);
+  const [confirmDisconnect, setConfirmDisconnect] = useState<ChannelKey | null>(null);
 
   // Carrega o SDK do Facebook (1x) e escuta o sessionInfo do Embedded Signup.
   useEffect(() => {
@@ -162,7 +180,46 @@ export default function ConectarCanais() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // FEATURE 5b.3 — busca saúde dos canais (conectado/desconectado + quality_rating).
+  const loadHealth = useCallback(async () => {
+    try {
+      setHealthLoading(true);
+      const res = await api.get<{ success: boolean; data: ChannelHealth[] }>('/api/settings/channels/health');
+      setHealth(res?.data || []);
+    } catch {
+      // Fail-soft: sem saúde ao vivo, os cards ficam com o estado do formulário.
+      setHealth([]);
+    } finally {
+      setHealthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); loadHealth(); }, [load, loadHealth]);
+
+  // Desconectar um canal: zera as credenciais na org (revogação). Pede confirmação
+  // antes (o modal seta confirmDisconnect; aqui só executa).
+  const handleDisconnect = useCallback(async (channel: ChannelKey) => {
+    setError(null);
+    setOkMsg(null);
+    setConfirmDisconnect(null);
+    setDisconnecting(channel);
+    try {
+      await api.post(`/api/settings/channels/${channel}/disconnect`);
+      // Reflete o desligamento no formulário local + recarrega tudo do servidor.
+      if (channel === 'whatsapp') { setWaPhone(''); setWaBiz(''); setWaToken(''); }
+      else { setIgAccount(''); setIgPage(''); setIgToken(''); }
+      await Promise.all([load(), loadHealth()]);
+      setOkMsg(
+        channel === 'whatsapp'
+          ? 'WhatsApp desconectado. As credenciais foram removidas e o agente parou de atender por esse canal.'
+          : 'Instagram desconectado. As credenciais foram removidas e o agente parou de atender por esse canal.',
+      );
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao desconectar o canal. Tente novamente.');
+    } finally {
+      setDisconnecting(null);
+    }
+  }, [load, loadHealth]);
 
   const wantWa = activation === 'whatsapp' || activation === 'both';
   const wantIg = activation === 'instagram' || activation === 'both';
@@ -364,6 +421,24 @@ export default function ConectarCanais() {
         <ShieldCheck size={14} className="text-primary-500 shrink-0" />
         Suas credenciais ficam guardadas só na sua organização e são usadas apenas para o agente responder em seu nome.
       </div>
+
+      {/* FEATURE 5b.3 — monitor de saúde dos canais + desconectar */}
+      <ChannelHealthMonitor
+        health={health}
+        loading={healthLoading}
+        disconnecting={disconnecting}
+        onRefresh={loadHealth}
+        onRequestDisconnect={(ch) => setConfirmDisconnect(ch)}
+      />
+
+      {confirmDisconnect && (
+        <ConfirmDisconnectModal
+          channel={confirmDisconnect}
+          busy={disconnecting === confirmDisconnect}
+          onCancel={() => setConfirmDisconnect(null)}
+          onConfirm={() => handleDisconnect(confirmDisconnect)}
+        />
+      )}
 
       {/* Conectar WhatsApp em 1 clique (Embedded Signup) — acima do manual */}
       {wantWa && (
@@ -639,6 +714,162 @@ function TutorialModal({ src, pdfUrl, onClose }: { src: string; pdfUrl: string; 
           title="Tutorial interativo de ativação ZappIQ"
           className="flex-1 w-full border-0"
         />
+      </div>
+    </div>
+  );
+}
+
+// ── FEATURE 5b.3 — Monitor de saúde dos canais ────────────────────────────────
+const CHANNEL_META: Record<ChannelKey, { label: string; icon: React.ReactNode; accent: 'green' | 'pink' }> = {
+  whatsapp: { label: 'WhatsApp Business', icon: <Smartphone size={18} className="text-green-600" />, accent: 'green' },
+  instagram: { label: 'Instagram Direct', icon: <Instagram size={18} className="text-pink-600" />, accent: 'pink' },
+};
+
+// Mapeia o quality_rating do número (Graph API) pra um selo legível.
+function qualityBadge(rating?: string | null): { label: string; cls: string } | null {
+  if (!rating) return null;
+  const r = rating.toUpperCase();
+  if (r === 'GREEN') return { label: 'Qualidade alta', cls: 'text-green-700 bg-green-50 border-green-200' };
+  if (r === 'YELLOW') return { label: 'Qualidade média', cls: 'text-amber-700 bg-amber-50 border-amber-200' };
+  if (r === 'RED') return { label: 'Qualidade baixa', cls: 'text-red-700 bg-red-50 border-red-200' };
+  if (r === 'UNKNOWN') return null;
+  return { label: `Qualidade: ${rating}`, cls: 'text-gray-700 bg-gray-50 border-gray-200' };
+}
+
+function ChannelHealthMonitor({
+  health, loading, disconnecting, onRefresh, onRequestDisconnect,
+}: {
+  health: ChannelHealth[];
+  loading: boolean;
+  disconnecting: ChannelKey | null;
+  onRefresh: () => void;
+  onRequestDisconnect: (ch: ChannelKey) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+          <Activity size={20} className="text-gray-600" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-gray-900">Saúde dos canais</p>
+          <p className="text-xs text-gray-500">Estado da conexão de cada canal e opção de desconectar.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5"
+        >
+          {loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+          Atualizar
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {(['whatsapp', 'instagram'] as ChannelKey[]).map((ch) => {
+          const meta = CHANNEL_META[ch];
+          const h = health.find((x) => x.channel === ch);
+          const connected = !!h?.connected;
+          const badge = qualityBadge(h?.qualityRating);
+          const flagged = (h?.numberStatus || '').toUpperCase() === 'FLAGGED';
+          return (
+            <div
+              key={ch}
+              className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-gray-100 bg-gray-50/60 px-4 py-3"
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                <span className="shrink-0">{meta.icon}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{meta.label}</p>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${
+                        connected
+                          ? 'text-green-700 bg-green-50 border-green-200'
+                          : 'text-gray-500 bg-gray-100 border-gray-200'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      {connected ? 'Conectado' : 'Desconectado'}
+                    </span>
+                    {connected && badge && (
+                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                    )}
+                    {connected && flagged && (
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border text-red-700 bg-red-50 border-red-200">
+                        Número sinalizado pela Meta
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {connected && (
+                <button
+                  type="button"
+                  onClick={() => onRequestDisconnect(ch)}
+                  disabled={disconnecting === ch}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                >
+                  {disconnecting === ch ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} />}
+                  Desconectar
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── FEATURE 5b.3 — Confirmação de desconexão ─────────────────────────────────
+function ConfirmDisconnectModal({
+  channel, busy, onCancel, onConfirm,
+}: {
+  channel: ChannelKey;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const label = CHANNEL_META[channel].label;
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+            <AlertCircle size={20} className="text-red-600" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-900">Desconectar {label}?</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Vamos remover as credenciais deste canal da sua organização. O agente para de
+              atender por {label} até você reconectar. Essa ação não pode ser desfeita —
+              você precisará conectar de novo (1 clique ou manual).
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />}
+            {busy ? 'Desconectando…' : 'Sim, desconectar'}
+          </button>
+        </div>
       </div>
     </div>
   );

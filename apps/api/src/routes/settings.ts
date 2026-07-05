@@ -4,9 +4,48 @@ import { requireRole } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import { trainingFieldsChanged } from '../services/trainingChange.js';
 import { refreshAIReadiness } from '../services/aiReadinessService.js';
+import { logAuditEvent } from '../services/auditService.js';
+import { env } from '../config/env.js';
 import { updateSettingsSchema, redactOrgSecrets } from './settings.schema.js';
+import {
+  isDisconnectableChannel,
+  buildDisconnectData,
+  buildDisconnectSettings,
+  deriveChannelHealth,
+  type Channel,
+  type ChannelHealth,
+} from './settings.channels.js';
 
 const router = Router();
+
+const GRAPH_VERSION = env.WHATSAPP_API_VERSION || 'v21.0';
+
+/**
+ * Busca quality_rating/status do número WhatsApp na Graph API (best-effort).
+ * Nunca lança: qualquer falha (token expirado, número inválido, rede) devolve
+ * null e o caller cai no indicador base (conectado/desconectado). É isso que
+ * evita o "morre em silêncio" — o cliente vê o estado real do número quando dá,
+ * e conectado/desconectado quando não dá.
+ */
+async function fetchWhatsappNumberHealth(
+  phoneNumberId: string,
+  accessToken: string,
+): Promise<{ qualityRating: string | null; numberStatus: string | null }> {
+  try {
+    const url =
+      `https://graph.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(phoneNumberId)}` +
+      `?fields=quality_rating,status`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!r.ok) return { qualityRating: null, numberStatus: null };
+    const body = (await r.json().catch(() => ({}))) as any;
+    return {
+      qualityRating: body?.quality_rating ?? null,
+      numberStatus: body?.status ?? null,
+    };
+  } catch {
+    return { qualityRating: null, numberStatus: null };
+  }
+}
 
 // ── Organization Settings ───────────────────────
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -42,6 +81,72 @@ router.put('/', requireRole('ADMIN'), async (req: Request, res: Response, next: 
     }
     // Consistência com o GET: resposta também sem segredos.
     res.json({ success: true, data: redactOrgSecrets(org) });
+  } catch (err) { next(err); }
+});
+
+// ── Channel Health + Disconnect (FEATURE 5b.3) ──────────────
+// GET /api/settings/channels/health — indicador de saúde por canal.
+// Base: presença de credencial na org (conectado/desconectado). Enriquecimento:
+// pro WhatsApp, tenta buscar quality_rating/status do número na Graph API
+// (best-effort; se falhar, fica só o base).
+router.get('/channels/health', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
+    if (!org) { res.status(404).json({ error: 'Organization not found' }); return; }
+    const health = deriveChannelHealth(org as any);
+
+    // Enriquecimento ao vivo só do WhatsApp (Graph expõe quality_rating do número).
+    const o = org as any;
+    if (health.whatsapp.connected && o.whatsappPhoneNumberId && o.whatsappAccessToken) {
+      const live = await fetchWhatsappNumberHealth(o.whatsappPhoneNumberId, o.whatsappAccessToken);
+      health.whatsapp.qualityRating = live.qualityRating;
+      health.whatsapp.numberStatus = live.numberStatus;
+    }
+
+    const list: ChannelHealth[] = [health.whatsapp, health.instagram];
+    res.json({ success: true, data: list });
+  } catch (err) { next(err); }
+});
+
+// POST /api/settings/channels/:channel/disconnect — revoga (zera) as credenciais
+// do canal na org. LGPD/troca-de-número: sem token, a ZappIQ para de usar o
+// canal na hora. Só ADMIN. Idempotente: desconectar já-desconectado é 200.
+router.post('/channels/:channel/disconnect', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const raw = String(req.params.channel || '').toLowerCase();
+    if (!isDisconnectableChannel(raw)) {
+      res.status(400).json({ error: `Canal inválido: ${req.params.channel}. Use 'whatsapp' ou 'instagram'.` });
+      return;
+    }
+    const channel: Channel = raw;
+    const orgId = req.organizationId!;
+
+    const current = await prisma.organization.findUnique({ where: { id: orgId } });
+    if (!current) { res.status(404).json({ error: 'Organization not found' }); return; }
+
+    const now = new Date().toISOString();
+    const clearedCreds = buildDisconnectData(channel);
+    const newSettings = buildDisconnectSettings(channel, (current.settings as any) || {}, now);
+
+    const org = await prisma.organization.update({
+      where: { id: orgId },
+      data: { ...clearedCreds, settings: newSettings } as any,
+    });
+
+    // Trilha de auditoria: revogação de credencial é evento relevante (LGPD/segurança).
+    // Nunca logamos o token — só o fato + qual canal.
+    await logAuditEvent(req, {
+      action: 'channel.disconnect',
+      resource: 'organization',
+      resourceId: orgId,
+      details: { channel },
+    }).catch(() => null);
+
+    // Canal desconectado muda o AI Readiness (score de canais conectados).
+    await refreshAIReadiness(orgId).catch(() => null);
+
+    logger.info('[settings/channels] desconectado', { orgId, channel });
+    res.json({ success: true, channel, data: redactOrgSecrets(org) });
   } catch (err) { next(err); }
 });
 
