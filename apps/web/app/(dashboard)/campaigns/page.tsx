@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Megaphone, Plus, Send, BarChart2, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Megaphone, Plus, Send, BarChart2, Clock, CheckCircle, XCircle, Trash2 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { CampaignFormModal } from '../../../components/campaigns/CampaignFormModal';
 
@@ -31,6 +31,7 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const fetchCampaigns = useCallback(() => {
     setLoading(true);
@@ -39,6 +40,34 @@ export default function CampaignsPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  // W2.4 — Disparar: enfileira o dispatch da campanha (POST /:id/send).
+  const handleSend = useCallback(async (id: string) => {
+    if (!confirm('Disparar esta campanha agora? As mensagens serão enviadas para os contatos com consentimento de marketing.')) return;
+    setBusyId(id);
+    try {
+      await api.post(`/api/campaigns/${id}/send`);
+      fetchCampaigns();
+    } catch {
+      alert('Não foi possível disparar a campanha.');
+    } finally {
+      setBusyId(null);
+    }
+  }, [fetchCampaigns]);
+
+  // W2.4 — Excluir campanha (DELETE /:id).
+  const handleDelete = useCallback(async (id: string) => {
+    if (!confirm('Excluir esta campanha? Esta ação não pode ser desfeita.')) return;
+    setBusyId(id);
+    try {
+      await api.delete(`/api/campaigns/${id}`);
+      fetchCampaigns();
+    } catch {
+      alert('Não foi possível excluir a campanha.');
+    } finally {
+      setBusyId(null);
+    }
+  }, [fetchCampaigns]);
 
   useEffect(() => {
     fetchCampaigns();
@@ -84,9 +113,30 @@ export default function CampaignsPage() {
                     <h3 className="text-base font-semibold text-gray-900">{c.name}</h3>
                     <p className="text-xs text-gray-400 mt-0.5">{c.type} · {new Date(c.createdAt).toLocaleDateString('pt-BR')}</p>
                   </div>
-                  <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_BADGE[c.status]?.bg || 'bg-gray-100'}`}>
-                    <StatusIcon size={12} /> {c.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_BADGE[c.status]?.bg || 'bg-gray-100'}`}>
+                      <StatusIcon size={12} /> {c.status}
+                    </span>
+                    {/* W2.4 — Disparar só faz sentido em DRAFT/SCHEDULED/CANCELLED */}
+                    {['DRAFT', 'SCHEDULED', 'CANCELLED'].includes(c.status) && (
+                      <button
+                        onClick={() => handleSend(c.id)}
+                        disabled={busyId === c.id}
+                        className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
+                        title="Disparar campanha"
+                      >
+                        <Send size={12} /> Disparar
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(c.id)}
+                      disabled={busyId === c.id}
+                      className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      title="Excluir campanha"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
                 {/* Stats bar */}
                 <div className="grid grid-cols-4 gap-4">
