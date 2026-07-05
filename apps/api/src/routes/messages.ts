@@ -4,6 +4,7 @@ import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { messageSendQueue } from '../services/queueService.js';
 import { withTenant } from '../middleware/rlsTenant.js';
+import { cache } from '../services/cloud/index.js';
 import {
   messagesQuerySchema,
   buildMessagesFindArgs,
@@ -86,6 +87,21 @@ router.post('/:id/messages', async (req: Request, res: Response, next: NextFunct
           isFromBot: false,
         },
       });
+
+      // W3.4 — humano respondeu: assume a conversa e PAUSA a Iza nesta conversa.
+      // Antes, IA e humano falavam com o cliente ao mesmo tempo. Agora o envio
+      // manual atribui (assignedToId) + marca ASSIGNED + aiPaused=true na MESMA
+      // transação do message.create (atomicidade). O orchestrator checa esse
+      // estado antes de responder e não gera autoreply enquanto pausado.
+      await tx.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          assignedToId: req.user!.userId,
+          status: 'ASSIGNED',
+          aiPaused: true,
+        },
+      });
+
       return { conversation, message };
     });
 
@@ -95,6 +111,15 @@ router.post('/:id/messages', async (req: Request, res: Response, next: NextFunct
     }
 
     const { conversation, message } = result;
+
+    // W3.4 — espelha a pausa no cache (fast-path que o orchestrator e o
+    // flowScheduler já consultam: ai_paused:<org>:<phone> com valor != 'autoreply').
+    // fail-soft por contrato; a fonte de verdade durável é conversation.aiPaused.
+    await cache.set(
+      `ai_paused:${req.organizationId}:${conversation.contact.whatsappId}`,
+      'human',
+      60 * 60 * 24 * 7,
+    );
 
     // Enfileira envio via WhatsApp API (BullMQ com rate limit 80/seg)
     await messageSendQueue.add('send', {

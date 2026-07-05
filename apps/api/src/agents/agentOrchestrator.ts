@@ -55,6 +55,29 @@ export interface ProcessMessageInput {
   channel?: 'whatsapp' | 'instagram' | 'web';
 }
 
+/**
+ * W3.4 — decisão pura: a Iza deve pular a resposta porque um humano assumiu?
+ *
+ * Antes, responder como humano (POST manual) NÃO pausava a IA nem atribuía a
+ * conversa: IA e humano falavam com o cliente ao mesmo tempo. Agora o envio
+ * manual (e o PUT /assign) marcam a conversa como ASSIGNED + aiPaused. Esta
+ * função é o guard durável (fonte de verdade no banco), complementar ao
+ * fast-path via cache `ai_paused`. Retorna true quando a IA NÃO deve responder.
+ *
+ * Regra: pausa se aiPaused === true, OU se a conversa está ASSIGNED a um humano
+ * (assignedToId preenchido). status ASSIGNED sem assignee não pausa (defensivo).
+ */
+export function shouldSkipForHumanHandoff(conv: {
+  aiPaused?: boolean | null;
+  status?: string | null;
+  assignedToId?: string | null;
+} | null | undefined): boolean {
+  if (!conv) return false;
+  if (conv.aiPaused === true) return true;
+  if (conv.status === 'ASSIGNED' && !!conv.assignedToId) return true;
+  return false;
+}
+
 export async function processIncomingMessage(input: ProcessMessageInput): Promise<void> {
   const { organizationId, conversationId, contactId, contactPhone, contactName, whatsappMessageId, orgSettings, mediaId } = input;
   // W2.1: se o caller não passou io (ex.: worker BullMQ, onde io não é
@@ -131,6 +154,20 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         logger.info(`[Agent] AI paused for ${contactPhone} (value=${pauseValue}), skipping`);
         return;
       }
+    }
+
+    // ── 1.5. Guard durável de handoff humano (W3.4) ─────
+    // O cache acima é fast-path e pode ter sido esvaziado (flush/TTL/backend
+    // fail-soft). A fonte de verdade é conversation.aiPaused / status ASSIGNED:
+    // se um humano respondeu (POST manual) ou foi atribuído, a Iza NÃO responde
+    // enquanto a conversa estiver sob atendimento humano.
+    const handoffState = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { aiPaused: true, status: true, assignedToId: true },
+    });
+    if (shouldSkipForHumanHandoff(handoffState)) {
+      logger.info(`[Agent] Conversa ${conversationId} sob atendimento humano (aiPaused/ASSIGNED), skipping`);
+      return;
     }
 
     // V4 #157 (PR #70) — flag pra TTS mirror: se input foi áudio, marcamos

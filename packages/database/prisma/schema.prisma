@@ -442,6 +442,10 @@ model Conversation {
   csatScore        Int?
   assignedToId     String?
   assignedTo       User?              @relation(fields: [assignedToId], references: [id])
+  // W3.4 — quando um humano assume a conversa (responde ou é atribuído), a IA
+  // fica pausada NESTA conversa: Iza não gera autoreply enquanto for true.
+  // Fonte de verdade durável; o cache ai_paused continua como fast-path espelhado.
+  aiPaused         Boolean            @default(false)
   contactId        String
   contact          Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
   organizationId   String

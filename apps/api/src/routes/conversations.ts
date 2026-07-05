@@ -5,6 +5,7 @@ import { validate } from '../middleware/validate.js';
 import { requireRole } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import { logAuditEvent } from '../services/auditService.js';
+import { cache } from '../services/cloud/index.js';
 
 const router = Router();
 
@@ -145,19 +146,33 @@ router.put('/:id/assign', async (req: Request, res: Response, next: NextFunction
 
     const existing = await prisma.conversation.findFirst({
       where: { id: req.params.id, organizationId: req.organizationId!, deletedAt: null },
+      include: { contact: { select: { whatsappId: true } } },
     });
     if (!existing) {
       res.status(404).json({ error: 'Conversation not found' });
       return;
     }
 
+    // W3.4 — atribuir a um humano PAUSA a Iza nesta conversa; desatribuir
+    // (agentId vazio) devolve o atendimento à IA (aiPaused=false).
+    const assignedToHuman = !!agentId;
+
     const updated = await prisma.conversation.update({
       where: { id: req.params.id },
       data: {
         assignedToId: agentId || null,
         status: agentId ? 'ASSIGNED' : 'OPEN',
+        aiPaused: assignedToHuman,
       },
     });
+
+    // Espelha no cache (fast-path que orchestrator/flowScheduler consultam).
+    const pauseKey = `ai_paused:${req.organizationId}:${existing.contact.whatsappId}`;
+    if (assignedToHuman) {
+      await cache.set(pauseKey, 'human', 60 * 60 * 24 * 7);
+    } else {
+      await cache.del(pauseKey);
+    }
 
     await logAuditEvent(req, {
       action: 'conversation.assign',
