@@ -3,6 +3,7 @@ import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { pendingSuggestions } from '../services/dealAttribution.js';
 import { normalizeLossReason } from './deals.lossreason.util.js';
+import { closingDatesForStage } from './deals.closedates.util.js';
 import { createDealSchema, updateDealSchema } from './deals.schema.js';
 
 const router = Router();
@@ -34,8 +35,12 @@ router.post('/', validate(createDealSchema), async (req: Request, res: Response,
       select: { id: true },
     });
     if (!contact) { res.status(404).json({ error: 'Contact not found' }); return; }
+    // W3.6: se o deal já nasce em 'won'/'lost' (criação direta pelo modal),
+    // aplica a MESMA lógica de datas do PUT /:id/stage — senão o deal fica sem
+    // wonAt/lostAt/closedAt e some das métricas de fechamento.
+    const closingDates = closingDatesForStage(stage);
     const deal = await prisma.deal.create({
-      data: { title, value, stage, contactId, organizationId: orgId },
+      data: { title, value, stage, contactId, organizationId: orgId, ...closingDates },
     });
     res.status(201).json({ success: true, data: deal });
   } catch (err) { next(err); }
@@ -152,14 +157,13 @@ router.put('/:id/stage', async (req: Request, res: Response, next: NextFunction)
         })
       : null;
 
-    const now = new Date();
+    // W3.6: mesma lógica de datas compartilhada com o POST (deal que já nasce fechado).
     const result = await prisma.deal.updateMany({
       where: { id: req.params.id, organizationId: req.organizationId! },
       data: {
         stage,
         ...(ps ? { stageId: ps.id } : {}),
-        ...(stage === 'won' ? { closedAt: now, wonAt: now } : {}),
-        ...(stage === 'lost' ? { closedAt: now, lostAt: now } : {}),
+        ...closingDatesForStage(stage as string),
         ...(validLossReason ? { lossReason: validLossReason as any } : {}),
       },
     });
