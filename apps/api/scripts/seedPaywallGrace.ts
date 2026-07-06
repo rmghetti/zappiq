@@ -36,12 +36,20 @@ import { sendEmail } from '../src/services/email/emailProvider.js';
 const GRACE_DAYS = 7;
 const GRACE_MS = GRACE_DAYS * 24 * 60 * 60 * 1000;
 
-/** Parse mínimo de process.argv: default é --dry-run; --apply grava. */
-function parseFlags(): { apply: boolean } {
+/** Parse mínimo de process.argv: default é --dry-run; --apply grava.
+ *  --email <addr> (opcional) restringe a UMA org, a que tem esse ADMIN. */
+function parseFlags(): { apply: boolean; emailFilter: string | null } {
   const argv = process.argv.slice(2);
   const apply = argv.includes('--apply');
-  // --dry-run é o default e é redundante, mas aceito explicitamente.
-  return { apply };
+  let emailFilter: string | null = null;
+  const eqFlag = argv.find((a) => a.startsWith('--email='));
+  if (eqFlag) {
+    emailFilter = eqFlag.slice('--email='.length).trim().toLowerCase() || null;
+  } else {
+    const idx = argv.indexOf('--email');
+    if (idx >= 0 && argv[idx + 1]) emailFilter = argv[idx + 1].trim().toLowerCase() || null;
+  }
+  return { apply, emailFilter };
 }
 
 /** Formata a data como dd/mm/yyyy (pt-BR) para a cópia do e-mail. */
@@ -108,13 +116,14 @@ interface MatchedOrg {
 }
 
 async function main(): Promise<void> {
-  const { apply } = parseFlags();
+  const { apply, emailFilter } = parseFlags();
   const now = new Date();
   const graceUntil = new Date(now.getTime() + GRACE_MS);
 
   logger.info({
     msg: 'seed_paywall_grace_start',
     mode: apply ? 'apply' : 'dry-run',
+    emailFilter: emailFilter ?? '(todas)',
     graceDays: GRACE_DAYS,
     graceUntil: graceUntil.toISOString(),
   });
@@ -147,6 +156,7 @@ async function main(): Promise<void> {
   let skippedHasGrace = 0;
   let skippedEnterprise = 0;
   let skippedInternal = 0;
+  let skippedEmailFilter = 0;
 
   for (const org of orgs) {
     // 1) Idempotência: já tem carência => nunca reprocessa.
@@ -189,6 +199,13 @@ async function main(): Promise<void> {
 
     // 1º ADMIN da org (para o e-mail de catch-up). Sem ADMIN: seta coluna, sem e-mail.
     const admin = org.users.find((u) => u.role === 'ADMIN') ?? null;
+
+    // Filtro opcional --email: só processa a org cujo ADMIN casa com o e-mail.
+    if (emailFilter && (admin?.email ?? '').toLowerCase() !== emailFilter) {
+      skippedEmailFilter++;
+      continue;
+    }
+
     matched.push({
       id: org.id,
       name: org.name,
@@ -270,6 +287,7 @@ async function main(): Promise<void> {
       alreadyHadGrace: skippedHasGrace,
       enterprise: skippedEnterprise,
       internalSuperadmin: skippedInternal,
+      emailFilter: skippedEmailFilter,
     },
   });
 
