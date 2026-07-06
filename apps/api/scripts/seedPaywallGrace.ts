@@ -60,10 +60,7 @@ function formatDateBR(d: Date): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-/**
- * Monta o e-mail de aviso (pt-BR, sem travessão por house style /voz-humana).
- * COPY PROVISÓRIA: precisa passar pelo passe de /voz-humana antes de enviar.
- */
+/** Monta o e-mail de aviso (pt-BR, sem travessão, revisado pela skill voz-humana). */
 function buildGraceEmail(input: {
   orgName: string;
   adminName: string;
@@ -75,8 +72,7 @@ function buildGraceEmail(input: {
 
   const subject = 'Seu teste gratuito terminou, você ainda tem acesso por alguns dias';
 
-  const html = `<!-- COPY PROVISÓRIA: revisar voz-humana -->
-<div style="font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #1a1a1a; max-width: 560px; margin: 0 auto;">
+  const html = `<div style="font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.6; color: #1a1a1a; max-width: 560px; margin: 0 auto;">
   <p>Oi, ${firstName}.</p>
   <p>Passando para avisar que o teste gratuito de 14 dias da ${input.orgName} chegou ao fim.</p>
   <p>Para você não parar do nada, liberamos acesso para a sua conta até <strong>${dateStr}</strong>. Depois dessa data, o acesso fica reservado a quem já escolheu um plano.</p>

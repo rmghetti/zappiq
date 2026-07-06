@@ -1,8 +1,9 @@
-# Copy do Trial Enforcement — para aprovação do CEO
+# Copy do Trial Enforcement (aprovada + aplicada)
 
-Tudo em pt-BR, sem travessão, tom honesto (padrão da casa, sem dark pattern). Está
-marcado como provisório no código; ao aprovar (com qualquer ajuste seu), eu sincronizo
-a versão final. Passe /voz-humana se quiser um último polimento.
+**APROVADA pelo CEO em 2026-07-06 e aplicada no código.** Passe de voz-humana feito
+(sem travessão, tom natural, 1ª pessoa do Rodrigo, sem anglicismo "off"). Assunto e
+corpo dos e-mails T-minus atualizados. Assinatura padronizada: "Rodrigo Ghetti, Founder
+da ZappIQ". Se quiser ajustar qualquer linha, é só dizer.
 
 ---
 

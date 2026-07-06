@@ -47,7 +47,7 @@ export function PaywallGate() {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-6 py-3">
       <p className="text-sm font-medium text-amber-900">
-        Seu teste terminou. Você mantém acesso {prazo} — escolha um plano agora para continuar sem interrupção.
+        Seu teste terminou. Você mantém acesso {prazo}. Escolha um plano agora para continuar sem interrupção.
       </p>
       <button
         onClick={() => router.push('/billing?reason=trial_expired')}
