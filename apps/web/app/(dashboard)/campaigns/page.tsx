@@ -4,11 +4,17 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Megaphone, Plus, Send, Clock, CheckCircle, XCircle, Trash2, Sparkles,
   Rocket, MessageSquare, Compass, TrendingUp, Zap, Reply, DollarSign,
-  ArrowRight, ChevronDown, ChevronUp,
+  ArrowRight, ChevronDown, ChevronUp, AlertTriangle, Lightbulb,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { CampaignFormModal } from '../../../components/campaigns/CampaignFormModal';
 import { IzaStrategistModal } from '../../../components/campaigns/IzaStrategistModal';
+
+interface CoachInsight {
+  severity: 'good' | 'info' | 'warning';
+  title: string;
+  message: string;
+}
 
 interface Campaign {
   id: string;
@@ -25,6 +31,7 @@ interface Campaign {
   objective?: string | null;
   channels?: string[] | null;
   template?: { name: string };
+  coachInsights?: CoachInsight[];
 }
 
 const GRAD = 'bg-gradient-to-r from-[#2FB57A] via-[#2F7FB5] to-[#4A52D0]';
@@ -54,8 +61,8 @@ const PILLARS = [
   {
     icon: Compass,
     title: 'Copiloto & Coach',
-    desc: 'A Iza sugere o que e o quanto fazer para bater sua meta, e protege a saúde do seu número.',
-    status: 'soon' as const,
+    desc: 'A Iza acompanha os números de cada campanha e sugere o que ajustar para bater sua meta.',
+    status: 'ok' as const,
   },
   {
     icon: TrendingUp,
@@ -307,6 +314,33 @@ function CampaignRow({ c, busy, onSend, onDelete }: {
         <Stat value={c.deliveredCount} label="Entregues" color="text-blue-600" bar="bg-blue-400" pct={(c.deliveredCount / total) * 100} />
         <Stat value={c.readCount} label="Lidos" color="text-green-600" bar="bg-green-400" pct={(c.readCount / total) * 100} />
         <Stat value={c.repliedCount} label="Respostas" color="text-[#4A52D0]" bar="bg-[#8B90F0]" pct={(c.repliedCount / total) * 100} />
+      </div>
+      {(c.coachInsights?.length ?? 0) > 0 && (
+        <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+          {c.coachInsights!.map((insight, i) => (
+            <CoachTip key={i} insight={insight} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const COACH_STYLE: Record<CoachInsight['severity'], { bg: string; text: string; icon: any }> = {
+  good: { bg: 'bg-[#E4F3EC]', text: 'text-[#1B7A54]', icon: TrendingUp },
+  info: { bg: 'bg-[#ECEDFA]', text: 'text-[#3A3FA8]', icon: Lightbulb },
+  warning: { bg: 'bg-amber-50', text: 'text-amber-800', icon: AlertTriangle },
+};
+
+function CoachTip({ insight }: { insight: CoachInsight }) {
+  const style = COACH_STYLE[insight.severity];
+  const Icon = style.icon;
+  return (
+    <div className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 ${style.bg}`}>
+      <Icon size={15} className={`flex-shrink-0 mt-0.5 ${style.text}`} />
+      <div>
+        <p className={`text-xs font-semibold ${style.text}`}>{insight.title}</p>
+        <p className="text-xs text-gray-600 mt-0.5 leading-snug">{insight.message}</p>
       </div>
     </div>
   );

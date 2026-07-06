@@ -5,6 +5,7 @@ import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { campaignDispatchQueue } from '../services/queueService.js';
 import { draftCampaignFromObjective } from '../services/impulsoStrategist.js';
+import { computeCoachInsights } from '../services/impulsoCoach.js';
 
 /*
  * Rotas do módulo Impulso (add-on de campanhas). Gated por requireImpulso()
@@ -61,7 +62,21 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         _count: { select: { variants: true, attributions: true } },
       },
     });
-    res.json({ success: true, data: campaigns });
+    // Copiloto & Coach: sugestões determinísticas embutidas na listagem
+    // (sem custo extra de LLM, sem round-trip adicional pro frontend).
+    const withCoach = campaigns.map((c) => ({
+      ...c,
+      coachInsights: computeCoachInsights({
+        status: c.status,
+        sentCount: c.sentCount,
+        deliveredCount: c.deliveredCount,
+        readCount: c.readCount,
+        repliedCount: c.repliedCount,
+        failedCount: c.failedCount,
+        budgetPlan: c.budgetPlan as any,
+      }),
+    }));
+    res.json({ success: true, data: withCoach });
   } catch (err) {
     next(err);
   }
@@ -200,6 +215,40 @@ router.get('/:id/stats', async (req: Request, res: Response, next: NextFunction)
         attributedRevenueBrl: (agg._sum.revenueCents ?? 0) / 100,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/impulso/:id/coach — Copiloto & Coach isolado (para tela de detalhe futura)
+router.get('/:id/coach', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: req.params.id, organizationId: req.organizationId!, isImpulso: true },
+      select: {
+        status: true,
+        sentCount: true,
+        deliveredCount: true,
+        readCount: true,
+        repliedCount: true,
+        failedCount: true,
+        budgetPlan: true,
+      },
+    });
+    if (!campaign) {
+      res.status(404).json({ error: 'Campaign not found' });
+      return;
+    }
+    const insights = computeCoachInsights({
+      status: campaign.status,
+      sentCount: campaign.sentCount,
+      deliveredCount: campaign.deliveredCount,
+      readCount: campaign.readCount,
+      repliedCount: campaign.repliedCount,
+      failedCount: campaign.failedCount,
+      budgetPlan: campaign.budgetPlan as any,
+    });
+    res.json({ success: true, data: { insights } });
   } catch (err) {
     next(err);
   }
