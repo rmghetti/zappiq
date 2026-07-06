@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Megaphone, Plus, Send, BarChart2, Clock, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { Megaphone, Plus, Send, BarChart2, Clock, CheckCircle, XCircle, Trash2, Sparkles } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { CampaignFormModal } from '../../../components/campaigns/CampaignFormModal';
+import { IzaStrategistModal } from '../../../components/campaigns/IzaStrategistModal';
 
 interface Campaign {
   id: string;
@@ -31,6 +32,7 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [izaOpen, setIzaOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const fetchCampaigns = useCallback(() => {
@@ -80,12 +82,20 @@ export default function CampaignsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Campanhas</h1>
           <p className="text-sm text-gray-500 mt-1">Disparos em massa via WhatsApp</p>
         </div>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600"
-        >
-          <Plus size={16} /> Nova Campanha
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIzaOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold bg-gradient-to-r from-[#2FB57A] via-[#2F7FB5] to-[#4A52D0] hover:opacity-95"
+          >
+            <Sparkles size={16} /> Criar com a Iza
+          </button>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            <Plus size={16} /> Nova Campanha
+          </button>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -171,6 +181,13 @@ export default function CampaignsPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onSaved={fetchCampaigns}
+      />
+
+      {/* Impulso — Iza Estrategista: objetivo em linguagem natural -> campanha */}
+      <IzaStrategistModal
+        open={izaOpen}
+        onClose={() => setIzaOpen(false)}
+        onCreated={fetchCampaigns}
       />
     </div>
   );
