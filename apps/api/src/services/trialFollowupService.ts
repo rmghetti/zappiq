@@ -25,14 +25,12 @@ import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import redis from '../utils/redis.js';
 import { sendEmail } from './email/emailProvider.js';
-import {
-  renderTrialSavingsFollowupEmail,
-  computeSavings,
-} from './email/templates/trialSavingsFollowup.js';
+import { computeSavings } from './email/templates/trialSavingsFollowup.js';
 import { renderTrialMidwayEmail } from './email/templates/trialMidway.js';
-import { renderTrialLastDayEmail } from './email/templates/trialLastDay.js';
+import { renderTrialReminderEmail } from './email/templates/trialReminder.js';
 import { renderTrialConvertedEmail } from './email/templates/trialConverted.js';
 import { computeAIReadiness } from './aiReadinessService.js';
+import { pickTrialReminderStage } from './trialReminderStage.util.js';
 
 const redisUrl = new URL(env.REDIS_URL);
 const isTLS = env.REDIS_URL.startsWith('rediss://');
@@ -59,13 +57,14 @@ export const trialFollowupQueue = new Queue('trial-followup', {
 let trialFollowupWorker: Worker | null = null;
 
 // ── Job payload types ──────────────────────────────
-// FASE 1.B (#240): renomeado de D3/D10/lastDay pra D1/D3/D7 (mais cedo).
-export type TrialStage = 'D1' | 'D3' | 'D7';
+// Trial Enforcement (2026-07): cadência regressiva T-3/T-2/T-1/T-0 (dias ATÉ o
+// fim do trial), substituindo D3/D7. D1 (ativação, 24h após cadastro) mantido.
+export type TrialStage = 'D1' | 'T3' | 'T2' | 'T1' | 'T0';
 
 export interface TrialFollowupJobData {
   orgId: string;
   userId: string;
-  type: 'trial:D1' | 'trial:D3' | 'trial:D7' | 'trial:converted';
+  type: 'trial:D1' | 'trial:T3' | 'trial:T2' | 'trial:T1' | 'trial:T0' | 'trial:converted';
   // Extras para trial:converted
   tierLabel?: string;
   monthlyBrl?: number;
@@ -80,6 +79,7 @@ function daysUntilTrialEnds(trialEndsAt: Date | null): number {
   if (!trialEndsAt) return 14;
   return Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
 }
+
 
 /**
  * Verifica se um stage já foi enviado pra essa org via tabela audit.
@@ -246,45 +246,25 @@ async function processTrialFollowupJob(job: any): Promise<void> {
       text = rendered.text;
     }
 
-    // D+3 · trial:D3 — oferta de call 1:1 (ainda dá tempo de salvar)
-    else if (type === 'trial:D3') {
-      stage = 'D3';
-      templateId = 'trialSavingsFollowup';
+    // T-3 / T-2 / T-1 / T-0 · contagem regressiva do fim do trial.
+    // Um único template parametrizado por daysLeft. Empurra o plano anual (20% off).
+    else if (
+      type === 'trial:T3' ||
+      type === 'trial:T2' ||
+      type === 'trial:T1' ||
+      type === 'trial:T0'
+    ) {
+      const daysLeft = (type === 'trial:T3' ? 3 : type === 'trial:T2' ? 2 : type === 'trial:T1' ? 1 : 0) as 0 | 1 | 2 | 3;
+      stage = type.slice('trial:'.length) as TrialStage; // 'T3' | 'T2' | 'T1' | 'T0'
+      templateId = `trialReminder_${stage}`;
       if (await alreadySent(orgId, stage)) {
         logger.info({ msg: 'trial_followup_already_sent_skip', orgId, stage });
         return;
       }
-      const readiness = await getAIReadinessScore(orgId);
-
-      const rendered = renderTrialSavingsFollowupEmail({
+      const rendered = renderTrialReminderEmail({
         firstName,
-        daysRemaining: 11,
-        competitorSetupBrl: 8000,
-        competitorMonthlyBrl: 1500,
-        aiReadinessScore: readiness,
-        ctaUrl: `${appUrl}/billing?coupon=TRIAL14&utm_source=email&utm_campaign=trial_d3`,
-      });
-      subject = rendered.subject;
-      html = rendered.html;
-      text = rendered.text;
-    }
-
-    // D+7 · trial:D7 — último toque (ativação ou churn iminente)
-    else if (type === 'trial:D7') {
-      stage = 'D7';
-      templateId = 'trialLastDay';
-      if (await alreadySent(orgId, stage)) {
-        logger.info({ msg: 'trial_followup_already_sent_skip', orgId, stage });
-        return;
-      }
-      const readiness = await getAIReadinessScore(orgId);
-      const savings = await getEstimatedSavings(orgId);
-
-      const rendered = renderTrialLastDayEmail({
-        firstName,
-        aiReadinessScore: readiness,
-        savings,
-        ctaUrl: `${appUrl}/billing?coupon=LASTDAY14&utm_source=email&utm_campaign=trial_d7`,
+        daysLeft,
+        ctaUrl: `${appUrl}/billing?reason=trial_ending&utm_source=email&utm_campaign=trial_${stage.toLowerCase()}`,
       });
       subject = rendered.subject;
       html = rendered.html;
@@ -461,58 +441,64 @@ export async function runTrialFollowupScheduler(): Promise<void> {
       },
     })) as any[];
 
-    // Filter in-memory since Prisma generated types don't include isTrialActive in where
-    const orgs = allOrgs.filter((org) => (org as any).isTrialActive === true);
-
-    logger.info({
-      msg: 'trial_followup_scheduler_run',
-      orgsToProcess: orgs.length,
+    // Elegíveis: trial ATIVO, ou trial recém-vencido (≤3 dias) ainda SEM pagamento.
+    // A janela pós-fim garante que o T-0 dispare mesmo depois do trialExpirationCron
+    // (03:40 UTC) zerar isTrialActive. NÃO pega as orgs legadas vencidas há muito.
+    const nowMs = Date.now();
+    const RECENT_END_MS = 3 * 24 * 60 * 60 * 1000;
+    const orgs = allOrgs.filter((org: any) => {
+      const active = org.isTrialActive === true;
+      const endsAt = org.trialEndsAt ? new Date(org.trialEndsAt).getTime() : null;
+      const recentlyEnded = endsAt !== null && endsAt <= nowMs && nowMs - endsAt <= RECENT_END_MS;
+      const unpaid = !org.paidAt && !org.churnedAt && !org.stripeSubscriptionId;
+      return active || (recentlyEnded && unpaid);
     });
 
-    let enqueuedD1 = 0, enqueuedD3 = 0, enqueuedD7 = 0, skippedNoAdmin = 0;
+    logger.info({ msg: 'trial_followup_scheduler_run', orgsToProcess: orgs.length });
+
+    let enqueuedD1 = 0, enqueuedT3 = 0, enqueuedT2 = 0, enqueuedT1 = 0, enqueuedT0 = 0, skippedNoAdmin = 0;
 
     for (const org of orgs) {
-      // FASE 1.B: D+1/D+3/D+7 baseado em daysSinceCreated (mais previsível
-      // que daysRemaining, que depende de trialEndsAt nem sempre setado).
-      const dsc = daysSinceCreated(org.createdAt);
       const adminUser = (org as any).users[0];
-
       if (!adminUser) {
-        logger.warn({
-          msg: 'trial_followup_no_admin_user',
-          orgId: org.id,
-          orgName: org.name,
-        });
+        logger.warn({ msg: 'trial_followup_no_admin_user', orgId: org.id, orgName: org.name });
         skippedNoAdmin++;
         continue;
       }
 
-      // FASE 3 P0b fix (2026-05-14): mudou de `dsc === N` (strict equality)
-      // para `dsc >= N` com gate em alreadySent. A lógica antiga perdia
-      // orgs pra sempre quando o scheduler pulava um dia (deploy, restart,
-      // crash, qualquer coisa). Agora qualquer execução PEGA orgs em catch-up.
-      // alreadySent garante que não envia 2x — feito via UNIQUE constraint.
-      if (dsc >= 1 && !(await alreadySent(org.id, 'D1'))) {
+      // D+1 · ativação (24h após cadastro) — só durante trial ativo. dsc >= N com
+      // gate em alreadySent: qualquer execução pega orgs em catch-up sem duplicar.
+      const dsc = daysSinceCreated(org.createdAt);
+      if (org.isTrialActive === true && dsc >= 1 && !(await alreadySent(org.id, 'D1'))) {
         await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D1');
         enqueuedD1++;
       }
-      if (dsc >= 3 && !(await alreadySent(org.id, 'D3'))) {
-        await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D3');
-        enqueuedD3++;
-      }
-      if (dsc >= 7 && !(await alreadySent(org.id, 'D7'))) {
-        await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D7');
-        enqueuedD7++;
+
+      // T-3/T-2/T-1/T-0 · só para orgs SEM pagamento (quem já assinou não recebe).
+      const unpaid = !org.paidAt && !org.churnedAt && !org.stripeSubscriptionId;
+      if (unpaid) {
+        const dtl = daysUntilTrialEnds(org.trialEndsAt ? new Date(org.trialEndsAt) : null);
+        const sent = {
+          T0: await alreadySent(org.id, 'T0'),
+          T1: await alreadySent(org.id, 'T1'),
+          T2: await alreadySent(org.id, 'T2'),
+          T3: await alreadySent(org.id, 'T3'),
+        };
+        const pick = pickTrialReminderStage(dtl, sent);
+        if (pick) {
+          await enqueueTrialFollowup(org.id, adminUser.id, `trial:${pick}`);
+          if (pick === 'T0') enqueuedT0++;
+          else if (pick === 'T1') enqueuedT1++;
+          else if (pick === 'T2') enqueuedT2++;
+          else enqueuedT3++;
+        }
       }
     }
 
     logger.info({
       msg: 'trial_followup_scheduler_complete',
       orgsProcessed: orgs.length,
-      enqueuedD1,
-      enqueuedD3,
-      enqueuedD7,
-      skippedNoAdmin,
+      enqueuedD1, enqueuedT3, enqueuedT2, enqueuedT1, enqueuedT0, skippedNoAdmin,
     });
   } catch (err) {
     logger.error({
