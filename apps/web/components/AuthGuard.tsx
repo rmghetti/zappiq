@@ -1,12 +1,17 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '../stores/authStore';
+
+// Rotas acessíveis mesmo com trial vencido (bloqueio 'hard'): a pessoa precisa
+// conseguir escolher/pagar um plano e sair. Espelha a allowlist da API.
+const PAYWALL_ALLOWLIST = ['/billing', '/logout'];
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { isAuthenticated, isLoading, fetchMe } = useAuthStore();
+  const pathname = usePathname();
+  const { isAuthenticated, isLoading, fetchMe, organization } = useAuthStore();
 
   useEffect(() => {
     fetchMe();
@@ -17,6 +22,16 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       router.push('/login');
     }
   }, [isLoading, isAuthenticated, router]);
+
+  // Trial Enforcement (UX): trial vencido/cancelado sem carência → paywall.
+  // A verdade é imposta na API (402); aqui é só o redirecionamento suave.
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !organization) return;
+    const isAllowed = PAYWALL_ALLOWLIST.some((p) => pathname?.startsWith(p));
+    if (organization.paywall === 'hard' && !isAllowed) {
+      router.replace('/billing?reason=trial_expired');
+    }
+  }, [isLoading, isAuthenticated, organization, pathname, router]);
 
   if (isLoading) {
     return (

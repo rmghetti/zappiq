@@ -10,12 +10,22 @@ interface User {
   avatar?: string;
 }
 
+export type PaywallMode = 'none' | 'soft' | 'hard' | 'past_due';
+export type LifecycleStage =
+  | 'CHURNED' | 'PAST_DUE' | 'ACTIVE' | 'TRIAL' | 'TRIAL_EXPIRED' | 'NOVO';
+
 interface Organization {
   id: string;
   name: string;
   slug: string;
   plan: string;
   settings: any;
+  // Trial Enforcement — vêm de GET /api/auth/me (fonte única: computeAccessState).
+  lifecycleStage?: LifecycleStage;
+  paywall?: PaywallMode;
+  trialEndsAt?: string | null;
+  isTrialActive?: boolean;
+  paywallGraceUntil?: string | null;
 }
 
 interface AuthState {
