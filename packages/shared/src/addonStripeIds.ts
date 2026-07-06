@@ -69,21 +69,23 @@ export const ADDONS_V4_STRIPE: Record<string, AddonStripeIds & { meterId?: strin
 
   // ─────────────────────────────────────────────────────────
   // Impulso (add-on de campanhas premium) — criado via
-  // apps/api/scripts/impulso-stripe-setup.ts (modo TESTE, 2026-07-06).
-  // Estes sao os IDs do Stripe TEST MODE (sk_test_...). Antes de vender
-  // de verdade, rode o mesmo script com sk_live_... e SUBSTITUA os IDs
-  // abaixo pelos de producao.
+  // apps/api/scripts/impulso-stripe-setup.ts. ADDONS_V4_STRIPE_MODE='LIVE',
+  // entao estes sao os IDs de PRODUCAO (sk_live_, 2026-07-06).
+  // IDs de TESTE (sandbox) p/ referencia, caso precise rodar em test mode:
+  //   START prod_Upv6bRLFAiDBJC / price_1TqFFvKlp5SWv74Xt8IYu1Z3
+  //   PRO   prod_Upv6acWtLxMcmk / price_1TqFFwKlp5SWv74XvWRN4w6o
+  //   SCALE prod_Upv6LhKZR8Yoyd / price_1TqFFxKlp5SWv74XUJ3519kr
   // ─────────────────────────────────────────────────────────
   IMPULSO_START: {
-    productId: 'prod_Upv6bRLFAiDBJC',
-    priceIds: { monthly: 'price_1TqFFvKlp5SWv74Xt8IYu1Z3' },  // R$ 197/mes (TEST)
+    productId: 'prod_Upxg7QwSAF4AwV',
+    priceIds: { monthly: 'price_1TqHl2Klp5SWv74XtGvDttlw' },  // R$ 197/mes (LIVE)
   },
   IMPULSO_PRO: {
-    productId: 'prod_Upv6acWtLxMcmk',
-    priceIds: { monthly: 'price_1TqFFwKlp5SWv74XvWRN4w6o' },  // R$ 497/mes (TEST)
+    productId: 'prod_Upxg2WAOdMB7NN',
+    priceIds: { monthly: 'price_1TqHl4Klp5SWv74XCR9JRVxk' },  // R$ 497/mes (LIVE)
   },
   IMPULSO_SCALE: {
-    productId: 'prod_Upv6LhKZR8Yoyd',
-    priceIds: { monthly: 'price_1TqFFxKlp5SWv74XUJ3519kr' },  // R$ 997/mes (TEST)
+    productId: 'prod_UpxguUhshUR7wM',
+    priceIds: { monthly: 'price_1TqHl5Klp5SWv74X2yjIAWSs' },  // R$ 997/mes (LIVE)
   },
 };
