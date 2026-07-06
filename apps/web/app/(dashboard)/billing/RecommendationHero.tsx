@@ -31,17 +31,34 @@ function brl(v: number): string {
  * soft/hard) ou quando a pessoa chega por um link de "trial acabando". Mostra o
  * plano recomendado pelo uso, com o anual em destaque, razões e addons sugeridos.
  */
+interface PurchasableAddon {
+  key: string;
+  name: string;
+  amountBrl: number;
+}
+
 export function RecommendationHero({
   paywall,
   onChoose,
   loadingPlan,
 }: {
   paywall?: PaywallMode;
-  onChoose: (planId: string, cycle: BillingCycle) => void;
+  onChoose: (planId: string, cycle: BillingCycle, addons?: string[]) => void;
   loadingPlan: string | null;
 }) {
   const [reason, setReason] = useState<string | null>(null);
   const [rec, setRec] = useState<Recommendation | null>(null);
+  const [addons, setAddons] = useState<PurchasableAddon[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  function toggleAddon(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -62,6 +79,22 @@ export function RecommendationHero({
         if (active && res?.data) setRec(res.data as Recommendation);
       } catch {
         // fail-soft: sem recomendação, o hero ainda mostra a mensagem + cards abaixo
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [show]);
+
+  useEffect(() => {
+    if (!show) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await api.get('/api/billing/addons');
+        if (active && res?.data) setAddons(res.data as PurchasableAddon[]);
+      } catch {
+        // fail-soft: sem catálogo de addons, o pacote sai só com o plano
       }
     })();
     return () => {
@@ -111,34 +144,50 @@ export function RecommendationHero({
               ))}
             </ul>
             <button
-              onClick={() => onChoose(rec.planId, 'annual')}
+              onClick={() => onChoose(rec.planId, 'annual', Array.from(selected))}
               disabled={loadingPlan === rec.planId}
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-3 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
             >
-              {loadingPlan === rec.planId ? 'Redirecionando...' : `Assinar ${rec.planLabel} anual`}
+              {loadingPlan === rec.planId
+                ? 'Redirecionando...'
+                : `Assinar ${rec.planLabel} anual${selected.size ? ` + ${selected.size} addon${selected.size > 1 ? 's' : ''}` : ''}`}
               <ArrowRight size={16} />
             </button>
           </div>
 
-          {/* Addons sugeridos */}
+          {/* Addons compráveis no pacote (recorrentes, entram na mesma assinatura) */}
           <div className="rounded-xl border border-gray-200 bg-white/60 p-5">
-            <p className="text-sm font-bold text-gray-800">Serviços extras que combinam com seu uso</p>
-            {rec.addonSuggestions.length > 0 ? (
-              <ul className="mt-3 space-y-2">
-                {rec.addonSuggestions.map((a) => (
-                  <li key={a.dimension} className="flex items-center gap-2 text-sm text-gray-700">
-                    <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
-                    {a.label}
-                  </li>
+            <p className="text-sm font-bold text-gray-800">Adicione serviços extras ao pacote</p>
+            {rec.addonSuggestions.length > 0 && (
+              <p className="mt-1 text-xs text-fuchsia-600">
+                Pelo seu uso, vale olhar: {rec.addonSuggestions.map((a) => a.label).join(', ')}.
+              </p>
+            )}
+            {addons.length > 0 ? (
+              <div className="mt-3 space-y-1.5">
+                {addons.map((a) => (
+                  <label
+                    key={a.key}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(a.key)}
+                      onChange={() => toggleAddon(a.key)}
+                      className="h-4 w-4 rounded border-gray-300 text-violet-600"
+                    />
+                    <span className="flex-1 text-sm text-gray-700">{a.name}</span>
+                    <span className="text-xs font-semibold text-gray-500">{brl(a.amountBrl)}/mês</span>
+                  </label>
                 ))}
-              </ul>
+              </div>
             ) : (
               <p className="mt-3 text-xs text-gray-500">
-                Seu uso cabe no plano recomendado. Você pode adicionar pacotes extras depois, quando precisar.
+                Você pode adicionar pacotes extras depois, quando precisar.
               </p>
             )}
             <p className="mt-4 text-xs text-gray-400">
-              Os planos completos estão logo abaixo, caso queira comparar.
+              Os addons marcados entram junto na sua assinatura. Os planos completos estão logo abaixo.
             </p>
           </div>
         </div>

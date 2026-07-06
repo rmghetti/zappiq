@@ -94,10 +94,14 @@ export default function BillingPage() {
     };
   }, []);
 
-  async function handleCheckout(planId: string, billingCycle: BillingCycle) {
+  async function handleCheckout(planId: string, billingCycle: BillingCycle, addons?: string[]) {
     setLoadingPlan(planId);
     try {
-      const res = await api.post('/api/billing/checkout', { plan: planId, cycle: billingCycle });
+      const res = await api.post('/api/billing/checkout', {
+        plan: planId,
+        cycle: billingCycle,
+        ...(addons && addons.length ? { addons } : {}),
+      });
       if (res.url) window.location.href = res.url;
     } catch (err: any) {
       alert(err.message || 'Erro ao iniciar checkout');

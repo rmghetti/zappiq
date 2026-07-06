@@ -8,6 +8,7 @@ import { getUsage } from '../middleware/planLimits.js';
 import { computeBillingUsage } from './billingUsage.util.js';
 import { buildSubscriptionState } from './billingSubscription.util.js';
 import { buildRecommendation } from '../services/planRecommendation.js';
+import { listPurchasableAddons, resolveAddonLineItems } from './billingAddons.util.js';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 const router = Router();
@@ -142,11 +143,19 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
       subscriptionData.trial_period_days = trialDays;
     }
 
+    // Trial Enforcement — "adicionar ao pacote": o cliente pode incluir addons
+    // recorrentes junto do plano. Resolvemos os price IDs no SERVIDOR (o front
+    // manda só as keys); keys inválidas/não-recorrentes são ignoradas.
+    const addonLineItems = resolveAddonLineItems(body.addons);
+    if (addonLineItems.length > 0) {
+      subscriptionData.metadata!.addons = addonLineItems.length.toString();
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
       allow_promotion_codes: true,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }, ...addonLineItems],
       subscription_data: subscriptionData,
       metadata: {
         organizationId: req.organizationId!,
@@ -253,6 +262,13 @@ router.get('/recommendation', async (req: Request, res: Response, next: NextFunc
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/billing/addons — catálogo dos addons recorrentes compráveis "no pacote"
+// (key + nome + preço; o price ID fica no servidor). Consumido pela paywall.
+router.get('/addons', (_req: Request, res: Response) => {
+  const addons = listPurchasableAddons().map(({ key, name, amountBrl }) => ({ key, name, amountBrl }));
+  res.json({ success: true, data: addons });
 });
 
 // GET /api/billing/subscription
