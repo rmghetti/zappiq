@@ -42,7 +42,7 @@ function escapeHtml(raw: string): string {
 export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): RenderedEmail {
   const { firstName, orgName, ctaUrl, daysRemaining } = input;
 
-  const subject = 'Bem-vindo(a) à ZappIQ — sua IA começa a treinar em 2 minutos';
+  const subject = 'Bem-vindo(a) à ZappIQ. Sua IA começa a treinar em 2 minutos';
 
   const html = `<!doctype html>
 <html lang="pt-br">
@@ -75,7 +75,7 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
 
                 <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#374151;">
                   Nenhum cartão de crédito necessário. Sem contrato de consultor.
-                  Você faz tudo sozinho — é por isso que somos 40% mais baratos.
+                  Você faz tudo sozinho, é por isso que somos 40% mais baratos.
                 </p>
 
                 <!-- 3 Próximos Passos -->
@@ -86,7 +86,7 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
                       <p style="margin:0;font-size:13px;font-weight:700;color:#4f46e5;text-transform:uppercase;letter-spacing:.08em;">1. Conectar WhatsApp</p>
                       <p style="margin:6px 0 0;font-size:14px;line-height:1.6;color:#374151;">
                         Vá para Settings e copie seus detalhes do WhatsApp Business.
-                        Você redireciona para nossa API — leva 30 segundos.
+                        Você redireciona para nossa API, leva 30 segundos.
                       </p>
                     </td>
                   </tr>
@@ -126,14 +126,14 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
                 </table>
 
                 <p style="margin:28px 0 0;font-size:13px;line-height:1.7;color:#6b7280;">
-                  Qualquer dúvida? Responda esse e-mail — respondemos em 2h.
-                  Fim de semana, segundas — a gente tá aqui. Somos uma dupla pequena,
+                  Qualquer dúvida? Responda esse e-mail, respondemos em 2h.
+                  Fim de semana, segundas, a gente tá aqui. Somos uma dupla pequena,
                   mas muito dedicada à sua experiência.
                 </p>
 
                 <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#111827;">
                   Abraço,<br/>
-                  <strong>Rodrigo Ghetti — Founder, ZappIQ</strong>
+                  <strong>Rodrigo Ghetti, Founder da ZappIQ</strong>
                 </p>
               </td>
             </tr>
@@ -176,7 +176,7 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
     'Qualquer dúvida? Responda esse e-mail.',
     '',
     'Abraço,',
-    'Rodrigo Ghetti — Founder, ZappIQ',
+    'Rodrigo Ghetti, Founder da ZappIQ',
   ]
     .filter(Boolean)
     .join('\n');

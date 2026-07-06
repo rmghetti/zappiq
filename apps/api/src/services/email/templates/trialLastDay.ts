@@ -88,7 +88,7 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
 
                 <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#374151;">
                   Este é seu último dia de acesso grátis à ZappIQ. Depois de hoje,
-                  sua IA vai parar de funcionar — a menos que você converta.
+                  sua IA vai parar de funcionar, a menos que você converta.
                 </p>
 
                 <!-- O número grande -->
@@ -108,7 +108,7 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fef2f2;border:2px solid #fee2e2;border-radius:12px;padding:24px;margin:24px 0;">
                   <tr>
                     <td align="center">
-                      <p style="margin:0;font-size:15px;font-weight:800;color:#dc2626;line-height:1.4;">Converta hoje com o cupom <code style="background:#f0f0f0;padding:3px 8px;border-radius:4px;font-family:monospace;">LASTDAY14</code> — 14% off no 1º ano</p>
+                      <p style="margin:0;font-size:15px;font-weight:800;color:#dc2626;line-height:1.4;">Converta hoje com o cupom <code style="background:#f0f0f0;padding:3px 8px;border-radius:4px;font-family:monospace;">LASTDAY14</code>, 14% de desconto no 1º ano</p>
                     </td>
                   </tr>
                 </table>
@@ -122,7 +122,7 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
                 <p style="margin:0 0 20px;font-size:14px;line-height:1.7;color:#6b7280;">
                   <strong>Sem setup fee. Sem mensalidade mínima.</strong>
                   Você paga apenas ${brl(247)}/mês no Starter, ou quanto usar.
-                  Cupom LASTDAY14 = 14% off no primeiro ano${hasSavings ? ' (já incluso no número acima)' : ''}.
+                  Cupom LASTDAY14 = 14% de desconto no primeiro ano${hasSavings ? ' (já incluso no número acima)' : ''}.
                 </p>
 
                 <!-- CTA grande -->
@@ -150,7 +150,7 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
 
                 <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#111827;">
                   Abraço,<br/>
-                  <strong>Rodrigo Ghetti — Founder, ZappIQ</strong>
+                  <strong>Rodrigo Ghetti, Founder da ZappIQ</strong>
                 </p>
               </td>
             </tr>
@@ -160,7 +160,7 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
               <td style="padding:20px 32px;background:#f8faf9;border-top:1px solid #e5e7eb;">
                 <p style="margin:0;font-size:11px;color:#9ca3af;line-height:1.6;">
                   Seu trial vence em 23:59 de hoje (hora de Brasília).
-                  Depois, sua IA para de funcionar. Cupom LASTDAY14 = 14% off no 1º ano.
+                  Depois, sua IA para de funcionar. Cupom LASTDAY14 = 14% de desconto no 1º ano.
                 </p>
               </td>
             </tr>
@@ -179,9 +179,9 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
     'Este é seu último dia de trial. Depois de hoje, sua IA para de funcionar.',
     '',
     hasSavings ? `Sua economia no 1º ano: ${brl(savings)}` : '',
-    hasSavings ? 'Cupom LASTDAY14 = 14% off (já incluso).' : 'Cupom LASTDAY14 = 14% off no 1º ano.',
+    hasSavings ? 'Cupom LASTDAY14 = 14% de desconto (já incluso).' : 'Cupom LASTDAY14 = 14% de desconto no 1º ano.',
     '',
-    'Você treinou sua IA por 14 dias. Tudo que você construiu continua acessível — basta converter.',
+    'Você treinou sua IA por 14 dias. Tudo que você construiu continua acessível. Basta converter.',
     '',
     'Sem setup fee. Sem mensalidade mínima.',
     `Você paga apenas ${brl(247)}/mês no Starter.`,
@@ -193,7 +193,7 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
     'Dúvida? Responda este e-mail.',
     '',
     'Abraço,',
-    'Rodrigo Ghetti — Founder, ZappIQ',
+    'Rodrigo Ghetti, Founder da ZappIQ',
   ]
     .filter(Boolean)
     .join('\n');

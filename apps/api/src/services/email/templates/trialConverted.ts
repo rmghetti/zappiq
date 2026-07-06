@@ -44,7 +44,7 @@ function brl(v: number): string {
 export function renderTrialConvertedEmail(input: TrialConvertedEmailInput): RenderedEmail {
   const { firstName, orgName, tierLabel, monthlyBrl } = input;
 
-  const subject = 'Parabéns — você acaba de virar cliente ZappIQ';
+  const subject = 'Parabéns, você acaba de virar cliente ZappIQ';
 
   const html = `<!doctype html>
 <html lang="pt-br">
@@ -132,12 +132,12 @@ export function renderTrialConvertedEmail(input: TrialConvertedEmailInput): Rend
                 <p style="margin:28px 0 0;font-size:13px;line-height:1.7;color:#6b7280;">
                   <strong>Obrigado por escolher ZappIQ.</strong>
                   Você acabou de entrar num grupo que economiza em média ${brl(18000)}/ano
-                  em operações — sem abrir mão de qualidade. Vamos crescer junto.
+                  em operações, sem abrir mão de qualidade. Vamos crescer junto.
                 </p>
 
                 <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#111827;">
                   Abraço,<br/>
-                  <strong>Rodrigo Ghetti — Founder, ZappIQ</strong>
+                  <strong>Rodrigo Ghetti, Founder da ZappIQ</strong>
                 </p>
               </td>
             </tr>
@@ -184,7 +184,7 @@ export function renderTrialConvertedEmail(input: TrialConvertedEmailInput): Rend
     'Obrigado por escolher ZappIQ. Vamos crescer junto.',
     '',
     'Abraço,',
-    'Rodrigo Ghetti — Founder, ZappIQ',
+    'Rodrigo Ghetti, Founder da ZappIQ',
   ]
     .filter(Boolean)
     .join('\n');

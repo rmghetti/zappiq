@@ -63,8 +63,8 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
 
   // Subject dinâmico — só afirma "pronta" quando temos score real ≥ 60.
   const subject = scoreReady
-    ? 'Sua IA já está pronta — hora de converter antes do cupom expirar'
-    : `Faltam ${daysRemaining} dias — veja o que sua IA já aprendeu`;
+    ? 'Sua IA já está pronta. Hora de converter antes do cupom expirar'
+    : `Faltam ${daysRemaining} dias. Veja o que sua IA já aprendeu`;
 
   // Contexto do readiness score (só usado quando hasScore)
   const readinessLevel = !hasScore
@@ -178,7 +178,7 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
 
                 <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#111827;">
                   Abraço,<br/>
-                  <strong>Rodrigo Ghetti — Founder, ZappIQ</strong>
+                  <strong>Rodrigo Ghetti, Founder da ZappIQ</strong>
                 </p>
               </td>
             </tr>
@@ -216,7 +216,7 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
     'Cupom TRIAL14 já está ativo. Você tem 14% de desconto até o fim do trial.',
     '',
     'Abraço,',
-    'Rodrigo Ghetti — Founder, ZappIQ',
+    'Rodrigo Ghetti, Founder da ZappIQ',
   ]
     .filter(Boolean)
     .join('\n');
