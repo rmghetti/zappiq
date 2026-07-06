@@ -7,6 +7,7 @@ import { logger } from '../utils/logger.js';
 import { getUsage } from '../middleware/planLimits.js';
 import { computeBillingUsage } from './billingUsage.util.js';
 import { buildSubscriptionState } from './billingSubscription.util.js';
+import { buildRecommendation } from '../services/planRecommendation.js';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 const router = Router();
@@ -231,6 +232,24 @@ router.get('/usage', async (req: Request, res: Response, next: NextFunction) => 
     });
 
     res.json({ success: true, data: usage });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/billing/recommendation
+// Trial Enforcement — plano mais adequado pelo perfil de uso do trial + addons
+// sugeridos. Consumido pela paywall (RecommendationHero) e pelo digest superadmin.
+// Isento do gate requireActivePlan (montado em /api/billing, sem o gate).
+router.get('/recommendation', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId;
+    if (!orgId) {
+      res.status(401).json({ error: 'organization context missing' });
+      return;
+    }
+    const recommendation = await buildRecommendation(orgId);
+    res.json({ success: true, data: recommendation });
   } catch (err) {
     next(err);
   }
