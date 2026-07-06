@@ -111,25 +111,25 @@ enum Urgency {
 
 // LGPD Art. 7 + Art. 11 — bases legais de tratamento
 enum LegalBasis {
-  CONSENT               // Art. 7, I / Art. 11, I
-  CONTRACT              // Art. 7, V
-  LEGAL_OBLIGATION      // Art. 7, II
-  LEGITIMATE_INTEREST   // Art. 7, IX
-  VITAL_INTERESTS       // Art. 7, VII
-  PUBLIC_INTEREST       // Art. 7, III
-  CREDIT_PROTECTION     // Art. 7, X
-  HEALTH_PROTECTION     // Art. 11, II, f
+  CONSENT // Art. 7, I / Art. 11, I
+  CONTRACT // Art. 7, V
+  LEGAL_OBLIGATION // Art. 7, II
+  LEGITIMATE_INTEREST // Art. 7, IX
+  VITAL_INTERESTS // Art. 7, VII
+  PUBLIC_INTEREST // Art. 7, III
+  CREDIT_PROTECTION // Art. 7, X
+  HEALTH_PROTECTION // Art. 11, II, f
 }
 
 // Tipos de requisição do titular — LGPD Art. 18
 enum DataSubjectRequestType {
-  ACCESS          // confirmação + acesso
-  CORRECTION      // correção
-  ANONYMIZATION   // anonimização
-  PORTABILITY     // portabilidade
-  DELETION        // eliminação
-  CONSENT_REVOKE  // revogação de consentimento
-  INFORMATION     // informação sobre compartilhamento
+  ACCESS // confirmação + acesso
+  CORRECTION // correção
+  ANONYMIZATION // anonimização
+  PORTABILITY // portabilidade
+  DELETION // eliminação
+  CONSENT_REVOKE // revogação de consentimento
+  INFORMATION // informação sobre compartilhamento
 }
 
 enum DataSubjectRequestStatus {
@@ -156,38 +156,38 @@ model Organization {
   // instagramAccountId: ID da IG Business Account (ex: 17841...)
   // instagramPageId: Facebook Page ID linkada à conta IG (necessária pelo Meta)
   // instagramAccessToken: Page Access Token de longa duração (60 dias, renovável)
-  instagramAccountId     String? @map("instagram_account_id")
-  instagramPageId        String? @map("instagram_page_id")
-  instagramAccessToken   String? @map("instagram_access_token") @db.Text
+  instagramAccountId        String?  @map("instagram_account_id")
+  instagramPageId           String?  @map("instagram_page_id")
+  instagramAccessToken      String?  @map("instagram_access_token") @db.Text
   // Self-serve "traga seu token": app secret do app Meta DO CLIENTE, usado pra
   // verificar a assinatura (x-hub-signature-256) dos webhooks WA/IG que chegam
   // assinados pelo app dele. Sem isso (ex.: Iza, ou cliente sob o app da ZappIQ)
   // o webhook cai no META_APP_SECRET global. Ver [[canais-self-serve-token-por-org]].
-  metaAppSecret          String? @map("meta_app_secret")
+  metaAppSecret             String?  @map("meta_app_secret")
   settings                  Json     @default("{}")
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
   // LGPD — retenção customizável por organização (dias).
   // Default conservador: 1825d (5 anos) audit / 730d (2 anos) soft-deleted.
-  auditRetentionDays        Int      @default(1825)
-  softDeleteRetentionDays   Int      @default(730)
-  dpoEmail                  String?  // Art. 41 — contato do encarregado
+  auditRetentionDays      Int     @default(1825)
+  softDeleteRetentionDays Int     @default(730)
+  dpoEmail                String? // Art. 41 — contato do encarregado
 
   // ── Trial (14 dias com cap de custo LLM) ────────────────
   // trialStartedAt/trialEndsAt: janela do período grátis.
   // trialCostCapUsd: teto de LLM que o tenant pode queimar no trial
   // para não impactar margem em signups curiosos/abusivos.
   // trialConverted: marca que o trial virou assinatura paga.
-  trialStartedAt     DateTime?
-  trialEndsAt        DateTime?
-  trialCostCapUsd    Float       @default(15.00)
-  trialConverted     Boolean     @default(false)
-  isTrialActive      Boolean     @default(true)
+  trialStartedAt  DateTime?
+  trialEndsAt     DateTime?
+  trialCostCapUsd Float     @default(15.00)
+  trialConverted  Boolean   @default(false)
+  isTrialActive   Boolean   @default(true)
 
   // ── Billing cycle sinc com Stripe ───────────────────────
-  billingCycle       String?     // "monthly" | "annual"
-  subscriptionStatus String?     // active | past_due | canceled | trialing
+  billingCycle       String? // "monthly" | "annual"
+  subscriptionStatus String? // active | past_due | canceled | trialing
 
   // ── Ciclo de vida canônico (Área Clientes / Fase 1) ─────
   // Colunas aditivas nullable. Antes só existiam no settings JSON — promovidas
@@ -195,48 +195,52 @@ model Organization {
   // sem ler JSON. stripeCustomerId/stripeSubscriptionId aqui são a fonte real
   // de "conta pagante" (nunca trialConverted). Preenchidas pelo webhook Stripe
   // (Fase 3) e pelo backfill; hoje nascem NULL.
-  paidAt                DateTime?  // 1º pagamento confirmado
-  churnedAt             DateTime?  // cancelamento efetivo (subscription.deleted)
-  cardAddedAt           DateTime?  // cartão adicionado (setup intent ok)
-  stripeCustomerId      String?    // cus_...
-  stripeSubscriptionId  String?    // sub_... — ÂNCORA de ACTIVE
+  paidAt                DateTime? // 1º pagamento confirmado
+  churnedAt             DateTime? // cancelamento efetivo (subscription.deleted)
+  cardAddedAt           DateTime? // cartão adicionado (setup intent ok)
+  stripeCustomerId      String? // cus_...
+  stripeSubscriptionId  String? // sub_... — ÂNCORA de ACTIVE
   // Cache do estágio derivado por deriveLifecycleStage() (recomputado em cron
   // diário + webhooks). Materializado para consulta rápida; a verdade continua
   // sendo a função pura. crm_accounts.lifecycleStage é o espelho consumido pela UI.
   accountLifecycleStage String?
 
-  users              User[]
-  contacts           Contact[]
-  conversations      Conversation[]
-  campaigns          Campaign[]
-  flows              Flow[]
-  knowledgeBases     KnowledgeBase[]
-  agents             Agent[]            // V2-021 (Sprint 0 §11.3)
-  templates          MessageTemplate[]
-  dataSubjectRequests DataSubjectRequest[]
-  tenantUsageMonthly TenantUsageMonthly[]
-  qaPairs            QAPair[]
-  onboardingJourneyStates OnboardingJourneyState[]  // FASE 1.B task #240
+  users                   User[]
+  contacts                Contact[]
+  conversations           Conversation[]
+  campaigns               Campaign[]
+  flows                   Flow[]
+  knowledgeBases          KnowledgeBase[]
+  agents                  Agent[] // V2-021 (Sprint 0 §11.3)
+  templates               MessageTemplate[]
+  dataSubjectRequests     DataSubjectRequest[]
+  tenantUsageMonthly      TenantUsageMonthly[]
+  qaPairs                 QAPair[]
+  onboardingJourneyStates OnboardingJourneyState[] // FASE 1.B task #240
   // CRM sinérgico (Onda 0): pipeline, timeline de atividades e tarefas por org.
-  pipelineStages     PipelineStage[]
-  activities         Activity[]
-  tasks              Task[]
-  flowNodeStats      FlowNodeStat[]
-  analyticsMetricsDaily AnalyticsMetricDaily[]  // Fase 2 Pulso — snapshots diários
-  analyticsInsights     AnalyticsInsight[]      // Fase 2 Pulso — narrativas/anomalias
-  crmAccount            CrmAccount?             // Área Clientes — espelho de conta (1:1 opcional)
-  stripeInvoices        StripeInvoice[]         // Área Clientes Fase 3 — faturas Stripe persistidas
+  pipelineStages          PipelineStage[]
+  activities              Activity[]
+  tasks                   Task[]
+  flowNodeStats           FlowNodeStat[]
+  campaignVariants        CampaignVariant[] // Impulso — braços de bandit
+  campaignNodeStats       CampaignNodeStat[] // Impulso — funil por nó
+  campaignAttributions    CampaignAttribution[] // Impulso — atribuição ad->venda
+  campaignConsents        CampaignConsent[] // Impulso — trilha de consentimento LGPD
+  analyticsMetricsDaily   AnalyticsMetricDaily[] // Fase 2 Pulso — snapshots diários
+  analyticsInsights       AnalyticsInsight[] // Fase 2 Pulso — narrativas/anomalias
+  crmAccount              CrmAccount? // Área Clientes — espelho de conta (1:1 opcional)
+  stripeInvoices          StripeInvoice[] // Área Clientes Fase 3 — faturas Stripe persistidas
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
   // criação de Q&A, preenchimento de survey). Exposto no dashboard como
   // "termômetro" guiando o cliente ao próximo passo de qualificação da IA.
-  aiReadinessScore   Int         @default(0)
+  aiReadinessScore     Int       @default(0)
   aiReadinessUpdatedAt DateTime?
   // Data em que o cliente finalizou a configuração inicial recomendada
   // (survey mínimo + 1 doc/URL + 3 Q&As). Marco usado para campanhas de
   // ativação e para o NPS do onboarding.
-  aiTrainingReadyAt  DateTime?
+  aiTrainingReadyAt    DateTime?
 
   @@map("organizations")
 }
@@ -250,9 +254,9 @@ model Organization {
 // Sem RLS por tenant: é a base instalada da ZappIQ, gerida pelo Superadmin.
 // ═══════════════════════════════════════════════════════════
 model CrmAccount {
-  id             String   @id @default(cuid())
+  id             String        @id @default(cuid())
   // 1:1 opcional com a org. Único quando presente (índice parcial no SQL).
-  organizationId String?  @unique
+  organizationId String?       @unique
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   // Elo com a linha em signups (tabela fora do Prisma). Guardado como texto.
   signupId       String?
@@ -262,17 +266,17 @@ model CrmAccount {
   plan           String?
   // NOVO | EM_TRIAL | TRIAL | ATIVO | ACTIVE | TRIAL_EXPIRADO | TRIAL_EXPIRED |
   // PAGO | PAST_DUE | CHURNED — ver accountLifecycle.ts (valores canônicos EN).
-  lifecycleStage String   @default("NOVO")
-  ownerUserId    String?  // usuário ZappIQ dono da conta (SDR/CS)
-  mrrCents       Int      @default(0)
-  healthScore    Int?     // 0-100 (health v1 composto)
+  lifecycleStage String        @default("NOVO")
+  ownerUserId    String? // usuário ZappIQ dono da conta (SDR/CS)
+  mrrCents       Int           @default(0)
+  healthScore    Int? // 0-100 (health v1 composto)
   trialEndsAt    DateTime?
   lastActivityAt DateTime?
-  pqlScore       Int?     // Fase 4 (PLG) — nasce NULL
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  pqlScore       Int? // Fase 4 (PLG) — nasce NULL
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  activities     CrmAccountActivity[]
+  activities CrmAccountActivity[]
 
   @@index([email])
   @@index([lifecycleStage])
@@ -284,12 +288,12 @@ model CrmAccount {
 // CrmAccountActivity — timeline da conta (reusa padrão Activity/ActivityType)
 // ═══════════════════════════════════════════════════════════
 model CrmAccountActivity {
-  id           String   @id @default(cuid())
+  id           String     @id @default(cuid())
   crmAccountId String
   crmAccount   CrmAccount @relation(fields: [crmAccountId], references: [id], onDelete: Cascade)
-  type         String   // ex: 'lifecycle_change' | 'owner_assigned' | 'note'
+  type         String // ex: 'lifecycle_change' | 'owner_assigned' | 'note'
   payload      Json?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime   @default(now())
 
   @@index([crmAccountId, createdAt])
   @@map("crm_account_activity")
@@ -304,16 +308,16 @@ model CrmAccountActivity {
 // amountBrlCents = amount_paid do Stripe (centavos de BRL).
 // ═══════════════════════════════════════════════════════════
 model StripeInvoice {
-  id              String   @id @default(cuid())
+  id              String       @id @default(cuid())
   organizationId  String
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  stripeInvoiceId String   @unique
-  amountBrlCents  Int      @default(0)
-  status          String   // 'paid' | 'open' | 'void' | ...
+  stripeInvoiceId String       @unique
+  amountBrlCents  Int          @default(0)
+  status          String // 'paid' | 'open' | 'void' | ...
   periodStart     DateTime?
   periodEnd       DateTime?
   paidAt          DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime     @default(now())
 
   @@index([organizationId, paidAt])
   @@map("stripe_invoices")
@@ -339,30 +343,30 @@ model StripeWebhookEvent {
 // Permite responder "esse cliente dá lucro?" em milissegundos.
 // ═══════════════════════════════════════════════════════════
 model TenantUsageMonthly {
-  id                   String   @id @default(cuid())
-  organizationId       String
-  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                         String       @id @default(cuid())
+  organizationId             String
+  organization               Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   // Janela mensal no formato YYYY-MM (ex: "2026-04").
-  periodYearMonth      String
+  periodYearMonth            String
   // Consumo bruto observado.
-  llmCostUsd           Float    @default(0)
-  llmInputTokens       BigInt   @default(0)
-  llmOutputTokens      BigInt   @default(0)
-  aiMessagesProcessed  Int      @default(0)
-  broadcastsSent       Int      @default(0)
-  conversationsOpened  Int      @default(0)
-  conversationsClosed  Int      @default(0)
-  conversationsAiResolved    Int      @default(0)
-  conversationsHumanResolved Int      @default(0)
-  handoffsCount        Int      @default(0)
+  llmCostUsd                 Float        @default(0)
+  llmInputTokens             BigInt       @default(0)
+  llmOutputTokens            BigInt       @default(0)
+  aiMessagesProcessed        Int          @default(0)
+  broadcastsSent             Int          @default(0)
+  conversationsOpened        Int          @default(0)
+  conversationsClosed        Int          @default(0)
+  conversationsAiResolved    Int          @default(0)
+  conversationsHumanResolved Int          @default(0)
+  handoffsCount              Int          @default(0)
   // Receita reconhecida no período (derivada do plano × cycle).
-  revenueBrlCents      Int      @default(0)
+  revenueBrlCents            Int          @default(0)
   // Custo da infra atribuído ao tenant (fly/supabase/loki) — rateio proporcional.
-  infraCostUsd         Float    @default(0)
+  infraCostUsd               Float        @default(0)
   // Gross margin derivada = (revenue - llmCost - infraCost) / revenue.
-  grossMarginPercent   Float?
-  computedAt           DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  grossMarginPercent         Float?
+  computedAt                 DateTime     @default(now())
+  updatedAt                  DateTime     @updatedAt
 
   @@unique([organizationId, periodYearMonth])
   @@index([periodYearMonth])
@@ -370,59 +374,59 @@ model TenantUsageMonthly {
 }
 
 model User {
-  id                    String   @id @default(cuid())
-  email                 String   @unique
+  id                    String         @id @default(cuid())
+  email                 String         @unique
   name                  String
   passwordHash          String
-  role                  UserRole @default(AGENT)
+  role                  UserRole       @default(AGENT)
   avatar                String?
-  isOnline              Boolean  @default(false)
-  maxConcurrentChats    Int      @default(5)
+  isOnline              Boolean        @default(false)
+  maxConcurrentChats    Int            @default(5)
   organizationId        String
-  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization          Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedConversations Conversation[]
   deletedConversations  Conversation[] @relation("DeletedConversations")
   messages              Message[]
   auditLogs             AuditLog[]
-  createdAt             DateTime @default(now())
+  createdAt             DateTime       @default(now())
 
   @@index([organizationId])
   @@map("users")
 }
 
 model Contact {
-  id                 String     @id @default(cuid())
+  id                 String         @id @default(cuid())
   whatsappId         String
   // FASE 4 (#251): IGSID — Instagram-Scoped ID que Meta retorna na DM.
   // É um ID estável por usuário POR conta IG Business (não global).
   // Permite identificar/dedup contato que mandou DM sem precisar do username.
-  instagramScopedId  String?    @map("instagram_scoped_id")
+  instagramScopedId  String?        @map("instagram_scoped_id")
   phone              String
   name               String?
   email              String?
   company            String?
   avatarUrl          String?
-  tags               String[]   @default([])
-  customFields       Json       @default("{}")
-  leadScore          Int        @default(0)
-  leadStatus         LeadStatus @default(NEW)
-  funnelStage        String     @default("new")
+  tags               String[]       @default([])
+  customFields       Json           @default("{}")
+  leadScore          Int            @default(0)
+  leadStatus         LeadStatus     @default(NEW)
+  funnelStage        String         @default("new")
   birthDate          DateTime?
   lastInteractionAt  DateTime?
-  consentMarketing   Boolean    @default(false)
+  consentMarketing   Boolean        @default(false)
   consentMarketingAt DateTime?
   // CRM (Onda 0): atribuição de origem (campanha que originou) + first/last touch.
   sourceCampaignId   String?
   firstTouchAt       DateTime?
   lastTouchAt        DateTime?
   organizationId     String
-  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization       Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversations      Conversation[]
   deals              Deal[]
   activities         Activity[]
   tasks              Task[]
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   @@unique([whatsappId, organizationId])
   @@unique([instagramScopedId, organizationId], name: "instagramScopedId_organizationId")
@@ -458,11 +462,11 @@ model Conversation {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   closedAt         DateTime?
-  deletedAt        DateTime?          // LGPD Art. 16 — marcação de exclusão
+  deletedAt        DateTime? // LGPD Art. 16 — marcação de exclusão
   deletedById      String?
   deletedBy        User?              @relation("DeletedConversations", fields: [deletedById], references: [id])
-  deletionReason   String?            // motivo (DSR, operacional, purge por retenção)
-  anonymizedAt     DateTime?          // LGPD Art. 12 — anonimização de PII
+  deletionReason   String? // motivo (DSR, operacional, purge por retenção)
+  anonymizedAt     DateTime? // LGPD Art. 12 — anonimização de PII
 
   @@index([organizationId])
   @@index([contactId])
@@ -506,28 +510,133 @@ model Message {
 }
 
 model Campaign {
-  id             String         @id @default(cuid())
+  id             String           @id @default(cuid())
   name           String
   type           CampaignType
-  status         CampaignStatus @default(DRAFT)
+  status         CampaignStatus   @default(DRAFT)
   templateId     String?
   template       MessageTemplate? @relation(fields: [templateId], references: [id])
   audienceFilter Json
   scheduledAt    DateTime?
-  sentCount      Int            @default(0)
-  deliveredCount Int            @default(0)
-  readCount      Int            @default(0)
-  repliedCount   Int            @default(0)
-  failedCount    Int            @default(0)
+  sentCount      Int              @default(0)
+  deliveredCount Int              @default(0)
+  readCount      Int              @default(0)
+  repliedCount   Int              @default(0)
+  failedCount    Int              @default(0)
   organizationId String
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   messages       Message[]
-  createdAt      DateTime       @default(now())
+  createdAt      DateTime         @default(now())
   completedAt    DateTime?
+
+  // ── Impulso (add-on de campanhas premium, 2026-07-06) — campos ADITIVOS.
+  // Campanhas legadas continuam com objective=null / isImpulso=false.
+  isImpulso       Boolean               @default(false)
+  objective       String? // objetivo em linguagem natural (Iza Estrategista)
+  channels        Json? // ['whatsapp','email','sms','instagram']
+  autonomyLevel   Int                   @default(2) // 0..4 — padrão 2 (Co-Piloto)
+  journey         Json? // nodes/edges (motor Maestro) p/ TRIGGER/SEQUENCE
+  audienceSegment Json? // segmento resolvido (além do audienceFilter legado)
+  budgetPlan      Json? // plano meta->verba do Copiloto & Coach
+  optimization    Json? // config de bandit/otimização
+  variants        CampaignVariant[]
+  nodeStats       CampaignNodeStat[]
+  attributions    CampaignAttribution[]
+  consents        CampaignConsent[]
 
   @@index([organizationId])
   @@index([status])
+  @@index([organizationId, isImpulso])
   @@map("campaigns")
+}
+
+/// Impulso — braço de teste (multi-armed bandit) de uma campanha. Volume desloca para a variante vencedora.
+model CampaignVariant {
+  id             String       @id @default(cuid())
+  campaignId     String
+  campaign       Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  label          String
+  content        Json // copy/template/criativo da variante
+  weight         Float        @default(0.5) // fração do tráfego (bandit atualiza)
+  sentCount      Int          @default(0)
+  conversions    Int          @default(0)
+  revenueCents   Int          @default(0)
+  isWinner       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([campaignId])
+  @@index([organizationId])
+  @@map("campaign_variants")
+}
+
+/// Impulso — funil por nó da jornada (drop-off), espelho do FlowNodeStat para campanhas.
+model CampaignNodeStat {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaignId     String
+  campaign       Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  nodeId         String
+  nodeType       String
+  nodeLabel      String?
+  period         String // 'YYYY-MM-DD' UTC
+  entries        Int          @default(0)
+  ends           Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([campaignId, nodeId, period])
+  @@index([organizationId, campaignId])
+  @@map("campaign_node_stats")
+}
+
+/// Impulso — atribuição anúncio->conversa->venda. Fecha o loop com Meta/TikTok (CAPI/Events) e a janela FEP 72h.
+model CampaignAttribution {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaignId      String?
+  campaign        Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  contactId       String?
+  source          String // 'ctwa' | 'meta_lead_ad' | 'tiktok_msg_ad' | 'organic'
+  ctwaClid        String? // click id do Click-to-WhatsApp
+  bsuid           String? // Business-Scoped User ID (WhatsApp usernames)
+  metaCampaignId  String?
+  adId            String?
+  fepWindowEndsAt DateTime? // fim da janela FEP 72h (mensagens grátis)
+  converted       Boolean      @default(false)
+  revenueCents    Int          @default(0)
+  convertedAt     DateTime?
+  capiSentAt      DateTime? // conversão devolvida ao Meta/TikTok (CAPI/Events)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId, campaignId])
+  @@index([bsuid])
+  @@index([ctwaClid])
+  @@map("campaign_attributions")
+}
+
+/// Impulso — trilha de consentimento LGPD por contato/campanha (base legal auditável).
+model CampaignConsent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaignId     String?
+  campaign       Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  contactId      String
+  legalBasis     LegalBasis   @default(CONSENT)
+  optIn          Boolean      @default(false)
+  optInAt        DateTime?
+  optOutAt       DateTime?
+  source         String? // onde o opt-in foi coletado
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, contactId])
+  @@map("campaign_consents")
 }
 
 model Flow {
@@ -565,7 +674,7 @@ model FlowVersion {
   edges          Json
   triggerType    FlowTriggerType
   triggerConfig  Json?
-  source         String          // 'publish' | 'refresh' | 'restore'
+  source         String // 'publish' | 'refresh' | 'restore'
   createdById    String?
   createdAt      DateTime        @default(now())
 
@@ -576,19 +685,19 @@ model FlowVersion {
 
 /// Maestro 1B-analytics — contadores por nó/dia (funil/drop-off).
 model FlowNodeStat {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   flowId         String
-  flow           Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  flow           Flow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
   nodeId         String
   nodeType       String
   nodeLabel      String?
-  period         String   // 'YYYY-MM-DD' UTC
-  entries        Int      @default(0)
-  ends           Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  period         String // 'YYYY-MM-DD' UTC
+  entries        Int          @default(0)
+  ends           Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([flowId, nodeId, period])
   @@index([organizationId, flowId])
@@ -598,26 +707,26 @@ model FlowNodeStat {
 /// Analytics "Pulso" (Fase 2) — snapshot diário de métricas por org. Baseline para
 /// detecção de anomalia determinística + trend rápido. Populado pelo cron noturno.
 model AnalyticsMetricDaily {
-  id                  String   @id @default(cuid())
+  id                  String       @id @default(cuid())
   organizationId      String
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  date                String   // 'YYYY-MM-DD' UTC (dia de referência)
-  messagesIn          Int      @default(0)
-  messagesOut         Int      @default(0)
-  botMessages         Int      @default(0)
-  automationRate      Int      @default(0)
-  newContacts         Int      @default(0)
-  openConversations   Int      @default(0)
-  closedConversations Int      @default(0)
+  date                String // 'YYYY-MM-DD' UTC (dia de referência)
+  messagesIn          Int          @default(0)
+  messagesOut         Int          @default(0)
+  botMessages         Int          @default(0)
+  automationRate      Int          @default(0)
+  newContacts         Int          @default(0)
+  openConversations   Int          @default(0)
+  closedConversations Int          @default(0)
   avgFirstResponseMs  Int?
   csatAvg             Float?
-  csatCount           Int      @default(0)
-  sentimentPos        Int      @default(0)
-  sentimentNeu        Int      @default(0)
-  sentimentNeg        Int      @default(0)
-  qualifiedLeads      Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  csatCount           Int          @default(0)
+  sentimentPos        Int          @default(0)
+  sentimentNeu        Int          @default(0)
+  sentimentNeg        Int          @default(0)
+  qualifiedLeads      Int          @default(0)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   @@unique([organizationId, date])
   @@index([organizationId, date])
@@ -627,18 +736,18 @@ model AnalyticsMetricDaily {
 /// Analytics "Pulso" (Fase 2) — insight narrado por org. A IA SÓ redige sobre os
 /// fatos em `facts` (nunca inventa número); `source='rule'` é o fallback determinístico.
 model AnalyticsInsight {
-  id                 String   @id @default(cuid())
+  id                 String       @id @default(cuid())
   organizationId     String
   organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  period             String   // 'YYYY-MM-DD' (dia de referência)
-  kind               String   @default("daily_summary")
-  severity           String   @default("info") // info | attention | critical
+  period             String // 'YYYY-MM-DD' (dia de referência)
+  kind               String       @default("daily_summary")
+  severity           String       @default("info") // info | attention | critical
   title              String
-  narrative          String   @db.Text
-  facts              Json     @default("{}")
-  recommendedActions Json     @default("[]")
-  source             String   @default("llm") // llm | rule
-  createdAt          DateTime @default(now())
+  narrative          String       @db.Text
+  facts              Json         @default("{}")
+  recommendedActions Json         @default("[]")
+  source             String       @default("llm") // llm | rule
+  createdAt          DateTime     @default(now())
 
   @@index([organizationId, createdAt])
   @@map("analytics_insights")
@@ -653,7 +762,7 @@ model FlowTimer {
   flowId         String
   flow           Flow      @relation(fields: [flowId], references: [id], onDelete: Cascade)
   flowVersion    Int
-  kind           String    // 'wait' | 'schedule'
+  kind           String // 'wait' | 'schedule'
   resumeNodeId   String
   stateSnapshot  Json
   runAt          DateTime
@@ -669,7 +778,7 @@ model FlowTimer {
 }
 
 model FlowTemplate {
-  id            String                  @id @default(cuid())
+  id            String               @id @default(cuid())
   name          String
   description   String
   vertical      FlowTemplateVertical
@@ -678,10 +787,10 @@ model FlowTemplate {
   edges         Json
   triggerType   FlowTriggerType
   triggerConfig Json?
-  order         Int                     @default(0)
-  isActive      Boolean                 @default(true)
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
+  order         Int                  @default(0)
+  isActive      Boolean              @default(true)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
   @@index([vertical])
   @@index([category])
@@ -745,12 +854,12 @@ model KBDocument {
 // Voyage voyage-3 1024 dim. Ver ADR docs/architecture/embeddings.md.
 // Migration: 20260427_kbchunk_vector_1024.
 model KBChunk {
-  id         String                          @id @default(cuid())
+  id         String                       @id @default(cuid())
   content    String
   embedding  Unsupported("vector(1024)")?
   metadata   Json?
   documentId String
-  document   KBDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document   KBDocument                   @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@map("kb_chunks")
 }
@@ -769,7 +878,7 @@ model QAPair {
   question       String
   answer         String
   category       String?
-  priority       Int          @default(0)       // ordem de exibição / peso no RAG
+  priority       Int          @default(0) // ordem de exibição / peso no RAG
   isActive       Boolean      @default(true)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -784,35 +893,35 @@ model QAPair {
 }
 
 model Deal {
-  id             String   @id @default(cuid())
-  title          String
-  value          Decimal?
+  id                   String         @id @default(cuid())
+  title                String
+  value                Decimal?
   // Legado: estágio textual livre. Mantido p/ back-compat; a fonte canônica
   // passa a ser stageId (PipelineStage). Sincronizados na transição.
-  stage          String   @default("new")
-  stageId        String?
-  pipelineStage  PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  stage                String         @default("new")
+  stageId              String?
+  pipelineStage        PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
   // CRM (Onda 0): dono, previsão, atribuição e desfecho.
-  ownerId           String?
-  expectedCloseDate DateTime?
-  lossReason        LossReason?
-  sourceCampaignId  String?
-  sourceAgentId     String?
+  ownerId              String?
+  expectedCloseDate    DateTime?
+  lossReason           LossReason?
+  sourceCampaignId     String?
+  sourceAgentId        String?
   // Fase B (atribuição IA): conversa que originou/destravou a venda (vínculo
   // conversa→deal). aiLinkReviewed = já confirmado/rejeitado por humano.
   sourceConversationId String?
-  sourceConversation   Conversation? @relation("DealSourceConversation", fields: [sourceConversationId], references: [id], onDelete: SetNull)
-  aiLinkReviewed       Boolean       @default(false)
-  wonAt             DateTime?
-  lostAt            DateTime?
-  contactId      String
-  contact        Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  organizationId String
-  activities     Activity[]
-  tasks          Task[]
-  closedAt       DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  sourceConversation   Conversation?  @relation("DealSourceConversation", fields: [sourceConversationId], references: [id], onDelete: SetNull)
+  aiLinkReviewed       Boolean        @default(false)
+  wonAt                DateTime?
+  lostAt               DateTime?
+  contactId            String
+  contact              Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  organizationId       String
+  activities           Activity[]
+  tasks                Task[]
+  closedAt             DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
   @@index([organizationId])
   @@index([contactId])
@@ -883,9 +992,9 @@ model PipelineStage {
 }
 
 model Activity {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   type           ActivityType
-  actor          ActorType    @default(SYSTEM)
+  actor          ActorType     @default(SYSTEM)
   actorUserId    String?
   title          String
   body           String?
@@ -934,25 +1043,25 @@ model Task {
 }
 
 model MessageTemplate {
-  id              String   @id @default(cuid())
-  name            String
-  category        String
-  language        String   @default("pt_BR")
-  headerType      String?
-  headerContent   String?
-  bodyText        String
-  footerText      String?
-  buttons         Json?
-  metaStatus      String   @default("PENDING")
-  metaTemplateId  String?
+  id             String       @id @default(cuid())
+  name           String
+  category       String
+  language       String       @default("pt_BR")
+  headerType     String?
+  headerContent  String?
+  bodyText       String
+  footerText     String?
+  buttons        Json?
+  metaStatus     String       @default("PENDING")
+  metaTemplateId String?
   // FEATURE 5b.2 — template usado pra REABRIR a janela de 24h da Meta.
   // Fora da janela de 24h a Meta rejeita mensagem free-form; só templates
   // aprovados passam. isReengagement marca os templates elegíveis pra esse uso.
-  isReengagement  Boolean  @default(false)
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  campaigns       Campaign[]
-  createdAt       DateTime @default(now())
+  isReengagement Boolean      @default(false)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaigns      Campaign[]
+  createdAt      DateTime     @default(now())
 
   @@index([organizationId])
   @@map("message_templates")
@@ -974,24 +1083,24 @@ model InternalNote {
 // Cadeia hash garante detecção de adulteração. Append-only via policy de banco.
 model AuditLog {
   id             String      @id @default(cuid())
-  sequence       BigInt      @default(autoincrement())  // ordem estrita p/ cadeia
-  action         String                                  // e.g. "conversation.delete"
-  resource       String                                  // e.g. "conversation"
-  resourceId     String?                                 // id do recurso tocado
-  purpose        String?                                 // LGPD Art. 6 — finalidade
-  legalBasis     LegalBasis?                             // LGPD Art. 7/11
-  dataSubjectId  String?                                 // contactId quando toca dados pessoais
+  sequence       BigInt      @default(autoincrement()) // ordem estrita p/ cadeia
+  action         String // e.g. "conversation.delete"
+  resource       String // e.g. "conversation"
+  resourceId     String? // id do recurso tocado
+  purpose        String? // LGPD Art. 6 — finalidade
+  legalBasis     LegalBasis? // LGPD Art. 7/11
+  dataSubjectId  String? // contactId quando toca dados pessoais
   details        Json?
-  before         Json?                                   // snapshot antes (forense)
-  after          Json?                                   // snapshot depois
+  before         Json? // snapshot antes (forense)
+  after          Json? // snapshot depois
   ipAddress      String?
   userAgent      String?
-  hash           String?                                 // SHA-256 do registro (null em linhas legacy)
-  prevHash       String?                                 // hash do registro anterior (chain)
+  hash           String? // SHA-256 do registro (null em linhas legacy)
+  prevHash       String? // hash do registro anterior (chain)
   userId         String
   user           User        @relation(fields: [userId], references: [id])
   organizationId String
-  anonymizedAt   DateTime?                               // LGPD Art. 16 — marcado ao anonimizar
+  anonymizedAt   DateTime? // LGPD Art. 16 — marcado ao anonimizar
   createdAt      DateTime    @default(now())
 
   @@index([organizationId])
@@ -1005,22 +1114,22 @@ model AuditLog {
 
 // LGPD Art. 18 — requisições do titular dos dados
 model DataSubjectRequest {
-  id             String                   @id @default(cuid())
-  type           DataSubjectRequestType
-  status         DataSubjectRequestStatus @default(PENDING)
-  requesterEmail String                                      // email do titular
-  requesterName  String?
-  contactId      String?                                     // Contact.id se identificado
-  reason         String?                                     // justificativa do titular
-  responseData   Json?                                       // payload da resposta (para ACCESS/PORTABILITY)
-  handledById    String?                                     // user.id do operador
+  id              String                   @id @default(cuid())
+  type            DataSubjectRequestType
+  status          DataSubjectRequestStatus @default(PENDING)
+  requesterEmail  String // email do titular
+  requesterName   String?
+  contactId       String? // Contact.id se identificado
+  reason          String? // justificativa do titular
+  responseData    Json? // payload da resposta (para ACCESS/PORTABILITY)
+  handledById     String? // user.id do operador
   rejectionReason String?
-  dueDate        DateTime                                    // prazo legal (15 dias — Art. 19)
-  completedAt    DateTime?
-  organizationId String
-  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  dueDate         DateTime // prazo legal (15 dias — Art. 19)
+  completedAt     DateTime?
+  organizationId  String
+  organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
 
   @@index([organizationId])
   @@index([status])
@@ -1051,21 +1160,21 @@ model Consent {
 // self-service Q3 estende esse modelo.
 // ═══════════════════════════════════════════════════════
 model Agent {
-  id              String          @id @default(uuid()) @db.Text
-  organizationId  String          @map("organization_id")
-  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name            String          // "Iza", "Bella", "Ana"
-  role            String          // 'comercial' | 'suporte' | 'onboarding' | 'financeiro'
-  status          String          @default("live") // 'draft' | 'reviewed' | 'live'
-  systemPrompt    String          @map("system_prompt") @db.Text
-  toneConfig      Json            @default("{}") @map("tone_config")
-  scopeConfig     Json            @default("{}") @map("scope_config")
-  abilities       Json            @default("{}")
-  knowledgeBaseId String?         @map("knowledge_base_id")
-  knowledgeBase   KnowledgeBase?  @relation(fields: [knowledgeBaseId], references: [id], onDelete: SetNull)
-  voiceConfig     Json?           @map("voice_config") // null até voz voltar Q3
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
+  id              String         @id @default(uuid()) @db.Text
+  organizationId  String         @map("organization_id")
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String // "Iza", "Bella", "Ana"
+  role            String // 'comercial' | 'suporte' | 'onboarding' | 'financeiro'
+  status          String         @default("live") // 'draft' | 'reviewed' | 'live'
+  systemPrompt    String         @map("system_prompt") @db.Text
+  toneConfig      Json           @default("{}") @map("tone_config")
+  scopeConfig     Json           @default("{}") @map("scope_config")
+  abilities       Json           @default("{}")
+  knowledgeBaseId String?        @map("knowledge_base_id")
+  knowledgeBase   KnowledgeBase? @relation(fields: [knowledgeBaseId], references: [id], onDelete: SetNull)
+  voiceConfig     Json?          @map("voice_config") // null até voz voltar Q3
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
   evalRuns        AgentEvalRun[]
 
   @@index([organizationId, role, status])
@@ -1080,7 +1189,7 @@ model OnboardingJourneyState {
   id              String       @id @default(uuid()) @db.Text
   organizationId  String       @map("organization_id")
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  stage           String       // 'D1' | 'D3' | 'D7'
+  stage           String // 'D1' | 'D3' | 'D7'
   sentAt          DateTime     @default(now()) @map("sent_at")
   emailProviderId String?      @map("email_provider_id") // Resend ID ou 'log:...'
   templateId      String       @map("template_id")
@@ -1096,41 +1205,41 @@ model OnboardingJourneyState {
 // Roda sob demanda (manual via API) ou via cron diário (V3.3 futuro).
 // Permite histórico de score por agent + alerta se degrada.
 model AgentEvalRun {
-  id                String    @id @default(uuid()) @db.Text
-  agentId           String    @map("agent_id")
-  agent             Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  id               String    @id @default(uuid()) @db.Text
+  agentId          String    @map("agent_id")
+  agent            Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   // 'pending' (criada, ainda não rodou) | 'running' | 'completed' | 'failed'
-  status            String    @default("pending")
+  status           String    @default("pending")
   // Versão do eval set usada (ex: 'v1') — pra rastrear quando set muda
-  evalSetVersion    String    @map("eval_set_version")
+  evalSetVersion   String    @map("eval_set_version")
   // Versão do CORE rules usada (ex: 'v1') — pra rastrear quando CORE muda
-  coreRulesVersion  String?   @map("core_rules_version")
+  coreRulesVersion String?   @map("core_rules_version")
   // Trigger: 'manual' | 'cron' | 'pre_release'
-  triggeredBy       String    @default("manual") @map("triggered_by")
+  triggeredBy      String    @default("manual") @map("triggered_by")
   // Scenarios rodados (subset filter aplicado) — null = todos
-  scenarioFilter    Json?     @map("scenario_filter")
+  scenarioFilter   Json?     @map("scenario_filter")
   // Métricas agregadas
-  totalScenarios    Int?      @map("total_scenarios")
-  passed            Int?
-  partial           Int?
-  failed            Int?
-  criticalFailed    Int?      @map("critical_failed")
-  scorePercent      Int?      @map("score_percent")
+  totalScenarios   Int?      @map("total_scenarios")
+  passed           Int?
+  partial          Int?
+  failed           Int?
+  criticalFailed   Int?      @map("critical_failed")
+  scorePercent     Int?      @map("score_percent")
   // Resultado completo (todos os ScenarioResult em JSON)
-  results           Json?
+  results          Json?
   // Erro (se status=failed)
-  error             String?   @db.Text
+  error            String?   @db.Text
   // Timing
-  startedAt         DateTime  @default(now()) @map("started_at")
-  completedAt       DateTime? @map("completed_at")
-  durationMs        Int?      @map("duration_ms")
+  startedAt        DateTime  @default(now()) @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  durationMs       Int?      @map("duration_ms")
   // FASE 2.2a (#243) — instrumentação Slack (diagnóstico de falhas silenciosas)
   // 'skipped' (não cruzou threshold) | 'sent' | 'failed' (com slackAlertError)
-  slackAlertStatus  String?   @map("slack_alert_status")
-  slackAlertError   String?   @db.Text @map("slack_alert_error")
-  slackAlertSentAt  DateTime? @map("slack_alert_sent_at")
+  slackAlertStatus String?   @map("slack_alert_status")
+  slackAlertError  String?   @map("slack_alert_error") @db.Text
+  slackAlertSentAt DateTime? @map("slack_alert_sent_at")
 
-  fixDecisions      AgentEvalFixDecision[]
+  fixDecisions AgentEvalFixDecision[]
 
   @@index([agentId, startedAt])
   @@index([status])
@@ -1141,30 +1250,30 @@ model AgentEvalRun {
 // Quando admin/cliente clica "Aplicar Sugestão" no dashboard, snapshot do
 // prompt antes/depois é persistido aqui pra rollback + audit.
 model AgentEvalFixDecision {
-  id              String        @id @default(uuid()) @db.Text
-  runId           String        @map("run_id")
-  run             AgentEvalRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
-  scenarioId      String        @map("scenario_id") // ex: cr5_nome_disponivel_usar
-  agentId         String        @map("agent_id")
+  id                 String       @id @default(uuid()) @db.Text
+  runId              String       @map("run_id")
+  run                AgentEvalRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scenarioId         String       @map("scenario_id") // ex: cr5_nome_disponivel_usar
+  agentId            String       @map("agent_id")
   // 'applied' | 'rejected' | 'reverted'
-  decision        String
+  decision           String
   // Snapshot da sugestão original (JSONB: summary + patches + confidence)
-  originalSuggestion Json?     @map("original_suggestion")
+  originalSuggestion Json?        @map("original_suggestion")
   // Diff final efetivamente aplicado (pode ter sido editado pelo user)
-  finalDiff       String?       @db.Text @map("final_diff")
+  finalDiff          String?      @map("final_diff") @db.Text
   // Snapshot do system_prompt antes (rollback) e depois
-  promptBefore    String?       @db.Text @map("prompt_before")
-  promptAfter     String?       @db.Text @map("prompt_after")
+  promptBefore       String?      @map("prompt_before") @db.Text
+  promptAfter        String?      @map("prompt_after") @db.Text
   // Audit: quem decidiu
-  decidedById     String?       @map("decided_by_id")
-  decidedByEmail  String        @map("decided_by_email") // snapshot
-  decidedByName   String?       @map("decided_by_name")  // snapshot
-  decidedByRole   String?       @map("decided_by_role")  // SUPERADMIN | ADMIN
-  decidedAt       DateTime      @default(now()) @map("decided_at")
+  decidedById        String?      @map("decided_by_id")
+  decidedByEmail     String       @map("decided_by_email") // snapshot
+  decidedByName      String?      @map("decided_by_name") // snapshot
+  decidedByRole      String?      @map("decided_by_role") // SUPERADMIN | ADMIN
+  decidedAt          DateTime     @default(now()) @map("decided_at")
   // Motivo opcional (preenche em 'rejected' ou notas em 'applied')
-  notes           String?       @db.Text
+  notes              String?      @db.Text
   // Se reverted, aponta pra decision original
-  revertedFromId  String?       @map("reverted_from_id")
+  revertedFromId     String?      @map("reverted_from_id")
 
   @@index([runId])
   @@index([agentId, decidedAt])
@@ -1177,20 +1286,20 @@ model AgentEvalFixDecision {
 // Não polui audit_logs (hash chain) — ver migration.sql para racional.
 // ═══════════════════════════════════════════════════════
 model LLMCallLog {
-  id                  String   @id @default(uuid()) @db.Text
-  organizationId      String?  @map("organization_id")
-  conversationId      String?  @map("conversation_id")
-  provider            String   // 'anthropic-sonnet' | 'anthropic-haiku' | 'openai-mini' | 'none'
-  model               String   // 'claude-sonnet-4-6' | etc
-  operation           String   @default("chat") // 'chat' | 'classify' | 'sentiment'
-  inputTokens         Int?     @map("input_tokens")
-  outputTokens        Int?     @map("output_tokens")
-  costUsdEstimate     Decimal? @map("cost_usd_estimate") @db.Decimal(10, 6)
-  latencyMs           Int      @map("latency_ms")
-  fallbackTriggered   Boolean  @default(false) @map("fallback_triggered")
-  attemptCount        Int      @default(1) @map("attempt_count")
-  error               String?
-  createdAt           DateTime @default(now()) @map("created_at")
+  id                String   @id @default(uuid()) @db.Text
+  organizationId    String?  @map("organization_id")
+  conversationId    String?  @map("conversation_id")
+  provider          String // 'anthropic-sonnet' | 'anthropic-haiku' | 'openai-mini' | 'none'
+  model             String // 'claude-sonnet-4-6' | etc
+  operation         String   @default("chat") // 'chat' | 'classify' | 'sentiment'
+  inputTokens       Int?     @map("input_tokens")
+  outputTokens      Int?     @map("output_tokens")
+  costUsdEstimate   Decimal? @map("cost_usd_estimate") @db.Decimal(10, 6)
+  latencyMs         Int      @map("latency_ms")
+  fallbackTriggered Boolean  @default(false) @map("fallback_triggered")
+  attemptCount      Int      @default(1) @map("attempt_count")
+  error             String?
+  createdAt         DateTime @default(now()) @map("created_at")
 
   @@index([organizationId, createdAt])
   @@index([provider, createdAt])

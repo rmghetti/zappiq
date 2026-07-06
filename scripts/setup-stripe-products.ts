@@ -26,9 +26,11 @@ import Stripe from 'stripe';
 import {
   PLAN_CONFIG,
   ADDONS,
+  ADDONS_V4_LIST,
   getAnnualPrice,
   type PlanConfig,
   type AddonConfig,
+  type AddonV4,
 } from '@zappiq/shared';
 
 const STRIPE_KEY = process.env.STRIPE_SECRET_KEY;
@@ -155,6 +157,21 @@ async function setupAddon(addon: AddonConfig): Promise<{ product: string; monthl
   return { product: product.id, monthly: price.id };
 }
 
+// Impulso (ADDONS_V4 família IMPULSO) — assinatura recorrente do add-on de campanhas.
+// O restante do ADDONS_V4 (mensagens IA, disparos, capacidade) é gerido pelo gerador
+// V4 (addonStripeIds.ts); aqui criamos só os produtos/prices dos tiers do Impulso.
+async function setupImpulsoAddon(a: AddonV4): Promise<{ product: string; monthly?: string }> {
+  console.log(`\n▼ Impulso ${a.name} (${a.key})`);
+  const product = await findOrCreateProduct(`addon_${a.key}`, `ZappIQ ${a.name}`, a.description);
+  const price = await findOrCreatePrice(
+    product.id,
+    Math.round(a.amountBrl * 100),
+    'month',
+    `zappiq_addon_${a.key.toLowerCase()}_monthly`,
+  );
+  return { product: product.id, monthly: price.id };
+}
+
 async function main() {
   console.log('═══════════════════════════════════════════════════════');
   console.log(' ZappIQ — Stripe Products & Prices Bootstrap');
@@ -169,6 +186,11 @@ async function main() {
   for (const addon of Object.values(ADDONS)) {
     const result = await setupAddon(addon);
     if (result) addonPrices[addon.id] = result;
+  }
+
+  // Impulso — add-on de campanhas (ADDONS_V4 família IMPULSO): Start/Pro/Scale.
+  for (const a of ADDONS_V4_LIST.filter((x) => x.family === 'IMPULSO')) {
+    addonPrices[a.key] = await setupImpulsoAddon(a);
   }
 
   console.log('\n═══════════════════════════════════════════════════════');
