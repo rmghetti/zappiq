@@ -68,6 +68,7 @@ import { initAgentEvalCronJob } from './services/agentEvalCronService.js'; // FA
 import { initAnalyticsPulseCronJob } from './services/analyticsPulseCron.js'; // Analytics Pulso — insight diário por org
 import { initCampaignSchedulerCronJob } from './services/campaignSchedulerCron.js'; // W2.4 — dispara campanhas agendadas
 import { initTrialExpirationCronJob } from './services/trialExpirationCron.js'; // Área Clientes Fase 1 — fecha trials vencidos + recomputa lifecycleStage
+import { initSuperadminTrialDigestJob } from './services/superadminTrialDigestCron.js'; // Trial Enforcement — digest diário ao CEO (e-mail + Slack)
 
 const app = express();
 const httpServer = createServer(app);
@@ -367,6 +368,11 @@ initTrialExpirationCronJob().catch((err) => {
 // ── W2.4: sweep de campanhas agendadas (a cada minuto) — dispara SCHEDULED ──
 initCampaignSchedulerCronJob().catch((err) => {
   logger.error('[Server] Failed to initialize campaign scheduler cron job:', err);
+});
+
+// ── Trial Enforcement: digest diário ao superadmin (13:00 UTC) — e-mail + Slack ──
+initSuperadminTrialDigestJob().catch((err) => {
+  logger.error('[Server] Failed to initialize superadmin trial digest cron job:', err);
 });
 
 // ── Error Handler (must be last) ────────────────
