@@ -9,6 +9,7 @@ import {
 import { api } from '../../../lib/api';
 import { CampaignFormModal } from '../../../components/campaigns/CampaignFormModal';
 import { IzaStrategistModal } from '../../../components/campaigns/IzaStrategistModal';
+import { ImpulsoUpsellModal, type ImpulsoEntitlement } from '../../../components/campaigns/ImpulsoUpsellModal';
 
 interface CoachInsight {
   severity: 'good' | 'info' | 'warning';
@@ -85,6 +86,20 @@ export default function CampaignsPage() {
   const [izaOpen, setIzaOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [howOpen, setHowOpen] = useState(true);
+  const [entitlement, setEntitlement] = useState<ImpulsoEntitlement | null>(null);
+  const [upsellOpen, setUpsellOpen] = useState(false);
+
+  const fetchEntitlement = useCallback(() => {
+    api.get('/api/impulso-access')
+      .then((res) => setEntitlement(res.data || null))
+      .catch(() => setEntitlement(null));
+  }, []);
+
+  // Intercepta as acoes: quem nao tem o Impulso ativo cai na vitrine/paywall.
+  const guard = useCallback((action: () => void) => {
+    if (entitlement?.enabled) action();
+    else setUpsellOpen(true);
+  }, [entitlement]);
 
   const fetchCampaigns = useCallback(() => {
     setLoading(true);
@@ -95,6 +110,7 @@ export default function CampaignsPage() {
   }, []);
 
   const handleSend = useCallback(async (id: string) => {
+    if (!entitlement?.enabled) { setUpsellOpen(true); return; }
     if (!confirm('Disparar esta campanha agora? As mensagens serão enviadas para os contatos com consentimento de marketing.')) return;
     setBusyId(id);
     try {
@@ -105,7 +121,7 @@ export default function CampaignsPage() {
     } finally {
       setBusyId(null);
     }
-  }, [fetchCampaigns]);
+  }, [fetchCampaigns, entitlement]);
 
   const handleDelete = useCallback(async (id: string) => {
     if (!confirm('Excluir esta campanha? Esta ação não pode ser desfeita.')) return;
@@ -120,7 +136,7 @@ export default function CampaignsPage() {
     }
   }, [fetchCampaigns]);
 
-  useEffect(() => { fetchCampaigns(); }, [fetchCampaigns]);
+  useEffect(() => { fetchCampaigns(); fetchEntitlement(); }, [fetchCampaigns, fetchEntitlement]);
 
   const metrics = useMemo(() => {
     const active = campaigns.filter((c) => c.status === 'SENDING' || c.status === 'SCHEDULED').length;
@@ -147,19 +163,32 @@ export default function CampaignsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIzaOpen(true)}
+            onClick={() => guard(() => setIzaOpen(true))}
             className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:opacity-95 shadow-sm ${GRAD}`}
           >
             <Sparkles size={16} /> Criar com a Iza
           </button>
           <button
-            onClick={() => setModalOpen(true)}
+            onClick={() => guard(() => setModalOpen(true))}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
           >
             <Plus size={16} /> Nova campanha
           </button>
         </div>
       </div>
+
+      {/* Banner do teste do Impulso (quando ativo via trial) */}
+      {entitlement?.source === 'trial' && entitlement.trial && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-[#CDE9DA] bg-[#E4F3EC] px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-[#1B7A54]">
+            <Sparkles size={15} />
+            <span><b>Teste do Impulso ativo</b> · {entitlement.trial.daysLeft} {entitlement.trial.daysLeft === 1 ? 'dia restante' : 'dias restantes'}</span>
+          </div>
+          <button onClick={() => setUpsellOpen(true)} className="text-xs font-semibold text-[#3A3FA8] hover:underline self-start sm:self-auto">
+            Ver planos e contratar
+          </button>
+        </div>
+      )}
 
       {/* ── Visão geral (métricas) ────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -226,7 +255,7 @@ export default function CampaignsPage() {
             ))}
           </div>
         ) : campaigns.length === 0 ? (
-          <EmptyState onIza={() => setIzaOpen(true)} onManual={() => setModalOpen(true)} />
+          <EmptyState onIza={() => guard(() => setIzaOpen(true))} onManual={() => guard(() => setModalOpen(true))} />
         ) : (
           <div className="space-y-3">
             {campaigns.map((c) => (
@@ -244,6 +273,12 @@ export default function CampaignsPage() {
 
       <CampaignFormModal open={modalOpen} onClose={() => setModalOpen(false)} onSaved={fetchCampaigns} />
       <IzaStrategistModal open={izaOpen} onClose={() => setIzaOpen(false)} onCreated={fetchCampaigns} />
+      <ImpulsoUpsellModal
+        open={upsellOpen}
+        entitlement={entitlement}
+        onClose={() => setUpsellOpen(false)}
+        onActivated={() => { fetchEntitlement(); setUpsellOpen(false); setIzaOpen(true); }}
+      />
     </div>
   );
 }

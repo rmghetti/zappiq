@@ -31,6 +31,7 @@ import conversationsRoutes from './routes/conversations.js';
 import messagesRoutes from './routes/messages.js';
 import campaignsRoutes from './routes/campaigns.js';
 import impulsoRoutes from './routes/impulso.js';
+import impulsoAccessRoutes from './routes/impulsoAccess.js';
 import { requireImpulso } from './middleware/requireImpulso.js';
 import analyticsRoutes from './routes/analytics.js';
 import flowsRoutes from './routes/flows.js';
@@ -286,7 +287,9 @@ app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, contactsRoutes);
 app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, conversationsRoutes);
 app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, messagesRoutes);
 app.use('/api/campaigns', authMiddleware, rlsTenantMiddleware, campaignsRoutes);
-// Impulso — add-on de campanhas premium. Gated por requireImpulso() (entitlement).
+// Impulso — acesso/entitlement + trial (NÃO gated: todo cliente consulta e pode ativar teste).
+app.use('/api/impulso-access', authMiddleware, rlsTenantMiddleware, impulsoAccessRoutes);
+// Impulso — features (gated por requireImpulso: precisa do add-on/trial/alpha ativo).
 app.use('/api/impulso', authMiddleware, rlsTenantMiddleware, requireImpulso(), impulsoRoutes);
 app.use('/api/analytics', authMiddleware, rlsTenantMiddleware, analyticsRoutes);
 // IMPORTANT: /api/flows/templates MUST be mounted before /api/flows, otherwise
