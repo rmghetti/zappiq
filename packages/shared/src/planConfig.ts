@@ -775,7 +775,7 @@ export function planAnnualTotal(plan: PlanConfig): number | null {
 
 export interface AddonV4 {
   key: string;
-  family: 'AI_MSG' | 'BROADCAST' | 'CHANNEL' | 'CAPACITY' | 'VOICE';
+  family: 'AI_MSG' | 'BROADCAST' | 'CHANNEL' | 'CAPACITY' | 'VOICE' | 'IMPULSO';
   name: string;
   description: string;
   pricingMode: 'overage_unit' | 'one_time_pack' | 'recurring_monthly';
@@ -873,6 +873,27 @@ export const ADDONS_V4_LIST: AddonV4[] = [
     pricingMode: 'recurring_monthly', amountBrl: 147, unit: '5 integracoes',
     cmgBrl: 5, marginPct: 97,
     availableFor: ['GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+
+  // ─── Familia 4: Impulso (add-on de campanhas — produto separado, 2026-07-06) ───
+  // Assinatura de SOFTWARE (modulo + IA de campanha inclusa + features). As
+  // mensagens de marketing vao pela carteira BROADCAST (repasse Meta + markup),
+  // NAO empacotadas aqui — competir na tarifa Meta quebra a margem.
+  // Stripe IDs gerados por comandos/impulso-stripe-setup.command (nao commitar chave).
+  { key: 'IMPULSO_START', family: 'IMPULSO', name: 'Impulso Start — campanhas com a Iza',
+    description: 'Modulo de campanhas: Iza Estrategista (objetivo em linguagem natural vira campanha completa) + Studio (jornadas/segmentos/criativos) + Copiloto. WhatsApp, e-mail e SMS. Ate 5.000 contatos ativos. IA de campanha inclusa.',
+    pricingMode: 'recurring_monthly', amountBrl: 197, unit: 'mes',
+    cmgBrl: 28, marginPct: 86,
+    availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'start_monthly' },
+  { key: 'IMPULSO_PRO', family: 'IMPULSO', name: 'Impulso Pro — campanhas + loop de anuncios',
+    description: 'Tudo do Start + Loop de Performance (Click-to-WhatsApp, Meta Lead Ads, CAPI), atribuicao de receita/ROAS, checkout Pix no chat, auto-otimizacao (bandit) + send-time, e TikTok->WhatsApp. Ate 25.000 contatos ativos.',
+    pricingMode: 'recurring_monthly', amountBrl: 497, unit: 'mes',
+    cmgBrl: 70, marginPct: 86,
+    availableFor: ['GROWTH', 'SCALE'], stripePriceKey: 'pro_monthly' },
+  { key: 'IMPULSO_SCALE', family: 'IMPULSO', name: 'Impulso Scale — performance sem limite',
+    description: 'Tudo do Pro + Google Ads e conversoes offline, autopiloto nivel 3, multiplos numeros e TikTok Events API. Contatos ilimitados.',
+    pricingMode: 'recurring_monthly', amountBrl: 997, unit: 'mes',
+    cmgBrl: 140, marginPct: 86,
+    availableFor: ['SCALE'], stripePriceKey: 'scale_monthly' },
 ];
 
 export function listAddonsV4(): AddonV4[] {
