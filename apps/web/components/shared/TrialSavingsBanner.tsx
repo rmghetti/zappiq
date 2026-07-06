@@ -71,13 +71,22 @@ export function TrialSavingsBanner() {
     ? Math.max(0, Math.ceil((new Date(trial.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 21;
 
+  // Trial Enforcement: "Dia X de 14" + urgência crescente (≤3 amarelo, ≤1 vermelho).
+  const diaAtual = Math.min(14, Math.max(1, 15 - daysRemaining));
+  const tone =
+    daysRemaining <= 1
+      ? { bg: 'bg-gradient-to-r from-red-600 via-rose-600 to-red-500', cta: 'text-red-700' }
+      : daysRemaining <= 3
+        ? { bg: 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500', cta: 'text-amber-700' }
+        : { bg: 'bg-gradient-to-r from-primary-600 via-purple-600 to-primary-500', cta: 'text-primary-700' };
+
   const handleDismiss = () => {
     localStorage.setItem(DISMISS_KEY, new Date().toISOString());
     setDismissed(true);
   };
 
   return (
-    <div className="relative bg-gradient-to-r from-primary-600 via-purple-600 to-primary-500 rounded-2xl overflow-hidden mb-6 shadow-lg">
+    <div className={`relative ${tone.bg} rounded-2xl overflow-hidden mb-6 shadow-lg`}>
       {/* Dismiss */}
       <button
         onClick={handleDismiss}
@@ -90,9 +99,11 @@ export function TrialSavingsBanner() {
       <div className="p-6 md:p-7">
         <div className="flex items-start gap-4 flex-wrap md:flex-nowrap">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 text-white/80 text-xs font-bold uppercase tracking-wider mb-2">
+            <div className="flex items-center gap-2 text-white/90 text-xs font-bold uppercase tracking-wider mb-2">
               <Clock size={14} />
-              Trial · {daysRemaining} {daysRemaining === 1 ? 'dia restante' : 'dias restantes'} · cap US$ 15
+              Dia {diaAtual} de 14 · {daysRemaining === 0
+                ? 'termina hoje'
+                : `faltam ${daysRemaining} ${daysRemaining === 1 ? 'dia' : 'dias'}`}
             </div>
             <h3 className="text-white font-display text-xl md:text-2xl font-extrabold leading-tight mb-1">
               {daysRemaining > 10
@@ -115,9 +126,9 @@ export function TrialSavingsBanner() {
             </button>
             <Link
               href="/billing"
-              className="inline-flex items-center gap-2 bg-white hover:bg-gray-50 text-primary-700 font-semibold px-4 py-2.5 rounded-lg text-sm transition-colors shadow-sm"
+              className={`inline-flex items-center gap-2 bg-white hover:bg-gray-50 ${tone.cta} font-semibold px-4 py-2.5 rounded-lg text-sm transition-colors shadow-sm`}
             >
-              Converter trial <ArrowRight size={14} />
+              {daysRemaining <= 3 ? 'Escolher plano' : 'Converter trial'} <ArrowRight size={14} />
             </Link>
           </div>
         </div>

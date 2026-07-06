@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
+import { RecommendationHero } from './RecommendationHero';
 
 const PLANS: PlanConfig[] = listActivePlans();
 
@@ -59,7 +60,8 @@ type SubscriptionState = {
 export default function BillingPage() {
   const { organization } = useAuthStore();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
-  const [cycle, setCycle] = useState<BillingCycle>('monthly');
+  // Trial Enforcement: anual é o padrão em destaque (empurra o desconto de 20%).
+  const [cycle, setCycle] = useState<BillingCycle>('annual');
   const [usage, setUsage] = useState<BillingUsage | null>(null);
   const [usageLoading, setUsageLoading] = useState(true);
   const [subscription, setSubscription] = useState<SubscriptionState | null>(null);
@@ -155,9 +157,18 @@ export default function BillingPage() {
       {/* Estado REAL da assinatura (FEATURE 5b.1) */}
       <SubscriptionCard loading={subLoading} sub={subscription} />
 
-      {/* Trial 14 dias HERO — so quando NAO ha assinatura paga real, pra nao
-          mostrar promo de trial a quem ja assinou. */}
-      {(!subscription || subscription.status === 'no_subscription' || subscription.status === 'trialing') && (
+      {/* Trial Enforcement — hero de conversão (plano recomendado + anual) quando
+          o trial venceu (paywall) ou a pessoa chega por link de trial acabando. */}
+      <RecommendationHero
+        paywall={organization?.paywall}
+        onChoose={handleCheckout}
+        loadingPlan={loadingPlan}
+      />
+
+      {/* Trial 14 dias HERO — so quando NAO ha assinatura paga real E não está em
+          paywall (senão duplica com o RecommendationHero). */}
+      {organization?.paywall !== 'hard' && organization?.paywall !== 'soft' &&
+       (!subscription || subscription.status === 'no_subscription' || subscription.status === 'trialing') && (
       <div className="mb-6 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border border-emerald-200 rounded-2xl p-5 flex items-start gap-4">
         <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
           <Gift size={20} className="text-white" />
