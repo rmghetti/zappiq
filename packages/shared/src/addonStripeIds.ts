@@ -66,4 +66,24 @@ export const ADDONS_V4_STRIPE: Record<string, AddonStripeIds & { meterId?: strin
     productId: 'prod_Ub3jKfnI4ylmF6',
     priceIds: { monthly: 'price_1TbrcOKlp5SWv74XSalzcP8g' },  // R$ 147/mes
   },
+
+  // ─────────────────────────────────────────────────────────
+  // Impulso (add-on de campanhas premium) — criado via
+  // apps/api/scripts/impulso-stripe-setup.ts (modo TESTE, 2026-07-06).
+  // Estes sao os IDs do Stripe TEST MODE (sk_test_...). Antes de vender
+  // de verdade, rode o mesmo script com sk_live_... e SUBSTITUA os IDs
+  // abaixo pelos de producao.
+  // ─────────────────────────────────────────────────────────
+  IMPULSO_START: {
+    productId: 'prod_Upv6bRLFAiDBJC',
+    priceIds: { monthly: 'price_1TqFFvKlp5SWv74Xt8IYu1Z3' },  // R$ 197/mes (TEST)
+  },
+  IMPULSO_PRO: {
+    productId: 'prod_Upv6acWtLxMcmk',
+    priceIds: { monthly: 'price_1TqFFwKlp5SWv74XvWRN4w6o' },  // R$ 497/mes (TEST)
+  },
+  IMPULSO_SCALE: {
+    productId: 'prod_Upv6LhKZR8Yoyd',
+    priceIds: { monthly: 'price_1TqFFxKlp5SWv74XUJ3519kr' },  // R$ 997/mes (TEST)
+  },
 };
