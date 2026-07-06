@@ -204,6 +204,9 @@ model Organization {
   // diário + webhooks). Materializado para consulta rápida; a verdade continua
   // sendo a função pura. crm_accounts.lifecycleStage é o espelho consumido pela UI.
   accountLifecycleStage String?
+  // Fim da carência de paywall. Setado APENAS nas orgs já vencidas no go-live do
+  // gate (cortesia de migração de 7 dias). Go-forward = null (trava dura no T-0).
+  paywallGraceUntil     DateTime?
 
   users              User[]
   contacts           Contact[]

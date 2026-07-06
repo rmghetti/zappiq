@@ -28,6 +28,7 @@ import { logger } from '../utils/logger.js';
 import { sendEmail } from '../services/email/emailProvider.js';
 import { renderTrialConvertedEmail } from '../services/email/templates/trialConverted.js';
 import { deriveLifecycleStage } from '../services/accountLifecycle.js';
+import { invalidateOrgAccessCache } from '../middleware/requireActivePlan.js'; // busta o cache do gate ao mudar billing
 import {
   resolvePlanFromPriceId,
   planToOrgEnum,
@@ -125,6 +126,10 @@ async function recomputeLifecycle(organizationId: string, source: string): Promi
     where: { id: organizationId },
     data: { accountLifecycleStage: stage },
   });
+
+  // Trial Enforcement: billing mudou → invalida o cache de 60s do gate, pra
+  // um cliente que acabou de pagar não ficar preso no 402 até o TTL expirar.
+  await invalidateOrgAccessCache(organizationId);
 
   // espelha em crm_accounts (fonte da UI), registrando mudança na timeline.
   const account = await prisma.crmAccount.findUnique({

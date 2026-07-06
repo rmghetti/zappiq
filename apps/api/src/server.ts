@@ -16,6 +16,7 @@ import { redis } from './utils/redis.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
 import { rlsTenantMiddleware } from './middleware/rlsTenant.js';
+import { requireActivePlan } from './middleware/requireActivePlan.js'; // Trial Enforcement — gate de trial vencido (402)
 import { initQueues, closeQueues } from './services/queueService.js';
 import { initFlowTimerWorker } from './services/flowScheduler.js';
 import { setIo } from './utils/socketRegistry.js';
@@ -279,27 +280,30 @@ app.use('/api/admin/clientes', adminClientesRoutes); // Área Clientes Fase 2: l
 // authMiddleware aplicado dentro da própria route + RLS por organizationId.
 app.use('/api/agent-quality', agentQualityRoutes);
 
-// ── Protected Routes (auth + RLS tenant isolation) ─
-app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, contactsRoutes);
-app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, conversationsRoutes);
-app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, messagesRoutes);
-app.use('/api/campaigns', authMiddleware, rlsTenantMiddleware, campaignsRoutes);
-app.use('/api/analytics', authMiddleware, rlsTenantMiddleware, analyticsRoutes);
+// ── Protected Routes (auth + RLS tenant isolation + gate de trial vencido) ─
+// requireActivePlan (Trial Enforcement) bloqueia (402) orgs sem plano pago ativo,
+// EXCETO /api/billing (precisa ficar acessível pra pessoa escolher/pagar um plano).
+// /api/auth, /api/onboarding, /api/dsr (direito LGPD) e /api/admin/* ficam fora por design.
+app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, requireActivePlan, contactsRoutes);
+app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, requireActivePlan, conversationsRoutes);
+app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, requireActivePlan, messagesRoutes);
+app.use('/api/campaigns', authMiddleware, rlsTenantMiddleware, requireActivePlan, campaignsRoutes);
+app.use('/api/analytics', authMiddleware, rlsTenantMiddleware, requireActivePlan, analyticsRoutes);
 // IMPORTANT: /api/flows/templates MUST be mounted before /api/flows, otherwise
 // GET /api/flows/templates would be captured by GET /:id in flowsRoutes (id="templates")
 // and return 404 'Flow not found' instead of the templates list.
-app.use('/api/flows/templates', authMiddleware, rlsTenantMiddleware, flowTemplatesRoutes);
-app.use('/api/flows', authMiddleware, rlsTenantMiddleware, flowsRoutes);
-app.use('/api/kb', authMiddleware, rlsTenantMiddleware, knowledgeBaseRoutes);
-app.use('/api/ai-training', authMiddleware, rlsTenantMiddleware, aiTrainingRoutes); // PR #106.1
-app.use('/api/templates', authMiddleware, rlsTenantMiddleware, templatesRoutes);
-app.use('/api/deals', authMiddleware, rlsTenantMiddleware, dealsRoutes);
-app.use('/api/crm', authMiddleware, rlsTenantMiddleware, crmRoutes); // PR #217 CRM 3a — métricas executivas
-app.use('/api/tasks', authMiddleware, rlsTenantMiddleware, tasksRoutes); // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA
-app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes);
-app.use('/api/settings', authMiddleware, rlsTenantMiddleware, settingsRoutes);
-app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, auditLogsRoutes);
-app.use('/api/embedded-signup', authMiddleware, rlsTenantMiddleware, embeddedSignupRoutes); // #273/#274
+app.use('/api/flows/templates', authMiddleware, rlsTenantMiddleware, requireActivePlan, flowTemplatesRoutes);
+app.use('/api/flows', authMiddleware, rlsTenantMiddleware, requireActivePlan, flowsRoutes);
+app.use('/api/kb', authMiddleware, rlsTenantMiddleware, requireActivePlan, knowledgeBaseRoutes);
+app.use('/api/ai-training', authMiddleware, rlsTenantMiddleware, requireActivePlan, aiTrainingRoutes); // PR #106.1
+app.use('/api/templates', authMiddleware, rlsTenantMiddleware, requireActivePlan, templatesRoutes);
+app.use('/api/deals', authMiddleware, rlsTenantMiddleware, requireActivePlan, dealsRoutes);
+app.use('/api/crm', authMiddleware, rlsTenantMiddleware, requireActivePlan, crmRoutes); // PR #217 CRM 3a — métricas executivas
+app.use('/api/tasks', authMiddleware, rlsTenantMiddleware, requireActivePlan, tasksRoutes); // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA
+app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes); // SEM gate: paywall precisa ser acessível
+app.use('/api/settings', authMiddleware, rlsTenantMiddleware, requireActivePlan, settingsRoutes);
+app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, requireActivePlan, auditLogsRoutes);
+app.use('/api/embedded-signup', authMiddleware, rlsTenantMiddleware, requireActivePlan, embeddedSignupRoutes); // #273/#274
 
 // DSR — POST público (titular não é usuário); demais exigem auth + RLS.
 // Rate-limit dedicado e agressivo nos endpoints públicos (sem auth): protege
