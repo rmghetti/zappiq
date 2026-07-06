@@ -1,7 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Megaphone, Plus, Send, BarChart2, Clock, CheckCircle, XCircle, Trash2, Sparkles } from 'lucide-react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  Megaphone, Plus, Send, Clock, CheckCircle, XCircle, Trash2, Sparkles,
+  Rocket, MessageSquare, Compass, TrendingUp, Zap, Reply, DollarSign,
+  ArrowRight, ChevronDown, ChevronUp,
+} from 'lucide-react';
 import { api } from '../../../lib/api';
 import { CampaignFormModal } from '../../../components/campaigns/CampaignFormModal';
 import { IzaStrategistModal } from '../../../components/campaigns/IzaStrategistModal';
@@ -17,16 +21,55 @@ interface Campaign {
   repliedCount: number;
   failedCount: number;
   createdAt: string;
+  isImpulso?: boolean;
+  objective?: string | null;
+  channels?: string[] | null;
   template?: { name: string };
 }
 
-const STATUS_BADGE: Record<string, { bg: string; icon: any }> = {
-  DRAFT: { bg: 'bg-gray-100 text-gray-600', icon: Clock },
-  SCHEDULED: { bg: 'bg-blue-100 text-blue-700', icon: Clock },
-  SENDING: { bg: 'bg-yellow-100 text-yellow-700', icon: Send },
-  COMPLETED: { bg: 'bg-green-100 text-green-700', icon: CheckCircle },
-  CANCELLED: { bg: 'bg-red-100 text-red-700', icon: XCircle },
+const GRAD = 'bg-gradient-to-r from-[#2FB57A] via-[#2F7FB5] to-[#4A52D0]';
+const GRAD_TEXT = 'bg-gradient-to-r from-[#2FB57A] via-[#2F7FB5] to-[#4A52D0] bg-clip-text text-transparent';
+
+const STATUS_BADGE: Record<string, { bg: string; icon: any; label: string }> = {
+  DRAFT: { bg: 'bg-gray-100 text-gray-600', icon: Clock, label: 'Rascunho' },
+  SCHEDULED: { bg: 'bg-blue-100 text-blue-700', icon: Clock, label: 'Agendada' },
+  SENDING: { bg: 'bg-amber-100 text-amber-700', icon: Send, label: 'Enviando' },
+  COMPLETED: { bg: 'bg-green-100 text-green-700', icon: CheckCircle, label: 'Concluída' },
+  CANCELLED: { bg: 'bg-red-100 text-red-700', icon: XCircle, label: 'Pausada' },
 };
+
+const PILLARS = [
+  {
+    icon: Sparkles,
+    title: 'Iza Estrategista',
+    desc: 'Descreva o objetivo em uma frase e a Iza monta a campanha inteira: público, mensagem, horário e verba.',
+    status: 'ok' as const,
+  },
+  {
+    icon: Send,
+    title: 'Disparo omnichannel',
+    desc: 'Envie para a sua base pelo WhatsApp, e-mail e SMS, com o custo do WhatsApp repassado de forma transparente.',
+    status: 'ok' as const,
+  },
+  {
+    icon: Compass,
+    title: 'Copiloto & Coach',
+    desc: 'A Iza sugere o que e o quanto fazer para bater sua meta, e protege a saúde do seu número.',
+    status: 'soon' as const,
+  },
+  {
+    icon: TrendingUp,
+    title: 'Loop de Performance',
+    desc: 'Anúncios do Meta e Google trazem o lead para a conversa, e a venda volta para otimizar a mídia.',
+    status: 'soon' as const,
+  },
+  {
+    icon: Zap,
+    title: 'Auto-otimização',
+    desc: 'A Iza testa variações da campanha e concentra o volume na que mais vende, sozinha.',
+    status: 'soon' as const,
+  },
+];
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -34,6 +77,7 @@ export default function CampaignsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [izaOpen, setIzaOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [howOpen, setHowOpen] = useState(true);
 
   const fetchCampaigns = useCallback(() => {
     setLoading(true);
@@ -43,7 +87,6 @@ export default function CampaignsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // W2.4 — Disparar: enfileira o dispatch da campanha (POST /:id/send).
   const handleSend = useCallback(async (id: string) => {
     if (!confirm('Disparar esta campanha agora? As mensagens serão enviadas para os contatos com consentimento de marketing.')) return;
     setBusyId(id);
@@ -57,7 +100,6 @@ export default function CampaignsPage() {
     }
   }, [fetchCampaigns]);
 
-  // W2.4 — Excluir campanha (DELETE /:id).
   const handleDelete = useCallback(async (id: string) => {
     if (!confirm('Excluir esta campanha? Esta ação não pode ser desfeita.')) return;
     setBusyId(id);
@@ -71,21 +113,35 @@ export default function CampaignsPage() {
     }
   }, [fetchCampaigns]);
 
-  useEffect(() => {
-    fetchCampaigns();
-  }, [fetchCampaigns]);
+  useEffect(() => { fetchCampaigns(); }, [fetchCampaigns]);
+
+  const metrics = useMemo(() => {
+    const active = campaigns.filter((c) => c.status === 'SENDING' || c.status === 'SCHEDULED').length;
+    const sent = campaigns.reduce((s, c) => s + (c.sentCount || 0), 0);
+    const replied = campaigns.reduce((s, c) => s + (c.repliedCount || 0), 0);
+    const replyRate = sent > 0 ? Math.round((replied / sent) * 100) : 0;
+    return { active, sent, replyRate, total: campaigns.length };
+  }, [campaigns]);
+
+  const hasCampaigns = !loading && campaigns.length > 0;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      {/* ── Header ────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Campanhas</h1>
-          <p className="text-sm text-gray-500 mt-1">Disparos em massa via WhatsApp</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900">Campanhas</h1>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full text-white ${GRAD}`}>Impulso</span>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">
+            Sua central de vendas proativas. Crie campanhas com a Iza e acompanhe os resultados.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIzaOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold bg-gradient-to-r from-[#2FB57A] via-[#2F7FB5] to-[#4A52D0] hover:opacity-95"
+            className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:opacity-95 shadow-sm ${GRAD}`}
           >
             <Sparkles size={16} /> Criar com a Iza
           </button>
@@ -93,102 +149,215 @@ export default function CampaignsPage() {
             onClick={() => setModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
           >
-            <Plus size={16} /> Nova Campanha
+            <Plus size={16} /> Nova campanha
           </button>
         </div>
       </div>
 
-      <div className="space-y-4">
-        {loading ? (
-          [...Array(3)].map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-100 p-6 animate-pulse">
-              <div className="h-5 bg-gray-200 rounded w-48 mb-3" />
-              <div className="h-3 bg-gray-100 rounded w-full" />
+      {/* ── Visão geral (métricas) ────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard icon={Megaphone} label="Campanhas ativas" value={metrics.active} hint="enviando ou agendadas" loading={loading} />
+        <MetricCard icon={Send} label="Disparos" value={metrics.sent} hint="mensagens enviadas" loading={loading} />
+        <MetricCard icon={Reply} label="Taxa de resposta" value={`${metrics.replyRate}%`} hint="quem respondeu" loading={loading} />
+        <MetricCard icon={DollarSign} label="Receita atribuída" value="R$ 0" hint="conecte anúncios para medir" loading={loading} accent />
+      </div>
+
+      {/* ── Como funciona o Impulso ───────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <button
+          onClick={() => setHowOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50"
+        >
+          <div className="flex items-center gap-3">
+            <span className={`flex items-center justify-center w-9 h-9 rounded-xl text-white ${GRAD}`}>
+              <Rocket size={18} />
+            </span>
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Como funciona o Impulso</h2>
+              <p className="text-xs text-gray-500">A Iza cuida da campanha de ponta a ponta. Veja cada parte.</p>
             </div>
-          ))
-        ) : campaigns.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
-            <Megaphone size={48} className="mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">Nenhuma campanha criada</h3>
-            <p className="text-sm text-gray-500 mb-4">Crie sua primeira campanha para disparar mensagens em massa.</p>
           </div>
-        ) : (
-          campaigns.map((c) => {
-            const total = c.sentCount || 1;
-            const StatusIcon = STATUS_BADGE[c.status]?.icon || Clock;
-            return (
-              <div key={c.id} className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-base font-semibold text-gray-900">{c.name}</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">{c.type} · {new Date(c.createdAt).toLocaleDateString('pt-BR')}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_BADGE[c.status]?.bg || 'bg-gray-100'}`}>
-                      <StatusIcon size={12} /> {c.status}
+          {howOpen ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+        </button>
+        {howOpen && (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-px bg-gray-100 border-t border-gray-100">
+            {PILLARS.map((p) => {
+              const Icon = p.icon;
+              return (
+                <div key={p.title} className="bg-white p-4 flex flex-col">
+                  <div className="flex items-center justify-between">
+                    <span className={`flex items-center justify-center w-8 h-8 rounded-lg ${p.status === 'ok' ? GRAD + ' text-white' : 'bg-gray-100 text-gray-400'}`}>
+                      <Icon size={15} />
                     </span>
-                    {/* W2.4 — Disparar só faz sentido em DRAFT/SCHEDULED/CANCELLED */}
-                    {['DRAFT', 'SCHEDULED', 'CANCELLED'].includes(c.status) && (
-                      <button
-                        onClick={() => handleSend(c.id)}
-                        disabled={busyId === c.id}
-                        className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
-                        title="Disparar campanha"
-                      >
-                        <Send size={12} /> Disparar
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleDelete(c.id)}
-                      disabled={busyId === c.id}
-                      className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
-                      title="Excluir campanha"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                    {p.status === 'ok'
+                      ? <span className="text-[10px] font-semibold text-[#2FB57A] bg-[#E4F3EC] px-1.5 py-0.5 rounded">Disponível</span>
+                      : <span className="text-[10px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Em breve</span>}
                   </div>
+                  <h3 className="text-sm font-semibold text-gray-900 mt-2.5">{p.title}</h3>
+                  <p className="text-xs text-gray-500 mt-1 leading-snug">{p.desc}</p>
                 </div>
-                {/* Stats bar */}
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-gray-900">{c.sentCount}</p>
-                    <p className="text-[10px] text-gray-400 uppercase">Enviados</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-blue-600">{c.deliveredCount}</p>
-                    <p className="text-[10px] text-gray-400 uppercase">Entregues</p>
-                    <div className="h-1 bg-gray-100 rounded-full mt-1"><div className="h-full bg-blue-400 rounded-full" style={{ width: `${(c.deliveredCount / total) * 100}%` }} /></div>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-green-600">{c.readCount}</p>
-                    <p className="text-[10px] text-gray-400 uppercase">Lidos</p>
-                    <div className="h-1 bg-gray-100 rounded-full mt-1"><div className="h-full bg-green-400 rounded-full" style={{ width: `${(c.readCount / total) * 100}%` }} /></div>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-purple-600">{c.repliedCount}</p>
-                    <p className="text-[10px] text-gray-400 uppercase">Respostas</p>
-                    <div className="h-1 bg-gray-100 rounded-full mt-1"><div className="h-full bg-purple-400 rounded-full" style={{ width: `${(c.repliedCount / total) * 100}%` }} /></div>
-                  </div>
-                </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* PR #110 — Modal Nova Campanha */}
-      <CampaignFormModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSaved={fetchCampaigns}
-      />
+      {/* ── Suas campanhas ────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-bold text-gray-900">Suas campanhas</h2>
+          {hasCampaigns && <span className="text-xs text-gray-400">{campaigns.length} no total</span>}
+        </div>
 
-      {/* Impulso — Iza Estrategista: objetivo em linguagem natural -> campanha */}
-      <IzaStrategistModal
-        open={izaOpen}
-        onClose={() => setIzaOpen(false)}
-        onCreated={fetchCampaigns}
-      />
+        {loading ? (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="bg-white rounded-xl border border-gray-100 p-5 animate-pulse">
+                <div className="h-5 bg-gray-200 rounded w-48 mb-3" />
+                <div className="h-3 bg-gray-100 rounded w-full" />
+              </div>
+            ))}
+          </div>
+        ) : campaigns.length === 0 ? (
+          <EmptyState onIza={() => setIzaOpen(true)} onManual={() => setModalOpen(true)} />
+        ) : (
+          <div className="space-y-3">
+            {campaigns.map((c) => (
+              <CampaignRow
+                key={c.id}
+                c={c}
+                busy={busyId === c.id}
+                onSend={() => handleSend(c.id)}
+                onDelete={() => handleDelete(c.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <CampaignFormModal open={modalOpen} onClose={() => setModalOpen(false)} onSaved={fetchCampaigns} />
+      <IzaStrategistModal open={izaOpen} onClose={() => setIzaOpen(false)} onCreated={fetchCampaigns} />
+    </div>
+  );
+}
+
+// ── Componentes ──────────────────────────────────────────
+
+function MetricCard({ icon: Icon, label, value, hint, loading, accent }: {
+  icon: any; label: string; value: string | number; hint: string; loading: boolean; accent?: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <div className="flex items-center gap-2 text-gray-400">
+        <Icon size={15} className={accent ? 'text-[#4A52D0]' : ''} />
+        <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="mt-2 text-2xl font-bold text-gray-900 tabular-nums">
+        {loading ? <span className="inline-block h-7 w-16 bg-gray-100 rounded animate-pulse" /> : value}
+      </div>
+      <div className="text-[11px] text-gray-400 mt-0.5">{hint}</div>
+    </div>
+  );
+}
+
+function CampaignRow({ c, busy, onSend, onDelete }: {
+  c: Campaign; busy: boolean; onSend: () => void; onDelete: () => void;
+}) {
+  const total = c.sentCount || 1;
+  const badge = STATUS_BADGE[c.status] || STATUS_BADGE.DRAFT;
+  const StatusIcon = badge.icon;
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-shadow">
+      <div className="flex items-start justify-between mb-4 gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-gray-900 truncate">{c.name}</h3>
+            {c.isImpulso && <Sparkles size={13} className="text-[#4A52D0] flex-shrink-0" />}
+          </div>
+          <p className="text-xs text-gray-400 mt-0.5 truncate">
+            {c.objective || c.type} · {new Date(c.createdAt).toLocaleDateString('pt-BR')}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${badge.bg}`}>
+            <StatusIcon size={12} /> {badge.label}
+          </span>
+          {['DRAFT', 'SCHEDULED', 'CANCELLED'].includes(c.status) && (
+            <button
+              onClick={onSend}
+              disabled={busy}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg text-white hover:opacity-95 disabled:opacity-50 ${GRAD}`}
+              title="Disparar campanha"
+            >
+              <Send size={12} /> Disparar
+            </button>
+          )}
+          <button
+            onClick={onDelete}
+            disabled={busy}
+            className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"
+            title="Excluir campanha"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-4">
+        <Stat value={c.sentCount} label="Enviados" />
+        <Stat value={c.deliveredCount} label="Entregues" color="text-blue-600" bar="bg-blue-400" pct={(c.deliveredCount / total) * 100} />
+        <Stat value={c.readCount} label="Lidos" color="text-green-600" bar="bg-green-400" pct={(c.readCount / total) * 100} />
+        <Stat value={c.repliedCount} label="Respostas" color="text-[#4A52D0]" bar="bg-[#8B90F0]" pct={(c.repliedCount / total) * 100} />
+      </div>
+    </div>
+  );
+}
+
+function Stat({ value, label, color, bar, pct }: { value: number; label: string; color?: string; bar?: string; pct?: number }) {
+  return (
+    <div className="text-center">
+      <p className={`text-lg font-bold tabular-nums ${color || 'text-gray-900'}`}>{value}</p>
+      <p className="text-[10px] text-gray-400 uppercase">{label}</p>
+      {bar != null && (
+        <div className="h-1 bg-gray-100 rounded-full mt-1">
+          <div className={`h-full ${bar} rounded-full`} style={{ width: `${Math.min(100, pct || 0)}%` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptyState({ onIza, onManual }: { onIza: () => void; onManual: () => void }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-8 sm:p-12 text-center">
+      <span className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl text-white mb-4 ${GRAD}`}>
+        <Sparkles size={26} />
+      </span>
+      <h3 className="text-xl font-bold text-gray-900">
+        Sua primeira campanha em <span className={GRAD_TEXT}>uma frase</span>
+      </h3>
+      <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
+        Diga à Iza o que você quer, por exemplo <em>"reativar quem sumiu há 30 dias com 15% de desconto"</em>,
+        e ela monta a campanha completa: público, mensagem, horário e estimativa. Você só aprova.
+      </p>
+      <div className="flex items-center justify-center gap-2 mt-6">
+        <button
+          onClick={onIza}
+          className={`inline-flex items-center gap-2 px-5 py-2.5 text-white rounded-lg text-sm font-semibold hover:opacity-95 ${GRAD}`}
+        >
+          <Sparkles size={16} /> Criar com a Iza <ArrowRight size={16} />
+        </button>
+        <button
+          onClick={onManual}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+        >
+          Prefiro montar manualmente
+        </button>
+      </div>
+      <div className="flex items-center justify-center gap-6 mt-8 pt-6 border-t border-gray-100 text-xs text-gray-400">
+        <span className="flex items-center gap-1.5"><MessageSquare size={13} /> WhatsApp, e-mail e SMS</span>
+        <span className="flex items-center gap-1.5"><CheckCircle size={13} /> Só dispara com consentimento</span>
+        <span className="flex items-center gap-1.5"><Sparkles size={13} /> Copy na voz da sua marca</span>
+      </div>
     </div>
   );
 }
