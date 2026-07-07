@@ -59,6 +59,7 @@ const PLANS = [
 
 export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: Props) {
   const [activating, setActivating] = useState(false);
+  const [contratando, setContratando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
@@ -78,10 +79,21 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
     }
   }
 
-  function contratar() {
-    // Checkout dedicado do add-on entra com o webhook do Stripe; por ora,
-    // encaminha para a área de assinatura/planos da conta.
-    window.location.href = '/billing';
+  async function contratar(tier: string) {
+    setError(null);
+    setContratando(tier);
+    try {
+      const res = await api.post('/api/impulso-access/checkout', { tier });
+      if (res.data?.url) {
+        window.location.href = res.data.url; // vai pro checkout do Stripe
+      } else {
+        setError('Não foi possível iniciar a contratação. Tente de novo.');
+        setContratando(null);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível iniciar a contratação.');
+      setContratando(null);
+    }
   }
 
   return (
@@ -143,10 +155,11 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
                   ))}
                 </ul>
                 <button
-                  onClick={contratar}
-                  className={`mt-3 w-full py-2 rounded-lg text-xs font-semibold ${p.highlight ? `${GRAD} text-white hover:opacity-95` : 'border border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                  onClick={() => contratar(p.key)}
+                  disabled={contratando !== null}
+                  className={`mt-3 w-full py-2 rounded-lg text-xs font-semibold disabled:opacity-50 ${p.highlight ? `${GRAD} text-white hover:opacity-95` : 'border border-gray-200 text-gray-700 hover:bg-gray-50'}`}
                 >
-                  Contratar
+                  {contratando === p.key ? 'Redirecionando…' : 'Contratar'}
                 </button>
               </div>
             ))}

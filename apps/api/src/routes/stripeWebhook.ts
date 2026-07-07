@@ -36,6 +36,8 @@ import {
   mergeSettings,
   stripeEpochToDate,
 } from './stripeWebhook.util.js';
+import { ADDONS_V4_STRIPE } from '@zappiq/shared';
+import { IMPULSO_ADDON_KEYS } from '../middleware/requireImpulso.js';
 
 if (!env.STRIPE_SECRET_KEY) {
   logger.warn('[Stripe] STRIPE_SECRET_KEY not set — webhook route will reject all events.');
@@ -153,6 +155,71 @@ async function recomputeLifecycle(organizationId: string, source: string): Promi
 function priceIdFromSubscription(sub: Stripe.Subscription): string | null {
   const item = sub.items?.data?.[0];
   return (item?.price?.id as string | undefined) ?? null;
+}
+
+// ─── Impulso (add-on de campanhas) — assinatura SEPARADA do plano base ──────
+// Detecta se a assinatura é do add-on Impulso (por metadata.impulsoAddon ou pelo
+// price id) e liga/desliga settings.addons SEM tocar em plan/stripeSubscriptionId
+// (que são do plano base). O id da sub do Impulso vive em settings.impulsoSubscriptionId.
+
+function impulsoTierFromPriceId(priceId: string | null | undefined): string | null {
+  if (!priceId) return null;
+  for (const key of IMPULSO_ADDON_KEYS) {
+    if (ADDONS_V4_STRIPE[key]?.priceIds?.monthly === priceId) return key;
+  }
+  return null;
+}
+
+function impulsoTierFromSubscription(sub: Stripe.Subscription): string | null {
+  const meta = sub.metadata?.impulsoAddon;
+  if (meta && (IMPULSO_ADDON_KEYS as readonly string[]).includes(meta)) return meta;
+  for (const item of sub.items?.data ?? []) {
+    const t = impulsoTierFromPriceId(item.price?.id);
+    if (t) return t;
+  }
+  return null;
+}
+
+async function applyImpulsoAddon(orgId: string, sub: Stripe.Subscription, tier: string): Promise<void> {
+  const active = sub.status === 'active' || sub.status === 'trialing';
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { settings: true, stripeCustomerId: true },
+  });
+  const settings = ((org?.settings as any) ?? {}) as Record<string, any>;
+  const addons: string[] = (Array.isArray(settings.addons) ? settings.addons : []).filter(
+    (k: string) => !(IMPULSO_ADDON_KEYS as readonly string[]).includes(k),
+  );
+  if (active) addons.push(tier);
+  settings.addons = addons;
+  settings.impulsoSubscriptionId = sub.id;
+  if (active) delete settings.impulsoTrial; // virou pagante — trial não é mais necessário
+  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id ?? null;
+  await prisma.organization.update({
+    where: { id: orgId },
+    data: {
+      settings,
+      // só preenche o customer se ainda não houver (não clobber do plano base)
+      ...(!org?.stripeCustomerId && customerId ? { stripeCustomerId: customerId } : {}),
+    } as any,
+  });
+  logger.info(`[Stripe][Impulso] add-on ${tier} ${active ? 'ATIVO' : 'inativo'} para org ${orgId} (sub ${sub.id}, status ${sub.status}).`);
+}
+
+async function removeImpulsoAddon(orgId: string, subId: string): Promise<void> {
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { settings: true },
+  });
+  const settings = ((org?.settings as any) ?? {}) as Record<string, any>;
+  // se o id registrado não bate, era outra sub do Impulso — ignora
+  if (settings.impulsoSubscriptionId && settings.impulsoSubscriptionId !== subId) return;
+  settings.addons = (Array.isArray(settings.addons) ? settings.addons : []).filter(
+    (k: string) => !(IMPULSO_ADDON_KEYS as readonly string[]).includes(k),
+  );
+  delete settings.impulsoSubscriptionId;
+  await prisma.organization.update({ where: { id: orgId }, data: { settings } as any });
+  logger.info(`[Stripe][Impulso] add-on removido de org ${orgId} (sub ${subId} cancelada).`);
 }
 
 /**
@@ -284,7 +351,12 @@ router.post('/', async (req: Request, res: Response) => {
           typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id,
         );
         if (orgId) {
-          await applySubscriptionState(orgId, subscription);
+          const impulsoTier = impulsoTierFromSubscription(subscription);
+          if (impulsoTier) {
+            await applyImpulsoAddon(orgId, subscription, impulsoTier);
+          } else {
+            await applySubscriptionState(orgId, subscription);
+          }
         } else {
           logger.warn(`[Stripe] ${event.type}: org não resolvida (sub ${subscription.id})`);
         }
@@ -299,24 +371,30 @@ router.post('/', async (req: Request, res: Response) => {
           typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id,
         );
         if (orgId) {
-          const before = await prisma.organization.findUnique({
-            where: { id: orgId },
-            select: { settings: true, churnedAt: true },
-          });
-          await prisma.organization.update({
-            where: { id: orgId },
-            data: {
-              churnedAt: before?.churnedAt ?? new Date(),
-              subscriptionStatus: 'canceled',
-              isTrialActive: false,
-              // preserva settings (merge não-destrutivo) — não apaga niche etc.
-              settings: mergeSettings(before?.settings, {}),
-            } as any,
-          });
-          // zera MRR da conta (não gera mais receita).
-          await prisma.crmAccount.updateMany({ where: { organizationId: orgId }, data: { mrrCents: 0 } });
-          await recomputeLifecycle(orgId, 'subscription:deleted');
-          logger.info(`[Stripe] Subscription deletada: org ${orgId} → CHURNED (churnedAt marcado).`);
+          const impulsoTier = impulsoTierFromSubscription(subscription);
+          if (impulsoTier) {
+            // Cancelou o add-on Impulso — remove settings.addons, sem churn do plano base.
+            await removeImpulsoAddon(orgId, subscription.id);
+          } else {
+            const before = await prisma.organization.findUnique({
+              where: { id: orgId },
+              select: { settings: true, churnedAt: true },
+            });
+            await prisma.organization.update({
+              where: { id: orgId },
+              data: {
+                churnedAt: before?.churnedAt ?? new Date(),
+                subscriptionStatus: 'canceled',
+                isTrialActive: false,
+                // preserva settings (merge não-destrutivo) — não apaga niche etc.
+                settings: mergeSettings(before?.settings, {}),
+              } as any,
+            });
+            // zera MRR da conta (não gera mais receita).
+            await prisma.crmAccount.updateMany({ where: { organizationId: orgId }, data: { mrrCents: 0 } });
+            await recomputeLifecycle(orgId, 'subscription:deleted');
+            logger.info(`[Stripe] Subscription deletada: org ${orgId} → CHURNED (churnedAt marcado).`);
+          }
         } else {
           logger.warn(`[Stripe] subscription.deleted: org não resolvida (sub ${subscription.id})`);
         }
@@ -400,6 +478,12 @@ router.post('/', async (req: Request, res: Response) => {
         const session = event.data.object as Stripe.Checkout.Session;
         const orgId = session.metadata?.organizationId;
         if (orgId) {
+          // Checkout do add-on Impulso: NÃO tocar em stripeSubscriptionId (é do
+          // plano base). A ativação real vem no customer.subscription.created.
+          if (session.metadata?.impulsoAddon) {
+            logger.info(`[Stripe][Impulso] checkout completo p/ org ${orgId} (${session.metadata.impulsoAddon}) — ativacao via subscription.created`);
+            break;
+          }
           const before = await prisma.organization.findUnique({
             where: { id: orgId },
             select: { settings: true },

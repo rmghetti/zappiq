@@ -1,5 +1,16 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { getImpulsoEntitlement, startImpulsoTrial } from '../middleware/requireImpulso.js';
+import Stripe from 'stripe';
+import { prisma } from '@zappiq/database';
+import { ADDONS_V4_STRIPE } from '@zappiq/shared';
+import { env } from '../config/env.js';
+import { logger } from '../utils/logger.js';
+import {
+  getImpulsoEntitlement,
+  startImpulsoTrial,
+  IMPULSO_ADDON_KEYS,
+} from '../middleware/requireImpulso.js';
+
+const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : (null as unknown as Stripe);
 
 /*
  * Rotas de ACESSO ao Impulso — NÃO passam pelo requireImpulso (todo cliente,
@@ -37,6 +48,48 @@ router.post('/trial', async (req: Request, res: Response, next: NextFunction) =>
       return;
     }
     res.json({ success: true, data: result.entitlement });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/impulso-access/checkout — cria a sessão de checkout do add-on Impulso.
+// Assinatura SEPARADA do plano base (metadata.impulsoAddon marca o tier); o webhook
+// detecta e liga settings.addons sem tocar na assinatura do plano base.
+router.post('/checkout', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const tier = String(req.body?.tier || '');
+    if (!(IMPULSO_ADDON_KEYS as readonly string[]).includes(tier)) {
+      res.status(400).json({ error: 'invalid_tier', allowed: IMPULSO_ADDON_KEYS });
+      return;
+    }
+    if (!stripe) {
+      res.status(503).json({ error: 'stripe_not_configured' });
+      return;
+    }
+    const priceId = ADDONS_V4_STRIPE[tier]?.priceIds?.monthly;
+    if (!priceId) {
+      res.status(500).json({ error: 'price_not_configured', tier });
+      return;
+    }
+    const org = await prisma.organization.findUnique({
+      where: { id: req.organizationId! },
+      select: { stripeCustomerId: true },
+    });
+    const appUrl = env.NEXT_PUBLIC_APP_URL;
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      allow_promotion_codes: true,
+      line_items: [{ price: priceId, quantity: 1 }],
+      ...(org?.stripeCustomerId ? { customer: org.stripeCustomerId } : {}),
+      subscription_data: { metadata: { organizationId: req.organizationId!, impulsoAddon: tier } },
+      metadata: { organizationId: req.organizationId!, impulsoAddon: tier },
+      success_url: `${appUrl}/campaigns?impulso=assinado`,
+      cancel_url: `${appUrl}/campaigns?impulso=cancelado`,
+    });
+    logger.info(`[Impulso] checkout criado org=${req.organizationId} tier=${tier} session=${session.id}`);
+    res.json({ success: true, url: session.url });
   } catch (err) {
     next(err);
   }
