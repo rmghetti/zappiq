@@ -9,6 +9,9 @@ import { computeBillingUsage } from './billingUsage.util.js';
 import { buildSubscriptionState } from './billingSubscription.util.js';
 import { buildRecommendation } from '../services/planRecommendation.js';
 import { listPurchasableAddons, resolveAddonLineItems } from './billingAddons.util.js';
+import { deriveLifecycleStage } from '../services/accountLifecycle.js';
+import { computeConfirmUpdate, isCheckoutSettled } from './billingCheckoutConfirm.util.js';
+import { effectiveTrialDays } from './billingCheckout.util.js';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 const router = Router();
@@ -129,6 +132,10 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
 
     const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
 
+    // Trial é UM por org: quem já testou (ativo ou vencido) ou já pagou
+    // assina direto, sem ganhar novo período grátis no Iza Lite.
+    trialDays = effectiveTrialDays(trialDays, org);
+
     const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
       metadata: {
         organizationId: req.organizationId!,
@@ -178,6 +185,129 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
     });
 
     res.json({ success: true, url: session.url, trialDays, pricingVersion });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/billing/checkout/confirm
+// Confirmação SÍNCRONA e idempotente do retorno do Stripe Checkout. A página
+// /billing/success chama isto com o session_id do success_url pra materializar
+// a assinatura na org NA HORA — sem depender do timing do webhook. Assim o
+// cliente já cai no painel reconhecido como ATIVO (e some o 404 do success_url
+// que apontava pra uma rota inexistente). Usa os MESMOS building-blocks do
+// webhook (stripeWebhook.util + deriveLifecycleStage), então os dois caminhos
+// convergem pro mesmo estado. Fonte da verdade continua sendo o webhook.
+router.post('/checkout/confirm', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authedOrgId = req.organizationId;
+    const sessionId =
+      (typeof req.body?.session_id === 'string' && req.body.session_id) ||
+      (typeof req.query.session_id === 'string' && req.query.session_id) ||
+      '';
+    if (!sessionId) {
+      res.status(400).json({ error: 'session_id obrigatório' });
+      return;
+    }
+    if (!env.STRIPE_SECRET_KEY) {
+      res.status(503).json({ error: 'Stripe não configurado' });
+      return;
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['subscription'],
+    });
+
+    const sessionOrgId = (session.metadata?.organizationId as string | undefined) || null;
+    // Segurança: a sessão precisa ser da org autenticada (não confirma checkout
+    // de outra org via session_id alheio).
+    if (sessionOrgId && authedOrgId && sessionOrgId !== authedOrgId) {
+      res.status(403).json({ error: 'Sessão de checkout de outra organização' });
+      return;
+    }
+    const orgId = sessionOrgId || authedOrgId;
+    if (!orgId) {
+      res.status(400).json({ error: 'organização não resolvida' });
+      return;
+    }
+
+    const sub =
+      session.subscription && typeof session.subscription === 'object'
+        ? (session.subscription as Stripe.Subscription)
+        : null;
+
+    if (sub) {
+      const before = await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { settings: true, paidAt: true, isTrialActive: true, trialConverted: true },
+      });
+      if (before) {
+        const { data } = computeConfirmUpdate(sub, before);
+        await prisma.organization.update({ where: { id: orgId }, data: data as any });
+
+        // materializa o lifecycle (mesma função pura do webhook) pra org já
+        // aparecer como ATIVA nos gates e na UI.
+        const fresh = await prisma.organization.findUnique({
+          where: { id: orgId },
+          select: {
+            churnedAt: true,
+            subscriptionStatus: true,
+            stripeSubscriptionId: true,
+            trialEndsAt: true,
+            isTrialActive: true,
+            trialConverted: true,
+            paidAt: true,
+          },
+        });
+        if (fresh) {
+          const stage = deriveLifecycleStage(fresh);
+          await prisma.organization.update({
+            where: { id: orgId },
+            data: { accountLifecycleStage: stage } as any,
+          });
+          await prisma.crmAccount
+            .updateMany({ where: { organizationId: orgId }, data: { lifecycleStage: stage } })
+            .catch(() => {
+              /* espelho CRM best-effort; o webhook garante a timeline completa */
+            });
+        }
+      }
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: {
+        plan: true,
+        subscriptionStatus: true,
+        stripeSubscriptionId: true,
+        accountLifecycleStage: true,
+        trialEndsAt: true,
+        isTrialActive: true,
+        trialConverted: true,
+        churnedAt: true,
+        paidAt: true,
+      },
+    });
+
+    const stage = org
+      ? deriveLifecycleStage({
+          churnedAt: org.churnedAt,
+          subscriptionStatus: org.subscriptionStatus,
+          stripeSubscriptionId: org.stripeSubscriptionId,
+          trialEndsAt: org.trialEndsAt,
+          isTrialActive: org.isTrialActive,
+          trialConverted: org.trialConverted,
+          paidAt: org.paidAt,
+        })
+      : 'NOVO';
+
+    res.json({
+      success: true,
+      active: stage === 'ACTIVE',
+      settled: isCheckoutSettled(session),
+      lifecycleStage: stage,
+      plan: org?.plan ?? null,
+    });
   } catch (err) {
     next(err);
   }
