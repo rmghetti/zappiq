@@ -19,9 +19,20 @@ import {
   CheckCircle2,
   CircleSlash,
 } from 'lucide-react';
+import { classifyPlanChange, type PlanTier, type BillingCycle as PlanCycle } from '@zappiq/shared';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import { RecommendationHero } from './RecommendationHero';
+import { PlanChangeModal } from './PlanChangeModal';
+
+// Enum do banco (org.plan) → tier lógico V4. STARTER/legado = Iza Lite.
+function orgEnumToTier(planEnum: string | null | undefined): PlanTier {
+  const up = (planEnum ?? '').toUpperCase();
+  if (up === 'GROWTH') return 'GROWTH';
+  if (up === 'SCALE' || up === 'BUSINESS') return 'SCALE';
+  if (up === 'ENTERPRISE') return 'ENTERPRISE';
+  return 'IZA_LITE';
+}
 
 const PLANS: PlanConfig[] = listActivePlans();
 
@@ -58,8 +69,9 @@ type SubscriptionState = {
 };
 
 export default function BillingPage() {
-  const { organization } = useAuthStore();
+  const { organization, fetchMe } = useAuthStore();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [changeNotice, setChangeNotice] = useState<string | null>(null);
   // Trial Enforcement: anual é o padrão em destaque (empurra o desconto de 20%).
   const [cycle, setCycle] = useState<BillingCycle>('annual');
   const [usage, setUsage] = useState<BillingUsage | null>(null);
@@ -128,6 +140,13 @@ export default function BillingPage() {
   const inTrial = stage === 'TRIAL';
   const usedTrial =
     inTrial || !!organization?.trialEndsAt || !!organization?.trialStartedAt;
+
+  // Seleção atual do pagante (pra classificar upgrade/downgrade nos cards).
+  const currentSelection = {
+    plan: orgEnumToTier(organization?.plan),
+    cycle: (organization?.billingCycle === 'annual' ? 'annual' : 'monthly') as PlanCycle,
+  };
+  const [changeTarget, setChangeTarget] = useState<{ plan: PlanTier; cycle: PlanCycle; label: string } | null>(null);
 
   function renderPrice(plan: PlanConfig) {
     if (plan.priceMonthly === null) {
@@ -232,12 +251,15 @@ export default function BillingPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {PLANS.map((plan) => {
           const isCurrent = currentPlan === plan.id;
-          // "Plano atual" imutável só com assinatura paga de verdade; em trial o
-          // plano testado é justamente o que a pessoa PRECISA conseguir assinar.
-          const isCurrentPaid = isCurrent && hasPaidSub;
           const isTrialPlan = isCurrent && inTrial;
           // Trial é um por org: sem nova oferta pra quem já testou ou já paga.
           const offerTrial = (plan.trialDays ?? 0) > 0 && !usedTrial && !hasPaidSub;
+          // Pagante: classifica a troca pro card (upgrade imediato vs downgrade
+          // agendado vs anual travado). A decisão final é reconfirmada no servidor.
+          const change = hasPaidSub
+            ? classifyPlanChange(currentSelection, { plan: plan.id as PlanTier, cycle })
+            : null;
+          const isCurrentPaid = change?.kind === 'noop';
           return (
             <div
               key={plan.id}
@@ -291,6 +313,25 @@ export default function BillingPage() {
                 >
                   Falar com vendas <ArrowRight size={14} />
                 </a>
+              ) : change ? (
+                // Pagante: troca de plano (modifica a assinatura, não cria outra).
+                <button
+                  onClick={() =>
+                    setChangeTarget({ plan: plan.id as PlanTier, cycle, label: plan.name })
+                  }
+                  className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                    change.kind === 'upgrade'
+                      ? 'bg-primary-500 text-white hover:bg-primary-600'
+                      : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {change.kind === 'upgrade'
+                    ? 'Fazer upgrade'
+                    : change.kind === 'downgrade_annual_locked'
+                      ? 'Agendar p/ renovação'
+                      : 'Agendar downgrade'}{' '}
+                  <ArrowRight size={14} />
+                </button>
               ) : (
                 <button
                   onClick={() => handleCheckout(plan.id, cycle)}
@@ -374,6 +415,32 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de troca de plano (pagante) — mostra a conta e aplica a mudança. */}
+      {changeTarget && (
+        <PlanChangeModal
+          targetPlan={changeTarget.plan}
+          targetCycle={changeTarget.cycle}
+          targetLabel={changeTarget.label}
+          onClose={() => setChangeTarget(null)}
+          onApplied={(msg) => {
+            setChangeTarget(null);
+            setChangeNotice(msg);
+            // Re-sincroniza org (plano/ciclo/agendamento) na store.
+            fetchMe();
+          }}
+        />
+      )}
+
+      {/* Aviso pós-troca (upgrade aplicado / downgrade agendado). */}
+      {changeNotice && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-gray-900 px-5 py-3 text-sm font-medium text-white shadow-lg">
+          {changeNotice}
+          <button onClick={() => setChangeNotice(null)} className="ml-3 text-white/70 hover:text-white">
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

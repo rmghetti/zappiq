@@ -207,6 +207,10 @@ model Organization {
   // Fim da carência de paywall. Setado APENAS nas orgs já vencidas no go-live do
   // gate (cortesia de migração de 7 dias). Go-forward = null (trava dura no T-0).
   paywallGraceUntil     DateTime?
+  // Troca de plano AGENDADA (downgrade / anual travado). { plan, cycle, effectiveAt }.
+  // Escrito ao agendar (Subscription Schedule no Stripe); limpo quando o webhook
+  // aplica a fase 2 na renovação OU quando o cliente cancela o agendamento.
+  pendingPlanChange     Json?
 
   users              User[]
   contacts           Contact[]

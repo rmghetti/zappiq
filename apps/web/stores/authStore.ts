@@ -27,7 +27,10 @@ interface Organization {
   trialEndsAt?: string | null;
   isTrialActive?: boolean;
   trialConverted?: boolean;
+  billingCycle?: string | null;
   paywallGraceUntil?: string | null;
+  // Troca de plano agendada (downgrade / anual travado) — faixa no dash.
+  pendingPlanChange?: { plan: string; cycle: string; effectiveAt: string | null } | null;
 }
 
 interface AuthState {

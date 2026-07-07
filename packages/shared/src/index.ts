@@ -6,3 +6,4 @@ export * from './planStripeIds';
 export * from './addonStripeIds';
 
 export * from './analyticsFormat.js';
+export * from './planChange.js';
