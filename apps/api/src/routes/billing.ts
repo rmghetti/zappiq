@@ -19,6 +19,9 @@ import {
   resolveCurrentSelection,
   currentPeriodEndMs,
   findPlanItem,
+  subscriptionGuard,
+  guardResponse,
+  buildDowngradeSchedulePhases,
 } from './billingChange.util.js';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
@@ -355,38 +358,49 @@ async function loadActiveSubscription(
     res.status(401).json({ error: 'organization context missing' });
     return null;
   }
-  if (!env.STRIPE_SECRET_KEY) {
-    res.status(503).json({ error: 'Stripe não configurado' });
-    return null;
-  }
-  const org = await prisma.organization.findUnique({
-    where: { id: orgId },
-    select: { plan: true, billingCycle: true, subscriptionStatus: true, stripeSubscriptionId: true },
+
+  // Guard pré-fetch: Stripe configurado + org tem stripeSubscriptionId.
+  const org = env.STRIPE_SECRET_KEY
+    ? await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { plan: true, billingCycle: true, subscriptionStatus: true, stripeSubscriptionId: true },
+      })
+    : null;
+  const pre = subscriptionGuard({
+    stripeConfigured: !!env.STRIPE_SECRET_KEY,
+    stripeSubscriptionId: org?.stripeSubscriptionId,
   });
-  if (!org?.stripeSubscriptionId) {
-    // Sem assinatura real → o front deve abrir o checkout, não trocar plano.
-    res.status(409).json({ error: 'no_active_subscription', action: 'checkout' });
+  // pre==='ok' garante org + stripeSubscriptionId (o guard checou), mas o TS não
+  // enxerga isso pela função opaca — fixa o narrowing aqui.
+  if (pre !== 'ok' || !org?.stripeSubscriptionId) {
+    const { status, body } = guardResponse(pre === 'ok' ? 'no_active_subscription' : pre);
+    res.status(status).json(body);
     return null;
   }
+  const orgRow = org;
+  const subscriptionId: string = org.stripeSubscriptionId;
 
-  const sub = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);
-  const status = (sub.status || '').toLowerCase();
-  if (status !== 'active' && status !== 'trialing' && status !== 'past_due') {
-    res.status(409).json({ error: 'no_active_subscription', action: 'checkout' });
-    return null;
-  }
-
+  const sub = await stripe.subscriptions.retrieve(subscriptionId);
   // Item do PLANO (ignora add-ons) — trocamos só ele, preservando os add-ons.
   const item = findPlanItem(sub.items?.data);
-  if (!item) {
-    res.status(422).json({ error: 'subscription_without_item' });
+
+  // Guard pós-fetch: status ativo/trial/past_due + tem item de plano.
+  const post = subscriptionGuard({
+    stripeConfigured: true,
+    stripeSubscriptionId: subscriptionId,
+    subStatus: sub.status,
+    hasPlanItem: !!item,
+  });
+  if (post !== 'ok' || !item) {
+    const { status, body } = guardResponse(post === 'ok' ? 'no_item' : post);
+    res.status(status).json(body);
     return null;
   }
 
   const current = resolveCurrentSelection({
     subscriptionPriceId: item.price?.id,
-    orgPlanEnum: org.plan,
-    orgBillingCycle: org.billingCycle,
+    orgPlanEnum: orgRow.plan,
+    orgBillingCycle: orgRow.billingCycle,
   });
 
   return { orgId, sub, itemId: item.id, current };
@@ -533,36 +547,20 @@ router.post('/change', async (req: Request, res: Response, next: NextFunction) =
     const startDate = (phase0?.start_date as number | undefined) ?? undefined;
     const boundary = (phase0?.end_date as number | undefined) ?? periodEndEpoch ?? undefined;
 
-    // Preserva TODOS os itens da fase atual (plano + add-ons). Na fase 2 trocamos
-    // só o item do plano pelo novo preço; add-ons seguem intactos. Fallback: se
-    // o schedule vier sem itens, usa só o item do plano.
-    const phase0Items = (phase0?.items ?? []).map((it) => ({
-      price: (typeof it.price === 'string' ? it.price : it.price?.id) as string,
-      quantity: it.quantity ?? 1,
-    }));
-    const basePhaseItems = phase0Items.length > 0 ? phase0Items : [{ price: currentPriceId ?? newPrice, quantity: 1 }];
-    const nextPhaseItems = basePhaseItems.map((it) =>
-      it.price === currentPriceId ? { ...it, price: newPrice } : it,
-    );
-    // Garante que o plano novo entre mesmo se não bateu nenhum item (edge).
-    if (!nextPhaseItems.some((it) => it.price === newPrice)) {
-      nextPhaseItems.push({ price: newPrice, quantity: 1 });
-    }
+    // Preserva TODOS os itens da fase atual (plano + add-ons), trocando só o
+    // item do plano na fase 2 (regra pura em buildDowngradeSchedulePhases).
+    const phases = buildDowngradeSchedulePhases({
+      phase0Items: phase0?.items ?? [],
+      currentPlanPriceId: currentPriceId,
+      newPriceId: newPrice,
+      startDate,
+      boundary,
+    });
 
     await stripe.subscriptionSchedules.update(schedule.id, {
       proration_behavior: 'none',
       end_behavior: 'release',
-      phases: [
-        {
-          items: basePhaseItems,
-          ...(startDate ? { start_date: startDate } : {}),
-          ...(boundary ? { end_date: boundary } : {}),
-        },
-        {
-          items: nextPhaseItems,
-          ...(boundary ? { start_date: boundary } : {}),
-        },
-      ],
+      phases,
     });
 
     const effectiveAt = periodEndMs ? new Date(periodEndMs).toISOString() : null;
