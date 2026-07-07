@@ -28,8 +28,9 @@ function brl(v: number): string {
 
 /**
  * Hero de conversão no topo de /billing. Aparece quando o trial venceu (paywall
- * soft/hard) ou quando a pessoa chega por um link de "trial acabando". Mostra o
- * plano recomendado pelo uso, com o anual em destaque, razões e addons sugeridos.
+ * soft/hard), quando a pessoa chega por um link de "trial acabando" OU durante o
+ * trial ativo (pra assinar o plano já escolhido antes do fim, sem fricção).
+ * Mostra o plano recomendado pelo uso, com o anual em destaque, razões e addons.
  */
 interface PurchasableAddon {
   key: string;
@@ -39,10 +40,15 @@ interface PurchasableAddon {
 
 export function RecommendationHero({
   paywall,
+  trialActive,
+  trialDaysLeft,
   onChoose,
   loadingPlan,
 }: {
   paywall?: PaywallMode;
+  /** Trial em andamento (lifecycleStage TRIAL) — hero de conversão antecipada. */
+  trialActive?: boolean;
+  trialDaysLeft?: number | null;
   onChoose: (planId: string, cycle: BillingCycle, addons?: string[]) => void;
   loadingPlan: string | null;
 }) {
@@ -68,7 +74,7 @@ export function RecommendationHero({
 
   const hardOrSoft = paywall === 'hard' || paywall === 'soft';
   const fromTrialLink = !!reason && reason.startsWith('trial');
-  const show = hardOrSoft || fromTrialLink;
+  const show = hardOrSoft || fromTrialLink || !!trialActive;
 
   useEffect(() => {
     if (!show) return;
@@ -107,7 +113,11 @@ export function RecommendationHero({
   const headline =
     paywall === 'hard' || reason === 'trial_expired'
       ? 'Seu teste terminou. Escolha um plano para continuar.'
-      : 'Seu teste está acabando. Garanta seu plano sem interrupção.';
+      : hardOrSoft
+      ? 'Seu teste está acabando. Garanta seu plano sem interrupção.'
+      : trialDaysLeft != null && trialDaysLeft > 0
+      ? `Seu teste segue ativo por mais ${trialDaysLeft} ${trialDaysLeft === 1 ? 'dia' : 'dias'}. Assine agora e continue sem interrupção.`
+      : 'Assine agora o plano que você está testando e continue sem interrupção.';
 
   return (
     <div className="mb-6 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-fuchsia-50 p-6">

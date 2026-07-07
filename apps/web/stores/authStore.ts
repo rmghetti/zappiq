@@ -23,8 +23,10 @@ interface Organization {
   // Trial Enforcement — vêm de GET /api/auth/me (fonte única: computeAccessState).
   lifecycleStage?: LifecycleStage;
   paywall?: PaywallMode;
+  trialStartedAt?: string | null;
   trialEndsAt?: string | null;
   isTrialActive?: boolean;
+  trialConverted?: boolean;
   paywallGraceUntil?: string | null;
 }
 

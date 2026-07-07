@@ -118,6 +118,17 @@ export default function BillingPage() {
 
   const currentPlan = organization?.plan || 'IZA_LITE';
 
+  // Estado canônico vem do lifecycleStage (computeAccessState no /me) — nunca
+  // do subscriptionStatus cru. Regras dos CTAs:
+  //  - "Plano atual" (desabilitado) só pra quem TEM assinatura paga real.
+  //  - Em trial, o plano testado vira o CTA principal ("Assinar agora").
+  //  - Oferta de trial só pra org que nunca testou nem pagou (trial é um por org).
+  const stage = organization?.lifecycleStage;
+  const hasPaidSub = stage === 'ACTIVE' || stage === 'PAST_DUE';
+  const inTrial = stage === 'TRIAL';
+  const usedTrial =
+    inTrial || !!organization?.trialEndsAt || !!organization?.trialStartedAt;
+
   function renderPrice(plan: PlanConfig) {
     if (plan.priceMonthly === null) {
       return <span className="text-3xl font-extrabold text-gray-900">Sob consulta</span>;
@@ -165,14 +176,17 @@ export default function BillingPage() {
           o trial venceu (paywall) ou a pessoa chega por link de trial acabando. */}
       <RecommendationHero
         paywall={organization?.paywall}
+        trialActive={inTrial}
+        trialDaysLeft={subscription?.trialDaysLeft}
         onChoose={handleCheckout}
         loadingPlan={loadingPlan}
       />
 
-      {/* Trial 14 dias HERO — so quando NAO ha assinatura paga real E não está em
-          paywall (senão duplica com o RecommendationHero). */}
-      {organization?.paywall !== 'hard' && organization?.paywall !== 'soft' &&
-       (!subscription || subscription.status === 'no_subscription' || subscription.status === 'trialing') && (
+      {/* Promo do trial Lite — SO pra org que nunca testou nem pagou. Quem já
+          está em trial (ou venceu) não pode ganhar outro, e mostrar isso pra
+          quem testa o Growth empurraria downgrade. */}
+      {!hasPaidSub && !usedTrial &&
+       organization?.paywall !== 'hard' && organization?.paywall !== 'soft' && (
       <div className="mb-6 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border border-emerald-200 rounded-2xl p-5 flex items-start gap-4">
         <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
           <Gift size={20} className="text-white" />
@@ -218,12 +232,19 @@ export default function BillingPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {PLANS.map((plan) => {
           const isCurrent = currentPlan === plan.id;
-          const hasTrial = (plan.trialDays ?? 0) > 0;
+          // "Plano atual" imutável só com assinatura paga de verdade; em trial o
+          // plano testado é justamente o que a pessoa PRECISA conseguir assinar.
+          const isCurrentPaid = isCurrent && hasPaidSub;
+          const isTrialPlan = isCurrent && inTrial;
+          // Trial é um por org: sem nova oferta pra quem já testou ou já paga.
+          const offerTrial = (plan.trialDays ?? 0) > 0 && !usedTrial && !hasPaidSub;
           return (
             <div
               key={plan.id}
               className={`bg-white rounded-2xl border-2 p-6 relative transition-shadow ${
-                plan.highlight ? 'border-primary-500 shadow-lg shadow-primary-100' : 'border-gray-200'
+                plan.highlight || isTrialPlan
+                  ? 'border-primary-500 shadow-lg shadow-primary-100'
+                  : 'border-gray-200'
               }`}
             >
               {plan.highlight && (
@@ -231,11 +252,15 @@ export default function BillingPage() {
                   <Sparkles size={12} /> Mais escolhido
                 </div>
               )}
-              {hasTrial && (
+              {isTrialPlan ? (
+                <div className="absolute -top-3 right-4 bg-teal-500 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                  <Gift size={10} /> Seu plano do teste
+                </div>
+              ) : offerTrial ? (
                 <div className="absolute -top-3 right-4 bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
                   <Gift size={10} /> {plan.trialDays}d gratis
                 </div>
-              )}
+              ) : null}
 
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
@@ -253,16 +278,25 @@ export default function BillingPage() {
                 ))}
               </ul>
 
-              {isCurrent ? (
+              {isCurrentPaid ? (
                 <div className="w-full py-2.5 text-center rounded-lg bg-gray-100 text-sm font-medium text-gray-500">
                   Plano atual
                 </div>
+              ) : plan.priceMonthly === null ? (
+                // Sob consulta (Enterprise) não tem checkout — antes o "Assinar"
+                // chamava POST /checkout com plano inválido e estourava 400.
+                <a
+                  href="mailto:founders@zappiq.com.br?subject=Plano%20Enterprise%20ZappIQ"
+                  className="w-full py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 border border-gray-200 text-gray-700 hover:bg-gray-50"
+                >
+                  Falar com vendas <ArrowRight size={14} />
+                </a>
               ) : (
                 <button
                   onClick={() => handleCheckout(plan.id, cycle)}
                   disabled={loadingPlan === plan.id}
                   className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-                    plan.highlight
+                    plan.highlight || isTrialPlan
                       ? 'bg-primary-500 text-white hover:bg-primary-600'
                       : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
                   } disabled:opacity-50`}
@@ -271,7 +305,11 @@ export default function BillingPage() {
                     'Redirecionando...'
                   ) : (
                     <>
-                      {hasTrial ? `Comecar ${plan.trialDays}d gratis` : 'Assinar'}{' '}
+                      {isTrialPlan
+                        ? `Assinar ${plan.name} agora`
+                        : offerTrial
+                          ? `Comecar ${plan.trialDays}d gratis`
+                          : 'Assinar'}{' '}
                       <ArrowRight size={14} />
                     </>
                   )}

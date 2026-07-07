@@ -11,6 +11,7 @@ import { buildRecommendation } from '../services/planRecommendation.js';
 import { listPurchasableAddons, resolveAddonLineItems } from './billingAddons.util.js';
 import { deriveLifecycleStage } from '../services/accountLifecycle.js';
 import { computeConfirmUpdate, isCheckoutSettled } from './billingCheckoutConfirm.util.js';
+import { effectiveTrialDays } from './billingCheckout.util.js';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 const router = Router();
@@ -130,6 +131,10 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
     }
 
     const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
+
+    // Trial é UM por org: quem já testou (ativo ou vencido) ou já pagou
+    // assina direto, sem ganhar novo período grátis no Iza Lite.
+    trialDays = effectiveTrialDays(trialDays, org);
 
     const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
       metadata: {
