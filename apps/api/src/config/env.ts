@@ -81,6 +81,8 @@ const envSchema = z.object({
   // RAG Service
   RAG_SERVICE_URL: z.string().default('http://localhost:8001'),
   RAG_SERVICE_SECRET: z.string().optional(),
+  // Piso de similaridade do retrieval (0..1). Abaixo disso o chunk não entra no prompt.
+  RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.25),
 
   // Email provider (Resend)
   RESEND_API_KEY: z.string().optional(),

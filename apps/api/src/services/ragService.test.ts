@@ -5,6 +5,8 @@ import {
   parseQueryContext,
   parseQuerySources,
   buildIngestForm,
+  htmlToPlainText,
+  urlToSource,
 } from './ragService.js';
 
 // W1.2: garante que o cliente fala o contrato REAL do serviço Python
@@ -33,8 +35,15 @@ describe('buildQueryRequest', () => {
       query: 'como faço X?',
       namespace: 'org_abc123',
       top_k: 7,
+      min_similarity: expect.any(Number),
     });
     expect(body).not.toHaveProperty('tenant_id');
+  });
+
+  it('envia piso de similaridade (sem ele, chunk irrelevante entra em todo prompt)', () => {
+    const { body } = buildQueryRequest('abc123', 'oi', 5);
+    expect(body.min_similarity).toBeGreaterThan(0);
+    expect(body.min_similarity).toBeLessThan(1);
   });
 });
 
@@ -133,5 +142,35 @@ describe('buildIngestForm', () => {
     expect(form.get('source')).toBe('manual.pdf');
     expect(form.has('tenant_id')).toBe(false);
     expect(form.has('file')).toBe(true);
+  });
+});
+
+describe('htmlToPlainText', () => {
+  it('remove scripts, styles e tags — só o texto legível vai pro RAG', () => {
+    const html = `<html><head><style>.x{color:red}</style><script>var a=1;</script></head>
+      <body><h1>Horário</h1><p>Seg a sex, 9h às 18h &amp; sábado até 12h</p></body></html>`;
+    const text = htmlToPlainText(html);
+    expect(text).toContain('Horário');
+    expect(text).toContain('Seg a sex, 9h às 18h & sábado até 12h');
+    expect(text).not.toContain('<');
+    expect(text).not.toContain('var a=1');
+    expect(text).not.toContain('color:red');
+  });
+
+  it('devolve vazio para página sem texto', () => {
+    expect(htmlToPlainText('<html><script>x()</script></html>')).toBe('');
+  });
+});
+
+describe('urlToSource', () => {
+  it('deriva hostname+pathname sem protocolo nem barra final (mesma chave da ingestão)', () => {
+    expect(urlToSource('https://www.linkedin.com/company/conselhomudandoojogo/')).toBe(
+      'www.linkedin.com/company/conselhomudandoojogo',
+    );
+    expect(urlToSource('https://cmj.com.br')).toBe('cmj.com.br');
+  });
+
+  it('mantém string crua se não for URL válida', () => {
+    expect(urlToSource('não é url')).toBe('não é url');
   });
 });

@@ -75,6 +75,7 @@ interface KBDocument {
   sourceType: string;
   sourceUrl?: string | null;
   createdAt: string;
+  ragChunks?: number;
 }
 
 interface QAPair {
@@ -86,6 +87,25 @@ interface QAPair {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  ragChunks?: number;
+}
+
+// Badge honesto de indexação: verde só quando existem trechos REAIS no
+// vector store; âmbar avisa que o item ainda não alimenta a IA.
+function IndexedBadge({ chunks }: { chunks?: number }) {
+  if (typeof chunks !== 'number') return null;
+  return chunks > 0 ? (
+    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700 whitespace-nowrap">
+      ✓ {chunks} {chunks === 1 ? 'trecho' : 'trechos'}
+    </span>
+  ) : (
+    <span
+      className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 whitespace-nowrap"
+      title="Este item ainda não foi indexado. A IA não usa o conteúdo dele nas respostas."
+    >
+      ⚠ não indexado
+    </span>
+  );
 }
 
 interface TrainingActivity {
@@ -562,6 +582,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
                     {d.sourceType === 'url' ? 'URL' : d.sourceType} · {new Date(d.createdAt).toLocaleDateString('pt-BR')}
                   </p>
                 </div>
+                <IndexedBadge chunks={d.ragChunks} />
                 <button
                   onClick={() => handleDelete(d.id)}
                   className="text-gray-400 hover:text-red-500 p-2 transition-colors"
@@ -799,6 +820,7 @@ function QAPanel({ onChange }: { onChange: () => void }) {
                           Desativada
                         </span>
                       )}
+                      {p.isActive && <IndexedBadge chunks={p.ragChunks} />}
                     </div>
                     <p className="text-sm font-semibold text-gray-900 mb-1">{p.question}</p>
                     <p className="text-sm text-gray-600 leading-relaxed">{p.answer}</p>
