@@ -8,6 +8,7 @@ import {
   orgEnumToTier,
   resolveCurrentSelection,
   currentPeriodEndMs,
+  findPlanItem,
 } from './billingChange.util.js';
 
 describe('billingChange.util', () => {
@@ -78,6 +79,24 @@ describe('billingChange.util', () => {
         plan: 'GROWTH',
         cycle: 'monthly',
       });
+    });
+  });
+
+  describe('findPlanItem', () => {
+    it('acha o item de plano ignorando add-ons', () => {
+      const items = [
+        { id: 'si_addon', price: { id: 'price_addon_qualquer' } },
+        { id: 'si_plan', price: { id: STRIPE_V4_PRICES.GROWTH.monthly } },
+      ];
+      expect(findPlanItem(items)?.id).toBe('si_plan');
+    });
+    it('fallback pro primeiro item quando nenhum é plano conhecido', () => {
+      const items = [{ id: 'si_x', price: { id: 'price_desconhecido' } }];
+      expect(findPlanItem(items)?.id).toBe('si_x');
+    });
+    it('null quando não há itens', () => {
+      expect(findPlanItem([])).toBeNull();
+      expect(findPlanItem(undefined)).toBeNull();
     });
   });
 

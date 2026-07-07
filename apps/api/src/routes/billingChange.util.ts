@@ -60,6 +60,19 @@ export function resolveCurrentSelection(args: {
 }
 
 /**
+ * Acha o item de PLANO da subscription (o preço que resolve pra um tier V4),
+ * ignorando itens de add-on. Fallback: o primeiro item. Assim upgrade/downgrade
+ * trocam só o plano e PRESERVAM os add-ons do cliente.
+ */
+export function findPlanItem<T extends { price?: { id?: string | null } | null }>(
+  items: T[] | undefined,
+): T | null {
+  if (!items || items.length === 0) return null;
+  const planItem = items.find((it) => resolvePlanFromPriceId(it.price?.id) !== null);
+  return planItem ?? items[0];
+}
+
+/**
  * Fim do período atual em ms epoch. Na API Basil (Stripe 17.x) o
  * current_period_end migrou pro item da subscription; mantemos fallback pro
  * nível da subscription (versões antigas) e pro topo do preview de fatura.
