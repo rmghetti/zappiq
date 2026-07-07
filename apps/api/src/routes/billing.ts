@@ -15,7 +15,6 @@ import { effectiveTrialDays } from './billingCheckout.util.js';
 import { classifyPlanChange, type PlanTier, type BillingCycle as PlanCycle } from '../services/planChange.util.js';
 import {
   isPlanTier,
-  isBillingCycle,
   priceIdForSelection,
   resolveCurrentSelection,
   currentPeriodEndMs,
