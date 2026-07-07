@@ -551,10 +551,13 @@ async def _knn_search(
             """,
             namespace,
             query_vector,
-            top_k,
+            # Busca além do top_k pra dar chance às fontes curadas no re-rank
+            # abaixo (um crawl de site com milhares de chunks domina o KNN puro
+            # e sufoca Q&A/qualificação, que são poucas linhas porém autoritativas).
+            min(top_k * 4, 60),
         )
 
-    return [
+    results = [
         QueryResult(
             id=row["id"],
             text=row["text"],
@@ -565,6 +568,19 @@ async def _knn_search(
         for row in rows
         if float(row["similarity"]) >= min_similarity
     ]
+
+    # Re-rank: Q&A e survey de qualificação são conteúdo curado pelo dono do
+    # negócio — pesam mais que chunks de crawl/documentos genéricos empatados.
+    def _rank(r: QueryResult) -> float:
+        src = r.source or ""
+        if src.startswith("qa-"):
+            return r.similarity * 1.20
+        if src.startswith("onboarding-survey"):
+            return r.similarity * 1.15
+        return r.similarity
+
+    results.sort(key=_rank, reverse=True)
+    return results[:top_k]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

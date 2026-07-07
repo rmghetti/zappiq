@@ -175,6 +175,18 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
 // DOCUMENTOS
 // ═══════════════════════════════════════════════════════════
 
+// Contagem de chunks por source no vector store (mesma instância Postgres).
+// É o que torna o status por item HONESTO: "indexado" só se chunks > 0 de fato.
+async function ragChunkCounts(orgId: string): Promise<Map<string, number>> {
+  const namespace = ragService.namespaceFor(orgId);
+  const rows = await prisma.$queryRaw<Array<{ source: string; n: bigint }>>`
+    SELECT source, count(*)::bigint AS n
+      FROM rag_chunks
+     WHERE namespace = ${namespace}
+     GROUP BY source`;
+  return new Map(rows.map((r) => [r.source, Number(r.n)]));
+}
+
 // GET /api/ai-training/documents
 router.get('/documents', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -190,7 +202,17 @@ router.get('/documents', async (req: Request, res: Response, next: NextFunction)
         createdAt: true,
       },
     });
-    res.json({ documents: docs });
+    const counts = await ragChunkCounts(orgId).catch(() => new Map<string, number>());
+    const documents = docs.map((d) => ({
+      ...d,
+      // URLs são ingeridas com source = hostname+pathname (ver urlToSource);
+      // arquivos usam o próprio título/filename.
+      ragChunks:
+        counts.get(
+          d.sourceType === 'url' && d.sourceUrl ? ragService.urlToSource(d.sourceUrl) : d.title,
+        ) ?? 0,
+    }));
+    res.json({ documents });
   } catch (err) {
     next(err);
   }
@@ -330,7 +352,10 @@ router.get('/qa', async (req: Request, res: Response, next: NextFunction) => {
       where: { organizationId: orgId },
       orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
     });
-    res.json({ qaPairs: pairs });
+    const counts = await ragChunkCounts(orgId).catch(() => new Map<string, number>());
+    res.json({
+      qaPairs: pairs.map((p: any) => ({ ...p, ragChunks: counts.get(`qa-${p.id}.txt`) ?? 0 })),
+    });
   } catch (err) {
     next(err);
   }
@@ -399,17 +424,24 @@ router.put('/qa/:id', validate(qaSchema.partial()), async (req: Request, res: Re
       data: req.body,
     });
 
-    // 2026-05-20 FIX — re-sincroniza o RAG. Antes o PUT só mexia na tabela,
-    // então editar um Q&A NÃO refletia na IA (drift silencioso). Re-ingere o
-    // doc com o MESMO filename (qa-{id}.txt) → substitui a versão anterior.
-    const content = `Pergunta: ${pair.question}\n\nResposta: ${pair.answer}`;
-    await ragService
-      .ingestDocument(orgId, {
-        filename: `qa-${pair.id}.txt`,
-        content: Buffer.from(content),
-        mimeType: 'text/plain',
-      })
-      .catch((err: any) => logger.warn(`[AITraining] RAG re-sync Q&A (update) falhou: ${err.message}`));
+    // Sincroniza o vector store com o ESTADO FINAL do par:
+    //  - ativo   → re-ingere (filename estável qa-{id}.txt substitui a versão anterior)
+    //  - inativo → REMOVE do RAG; sem isso o toggle "Desativar" era cosmético
+    //    (só mexia no banco) e a IA continuava respondendo com o Q&A desativado.
+    if (pair.isActive === false) {
+      await ragService
+        .deleteDocument(orgId, `qa-${pair.id}.txt`)
+        .catch((err: any) => logger.warn(`[AITraining] RAG remove Q&A (desativado) falhou: ${err.message}`));
+    } else {
+      const content = `Pergunta: ${pair.question}\n\nResposta: ${pair.answer}`;
+      await ragService
+        .ingestDocument(orgId, {
+          filename: `qa-${pair.id}.txt`,
+          content: Buffer.from(content),
+          mimeType: 'text/plain',
+        })
+        .catch((err: any) => logger.warn(`[AITraining] RAG re-sync Q&A (update) falhou: ${err.message}`));
+    }
 
     await logTraining(req, 'kb.qa.update', 'qa_pair', pair.id,
       `Q&A editado: "${String(pair.question).slice(0, 80)}"`,
@@ -501,20 +533,31 @@ router.put('/survey', validate(surveySchema), async (req: Request, res: Response
     const settings = (org?.settings as any) || {};
     const before = settings.surveyAnswers || {};
 
-    const merged = { ...settings, surveyAnswers };
+    const niche = settings.niche || 'geral';
+    const currentFilename = surveyDocFilename(niche);
+    // Se o niche mudou desde o último save, o filename muda junto — o doc
+    // antigo viraria órfão no RAG (a IA leria a qualificação desatualizada).
+    const previousFilename: string | undefined = settings.surveyDocFilename;
+
+    const merged = { ...settings, surveyAnswers, surveyDocFilename: currentFilename };
     await prisma.organization.update({ where: { id: orgId }, data: { settings: merged } });
 
     // Re-ingere o doc de conhecimento (filename estável → substitui versão anterior)
-    const niche = settings.niche || 'geral';
     const businessName = settings.businessName || org?.name || 'Empresa';
     const kb = buildKnowledgeBase({ businessName, niche, surveyAnswers });
     await ragService
       .ingestDocument(orgId, {
-        filename: surveyDocFilename(niche),
+        filename: currentFilename,
         content: Buffer.from(kb),
         mimeType: 'text/plain',
       })
       .catch((err: any) => logger.warn(`[AITraining] RAG re-sync survey falhou: ${err.message}`));
+
+    if (previousFilename && previousFilename !== currentFilename) {
+      await ragService
+        .deleteDocument(orgId, previousFilename)
+        .catch((err: any) => logger.warn(`[AITraining] RAG remove survey antigo falhou: ${err.message}`));
+    }
 
     const answeredCount = countAnsweredQuestions(surveyAnswers);
     await logTraining(req, 'kb.survey.update', 'survey', undefined,
