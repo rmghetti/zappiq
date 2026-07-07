@@ -19,6 +19,7 @@ Decisoes chave:
 
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -28,7 +29,8 @@ from typing import Literal
 import asyncpg
 import fitz  # PyMuPDF
 import tiktoken
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from pgvector.asyncpg import register_vector
 from pydantic import BaseModel, Field
 
@@ -279,6 +281,27 @@ FastAPIInstrumentor.instrument_app(app)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Auth — segredo compartilhado com a API (header X-Service-Secret)
+# ─────────────────────────────────────────────────────────────────────────────
+
+RAG_SERVICE_SECRET = os.getenv("RAG_SERVICE_SECRET", "")
+
+# Sem o segredo configurado o serviço fica aberto (dev local); em produção o
+# secret PRECISA estar setado — /query lê e /ingest escreve a base de qualquer
+# namespace, então exposto na internet permite ler/envenenar dados de clientes.
+_PUBLIC_PATHS = {"/health", "/ready"}
+
+
+@app.middleware("http")
+async def _require_service_secret(request: Request, call_next):
+    if RAG_SERVICE_SECRET and request.url.path not in _PUBLIC_PATHS:
+        provided = request.headers.get("x-service-secret", "")
+        if not hmac.compare_digest(provided, RAG_SERVICE_SECRET):
+            return JSONResponse(status_code=401, content={"detail": "unauthorized"})
+    return await call_next(request)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Utilities — text extraction
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -457,11 +480,13 @@ async def _upsert_chunks(
     metadata: dict,
 ) -> int:
     """
-    Upsert idempotente. ON CONFLICT (namespace, chunk_hash) DO NOTHING — se o
-    conteudo nao mudou, pulamos. Se mudou, chunk_hash muda e ele e inserido.
+    Ingestao = REPLACE do source: apaga os chunks antigos do mesmo
+    (namespace, source) e insere a versao nova, na MESMA transacao.
 
-    Nota: nao deletamos chunks antigos aqui. Cleanup de versoes antigas do mesmo
-    source e responsabilidade de um job separado (audit-log-lifecycle pattern).
+    Sem o delete, re-ingestao com conteudo alterado ACUMULA versoes (chunk_hash
+    inclui o conteudo, entao ON CONFLICT nunca dispara) e a IA segue
+    recuperando respostas antigas — confirmado em producao com 30 versoes do
+    mesmo chunk de survey. O "job separado de cleanup" nunca existiu.
     """
     if not state.pool:
         raise HTTPException(status_code=503, detail="DB pool nao inicializado")
@@ -484,6 +509,11 @@ async def _upsert_chunks(
 
     async with state.pool.acquire() as conn:
         async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM rag_chunks WHERE namespace = $1 AND source = $2",
+                namespace,
+                source,
+            )
             await conn.executemany(
                 """
                 INSERT INTO rag_chunks
