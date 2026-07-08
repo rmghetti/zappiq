@@ -14,6 +14,8 @@ import {
   Gauge,
   // Agendamento — agenda interna (hub)
   CalendarClock,
+  // Cupons de desconto (SUPERADMIN)
+  Ticket,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
@@ -60,6 +62,7 @@ const platformAdminItems = [
   { href: '/admin/iza-conversations', label: 'Conversas Iza', icon: MessageSquare },
   { href: '/admin/quota-watch', label: 'Quota Watch', icon: Activity },
   { href: '/admin/unit-economics', label: 'Unit Economics', icon: DollarSign },
+  { href: '/admin/coupons', label: 'Cupons de Descontos', icon: Ticket },
 ];
 
 // Sub-grupo "Clientes" (Área Clientes / Fase 2, §2 proposedNav) — gestão da
