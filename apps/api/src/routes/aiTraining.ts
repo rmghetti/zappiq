@@ -36,6 +36,7 @@ import { logAuditEvent } from '../services/auditService.js';
 import { buildSystemPromptForContact, pickTierAndOverride } from '../agents/agentOrchestrator.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
 import { testMessageSchema, buildPlaygroundResult } from './aiTraining.playground.js';
+import { textDocSchema } from './aiTraining.text.util.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -302,6 +303,48 @@ router.post(
       res.status(201).json({ document: doc, readiness });
     } catch (err: any) {
       logger.warn(`[AITraining] URL ingest falhou: ${err.message}`);
+      next(err);
+    }
+  },
+);
+
+// POST /api/ai-training/documents/text
+// Texto colado direto (sem arquivo/URL). Vira documento e chunks no RAG igual
+// a um upload. `source` = título → a contagem de chunks (GET /documents) e o
+// DELETE reaproveitam o mesmo caminho dos arquivos.
+router.post(
+  '/documents/text',
+  validate(textDocSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.user!.organizationId;
+      const { title, content } = req.body as { title: string; content: string };
+
+      const kb = await ensureKnowledgeBase(orgId);
+
+      await ragService.ingestDocument(orgId, {
+        filename: title,
+        content: Buffer.from(content, 'utf-8'),
+        mimeType: 'text/plain',
+      });
+
+      const doc = await prisma.kBDocument.create({
+        data: {
+          title,
+          sourceType: 'text',
+          content, // texto colado é curto: guardamos o canônico aqui também
+          knowledgeBaseId: kb.id,
+        },
+        select: { id: true, title: true, sourceType: true, createdAt: true },
+      });
+
+      await logTraining(req, 'kb.text.create', 'kb_document', doc.id,
+        `Texto colado: "${title}"`);
+
+      const readiness = await refreshAIReadiness(orgId).catch(() => null);
+      res.status(201).json({ document: doc, readiness });
+    } catch (err: any) {
+      logger.warn(`[AITraining] Texto colado falhou: ${err.message}`);
       next(err);
     }
   },
@@ -598,7 +641,17 @@ router.get('/activity', async (req: Request, res: Response, next: NextFunction) 
 const identitySchema = z.object({
   agentName: z.string().min(1).max(60).optional(),
   tone: z.enum(['friendly', 'formal', 'technical']).optional(),
-  businessHours: z.record(z.any()).optional(),
+  // Horário: strings livres por período (ex.: "09:00 às 18:00"). Objeto
+  // fechado evita lixo entrando no prompt (o buildHoursSection lê essas chaves).
+  businessHours: z
+    .object({
+      weekdays: z.string().max(120).optional(),
+      saturday: z.string().max(120).optional(),
+      sunday: z.string().max(120).optional(),
+      holidays: z.string().max(120).optional(),
+    })
+    .partial()
+    .optional(),
   greetingMessage: z.string().max(1000).optional(),
   handoffMessage: z.string().max(1000).optional(),
 });
@@ -620,6 +673,15 @@ router.get('/identity', async (req: Request, res: Response, next: NextFunction) 
         tone: (s.tone as 'friendly' | 'formal' | 'technical') || 'friendly',
         greetingMessage: s.greetingMessage || '',
         handoffMessage: s.handoffMessage || '',
+        // Horário alimenta a seção "HORÁRIO DE FUNCIONAMENTO" do prompt
+        // (promptEngine.buildHoursSection). Sem devolver aqui, o cliente não
+        // conseguia EDITAR o que já tinha salvo.
+        businessHours: {
+          weekdays: s.businessHours?.weekdays || '',
+          saturday: s.businessHours?.saturday || '',
+          sunday: s.businessHours?.sunday || '',
+          holidays: s.businessHours?.holidays || '',
+        },
       },
     });
   } catch (err) {
