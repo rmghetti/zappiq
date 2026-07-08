@@ -1,0 +1,259 @@
+'use client';
+
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Ticket, Copy, Check, Loader2, Plus } from 'lucide-react';
+import { useAuthStore } from '../../../../stores/authStore';
+import { api } from '../../../../lib/api';
+
+interface CatalogItem {
+  key: string;
+  label: string;
+  productId: string;
+  type: 'plan' | 'addon';
+}
+interface IssuedCoupon {
+  code: string;
+  productLabel: string;
+  percentOff: number;
+  duration: string;
+  durationInMonths: number | null;
+  createdByEmail: string;
+  timesRedeemed: number;
+  used: boolean;
+  createdAt: string;
+}
+
+const PERCENTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+const DURATIONS: { value: string; label: string; months?: number }[] = [
+  { value: 'once', label: '1º ciclo (once)' },
+  { value: 'repeating:3', label: '3 meses' },
+  { value: 'repeating:6', label: '6 meses' },
+  { value: 'repeating:12', label: '12 meses' },
+  { value: 'forever', label: 'Vitalício (forever)' },
+];
+
+function durationLabel(duration: string, months: number | null): string {
+  if (duration === 'once') return '1º ciclo';
+  if (duration === 'forever') return 'Vitalício';
+  return months ? `${months} meses` : 'Recorrente';
+}
+
+export default function CouponsAdminPage() {
+  const router = useRouter();
+  const { user } = useAuthStore();
+
+  useEffect(() => {
+    if (user && user.role !== 'SUPERADMIN') router.push('/dashboard');
+  }, [user, router]);
+
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [issued, setIssued] = useState<IssuedCoupon[]>([]);
+  const [productId, setProductId] = useState('');
+  const [percentOff, setPercentOff] = useState(30);
+  const [durationSel, setDurationSel] = useState('once');
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastCode, setLastCode] = useState<{ code: string; label: string; percent: number; dur: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const loadList = useCallback(async () => {
+    try {
+      const res = await api.get('/api/admin/coupons');
+      if (res?.data) setIssued(res.data as IssuedCoupon[]);
+    } catch {
+      /* fail-soft: lista vazia */
+    }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/api/admin/coupons/catalog');
+        if (res?.data) {
+          setCatalog(res.data as CatalogItem[]);
+          if ((res.data as CatalogItem[]).length) setProductId((res.data as CatalogItem[])[0].productId);
+        }
+      } catch {
+        /* fail-soft */
+      }
+    })();
+    loadList();
+  }, [loadList]);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setError(null);
+    setLastCode(null);
+    try {
+      const [duration, monthsRaw] = durationSel.split(':');
+      const body: Record<string, unknown> = { productId, percentOff, duration };
+      if (duration === 'repeating') body.durationInMonths = Number(monthsRaw);
+      const res = await api.post('/api/admin/coupons', body);
+      const d = res?.data;
+      if (d?.code) {
+        setLastCode({
+          code: d.code,
+          label: d.productLabel,
+          percent: d.percentOff,
+          dur: durationLabel(d.duration, d.durationInMonths ?? null),
+        });
+        loadList();
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Não consegui gerar o cupom. Tente de novo.');
+    }
+    setGenerating(false);
+  }
+
+  function copyCode() {
+    if (!lastCode) return;
+    navigator.clipboard?.writeText(lastCode.code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }
+
+  if (user?.role !== 'SUPERADMIN') return null;
+
+  return (
+    <div className="max-w-5xl">
+      <div className="mb-6 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-50">
+          <Ticket className="text-primary-600" size={20} />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Cupons de Descontos</h1>
+          <p className="text-sm text-gray-500">
+            Gere um cupom restrito a UM produto, de uso único. Envie o código ao cliente.
+          </p>
+        </div>
+      </div>
+
+      {/* Gerador */}
+      <div className="grid gap-6 md:grid-cols-[1.3fr_1fr]">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6">
+          <h2 className="mb-4 text-sm font-bold text-gray-800">Gerar novo cupom</h2>
+
+          <label className="mb-1 block text-xs font-medium text-gray-500">Produto</label>
+          <select
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+            className="mb-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          >
+            <optgroup label="Planos">
+              {catalog.filter((c) => c.type === 'plan').map((c) => (
+                <option key={c.productId} value={c.productId}>{c.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Add-ons">
+              {catalog.filter((c) => c.type === 'addon').map((c) => (
+                <option key={c.productId} value={c.productId}>{c.label}</option>
+              ))}
+            </optgroup>
+          </select>
+
+          <label className="mb-1 block text-xs font-medium text-gray-500">Desconto</label>
+          <select
+            value={percentOff}
+            onChange={(e) => setPercentOff(Number(e.target.value))}
+            className="mb-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          >
+            {PERCENTS.map((p) => (
+              <option key={p} value={p}>{p}% off</option>
+            ))}
+          </select>
+
+          <label className="mb-1 block text-xs font-medium text-gray-500">Duração</label>
+          <select
+            value={durationSel}
+            onChange={(e) => setDurationSel(e.target.value)}
+            className="mb-5 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          >
+            {DURATIONS.map((d) => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+
+          <button
+            onClick={handleGenerate}
+            disabled={generating || !productId}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-500 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+          >
+            {generating ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
+            {generating ? 'Gerando…' : 'Gerar cupom'}
+          </button>
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        </div>
+
+        {/* Código gerado (copiável) */}
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6">
+          <h2 className="mb-4 text-sm font-bold text-gray-800">Código para o cliente</h2>
+          {lastCode ? (
+            <div>
+              <div className="flex items-center gap-2 rounded-xl border-2 border-dashed border-primary-300 bg-white p-4">
+                <span className="flex-1 select-all font-mono text-lg font-bold tracking-wider text-gray-900">
+                  {lastCode.code}
+                </span>
+                <button
+                  onClick={copyCode}
+                  className="flex items-center gap-1 rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-600"
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? 'Copiado' : 'Copiar'}
+                </button>
+              </div>
+              <p className="mt-3 text-xs text-gray-600">
+                {lastCode.percent}% off em <span className="font-semibold">{lastCode.label}</span> · {lastCode.dur} · uso único.
+                O cliente digita este código no campo "Cupom de desconto" do checkout desse produto.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">
+              Selecione produto + desconto + duração e clique em "Gerar cupom". O código aparece aqui, pronto para copiar.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Emitidos */}
+      <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-6">
+        <h2 className="mb-4 text-sm font-bold text-gray-800">Cupons emitidos</h2>
+        {issued.length === 0 ? (
+          <p className="text-sm text-gray-400">Nenhum cupom emitido ainda.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-xs uppercase text-gray-400">
+                  <th className="py-2 pr-4">Código</th>
+                  <th className="py-2 pr-4">Produto</th>
+                  <th className="py-2 pr-4">Desconto</th>
+                  <th className="py-2 pr-4">Duração</th>
+                  <th className="py-2 pr-4">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {issued.map((c) => (
+                  <tr key={c.code} className="border-b border-gray-50">
+                    <td className="py-2 pr-4 font-mono font-semibold text-gray-900">{c.code}</td>
+                    <td className="py-2 pr-4 text-gray-700">{c.productLabel}</td>
+                    <td className="py-2 pr-4 text-gray-700">{c.percentOff}%</td>
+                    <td className="py-2 pr-4 text-gray-500">{durationLabel(c.duration, c.durationInMonths)}</td>
+                    <td className="py-2 pr-4">
+                      {c.used ? (
+                        <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600">Usado</span>
+                      ) : (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Disponível</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
