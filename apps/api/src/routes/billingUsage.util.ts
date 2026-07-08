@@ -20,7 +20,7 @@
  * Funcao pura + dependencias injetadas -> testavel sem Redis/DB real.
  * ============================================================================
  */
-import { PLAN_CONFIG, type PlanId, type PlanLimits } from '@zappiq/shared';
+import { PLAN_CONFIG, applyAddonGrants, type PlanId, type PlanLimits } from '@zappiq/shared';
 
 export interface UsageMetric {
   /** Uso observado no periodo corrente. */
@@ -78,9 +78,12 @@ export interface ComputeBillingUsageDeps {
 export async function computeBillingUsage(
   planIdRaw: string | null | undefined,
   deps: ComputeBillingUsageDeps,
+  /** Addons de pacote ativos (settings.addons) — somam ao limite exibido. */
+  activeAddons: readonly string[] = [],
 ): Promise<BillingUsageResult> {
   const planId = resolvePlanId(planIdRaw);
-  const limits: PlanLimits = PLAN_CONFIG[planId].limits;
+  // Limite EFETIVO = plano + addons (mesma regra do enforcement de quota).
+  const limits: PlanLimits = applyAddonGrants(PLAN_CONFIG[planId].limits, activeAddons);
   const now = deps.now ?? new Date();
   const { start, end } = currentMonthRange(now);
 

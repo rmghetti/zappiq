@@ -655,8 +655,11 @@ router.get('/usage', async (req: Request, res: Response, next: NextFunction) => 
 
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
-      select: { plan: true },
+      select: { plan: true, settings: true },
     });
+    const activeAddons: string[] = Array.isArray((org?.settings as any)?.addons)
+      ? (org!.settings as any).addons
+      : [];
 
     const usage = await computeBillingUsage(org?.plan, {
       // Conversas criadas no mes corrente.
@@ -674,7 +677,7 @@ router.get('/usage', async (req: Request, res: Response, next: NextFunction) => 
           .catch(() => 0),
       // Mensagens de IA no ciclo — mesmo contador Redis do enforcement de quota.
       getAiMessagesUsage: () => getUsage(orgId, 'aiMessagesPerMonth').catch(() => 0),
-    });
+    }, activeAddons);
 
     res.json({ success: true, data: usage });
   } catch (err) {

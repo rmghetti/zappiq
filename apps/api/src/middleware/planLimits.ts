@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '@zappiq/database';
-import { PLAN_CONFIG, type PlanId, type PlanLimits } from '@zappiq/shared';
+import { PLAN_CONFIG, applyAddonGrants, type PlanId, type PlanLimits } from '@zappiq/shared';
 import { cache } from '../services/cloud/index.js';
 import { logger } from '../utils/logger.js';
 import { reportOverageMeterEvent, estimateOverageBrl } from '../services/quotaOverageService.js';
@@ -99,9 +99,17 @@ export async function getEffectivePlan(orgId: string): Promise<{
     org.trialEndsAt !== null &&
     org.trialEndsAt > now;
 
+  // Camada 1 — limite EFETIVO = limite do plano + addons de pacote comprados
+  // (settings.addons, populado pelo webhook Stripe). applyAddonGrants ignora
+  // Impulso/keys sem grant e mantém -1 (ilimitado).
+  const activeAddons: string[] = Array.isArray((org.settings as any)?.addons)
+    ? (org.settings as any).addons
+    : [];
+  const limits = applyAddonGrants(config.limits, activeAddons);
+
   return {
     planId,
-    limits: config.limits,
+    limits,
     isTrialing,
     trialCostCapUsd: org.trialCostCapUsd,
     trialEndsAt: org.trialEndsAt,

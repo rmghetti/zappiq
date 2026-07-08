@@ -10,7 +10,7 @@
  * nunca trialConverted. Aqui só derivamos os campos que o webhook grava.
  * ══════════════════════════════════════════════════════════════════════ */
 
-import { STRIPE_V4_PRICES, PLAN_CONFIG } from '@zappiq/shared';
+import { STRIPE_V4_PRICES, PLAN_CONFIG, ADDONS_V4_STRIPE, V4_PACKAGE_ADDON_KEYS } from '@zappiq/shared';
 
 /** Plans que o Organization.plan (enum PlanType) aceita. IZA_LITE → STARTER. */
 const PLAN_ENUM = new Set(['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE']);
@@ -30,6 +30,48 @@ export function resolvePlanFromPriceId(
     if (cfg.annual === priceId) return { plan, billingCycle: 'annual' };
   }
   return null;
+}
+
+/** priceId (mensal OU anual) → key do addon de PACOTE (capacidade/canal). null se não for. */
+export function packageAddonKeyFromPriceId(priceId: string | null | undefined): string | null {
+  if (!priceId) return null;
+  for (const key of V4_PACKAGE_ADDON_KEYS) {
+    const ids = (ADDONS_V4_STRIPE as Record<string, { priceIds?: Record<string, string> }>)[key]?.priceIds;
+    if (!ids) continue;
+    if (ids.monthly === priceId || ids.annual === priceId) return key;
+  }
+  return null;
+}
+
+/**
+ * Lê os itens de uma assinatura e devolve as keys dos addons de PACOTE presentes
+ * (contatos/docs/fluxos/atendente/número/IG/integrações). Pura. Ignora o item do
+ * plano, packs one-shot, overage e Impulso (assinatura separada).
+ */
+export function packageAddonsFromSubscriptionItems(
+  items: Array<{ price?: { id?: string | null } | null }> | undefined,
+): string[] {
+  if (!items) return [];
+  const keys = new Set<string>();
+  for (const it of items) {
+    const key = packageAddonKeyFromPriceId(it.price?.id);
+    if (key) keys.add(key);
+  }
+  return [...keys];
+}
+
+const PACKAGE_KEY_SET = new Set<string>(V4_PACKAGE_ADDON_KEYS);
+
+/**
+ * Recalcula settings.addons a partir do estado atual da assinatura do PLANO:
+ * substitui SÓ as keys de pacote (capacidade/canal) pelas detectadas, PRESERVANDO
+ * Impulso e quaisquer outras keys (que vêm de outras assinaturas). Pura.
+ */
+export function mergePackageAddons(existing: unknown, detected: string[]): string[] {
+  const prev = Array.isArray(existing) ? existing.filter((k): k is string => typeof k === 'string') : [];
+  const preserved = prev.filter((k) => !PACKAGE_KEY_SET.has(k));
+  const detectedUnique = [...new Set(detected.filter((k) => PACKAGE_KEY_SET.has(k)))];
+  return [...preserved, ...detectedUnique];
 }
 
 /**

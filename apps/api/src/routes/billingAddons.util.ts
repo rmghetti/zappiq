@@ -11,7 +11,7 @@
  * Os pacotes one-shot (mensagens/disparos) e o overage metered NÃO entram aqui —
  * não são line items recorrentes de assinatura (são top-ups pós-contratação).
  */
-import { ADDONS_V4_LIST, ADDONS_V4_STRIPE } from '@zappiq/shared';
+import { ADDONS_V4_LIST, ADDONS_V4_STRIPE, isV4PackageAddonKey } from '@zappiq/shared';
 
 export type BillingCycle = 'monthly' | 'annual';
 
@@ -33,7 +33,10 @@ export function addonPriceIdFor(addonKey: string, cycle: BillingCycle): string |
  * que têm price real naquele ciclo. Default mensal (catálogo exibido em /mês).
  */
 export function listPurchasableAddons(cycle: BillingCycle = 'monthly'): PurchasableAddon[] {
-  return ADDONS_V4_LIST.filter((a) => a.pricingMode === 'recurring_monthly')
+  // SÓ os addons de pacote (capacidade/canal). Exclui o Impulso, que é produto
+  // separado (assinatura própria com fluxo/checkout dedicado), embora também seja
+  // recurring_monthly — senão vazaria como checkbox "adicionar ao plano".
+  return ADDONS_V4_LIST.filter((a) => a.pricingMode === 'recurring_monthly' && isV4PackageAddonKey(a.key))
     .map((a) => {
       const priceId = addonPriceIdFor(a.key, cycle);
       return priceId ? { key: a.key, name: a.name, amountBrl: a.amountBrl, priceId } : null;
