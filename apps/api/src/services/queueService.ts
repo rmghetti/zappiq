@@ -7,6 +7,7 @@ import {
   recordQueueJobCompleted,
   recordQueueJobFailed,
 } from '../config/metrics.js';
+import { resolveAudienceWhere } from './impulsoAudience.js';
 
 // ── Conexão Redis para BullMQ ────────────────────
 // BullMQ requer uma conexão própria (não reutiliza ioredis do app)
@@ -288,10 +289,19 @@ export async function dispatchCampaignJob(
       throw new Error(`Campaign ${campaignId} not found`);
     }
 
-    // Audiência: contatos da org com consentimento LGPD de marketing.
+    // Audiência: contatos da org com consentimento LGPD de marketing,
+    // recortados pelo audienceSegment da campanha (Impulso) quando houver.
+    // resolveAudienceWhere sempre reforça organizationId + consentMarketing,
+    // o segmento não consegue desligar esse piso de segurança.
+    const { where: audienceWhere, take: audienceTake } = resolveAudienceWhere(
+      organizationId,
+      campaign.audienceSegment,
+      new Date(),
+    );
     const contacts = await prisma.contact.findMany({
-      where: { organizationId, consentMarketing: true },
+      where: audienceWhere,
       select: { id: true, whatsappId: true, name: true },
+      ...(audienceTake !== undefined ? { take: audienceTake } : {}),
     });
     logger.info(`[Queue:CampaignDispatch] Found ${contacts.length} contacts for campaign ${campaignId}`);
 

@@ -101,4 +101,58 @@ describe('dispatchCampaignJob', () => {
       data: { status: 'CANCELLED' },
     });
   });
+
+  it('com audienceSegment, filtra a audiência por ele (não dispara pra base inteira)', async () => {
+    campaignFindUnique.mockResolvedValue({
+      id: 'camp-2',
+      template: { bodyText: 'Oi {{nome}}' },
+      audienceSegment: { tagsAny: ['vip'] },
+    });
+    contactFindMany.mockResolvedValue([{ id: 'c9', whatsappId: '5511900000009', name: 'VIP' }]);
+    vi.spyOn(messageSendQueue, 'addBulk').mockResolvedValue([] as any);
+
+    await dispatchCampaignJob({ campaignId: 'camp-2', organizationId: 'org-1' });
+
+    // Continua exigindo consentMarketing + organizationId (piso de segurança),
+    // e ADICIONA o critério do segmento (tags).
+    expect(contactFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: 'org-1', consentMarketing: true, tags: { hasSome: ['vip'] } },
+      }),
+    );
+  });
+
+  it('respeita o limit do audienceSegment (take no findMany)', async () => {
+    campaignFindUnique.mockResolvedValue({
+      id: 'camp-3',
+      template: { bodyText: 'Oi' },
+      audienceSegment: { limit: 500 },
+    });
+    contactFindMany.mockResolvedValue([]);
+    vi.spyOn(messageSendQueue, 'addBulk').mockResolvedValue([] as any);
+
+    await dispatchCampaignJob({ campaignId: 'camp-3', organizationId: 'org-1' });
+
+    expect(contactFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 500 }));
+  });
+
+  it('sem audienceSegment (campanha legada), mantém o comportamento antigo (toda a base consentida)', async () => {
+    campaignFindUnique.mockResolvedValue({
+      id: 'camp-4',
+      template: { bodyText: 'Oi' },
+      audienceSegment: null,
+    });
+    contactFindMany.mockResolvedValue([]);
+    vi.spyOn(messageSendQueue, 'addBulk').mockResolvedValue([] as any);
+
+    await dispatchCampaignJob({ campaignId: 'camp-4', organizationId: 'org-1' });
+
+    expect(contactFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: 'org-1', consentMarketing: true },
+      }),
+    );
+    // Sem limit no segmento -> sem take.
+    expect(contactFindMany.mock.calls[0][0].take).toBeUndefined();
+  });
 });
