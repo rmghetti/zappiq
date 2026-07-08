@@ -99,3 +99,39 @@ export function buildCouponCreateParams(input: CouponCreateInput): StripeCouponP
   }
   return params;
 }
+
+// ── Reconciliação (autocura) do espelho local vs Stripe ────────────────────
+// O Stripe é sempre a fonte da verdade. Se uma escrita local falhar (timeout,
+// cold start, rede) DEPOIS de uma mutação no Stripe já ter tido sucesso, o
+// registro local fica desatualizado até a próxima listagem corrigir sozinha.
+
+export interface CouponLocalState {
+  timesRedeemed: number;
+  active: boolean;
+}
+
+/**
+ * Estado resolvido pra exibição: usa o valor do Stripe quando disponível
+ * (fonte da verdade); cai pro local só se o promo code não veio na listagem
+ * (raro — ex. falha transitória ao listar do Stripe).
+ */
+export function resolveCouponState(
+  local: CouponLocalState,
+  stripe: CouponLocalState | undefined,
+): CouponLocalState {
+  if (!stripe) return local;
+  return { timesRedeemed: stripe.timesRedeemed, active: stripe.active };
+}
+
+/** true quando o registro local diverge do resolvido — precisa gravar a correção. */
+export function needsReconciliation(local: CouponLocalState, resolved: CouponLocalState): boolean {
+  return local.timesRedeemed !== resolved.timesRedeemed || local.active !== resolved.active;
+}
+
+export type CouponStatus = 'used' | 'available' | 'canceled';
+
+/** Deriva o status exibido na UI a partir do estado resolvido. */
+export function deriveCouponStatus(resolved: CouponLocalState): CouponStatus {
+  if (resolved.timesRedeemed >= 1) return 'used';
+  return resolved.active ? 'available' : 'canceled';
+}

@@ -24,6 +24,9 @@ import {
   generateCouponCode,
   bytesToCode,
   isCouponDuration,
+  resolveCouponState,
+  needsReconciliation,
+  deriveCouponStatus,
 } from './billingCoupons.util.js';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
@@ -37,27 +40,38 @@ router.get('/catalog', (_req: Request, res: Response) => {
 });
 
 // GET /api/admin/coupons — cupons emitidos + status (usado/disponível).
-// Sincroniza times_redeemed do Stripe (lista uma vez) pra refletir resgates.
+// AUTOCURA: sincroniza times_redeemed E active com a fonte da verdade (Stripe)
+// a cada carregamento. Se um cancelamento anterior derrubou no meio do caminho
+// (Stripe cancelado, escrita local não concluída — timeout/cold start/etc.), a
+// PRÓXIMA listagem corrige sozinha o registro local, sem deixar cupom "preso".
 router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await prisma.discountCoupon.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
 
-    // Refresh best-effort do times_redeemed (não derruba a lista se o Stripe falhar).
-    const redeemedByCode = new Map<string, number>();
+    // Estado real por code: times_redeemed + active (não filtra — lista ativos E inativos).
+    const stripeStateByCode = new Map<string, { timesRedeemed: number; active: boolean }>();
     if (env.STRIPE_SECRET_KEY && rows.length > 0) {
       await stripe.promotionCodes
         .list({ limit: 100 })
         .then((pc) => {
-          for (const p of pc.data) redeemedByCode.set(p.code, p.times_redeemed ?? 0);
+          for (const p of pc.data) {
+            stripeStateByCode.set(p.code, { timesRedeemed: p.times_redeemed ?? 0, active: p.active });
+          }
         })
         .catch((e) => logger.warn('admin.coupons.list_promos_failed', { err: String(e) }));
     }
 
+    const toReconcile: Array<{ code: string; timesRedeemed: number; active: boolean }> = [];
     const data = rows.map((r) => {
-      const timesRedeemed = redeemedByCode.get(r.code) ?? r.timesRedeemed;
-      const used = timesRedeemed >= 1;
-      // Status: usado > cancelado (inativo e nunca usado) > disponível.
-      const status = used ? 'used' : r.active ? 'available' : 'canceled';
+      const local = { timesRedeemed: r.timesRedeemed, active: r.active };
+      const resolved = resolveCouponState(local, stripeStateByCode.get(r.code));
+      const status = deriveCouponStatus(resolved);
+      const used = status === 'used';
+
+      if (needsReconciliation(local, resolved)) {
+        toReconcile.push({ code: r.code, ...resolved });
+      }
+
       return {
         code: r.code,
         productKey: r.productKey,
@@ -66,15 +80,27 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
         duration: r.duration,
         durationInMonths: r.durationInMonths,
         createdByEmail: r.createdByEmail,
-        timesRedeemed,
+        timesRedeemed: resolved.timesRedeemed,
         used,
-        active: r.active,
+        active: resolved.active,
         status,
-        canCancel: !used && r.active, // só cancela o que está disponível
+        canCancel: !used && resolved.active, // só cancela o que está disponível
         createdAt: r.createdAt,
       };
     });
+
     res.json({ success: true, data });
+
+    // Reconciliação em background (não atrasa a resposta) — corrige drift local.
+    if (toReconcile.length > 0) {
+      Promise.all(
+        toReconcile.map((r) =>
+          prisma.discountCoupon
+            .update({ where: { code: r.code }, data: { timesRedeemed: r.timesRedeemed, active: r.active } })
+            .catch((e) => logger.warn('admin.coupons.reconcile_failed', { code: r.code, err: String(e) })),
+        ),
+      ).then(() => logger.info('admin.coupons.reconciled', { count: toReconcile.length }));
+    }
   } catch (err) {
     next(err);
   }
@@ -219,15 +245,26 @@ router.delete('/:code', async (req: Request, res: Response, next: NextFunction) 
       return;
     }
 
-    // Desativa o código (fail-soft) e apaga o coupon (invalida o resgate).
-    await stripe.promotionCodes
-      .update(row.stripePromotionCodeId, { active: false })
-      .catch((e) => logger.warn('admin.coupons.deactivate_promo_failed', { code, err: String(e) }));
-    await stripe.coupons
-      .del(row.stripeCouponId)
-      .catch((e) => logger.warn('admin.coupons.delete_coupon_failed', { code, err: String(e) }));
+    // Desativa o código e apaga o coupon EM PARALELO (independentes entre si —
+    // menos round-trips sequenciais = menos chance de timeout/cold-start no meio
+    // do caminho). Fail-soft: cada um loga o próprio erro sem derrubar o outro.
+    await Promise.all([
+      stripe.promotionCodes
+        .update(row.stripePromotionCodeId, { active: false })
+        .catch((e) => logger.warn('admin.coupons.deactivate_promo_failed', { code, err: String(e) })),
+      stripe.coupons
+        .del(row.stripeCouponId)
+        .catch((e) => logger.warn('admin.coupons.delete_coupon_failed', { code, err: String(e) })),
+    ]);
 
-    await prisma.discountCoupon.update({ where: { code }, data: { active: false } });
+    // A verdade já está no Stripe (cancelado). A escrita local é só um espelho
+    // pra UI responder rápido — se ELA falhar (rede/cold-start), NÃO reportamos
+    // erro ao usuário (o cupom já está cancelado de fato): o GET seguinte
+    // AUTOCURA o registro local a partir do Stripe (ver reconciliação acima).
+    await prisma.discountCoupon
+      .update({ where: { code }, data: { active: false } })
+      .catch((e) => logger.warn('admin.coupons.local_write_failed_will_self_heal', { code, err: String(e) }));
+
     logger.info('admin.coupons.canceled', { code, by: req.user?.email });
     res.json({ success: true });
   } catch (err) {
