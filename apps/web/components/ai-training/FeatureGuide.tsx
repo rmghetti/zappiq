@@ -181,6 +181,21 @@ export const GUIDES: Record<string, GuideContent> = {
     result:
       'Diferente dos documentos, a identidade entra direto na "personalidade" da IA a cada conversa. Muda de imediato o jeito de falar, o nome e o comportamento em todos os atendimentos.',
   },
+  scheduling: {
+    id: 'scheduling',
+    title: 'Agendamento',
+    summary: 'Deixe a IA marcar consultas, reuniões, ligações e visitas com o seu cliente.',
+    what:
+      'Você define os tipos de agendamento que oferece (Consulta, Reunião, Visita…) e as regras de cada um: duração, horários, antecedência, o que perguntar ao cliente. A IA passa a agendar dentro da conversa, sem você precisar entrar no meio.',
+    how: [
+      'Se não quiser oferecer agendamento, deixe marcado "Não desejo oferecer agendamento".',
+      'Senão, crie um ou mais tipos de agendamento e preencha as regras de cada um.',
+      'Defina os horários em que você atende. A IA nunca vai oferecer um horário fora deles.',
+      'Tudo o que for agendado aparece na sua Agenda, dentro do CRM.',
+    ],
+    result:
+      'As regras entram no conhecimento da IA e viram ações que ela executa: quando um cliente pede para marcar, a IA confere um horário livre de verdade, coleta os dados e cria o agendamento na sua agenda.',
+  },
   playground: {
     id: 'playground',
     title: 'Testar minha IA',

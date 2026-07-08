@@ -41,9 +41,10 @@ import {
 import { api } from '../../../lib/api';
 import ReadinessMilestoneNudge from '../../../components/shared/ReadinessMilestoneNudge';
 import { SurveyPanel } from '../../../components/ai-training/SurveyPanel';
+import { SchedulingPanel } from '../../../components/ai-training/SchedulingPanel';
 import { FeatureGuide, GUIDES } from '../../../components/ai-training/FeatureGuide';
 import { NotIndexedAlert, type NotIndexedItem } from '../../../components/ai-training/NotIndexedAlert';
-import { ClipboardPaste } from 'lucide-react';
+import { ClipboardPaste, CalendarClock } from 'lucide-react';
 
 // ── Tipos alinhados ao service backend ───────────────────
 interface Readiness {
@@ -129,7 +130,7 @@ const LEVEL_META: Record<Readiness['level'], { label: string; color: string; bg:
   expert: { label: 'Expert', color: 'text-primary-700', bg: 'bg-primary-50 border-primary-200' },
 };
 
-type TabKey = 'survey' | 'documents' | 'qa' | 'identity' | 'playground';
+type TabKey = 'survey' | 'documents' | 'qa' | 'identity' | 'scheduling' | 'playground';
 
 // Hash ↔ tab. Permite deep-link a partir do FAB (Treinar IA), do Breakdown e
 // das Próximas ações. Ex.: /ai-training#survey abre direto a Qualificação.
@@ -138,6 +139,7 @@ const TAB_HASH: Record<TabKey, string> = {
   documents: '#documents',
   qa: '#qa',
   identity: '#identity',
+  scheduling: '#scheduling',
   playground: '#playground',
 };
 
@@ -147,6 +149,7 @@ function hashToTab(hash: string): TabKey | null {
   if (h === 'documents' || h === 'documentos' || h === 'knowledge') return 'documents';
   if (h === 'qa' || h === 'q&a' || h === 'perguntas') return 'qa';
   if (h === 'identity' || h === 'identidade' || h === 'tom') return 'identity';
+  if (h === 'scheduling' || h === 'agendamento' || h === 'agenda') return 'scheduling';
   if (h === 'playground' || h === 'testar' || h === 'teste' || h === 'test') return 'playground';
   return null;
 }
@@ -243,6 +246,9 @@ export default function AITrainingPage() {
         <TabButton active={tab === 'identity'} onClick={() => setTab('identity')}>
           <User size={16} /> Identidade do agente
         </TabButton>
+        <TabButton active={tab === 'scheduling'} onClick={() => setTab('scheduling')}>
+          <CalendarClock size={16} /> Agendamento
+        </TabButton>
         <TabButton active={tab === 'playground'} onClick={() => setTab('playground')}>
           <Bot size={16} /> Testar minha IA
         </TabButton>
@@ -271,6 +277,12 @@ export default function AITrainingPage() {
         <div className="space-y-4">
           <FeatureGuide content={GUIDES.identity} />
           <IdentityPanel onChange={refreshReadiness} />
+        </div>
+      )}
+      {tab === 'scheduling' && (
+        <div className="space-y-4">
+          <FeatureGuide content={GUIDES.scheduling} />
+          <SchedulingPanel onChange={refreshReadiness} />
         </div>
       )}
       {tab === 'playground' && (

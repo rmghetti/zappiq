@@ -37,6 +37,12 @@ import { buildSystemPromptForContact, pickTierAndOverride } from '../agents/agen
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
 import { testMessageSchema, buildPlaygroundResult } from './aiTraining.playground.js';
 import { textDocSchema } from './aiTraining.text.util.js';
+import {
+  appointmentTypeSchema,
+  schedulingConfigSchema,
+  buildSchedulingKnowledge,
+  SCHEDULING_RAG_SOURCE,
+} from './scheduling.util.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -711,6 +717,130 @@ router.put('/identity', validate(identitySchema), async (req: Request, res: Resp
 
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
     res.json({ settings: merged, readiness });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// AGENDAMENTO — o dono do negócio define os tipos que a IA pode agendar.
+// A config vira documento no RAG (a IA "sabe" as regras). Fonte estável
+// `agendamento-config.txt` (replace-on-ingest). Opt-out remove do RAG.
+// ═══════════════════════════════════════════════════════════
+
+// Reconstrói o doc de RAG a partir do estado atual dos tipos. Se opt-out ou
+// nenhum tipo ativo, remove o doc do RAG (a IA deixa de oferecer agendamento).
+async function resyncSchedulingRag(orgId: string): Promise<void> {
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+  const optOut = Boolean((org?.settings as any)?.scheduling?.optOut);
+  const types = optOut
+    ? []
+    : await (prisma as any).appointmentType.findMany({ where: { organizationId: orgId, active: true } });
+
+  if (types.length === 0) {
+    await ragService
+      .deleteDocument(orgId, SCHEDULING_RAG_SOURCE)
+      .catch((err: any) => logger.warn(`[AITraining] RAG remove agendamento falhou: ${err.message}`));
+    return;
+  }
+  const doc = buildSchedulingKnowledge(types);
+  await ragService
+    .ingestDocument(orgId, {
+      filename: SCHEDULING_RAG_SOURCE,
+      content: Buffer.from(doc, 'utf-8'),
+      mimeType: 'text/plain',
+    })
+    .catch((err: any) => logger.warn(`[AITraining] RAG sync agendamento falhou: ${err.message}`));
+}
+
+// GET /api/ai-training/scheduling — config (opt-out) + tipos cadastrados.
+router.get('/scheduling', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const optOut = Boolean((org?.settings as any)?.scheduling?.optOut);
+    const types = await (prisma as any).appointmentType.findMany({
+      where: { organizationId: orgId },
+      orderBy: { createdAt: 'asc' },
+    });
+    res.json({ optOut, types });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/ai-training/scheduling — liga/desliga o agendamento (opt-out).
+router.put('/scheduling', validate(schedulingConfigSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { optOut } = req.body as { optOut: boolean };
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const settings = (org?.settings as any) || {};
+    const merged = { ...settings, scheduling: { ...(settings.scheduling || {}), optOut, enabled: !optOut } };
+    await prisma.organization.update({ where: { id: orgId }, data: { settings: merged } });
+
+    await resyncSchedulingRag(orgId);
+    await logTraining(req, 'kb.scheduling.config', 'scheduling', undefined,
+      optOut ? 'Agendamento desativado' : 'Agendamento ativado');
+
+    const readiness = await refreshAIReadiness(orgId).catch(() => null);
+    res.json({ optOut, readiness });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/ai-training/appointment-types — cria um tipo.
+router.post('/appointment-types', validate(appointmentTypeSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const t = await (prisma as any).appointmentType.create({
+      data: { ...req.body, organizationId: orgId },
+    });
+    await resyncSchedulingRag(orgId);
+    await logTraining(req, 'kb.scheduling.type.create', 'appointment_type', t.id, `Tipo de agendamento criado: "${t.name}"`);
+    const readiness = await refreshAIReadiness(orgId).catch(() => null);
+    res.status(201).json({ type: t, readiness });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/ai-training/appointment-types/:id — atualiza.
+router.put('/appointment-types/:id', validate(appointmentTypeSchema.partial()), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { id } = req.params;
+    const existing = await (prisma as any).appointmentType.findFirst({ where: { id, organizationId: orgId } });
+    if (!existing) {
+      res.status(404).json({ error: 'Tipo não encontrado' });
+      return;
+    }
+    const t = await (prisma as any).appointmentType.update({ where: { id }, data: req.body });
+    await resyncSchedulingRag(orgId);
+    await logTraining(req, 'kb.scheduling.type.update', 'appointment_type', t.id, `Tipo de agendamento editado: "${t.name}"`);
+    const readiness = await refreshAIReadiness(orgId).catch(() => null);
+    res.json({ type: t, readiness });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/ai-training/appointment-types/:id — remove.
+router.delete('/appointment-types/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { id } = req.params;
+    const existing = await (prisma as any).appointmentType.findFirst({ where: { id, organizationId: orgId }, select: { id: true, name: true } });
+    if (!existing) {
+      res.status(404).json({ error: 'Tipo não encontrado' });
+      return;
+    }
+    await (prisma as any).appointmentType.delete({ where: { id } });
+    await resyncSchedulingRag(orgId);
+    await logTraining(req, 'kb.scheduling.type.delete', 'appointment_type', id, `Tipo de agendamento removido: "${existing.name}"`);
+    const readiness = await refreshAIReadiness(orgId).catch(() => null);
+    res.json({ ok: true, readiness });
   } catch (err) {
     next(err);
   }
