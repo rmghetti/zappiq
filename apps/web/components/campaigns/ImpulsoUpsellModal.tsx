@@ -41,24 +41,27 @@ const PLANS = [
     key: 'IMPULSO_START',
     name: 'Start',
     price: 197,
-    who: 'Para começar a vender com a Iza.',
-    features: ['Iza Estrategista + Studio', 'WhatsApp, e-mail e SMS', 'Até 5.000 contatos ativos', 'IA de campanha inclusa'],
+    priceAnnual: 158,
+    who: 'Venda pela sua base, sem depender de anúncio.',
+    features: ['Iza Estrategista + Studio + Coach', 'WhatsApp, e-mail e SMS', 'CRM nativo + segmentação', 'Até 5.000 contatos · 1.000 disparos/mês'],
     highlight: false,
   },
   {
     key: 'IMPULSO_PRO',
     name: 'Pro',
-    price: 497,
-    who: 'Quem quer o loop de anúncios fechado.',
-    features: ['Tudo do Start', 'Anúncios Meta (CTWA, Lead Ads, CAPI)', 'Atribuição de receita + Pix no chat', 'Auto-otimização + TikTok', 'Até 25.000 contatos'],
+    price: 597,
+    priceAnnual: 478,
+    who: 'Feche o loop entre anúncio, conversa e venda.',
+    features: ['Tudo do Start', 'Loop de Receita: Meta CTWA + CAPI + atribuição', 'Audiências preditivas + auto-otimização', 'Conector com 1 CRM (HubSpot/RD/Pipedrive)', 'Até 25.000 contatos · 5.000 disparos/mês'],
     highlight: true,
   },
   {
     key: 'IMPULSO_SCALE',
     name: 'Scale',
-    price: 997,
-    who: 'Operação de performance com verba.',
-    features: ['Tudo do Pro', 'Google Ads + conversões offline', 'Autopiloto + múltiplos números', 'Contatos ilimitados'],
+    price: 1297,
+    priceAnnual: 1038,
+    who: 'Operação de performance no autopiloto.',
+    features: ['Tudo do Pro', 'Iza Autopiloto com governança', 'Google Ads + conversões offline + múltiplos números', 'Conector com múltiplos CRMs', 'Contatos ilimitados · 20.000 disparos/mês'],
     highlight: false,
   },
 ];
@@ -177,6 +180,19 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
                 </button>
               </div>
             ))}
+          </div>
+          {/* Enterprise — sob consulta (redes/franquias) */}
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Enterprise <span className="text-xs font-normal text-gray-500">· sob consulta</span></p>
+              <p className="text-[11px] text-gray-500">Redes e franquias: tudo do Scale + volume dedicado, SLA, onboarding assistido e integrações sob medida.</p>
+            </div>
+            <a
+              href="mailto:comercial@zappiq.com.br?subject=Zap%20Impulso%20Enterprise"
+              className="text-xs font-semibold text-[#3A3FA8] hover:underline whitespace-nowrap self-start sm:self-auto"
+            >
+              Falar com vendas
+            </a>
           </div>
           <p className="text-[11px] text-gray-400 mt-3 text-center">
             Mensagens de marketing são cobradas por uso (custo do WhatsApp repassado). Sem taxa de setup. Cancele quando quiser.
