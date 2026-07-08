@@ -10,12 +10,27 @@ interface User {
   avatar?: string;
 }
 
+export type PaywallMode = 'none' | 'soft' | 'hard' | 'past_due';
+export type LifecycleStage =
+  | 'CHURNED' | 'PAST_DUE' | 'ACTIVE' | 'TRIAL' | 'TRIAL_EXPIRED' | 'NOVO';
+
 interface Organization {
   id: string;
   name: string;
   slug: string;
   plan: string;
   settings: any;
+  // Trial Enforcement — vêm de GET /api/auth/me (fonte única: computeAccessState).
+  lifecycleStage?: LifecycleStage;
+  paywall?: PaywallMode;
+  trialStartedAt?: string | null;
+  trialEndsAt?: string | null;
+  isTrialActive?: boolean;
+  trialConverted?: boolean;
+  billingCycle?: string | null;
+  paywallGraceUntil?: string | null;
+  // Troca de plano agendada (downgrade / anual travado) — faixa no dash.
+  pendingPlanChange?: { plan: string; cycle: string; effectiveAt: string | null } | null;
 }
 
 interface AuthState {

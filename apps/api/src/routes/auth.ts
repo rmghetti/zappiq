@@ -7,6 +7,7 @@ import { signToken, signRefreshToken, verifyRefreshToken } from '../utils/token.
 import { validate } from '../middleware/validate.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { seedDefaultPipelineStages } from '../services/pipelineStageProvisioningService.js';
+import { computeAccessState } from '../services/accountAccess.js'; // Trial Enforcement — paywall p/ o web
 
 const router = Router();
 
@@ -300,6 +301,12 @@ router.get('/me', authMiddleware, async (req: Request, res: Response, next: Next
       return;
     }
 
+    // Trial Enforcement: expõe o estágio + modo de paywall pro AuthGuard/banner.
+    // Fonte única (computeAccessState) — o web NÃO reimplementa a regra.
+    const access = user.organization
+      ? computeAccessState(user.organization as any)
+      : { stage: 'NOVO' as const, paywall: 'none' as const };
+
     res.json({
       user: {
         id: user.id,
@@ -310,7 +317,9 @@ router.get('/me', authMiddleware, async (req: Request, res: Response, next: Next
         avatar: user.avatar,
         isOnline: user.isOnline,
       },
-      organization: user.organization,
+      organization: user.organization
+        ? { ...user.organization, lifecycleStage: access.stage, paywall: access.paywall }
+        : null,
     });
   } catch (err) {
     next(err);

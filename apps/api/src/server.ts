@@ -16,6 +16,7 @@ import { redis } from './utils/redis.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
 import { rlsTenantMiddleware } from './middleware/rlsTenant.js';
+import { requireActivePlan } from './middleware/requireActivePlan.js'; // Trial Enforcement — gate de trial vencido (402)
 import { initQueues, closeQueues } from './services/queueService.js';
 import { initFlowTimerWorker } from './services/flowScheduler.js';
 import { setIo } from './utils/socketRegistry.js';
@@ -70,6 +71,7 @@ import { initAgentEvalCronJob } from './services/agentEvalCronService.js'; // FA
 import { initAnalyticsPulseCronJob } from './services/analyticsPulseCron.js'; // Analytics Pulso — insight diário por org
 import { initCampaignSchedulerCronJob } from './services/campaignSchedulerCron.js'; // W2.4 — dispara campanhas agendadas
 import { initTrialExpirationCronJob } from './services/trialExpirationCron.js'; // Área Clientes Fase 1 — fecha trials vencidos + recomputa lifecycleStage
+import { initSuperadminTrialDigestJob } from './services/superadminTrialDigestCron.js'; // Trial Enforcement — digest diário ao CEO (e-mail + Slack)
 
 const app = express();
 const httpServer = createServer(app);
@@ -282,31 +284,36 @@ app.use('/api/admin/clientes', adminClientesRoutes); // Área Clientes Fase 2: l
 // authMiddleware aplicado dentro da própria route + RLS por organizationId.
 app.use('/api/agent-quality', agentQualityRoutes);
 
-// ── Protected Routes (auth + RLS tenant isolation) ─
-app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, contactsRoutes);
-app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, conversationsRoutes);
-app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, messagesRoutes);
-app.use('/api/campaigns', authMiddleware, rlsTenantMiddleware, campaignsRoutes);
-// Impulso — acesso/entitlement + trial (NÃO gated: todo cliente consulta e pode ativar teste).
-app.use('/api/impulso-access', authMiddleware, rlsTenantMiddleware, impulsoAccessRoutes);
-// Impulso — features (gated por requireImpulso: precisa do add-on/trial/alpha ativo).
-app.use('/api/impulso', authMiddleware, rlsTenantMiddleware, requireImpulso(), impulsoRoutes);
-app.use('/api/analytics', authMiddleware, rlsTenantMiddleware, analyticsRoutes);
+// ── Protected Routes (auth + RLS tenant isolation + gate de trial vencido) ─
+// requireActivePlan (Trial Enforcement) bloqueia (402) orgs sem plano pago ativo,
+// EXCETO /api/billing (precisa ficar acessível pra pessoa escolher/pagar um plano).
+// /api/auth, /api/onboarding, /api/dsr (direito LGPD) e /api/admin/* ficam fora por design.
+app.use('/api/contacts', authMiddleware, rlsTenantMiddleware, requireActivePlan, contactsRoutes);
+app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, requireActivePlan, conversationsRoutes);
+app.use('/api/conversations', authMiddleware, rlsTenantMiddleware, requireActivePlan, messagesRoutes);
+app.use('/api/campaigns', authMiddleware, rlsTenantMiddleware, requireActivePlan, campaignsRoutes);
+// Impulso — acesso/entitlement + trial do add-on. Passa pelo requireActivePlan (só
+// cliente com plano/trial da plataforma ativo), mas NÃO por requireImpulso: todo cliente
+// ativo consulta o status e pode ativar o teste de 7 dias do Impulso.
+app.use('/api/impulso-access', authMiddleware, rlsTenantMiddleware, requireActivePlan, impulsoAccessRoutes);
+// Impulso — features (gated por requireImpulso: precisa do add-on/trial/alpha do Impulso ativo).
+app.use('/api/impulso', authMiddleware, rlsTenantMiddleware, requireActivePlan, requireImpulso(), impulsoRoutes);
+app.use('/api/analytics', authMiddleware, rlsTenantMiddleware, requireActivePlan, analyticsRoutes);
 // IMPORTANT: /api/flows/templates MUST be mounted before /api/flows, otherwise
 // GET /api/flows/templates would be captured by GET /:id in flowsRoutes (id="templates")
 // and return 404 'Flow not found' instead of the templates list.
-app.use('/api/flows/templates', authMiddleware, rlsTenantMiddleware, flowTemplatesRoutes);
-app.use('/api/flows', authMiddleware, rlsTenantMiddleware, flowsRoutes);
-app.use('/api/kb', authMiddleware, rlsTenantMiddleware, knowledgeBaseRoutes);
-app.use('/api/ai-training', authMiddleware, rlsTenantMiddleware, aiTrainingRoutes); // PR #106.1
-app.use('/api/templates', authMiddleware, rlsTenantMiddleware, templatesRoutes);
-app.use('/api/deals', authMiddleware, rlsTenantMiddleware, dealsRoutes);
-app.use('/api/crm', authMiddleware, rlsTenantMiddleware, crmRoutes); // PR #217 CRM 3a — métricas executivas
-app.use('/api/tasks', authMiddleware, rlsTenantMiddleware, tasksRoutes); // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA
-app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes);
-app.use('/api/settings', authMiddleware, rlsTenantMiddleware, settingsRoutes);
-app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, auditLogsRoutes);
-app.use('/api/embedded-signup', authMiddleware, rlsTenantMiddleware, embeddedSignupRoutes); // #273/#274
+app.use('/api/flows/templates', authMiddleware, rlsTenantMiddleware, requireActivePlan, flowTemplatesRoutes);
+app.use('/api/flows', authMiddleware, rlsTenantMiddleware, requireActivePlan, flowsRoutes);
+app.use('/api/kb', authMiddleware, rlsTenantMiddleware, requireActivePlan, knowledgeBaseRoutes);
+app.use('/api/ai-training', authMiddleware, rlsTenantMiddleware, requireActivePlan, aiTrainingRoutes); // PR #106.1
+app.use('/api/templates', authMiddleware, rlsTenantMiddleware, requireActivePlan, templatesRoutes);
+app.use('/api/deals', authMiddleware, rlsTenantMiddleware, requireActivePlan, dealsRoutes);
+app.use('/api/crm', authMiddleware, rlsTenantMiddleware, requireActivePlan, crmRoutes); // PR #217 CRM 3a — métricas executivas
+app.use('/api/tasks', authMiddleware, rlsTenantMiddleware, requireActivePlan, tasksRoutes); // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA
+app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes); // SEM gate: paywall precisa ser acessível
+app.use('/api/settings', authMiddleware, rlsTenantMiddleware, requireActivePlan, settingsRoutes);
+app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, requireActivePlan, auditLogsRoutes);
+app.use('/api/embedded-signup', authMiddleware, rlsTenantMiddleware, requireActivePlan, embeddedSignupRoutes); // #273/#274
 
 // DSR — POST público (titular não é usuário); demais exigem auth + RLS.
 // Rate-limit dedicado e agressivo nos endpoints públicos (sem auth): protege
@@ -370,6 +377,11 @@ initTrialExpirationCronJob().catch((err) => {
 // ── W2.4: sweep de campanhas agendadas (a cada minuto) — dispara SCHEDULED ──
 initCampaignSchedulerCronJob().catch((err) => {
   logger.error('[Server] Failed to initialize campaign scheduler cron job:', err);
+});
+
+// ── Trial Enforcement: digest diário ao superadmin (13:00 UTC) — e-mail + Slack ──
+initSuperadminTrialDigestJob().catch((err) => {
+  logger.error('[Server] Failed to initialize superadmin trial digest cron job:', err);
 });
 
 // ── Error Handler (must be last) ────────────────

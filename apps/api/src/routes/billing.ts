@@ -7,6 +7,22 @@ import { logger } from '../utils/logger.js';
 import { getUsage } from '../middleware/planLimits.js';
 import { computeBillingUsage } from './billingUsage.util.js';
 import { buildSubscriptionState } from './billingSubscription.util.js';
+import { buildRecommendation } from '../services/planRecommendation.js';
+import { listPurchasableAddons, resolveAddonLineItems } from './billingAddons.util.js';
+import { deriveLifecycleStage } from '../services/accountLifecycle.js';
+import { computeConfirmUpdate, isCheckoutSettled } from './billingCheckoutConfirm.util.js';
+import { effectiveTrialDays } from './billingCheckout.util.js';
+import { classifyPlanChange, type PlanTier, type BillingCycle as PlanCycle } from '../services/planChange.util.js';
+import {
+  isPlanTier,
+  priceIdForSelection,
+  resolveCurrentSelection,
+  currentPeriodEndMs,
+  findPlanItem,
+  subscriptionGuard,
+  guardResponse,
+  buildDowngradeSchedulePhases,
+} from './billingChange.util.js';
 
 const stripe = new Stripe(env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 const router = Router();
@@ -127,6 +143,10 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
 
     const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
 
+    // Trial é UM por org: quem já testou (ativo ou vencido) ou já pagou
+    // assina direto, sem ganhar novo período grátis no Iza Lite.
+    trialDays = effectiveTrialDays(trialDays, org);
+
     const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
       metadata: {
         organizationId: req.organizationId!,
@@ -141,11 +161,19 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
       subscriptionData.trial_period_days = trialDays;
     }
 
+    // Trial Enforcement — "adicionar ao pacote": o cliente pode incluir addons
+    // recorrentes junto do plano. Resolvemos os price IDs no SERVIDOR (o front
+    // manda só as keys); keys inválidas/não-recorrentes são ignoradas.
+    const addonLineItems = resolveAddonLineItems(body.addons);
+    if (addonLineItems.length > 0) {
+      subscriptionData.metadata!.addons = addonLineItems.length.toString();
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
       allow_promotion_codes: true,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }, ...addonLineItems],
       subscription_data: subscriptionData,
       metadata: {
         organizationId: req.organizationId!,
@@ -168,6 +196,423 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
     });
 
     res.json({ success: true, url: session.url, trialDays, pricingVersion });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/billing/checkout/confirm
+// Confirmação SÍNCRONA e idempotente do retorno do Stripe Checkout. A página
+// /billing/success chama isto com o session_id do success_url pra materializar
+// a assinatura na org NA HORA — sem depender do timing do webhook. Assim o
+// cliente já cai no painel reconhecido como ATIVO (e some o 404 do success_url
+// que apontava pra uma rota inexistente). Usa os MESMOS building-blocks do
+// webhook (stripeWebhook.util + deriveLifecycleStage), então os dois caminhos
+// convergem pro mesmo estado. Fonte da verdade continua sendo o webhook.
+router.post('/checkout/confirm', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authedOrgId = req.organizationId;
+    const sessionId =
+      (typeof req.body?.session_id === 'string' && req.body.session_id) ||
+      (typeof req.query.session_id === 'string' && req.query.session_id) ||
+      '';
+    if (!sessionId) {
+      res.status(400).json({ error: 'session_id obrigatório' });
+      return;
+    }
+    if (!env.STRIPE_SECRET_KEY) {
+      res.status(503).json({ error: 'Stripe não configurado' });
+      return;
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['subscription'],
+    });
+
+    const sessionOrgId = (session.metadata?.organizationId as string | undefined) || null;
+    // Segurança: a sessão precisa ser da org autenticada (não confirma checkout
+    // de outra org via session_id alheio).
+    if (sessionOrgId && authedOrgId && sessionOrgId !== authedOrgId) {
+      res.status(403).json({ error: 'Sessão de checkout de outra organização' });
+      return;
+    }
+    const orgId = sessionOrgId || authedOrgId;
+    if (!orgId) {
+      res.status(400).json({ error: 'organização não resolvida' });
+      return;
+    }
+
+    const sub =
+      session.subscription && typeof session.subscription === 'object'
+        ? (session.subscription as Stripe.Subscription)
+        : null;
+
+    if (sub) {
+      const before = await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { settings: true, paidAt: true, isTrialActive: true, trialConverted: true },
+      });
+      if (before) {
+        const { data } = computeConfirmUpdate(sub, before);
+        await prisma.organization.update({ where: { id: orgId }, data: data as any });
+
+        // materializa o lifecycle (mesma função pura do webhook) pra org já
+        // aparecer como ATIVA nos gates e na UI.
+        const fresh = await prisma.organization.findUnique({
+          where: { id: orgId },
+          select: {
+            churnedAt: true,
+            subscriptionStatus: true,
+            stripeSubscriptionId: true,
+            trialEndsAt: true,
+            isTrialActive: true,
+            trialConverted: true,
+            paidAt: true,
+          },
+        });
+        if (fresh) {
+          const stage = deriveLifecycleStage(fresh);
+          await prisma.organization.update({
+            where: { id: orgId },
+            data: { accountLifecycleStage: stage } as any,
+          });
+          await prisma.crmAccount
+            .updateMany({ where: { organizationId: orgId }, data: { lifecycleStage: stage } })
+            .catch(() => {
+              /* espelho CRM best-effort; o webhook garante a timeline completa */
+            });
+        }
+      }
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: {
+        plan: true,
+        subscriptionStatus: true,
+        stripeSubscriptionId: true,
+        accountLifecycleStage: true,
+        trialEndsAt: true,
+        isTrialActive: true,
+        trialConverted: true,
+        churnedAt: true,
+        paidAt: true,
+      },
+    });
+
+    const stage = org
+      ? deriveLifecycleStage({
+          churnedAt: org.churnedAt,
+          subscriptionStatus: org.subscriptionStatus,
+          stripeSubscriptionId: org.stripeSubscriptionId,
+          trialEndsAt: org.trialEndsAt,
+          isTrialActive: org.isTrialActive,
+          trialConverted: org.trialConverted,
+          paidAt: org.paidAt,
+        })
+      : 'NOVO';
+
+    res.json({
+      success: true,
+      active: stage === 'ACTIVE',
+      settled: isCheckoutSettled(session),
+      lifecycleStage: stage,
+      plan: org?.plan ?? null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Troca de plano (upgrade/downgrade, mensal/anual) com proration.
+// Só para org com assinatura ATIVA real; trial/sem-sub segue no /checkout.
+// Regra pura em planChange.util (classifyPlanChange). Aqui: mecânica Stripe.
+// ═══════════════════════════════════════════════════════════════════════
+
+const PLAN_LABELS: Record<string, string> = {
+  IZA_LITE: 'Iza Lite',
+  GROWTH: 'Growth',
+  SCALE: 'Scale',
+  ENTERPRISE: 'Enterprise',
+};
+
+type LoadedSub = {
+  orgId: string;
+  sub: Stripe.Subscription;
+  itemId: string;
+  current: { plan: PlanTier; cycle: PlanCycle };
+};
+
+/**
+ * Carrega a assinatura ATIVA da org + a seleção atual (plano/ciclo). Responde
+ * direto (409/503/404) e retorna null quando não dá pra prosseguir — trial e
+ * orgs sem assinatura são mandadas pro checkout.
+ */
+async function loadActiveSubscription(
+  req: Request,
+  res: Response,
+): Promise<LoadedSub | null> {
+  const orgId = req.organizationId;
+  if (!orgId) {
+    res.status(401).json({ error: 'organization context missing' });
+    return null;
+  }
+
+  // Guard pré-fetch: Stripe configurado + org tem stripeSubscriptionId.
+  const org = env.STRIPE_SECRET_KEY
+    ? await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { plan: true, billingCycle: true, subscriptionStatus: true, stripeSubscriptionId: true },
+      })
+    : null;
+  const pre = subscriptionGuard({
+    stripeConfigured: !!env.STRIPE_SECRET_KEY,
+    stripeSubscriptionId: org?.stripeSubscriptionId,
+  });
+  // pre==='ok' garante org + stripeSubscriptionId (o guard checou), mas o TS não
+  // enxerga isso pela função opaca — fixa o narrowing aqui.
+  if (pre !== 'ok' || !org?.stripeSubscriptionId) {
+    const { status, body } = guardResponse(pre === 'ok' ? 'no_active_subscription' : pre);
+    res.status(status).json(body);
+    return null;
+  }
+  const orgRow = org;
+  const subscriptionId: string = org.stripeSubscriptionId;
+
+  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  // Item do PLANO (ignora add-ons) — trocamos só ele, preservando os add-ons.
+  const item = findPlanItem(sub.items?.data);
+
+  // Guard pós-fetch: status ativo/trial/past_due + tem item de plano.
+  const post = subscriptionGuard({
+    stripeConfigured: true,
+    stripeSubscriptionId: subscriptionId,
+    subStatus: sub.status,
+    hasPlanItem: !!item,
+  });
+  if (post !== 'ok' || !item) {
+    const { status, body } = guardResponse(post === 'ok' ? 'no_item' : post);
+    res.status(status).json(body);
+    return null;
+  }
+
+  const current = resolveCurrentSelection({
+    subscriptionPriceId: item.price?.id,
+    orgPlanEnum: orgRow.plan,
+    orgBillingCycle: orgRow.billingCycle,
+  });
+
+  return { orgId, sub, itemId: item.id, current };
+}
+
+/** Valida e normaliza {plan, cycle} do body. Responde 400 e retorna null se inválido. */
+function parseTarget(
+  req: Request,
+  res: Response,
+): { plan: PlanTier; cycle: PlanCycle } | null {
+  const plan = req.body?.plan;
+  const cycle = req.body?.cycle;
+  if (!isPlanTier(plan) || !isBillingCycle(cycle)) {
+    res.status(400).json({ error: 'invalid_target', allowedPlans: Object.keys(PLAN_LABELS) });
+    return null;
+  }
+  return { plan, cycle };
+}
+
+// POST /api/billing/change/preview — mostra a conta ANTES de confirmar.
+router.post('/change/preview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const loaded = await loadActiveSubscription(req, res);
+    if (!loaded) return;
+    const target = parseTarget(req, res);
+    if (!target) return;
+
+    const cls = classifyPlanChange(loaded.current, target);
+    const periodEndMs = currentPeriodEndMs(loaded.sub as any);
+    const base = {
+      kind: cls.kind,
+      effectiveTiming: cls.effectiveTiming,
+      currentPlanLabel: PLAN_LABELS[loaded.current.plan],
+      targetPlanLabel: PLAN_LABELS[target.plan],
+    };
+
+    if (cls.kind === 'noop' || cls.kind === 'contact_sales') {
+      res.json({ success: true, data: { ...base, chargeNowBrlCents: 0, effectiveDate: null, newRenewalDate: null } });
+      return;
+    }
+
+    if (cls.kind === 'upgrade') {
+      const newPrice = priceIdForSelection(target.plan, target.cycle);
+      if (!newPrice) {
+        res.status(422).json({ error: 'target_has_no_price' });
+        return;
+      }
+      // Prévia da proration: quanto o Stripe cobraria AGORA pela troca.
+      const preview = await stripe.invoices.createPreview({
+        customer: loaded.sub.customer as string,
+        subscription: loaded.sub.id,
+        subscription_details: {
+          items: [{ id: loaded.itemId, price: newPrice }],
+          proration_behavior: 'always_invoice',
+        },
+      });
+      const chargeNowBrlCents = Math.max(0, preview.amount_due ?? 0);
+      // Fim do próximo período = última linha do preview (fallback: período atual).
+      const lastLine = preview.lines?.data?.[preview.lines.data.length - 1];
+      const nextEndEpoch = (lastLine?.period?.end ?? null) as number | null;
+      const newRenewalDate = nextEndEpoch
+        ? new Date(nextEndEpoch * 1000).toISOString()
+        : periodEndMs
+          ? new Date(periodEndMs).toISOString()
+          : null;
+      res.json({
+        success: true,
+        data: { ...base, chargeNowBrlCents, effectiveDate: new Date().toISOString(), newRenewalDate },
+      });
+      return;
+    }
+
+    // downgrade / downgrade_annual_locked → sem cobrança agora, vale no fim do período.
+    const effectiveDate = periodEndMs ? new Date(periodEndMs).toISOString() : null;
+    res.json({
+      success: true,
+      data: { ...base, chargeNowBrlCents: 0, effectiveDate, newRenewalDate: effectiveDate },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/billing/change — aplica a troca. Reclassifica no servidor.
+router.post('/change', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const loaded = await loadActiveSubscription(req, res);
+    if (!loaded) return;
+    const target = parseTarget(req, res);
+    if (!target) return;
+
+    const cls = classifyPlanChange(loaded.current, target);
+
+    if (cls.kind === 'noop') {
+      res.json({ success: true, kind: 'noop', message: 'Você já está neste plano.' });
+      return;
+    }
+    if (cls.kind === 'contact_sales') {
+      res.status(422).json({ error: 'contact_sales' });
+      return;
+    }
+
+    const newPrice = priceIdForSelection(target.plan, target.cycle);
+    if (!newPrice) {
+      res.status(422).json({ error: 'target_has_no_price' });
+      return;
+    }
+
+    if (cls.kind === 'upgrade') {
+      // Cobra a diferença proporcional AGORA e troca o item na hora. O webhook
+      // customer.subscription.updated sincroniza plano/ciclo/MRR na org.
+      await stripe.subscriptions.update(loaded.sub.id, {
+        items: [{ id: loaded.itemId, price: newPrice }],
+        proration_behavior: 'always_invoice',
+        payment_behavior: 'error_if_incomplete',
+      });
+      // Se havia downgrade agendado, o upgrade imediato o torna obsoleto.
+      await prisma.organization
+        .update({ where: { id: loaded.orgId }, data: { pendingPlanChange: null } as any })
+        .catch(() => {});
+      logger.info('billing.change.upgrade_applied', {
+        organizationId: loaded.orgId,
+        from: loaded.current,
+        to: target,
+      });
+      res.json({ success: true, kind: 'upgrade', effectiveTiming: 'immediate' });
+      return;
+    }
+
+    // downgrade / downgrade_annual_locked → agenda via Subscription Schedule.
+    const periodEndMs = currentPeriodEndMs(loaded.sub as any);
+    const periodEndEpoch = periodEndMs ? Math.round(periodEndMs / 1000) : null;
+
+    // Cria (ou reaproveita) o schedule a partir da assinatura e define 2 fases:
+    // preço atual até o fim do período, depois o preço novo.
+    const existingScheduleId =
+      typeof loaded.sub.schedule === 'string' ? loaded.sub.schedule : loaded.sub.schedule?.id;
+    const schedule = existingScheduleId
+      ? await stripe.subscriptionSchedules.retrieve(existingScheduleId)
+      : await stripe.subscriptionSchedules.create({ from_subscription: loaded.sub.id });
+
+    const phase0 = schedule.phases?.[0];
+    const currentPriceId = priceIdForSelection(loaded.current.plan, loaded.current.cycle);
+    const startDate = (phase0?.start_date as number | undefined) ?? undefined;
+    const boundary = (phase0?.end_date as number | undefined) ?? periodEndEpoch ?? undefined;
+
+    // Preserva TODOS os itens da fase atual (plano + add-ons), trocando só o
+    // item do plano na fase 2 (regra pura em buildDowngradeSchedulePhases).
+    const phases = buildDowngradeSchedulePhases({
+      phase0Items: phase0?.items ?? [],
+      currentPlanPriceId: currentPriceId,
+      newPriceId: newPrice,
+      startDate,
+      boundary,
+    });
+
+    await stripe.subscriptionSchedules.update(schedule.id, {
+      proration_behavior: 'none',
+      end_behavior: 'release',
+      phases,
+    });
+
+    const effectiveAt = periodEndMs ? new Date(periodEndMs).toISOString() : null;
+    await prisma.organization.update({
+      where: { id: loaded.orgId },
+      data: {
+        pendingPlanChange: {
+          plan: target.plan,
+          cycle: target.cycle,
+          effectiveAt,
+          scheduleId: schedule.id,
+        },
+      } as any,
+    });
+    logger.info('billing.change.downgrade_scheduled', {
+      organizationId: loaded.orgId,
+      from: loaded.current,
+      to: target,
+      effectiveAt,
+    });
+    res.json({ success: true, kind: cls.kind, effectiveTiming: cls.effectiveTiming, effectiveAt });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/billing/change/scheduled — cancela um downgrade agendado.
+router.delete('/change/scheduled', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId;
+    if (!orgId) {
+      res.status(401).json({ error: 'organization context missing' });
+      return;
+    }
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { pendingPlanChange: true, stripeSubscriptionId: true },
+    });
+    const pending = (org?.pendingPlanChange as any) || null;
+    const scheduleId: string | null = pending?.scheduleId ?? null;
+
+    if (scheduleId && env.STRIPE_SECRET_KEY) {
+      await stripe.subscriptionSchedules.release(scheduleId).catch((e) => {
+        // Já liberado/aplicado — idempotente, seguimos limpando o marcador.
+        logger.warn('billing.change.release_noop', { organizationId: orgId, err: String(e) });
+      });
+    }
+    await prisma.organization
+      .update({ where: { id: orgId }, data: { pendingPlanChange: null } as any })
+      .catch(() => {});
+
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }
@@ -234,6 +679,31 @@ router.get('/usage', async (req: Request, res: Response, next: NextFunction) => 
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/billing/recommendation
+// Trial Enforcement — plano mais adequado pelo perfil de uso do trial + addons
+// sugeridos. Consumido pela paywall (RecommendationHero) e pelo digest superadmin.
+// Isento do gate requireActivePlan (montado em /api/billing, sem o gate).
+router.get('/recommendation', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId;
+    if (!orgId) {
+      res.status(401).json({ error: 'organization context missing' });
+      return;
+    }
+    const recommendation = await buildRecommendation(orgId);
+    res.json({ success: true, data: recommendation });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/billing/addons — catálogo dos addons recorrentes compráveis "no pacote"
+// (key + nome + preço; o price ID fica no servidor). Consumido pela paywall.
+router.get('/addons', (_req: Request, res: Response) => {
+  const addons = listPurchasableAddons().map(({ key, name, amountBrl }) => ({ key, name, amountBrl }));
+  res.json({ success: true, data: addons });
 });
 
 // GET /api/billing/subscription

@@ -74,7 +74,7 @@ export function renderDsrCompletedEmail(input: DsrCompletedEmailInput): Rendered
   const greetingName = requesterName?.trim() || 'Olá';
   const { headline, paragraph } = bodyFor(outcome);
 
-  const subject = `Sua solicitação LGPD foi concluída — protocolo ${protocol}`;
+  const subject = `Sua solicitação LGPD foi concluída. Protocolo ${protocol}`;
 
   const html = `<!doctype html>
 <html lang="pt-br">
@@ -143,7 +143,7 @@ export function renderDsrCompletedEmail(input: DsrCompletedEmailInput): Rendered
     '',
     'Se você não reconhece esta solicitação ou tem alguma dúvida, responda este e-mail.',
     '',
-    `— ${orgName} (em atendimento à LGPD)`,
+    `${orgName} (em atendimento à LGPD)`,
   ].join('\n');
 
   return { subject, html, text };

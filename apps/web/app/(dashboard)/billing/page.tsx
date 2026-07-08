@@ -19,8 +19,20 @@ import {
   CheckCircle2,
   CircleSlash,
 } from 'lucide-react';
+import { classifyPlanChange, type PlanTier, type BillingCycle as PlanCycle } from '@zappiq/shared';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
+import { RecommendationHero } from './RecommendationHero';
+import { PlanChangeModal } from './PlanChangeModal';
+
+// Enum do banco (org.plan) → tier lógico V4. STARTER/legado = Iza Lite.
+function orgEnumToTier(planEnum: string | null | undefined): PlanTier {
+  const up = (planEnum ?? '').toUpperCase();
+  if (up === 'GROWTH') return 'GROWTH';
+  if (up === 'SCALE' || up === 'BUSINESS') return 'SCALE';
+  if (up === 'ENTERPRISE') return 'ENTERPRISE';
+  return 'IZA_LITE';
+}
 
 const PLANS: PlanConfig[] = listActivePlans();
 
@@ -57,9 +69,11 @@ type SubscriptionState = {
 };
 
 export default function BillingPage() {
-  const { organization } = useAuthStore();
+  const { organization, fetchMe } = useAuthStore();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
-  const [cycle, setCycle] = useState<BillingCycle>('monthly');
+  const [changeNotice, setChangeNotice] = useState<string | null>(null);
+  // Trial Enforcement: anual é o padrão em destaque (empurra o desconto de 20%).
+  const [cycle, setCycle] = useState<BillingCycle>('annual');
   const [usage, setUsage] = useState<BillingUsage | null>(null);
   const [usageLoading, setUsageLoading] = useState(true);
   const [subscription, setSubscription] = useState<SubscriptionState | null>(null);
@@ -92,10 +106,14 @@ export default function BillingPage() {
     };
   }, []);
 
-  async function handleCheckout(planId: string, billingCycle: BillingCycle) {
+  async function handleCheckout(planId: string, billingCycle: BillingCycle, addons?: string[]) {
     setLoadingPlan(planId);
     try {
-      const res = await api.post('/api/billing/checkout', { plan: planId, cycle: billingCycle });
+      const res = await api.post('/api/billing/checkout', {
+        plan: planId,
+        cycle: billingCycle,
+        ...(addons && addons.length ? { addons } : {}),
+      });
       if (res.url) window.location.href = res.url;
     } catch (err: any) {
       alert(err.message || 'Erro ao iniciar checkout');
@@ -111,6 +129,24 @@ export default function BillingPage() {
   }
 
   const currentPlan = organization?.plan || 'IZA_LITE';
+
+  // Estado canônico vem do lifecycleStage (computeAccessState no /me) — nunca
+  // do subscriptionStatus cru. Regras dos CTAs:
+  //  - "Plano atual" (desabilitado) só pra quem TEM assinatura paga real.
+  //  - Em trial, o plano testado vira o CTA principal ("Assinar agora").
+  //  - Oferta de trial só pra org que nunca testou nem pagou (trial é um por org).
+  const stage = organization?.lifecycleStage;
+  const hasPaidSub = stage === 'ACTIVE' || stage === 'PAST_DUE';
+  const inTrial = stage === 'TRIAL';
+  const usedTrial =
+    inTrial || !!organization?.trialEndsAt || !!organization?.trialStartedAt;
+
+  // Seleção atual do pagante (pra classificar upgrade/downgrade nos cards).
+  const currentSelection = {
+    plan: orgEnumToTier(organization?.plan),
+    cycle: (organization?.billingCycle === 'annual' ? 'annual' : 'monthly') as PlanCycle,
+  };
+  const [changeTarget, setChangeTarget] = useState<{ plan: PlanTier; cycle: PlanCycle; label: string } | null>(null);
 
   function renderPrice(plan: PlanConfig) {
     if (plan.priceMonthly === null) {
@@ -155,9 +191,21 @@ export default function BillingPage() {
       {/* Estado REAL da assinatura (FEATURE 5b.1) */}
       <SubscriptionCard loading={subLoading} sub={subscription} />
 
-      {/* Trial 14 dias HERO — so quando NAO ha assinatura paga real, pra nao
-          mostrar promo de trial a quem ja assinou. */}
-      {(!subscription || subscription.status === 'no_subscription' || subscription.status === 'trialing') && (
+      {/* Trial Enforcement — hero de conversão (plano recomendado + anual) quando
+          o trial venceu (paywall) ou a pessoa chega por link de trial acabando. */}
+      <RecommendationHero
+        paywall={organization?.paywall}
+        trialActive={inTrial}
+        trialDaysLeft={subscription?.trialDaysLeft}
+        onChoose={handleCheckout}
+        loadingPlan={loadingPlan}
+      />
+
+      {/* Promo do trial Lite — SO pra org que nunca testou nem pagou. Quem já
+          está em trial (ou venceu) não pode ganhar outro, e mostrar isso pra
+          quem testa o Growth empurraria downgrade. */}
+      {!hasPaidSub && !usedTrial &&
+       organization?.paywall !== 'hard' && organization?.paywall !== 'soft' && (
       <div className="mb-6 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border border-emerald-200 rounded-2xl p-5 flex items-start gap-4">
         <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
           <Gift size={20} className="text-white" />
@@ -203,12 +251,22 @@ export default function BillingPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {PLANS.map((plan) => {
           const isCurrent = currentPlan === plan.id;
-          const hasTrial = (plan.trialDays ?? 0) > 0;
+          const isTrialPlan = isCurrent && inTrial;
+          // Trial é um por org: sem nova oferta pra quem já testou ou já paga.
+          const offerTrial = (plan.trialDays ?? 0) > 0 && !usedTrial && !hasPaidSub;
+          // Pagante: classifica a troca pro card (upgrade imediato vs downgrade
+          // agendado vs anual travado). A decisão final é reconfirmada no servidor.
+          const change = hasPaidSub
+            ? classifyPlanChange(currentSelection, { plan: plan.id as PlanTier, cycle })
+            : null;
+          const isCurrentPaid = change?.kind === 'noop';
           return (
             <div
               key={plan.id}
               className={`bg-white rounded-2xl border-2 p-6 relative transition-shadow ${
-                plan.highlight ? 'border-primary-500 shadow-lg shadow-primary-100' : 'border-gray-200'
+                plan.highlight || isTrialPlan
+                  ? 'border-primary-500 shadow-lg shadow-primary-100'
+                  : 'border-gray-200'
               }`}
             >
               {plan.highlight && (
@@ -216,11 +274,15 @@ export default function BillingPage() {
                   <Sparkles size={12} /> Mais escolhido
                 </div>
               )}
-              {hasTrial && (
+              {isTrialPlan ? (
+                <div className="absolute -top-3 right-4 bg-teal-500 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                  <Gift size={10} /> Seu plano do teste
+                </div>
+              ) : offerTrial ? (
                 <div className="absolute -top-3 right-4 bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
                   <Gift size={10} /> {plan.trialDays}d gratis
                 </div>
-              )}
+              ) : null}
 
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
@@ -238,16 +300,44 @@ export default function BillingPage() {
                 ))}
               </ul>
 
-              {isCurrent ? (
+              {isCurrentPaid ? (
                 <div className="w-full py-2.5 text-center rounded-lg bg-gray-100 text-sm font-medium text-gray-500">
                   Plano atual
                 </div>
+              ) : plan.priceMonthly === null ? (
+                // Sob consulta (Enterprise) não tem checkout — antes o "Assinar"
+                // chamava POST /checkout com plano inválido e estourava 400.
+                <a
+                  href="mailto:founders@zappiq.com.br?subject=Plano%20Enterprise%20ZappIQ"
+                  className="w-full py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 border border-gray-200 text-gray-700 hover:bg-gray-50"
+                >
+                  Falar com vendas <ArrowRight size={14} />
+                </a>
+              ) : change ? (
+                // Pagante: troca de plano (modifica a assinatura, não cria outra).
+                <button
+                  onClick={() =>
+                    setChangeTarget({ plan: plan.id as PlanTier, cycle, label: plan.name })
+                  }
+                  className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                    change.kind === 'upgrade'
+                      ? 'bg-primary-500 text-white hover:bg-primary-600'
+                      : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {change.kind === 'upgrade'
+                    ? 'Fazer upgrade'
+                    : change.kind === 'downgrade_annual_locked'
+                      ? 'Agendar p/ renovação'
+                      : 'Agendar downgrade'}{' '}
+                  <ArrowRight size={14} />
+                </button>
               ) : (
                 <button
                   onClick={() => handleCheckout(plan.id, cycle)}
                   disabled={loadingPlan === plan.id}
                   className={`w-full py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-                    plan.highlight
+                    plan.highlight || isTrialPlan
                       ? 'bg-primary-500 text-white hover:bg-primary-600'
                       : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
                   } disabled:opacity-50`}
@@ -256,7 +346,11 @@ export default function BillingPage() {
                     'Redirecionando...'
                   ) : (
                     <>
-                      {hasTrial ? `Comecar ${plan.trialDays}d gratis` : 'Assinar'}{' '}
+                      {isTrialPlan
+                        ? `Assinar ${plan.name} agora`
+                        : offerTrial
+                          ? `Comecar ${plan.trialDays}d gratis`
+                          : 'Assinar'}{' '}
                       <ArrowRight size={14} />
                     </>
                   )}
@@ -321,6 +415,32 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de troca de plano (pagante) — mostra a conta e aplica a mudança. */}
+      {changeTarget && (
+        <PlanChangeModal
+          targetPlan={changeTarget.plan}
+          targetCycle={changeTarget.cycle}
+          targetLabel={changeTarget.label}
+          onClose={() => setChangeTarget(null)}
+          onApplied={(msg) => {
+            setChangeTarget(null);
+            setChangeNotice(msg);
+            // Re-sincroniza org (plano/ciclo/agendamento) na store.
+            fetchMe();
+          }}
+        />
+      )}
+
+      {/* Aviso pós-troca (upgrade aplicado / downgrade agendado). */}
+      {changeNotice && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-gray-900 px-5 py-3 text-sm font-medium text-white shadow-lg">
+          {changeNotice}
+          <button onClick={() => setChangeNotice(null)} className="ml-3 text-white/70 hover:text-white">
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

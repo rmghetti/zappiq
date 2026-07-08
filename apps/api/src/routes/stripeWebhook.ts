@@ -28,6 +28,7 @@ import { logger } from '../utils/logger.js';
 import { sendEmail } from '../services/email/emailProvider.js';
 import { renderTrialConvertedEmail } from '../services/email/templates/trialConverted.js';
 import { deriveLifecycleStage } from '../services/accountLifecycle.js';
+import { invalidateOrgAccessCache } from '../middleware/requireActivePlan.js'; // busta o cache do gate ao mudar billing
 import {
   resolvePlanFromPriceId,
   planToOrgEnum,
@@ -127,6 +128,10 @@ async function recomputeLifecycle(organizationId: string, source: string): Promi
     where: { id: organizationId },
     data: { accountLifecycleStage: stage },
   });
+
+  // Trial Enforcement: billing mudou → invalida o cache de 60s do gate, pra
+  // um cliente que acabou de pagar não ficar preso no 402 até o TTL expirar.
+  await invalidateOrgAccessCache(organizationId);
 
   // espelha em crm_accounts (fonte da UI), registrando mudança na timeline.
   const account = await prisma.crmAccount.findUnique({
@@ -239,7 +244,14 @@ async function applySubscriptionState(
 
   const before = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { settings: true, paidAt: true, isTrialActive: true, trialConverted: true, name: true },
+    select: {
+      settings: true,
+      paidAt: true,
+      isTrialActive: true,
+      trialConverted: true,
+      name: true,
+      pendingPlanChange: true,
+    },
   });
   if (!before) {
     logger.warn(`[Stripe] Org ${organizationId} não encontrada para subscription ${sub.id}`);
@@ -267,6 +279,18 @@ async function applySubscriptionState(
     data.paidAt = new Date();
     data.isTrialActive = false;
     data.trialConverted = true;
+  }
+  // Downgrade agendado que ENTROU em vigor: quando o plano/ciclo resultante bate
+  // com o pendingPlanChange, o Subscription Schedule já aplicou a fase 2 — limpa
+  // o marcador pra faixa "troca agendada" sumir do dash.
+  const pending = (before.pendingPlanChange as { plan?: string; cycle?: string } | null) || null;
+  if (
+    pending &&
+    resolved &&
+    pending.plan === resolved.plan &&
+    pending.cycle === resolved.billingCycle
+  ) {
+    data.pendingPlanChange = null;
   }
 
   await prisma.organization.update({ where: { id: organizationId }, data: data as any });

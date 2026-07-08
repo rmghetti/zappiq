@@ -39,7 +39,7 @@ export interface TrialSavingsEmailInput {
   zappiqMonthlyBrl?: number;
   /** URL absoluta do CTA (com cupom, trackers etc). */
   ctaUrl: string;
-  /** Nome do fundador que assina. Default: "Rodrigo Ghetti — Founder, ZappIQ". */
+  /** Nome do fundador que assina. Default: "Rodrigo Ghetti, Founder da ZappIQ". */
   signature?: string;
 }
 
@@ -70,10 +70,10 @@ function brl(v: number): string {
 
 function subjectLine(daysRemaining: number, savings: number): string {
   if (daysRemaining <= 0) {
-    return `Seu trial acabou — mas R$ ${savings.toLocaleString('pt-BR')}/ano ainda estão na mesa`;
+    return `Seu trial acabou, mas R$ ${savings.toLocaleString('pt-BR')}/ano ainda estão na mesa`;
   }
   if (daysRemaining >= 10) {
-    return `${daysRemaining > 13 ? 'Bem-vindo' : 'Primeira semana'} — veja quanto você já economizou sem setup fee`;
+    return `${daysRemaining > 13 ? 'Bem-vindo' : 'Primeira semana'}. Veja quanto você já economizou sem setup fee`;
   }
   if (daysRemaining >= 4) {
     return `Faltam ${daysRemaining} dias de trial · economia calculada dentro`;
@@ -112,7 +112,7 @@ export function renderTrialSavingsFollowupEmail(
     zappiqTierLabel = 'ZappIQ Starter',
     zappiqMonthlyBrl = 197,
     ctaUrl,
-    signature = 'Rodrigo Ghetti — Founder, ZappIQ',
+    signature = 'Rodrigo Ghetti, Founder da ZappIQ',
   } = input;
 
   const { firstYearCompetitor, firstYearZappiq, savings, pctSavings } = computeSavings(
@@ -127,10 +127,10 @@ export function renderTrialSavingsFollowupEmail(
     daysRemaining <= 0
       ? `O trial acabou, mas a conta continua simples: sem setup fee, você paga ${brl(zappiqMonthlyBrl)}/mês. Quer reativar?`
       : daysRemaining <= 3
-      ? `Faltam ${daysRemaining} ${daysRemaining === 1 ? 'dia' : 'dias'}. Converta hoje e trave 14% off no primeiro ano (cupom automático no link).`
+      ? `Faltam ${daysRemaining} ${daysRemaining === 1 ? 'dia' : 'dias'}. Converta hoje e trave 14% de desconto no primeiro ano (cupom automático no link).`
       : daysRemaining <= 7
       ? `${daysRemaining} dias para o fim do trial. Número abaixo é o que você economiza se converter agora.`
-      : `${daysRemaining} dias de trial ainda. O cálculo abaixo é conservador — use os números reais da sua cotação.`;
+      : `${daysRemaining} dias de trial ainda. O cálculo abaixo é conservador. Use os números reais da sua cotação.`;
 
   const html = `<!doctype html>
 <html lang="pt-br">

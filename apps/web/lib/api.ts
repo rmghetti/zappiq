@@ -164,6 +164,23 @@ class ApiClient {
       throw unauthorizedError;
     }
 
+    // Tratamento de 402 — trial vencido/sem plano pago (Trial Enforcement).
+    // A API é a fronteira de verdade; se um GET de produto voltar 402, levamos
+    // a pessoa pra escolher um plano (defesa em profundidade além do AuthGuard).
+    if (response.status === 402) {
+      const data = await response.json().catch(() => ({} as any));
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/billing')) {
+        const reason = data?.reason ? `?reason=${encodeURIComponent(data.reason)}` : '';
+        window.location.href = `/billing${reason}`;
+      }
+      const paywallError: ApiError = {
+        status: 402,
+        message: data?.error || 'Seu período de teste terminou.',
+        details: data,
+      };
+      throw paywallError;
+    }
+
     // Outros erros HTTP
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Requisição falhou' }));

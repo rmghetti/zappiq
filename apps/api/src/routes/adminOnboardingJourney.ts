@@ -83,9 +83,9 @@ router.post(
     try {
       const orgId = String(req.body?.orgId || '');
       const stage = String(req.body?.stage || '') as TrialStage;
-      const validStages: TrialStage[] = ['D1', 'D3', 'D7'];
+      const validStages: TrialStage[] = ['D1', 'T3', 'T2', 'T1', 'T0'];
       if (!orgId || !validStages.includes(stage)) {
-        res.status(400).json({ error: 'orgId + stage (D1|D3|D7) obrigatórios' });
+        res.status(400).json({ error: 'orgId + stage (D1|T3|T2|T1|T0) obrigatórios' });
         return;
       }
 

@@ -77,6 +77,9 @@ export function buildQueryRequest(
       query,
       namespace: namespaceFor(organizationId),
       top_k: topK,
+      // Sem esse piso o serviço devolve os top_k SEMPRE, mesmo com similaridade
+      // irrelevante — chunk aleatório de crawl entrava no prompt em toda resposta.
+      min_similarity: Number(env.RAG_MIN_SIMILARITY ?? 0.25),
     },
   };
 }
@@ -175,7 +178,8 @@ export async function search(organizationId: string, query: string, topK = 5): P
 
     return context;
   } catch (err: any) {
-    logger.warn('[RAG] Query failed:', err.message);
+    // error, não warn: a IA vai responder SEM nada do treinamento do cliente.
+    logger.error('[RAG] Query failed — respondendo sem contexto treinado:', err.message);
     return '';
   }
 }
@@ -254,6 +258,44 @@ function assertPublicUrl(url: string): void {
  * 404/422. Aqui fazemos o fetch da URL e reaproveitamos `ingestDocument`,
  * respeitando o contrato real. O guard anti-SSRF continua valendo.
  */
+/**
+ * HTML → texto legível. Sem isso, páginas eram ingeridas com markup/JS cru —
+ * uma única página do YouTube gerou 1.532 chunks de lixo que competiam no
+ * retrieval com o conteúdo curado do cliente.
+ */
+export function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<\/(p|div|section|article|li|tr|h[1-6]|br)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .trim();
+}
+
+/**
+ * Nome de `source` estável derivado da URL (hostname+pathname, sem protocolo).
+ * Usado na ingestão E na reconciliação de chunks por documento — precisa ser
+ * a MESMA derivação nos dois lados.
+ */
+export function urlToSource(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.hostname}${u.pathname}`.replace(/\/+$/, '') || u.hostname;
+  } catch {
+    return url;
+  }
+}
+
 export async function ingestUrl(organizationId: string, url: string) {
   assertPublicUrl(url);
 
@@ -267,19 +309,21 @@ export async function ingestUrl(organizationId: string, url: string) {
     (resp.headers['content-type'] as string | undefined)?.split(';')[0]?.trim() ||
     'text/plain';
 
-  // Deriva um nome de arquivo estável a partir da URL (usado como `source`).
-  let filename = url;
-  try {
-    const u = new URL(url);
-    filename = `${u.hostname}${u.pathname}`.replace(/\/+$/, '') || u.hostname;
-  } catch {
-    /* mantém url crua */
+  const filename = urlToSource(url);
+
+  let content = Buffer.from(resp.data);
+  let effectiveMime = mimeType;
+  if (mimeType === 'text/html' || mimeType === 'application/xhtml+xml') {
+    const text = htmlToPlainText(content.toString('utf-8'));
+    if (!text) throw new Error('Página sem texto extraível após limpeza de HTML');
+    content = Buffer.from(text, 'utf-8');
+    effectiveMime = 'text/plain';
   }
 
   return ingestDocument(organizationId, {
     filename,
-    content: Buffer.from(resp.data),
-    mimeType,
+    content,
+    mimeType: effectiveMime,
   });
 }
 
