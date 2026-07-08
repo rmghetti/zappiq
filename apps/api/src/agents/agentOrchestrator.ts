@@ -10,6 +10,7 @@ import * as ragService from '../services/ragService.js';
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
 import { syncContactToCrm } from '../services/crmAutomationService.js'; // CRM Onda 1 — IA preenche o pipeline
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
+import { getToolsForContext } from '../services/llm/tools.js';
 import { llmRouter, type LLMTier, type LLMProviderId, type LLMMessage as RouterLLMMessage, type ToolDefinition } from '../services/llm/LLMRouter.js';
 import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
@@ -512,6 +513,11 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // Per-org override via organizations.settings.llm_routing (#133):
     //   { forceProvider: "anthropic-sonnet" | ... } → bypassa tier-based
     //   { useDefaultCascade: true }                 → cascade default (Iza)
+    // Agendamento: só oferece as tools de booking quando a org ativou (não
+    // opt-out). Sem isso o turn segue idêntico (zero mudança pra quem não usa).
+    const schedulingOn = Boolean(orgSettings?.scheduling?.enabled) && !orgSettings?.scheduling?.optOut;
+    const turnTools = schedulingOn ? getToolsForContext({ hasScheduling: true }) : undefined;
+
     const turnResult = await routeIzaTurn({
       systemPrompt,
       userMessage: messageContent,
@@ -520,6 +526,8 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       forceProvider,
       orgId: organizationId,
       conversationId,
+      contactId,
+      tools: turnTools,
     });
 
     // ── 9.5. Vertical bloqueada — template estático, sem LLM ──────

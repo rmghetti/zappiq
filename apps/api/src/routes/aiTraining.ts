@@ -43,6 +43,7 @@ import {
   buildSchedulingKnowledge,
   SCHEDULING_RAG_SOURCE,
 } from './scheduling.util.js';
+import { getToolsForContext } from '../services/llm/tools.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -151,6 +152,14 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     // 3. Mesmo roteamento de tier/provider do bot real.
     const { tier, forceProvider } = await pickTierAndOverride(orgId);
 
+    // Agendamento no playground: só a tool de CONSULTA (read-only) — o teste
+    // mostra a IA oferecendo horários reais, mas NÃO cria agendamentos de
+    // verdade (create_appointment fica fora pra não poluir a agenda com testes).
+    const schedulingOn = Boolean(orgSettings?.scheduling?.enabled) && !orgSettings?.scheduling?.optOut;
+    const playgroundTools = schedulingOn
+      ? getToolsForContext({ hasScheduling: true }).filter((t) => t.name === 'check_availability')
+      : undefined;
+
     // 4. Mesmo turno da Iza (pre-filter + classify + cascade). history vazio:
     // é um teste isolado, sem conversa prévia. conversationId null (sem persistência).
     const turn = await routeIzaTurn({
@@ -161,6 +170,7 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
       forceProvider,
       orgId,
       conversationId: null,
+      tools: playgroundTools,
     });
 
     // Vertical bloqueada (apostas/cripto/...) devolve template estático, sem LLM.

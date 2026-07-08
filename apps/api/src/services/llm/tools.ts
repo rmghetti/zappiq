@@ -49,6 +49,7 @@ import { prisma } from '@zappiq/database';
 import { PLAN_CONFIG, type PlanConfig, type PlanId } from '@zappiq/shared';
 import { logger } from '../../utils/logger.js';
 import type { ToolDefinition } from './LLMRouter.js';
+import { checkAvailabilityTool, createAppointmentTool } from '../../agents/schedulingTools.js';
 
 // ─── Contexto disponível pra handlers ────────────────────────────────────
 
@@ -73,6 +74,12 @@ export interface RegisteredTool {
    * Útil pra rollout cauteloso de tools experimentais.
    */
   internalOnly?: boolean;
+  /**
+   * Se true, tool só é oferecida quando a org tem AGENDAMENTO ativo
+   * (getToolsForContext({ hasScheduling: true })). Mantém o blast radius
+   * zero para quem não usa agendamento.
+   */
+  schedulingOnly?: boolean;
 }
 
 // ─── Tool: get_org_billing_summary ───────────────────────────────────────
@@ -133,6 +140,8 @@ const getOrgBillingSummary: RegisteredTool = {
 
 const TOOL_REGISTRY: Record<string, RegisteredTool> = {
   [getOrgBillingSummary.definition.name]: getOrgBillingSummary,
+  [checkAvailabilityTool.definition.name]: checkAvailabilityTool,
+  [createAppointmentTool.definition.name]: createAppointmentTool,
 };
 
 // ─── API pública ─────────────────────────────────────────────────────────
@@ -145,9 +154,10 @@ const TOOL_REGISTRY: Record<string, RegisteredTool> = {
  *   const tools = getToolsForContext({ isIzaOrg: org.id === IZA_ORG_ID });
  *   const resp = await llmRouter.complete({ ..., tools });
  */
-export function getToolsForContext(opts: { isIzaOrg?: boolean } = {}): ToolDefinition[] {
+export function getToolsForContext(opts: { isIzaOrg?: boolean; hasScheduling?: boolean } = {}): ToolDefinition[] {
   return Object.values(TOOL_REGISTRY)
     .filter((t) => !t.internalOnly || opts.isIzaOrg)
+    .filter((t) => !t.schedulingOnly || opts.hasScheduling)
     .map((t) => t.definition);
 }
 

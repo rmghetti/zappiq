@@ -15,13 +15,19 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockComplete, mockClassify } = vi.hoisted(() => ({
+const { mockComplete, mockClassify, mockExecuteTool } = vi.hoisted(() => ({
   mockComplete: vi.fn(),
   mockClassify: vi.fn(),
+  mockExecuteTool: vi.fn(),
 }));
 
 vi.mock('./LLMRouter.js', () => ({
   llmRouter: { complete: mockComplete },
+}));
+
+vi.mock('./tools.js', () => ({
+  executeToolCall: mockExecuteTool,
+  getToolsForContext: () => [],
 }));
 
 vi.mock('./intentClassifier.js', async () => {
@@ -307,5 +313,60 @@ describe('routeIzaTurn — robustez', () => {
     const call = mockComplete.mock.calls[0][0];
     expect(call.orgId).toBe('org-abc');
     expect(call.conversationId).toBe('conv-xyz');
+  });
+});
+
+describe('routeIzaTurn — loop de tools (agendamento)', () => {
+  beforeEach(() => {
+    mockComplete.mockReset();
+    mockClassify.mockReset();
+    mockExecuteTool.mockReset();
+    mockClassify.mockResolvedValue('normal');
+  });
+
+  const TOOL = { name: 'check_availability', description: 'x', inputSchema: { type: 'object', properties: {}, required: [] } };
+
+  it('executa a tool pedida e devolve a resposta final', async () => {
+    // 1ª chamada: modelo pede a tool. 2ª: responde com o resultado.
+    mockComplete
+      .mockResolvedValueOnce({ text: '', provider: 'anthropic-sonnet', model: 'claude-sonnet-4-6', latencyMs: 10, attempt: 1, stopReason: 'tool_use', toolCalls: [{ id: 't1', name: 'check_availability', input: { appointment_type: 'Consulta' } }] })
+      .mockResolvedValueOnce({ text: 'Tenho segunda às 9h. Confirmo?', provider: 'anthropic-sonnet', model: 'claude-sonnet-4-6', latencyMs: 12, attempt: 1, stopReason: 'end_turn' });
+    mockExecuteTool.mockResolvedValue({ slots: [{ start_iso: '2027-01-18T12:00:00Z', label: 'seg 18/01 09:00' }] });
+
+    const result = await routeIzaTurn({
+      systemPrompt: 'Iza', userMessage: 'quero marcar uma consulta', skipClassify: true,
+      orgId: 'org1', conversationId: 'c1', contactId: 'ct1', tools: [TOOL],
+    });
+
+    expect(result.kind).toBe('llm');
+    if (result.kind === 'llm') {
+      expect(result.response.text).toContain('segunda');
+      expect(result.llmCallsMade).toBe(2); // pediu tool + resposta final
+    }
+    // a tool foi executada com o input do modelo e o contexto certo
+    expect(mockExecuteTool).toHaveBeenCalledWith('check_availability', { appointment_type: 'Consulta' }, expect.objectContaining({ organizationId: 'org1', contactId: 'ct1' }));
+    // a 2ª chamada recebeu o histórico com tool_use (assistant) + tool_result (user)
+    const secondCallMsgs = mockComplete.mock.calls[1][0].messages;
+    expect(secondCallMsgs.some((m: any) => Array.isArray(m.content) && m.content.some((b: any) => b.type === 'tool_use'))).toBe(true);
+    expect(secondCallMsgs.some((m: any) => Array.isArray(m.content) && m.content.some((b: any) => b.type === 'tool_result'))).toBe(true);
+  });
+
+  it('sem tools, NÃO entra no loop nem chama executeToolCall (zero mudança)', async () => {
+    mockComplete.mockResolvedValueOnce({ text: 'oi', provider: 'google-gemini-flash', model: 'gemini-2.5-flash', latencyMs: 8, attempt: 1, stopReason: 'end_turn' });
+    const result = await routeIzaTurn({ systemPrompt: 'Iza', userMessage: 'oi', skipClassify: true, orgId: 'o', conversationId: 'c' });
+    expect(result.kind).toBe('llm');
+    expect(mockExecuteTool).not.toHaveBeenCalled();
+    // sem tools o complete não recebe tools
+    expect(mockComplete.mock.calls[0][0].tools).toBeUndefined();
+  });
+
+  it('respeita o teto de rodadas (não faz loop infinito)', async () => {
+    // modelo insiste em pedir tool sempre
+    mockComplete.mockResolvedValue({ text: '', provider: 'anthropic-sonnet', model: 'claude-sonnet-4-6', latencyMs: 5, attempt: 1, stopReason: 'tool_use', toolCalls: [{ id: 't', name: 'check_availability', input: {} }] });
+    mockExecuteTool.mockResolvedValue({ ok: true });
+    const result = await routeIzaTurn({ systemPrompt: 'Iza', userMessage: 'x', skipClassify: true, orgId: 'o', conversationId: 'c', tools: [TOOL] });
+    expect(result.kind).toBe('llm');
+    // 1 inicial + no máx 4 rodadas = 5 chamadas de complete
+    expect(mockComplete.mock.calls.length).toBeLessThanOrEqual(5);
   });
 });
