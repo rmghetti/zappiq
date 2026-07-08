@@ -12,6 +12,8 @@ import {
   Activity, TrendingUp, Bot, UserCheck, DollarSign, Building2,
   // FASE 2.2b — Qualidade da IA (cliente)
   Gauge,
+  // Agendamento — agenda interna (hub)
+  CalendarClock,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
@@ -21,6 +23,8 @@ const navItems = [
   { href: '/conversations', label: 'Conversas', icon: MessageSquare },
   { href: '/contacts', label: 'Contatos', icon: Users },
   { href: '/crm', label: 'CRM', icon: Target },
+  // Agendamento — agenda interna (hub). A IA grava aqui; calendários externos sincronizam.
+  { href: '/crm/agenda', label: 'Agenda', icon: CalendarClock },
   // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA. A automação (crmAutomationService)
   // já cria Tasks quando detecta intenção de compra; aqui a PME finalmente as vê e conclui.
   { href: '/tasks', label: 'Tarefas', icon: ListChecks },

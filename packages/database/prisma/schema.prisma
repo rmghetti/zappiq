@@ -237,6 +237,9 @@ model Organization {
   analyticsInsights       AnalyticsInsight[] // Fase 2 Pulso — narrativas/anomalias
   crmAccount              CrmAccount? // Área Clientes — espelho de conta (1:1 opcional)
   stripeInvoices          StripeInvoice[] // Área Clientes Fase 3 — faturas Stripe persistidas
+  appointmentTypes        AppointmentType[] // Agendamento — tipos oferecidos pela IA
+  appointments            Appointment[] // Agendamento — agenda interna (hub)
+  calendarConnections     CalendarConnection[] // Agendamento — Google/Microsoft conectados
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
@@ -432,6 +435,7 @@ model Contact {
   deals              Deal[]
   activities         Activity[]
   tasks              Task[]
+  appointments       Appointment[] // Agendamento — agendamentos deste contato
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
@@ -1312,4 +1316,143 @@ model LLMCallLog {
   @@index([organizationId, createdAt])
   @@index([provider, createdAt])
   @@map("llm_call_logs")
+}
+
+// ═══════════════════════════════════════════════════════════
+// AGENDAMENTO (2026-07-08) — a IA agenda com o cliente final.
+// Agenda interna = fonte da verdade (hub). Calendário externo (Google/Microsoft)
+// é espelho que sincroniza bidirecionalmente com a interna.
+// ═══════════════════════════════════════════════════════════
+
+enum AppointmentModality {
+  in_person
+  online
+  phone
+  video
+}
+
+enum AppointmentStatus {
+  pending // criado, aguardando confirmação (quando requiresConfirmation)
+  confirmed
+  cancelled
+  no_show
+  completed
+}
+
+enum AppointmentSource {
+  ai // criado pela Iza numa conversa
+  manual // criado pelo dono do negócio na agenda interna
+  external_sync // veio de um calendário externo conectado
+}
+
+enum CalendarProvider {
+  google
+  microsoft
+}
+
+enum CalendarConnectionStatus {
+  active
+  expired
+  revoked
+}
+
+// Tipo de agendamento que o dono do negócio oferece (Consulta, Reunião, Visita…).
+// Cada tipo carrega as REGRAS que a IA respeita ao agendar.
+model AppointmentType {
+  id                   String              @id @default(uuid()) @db.Text
+  organizationId       String              @map("organization_id")
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                 String
+  icon                 String?
+  durationMin          Int                 @default(30) @map("duration_min")
+  durationBookerChoice Boolean             @default(false) @map("duration_booker_choice")
+  modality             AppointmentModality @default(online)
+  locationText         String?             @map("location_text") // endereço p/ presencial
+  meetingLinkTemplate  String?             @map("meeting_link_template") // p/ online/vídeo
+  // Grade semanal + fuso: { timezone, weekly: { mon:[["09:00","18:00"]], ... } }
+  availability         Json                @default("{}")
+  minNoticeMin         Int                 @default(120) @map("min_notice_min")
+  bufferBeforeMin      Int                 @default(0) @map("buffer_before_min")
+  bufferAfterMin       Int                 @default(0) @map("buffer_after_min")
+  maxPerDay            Int?                @map("max_per_day")
+  futureHorizonDays    Int                 @default(60) @map("future_horizon_days")
+  requiresConfirmation Boolean             @default(false) @map("requires_confirmation")
+  // Campos que o cliente final preenche: [{ key, label, type, required }]
+  bookingFields        Json                @default("[]") @map("booking_fields")
+  // Lembretes: [{ offsetMin, channel }]
+  reminders            Json                @default("[]")
+  cancelPolicyText     String?             @map("cancel_policy_text")
+  active               Boolean             @default(true)
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  appointments         Appointment[]
+
+  @@index([organizationId, active])
+  @@map("appointment_types")
+}
+
+// Um agendamento concreto na agenda interna (hub).
+model Appointment {
+  id                   String              @id @default(uuid()) @db.Text
+  organizationId       String              @map("organization_id")
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appointmentTypeId    String?             @map("appointment_type_id")
+  appointmentType      AppointmentType?    @relation(fields: [appointmentTypeId], references: [id], onDelete: SetNull)
+  contactId            String?             @map("contact_id")
+  contact              Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  conversationId       String?             @map("conversation_id")
+  status               AppointmentStatus   @default(pending)
+  startAt              DateTime            @map("start_at")
+  endAt                DateTime            @map("end_at")
+  timezone             String              @default("America/Sao_Paulo")
+  modality             AppointmentModality @default(online)
+  customerName         String              @map("customer_name")
+  customerPhone        String?             @map("customer_phone")
+  customerEmail        String?             @map("customer_email")
+  answers              Json                @default("{}") // respostas dos bookingFields
+  location             String?
+  meetingUrl           String?             @map("meeting_url")
+  notes                String?
+  source               AppointmentSource   @default(ai)
+  // Espelho no calendário externo (idempotência de sync)
+  externalEventId      String?             @map("external_event_id")
+  calendarConnectionId String?             @map("calendar_connection_id")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+
+  @@index([organizationId, startAt])
+  @@index([organizationId, status])
+  @@index([calendarConnectionId, externalEventId])
+  @@map("appointments")
+}
+
+// Conexão OAuth/credencial com um calendário externo. Tokens cifrados em repouso.
+model CalendarConnection {
+  id                   String                   @id @default(uuid()) @db.Text
+  organizationId       String                   @map("organization_id")
+  organization         Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider             CalendarProvider
+  status               CalendarConnectionStatus @default(active)
+  externalAccountEmail String?                  @map("external_account_email")
+  accessTokenEnc       String?                  @map("access_token_enc") @db.Text
+  refreshTokenEnc      String?                  @map("refresh_token_enc") @db.Text
+  tokenExpiresAt       DateTime?                @map("token_expires_at")
+  scope                String?
+  targetCalendarId     String?                  @map("target_calendar_id")
+  // Google watch channel
+  channelId            String?                  @map("channel_id")
+  resourceId           String?                  @map("resource_id")
+  watchExpiresAt       DateTime?                @map("watch_expires_at")
+  // Microsoft Graph subscription
+  subscriptionId       String?                  @map("subscription_id")
+  subExpiresAt         DateTime?                @map("sub_expires_at")
+  // Sync incremental (Google syncToken / Graph deltaLink)
+  syncToken            String?                  @map("sync_token") @db.Text
+  deltaLink            String?                  @map("delta_link") @db.Text
+  lastSyncAt           DateTime?                @map("last_sync_at")
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+
+  @@index([organizationId, provider])
+  @@map("calendar_connections")
 }

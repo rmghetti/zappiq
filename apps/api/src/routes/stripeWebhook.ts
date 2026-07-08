@@ -36,6 +36,8 @@ import {
   normalizeSubscriptionStatus,
   mergeSettings,
   stripeEpochToDate,
+  packageAddonsFromSubscriptionItems,
+  mergePackageAddons,
 } from './stripeWebhook.util.js';
 import { ADDONS_V4_STRIPE } from '@zappiq/shared';
 import { IMPULSO_ADDON_KEYS } from '../middleware/requireImpulso.js';
@@ -261,9 +263,19 @@ async function applySubscriptionState(
   const wasTrialConversion =
     Boolean(before.isTrialActive) && !before.trialConverted && status === 'active';
 
+  // Entitlement dos addons de PACOTE (Camada 1): registra em settings.addons os
+  // addons de capacidade/canal presentes na assinatura do plano, pra getEffectivePlan
+  // somar o limite. Só quando a assinatura está viva; cancelada/inadimplente zera os
+  // de pacote (preservando Impulso, que é assinatura separada). Recalcula a cada evento.
+  const subAlive = status === 'active' || status === 'trialing' || status === 'past_due';
+  const detectedAddons = subAlive ? packageAddonsFromSubscriptionItems(sub.items?.data) : [];
+  const existingAddons = ((before.settings as any) ?? {}).addons;
+  const nextAddons = mergePackageAddons(existingAddons, detectedAddons);
+
   const mergedSettings = mergeSettings(before.settings, {
     stripeCustomerId: stripeCustomerId ?? undefined,
     stripeSubscriptionId: sub.id,
+    addons: nextAddons,
   });
 
   const data: Record<string, unknown> = {

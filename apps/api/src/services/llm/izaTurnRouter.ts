@@ -34,7 +34,7 @@
  *   Outras orgs (não-Iza) podem usar LLMRouter direto sem essa política.
  * ══════════════════════════════════════════════════════════════════════ */
 
-import { llmRouter, type LLMMessage, type LLMTier, type LLMProviderId } from './LLMRouter.js';
+import { llmRouter, type LLMMessage, type LLMTier, type LLMProviderId, type ToolDefinition } from './LLMRouter.js';
 import {
   detectBlockedVertical,
   type BlockedVertical,
@@ -44,7 +44,11 @@ import {
   shouldEscalateToSonnet,
   type IzaIntent,
 } from './intentClassifier.js';
+import { executeToolCall, type ToolContext } from './tools.js';
 import { logger } from '../../utils/logger.js';
+
+// Máximo de rodadas do loop de tools num único turn (guarda contra loop infinito).
+const MAX_TOOL_ROUNDS = 4;
 
 export interface IzaTurnRequest {
   /** System prompt da Iza (V5 enxuto + few-shot patches). */
@@ -65,6 +69,15 @@ export interface IzaTurnRequest {
   conversationId?: string | null;
   /** Tokens máx da resposta principal (default 1024). */
   maxTokens?: number;
+  /** Contato final (pra tools que gravam dados, ex.: agendamento). */
+  contactId?: string | null;
+  /**
+   * Tools disponíveis neste turn (ex.: agendamento). Quando presente e não
+   * vazio, o turn entra no loop de function-calling e usa um provider
+   * tool-capable (Sonnet/OpenAI); o Gemini não suporta tools. Orgs sem tools
+   * seguem o caminho normal, sem qualquer mudança de comportamento.
+   */
+  tools?: ToolDefinition[];
 }
 
 export type IzaTurnResult =
@@ -81,7 +94,9 @@ export type IzaTurnResult =
       intent: IzaIntent;
       escalated: boolean;
       tierUsed: LLMTier | undefined;
-      llmCallsMade: 1 | 2;
+      // 1 (skipClassify) ou 2 (classify+chat) no caminho normal; mais quando o
+      // loop de tools (agendamento) faz rodadas adicionais de complete().
+      llmCallsMade: number;
     };
 
 /**
@@ -164,22 +179,75 @@ export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> 
     { role: 'user', content: req.userMessage },
   ];
 
-  const resp = await llmRouter.complete({
+  const hasTools = Array.isArray(req.tools) && req.tools.length > 0;
+  // Gemini não suporta tools. Quando há tools (ex.: agendamento), preferimos um
+  // provider tool-capable (Sonnet, com fallback pra OpenAI que também suporta).
+  // Sem tools, mantém exatamente o routing anterior.
+  const toolPrefer: LLMProviderId | undefined = hasTools && !hardForce ? 'anthropic-sonnet' : softPrefer;
+  const useTier = hardForce || toolPrefer ? undefined : req.tier;
+
+  let resp = await llmRouter.complete({
     system: req.systemPrompt,
     messages,
-    // V4 #162 (PR #74 hotfix 2026-05-04) — bumpado de 1024 → 2048.
-    // Feedback usuário: resposta com 6 pacotes Voice + intro foi cortada em
-    // "trial 14 dias inclui 30 minutos grát" (pareceu estourar limite output).
-    // 2048 tokens (~6000-8000 chars) cobre listas longas confortavelmente.
-    // Custo extra negligenciável (Gemini Flash $0.30/1M output ≈ +$0.0003/turn).
     maxTokens: req.maxTokens ?? 2048,
     operation: 'chat',
     forceProvider: hardForce,
-    preferProvider: softPrefer,
-    tier: hardForce || softPrefer ? undefined : req.tier,
+    preferProvider: toolPrefer,
+    tier: useTier,
     orgId: req.orgId ?? null,
     conversationId: req.conversationId ?? null,
+    tools: hasTools ? req.tools : undefined,
   });
+
+  let llmCalls = req.skipClassify ? 1 : 2;
+
+  // ── 4b. Loop de function-calling (só quando há tools) ─────────
+  // Enquanto o modelo pedir tools, executamos e devolvemos o resultado, até
+  // ele produzir a resposta final (ou o teto de rodadas). Cada rodada é um
+  // par assistant(tool_use) → user(tool_result), no formato Anthropic.
+  if (hasTools) {
+    const toolCtx: ToolContext = {
+      organizationId: req.orgId || '',
+      conversationId: req.conversationId ?? null,
+      contactId: req.contactId ?? null,
+    };
+    let rounds = 0;
+    while (resp.stopReason === 'tool_use' && (resp.toolCalls?.length ?? 0) > 0 && rounds < MAX_TOOL_ROUNDS) {
+      rounds++;
+      const calls = resp.toolCalls!;
+      // Bloco assistant com os tool_use pedidos.
+      messages.push({
+        role: 'assistant',
+        content: calls.map((c) => ({ type: 'tool_use' as const, id: c.id, name: c.name, input: c.input })),
+      });
+      // Executa cada tool e monta os tool_result.
+      const results = await Promise.all(
+        calls.map(async (c) => ({
+          type: 'tool_result' as const,
+          tool_use_id: c.id,
+          content: JSON.stringify(await executeToolCall(c.name, c.input, toolCtx)),
+        })),
+      );
+      messages.push({ role: 'user', content: results });
+
+      resp = await llmRouter.complete({
+        system: req.systemPrompt,
+        messages,
+        maxTokens: req.maxTokens ?? 2048,
+        operation: 'chat',
+        forceProvider: hardForce,
+        preferProvider: toolPrefer,
+        tier: useTier,
+        orgId: req.orgId ?? null,
+        conversationId: req.conversationId ?? null,
+        tools: req.tools,
+      });
+      llmCalls++;
+    }
+    if (rounds >= MAX_TOOL_ROUNDS && resp.stopReason === 'tool_use') {
+      logger.warn('[izaTurnRouter] teto de rodadas de tools atingido', { orgId: req.orgId, conversationId: req.conversationId });
+    }
+  }
 
   return {
     kind: 'llm',
@@ -192,6 +260,6 @@ export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> 
     intent,
     escalated: intent !== 'normal',
     tierUsed: req.tier,
-    llmCallsMade: req.skipClassify ? 1 : 2,
+    llmCallsMade: llmCalls,
   };
 }
