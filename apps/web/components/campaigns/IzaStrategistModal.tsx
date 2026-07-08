@@ -12,7 +12,7 @@
  * a geração retorna 403 e mostramos o aviso de ativação.
  */
 import { useState } from 'react';
-import { Sparkles, Loader2, X, Check, RefreshCw, AlertCircle, MessageCircle, Clock, Target, TrendingUp } from 'lucide-react';
+import { Sparkles, Loader2, X, Check, RefreshCw, AlertCircle, MessageCircle, Clock, Target, TrendingUp, Pencil, Instagram, Lock } from 'lucide-react';
 import { api } from '../../lib/api';
 
 interface ImpulsoDraft {
@@ -31,6 +31,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  /** Org tem Instagram conectado — libera o canal Instagram (política Meta + plano). */
+  hasInstagram: boolean;
 }
 
 const GRAD = 'bg-gradient-to-r from-[#2FB57A] via-[#2F7FB5] to-[#4A52D0]';
@@ -41,12 +43,17 @@ const EXAMPLES = [
   'Recuperar carrinhos abandonados da última semana',
 ];
 
-export function IzaStrategistModal({ open, onClose, onCreated }: Props) {
+export function IzaStrategistModal({ open, onClose, onCreated, hasInstagram }: Props) {
   const [objective, setObjective] = useState('');
   const [draft, setDraft] = useState<ImpulsoDraft | null>(null);
   const [generating, setGenerating] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Texto do WhatsApp editável pelo cliente (a Iza sugere; o cliente ajusta e salva).
+  const [msg, setMsg] = useState('');
+  const [editing, setEditing] = useState(false);
+  // Instagram só entra se a org tiver o IG conectado (hasInstagram).
+  const [igOn, setIgOn] = useState(false);
 
   if (!open) return null;
 
@@ -54,6 +61,17 @@ export function IzaStrategistModal({ open, onClose, onCreated }: Props) {
     setObjective('');
     setDraft(null);
     setError(null);
+    setMsg('');
+    setEditing(false);
+    setIgOn(false);
+  }
+
+  // Canais efetivos: base da Iza sem instagram + whatsapp garantido + instagram se ligado.
+  function effectiveChannels(d: ImpulsoDraft): string[] {
+    const set = new Set((d.channels || []).filter((c) => c !== 'instagram'));
+    set.add('whatsapp');
+    if (igOn && hasInstagram) set.add('instagram');
+    return Array.from(set);
   }
 
   function handleClose() {
@@ -72,7 +90,11 @@ export function IzaStrategistModal({ open, onClose, onCreated }: Props) {
     setDraft(null);
     try {
       const res = await api.post('/api/impulso/draft', { objective: objective.trim() });
-      setDraft(res.data as ImpulsoDraft);
+      const d = res.data as ImpulsoDraft;
+      setDraft(d);
+      setMsg(d.copy?.whatsapp || '');
+      setEditing(false);
+      setIgOn(hasInstagram && (d.channels?.includes('instagram') ?? false));
     } catch (err: any) {
       const msg = String(err?.message || '');
       if (msg.includes('403') || msg.toLowerCase().includes('addon')) {
@@ -90,14 +112,20 @@ export function IzaStrategistModal({ open, onClose, onCreated }: Props) {
     setCreating(true);
     setError(null);
     try {
+      const channels = effectiveChannels(draft);
       await api.post('/api/impulso', {
         name: draft.name,
         objective: objective.trim(),
         type: 'BROADCAST',
-        channels: draft.channels,
+        channels,
         audienceSegment: { description: draft.segmentDescription },
         budgetPlan: draft.budgetPlan,
         autonomyLevel: draft.autonomyLevelSuggested ?? 2,
+        // Texto salvo/editado pelo cliente é o que vai de fato ser disparado.
+        message: {
+          whatsapp: msg,
+          ...(channels.includes('instagram') ? { instagram: msg } : {}),
+        },
       });
       onCreated();
       resetAll();
@@ -182,9 +210,9 @@ export function IzaStrategistModal({ open, onClose, onCreated }: Props) {
                   </div>
                 </div>
                 <div className="p-4 space-y-4">
-                  {/* Canais */}
+                  {/* Canais efetivos + horário */}
                   <div className="flex flex-wrap gap-1.5">
-                    {draft.channels.map((c) => (
+                    {effectiveChannels(draft).map((c) => (
                       <span key={c} className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#ECEDFA] text-[#3A3FA8] capitalize">
                         {c}
                       </span>
@@ -194,17 +222,65 @@ export function IzaStrategistModal({ open, onClose, onCreated }: Props) {
                     </span>
                   </div>
 
-                  {/* Copy WhatsApp */}
-                  {draft.copy?.whatsapp && (
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1 flex items-center gap-1">
-                        <MessageCircle size={11} /> Mensagem no WhatsApp
-                      </div>
-                      <div className="text-sm text-gray-800 bg-[#E4F3EC] rounded-lg rounded-tl-none p-3 whitespace-pre-wrap">
-                        {draft.copy.whatsapp}
-                      </div>
+                  {/* Instagram — só habilitado com o IG conectado (política Meta + plano) */}
+                  {hasInstagram ? (
+                    <button
+                      type="button"
+                      onClick={() => setIgOn((v) => !v)}
+                      className={`flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg border w-full ${igOn ? 'border-[#C7B3F0] bg-[#F3EEFC] text-[#7A3FA8]' : 'border-gray-200 bg-white text-gray-600'}`}
+                    >
+                      <Instagram size={14} />
+                      <span className="flex-1 text-left">Enviar também pelo Instagram Direct</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${igOn ? 'bg-[#7A3FA8] text-white' : 'bg-gray-200 text-gray-500'}`}>
+                        {igOn ? 'ATIVO' : 'OFF'}
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-400">
+                      <Lock size={13} className="flex-shrink-0" />
+                      <span>Instagram Direct: conecte uma conta Instagram no seu plano para usar este canal.</span>
                     </div>
                   )}
+
+                  {/* Copy WhatsApp — editável pelo cliente */}
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1"><MessageCircle size={11} /> Mensagem no WhatsApp</span>
+                      {!editing && (
+                        <button
+                          type="button"
+                          onClick={() => setEditing(true)}
+                          className="text-[11px] font-semibold text-[#3A3FA8] hover:underline flex items-center gap-1 normal-case tracking-normal"
+                        >
+                          <Pencil size={11} /> Editar
+                        </button>
+                      )}
+                    </div>
+                    {editing ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={msg}
+                          onChange={(e) => setMsg(e.target.value)}
+                          rows={5}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#4A52D0] resize-none"
+                          autoFocus
+                        />
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setEditing(false)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white rounded-lg ${GRAD}`}
+                          >
+                            <Check size={12} /> Salvar mensagem
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-800 bg-[#E4F3EC] rounded-lg rounded-tl-none p-3 whitespace-pre-wrap">
+                        {msg || <span className="text-gray-400 italic">Sem mensagem. Clique em Editar para escrever.</span>}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Estimativa (Coach) */}
                   <div className="grid grid-cols-3 gap-2">
@@ -255,7 +331,8 @@ export function IzaStrategistModal({ open, onClose, onCreated }: Props) {
               </button>
               <button
                 onClick={createCampaign}
-                disabled={creating}
+                disabled={creating || editing || !msg.trim()}
+                title={editing ? 'Salve a mensagem antes de criar' : !msg.trim() ? 'Escreva a mensagem antes de criar' : undefined}
                 className={`inline-flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold disabled:opacity-50 ${GRAD}`}
               >
                 {creating ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}

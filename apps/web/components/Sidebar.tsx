@@ -14,6 +14,8 @@ import {
   Gauge,
   // Agendamento — agenda interna (hub)
   CalendarClock,
+  // Cupons de desconto (SUPERADMIN)
+  Ticket,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
@@ -28,7 +30,7 @@ const navItems = [
   // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA. A automação (crmAutomationService)
   // já cria Tasks quando detecta intenção de compra; aqui a PME finalmente as vê e conclui.
   { href: '/tasks', label: 'Tarefas', icon: ListChecks },
-  { href: '/campaigns', label: 'Campanhas', icon: Megaphone },
+  { href: '/campaigns', label: 'Zap Impulso', icon: Megaphone },
   // FEATURE 5b.2 — gestão de templates de WhatsApp (aprovados pela Meta;
   // alimentam o seletor de campanha e o reengajamento fora da janela de 24h).
   { href: '/templates', label: 'Templates', icon: FileText },
@@ -60,6 +62,7 @@ const platformAdminItems = [
   { href: '/admin/iza-conversations', label: 'Conversas Iza', icon: MessageSquare },
   { href: '/admin/quota-watch', label: 'Quota Watch', icon: Activity },
   { href: '/admin/unit-economics', label: 'Unit Economics', icon: DollarSign },
+  { href: '/admin/coupons', label: 'Cupons de Descontos', icon: Ticket },
 ];
 
 // Sub-grupo "Clientes" (Área Clientes / Fase 2, §2 proposedNav) — gestão da

@@ -54,6 +54,7 @@ import auditLogsRoutes from './routes/auditLogs.js';
 import dsrRoutes from './routes/dataSubjectRequests.js';
 import adminWhatsappRoutes from './routes/adminWhatsapp.js';
 import adminOrganizationsRoutes from './routes/adminOrganizations.js'; // PR #218.1 — montar endpoint admin orgs (era órfão)
+import adminCouponsRoutes from './routes/adminCoupons.js'; // 2026-07-08 — cupons de desconto (SUPERADMIN)
 import adminLlmRoutes from './routes/adminLlm.js'; // V2-025 Observability DAY 1
 import adminLeadsIzaRoutes from './routes/adminLeadsIza.js'; // 2026-05-11 leads + iza-conversations
 import adminLlmStreamRoutes from './routes/adminLlmStream.js'; // PR #V4-004 streaming SSE test
@@ -274,6 +275,7 @@ app.use('/api/onboarding', onboardingRoutes);
 // ── Admin diagnostics (auth via header X-Admin-Secret == META_APP_SECRET) ─
 app.use('/api/admin/whatsapp', adminWhatsappRoutes);
 app.use('/api/admin/organizations', adminOrganizationsRoutes); // PR #218.1 — montar admin orgs pra OrgSwitcher
+app.use('/api/admin/coupons', adminCouponsRoutes); // 2026-07-08 — cupons de desconto (SUPERADMIN)
 app.use('/api/admin', adminLlmRoutes); // V2-025: GET /api/admin/llm-status
 app.use('/api/admin', adminLeadsIzaRoutes); // 2026-05-11: /admin/leads + /admin/iza-conversations
 app.use('/api/admin', adminIzaFactsRoutes); // FASE 4 P7+ : /admin/iza-facts CRUD Camada 2

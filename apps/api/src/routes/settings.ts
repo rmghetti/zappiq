@@ -6,6 +6,7 @@ import { trainingFieldsChanged } from '../services/trainingChange.js';
 import { refreshAIReadiness } from '../services/aiReadinessService.js';
 import { logAuditEvent } from '../services/auditService.js';
 import { env } from '../config/env.js';
+import { checkResourceLimit, resourceLimitBody } from '../middleware/planLimits.js';
 import { updateSettingsSchema, redactOrgSecrets } from './settings.schema.js';
 import {
   isDisconnectableChannel,
@@ -167,6 +168,14 @@ router.post('/team', requireRole('ADMIN'), async (req: Request, res: Response, n
     const { email, name, role, password } = req.body;
     if (!email || !name || !password) {
       res.status(400).json({ error: 'email, name, and password are required' });
+      return;
+    }
+
+    // Camada 2 — limite de atendentes/seats (plano + addon AGENT_SEAT). audit default.
+    const seatCount = await prisma.user.count({ where: { organizationId: req.organizationId! } });
+    const seatDec = await checkResourceLimit(req.organizationId!, 'agents', seatCount);
+    if (!seatDec.allowed) {
+      res.status(429).json(resourceLimitBody('agents', seatDec));
       return;
     }
 

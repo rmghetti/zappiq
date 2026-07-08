@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { snapshotFlowVersion } from '../services/flowVersionService.js';
+import { checkResourceLimit, resourceLimitBody } from '../middleware/planLimits.js';
 // ZappIQ Maestro (#280) — engine PURO compartilhado com a produção
 // (agentOrchestrator → flowRuntime → flowEngine). O /test usa o MESMO motor pra
 // que "testar fluxo" reflita exatamente o comportamento real, sem simulação
@@ -329,6 +330,17 @@ router.post('/:id/publish', async (req: Request, res: Response, next: NextFuncti
     const orgId = req.organizationId!;
     const flow = await prisma.flow.findFirst({ where: { id: req.params.id, organizationId: orgId } });
     if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+
+    // Camada 2 — limite de FLUXOS ATIVOS (plano + addon FLOWS_PACK). Só conta ao
+    // ATIVAR (isActive false→true); re-publicar um fluxo já ativo não consome slot.
+    if (!flow.isActive) {
+      const activeCount = await prisma.flow.count({ where: { organizationId: orgId, isActive: true } });
+      const flowDec = await checkResourceLimit(orgId, 'flows', activeCount);
+      if (!flowDec.allowed) {
+        res.status(429).json(resourceLimitBody('flows', flowDec));
+        return;
+      }
+    }
 
     // Maestro v2: snapshot ANTES de ativar (rollback garantido) + multi-ativo
     // (não desativa mais os demais — o flowRouter decide quem atende; spec 2026-06-11).

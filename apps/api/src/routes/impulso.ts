@@ -6,6 +6,16 @@ import { logger } from '../utils/logger.js';
 import { campaignDispatchQueue } from '../services/queueService.js';
 import { draftCampaignFromObjective } from '../services/impulsoStrategist.js';
 import { computeCoachInsights } from '../services/impulsoCoach.js';
+import { sanitizeChannels } from '../services/impulsoChannels.js';
+
+/** Instagram só entra numa campanha se a org tiver o IG conectado (política Meta + requisito de plano). */
+async function orgHasInstagram(orgId: string): Promise<boolean> {
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { instagramAccountId: true },
+  });
+  return Boolean(org?.instagramAccountId);
+}
 
 /*
  * Rotas do módulo Impulso (add-on de campanhas). Gated por requireImpulso()
@@ -47,6 +57,7 @@ const createSchema = z.object({
   journey: z.any().optional(),
   budgetPlan: z.record(z.any()).optional(),
   optimization: z.record(z.any()).optional(),
+  message: z.record(z.any()).optional(), // copy por canal: { whatsapp?, instagram?, ... }
   autonomyLevel: z.number().int().min(0).max(4).default(2),
   scheduledAt: z.string().datetime().optional(),
 });
@@ -86,9 +97,13 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 router.post('/', validate(createSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { scheduledAt } = req.body;
+    // Gate de Instagram server-side: remove o canal se a org não tem IG conectado.
+    const hasInstagram = await orgHasInstagram(req.organizationId!);
+    const channels = sanitizeChannels(req.body.channels, { hasInstagram });
     const campaign = await prisma.campaign.create({
       data: {
         ...req.body,
+        channels,
         isImpulso: true,
         organizationId: req.organizationId!,
         status: scheduledAt ? 'SCHEDULED' : 'DRAFT',
@@ -120,9 +135,16 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 // PUT /api/impulso/:id
 router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const data = { ...req.body };
+    // Mesmo gate de Instagram na edição: nunca deixa uma campanha passar a
+    // mirar o IG sem a org ter o Instagram conectado.
+    if (data.channels !== undefined) {
+      const hasInstagram = await orgHasInstagram(req.organizationId!);
+      data.channels = sanitizeChannels(data.channels, { hasInstagram });
+    }
     const result = await prisma.campaign.updateMany({
       where: { id: req.params.id, organizationId: req.organizationId!, isImpulso: true },
-      data: req.body,
+      data,
     });
     if (result.count === 0) {
       res.status(404).json({ error: 'Campaign not found' });

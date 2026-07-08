@@ -4,6 +4,7 @@ import { prisma, Prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { withTenant } from '../middleware/rlsTenant.js';
+import { checkResourceLimit, resourceLimitBody } from '../middleware/planLimits.js';
 
 const router = Router();
 
@@ -77,6 +78,14 @@ router.get('/', validate(querySchema, 'query'), async (req: Request, res: Respon
 // ── POST /api/contacts ──────────────────────────
 router.post('/', validate(createContactSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Camada 2 — limite de contatos (plano + addons). audit_only por padrão.
+    const contactCount = await prisma.contact.count({ where: { organizationId: req.organizationId! } });
+    const limitDec = await checkResourceLimit(req.organizationId!, 'contacts', contactCount);
+    if (!limitDec.allowed) {
+      res.status(429).json(resourceLimitBody('contacts', limitDec));
+      return;
+    }
+
     const contact = await withTenant(req, (tx) =>
       tx.contact.create({
         data: {

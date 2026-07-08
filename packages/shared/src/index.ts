@@ -8,3 +8,4 @@ export * from './addonStripeIds';
 export * from './analyticsFormat.js';
 export * from './planChange.js';
 export * from './addonGrants.js';
+export * from './couponCatalog.js';

@@ -9,8 +9,10 @@
  * como cliente ativo). Ativar o teste desbloqueia o Impulso na hora.
  */
 import { useState } from 'react';
-import { Sparkles, X, Check, Loader2, Rocket, ArrowRight } from 'lucide-react';
+import { Sparkles, X, Check, Loader2, Rocket, ArrowRight, Info } from 'lucide-react';
 import { api } from '../../lib/api';
+import { ImpulsoPlanDetailModal } from './ImpulsoPlanDetailModal';
+import type { PlanKey } from './impulsoPlansContent';
 
 export interface ImpulsoEntitlement {
   enabled: boolean;
@@ -18,6 +20,10 @@ export interface ImpulsoEntitlement {
   tier: string | null;
   trial: { endsAt: string; daysLeft: number } | null;
   trialAvailable: boolean;
+  /** Teste de 7 dias já acabou e a conta não assinou — serviço bloqueado. */
+  trialExpired?: boolean;
+  /** Org tem Instagram conectado — libera o canal Instagram nas campanhas. */
+  hasInstagram?: boolean;
 }
 
 interface Props {
@@ -61,6 +67,7 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
   const [activating, setActivating] = useState(false);
   const [contratando, setContratando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [detailPlan, setDetailPlan] = useState<PlanKey | null>(null);
 
   if (!open) return null;
 
@@ -97,6 +104,7 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
   }
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
@@ -161,6 +169,12 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
                 >
                   {contratando === p.key ? 'Redirecionando…' : 'Contratar'}
                 </button>
+                <button
+                  onClick={() => setDetailPlan(p.key as PlanKey)}
+                  className="mt-1.5 w-full py-1.5 rounded-lg text-[11px] font-semibold text-[#3A3FA8] hover:bg-[#F3F4FE] inline-flex items-center justify-center gap-1"
+                >
+                  <Info size={12} /> Saiba mais
+                </button>
               </div>
             ))}
           </div>
@@ -171,5 +185,7 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
         </div>
       </div>
     </div>
+    <ImpulsoPlanDetailModal planKey={detailPlan} onClose={() => setDetailPlan(null)} />
+    </>
   );
 }

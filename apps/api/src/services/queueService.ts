@@ -8,6 +8,7 @@ import {
   recordQueueJobFailed,
 } from '../config/metrics.js';
 import { resolveAudienceWhere } from './impulsoAudience.js';
+import { resolveCampaignMessage } from './impulsoChannels.js';
 
 // ── Conexão Redis para BullMQ ────────────────────
 // BullMQ requer uma conexão própria (não reutiliza ioredis do app)
@@ -330,7 +331,9 @@ export async function dispatchCampaignJob(
           campaignId,
           contactId: contact.id,
           to: contact.whatsappId,
-          content: campaign.template?.bodyText || '',
+          // Texto que vai de fato: a copy salva/editada pelo cliente (por canal)
+          // vence; sem ela, cai no bodyText do template legado.
+          content: resolveCampaignMessage(campaign, 'whatsapp'),
           organizationId,
         },
       }));

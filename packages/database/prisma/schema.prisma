@@ -550,6 +550,7 @@ model Campaign {
   audienceSegment Json? // segmento resolvido (além do audienceFilter legado)
   budgetPlan      Json? // plano meta->verba do Copiloto & Coach
   optimization    Json? // config de bandit/otimização
+  message         Json? // copy por canal editável pelo cliente: { whatsapp?, instagram?, email?, sms? }
   variants        CampaignVariant[]
   nodeStats       CampaignNodeStat[]
   attributions    CampaignAttribution[]
@@ -1454,4 +1455,31 @@ model CalendarConnection {
 
   @@index([organizationId, provider])
   @@map("calendar_connections")
+}
+
+// ═══════════════════════════════════════════════════════
+// Cupons de desconto emitidos pelo SUPERADMIN (2026-07-08)
+// ═══════════════════════════════════════════════════════
+// Cada cupom é RESTRITO a um Stripe Product (applies_to.products) e de USO
+// ÚNICO (max_redemptions=1). Espelho local do par Coupon+PromotionCode do
+// Stripe, para a tela de emissão/auditoria. A verdade do resgate é o Stripe
+// (times_redeemed sincronizado ao listar). Emissão só via /admin/coupons.
+model DiscountCoupon {
+  id                    String   @id @default(cuid())
+  code                  String   @unique // código legível digitado no checkout
+  stripeCouponId        String   @map("stripe_coupon_id")
+  stripePromotionCodeId String   @map("stripe_promotion_code_id")
+  productId             String   @map("product_id") // prod_… (Stripe)
+  productKey            String   @map("product_key") // GROWTH, AGENT_SEAT…
+  productLabel          String   @map("product_label")
+  percentOff            Int      @map("percent_off")
+  duration              String // once | repeating | forever
+  durationInMonths      Int?     @map("duration_in_months")
+  createdByEmail        String   @map("created_by_email")
+  timesRedeemed         Int      @default(0) @map("times_redeemed")
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([productKey])
+  @@map("discount_coupons")
 }

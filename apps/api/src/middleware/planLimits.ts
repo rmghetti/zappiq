@@ -445,6 +445,82 @@ export function enforceLimit(kind: LimitKind, delta = 1) {
   };
 }
 
+// ═════════════════════════════════════════════════════════════════
+// Camada 2 — enforcement de RECURSOS COM ESTADO (contatos, fluxos, docs,
+// atendentes). Diferente do checkLimit acima (contadores Redis mensais): aqui
+// o "atual" é COUNT(*) real no banco vs limite EFETIVO (plano + addons, via
+// getEffectivePlan). Atrás de RESOURCE_LIMITS_MODE (default audit_only = nunca
+// bloqueia, só loga). Ligar bloqueio = fly secrets set RESOURCE_LIMITS_MODE=enforce.
+// ═════════════════════════════════════════════════════════════════
+
+export type ResourceLimitKind = 'contacts' | 'flows' | 'knowledgeBaseDocs' | 'agents';
+
+export interface ResourceLimitDecision {
+  /** Pode prosseguir? (audit_only => sempre true; só loga o estouro.) */
+  allowed: boolean;
+  /** Cabe no limite efetivo? (independente do modo.) */
+  withinLimit: boolean;
+  limit: number;
+  current: number;
+  mode: 'audit_only' | 'enforce';
+}
+
+/**
+ * Decisão PURA de limite de recurso com estado. Limite -1 (ilimitado) sempre
+ * passa. Em audit_only, `allowed` é sempre true (observa, não bloqueia).
+ */
+export function decideResourceLimit(input: {
+  limit: number;
+  current: number;
+  delta: number;
+  mode: 'audit_only' | 'enforce';
+}): ResourceLimitDecision {
+  const { limit, current, delta, mode } = input;
+  if (limit === -1) return { allowed: true, withinLimit: true, limit, current, mode };
+  const withinLimit = current + delta <= limit;
+  const allowed = withinLimit || mode === 'audit_only';
+  return { allowed, withinLimit, limit, current, mode };
+}
+
+/**
+ * Checa um recurso com estado: lê o limite EFETIVO (plano + addons) e compara
+ * com a contagem real informada. Loga quem estouraria (AUDIT) ou bloquearia
+ * (BLOCK). Fail-soft: erro ao ler o plano nunca bloqueia (retorna allowed).
+ */
+export async function checkResourceLimit(
+  orgId: string,
+  kind: ResourceLimitKind,
+  currentCount: number,
+  delta = 1,
+): Promise<ResourceLimitDecision> {
+  const mode = env.RESOURCE_LIMITS_MODE;
+  try {
+    const { limits, planId } = await getEffectivePlan(orgId);
+    const dec = decideResourceLimit({ limit: limits[kind], current: currentCount, delta, mode });
+    if (!dec.withinLimit) {
+      logger.warn(
+        `[resourceLimits] ${dec.mode === 'enforce' ? 'BLOCK' : 'AUDIT'} org=${orgId} plan=${planId} kind=${kind} ${dec.current}+${delta}/${dec.limit}`,
+      );
+    }
+    return dec;
+  } catch (err: any) {
+    logger.error(`[resourceLimits] check error org=${orgId} kind=${kind}: ${err?.message ?? err}`);
+    return { allowed: true, withinLimit: true, limit: -1, current: currentCount, mode };
+  }
+}
+
+/** Corpo padrão do 429 quando um recurso com estado é bloqueado. */
+export function resourceLimitBody(kind: ResourceLimitKind, dec: ResourceLimitDecision) {
+  return {
+    error: 'plan_limit_exceeded',
+    kind,
+    limit: dec.limit,
+    current: dec.current,
+    message: `Limite do plano atingido para ${kind} (${dec.current}/${dec.limit}). Faça upgrade ou contrate um addon.`,
+    upgradeUrl: '/billing',
+  };
+}
+
 /**
  * Trial cost cap — chamado de dentro do agentOrchestrator antes
  * de efetuar chamada LLM paga.
