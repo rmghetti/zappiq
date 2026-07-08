@@ -32,39 +32,40 @@ export const ADDONS_V4_STRIPE: Record<string, AddonStripeIds & { meterId?: strin
   },
   EXTRA_WA_NUMBER: {
     productId: 'prod_Ub3jykHTYnd6Dw',
-    priceIds: { monthly: 'price_1Tbrc3Klp5SWv74XCTvhW4Ro' },  // R$ 137/mes
+    // annual = mensal*12*0.8 (mesmo 20% off do plano); criados 2026-07-08, lookup zappiq_addon_*_annual
+    priceIds: { monthly: 'price_1Tbrc3Klp5SWv74XCTvhW4Ro', annual: 'price_1TqviQKlp5SWv74XUbNcdgU8' },  // R$ 137/mes | R$ 1315,20/ano
   },
   EXTRA_IG_DIRECT: {
     productId: 'prod_Ub3jIefVN1DFAx',
-    priceIds: { monthly: 'price_1Tbrc5Klp5SWv74XuJUMCkyZ' },  // R$ 97/mes
+    priceIds: { monthly: 'price_1Tbrc5Klp5SWv74XuJUMCkyZ', annual: 'price_1TqviRKlp5SWv74Xa6hqvgoE' },  // R$ 97/mes | R$ 931,20/ano
   },
   CONTACTS_PACK_5K: {
     productId: 'prod_Ub3jsL80jMMSZ0',
-    priceIds: { monthly: 'price_1Tbrc8Klp5SWv74XdYyibw1F' },  // R$ 59/mes
+    priceIds: { monthly: 'price_1Tbrc8Klp5SWv74XdYyibw1F', annual: 'price_1TqviRKlp5SWv74XTcX6Tk3J' },  // R$ 59/mes | R$ 566,40/ano
   },
   CONTACTS_PACK_25K: {
     productId: 'prod_Ub3jPuIhVX3IkQ',
-    priceIds: { monthly: 'price_1TbrcAKlp5SWv74X3DBQ9xSa' },  // R$ 199/mes
+    priceIds: { monthly: 'price_1TbrcAKlp5SWv74X3DBQ9xSa', annual: 'price_1TqviSKlp5SWv74XGqVSnN6c' },  // R$ 199/mes | R$ 1910,40/ano
   },
   FLOWS_PACK_5: {
     productId: 'prod_Ub3jyljRbIRcJm',
-    priceIds: { monthly: 'price_1TbrcDKlp5SWv74Xl0h8HzfY' },  // R$ 47/mes
+    priceIds: { monthly: 'price_1TbrcDKlp5SWv74Xl0h8HzfY', annual: 'price_1TqviTKlp5SWv74XU1t6LrLj' },  // R$ 47/mes | R$ 451,20/ano
   },
   KB_DOCS_PACK_25: {
     productId: 'prod_Ub3j6q1wGAR7QX',
-    priceIds: { monthly: 'price_1TbrcFKlp5SWv74XAP0mD3vX' },  // R$ 99/mes
+    priceIds: { monthly: 'price_1TbrcFKlp5SWv74XAP0mD3vX', annual: 'price_1TqviTKlp5SWv74X6FSgmDbe' },  // R$ 99/mes | R$ 950,40/ano
   },
   KB_DOCS_PACK_100: {
     productId: 'prod_Ub3jlnuDb2vlWp',
-    priceIds: { monthly: 'price_1TbrcJKlp5SWv74XMxZXKu1N' },  // R$ 297/mes
+    priceIds: { monthly: 'price_1TbrcJKlp5SWv74XMxZXKu1N', annual: 'price_1TqviUKlp5SWv74X9owluYmz' },  // R$ 297/mes | R$ 2851,20/ano
   },
   AGENT_SEAT: {
     productId: 'prod_Ub3jl89x5QlVga',
-    priceIds: { monthly: 'price_1TbrcLKlp5SWv74XoMB5Mqcb' },  // R$ 79/seat/mes
+    priceIds: { monthly: 'price_1TbrcLKlp5SWv74XoMB5Mqcb', annual: 'price_1TqviUKlp5SWv74XzZlgTzCr' },  // R$ 79/seat/mes | R$ 758,40/ano
   },
   INTEGRATIONS_PACK_5: {
     productId: 'prod_Ub3jKfnI4ylmF6',
-    priceIds: { monthly: 'price_1TbrcOKlp5SWv74XSalzcP8g' },  // R$ 147/mes
+    priceIds: { monthly: 'price_1TbrcOKlp5SWv74XSalzcP8g', annual: 'price_1TqviVKlp5SWv74XeBaepmaR' },  // R$ 147/mes | R$ 1411,20/ano
   },
 
   // ─────────────────────────────────────────────────────────

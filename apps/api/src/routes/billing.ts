@@ -163,8 +163,9 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
 
     // Trial Enforcement — "adicionar ao pacote": o cliente pode incluir addons
     // recorrentes junto do plano. Resolvemos os price IDs no SERVIDOR (o front
-    // manda só as keys); keys inválidas/não-recorrentes são ignoradas.
-    const addonLineItems = resolveAddonLineItems(body.addons);
+    // manda só as keys); keys inválidas/não-recorrentes são ignoradas. CRÍTICO:
+    // resolvemos no MESMO ciclo do plano — o Stripe recusa mensal+anual juntos.
+    const addonLineItems = resolveAddonLineItems(body.addons, cycle);
     if (addonLineItems.length > 0) {
       subscriptionData.metadata!.addons = addonLineItems.length.toString();
     }
