@@ -32,14 +32,19 @@ export interface ImpulsoEntitlement {
   trial: { endsAt: string; daysLeft: number } | null;
   /** Pode iniciar um teste de 7 dias (nunca iniciou e não é assinante/alpha). */
   trialAvailable: boolean;
+  /** Teste de 7 dias já foi usado e acabou, sem add-on/alpha — serviço bloqueado. */
+  trialExpired: boolean;
+  /** Org tem Instagram conectado (organization.instagramAccountId) — libera o canal Instagram. */
+  hasInstagram: boolean;
 }
 
 export async function getImpulsoEntitlement(orgId: string): Promise<ImpulsoEntitlement> {
   const org = (await prisma.organization.findUnique({
     where: { id: orgId },
-    select: { settings: true },
+    select: { settings: true, instagramAccountId: true },
   })) as any;
   const settings = (org?.settings as any) ?? {};
+  const hasInstagram = Boolean(org?.instagramAccountId);
   const addons: string[] = Array.isArray(settings.addons) ? settings.addons : [];
   const tier = (IMPULSO_ADDON_KEYS.find((k) => addons.includes(k)) ?? null) as ImpulsoTier | null;
   const alpha = settings.impulsoAlpha === true;
@@ -62,8 +67,10 @@ export async function getImpulsoEntitlement(orgId: string): Promise<ImpulsoEntit
   const source: ImpulsoEntitlement['source'] = tier ? 'addon' : alpha ? 'alpha' : trialActive ? 'trial' : null;
   const enabled = Boolean(tier) || alpha || trialActive;
   const trialAvailable = !trialEverStarted && !tier && !alpha;
+  // Teste começou, já venceu e a org não virou assinante/alpha: serviço bloqueado.
+  const trialExpired = trialEverStarted && !trialActive && !tier && !alpha;
 
-  return { enabled, source, tier, trial, trialAvailable };
+  return { enabled, source, tier, trial, trialAvailable, trialExpired, hasInstagram };
 }
 
 /**

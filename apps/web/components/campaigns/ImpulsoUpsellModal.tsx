@@ -18,6 +18,10 @@ export interface ImpulsoEntitlement {
   tier: string | null;
   trial: { endsAt: string; daysLeft: number } | null;
   trialAvailable: boolean;
+  /** Teste de 7 dias já acabou e a conta não assinou — serviço bloqueado. */
+  trialExpired?: boolean;
+  /** Org tem Instagram conectado — libera o canal Instagram nas campanhas. */
+  hasInstagram?: boolean;
 }
 
 interface Props {

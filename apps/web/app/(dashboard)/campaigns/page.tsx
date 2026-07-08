@@ -154,8 +154,8 @@ export default function CampaignsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-gray-900">Campanhas</h1>
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full text-white ${GRAD}`}>Impulso</span>
+            <h1 className="text-2xl font-bold text-gray-900">Zap Impulso</h1>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full text-white ${GRAD}`}>Campanhas</span>
           </div>
           <p className="text-sm text-gray-500 mt-1">
             Sua central de vendas proativas. Crie campanhas com a Iza e acompanhe os resultados.
@@ -177,15 +177,32 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {/* Banner do teste do Impulso (quando ativo via trial) */}
+      {/* Banner do teste do Zap Impulso — contagem regressiva (igual à faixa de
+          trial da plataforma no topo, agora repetida dentro da página). */}
       {entitlement?.source === 'trial' && entitlement.trial && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-[#CDE9DA] bg-[#E4F3EC] px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-[#1B7A54]">
-            <Sparkles size={15} />
-            <span><b>Teste do Impulso ativo</b> · {entitlement.trial.daysLeft} {entitlement.trial.daysLeft === 1 ? 'dia restante' : 'dias restantes'}</span>
+            <Sparkles size={15} className="flex-shrink-0" />
+            <span>
+              <b>Teste do Zap Impulso ativo</b> · {entitlement.trial.daysLeft} {entitlement.trial.daysLeft === 1 ? 'dia restante' : 'dias restantes'}.
+              {' '}Depois disso o serviço é bloqueado até você contratar um plano.
+            </span>
           </div>
-          <button onClick={() => setUpsellOpen(true)} className="text-xs font-semibold text-[#3A3FA8] hover:underline self-start sm:self-auto">
+          <button onClick={() => setUpsellOpen(true)} className="text-xs font-semibold text-[#3A3FA8] hover:underline self-start sm:self-auto whitespace-nowrap">
             Ver planos e contratar
+          </button>
+        </div>
+      )}
+
+      {/* Teste terminou e a conta não assinou — serviço bloqueado. */}
+      {entitlement?.trialExpired && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <AlertTriangle size={15} className="flex-shrink-0" />
+            <span><b>Seu teste do Zap Impulso terminou.</b> As campanhas ficam bloqueadas até você contratar um plano.</span>
+          </div>
+          <button onClick={() => setUpsellOpen(true)} className={`text-xs font-semibold text-white px-3 py-1.5 rounded-lg self-start sm:self-auto whitespace-nowrap ${GRAD}`}>
+            Ver planos
           </button>
         </div>
       )}
@@ -272,7 +289,12 @@ export default function CampaignsPage() {
       </div>
 
       <CampaignFormModal open={modalOpen} onClose={() => setModalOpen(false)} onSaved={fetchCampaigns} />
-      <IzaStrategistModal open={izaOpen} onClose={() => setIzaOpen(false)} onCreated={fetchCampaigns} />
+      <IzaStrategistModal
+        open={izaOpen}
+        onClose={() => setIzaOpen(false)}
+        onCreated={fetchCampaigns}
+        hasInstagram={entitlement?.hasInstagram ?? false}
+      />
       <ImpulsoUpsellModal
         open={upsellOpen}
         entitlement={entitlement}

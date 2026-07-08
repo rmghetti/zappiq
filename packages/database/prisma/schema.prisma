@@ -546,6 +546,7 @@ model Campaign {
   audienceSegment Json? // segmento resolvido (além do audienceFilter legado)
   budgetPlan      Json? // plano meta->verba do Copiloto & Coach
   optimization    Json? // config de bandit/otimização
+  message         Json? // copy por canal editável pelo cliente: { whatsapp?, instagram?, email?, sms? }
   variants        CampaignVariant[]
   nodeStats       CampaignNodeStat[]
   attributions    CampaignAttribution[]
