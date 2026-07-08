@@ -5,6 +5,7 @@ import {
   generateCouponCode,
   bytesToCode,
   buildCouponCreateParams,
+  buildCouponName,
   ALLOWED_PERCENTS,
 } from './billingCoupons.util.js';
 
@@ -42,6 +43,22 @@ describe('geração de código', () => {
     const code = bytesToCode(new Uint8Array([0, 5, 10, 20, 30, 40, 250, 3]), 8);
     expect(code).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/);
     expect(code).not.toMatch(/[O01IL]/);
+  });
+});
+
+describe('buildCouponName (limite Stripe = 40 chars)', () => {
+  it('nome curto passa inteiro', () => {
+    expect(buildCouponName(30, 'Plano Growth')).toBe('30% off · Plano Growth');
+  });
+  it('nome longo (Impulso Pro) é truncado para <=40 chars', () => {
+    const name = buildCouponName(100, 'Impulso Pro — campanhas + loop de anuncios');
+    expect(name.length).toBeLessThanOrEqual(40);
+    expect(name.startsWith('100% off · Impulso Pro')).toBe(true);
+    expect(name.endsWith('…')).toBe(true);
+  });
+  it('qualquer label longo respeita o teto de 40', () => {
+    const name = buildCouponName(90, 'X'.repeat(100));
+    expect(name.length).toBeLessThanOrEqual(40);
   });
 });
 

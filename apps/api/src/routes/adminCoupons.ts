@@ -20,6 +20,7 @@ import { logger } from '../utils/logger.js';
 import { listCouponableProducts, findCouponableProduct } from '@zappiq/shared';
 import {
   buildCouponCreateParams,
+  buildCouponName,
   generateCouponCode,
   bytesToCode,
   isCouponDuration,
@@ -54,6 +55,9 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 
     const data = rows.map((r) => {
       const timesRedeemed = redeemedByCode.get(r.code) ?? r.timesRedeemed;
+      const used = timesRedeemed >= 1;
+      // Status: usado > cancelado (inativo e nunca usado) > disponível.
+      const status = used ? 'used' : r.active ? 'available' : 'canceled';
       return {
         code: r.code,
         productKey: r.productKey,
@@ -63,7 +67,10 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
         durationInMonths: r.durationInMonths,
         createdByEmail: r.createdByEmail,
         timesRedeemed,
-        used: timesRedeemed >= 1,
+        used,
+        active: r.active,
+        status,
+        canCancel: !used && r.active, // só cancela o que está disponível
         createdAt: r.createdAt,
       };
     });
@@ -108,7 +115,8 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     // 1) Coupon (regra + escopo + uso único).
     const coupon = await stripe.coupons.create({
       ...couponParams,
-      name: `${product.label} · ${couponParams.percent_off}% (superadmin)`,
+      // Stripe limita coupon.name a 40 chars — buildCouponName trunca com segurança.
+      name: buildCouponName(couponParams.percent_off, product.label),
     } as Stripe.CouponCreateParams);
 
     // 2) Promotion Code (string digitável) com código único; retry em colisão.
@@ -168,6 +176,60 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
         durationInMonths: couponParams.duration_in_months ?? null,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/admin/coupons/:code — CANCELA um cupom AINDA NÃO USADO.
+// Verifica no Stripe (fonte da verdade) que times_redeemed === 0; se já foi
+// resgatado, recusa (409). Cancelar = desativar o promotion code + apagar o
+// coupon no Stripe + marcar inativo localmente. Idempotente/fail-soft por parte.
+router.delete('/:code', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!env.STRIPE_SECRET_KEY) {
+      res.status(503).json({ error: 'Stripe não configurado' });
+      return;
+    }
+    const code = req.params.code;
+    const row = await prisma.discountCoupon.findUnique({ where: { code } });
+    if (!row) {
+      res.status(404).json({ error: 'coupon_not_found' });
+      return;
+    }
+    if (!row.active) {
+      res.json({ success: true, alreadyCanceled: true });
+      return;
+    }
+
+    // Fonte da verdade do resgate: o promotion code no Stripe.
+    let timesRedeemed = row.timesRedeemed;
+    try {
+      const promo = await stripe.promotionCodes.retrieve(row.stripePromotionCodeId);
+      timesRedeemed = promo.times_redeemed ?? timesRedeemed;
+    } catch (e) {
+      logger.warn('admin.coupons.cancel_retrieve_failed', { code, err: String(e) });
+    }
+    if (timesRedeemed >= 1) {
+      // Já usado — não pode cancelar. Sincroniza o contador local.
+      await prisma.discountCoupon
+        .update({ where: { code }, data: { timesRedeemed } })
+        .catch(() => {});
+      res.status(409).json({ error: 'already_used', message: 'Este cupom já foi utilizado e não pode ser cancelado.' });
+      return;
+    }
+
+    // Desativa o código (fail-soft) e apaga o coupon (invalida o resgate).
+    await stripe.promotionCodes
+      .update(row.stripePromotionCodeId, { active: false })
+      .catch((e) => logger.warn('admin.coupons.deactivate_promo_failed', { code, err: String(e) }));
+    await stripe.coupons
+      .del(row.stripeCouponId)
+      .catch((e) => logger.warn('admin.coupons.delete_coupon_failed', { code, err: String(e) }));
+
+    await prisma.discountCoupon.update({ where: { code }, data: { active: false } });
+    logger.info('admin.coupons.canceled', { code, by: req.user?.email });
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

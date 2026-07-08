@@ -21,6 +21,9 @@ interface IssuedCoupon {
   createdByEmail: string;
   timesRedeemed: number;
   used: boolean;
+  active: boolean;
+  status: 'used' | 'available' | 'canceled';
+  canCancel: boolean;
   createdAt: string;
 }
 
@@ -56,6 +59,7 @@ export default function CouponsAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastCode, setLastCode] = useState<{ code: string; label: string; percent: number; dur: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [canceling, setCanceling] = useState<string | null>(null);
 
   const loadList = useCallback(async () => {
     try {
@@ -104,6 +108,20 @@ export default function CouponsAdminPage() {
       setError(err?.message || 'Não consegui gerar o cupom. Tente de novo.');
     }
     setGenerating(false);
+  }
+
+  async function handleCancel(code: string) {
+    if (!window.confirm(`Cancelar o cupom ${code}? Ele deixará de ser válido. (Só funciona se ainda não foi usado.)`)) return;
+    setCanceling(code);
+    try {
+      await api.delete(`/api/admin/coupons/${encodeURIComponent(code)}`);
+      await loadList();
+    } catch (err: any) {
+      // 409 = já usado; mostra a mensagem do servidor.
+      alert(err?.message || 'Não consegui cancelar este cupom.');
+      await loadList();
+    }
+    setCanceling(null);
   }
 
   function copyCode() {
@@ -231,6 +249,7 @@ export default function CouponsAdminPage() {
                   <th className="py-2 pr-4">Desconto</th>
                   <th className="py-2 pr-4">Duração</th>
                   <th className="py-2 pr-4">Status</th>
+                  <th className="py-2 pr-4"></th>
                 </tr>
               </thead>
               <tbody>
@@ -241,10 +260,23 @@ export default function CouponsAdminPage() {
                     <td className="py-2 pr-4 text-gray-700">{c.percentOff}%</td>
                     <td className="py-2 pr-4 text-gray-500">{durationLabel(c.duration, c.durationInMonths)}</td>
                     <td className="py-2 pr-4">
-                      {c.used ? (
+                      {c.status === 'used' ? (
                         <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600">Usado</span>
+                      ) : c.status === 'canceled' ? (
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">Cancelado</span>
                       ) : (
                         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Disponível</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-4 text-right">
+                      {c.canCancel && (
+                        <button
+                          onClick={() => handleCancel(c.code)}
+                          disabled={canceling === c.code}
+                          className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {canceling === c.code ? 'Cancelando…' : 'Cancelar'}
+                        </button>
                       )}
                     </td>
                   </tr>

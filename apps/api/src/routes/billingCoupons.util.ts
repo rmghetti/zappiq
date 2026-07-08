@@ -41,6 +41,16 @@ export function bytesToCode(bytes: Uint8Array, len = 8): string {
   return out;
 }
 
+/**
+ * Nome interno do coupon (aparece no dashboard Stripe). A Stripe LIMITA name a
+ * 40 caracteres — por isso truncamos. Ex.: "100% off · Impulso Pro — campanh…".
+ */
+export function buildCouponName(percentOff: number, productLabel: string): string {
+  const full = `${percentOff}% off · ${productLabel}`;
+  if (full.length <= 40) return full;
+  return `${full.slice(0, 39)}…`;
+}
+
 export interface CouponCreateInput {
   percentOff: number;
   productId: string;
