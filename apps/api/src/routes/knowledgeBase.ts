@@ -4,6 +4,7 @@ import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import * as ragService from '../services/ragService.js';
 import { logger } from '../utils/logger.js';
+import { checkResourceLimit, resourceLimitBody } from '../middleware/planLimits.js';
 
 const router = Router();
 
@@ -57,6 +58,16 @@ router.post('/:id/documents', async (req: Request, res: Response, next: NextFunc
   try {
     const { title, sourceType, sourceUrl, content } = req.body;
     if (!title || !content) { res.status(400).json({ error: 'title and content required' }); return; }
+
+    // Camada 2 — limite de docs na base RAG (plano + addons). audit_only default.
+    const docCount = await prisma.kBDocument.count({
+      where: { knowledgeBase: { organizationId: req.organizationId! } },
+    });
+    const docLimit = await checkResourceLimit(req.organizationId!, 'knowledgeBaseDocs', docCount);
+    if (!docLimit.allowed) {
+      res.status(429).json(resourceLimitBody('knowledgeBaseDocs', docLimit));
+      return;
+    }
 
     const doc = await prisma.kBDocument.create({
       data: {

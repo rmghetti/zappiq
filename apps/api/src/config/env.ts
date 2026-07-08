@@ -75,6 +75,14 @@ const envSchema = z.object({
   // Flipar via: fly secrets set QUOTA_OVERAGE_MODE=enforce -a zappiq-api
   QUOTA_OVERAGE_MODE: z.enum(['audit_only', 'enforce']).default('audit_only'),
 
+  // Camada 2 — enforcement de limite de RECURSOS COM ESTADO (contatos, fluxos,
+  // docs, atendentes) por COUNT(*) real vs limite efetivo (plano + addons).
+  //   - audit_only (default): NUNCA bloqueia, só loga quem estouraria (rollout
+  //     seguro; nenhum cliente atual é travado de surpresa).
+  //   - enforce: bloqueia a criação além do limite (429).
+  // Flipar quando validado via: fly secrets set RESOURCE_LIMITS_MODE=enforce -a zappiq-api
+  RESOURCE_LIMITS_MODE: z.enum(['audit_only', 'enforce']).default('audit_only'),
+
   // Frontend
   NEXT_PUBLIC_APP_URL: z.string().default('http://localhost:3000'),
 
