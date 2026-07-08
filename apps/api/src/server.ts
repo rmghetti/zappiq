@@ -40,6 +40,7 @@ import flowTemplatesRoutes from './routes/flowTemplates.js';
 import knowledgeBaseRoutes from './routes/knowledgeBase.js';
 import aiTrainingRoutes from './routes/aiTraining.js'; // PR #106.1 — readiness score + KB upload + Q&A + identity
 import appointmentsRoutes from './routes/appointments.js'; // Agendamento — agenda interna (hub)
+import integrationsGoogleRoutes from './routes/integrationsGoogle.js'; // Agendamento — OAuth Google Calendar
 import templatesRoutes from './routes/templates.js';
 import dealsRoutes from './routes/deals.js';
 import crmRoutes from './routes/crm.js'; // PR #217 — métricas executivas /api/crm/metrics
@@ -311,6 +312,9 @@ app.use('/api/templates', authMiddleware, rlsTenantMiddleware, requireActivePlan
 app.use('/api/deals', authMiddleware, rlsTenantMiddleware, requireActivePlan, dealsRoutes);
 app.use('/api/crm', authMiddleware, rlsTenantMiddleware, requireActivePlan, crmRoutes); // PR #217 CRM 3a — métricas executivas
 app.use('/api/appointments', authMiddleware, rlsTenantMiddleware, requireActivePlan, appointmentsRoutes); // Agendamento — agenda interna (hub)
+// Integração Google: auth aplicada por-rota (o /callback é público — redirect do
+// browser sem nosso token, validado por state assinado).
+app.use('/api/integrations/google', integrationsGoogleRoutes);
 app.use('/api/tasks', authMiddleware, rlsTenantMiddleware, requireActivePlan, tasksRoutes); // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA
 app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes); // SEM gate: paywall precisa ser acessível
 app.use('/api/settings', authMiddleware, rlsTenantMiddleware, requireActivePlan, settingsRoutes);

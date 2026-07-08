@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { authMiddleware } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
+import * as googleCalendar from '../services/googleCalendar.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -99,7 +100,7 @@ router.patch('/:id', validate(patchSchema), async (req: Request, res: Response, 
   try {
     const orgId = req.user!.organizationId;
     const { id } = req.params;
-    const existing = await (prisma as any).appointment.findFirst({ where: { id, organizationId: orgId }, select: { id: true } });
+    const existing = await (prisma as any).appointment.findFirst({ where: { id, organizationId: orgId }, select: { id: true, externalEventId: true, status: true } });
     if (!existing) {
       res.status(404).json({ error: 'Agendamento não encontrado' });
       return;
@@ -111,6 +112,12 @@ router.patch('/:id', validate(patchSchema), async (req: Request, res: Response, 
     if (body.endAt) data.endAt = new Date(body.endAt);
     if (body.notes !== undefined) data.notes = body.notes;
     const appt = await (prisma as any).appointment.update({ where: { id }, data });
+
+    // Cancelar remove o evento espelho no Google (best-effort). Mantém o hub e o
+    // calendário externo em sincronia.
+    if (body.status === 'cancelled' && existing.externalEventId) {
+      await googleCalendar.deleteEvent(orgId, existing.externalEventId).catch(() => {});
+    }
     res.json({ appointment: appt });
   } catch (err) {
     next(err);

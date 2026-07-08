@@ -84,6 +84,12 @@ const envSchema = z.object({
   // Piso de similaridade do retrieval (0..1). Abaixo disso o chunk não entra no prompt.
   RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.25),
 
+  // Agendamento — OAuth do Google Calendar (cada cliente conecta a agenda dele).
+  // Um único app ZappIQ; muitos clientes autorizam a própria conta.
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().default('https://zappiq.com.br/api/integrations/google/callback'),
+
   // Email provider (Resend)
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('ZappIQ <hello@zappiq.com.br>'),

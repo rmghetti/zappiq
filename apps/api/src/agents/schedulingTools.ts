@@ -14,13 +14,16 @@ import type { RegisteredTool } from '../services/llm/tools.js';
 import { computeSlots, isSlotFree, type BusyInterval } from './schedulingAvailability.js';
 import { localMidnightUtcMs, localDayOfWeek, fmtLocal } from './schedulingTz.js';
 import { logger } from '../utils/logger.js';
+import * as googleCalendar from '../services/googleCalendar.js';
 
 // Carrega os tipos ativos da org (com as regras).
 async function loadActiveTypes(orgId: string) {
   return (prisma as any).appointmentType.findMany({ where: { organizationId: orgId, active: true } });
 }
 
-// Agendamentos que ocupam a agenda (confirmados/pendentes) viram "busy".
+// Intervalos ocupados = agenda interna (confirmados/pendentes) UNIÃO free/busy
+// do Google (se a org conectou). Assim a IA nunca oferece um horário que já
+// está tomado por fora do ZappIQ (reunião marcada direto no Google, etc).
 async function loadBusy(orgId: string, fromMs: number, toMs: number): Promise<BusyInterval[]> {
   const rows = await (prisma as any).appointment.findMany({
     where: {
@@ -30,7 +33,9 @@ async function loadBusy(orgId: string, fromMs: number, toMs: number): Promise<Bu
     },
     select: { startAt: true, endAt: true },
   });
-  return rows.map((r: any) => ({ startMs: new Date(r.startAt).getTime(), endMs: new Date(r.endAt).getTime() }));
+  const internal: BusyInterval[] = rows.map((r: any) => ({ startMs: new Date(r.startAt).getTime(), endMs: new Date(r.endAt).getTime() }));
+  const external = await googleCalendar.getBusy(orgId, fromMs, toMs); // [] se não conectado
+  return [...internal, ...external];
 }
 
 function resolveType(types: any[], nameHint?: string) {
@@ -136,6 +141,19 @@ export const createAppointmentTool: RegisteredTool = {
 
     const endMs = startMs + t.durationMin * 60_000;
     const status = t.requiresConfirmation ? 'pending' : 'confirmed';
+
+    // Espelha no Google Calendar da org (se conectado). A agenda interna é a
+    // fonte da verdade; guardamos o externalEventId pra manter o par sincronizado.
+    const startIso = new Date(startMs).toISOString();
+    const endIso = new Date(endMs).toISOString();
+    const externalEventId = await googleCalendar.insertEvent(ctx.organizationId, {
+      summary: `${t.name} — ${String(input.customer_name)}`,
+      description: `Agendado pela IA (ZappIQ).`,
+      startIso, endIso, timezone: tz,
+      attendeeEmail: (input.customer_email as string) || null,
+      location: t.locationText || null,
+    }).catch(() => null);
+
     const appt = await (prisma as any).appointment.create({
       data: {
         organizationId: ctx.organizationId,
@@ -153,9 +171,10 @@ export const createAppointmentTool: RegisteredTool = {
         answers: (input.answers as Record<string, unknown>) || {},
         location: t.locationText || null,
         source: 'ai',
+        externalEventId: externalEventId || null,
       },
     });
-    logger.info(`[scheduling] Agendamento criado via IA: ${appt.id} org=${ctx.organizationId} tipo=${t.name}`);
+    logger.info(`[scheduling] Agendamento criado via IA: ${appt.id} org=${ctx.organizationId} tipo=${t.name} google=${externalEventId ? 'sim' : 'nao'}`);
 
     return {
       ok: true,
@@ -164,6 +183,7 @@ export const createAppointmentTool: RegisteredTool = {
       when: fmtLocal(tz, startMs),
       requires_confirmation: t.requiresConfirmation,
       cancel_policy: t.cancelPolicyText || null,
+      synced_to_google: Boolean(externalEventId),
     };
   },
 };
