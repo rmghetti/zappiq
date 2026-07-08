@@ -41,6 +41,9 @@ import {
 import { api } from '../../../lib/api';
 import ReadinessMilestoneNudge from '../../../components/shared/ReadinessMilestoneNudge';
 import { SurveyPanel } from '../../../components/ai-training/SurveyPanel';
+import { FeatureGuide, GUIDES } from '../../../components/ai-training/FeatureGuide';
+import { NotIndexedAlert, type NotIndexedItem } from '../../../components/ai-training/NotIndexedAlert';
+import { ClipboardPaste } from 'lucide-react';
 
 // ── Tipos alinhados ao service backend ───────────────────
 interface Readiness {
@@ -245,12 +248,37 @@ export default function AITrainingPage() {
         </TabButton>
       </div>
 
-      {/* Tab panels */}
-      {tab === 'survey' && <SurveyPanel onChange={refreshReadiness} />}
-      {tab === 'documents' && <DocumentsPanel onChange={refreshReadiness} />}
-      {tab === 'qa' && <QAPanel onChange={refreshReadiness} />}
-      {tab === 'identity' && <IdentityPanel onChange={refreshReadiness} />}
-      {tab === 'playground' && <PlaygroundPanel />}
+      {/* Tab panels — cada aba abre com o descritivo da função (FeatureGuide) */}
+      {tab === 'survey' && (
+        <div className="space-y-4">
+          <FeatureGuide content={GUIDES.survey} />
+          <SurveyPanel onChange={refreshReadiness} />
+        </div>
+      )}
+      {tab === 'documents' && (
+        <div className="space-y-4">
+          <FeatureGuide content={GUIDES.documents} />
+          <DocumentsPanel onChange={refreshReadiness} />
+        </div>
+      )}
+      {tab === 'qa' && (
+        <div className="space-y-4">
+          <FeatureGuide content={GUIDES.qa} />
+          <QAPanel onChange={refreshReadiness} />
+        </div>
+      )}
+      {tab === 'identity' && (
+        <div className="space-y-4">
+          <FeatureGuide content={GUIDES.identity} />
+          <IdentityPanel onChange={refreshReadiness} />
+        </div>
+      )}
+      {tab === 'playground' && (
+        <div className="space-y-4">
+          <FeatureGuide content={GUIDES.playground} />
+          <PlaygroundPanel />
+        </div>
+      )}
 
       {/* Milestone nudge — dispara uma vez quando score cruza 60 */}
       <ReadinessMilestoneNudge score={readiness?.score} />
@@ -418,6 +446,9 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
   const [urlLoading, setUrlLoading] = useState(false);
   const [urlInput, setUrlInput] = useState('');
   const [urlProgress, setUrlProgress] = useState<string | null>(null);
+  const [textTitle, setTextTitle] = useState('');
+  const [textBody, setTextBody] = useState('');
+  const [textLoading, setTextLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadDocs = useCallback(async () => {
@@ -491,6 +522,25 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
     }
   };
 
+  const handleText = async () => {
+    if (textTitle.trim().length < 2 || textBody.trim().length < 20) return;
+    setTextLoading(true);
+    try {
+      await api.post('/api/ai-training/documents/text', {
+        title: textTitle.trim(),
+        content: textBody.trim(),
+      });
+      setTextTitle('');
+      setTextBody('');
+      await loadDocs();
+      onChange();
+    } catch (err: any) {
+      alert(`Erro ao salvar o texto: ${err.message}`);
+    } finally {
+      setTextLoading(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Remover este documento da base?')) return;
     try {
@@ -502,8 +552,20 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
     }
   };
 
+  // Itens que estão na lista mas NÃO chegaram à IA (ingestão falhou/sem texto).
+  const notIndexed: NotIndexedItem[] = docs
+    .filter((d) => d.ragChunks === 0)
+    .map((d) => ({
+      id: d.id,
+      label: d.title,
+      kind: d.sourceType === 'url' ? 'url' : d.sourceType === 'text' ? 'text' : 'file',
+    }));
+
   return (
     <div className="space-y-4">
+      {/* Aviso de conteúdo que não chegou à IA */}
+      <NotIndexedAlert items={notIndexed} />
+
       {/* Upload box */}
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-white border-2 border-dashed border-gray-300 hover:border-primary-400 rounded-xl p-6 text-center transition-colors">
@@ -559,6 +621,48 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
         </div>
       </div>
 
+      {/* Colar texto direto — quando a informação não está em arquivo nem em link */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6">
+        <div className="flex items-center gap-2 mb-2">
+          <ClipboardPaste size={18} className="text-primary-500" />
+          <p className="text-sm font-medium text-gray-900">Colar texto direto</p>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">
+          Para informações que não estão em arquivo nem no site. Dê um título e cole
+          o conteúdo. A IA passa a usar esse texto para responder, igual a um documento.
+        </p>
+        <input
+          value={textTitle}
+          onChange={(e) => setTextTitle(e.target.value)}
+          placeholder="Título. Ex.: Política de troca e devolução"
+          maxLength={120}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-primary-500 focus:outline-none mb-2"
+        />
+        <textarea
+          value={textBody}
+          onChange={(e) => setTextBody(e.target.value)}
+          placeholder="Cole aqui o conteúdo. Ex.: Aceitamos trocas em até 7 dias corridos, com nota fiscal e produto sem uso..."
+          rows={5}
+          maxLength={50000}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-primary-500 focus:outline-none resize-y"
+        />
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <span className="text-xs text-gray-400">
+            {textBody.trim().length > 0 && textBody.trim().length < 20
+              ? 'Cole um pouco mais de conteúdo (mín. 20 caracteres)'
+              : `${textBody.length.toLocaleString('pt-BR')} caracteres`}
+          </span>
+          <button
+            onClick={handleText}
+            disabled={textLoading || textTitle.trim().length < 2 || textBody.trim().length < 20}
+            className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {textLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+            {textLoading ? 'Salvando...' : 'Adicionar à base'}
+          </button>
+        </div>
+      </div>
+
       {/* Lista */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -574,12 +678,12 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
             {docs.map((d) => (
               <li key={d.id} className="px-4 py-3 flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center flex-shrink-0">
-                  {d.sourceType === 'url' ? <Globe size={16} /> : <FileText size={16} />}
+                  {d.sourceType === 'url' ? <Globe size={16} /> : d.sourceType === 'text' ? <ClipboardPaste size={16} /> : <FileText size={16} />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{d.title}</p>
                   <p className="text-xs text-gray-500">
-                    {d.sourceType === 'url' ? 'URL' : d.sourceType} · {new Date(d.createdAt).toLocaleDateString('pt-BR')}
+                    {d.sourceType === 'url' ? 'URL' : d.sourceType === 'text' ? 'Texto' : d.sourceType} · {new Date(d.createdAt).toLocaleDateString('pt-BR')}
                   </p>
                 </div>
                 <IndexedBadge chunks={d.ragChunks} />
@@ -609,6 +713,7 @@ const ACTION_LABEL: Record<string, string> = {
   'kb.document.create': 'Documento enviado',
   'kb.document.delete': 'Documento removido',
   'kb.url.create': 'URL ingerida',
+  'kb.text.create': 'Texto colado',
   'kb.qa.create': 'Q&A criada',
   'kb.qa.update': 'Q&A atualizada',
   'kb.qa.delete': 'Q&A removida',
@@ -752,8 +857,16 @@ function QAPanel({ onChange }: { onChange: () => void }) {
     }
   };
 
+  // Q&A ativo que não gerou chunk = não está alimentando a IA.
+  const notIndexed: NotIndexedItem[] = pairs
+    .filter((p) => p.isActive && p.ragChunks === 0)
+    .map((p) => ({ id: p.id, label: p.question, kind: 'qa' as const }));
+
   return (
     <div className="space-y-4">
+      {/* Aviso de Q&A que não chegou à IA */}
+      <NotIndexedAlert items={notIndexed} />
+
       {/* Form */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -853,23 +966,39 @@ function QAPanel({ onChange }: { onChange: () => void }) {
 // ═════════════════════════════════════════════════════════
 // Identity panel
 // ═════════════════════════════════════════════════════════
+interface BusinessHours {
+  weekdays: string;
+  saturday: string;
+  sunday: string;
+  holidays: string;
+}
+
 function IdentityPanel({ onChange }: { onChange: () => void }) {
   const [form, setForm] = useState({
     agentName: '',
     tone: 'friendly' as 'friendly' | 'formal' | 'technical',
     greetingMessage: '',
     handoffMessage: '',
+    businessHours: { weekdays: '', saturday: '', sunday: '', holidays: '' } as BusinessHours,
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const setHours = (key: keyof BusinessHours, value: string) =>
+    setForm((f) => ({ ...f, businessHours: { ...f.businessHours, [key]: value } }));
 
   // Pré-carrega a identidade já salva pra o cliente EDITAR (não sobrescrever do zero).
   useEffect(() => {
     (async () => {
       try {
-        const data = await api.get<{ identity: typeof form }>('/api/ai-training/identity');
+        const data = await api.get<{ identity: Partial<typeof form> }>('/api/ai-training/identity');
         if (data?.identity) {
-          setForm((f) => ({ ...f, ...data.identity }));
+          setForm((f) => ({
+            ...f,
+            ...data.identity,
+            // businessHours pode vir parcial/ausente — mescla sobre o default.
+            businessHours: { ...f.businessHours, ...(data.identity.businessHours || {}) },
+          }));
         }
       } catch {
         /* sem identidade ainda — começa com defaults */
@@ -940,6 +1069,33 @@ function IdentityPanel({ onChange }: { onChange: () => void }) {
           placeholder="Ex.: Olá! Sou a Bia, assistente virtual da Loja X. Em que posso ajudar?"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-primary-500 focus:outline-none resize-none"
         />
+      </div>
+
+      <div>
+        <label className="text-sm font-medium text-gray-900 block mb-1">Horário de atendimento</label>
+        <p className="text-xs text-gray-500 mb-3">
+          A IA responde 24 horas, mas usa isto para saber quando você atende
+          pessoalmente e avisar o cliente. Deixe em branco o que não se aplica.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {[
+            { key: 'weekdays' as const, label: 'Segunda a sexta', placeholder: 'Ex.: 09:00 às 18:00' },
+            { key: 'saturday' as const, label: 'Sábado', placeholder: 'Ex.: 09:00 às 13:00' },
+            { key: 'sunday' as const, label: 'Domingo', placeholder: 'Ex.: Fechado' },
+            { key: 'holidays' as const, label: 'Feriados', placeholder: 'Ex.: Fechado' },
+          ].map((row) => (
+            <div key={row.key}>
+              <label className="text-xs text-gray-500 block mb-1">{row.label}</label>
+              <input
+                value={form.businessHours[row.key]}
+                onChange={(e) => setHours(row.key, e.target.value)}
+                placeholder={row.placeholder}
+                maxLength={120}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
+              />
+            </div>
+          ))}
+        </div>
       </div>
 
       <div>
