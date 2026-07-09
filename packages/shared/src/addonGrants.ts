@@ -23,6 +23,7 @@ export const V4_PACKAGE_ADDON_KEYS = [
   'KB_DOCS_PACK_100',
   'AGENT_SEAT',
   'INTEGRATIONS_PACK_5',
+  'SCHEDULING_AGENT',
 ] as const;
 
 export type V4PackageAddonKey = (typeof V4_PACKAGE_ADDON_KEYS)[number];

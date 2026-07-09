@@ -67,6 +67,12 @@ export const ADDONS_V4_STRIPE: Record<string, AddonStripeIds & { meterId?: strin
     productId: 'prod_Ub3jKfnI4ylmF6',
     priceIds: { monthly: 'price_1TbrcOKlp5SWv74XSalzcP8g', annual: 'price_1TqviVKlp5SWv74XeBaepmaR' },  // R$ 147/mes | R$ 1411,20/ano
   },
+  // Agendamento pela IA (add-on Lite; incluido do Growth pra cima). LIVE, criado
+  // 2026-07-08 via API (lookup zappiq_addon_scheduling_*). annual = mensal*12*0.8.
+  SCHEDULING_AGENT: {
+    productId: 'prod_Uqo1QOYhDsEBXI',
+    priceIds: { monthly: 'price_1Tr6PBKlp5SWv74XtN7kuDAF', annual: 'price_1Tr6PCKlp5SWv74XXAT7OdyO' },  // R$ 49/mes | R$ 470,40/ano
+  },
 
   // ─────────────────────────────────────────────────────────
   // Impulso (add-on de campanhas premium) — criado via

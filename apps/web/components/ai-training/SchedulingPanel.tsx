@@ -9,7 +9,7 @@
  * é executada por tools + calendário. Tudo gerido na Agenda interna (CRM).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarClock, Plus, Trash2, Loader2, CheckCircle2, MapPin, Video, Phone, Building2, Calendar, Link2, Unlink, HelpCircle } from 'lucide-react';
+import { CalendarClock, Plus, Trash2, Loader2, CheckCircle2, MapPin, Video, Phone, Building2, Calendar, Link2, Unlink, HelpCircle, ArrowRight } from 'lucide-react';
 import { api } from '../../lib/api';
 import { GoogleConnectGuide } from './GoogleConnectGuide';
 
@@ -52,6 +52,7 @@ const BLANK_TYPE = {
 export function SchedulingPanel({ onChange }: { onChange: () => void }) {
   const [optOut, setOptOut] = useState(false);
   const [types, setTypes] = useState<AppointmentType[]>([]);
+  const [entitled, setEntitled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ ...BLANK_TYPE });
@@ -64,9 +65,10 @@ export function SchedulingPanel({ onChange }: { onChange: () => void }) {
 
   const load = useCallback(async () => {
     try {
-      const data = await api.get<{ optOut: boolean; types: AppointmentType[] }>('/api/ai-training/scheduling');
+      const data = await api.get<{ optOut: boolean; types: AppointmentType[]; entitled?: boolean }>('/api/ai-training/scheduling');
       setOptOut(data.optOut);
       setTypes(data.types || []);
+      setEntitled(data.entitled !== false);
     } catch (err) {
       console.warn('Falha ao carregar agendamento:', err);
     } finally {
@@ -185,6 +187,40 @@ export function SchedulingPanel({ onChange }: { onChange: () => void }) {
 
   if (loading) {
     return <div className="flex items-center justify-center h-40 text-gray-400"><Loader2 size={18} className="animate-spin mr-2" /> Carregando…</div>;
+  }
+
+  // Lite sem o add-on: mostra o upsell no lugar da configuração.
+  if (!entitled) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-primary-500 to-secondary-500 p-6 text-white">
+            <div className="flex items-center gap-2 mb-1"><CalendarClock size={22} /><h3 className="text-lg font-display font-bold">Agendamento pela IA</h3></div>
+            <p className="text-sm opacity-90">Deixe a sua IA marcar consultas, reuniões, ligações e visitas direto na conversa com o cliente.</p>
+          </div>
+          <div className="p-6 space-y-4">
+            <ul className="space-y-2">
+              {[
+                'A IA oferece só horários realmente livres e agenda sozinha.',
+                'Agenda interna no seu CRM, com confirmação e status.',
+                'Conecte seu Google Calendar: a IA respeita seus compromissos e cria os eventos lá.',
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-2 text-sm text-gray-700"><CheckCircle2 size={16} className="text-secondary-600 flex-shrink-0 mt-0.5" /> {t}</li>
+              ))}
+            </ul>
+            <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-sm text-gray-900"><span className="font-semibold">Incluído a partir do plano Growth.</span> No seu plano, ative como add-on.</p>
+                <p className="text-xs text-gray-500 mt-0.5">R$ 49/mês. No plano anual, 20% de desconto (R$ 39,20/mês).</p>
+              </div>
+              <a href="/billing#addons" className="inline-flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold px-4 py-2 rounded-lg whitespace-nowrap">
+                Ativar Agendamento <ArrowRight size={14} />
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
