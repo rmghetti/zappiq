@@ -44,6 +44,15 @@ import {
   SCHEDULING_RAG_SOURCE,
 } from './scheduling.util.js';
 import { getToolsForContext } from '../services/llm/tools.js';
+import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
+
+// Entitlement do Agendamento: incluído no GROWTH+; no Lite exige o add-on
+// SCHEDULING_AGENT (settings.addons). Lê plano + add-ons ativos da org.
+async function schedulingAccessFor(orgId: string) {
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { plan: true, settings: true } });
+  const addons = Array.isArray((org?.settings as any)?.addons) ? (org!.settings as any).addons as string[] : [];
+  return resolveSchedulingAccess((org?.plan as PlanId) || 'IZA_LITE', addons);
+}
 
 const router = Router();
 router.use(authMiddleware);
@@ -773,7 +782,8 @@ router.get('/scheduling', async (req: Request, res: Response, next: NextFunction
       where: { organizationId: orgId },
       orderBy: { createdAt: 'asc' },
     });
-    res.json({ optOut, types });
+    const access = await schedulingAccessFor(orgId);
+    res.json({ optOut, types, entitled: access.entitled, accessReason: access.reason });
   } catch (err) {
     next(err);
   }
@@ -784,6 +794,14 @@ router.put('/scheduling', validate(schedulingConfigSchema), async (req: Request,
   try {
     const orgId = req.user!.organizationId;
     const { optOut } = req.body as { optOut: boolean };
+    // Ativar (optOut=false) exige entitlement. Desativar é sempre permitido.
+    if (!optOut) {
+      const access = await schedulingAccessFor(orgId);
+      if (!access.entitled) {
+        res.status(402).json({ error: 'agendamento_requer_addon', addonKey: 'SCHEDULING_AGENT', message: 'O Agendamento pela IA está incluído a partir do plano Growth. No Lite, ative como add-on por R$ 49/mês.' });
+        return;
+      }
+    }
     const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
     const settings = (org?.settings as any) || {};
     const merged = { ...settings, scheduling: { ...(settings.scheduling || {}), optOut, enabled: !optOut } };
@@ -804,6 +822,11 @@ router.put('/scheduling', validate(schedulingConfigSchema), async (req: Request,
 router.post('/appointment-types', validate(appointmentTypeSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
+    const access = await schedulingAccessFor(orgId);
+    if (!access.entitled) {
+      res.status(402).json({ error: 'agendamento_requer_addon', addonKey: 'SCHEDULING_AGENT', message: 'O Agendamento pela IA está incluído a partir do plano Growth. No Lite, ative como add-on por R$ 49/mês.' });
+      return;
+    }
     const t = await (prisma as any).appointmentType.create({
       data: { ...req.body, organizationId: orgId },
     });

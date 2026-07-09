@@ -775,7 +775,7 @@ export function planAnnualTotal(plan: PlanConfig): number | null {
 
 export interface AddonV4 {
   key: string;
-  family: 'AI_MSG' | 'BROADCAST' | 'CHANNEL' | 'CAPACITY' | 'VOICE' | 'IMPULSO';
+  family: 'AI_MSG' | 'BROADCAST' | 'CHANNEL' | 'CAPACITY' | 'VOICE' | 'IMPULSO' | 'FEATURE';
   name: string;
   description: string;
   pricingMode: 'overage_unit' | 'one_time_pack' | 'recurring_monthly';
@@ -836,6 +836,14 @@ export const ADDONS_V4_LIST: AddonV4[] = [
     pricingMode: 'recurring_monthly', amountBrl: 97, unit: 'conta',
     cmgBrl: 5, marginPct: 95,
     availableFor: ['IZA_LITE', 'GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+
+  // ─── Familia: Recurso (feature premium) ───
+  // Agendamento pela IA. Incluído do GROWTH pra cima; no Lite é add-on.
+  { key: 'SCHEDULING_AGENT', family: 'FEATURE', name: 'Agendamento pela IA',
+    description: 'A IA marca consultas, reuniões, ligações e visitas com o seu cliente. Agenda interna + sync com Google Calendar.',
+    pricingMode: 'recurring_monthly', amountBrl: 49, unit: 'agente',
+    cmgBrl: 3, marginPct: 94,
+    availableFor: ['IZA_LITE'], stripePriceKey: 'monthly' },
 
   // ─── Familia 3: Capacidade ───
   { key: 'CONTACTS_PACK_5K', family: 'CAPACITY', name: 'Contatos CRM pacote 5.000',

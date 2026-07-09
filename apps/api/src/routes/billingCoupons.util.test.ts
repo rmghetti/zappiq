@@ -7,6 +7,9 @@ import {
   buildCouponCreateParams,
   buildCouponName,
   ALLOWED_PERCENTS,
+  resolveCouponState,
+  needsReconciliation,
+  deriveCouponStatus,
 } from './billingCoupons.util.js';
 
 describe('validações', () => {
@@ -95,5 +98,47 @@ describe('buildCouponCreateParams', () => {
   it('rejeita repeating sem meses válidos', () => {
     expect(() => buildCouponCreateParams({ percentOff: 30, productId: PID, duration: 'repeating' })).toThrow('invalid_duration_months');
     expect(() => buildCouponCreateParams({ percentOff: 30, productId: PID, duration: 'repeating', durationInMonths: 0 })).toThrow('invalid_duration_months');
+  });
+});
+
+describe('resolveCouponState (Stripe é a fonte da verdade)', () => {
+  it('sem estado do Stripe → mantém o local', () => {
+    const local = { timesRedeemed: 0, active: true };
+    expect(resolveCouponState(local, undefined)).toEqual(local);
+  });
+  it('com estado do Stripe → o Stripe manda, mesmo divergindo do local', () => {
+    const local = { timesRedeemed: 0, active: true };
+    const stripe = { timesRedeemed: 0, active: false }; // cancelado no Stripe, local desatualizado
+    expect(resolveCouponState(local, stripe)).toEqual(stripe);
+  });
+});
+
+describe('needsReconciliation', () => {
+  it('iguais → não precisa gravar', () => {
+    const s = { timesRedeemed: 0, active: true };
+    expect(needsReconciliation(s, s)).toBe(false);
+  });
+  it('active divergente → precisa gravar (o caso do bug: Stripe cancelou, local não)', () => {
+    expect(
+      needsReconciliation({ timesRedeemed: 0, active: true }, { timesRedeemed: 0, active: false }),
+    ).toBe(true);
+  });
+  it('timesRedeemed divergente → precisa gravar', () => {
+    expect(
+      needsReconciliation({ timesRedeemed: 0, active: true }, { timesRedeemed: 1, active: true }),
+    ).toBe(true);
+  });
+});
+
+describe('deriveCouponStatus', () => {
+  it('redeemed >=1 → used, independente de active', () => {
+    expect(deriveCouponStatus({ timesRedeemed: 1, active: true })).toBe('used');
+    expect(deriveCouponStatus({ timesRedeemed: 1, active: false })).toBe('used');
+  });
+  it('não usado + active → available', () => {
+    expect(deriveCouponStatus({ timesRedeemed: 0, active: true })).toBe('available');
+  });
+  it('não usado + inativo → canceled', () => {
+    expect(deriveCouponStatus({ timesRedeemed: 0, active: false })).toBe('canceled');
   });
 });

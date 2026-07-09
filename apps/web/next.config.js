@@ -90,6 +90,25 @@ const nextConfig = {
       },
     ];
   },
+
+  // ── Rewrites (proxy reverso) ───────────────────────────
+  // Agendamento / Google Calendar: o callback do OAuth vive na API (Express no
+  // Fly), mas o redirect_uri registrado no Google usa o dominio branded
+  // zappiq.com.br/api/integrations/google/callback — entao o Google devolve o
+  // browser pra ca. Sem este proxy o Next respondia 404 (a rota so existe na
+  // API), quebrando a conexao da agenda. Encaminhamos de forma transparente pra
+  // API, que troca o `code` e faz o 302 de volta pro /ai-training. Destino
+  // fixo no host fly.dev (comprovadamente no ar; api.zappiq.com.br esta sem
+  // cert). Escopo restrito a /api/integrations/* — nao toca as rotas Next de
+  // /api/* (auth, cron, login/google, signup/google etc.).
+  async rewrites() {
+    return [
+      {
+        source: '/api/integrations/:path*',
+        destination: 'https://zappiq-api.fly.dev/api/integrations/:path*',
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

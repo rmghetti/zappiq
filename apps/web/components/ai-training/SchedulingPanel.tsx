@@ -9,8 +9,9 @@
  * é executada por tools + calendário. Tudo gerido na Agenda interna (CRM).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarClock, Plus, Trash2, Loader2, CheckCircle2, MapPin, Video, Phone, Building2 } from 'lucide-react';
+import { CalendarClock, Plus, Trash2, Loader2, CheckCircle2, MapPin, Video, Phone, Building2, Calendar, Link2, Unlink, HelpCircle, ArrowRight } from 'lucide-react';
 import { api } from '../../lib/api';
+import { GoogleConnectGuide } from './GoogleConnectGuide';
 
 type Modality = 'in_person' | 'online' | 'phone' | 'video';
 interface BookingField { key: string; label: string; type: 'text' | 'phone' | 'email' | 'select'; required: boolean }
@@ -51,24 +52,69 @@ const BLANK_TYPE = {
 export function SchedulingPanel({ onChange }: { onChange: () => void }) {
   const [optOut, setOptOut] = useState(false);
   const [types, setTypes] = useState<AppointmentType[]>([]);
+  const [entitled, setEntitled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ ...BLANK_TYPE });
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
+  const [gcal, setGcal] = useState<{ configured: boolean; connected: boolean; email?: string | null }>({ configured: false, connected: false });
+  const [gcalBusy, setGcalBusy] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+
   const load = useCallback(async () => {
     try {
-      const data = await api.get<{ optOut: boolean; types: AppointmentType[] }>('/api/ai-training/scheduling');
+      const data = await api.get<{ optOut: boolean; types: AppointmentType[]; entitled?: boolean }>('/api/ai-training/scheduling');
       setOptOut(data.optOut);
       setTypes(data.types || []);
+      setEntitled(data.entitled !== false);
     } catch (err) {
       console.warn('Falha ao carregar agendamento:', err);
     } finally {
       setLoading(false);
     }
   }, []);
-  useEffect(() => { load(); }, [load]);
+
+  const loadGcal = useCallback(async () => {
+    try {
+      const s = await api.get<{ configured: boolean; connected: boolean; email?: string | null }>('/api/integrations/google/status');
+      setGcal(s);
+    } catch { /* silencioso */ }
+  }, []);
+
+  useEffect(() => { load(); loadGcal(); }, [load, loadGcal]);
+
+  // Retorno do OAuth (#scheduling?gcal=ok|erro). Recarrega o status e limpa a URL.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash;
+    if (hash.includes('gcal=ok')) { loadGcal(); history.replaceState(null, '', window.location.pathname + '#scheduling'); }
+    else if (hash.includes('gcal=erro')) { alert('Não foi possível conectar o Google Calendar. Tente novamente.'); history.replaceState(null, '', window.location.pathname + '#scheduling'); }
+  }, [loadGcal]);
+
+  const connectGoogle = async () => {
+    setGcalBusy(true);
+    try {
+      const { authUrl } = await api.get<{ authUrl: string }>('/api/integrations/google/connect');
+      window.location.href = authUrl; // vai pro consentimento do Google e volta no callback
+    } catch (err: any) {
+      alert(`Erro ao iniciar conexão: ${err.message}`);
+      setGcalBusy(false);
+    }
+  };
+  const disconnectGoogle = async () => {
+    if (!confirm('Desconectar a agenda do Google? A IA volta a usar só a agenda interna.')) return;
+    setGcalBusy(true);
+    try {
+      await api.delete('/api/integrations/google');
+      await loadGcal();
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      setGcalBusy(false);
+    }
+  };
 
   const toggleOptOut = async (next: boolean) => {
     setOptOut(next);
@@ -143,6 +189,40 @@ export function SchedulingPanel({ onChange }: { onChange: () => void }) {
     return <div className="flex items-center justify-center h-40 text-gray-400"><Loader2 size={18} className="animate-spin mr-2" /> Carregando…</div>;
   }
 
+  // Lite sem o add-on: mostra o upsell no lugar da configuração.
+  if (!entitled) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-primary-500 to-secondary-500 p-6 text-white">
+            <div className="flex items-center gap-2 mb-1"><CalendarClock size={22} /><h3 className="text-lg font-display font-bold">Agendamento pela IA</h3></div>
+            <p className="text-sm opacity-90">Deixe a sua IA marcar consultas, reuniões, ligações e visitas direto na conversa com o cliente.</p>
+          </div>
+          <div className="p-6 space-y-4">
+            <ul className="space-y-2">
+              {[
+                'A IA oferece só horários realmente livres e agenda sozinha.',
+                'Agenda interna no seu CRM, com confirmação e status.',
+                'Conecte seu Google Calendar: a IA respeita seus compromissos e cria os eventos lá.',
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-2 text-sm text-gray-700"><CheckCircle2 size={16} className="text-secondary-600 flex-shrink-0 mt-0.5" /> {t}</li>
+              ))}
+            </ul>
+            <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-sm text-gray-900"><span className="font-semibold">Incluído a partir do plano Growth.</span> No seu plano, ative como add-on.</p>
+                <p className="text-xs text-gray-500 mt-0.5">R$ 49/mês. No plano anual, 20% de desconto (R$ 39,20/mês).</p>
+              </div>
+              <a href="/billing#addons" className="inline-flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold px-4 py-2 rounded-lg whitespace-nowrap">
+                Ativar Agendamento <ArrowRight size={14} />
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Seletor mestre: opt-out */}
@@ -166,6 +246,37 @@ export function SchedulingPanel({ onChange }: { onChange: () => void }) {
 
       {!optOut && (
         <>
+          {/* Conexão com o Google Calendar do cliente (self-service) */}
+          {gcal.configured && (
+            <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${gcal.connected ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
+                <Calendar size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900">Sua agenda do Google</p>
+                {gcal.connected ? (
+                  <p className="text-xs text-green-700 truncate">Conectada{gcal.email ? ` (${gcal.email})` : ''}. A IA respeita seus compromissos e cria os eventos aí.</p>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    Conecte para a IA ver seus horários ocupados e criar os agendamentos direto na sua agenda.{' '}
+                    <button type="button" onClick={() => setGuideOpen(true)} className="inline-flex items-center gap-0.5 text-primary-600 hover:text-primary-700 hover:underline font-medium align-baseline">
+                      <HelpCircle size={12} /> Saiba como conectar
+                    </button>
+                  </p>
+                )}
+              </div>
+              {gcal.connected ? (
+                <button onClick={disconnectGoogle} disabled={gcalBusy} className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-red-600 border border-gray-200 rounded-lg px-3 py-2 disabled:opacity-50">
+                  {gcalBusy ? <Loader2 size={14} className="animate-spin" /> : <Unlink size={14} />} Desconectar
+                </button>
+              ) : (
+                <button onClick={connectGoogle} disabled={gcalBusy} className="inline-flex items-center gap-1.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50">
+                  {gcalBusy ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Conectar Google Calendar
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Lista de tipos */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -304,6 +415,8 @@ export function SchedulingPanel({ onChange }: { onChange: () => void }) {
           )}
         </>
       )}
+
+      <GoogleConnectGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );
 }
