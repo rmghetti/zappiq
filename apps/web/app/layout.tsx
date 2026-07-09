@@ -49,6 +49,12 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  // Prova de posse do dominio no Google Search Console — pre-requisito do
+  // "Branding status" na verificacao do app OAuth (Agendamento/Google
+  // Calendar). Gera <meta name="google-site-verification" ...> no <head>.
+  verification: {
+    google: 'WzMgUiCQ5Ckri6phWDqBWKyELrFhCzXn9YGGlJ8NVDE',
+  },
 };
 
 /* PLACEHOLDER: substituir URLs por domínio real */
