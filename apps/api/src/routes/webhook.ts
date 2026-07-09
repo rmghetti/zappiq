@@ -6,6 +6,7 @@ import { env } from '../config/env.js';
 import { aiProcessQueue } from '../services/queueService.js';
 import { inboundContentFromMessage } from '../services/inboundContent.js';
 import { applyMessageStatusUpdate, attributeCampaignReply } from './campaignStatus.util.js';
+import { recordCtwaAttribution } from '../services/ctwaAttribution.js';
 
 const router = Router();
 
@@ -150,6 +151,10 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
         lastInteractionAt: new Date(),
       },
     });
+
+    // Loop de Receita: se a mensagem veio de anúncio (CTWA), captura o ctwa_clid
+    // para depois devolver a conversão de compra ao Meta (CAPI). Não bloqueia.
+    await recordCtwaAttribution({ organizationId: org.id, contactId: contact.id, referral: (message as any).referral });
 
     // Find or create conversation
     let conversation = await prisma.conversation.findFirst({
