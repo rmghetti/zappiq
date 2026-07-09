@@ -71,6 +71,7 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
   const [contratando, setContratando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [detailPlan, setDetailPlan] = useState<PlanKey | null>(null);
+  const [cycle, setCycle] = useState<'monthly' | 'annual'>('monthly');
 
   if (!open) return null;
 
@@ -93,7 +94,7 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
     setError(null);
     setContratando(tier);
     try {
-      const res = await api.post('/api/impulso-access/checkout', { tier });
+      const res = await api.post('/api/impulso-access/checkout', { tier, cycle });
       if (res.data?.url) {
         window.location.href = res.data.url; // vai pro checkout do Stripe
       } else {
@@ -145,7 +146,24 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
 
         {/* Planos */}
         <div className="px-6 py-5">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Planos do Impulso</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Planos do Impulso</p>
+            {/* Seletor mensal / anual (-20%) */}
+            <div className="inline-flex rounded-lg border border-gray-200 p-0.5 text-[11px] font-semibold">
+              <button
+                onClick={() => setCycle('monthly')}
+                className={`px-2.5 py-1 rounded-md ${cycle === 'monthly' ? `${GRAD} text-white` : 'text-gray-600 hover:bg-gray-50'}`}
+              >
+                Mensal
+              </button>
+              <button
+                onClick={() => setCycle('annual')}
+                className={`px-2.5 py-1 rounded-md ${cycle === 'annual' ? `${GRAD} text-white` : 'text-gray-600 hover:bg-gray-50'}`}
+              >
+                Anual <span className="opacity-90">−20%</span>
+              </button>
+            </div>
+          </div>
           <div className="grid sm:grid-cols-3 gap-3">
             {PLANS.map((p) => (
               <div key={p.key} className={`rounded-xl border p-4 flex flex-col ${p.highlight ? 'border-transparent ring-2 ring-[#4A52D0]' : 'border-gray-200'}`}>
@@ -154,9 +172,10 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
                 )}
                 <h3 className="text-sm font-bold text-gray-900">{p.name}</h3>
                 <div className="mt-1">
-                  <span className="text-2xl font-bold text-gray-900">R$ {p.price}</span>
+                  <span className="text-2xl font-bold text-gray-900">R$ {cycle === 'annual' ? p.priceAnnual : p.price}</span>
                   <span className="text-xs text-gray-400">/mês</span>
                 </div>
+                <p className="text-[10px] text-gray-400 min-h-[14px]">{cycle === 'annual' ? `cobrado anualmente (R$ ${Math.round(p.price * 12 * 0.8).toLocaleString('pt-BR')})` : ''}</p>
                 <p className="text-[11px] text-gray-500 mt-1 mb-3 min-h-[28px]">{p.who}</p>
                 <ul className="space-y-1.5 flex-1">
                   {p.features.map((f) => (

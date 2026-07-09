@@ -67,8 +67,13 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
       res.status(503).json({ error: 'stripe_not_configured' });
       return;
     }
-    const priceId = ADDONS_V4_STRIPE[tier]?.priceIds?.monthly;
-    if (!priceId) {
+    // Ciclo mensal (padrão) ou anual (-20%). Fallback seguro pra mensal se o
+    // preço anual ainda não estiver configurado no Stripe (id placeholder).
+    const cycle = req.body?.cycle === 'annual' ? 'annual' : 'monthly';
+    const prices = ADDONS_V4_STRIPE[tier]?.priceIds ?? {};
+    let priceId = prices[cycle];
+    if (!priceId || !priceId.startsWith('price_')) priceId = prices.monthly;
+    if (!priceId || !priceId.startsWith('price_')) {
       res.status(500).json({ error: 'price_not_configured', tier });
       return;
     }
