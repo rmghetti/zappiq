@@ -7,6 +7,15 @@ import { campaignDispatchQueue } from '../services/queueService.js';
 import { draftCampaignFromObjective } from '../services/impulsoStrategist.js';
 import { computeCoachInsights } from '../services/impulsoCoach.js';
 import { sanitizeChannels } from '../services/impulsoChannels.js';
+import {
+  getAsaasConfigFromSettings,
+  ensureAsaasCustomer,
+  createPixCharge,
+  buildPixReference,
+  formatPixMessage,
+  pixAllowedForTier,
+} from '../services/asaasPix.js';
+import { sendReplyText } from '../services/channelDispatcher.js';
 
 /** Instagram só entra numa campanha se a org tiver o IG conectado (política Meta + requisito de plano). */
 async function orgHasInstagram(orgId: string): Promise<boolean> {
@@ -271,6 +280,65 @@ router.get('/:id/coach', async (req: Request, res: Response, next: NextFunction)
       budgetPlan: campaign.budgetPlan as any,
     });
     res.json({ success: true, data: { insights } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /api/impulso/pix — Pix na conversa (Pro+). Cobra na chave Asaas do
+// próprio lojista e envia o copia-e-cola na conversa. Inerte sem Asaas configurado.
+const pixSchema = z.object({
+  conversationId: z.string().optional(),
+  dealId: z.string().min(1),
+  value: z.number().positive(),
+  description: z.string().default('Cobrança'),
+  customer: z.object({
+    name: z.string().min(1),
+    cpfCnpj: z.string().optional(),
+    phone: z.string().optional(),
+    externalReference: z.string().optional(),
+  }),
+});
+
+router.post('/pix', validate(pixSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Gate: Pix é feature Pro+.
+    if (!pixAllowedForTier((req as any).impulsoTier)) {
+      res.status(403).json({ error: 'pix_requires_pro', message: 'O Pix na conversa está disponível a partir do plano Pro.' });
+      return;
+    }
+    const org = await prisma.organization.findUnique({
+      where: { id: req.organizationId! },
+      select: { settings: true },
+    });
+    const { apiKey } = getAsaasConfigFromSettings(org?.settings);
+    if (!apiKey) {
+      res.status(400).json({ error: 'asaas_not_configured', message: 'Conecte sua conta Asaas para cobrar por Pix na conversa.' });
+      return;
+    }
+    const { conversationId, dealId, value, description, customer } = req.body;
+    const customerId = await ensureAsaasCustomer(apiKey, {
+      name: customer.name,
+      cpfCnpj: customer.cpfCnpj,
+      phone: customer.phone,
+      externalReference: customer.externalReference || `contact:${dealId}`,
+    });
+    const dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const charge = await createPixCharge(apiKey, {
+      customerId,
+      value,
+      description,
+      referenceId: buildPixReference(req.organizationId!, dealId),
+      dueDate,
+    });
+    if (conversationId) {
+      await sendReplyText({
+        organizationId: req.organizationId!,
+        conversationId,
+        content: formatPixMessage({ payload: charge.payload, value, description }),
+      }).catch((e) => logger.warn(`[Pix] envio na conversa falhou: ${e instanceof Error ? e.message : e}`));
+    }
+    res.json({ success: true, paymentId: charge.paymentId, payload: charge.payload, qrImageBase64: charge.qrImageBase64, expiresAt: charge.expiresAt });
   } catch (err) {
     next(err);
   }

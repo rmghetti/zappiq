@@ -10,9 +10,26 @@
  * Nada aqui move dinheiro sem a chave Asaas configurada na org.
  */
 import { env } from '../config/env.js';
+import { decryptSecret } from '../utils/crypto.js';
 
 // Base sandbox por padrão (seguro): produção só quando ASAAS_API_URL for setado.
 const ASAAS_BASE = (env as any).ASAAS_API_URL || 'https://sandbox.asaas.com/api/v3';
+
+/**
+ * Config do Asaas por org, lida de organization.settings (pura, testável):
+ *  - asaasApiKeyEnc: chave de API do Asaas do LOJISTA, cifrada (crypto.encryptSecret).
+ *  - asaasWebhookToken: token que o Asaas envia no header do webhook (verificação).
+ * Sem chave configurada, o Pix fica inerte (nada é cobrado).
+ */
+export function getAsaasConfigFromSettings(settings: unknown): { apiKey: string | null; webhookToken: string | null } {
+  const s = (settings && typeof settings === 'object' ? settings : {}) as Record<string, unknown>;
+  let apiKey: string | null = null;
+  if (typeof s.asaasApiKeyEnc === 'string' && s.asaasApiKeyEnc) {
+    try { apiKey = decryptSecret(s.asaasApiKeyEnc); } catch { apiKey = null; }
+  }
+  const webhookToken = typeof s.asaasWebhookToken === 'string' && s.asaasWebhookToken ? s.asaasWebhookToken : null;
+  return { apiKey, webhookToken };
+}
 
 // ── Partes puras (testadas) ─────────────────────────────────
 
