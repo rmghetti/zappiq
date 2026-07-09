@@ -9,8 +9,9 @@
  * é executada por tools + calendário. Tudo gerido na Agenda interna (CRM).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarClock, Plus, Trash2, Loader2, CheckCircle2, MapPin, Video, Phone, Building2, Calendar, Link2, Unlink } from 'lucide-react';
+import { CalendarClock, Plus, Trash2, Loader2, CheckCircle2, MapPin, Video, Phone, Building2, Calendar, Link2, Unlink, HelpCircle } from 'lucide-react';
 import { api } from '../../lib/api';
+import { GoogleConnectGuide } from './GoogleConnectGuide';
 
 type Modality = 'in_person' | 'online' | 'phone' | 'video';
 interface BookingField { key: string; label: string; type: 'text' | 'phone' | 'email' | 'select'; required: boolean }
@@ -59,6 +60,7 @@ export function SchedulingPanel({ onChange }: { onChange: () => void }) {
 
   const [gcal, setGcal] = useState<{ configured: boolean; connected: boolean; email?: string | null }>({ configured: false, connected: false });
   const [gcalBusy, setGcalBusy] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -219,7 +221,12 @@ export function SchedulingPanel({ onChange }: { onChange: () => void }) {
                 {gcal.connected ? (
                   <p className="text-xs text-green-700 truncate">Conectada{gcal.email ? ` (${gcal.email})` : ''}. A IA respeita seus compromissos e cria os eventos aí.</p>
                 ) : (
-                  <p className="text-xs text-gray-500">Conecte para a IA ver seus horários ocupados e criar os agendamentos direto na sua agenda.</p>
+                  <p className="text-xs text-gray-500">
+                    Conecte para a IA ver seus horários ocupados e criar os agendamentos direto na sua agenda.{' '}
+                    <button type="button" onClick={() => setGuideOpen(true)} className="inline-flex items-center gap-0.5 text-primary-600 hover:text-primary-700 hover:underline font-medium align-baseline">
+                      <HelpCircle size={12} /> Saiba como conectar
+                    </button>
+                  </p>
                 )}
               </div>
               {gcal.connected ? (
@@ -372,6 +379,8 @@ export function SchedulingPanel({ onChange }: { onChange: () => void }) {
           )}
         </>
       )}
+
+      <GoogleConnectGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );
 }
