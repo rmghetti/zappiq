@@ -6,8 +6,11 @@ import { trainingFieldsChanged } from '../services/trainingChange.js';
 import { refreshAIReadiness } from '../services/aiReadinessService.js';
 import { logAuditEvent } from '../services/auditService.js';
 import { env } from '../config/env.js';
+import { randomBytes } from 'node:crypto';
 import { checkResourceLimit, resourceLimitBody } from '../middleware/planLimits.js';
-import { updateSettingsSchema, redactOrgSecrets } from './settings.schema.js';
+import { updateSettingsSchema, redactOrgSecrets, impulsoIntegrationSchema } from './settings.schema.js';
+import { encryptSecret } from '../utils/crypto.js';
+import { applyImpulsoIntegration, readImpulsoIntegrationStatus } from '../services/impulsoIntegrations.js';
 import {
   isDisconnectableChannel,
   buildDisconnectData,
@@ -82,6 +85,50 @@ router.put('/', requireRole('ADMIN'), async (req: Request, res: Response, next: 
     }
     // Consistência com o GET: resposta também sem segredos.
     res.json({ success: true, data: redactOrgSecrets(org) });
+  } catch (err) { next(err); }
+});
+
+// ── Zap Impulso — integrações (Meta CAPI + Asaas Pix) ───────────────
+// O cliente configura, no próprio dashboard, as credenciais do Loop de Receita:
+// dataset id + access token do Meta CAPI e a API key do Asaas para Pix na
+// conversa. Os segredos são CIFRADOS no servidor (encryptSecret) antes de ir pro
+// banco — nunca trafegam nem repousam em claro, e o GET só devolve booleanos de
+// status + o dataset id (público) + o token de webhook (que o cliente cola no
+// painel do Asaas). Regra: segredo não passa em claro em lugar nenhum.
+
+// GET /api/settings/integrations/zap-impulso — status (sem vazar segredo).
+router.get('/integrations/zap-impulso', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: req.organizationId! },
+      select: { settings: true },
+    });
+    res.json({ success: true, data: readImpulsoIntegrationStatus(org?.settings) });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/settings/integrations/zap-impulso — grava/atualiza credenciais.
+// Recebe texto puro; cifra no servidor; mescla em settings; devolve só status.
+router.put('/integrations/zap-impulso', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const parsed = impulsoIntegrationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Payload de integração inválido', details: parsed.error.flatten() });
+      return;
+    }
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const nextSettings = applyImpulsoIntegration(org?.settings as any, parsed.data, {
+      encrypt: encryptSecret,
+      genToken: () => randomBytes(24).toString('hex'),
+    });
+    const updated = await prisma.organization.update({
+      where: { id: orgId },
+      data: { settings: nextSettings },
+      select: { settings: true },
+    });
+    logger.info(`[Impulso] integrações atualizadas org=${orgId}`);
+    res.json({ success: true, data: readImpulsoIntegrationStatus(updated.settings) });
   } catch (err) { next(err); }
 });
 
