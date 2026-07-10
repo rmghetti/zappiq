@@ -1066,6 +1066,10 @@ model MessageTemplate {
   buttons        Json?
   metaStatus     String       @default("PENDING")
   metaTemplateId String?
+  // Mapa de preenchimento das variáveis {{1}}, {{2}}... do bodyText por contato.
+  // Array de { index, source: 'contact.firstName'|'contact.name'|'contact.company'|'fixed',
+  // fixedText?, fallback }. Sem esse mapa (ou incompleto), o disparo cai em texto.
+  variables      Json?
   // FEATURE 5b.2 — template usado pra REABRIR a janela de 24h da Meta.
   // Fora da janela de 24h a Meta rejeita mensagem free-form; só templates
   // aprovados passam. isReengagement marca os templates elegíveis pra esse uso.

@@ -91,7 +91,7 @@ export const templatesContent: SaibaMaisContent[] = [
       'Crie um template pensado para reabrir conversa. Sem variáveis ele já funciona por completo, como "Faz um tempo que a gente não conversa por aqui. Posso te ajudar com algo?".',
       'No formulário, marque a caixa "Template de reengajamento (reabre a janela de 24h)".',
       'Envie o template à Meta e aguarde a aprovação, como qualquer outro template.',
-      'Depois de aprovado, escolha esse template numa campanha para contatos inativos: ele é disparado de verdade e alcança quem já passou das 24 horas. Modelos sem variáveis já funcionam por completo; os que usam o nome do cliente ({{1}}) dependem do preenchimento por contato, que está em desenvolvimento.',
+      'Depois de aprovado, escolha esse template numa campanha para contatos inativos: ele é disparado de verdade e alcança quem já passou das 24 horas. Se usar o nome do cliente ({{1}}), aponte esse marcador para o primeiro nome do contato na seção de variáveis, e cada pessoa recebe a mensagem personalizada.',
     ],
     exemploResultado:
       'Um cliente de uma loja de móveis some do WhatsApp há 3 dias. Como a janela de 24h fechou, uma mensagem livre não chega até ele. A loja usa um template de reengajamento aprovado e sem variáveis, tipo "Faz um tempo que a gente não conversa por aqui. Posso te ajudar com algo?", numa campanha para os inativos, e a mensagem chega, reabrindo a conversa.',
@@ -140,15 +140,15 @@ export const templatesContent: SaibaMaisContent[] = [
     oQueE:
       'É o texto principal do template. Nele você pode usar marcadores como {{1}}, {{2}} para indicar pra Meta que aquele trecho da mensagem é variável.',
     paraQueServe:
-      'Os marcadores {{1}}, {{2}} são exigidos pela Meta quando você quer que um trecho do template mude a cada envio, tipo o nome do contato. Hoje o ZappIQ ainda não preenche esses marcadores sozinho por contato numa campanha: o texto sai do jeito que foi escrito, marcador incluído. Por enquanto, use variáveis só se for você mesmo editar o texto antes de enviar.',
+      'Os marcadores {{1}}, {{2}} deixam um trecho da mensagem mudar para cada contato, tipo o nome dele. Quando você usa um marcador, aparece logo abaixo a seção "O que preenche cada variável": ali você escolhe o que entra em cada um (primeiro nome, nome completo, empresa do contato ou um texto fixo) e um valor de reserva para quando o contato não tiver aquele dado. Na campanha, cada pessoa recebe a mensagem já com o valor dela.',
     comoImplementar: [
       'Escreva a mensagem no campo "Corpo da mensagem" usando {{1}} onde quiser inserir o nome do contato, {{2}} para um segundo dado, e assim por diante.',
       'Use os marcadores em ordem, começando de {{1}}, sem pular números.',
       'Escreva um texto natural ao redor das variáveis, tipo "Oi {{1}}! Seu pedido {{2}} já está a caminho.".',
-      'Saiba que, ao escolher esse template numa campanha, o texto é enviado exatamente como está salvo: se não precisar variar o conteúdo por contato, prefira escrever o template sem marcadores.',
+      'Abaixo do corpo, na seção "O que preenche cada variável", diga a origem de cada marcador e, se quiser, um valor de reserva. Se não precisar personalizar, é só escrever o template sem marcadores.',
     ],
     exemploResultado:
-      'Uma ótica cria o template "Oi {{1}}! Seus óculos {{2}} já estão prontos para retirada.". Como o preenchimento automático por contato ainda não existe, ela usa esse texto como base e ajusta nome e modelo à mão nas conversas em que precisa reabrir contato.',
+      'Uma ótica cria "Oi {{1}}! Seus óculos já estão prontos para retirada." e aponta o {{1}} para o primeiro nome do contato, com reserva "tudo bem". Numa campanha, o João recebe "Oi João! ..." e quem não tem nome cadastrado recebe "Oi tudo bem! ...", tudo automático.',
     relacionados: ['templates.form.categoria', 'templates.form.rodape'],
   },
   {

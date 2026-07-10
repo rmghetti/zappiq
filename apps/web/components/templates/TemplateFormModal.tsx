@@ -14,10 +14,34 @@
  * POST /api/templates (criar) | PUT /api/templates/:id (editar).
  * metaStatus/submissão à Meta é feita na listagem (botão "Enviar à Meta").
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { X, Loader2, Check, AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { SaibaMais } from '@/components/shared/SaibaMais';
+
+type VarSource = 'contact.firstName' | 'contact.name' | 'contact.company' | 'fixed';
+interface TemplateVariable {
+  index: number;
+  source: VarSource;
+  fixedText?: string;
+  fallback?: string;
+}
+
+const VAR_SOURCES: { value: VarSource; label: string }[] = [
+  { value: 'contact.firstName', label: 'Primeiro nome do contato' },
+  { value: 'contact.name', label: 'Nome completo do contato' },
+  { value: 'contact.company', label: 'Empresa do contato' },
+  { value: 'fixed', label: 'Texto fixo' },
+];
+
+/** Números das variáveis {{1}}, {{2}}... no corpo, distintos e ordenados. */
+function extractVarNumbers(body: string): number[] {
+  const nums = new Set<number>();
+  const re = /\{\{\s*(\d+)\s*\}\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body))) nums.add(Number(m[1]));
+  return [...nums].sort((a, b) => a - b);
+}
 
 export interface TemplateRecord {
   id: string;
@@ -28,6 +52,7 @@ export interface TemplateRecord {
   footerText?: string | null;
   isReengagement?: boolean;
   metaStatus?: string;
+  variables?: TemplateVariable[] | null;
 }
 
 interface Props {
@@ -51,8 +76,11 @@ export function TemplateFormModal({ open, template, onClose, onSaved }: Props) {
   const [bodyText, setBodyText] = useState('');
   const [footerText, setFooterText] = useState('');
   const [isReengagement, setIsReengagement] = useState(false);
+  const [varMap, setVarMap] = useState<Record<number, { source: VarSource; fixedText?: string; fallback?: string }>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const varNumbers = useMemo(() => extractVarNumbers(bodyText), [bodyText]);
 
   useEffect(() => {
     if (open) {
@@ -62,11 +90,23 @@ export function TemplateFormModal({ open, template, onClose, onSaved }: Props) {
       setBodyText(template?.bodyText ?? '');
       setFooterText(template?.footerText ?? '');
       setIsReengagement(Boolean(template?.isReengagement));
+      const initialMap: Record<number, { source: VarSource; fixedText?: string; fallback?: string }> = {};
+      for (const v of template?.variables ?? []) {
+        initialMap[v.index] = { source: v.source, fixedText: v.fixedText, fallback: v.fallback };
+      }
+      setVarMap(initialMap);
       setError(null);
     }
   }, [open, template]);
 
   if (!open) return null;
+
+  function setVar(index: number, patch: Partial<{ source: VarSource; fixedText: string; fallback: string }>) {
+    setVarMap((prev) => {
+      const cur = prev[index] ?? { source: 'contact.firstName' as VarSource };
+      return { ...prev, [index]: { ...cur, ...patch } };
+    });
+  }
 
   async function handleSubmit() {
     setError(null);
@@ -78,12 +118,28 @@ export function TemplateFormModal({ open, template, onClose, onSaved }: Props) {
       setError('O corpo do template não pode ficar vazio.');
       return;
     }
+    // Monta o mapa de variáveis a partir dos {{N}} presentes no corpo.
+    const variables: TemplateVariable[] = varNumbers.map((n) => {
+      const v = varMap[n] ?? { source: 'contact.firstName' as VarSource };
+      return {
+        index: n,
+        source: v.source,
+        ...(v.source === 'fixed' ? { fixedText: (v.fixedText ?? '').trim() } : {}),
+        ...(v.fallback?.trim() ? { fallback: v.fallback.trim() } : {}),
+      };
+    });
+    const fixedSemTexto = variables.find((v) => v.source === 'fixed' && !v.fixedText);
+    if (fixedSemTexto) {
+      setError(`A variável {{${fixedSemTexto.index}}} está como "Texto fixo" mas sem texto.`);
+      return;
+    }
     const payload = {
       name: name.trim(),
       category,
       language: language.trim() || 'pt_BR',
       bodyText: bodyText.trim(),
       footerText: footerText.trim() || undefined,
+      variables,
       isReengagement,
     };
     setSubmitting(true);
@@ -196,6 +252,54 @@ export function TemplateFormModal({ open, template, onClose, onSaved }: Props) {
             />
             <p className="text-[10px] text-gray-400 mt-1">Use {'{{1}}'}, {'{{2}}'}… para variáveis que a Meta preenche no envio.</p>
           </div>
+
+          {/* Preenchimento das variáveis */}
+          {varNumbers.length > 0 && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3.5">
+              <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                O que preenche cada variável
+                <SaibaMais featureKey="templates.form.corpo-variaveis" />
+              </label>
+              <p className="text-[10px] text-gray-500 mb-2.5">
+                Cada campanha preenche estas variáveis por contato no envio. O valor de reserva é usado quando o contato não tem aquele dado.
+              </p>
+              <div className="space-y-2.5">
+                {varNumbers.map((n) => {
+                  const v = varMap[n] ?? { source: 'contact.firstName' as VarSource };
+                  return (
+                    <div key={n} className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-xs text-gray-500 w-9 shrink-0">{`{{${n}}}`}</span>
+                      <select
+                        value={v.source}
+                        onChange={(e) => setVar(n, { source: e.target.value as VarSource })}
+                        className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        {VAR_SOURCES.map((s) => (
+                          <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                      </select>
+                      {v.source === 'fixed' && (
+                        <input
+                          value={v.fixedText ?? ''}
+                          onChange={(e) => setVar(n, { fixedText: e.target.value })}
+                          placeholder="Texto fixo"
+                          className="flex-1 min-w-[120px] px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      )}
+                      {v.source !== 'fixed' && (
+                        <input
+                          value={v.fallback ?? ''}
+                          onChange={(e) => setVar(n, { fallback: e.target.value })}
+                          placeholder="Reserva (ex: cliente)"
+                          className="flex-1 min-w-[120px] px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Rodapé */}
           <div>

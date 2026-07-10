@@ -9,7 +9,7 @@ import {
 } from '../config/metrics.js';
 import { resolveAudienceWhere } from './impulsoAudience.js';
 import { resolveCampaignMessage } from './impulsoChannels.js';
-import { resolveCampaignSend } from './impulsoTemplateSend.js';
+import { resolveCampaignSend, buildTemplateComponents, type TemplateVariable } from './impulsoTemplateSend.js';
 
 // ── Conexão Redis para BullMQ ────────────────────
 // BullMQ requer uma conexão própria (não reutiliza ioredis do app)
@@ -99,10 +99,11 @@ export interface MessageSendJobData {
   to?: string;
   /**
    * Presente só no caminho de campanha quando a campanha usa um template da Meta
-   * APROVADO e SEM variáveis: o envio sai como template (vale fora da janela de
-   * 24h). Se ausente, envia texto livre (comportamento padrão).
+   * APROVADO com mapa de variáveis válido (ou sem variáveis): o envio sai como
+   * template (vale fora da janela de 24h). As variáveis são resolvidas por
+   * contato no envio. Se ausente, envia texto livre (comportamento padrão).
    */
-  template?: { name: string; language: string };
+  template?: { name: string; language: string; bodyText: string; variables: TemplateVariable[] };
 }
 
 /**
@@ -201,11 +202,24 @@ export async function processMessageSendJob(
     let result;
     if (data.template) {
       try {
+        // Resolve as variáveis {{N}} para este contato (nome, empresa) e monta
+        // os components da Meta. Sem variáveis, components fica vazio.
+        let components: any[] = [];
+        if (data.template.variables?.length) {
+          const contact = data.contactId
+            ? await prisma.contact.findUnique({
+                where: { id: data.contactId },
+                select: { name: true, company: true },
+              })
+            : null;
+          components = buildTemplateComponents(data.template.bodyText, data.template.variables, contact ?? {});
+        }
         result = await sendReplyTemplate({
           organizationId,
           conversationId,
           templateName: data.template.name,
           languageCode: data.template.language,
+          components,
         });
       } catch (tplErr) {
         logger.warn(
@@ -351,11 +365,16 @@ export async function dispatchCampaignJob(
     const sendPlan = resolveCampaignSend(campaign as any, 'whatsapp');
     const templateData =
       sendPlan.kind === 'template'
-        ? { name: sendPlan.templateName, language: sendPlan.languageCode }
+        ? {
+            name: sendPlan.templateName,
+            language: sendPlan.languageCode,
+            bodyText: sendPlan.bodyText,
+            variables: sendPlan.variables,
+          }
         : undefined;
     if (templateData) {
       logger.info(
-        `[Queue:CampaignDispatch] Campaign ${campaignId} usa template aprovado "${templateData.name}" (envio fora da janela de 24h habilitado)`,
+        `[Queue:CampaignDispatch] Campaign ${campaignId} usa template aprovado "${templateData.name}" (${templateData.variables.length} variáveis; envio fora da janela de 24h habilitado)`,
       );
     }
 
