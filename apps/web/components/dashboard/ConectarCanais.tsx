@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { SaibaMais } from '@/components/shared/SaibaMais';
+import { TourLauncher } from '@/components/shared/GuidedTour';
 
 // Link do Google Appointment Schedules (mesmo usado na landing /agendar)
 const ONBOARD_ASSISTIDO_URL =
@@ -367,7 +368,10 @@ export default function ConectarCanais() {
   return (
     <div className="space-y-6 max-w-3xl">
       <header>
-        <h2 className="text-lg font-semibold text-gray-900">Conectar canais</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">Conectar canais</h2>
+          <TourLauncher tourKey="conectar-whatsapp" autoStart />
+        </div>
         <p className="text-sm text-gray-500">
           Escolha o que ativar e conecte WhatsApp Business e/ou Instagram Direct.
           Seu agente passa a atender pelos canais que você ativar.
@@ -389,7 +393,7 @@ export default function ConectarCanais() {
       <TutorialAccessCard onOpen={() => setTutorialOpen(true)} pdfUrl={TUTORIAL_PDF_URL} />
 
       {/* Seletor de ativação */}
-      <div>
+      <div data-tour="canais-ativar">
         <p className="text-sm font-semibold text-gray-900 mb-2">O que você quer ativar?</p>
         <div className="grid sm:grid-cols-3 gap-3">
           <ActivationOption
@@ -443,7 +447,7 @@ export default function ConectarCanais() {
 
       {/* Conectar WhatsApp em 1 clique (Embedded Signup) — acima do manual */}
       {wantWa && (
-        <div className="rounded-xl border border-green-200 bg-green-50/60 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div data-tour="canais-whatsapp-1clique" className="rounded-xl border border-green-200 bg-green-50/60 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="w-11 h-11 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
             <Smartphone size={22} className="text-green-600" />
           </div>
@@ -495,6 +499,7 @@ export default function ConectarCanais() {
       )}
 {/* Formulário WhatsApp (manual / alternativa ao 1 clique) */}
       {wantWa && (
+        <div data-tour="canais-whatsapp-manual">
         <ChannelForm
           title={
             <>
@@ -511,6 +516,7 @@ export default function ConectarCanais() {
             { label: 'Access Token', value: waToken, set: setWaToken, placeholder: 'Token permanente do seu app Meta', secret: true, hint: 'Token de System User (permanente). Fica protegido.' },
           ]}
         />
+        </div>
       )}
 
       {/* Formulário Instagram */}
