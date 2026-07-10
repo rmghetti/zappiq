@@ -64,12 +64,12 @@ export const qualidadeContent: SaibaMaisContent[] = [
     titulo: 'Correção sugerida',
     clientSafe: true,
     oQueE:
-      'É o ajuste de texto que a IA propõe pras instruções do seu agente, pra corrigir o comportamento que reprovou no teste. Aparece um resumo em português simples e, abaixo, o texto exato que vai entrar (ou sair) das instruções, marcado em formato de antes e depois. Não precisa entender esse formato técnico, só ler o resumo e conferir o texto se quiser. Ao lado tem uma porcentagem de confiança, que mostra o quanto a IA acredita que essa correção resolve o problema.',
+      'É o ajuste de texto que a IA propõe pras instruções do seu agente, pra corrigir o comportamento que reprovou no teste. Aparece um resumo em português simples e, logo abaixo, o texto exato que vai ser acrescentado às instruções. A correção nunca apaga nada que já existe: ela soma uma regra nova, reforçando o ponto que falhou. Não precisa entender formato técnico, só ler o resumo e conferir o texto se quiser. Ao lado tem uma porcentagem de confiança, que mostra o quanto a IA acredita que essa correção resolve o problema.',
     paraQueServe:
       'Serve pra você decidir com segurança se aplica a mudança no agente, sem precisar escrever a regra você mesmo.',
     comoImplementar: [
       'Leia o resumo em destaque, logo acima do texto técnico.',
-      'Se quiser conferir o texto exato, abra o bloco abaixo do resumo.',
+      'O texto exato já aparece logo abaixo do resumo, num bloco separado. Não precisa clicar em nada pra ver.',
       'Se a confiança estiver baixa ou o texto não fizer sentido pro seu negócio, use "Editar antes de aplicar" ou recuse a sugestão.',
     ],
     exemploResultado:

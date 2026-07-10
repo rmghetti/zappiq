@@ -109,10 +109,10 @@ export const conversationsContent: SaibaMaisContent[] = [
       'Abra a conversa e clique no botão Nota, no topo da tela.',
       'Escreva o recado no campo amarelo que aparece.',
       'Clique em Salvar.',
-      'A nota fica registrada na linha do tempo, no painel de CRM à direita, junto com o histórico daquele contato.',
+      'A nota fica salva junto com a conversa. Hoje ela ainda não aparece na linha do tempo nem em outro lugar da tela, então use como lembrete rápido pra você mesmo e avise a equipe por outro canal se for algo importante.',
     ],
     exemploResultado:
-      'Numa barbearia, o atendente anota "cliente é alérgico a um dos produtos, avisar antes de aplicar" numa nota interna. Semanas depois, outro atendente abre a conversa, vê a nota na linha do tempo e evita o problema.',
+      'Numa barbearia, o atendente anota "cliente é alérgico a um dos produtos, avisar antes de aplicar" numa nota interna, como lembrete rápido durante o próprio atendimento. Como a nota ainda não aparece pra outra pessoa depois, ele também avisa o colega por WhatsApp interno pra garantir que ninguém esqueça.',
     relacionados: ['conversations.crm.timeline'],
   },
   {
@@ -125,12 +125,12 @@ export const conversationsContent: SaibaMaisContent[] = [
       'Serve para você ver, direto da conversa, se aquele cliente já é um negócio real em andamento, sem precisar abrir a tela de Pipeline de Vendas separadamente.',
     comoImplementar: [
       'Abra uma conversa e olhe o painel à direita, na seção Oportunidade.',
-      'Se houver um negócio aberto para aquele contato, você vê o título, a etapa (com uma cor) e o valor.',
+      'Se houver um negócio aberto para aquele contato, você vê o título, a etapa (com uma cor) e o valor, quando ele já tiver sido preenchido.',
       'Se aparecer "Nenhuma oportunidade aberta ainda", é porque ninguém criou um negócio para esse contato.',
-      'Para gerenciar o negócio por completo, como mudar a etapa ou editar o valor, acesse a tela de Pipeline de Vendas.',
+      'Para gerenciar o negócio por completo, como mudar a etapa ou preencher o valor, acesse a tela de Pipeline de Vendas.',
     ],
     exemploResultado:
-      'Numa imobiliária, a Iza identifica que um cliente quer alugar um apartamento e cria automaticamente uma oportunidade de R$ 2.400 na etapa "Qualificado". O corretor vê isso direto na conversa, sem precisar perguntar ao cliente de novo o que ele procura.',
+      'Numa imobiliária, a Iza identifica que um cliente quer alugar um apartamento e cria automaticamente uma oportunidade na etapa Proposta, ainda sem valor definido. O corretor vê isso direto na conversa e completa o valor do aluguel na tela de Pipeline de Vendas.',
     relacionados: ['conversations.crm.contato'],
   },
   {
@@ -156,12 +156,12 @@ export const conversationsContent: SaibaMaisContent[] = [
     titulo: 'Status da conversa',
     clientSafe: true,
     oQueE:
-      'É a etiqueta que mostra em que ponto está o atendimento daquela conversa. Aberta significa que a Iza está respondendo normalmente. Aguardando significa que o cliente mandou mensagem e ainda não teve resposta. Assumida significa que um atendente humano pegou a conversa. Fechada significa que o atendimento foi encerrado.',
+      'É a etiqueta que mostra em que ponto está o atendimento daquela conversa. Hoje ela aparece em inglês (OPEN, WAITING, ASSIGNED ou CLOSED), mas o sentido é esse: OPEN é a Iza respondendo normalmente. WAITING é quando o cliente mandou mensagem e ainda não teve resposta. ASSIGNED é quando um atendente humano pegou a conversa. CLOSED é quando o atendimento foi encerrado.',
     paraQueServe:
       'Serve para você bater o olho na lista de conversas e saber quais precisam de atenção agora, sem precisar abrir uma por uma.',
     comoImplementar: [
       'Veja a etiqueta colorida ao lado do telefone do contato, no topo da conversa aberta.',
-      'Verde é Aberta, amarelo é Aguardando, azul é Assumida (com um humano) e cinza é Fechada.',
+      'Verde é OPEN (aberta), amarelo é WAITING (aguardando), azul é ASSIGNED (assumida por um humano) e cinza é CLOSED (fechada).',
       'Use os filtros de status na lista à esquerda (Todas, Abertas, Aguardando, Fechadas) para focar no que importa.',
       'Uma conversa Fechada pode ser reaberta a qualquer momento pelo botão Reabrir.',
     ],
@@ -192,7 +192,7 @@ export const conversationsContent: SaibaMaisContent[] = [
     titulo: 'Próximos passos (tarefas)',
     clientSafe: true,
     oQueE:
-      'É a lista de tarefas ligadas àquele contato, criadas automaticamente pela IA a partir da conversa, por exemplo "ligar para confirmar orçamento", ou criadas manualmente pela sua equipe.',
+      'É a lista de tarefas ligadas àquele contato, criadas automaticamente pela IA quando ela percebe que o cliente quer fechar negócio (a tarefa se chama sempre "Follow-up: fechar a venda"), ou criadas manualmente pela sua equipe.',
     paraQueServe:
       'Serve para você não esquecer o que precisa fazer com aquele cliente depois da conversa, com o prazo visível quando houver.',
     comoImplementar: [
@@ -202,7 +202,7 @@ export const conversationsContent: SaibaMaisContent[] = [
       'Para marcar uma tarefa como concluída ou ver todas as tarefas da empresa juntas, acesse a tela Tarefas no menu principal.',
     ],
     exemploResultado:
-      'Numa oficina mecânica, a Iza identifica durante a conversa que o cliente precisa de um orçamento por telefone e cria automaticamente a tarefa "Ligar para confirmar orçamento do freio, vence amanhã". O mecânico vê isso no painel da conversa e não deixa passar.',
+      'Numa oficina mecânica, a Iza percebe durante a conversa que o cliente demonstrou intenção de fechar negócio e cria automaticamente a tarefa "Follow-up: fechar a venda", com vencimento pro dia seguinte. O mecânico vê isso no painel da conversa e não deixa passar.',
     relacionados: ['conversations.crm.oportunidade'],
   },
 ];

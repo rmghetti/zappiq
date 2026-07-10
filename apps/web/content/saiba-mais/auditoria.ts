@@ -10,17 +10,17 @@ export const auditoriaContent: SaibaMaisContent[] = [
     titulo: 'Trilha de Auditoria',
     clientSafe: true,
     oQueE:
-      'A Trilha de Auditoria é um registro automático de tudo que acontece com os dados dos seus clientes dentro da ZappIQ: quem acessou, alterou ou apagou uma informação, e quando isso aconteceu. Cada evento fica gravado numa lista que ninguém consegue editar depois, nem você.',
+      'A Trilha de Auditoria é um registro automático das principais ações feitas com os dados dos seus clientes dentro da ZappIQ: atribuição, encerramento, exclusão e restauração de conversas, desconexão de canais e o andamento das solicitações de titulares, entre outras. Cada evento fica gravado numa lista que ninguém consegue editar depois, nem você. Simples visualização de tela não entra nesse registro.',
     paraQueServe:
       'Serve para provar, se a ANPD (o órgão que fiscaliza proteção de dados no Brasil) ou um cliente perguntar, que sua empresa trata os dados pessoais com cuidado e consegue mostrar exatamente o que foi feito com eles. É a sua defesa documentada em caso de dúvida ou reclamação.',
     comoImplementar: [
       'Abra o menu Auditoria e entre em Trilha de Auditoria.',
-      'Use os filtros de Ação e Recurso para achar um evento específico, como uma exclusão de contato.',
+      'Use os filtros de Ação e Recurso para achar um evento específico, como o encerramento de uma conversa.',
       'Clique numa linha da tabela para ver o detalhe completo do evento.',
       'Se precisar comprovar que nada foi alterado, clique em Verificar Integridade.',
     ],
     exemploResultado:
-      'Numa clínica que recebeu reclamação de um paciente dizendo que os dados dele sumiram sem aviso, o dono abre a Trilha de Auditoria, filtra por "contact.delete" e encontra o registro exato: quem apagou, quando e por qual motivo. Isso resolve a reclamação em minutos, com prova documentada.',
+      'Numa clínica que recebeu um pedido de eliminação de dados de um paciente, o dono abre a Trilha de Auditoria, filtra por "dsr.delete" e encontra o registro exato: quem processou o pedido, quando e com qual justificativa. Isso resolve a dúvida em minutos, com prova documentada. Importante: hoje a exclusão avulsa de um contato feita direto na tela de Contatos não gera registro na Trilha; só as ações tratadas pelo fluxo de Requisições do Titular ficam auditadas dessa forma.',
     relacionados: ['audit-logs.verificar-integridade', 'audit-logs.base-legal', 'dsr.pagina'],
   },
   {
@@ -118,13 +118,13 @@ export const auditoriaContent: SaibaMaisContent[] = [
     titulo: 'Tipo de solicitação',
     clientSafe: true,
     oQueE:
-      'É a coluna que mostra que tipo de pedido o cliente fez sobre os próprios dados. Os principais tipos são: Acesso (ver os dados), Correção (arrumar uma informação errada), Portabilidade (levar os dados para outro lugar), Eliminação (apagar tudo), Anonimização (remover a identificação mas manter o histórico) e Revogação de consentimento (cancelar uma autorização dada antes).',
+      'É a coluna que mostra que tipo de pedido o cliente fez sobre os próprios dados. Os tipos são: Acesso (ver os dados), Correção (arrumar uma informação errada), Portabilidade (levar os dados para outro lugar), Eliminação (apagar), Anonimização (trocar dados identificáveis por dado genérico), Revogação de consentimento (cancelar uma autorização dada antes) e Informação (saber com quem os dados foram compartilhados).',
     paraQueServe:
-      'Serve para você saber, antes de agir, qual é exatamente a ação esperada, já que cada tipo pede um tratamento diferente. Eliminação e Anonimização apagam dados de verdade; Acesso e Portabilidade só entregam uma cópia.',
+      'Serve para você saber, antes de agir, qual é exatamente a ação esperada, já que cada tipo pede um tratamento diferente. Hoje, no sistema, Eliminação e Anonimização usam o mesmo botão e produzem o mesmo resultado: as conversas do titular são removidas e o contato é anonimizado. Acesso e Portabilidade só entregam uma cópia dos dados.',
     comoImplementar: [
       'Veja a coluna Tipo na tabela de Requisições do Titular.',
-      'Antes de clicar em qualquer botão de ação, confirme o tipo: um pedido de Acesso pede para exportar, um pedido de Eliminação pede para apagar.',
-      'Em caso de dúvida entre Eliminação e Anonimização, lembre que a Eliminação remove a conversa e a Anonimização troca nome, telefone e e-mail por dado genérico.',
+      'Antes de clicar em qualquer botão de ação, confirme o tipo: um pedido de Acesso pede para exportar, um pedido de Eliminação ou Anonimização pede para clicar em Eliminar.',
+      'Hoje Eliminação e Anonimização levam ao mesmo resultado no sistema: a conversa é removida e o contato fica anonimizado.',
     ],
     exemploResultado:
       'Uma barbearia recebe dois pedidos no mesmo dia: um de Acesso e outro de Eliminação. O dono confere o tipo antes de agir e, no primeiro caso, exporta os dados em PDF para o cliente; no segundo, elimina o cadastro. Cada pedido é tratado do jeito certo, sem confundir um com o outro.',
@@ -211,9 +211,9 @@ export const auditoriaContent: SaibaMaisContent[] = [
       'Serve para você não se perder na hora de atender um pedido: cada tipo tem seu próprio caminho, e seguir a ordem errada pode gerar problema, como concluir um pedido de acesso sem ter exportado os dados antes.',
     comoImplementar: [
       'Veja o Tipo do pedido na tabela antes de agir.',
-      'Clique em Iniciar para mudar o status de Pendente para Em andamento.',
+      'Clique em Iniciar para sinalizar que alguém já está tratando o pedido (recomendado, mas os botões de ação abaixo já aparecem mesmo com o pedido Pendente).',
       'Se o tipo for Acesso ou Portabilidade, exporte os dados em JSON ou CSV, confira o arquivo e só então clique em Concluir + avisar.',
-      'Se o tipo for Eliminação ou Anonimização, clique direto em Eliminar; essa ação já anonimiza o contato e marca o pedido como concluído.',
+      'Se o tipo for Eliminação ou Anonimização, clique direto em Eliminar; essa ação já remove as conversas, anonimiza o contato e marca o pedido como concluído.',
       'Para os demais tipos, use Concluir depois de resolver o pedido manualmente, por exemplo uma Correção feita direto no cadastro.',
       'Se não for possível atender o pedido, clique em Rejeitar e escreva o motivo; o sistema pede essa justificativa antes de confirmar.',
     ],

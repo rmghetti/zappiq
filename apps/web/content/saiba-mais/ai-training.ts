@@ -19,7 +19,7 @@ export const aiTrainingContent: SaibaMaisContent[] = [
       'O número atualiza sozinho assim que você salva algo em qualquer aba.',
     ],
     exemploResultado:
-      'Numa clínica de estética que acabou de assinar a ZappIQ, o Readiness começa em 20%, só com os dados básicos do cadastro. Depois que o dono responde o questionário, sobe para 55%. Ao subir 8 documentos e conectar o WhatsApp, chega a 90%, e a IA passa a responder dúvida de preço e horário sem inventar nada.',
+      'Numa clínica de estética que acabou de assinar a ZappIQ, o Readiness começa em 20%, só com os dados básicos do cadastro. Depois que o dono responde o questionário, sobe para 55%. Ao subir 8 documentos e conectar o WhatsApp, chega a 80%, e a IA já responde dúvida de preço e horário sem inventar nada. Para chegar perto de 100%, falta cadastrar perguntas e respostas mais específicas do negócio.',
     relacionados: ['dashboard.agent-training-widget'],
   },
   {
@@ -54,7 +54,7 @@ export const aiTrainingContent: SaibaMaisContent[] = [
     comoImplementar: [
       'Vá até a aba Documentos e role até o fim da página.',
       'Veja os eventos mais recentes na lista, com o tipo de ação e quem fez.',
-      'Clique em "Ver todos os eventos" para abrir o histórico completo.',
+      'Clique em "Ver todos os [número] eventos", no fim da lista, para abrir o histórico completo.',
     ],
     exemploResultado:
       'Numa loja com dois funcionários treinando a IA, o histórico mostra que a atendente Ana subiu a tabela de preços na terça e o dono editou a identidade do agente na quinta. Se a IA passar a responder algo diferente, dá para saber exatamente o que mudou e quando.',
@@ -69,8 +69,9 @@ export const aiTrainingContent: SaibaMaisContent[] = [
     paraQueServe:
       'Serve para você revisar antes de um horário virar compromisso oficial, útil quando o agendamento depende de checar disponibilidade de um profissional específico ou de algo que a IA não enxerga sozinha.',
     comoImplementar: [
-      'Na aba Agendamento, ao criar ou editar um tipo, marque a caixa "Exigir minha confirmação antes de valer".',
+      'Na aba Agendamento, ao criar um novo tipo, marque a caixa "Exigir minha confirmação antes de valer".',
       'Deixe desmarcada se quer que o horário já valha na hora, sem revisão manual.',
+      'Hoje não dá para editar um tipo já salvo. Para mudar essa opção depois, remova o tipo na lixeira e cadastre de novo com a caixa como quiser.',
       'Agendamentos pendentes de confirmação aparecem na Agenda do CRM, dentro da aba de agendamentos.',
     ],
     exemploResultado:

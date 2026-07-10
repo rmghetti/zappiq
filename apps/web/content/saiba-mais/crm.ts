@@ -17,7 +17,7 @@ export const crmContent: SaibaMaisContent[] = [
     paraQueServe:
       'Serve para você ver de relance quantas vendas estão em andamento, em que fase cada uma está e quanto dinheiro está em jogo, sem precisar abrir planilha nem perguntar pro time como estão as negociações.',
     comoImplementar: [
-      'Sempre que a IA identifica uma oportunidade de venda numa conversa de WhatsApp, ela cria um deal aqui automaticamente, já com o contato vinculado.',
+      'Na primeira vez que a IA identifica uma intenção de compra numa conversa de WhatsApp, ela cria um deal aqui automaticamente, já com o contato vinculado. Se esse contato já tiver um negócio aberto, a IA move esse negócio para a fase de Proposta em vez de criar um novo.',
       'Para criar um deal você mesmo, clique em "Novo Deal" no canto superior direito, ou no botão + no topo de qualquer coluna.',
       'Arraste o cartão para outra coluna quando o negócio avançar. Ao soltar em "Perdido", o sistema pede o motivo da perda.',
       'Clique em qualquer cartão para abrir os detalhes: editar título e valor, ver o contato, a conversa de origem e o histórico completo do negócio.',
@@ -128,7 +128,7 @@ export const crmContent: SaibaMaisContent[] = [
       'Use esse número pro planejamento de caixa: ele é mais confiável do que somar o valor de todos os negócios abertos.',
     ],
     exemploResultado:
-      'Uma prestadora de serviços tem R$ 30 mil em negócios abertos em Novo (chance baixa de fechar) e R$ 15 mil em Negociação (chance alta). O Forecast pondera isso e mostra algo como R$ 12 mil de previsão realista, em vez dos R$ 45 mil somados sem critério, evitando que o dono planeje gastos com base num valor otimista demais.',
+      'Uma prestadora de serviços tem R$ 30 mil em negócios abertos em Novo (chance baixa de fechar) e R$ 15 mil em Negociação (chance alta). O Forecast pondera isso e mostra algo como R$ 13,5 mil de previsão realista, em vez dos R$ 45 mil somados sem critério, evitando que o dono planeje gastos com base num valor otimista demais.',
     relacionados: ['crm.pipeline.forecast-breakdown', 'crm.pipeline.kpis'],
   },
   {
@@ -136,7 +136,7 @@ export const crmContent: SaibaMaisContent[] = [
     titulo: 'Sales Velocity',
     clientSafe: true,
     oQueE:
-      'Sales Velocity é a velocidade em que a receita entra no seu negócio, medida em reais por dia. A conta junta 4 informações: quantos negócios estão abertos, sua taxa de vendas ganhas (Win Rate), o ticket médio e quanto tempo, em média, um negócio leva pra fechar (Ciclo Médio).',
+      'Sales Velocity é a velocidade em que a receita entra no seu negócio, medida em reais por dia. A conta junta 4 informações: quantos negócios você ganhou no período, sua taxa de vendas ganhas (Win Rate), o ticket médio e quanto tempo, em média, um negócio leva pra fechar (Ciclo Médio).',
     paraQueServe:
       'Serve como um termômetro único da saúde comercial: se esse número sobe, significa que você está vendendo mais rápido, com ticket maior ou com ciclo de venda mais curto. Se cai, alguma dessas engrenagens travou.',
     comoImplementar: [
@@ -145,7 +145,7 @@ export const crmContent: SaibaMaisContent[] = [
       'Ações que aumentam esse número: fechar negócios mais rápido, vender ticket maior ou converter mais propostas em vendas.',
     ],
     exemploResultado:
-      'Uma loja de eletrônicos tem 40 negócios abertos, Win Rate de 30%, ticket médio de R$ 800 e ciclo médio de 10 dias. O Sales Velocity dá algo perto de R$ 960 por dia. Se o dono reduzir o tempo de resposta e o ciclo cair pra 7 dias, esse número sobe mesmo sem vender mais negócios, porque o dinheiro entra mais rápido.',
+      'Uma loja de eletrônicos ganhou 40 negócios no período, com Win Rate de 30%, ticket médio de R$ 800 e ciclo médio de 10 dias. O Sales Velocity dá algo perto de R$ 960 por dia. Se o dono reduzir o tempo de resposta e o ciclo cair pra 7 dias, esse número sobe mesmo sem ganhar mais negócios, porque o dinheiro entra mais rápido.',
     relacionados: ['crm.pipeline.kpis', 'crm.pipeline.kpis.win-rate'],
   },
   {
@@ -192,7 +192,7 @@ export const crmContent: SaibaMaisContent[] = [
     titulo: 'Agenda',
     clientSafe: true,
     oQueE:
-      'A Agenda é o lugar único onde ficam todos os agendamentos do seu negócio, sejam eles marcados pela IA numa conversa de WhatsApp ou sincronizados de um calendário externo, como Google Agenda. Ela é a fonte da verdade: tudo que a IA agenda aparece aqui primeiro.',
+      'A Agenda é o lugar único onde ficam todos os próximos agendamentos do seu negócio (até 60 dias à frente), sejam eles marcados pela IA numa conversa de WhatsApp ou sincronizados de um calendário externo, como Google Agenda. Ela é a fonte da verdade: tudo que a IA agenda aparece aqui primeiro.',
     paraQueServe:
       'Serve pra você e sua equipe confirmarem, remarcarem ou cancelarem um horário marcado pela IA, e registrarem se o cliente compareceu, sem precisar checar WhatsApp e calendário separadamente.',
     comoImplementar: [
@@ -210,12 +210,12 @@ export const crmContent: SaibaMaisContent[] = [
     titulo: 'Origem do agendamento',
     clientSafe: true,
     oQueE:
-      'É a etiqueta pequena ao lado de cada agendamento que mostra de onde ele veio. "Via IA" quer dizer que a própria IA marcou esse horário durante uma conversa de WhatsApp. "Calendário externo" quer dizer que o agendamento veio de um Google Agenda ou Outlook conectado à sua conta. Quando não aparece etiqueta, o horário foi registrado direto por alguém da equipe.',
+      'É a etiqueta pequena ao lado de cada agendamento que mostra de onde ele veio. "Via IA" quer dizer que a própria IA marcou esse horário durante uma conversa de WhatsApp. "Calendário externo" quer dizer que o agendamento veio de um Google Agenda conectado à sua conta. Quando não aparece etiqueta, o horário foi registrado direto por alguém da equipe.',
     paraQueServe:
       'Serve pra você distinguir rapidamente quais horários a IA está gerando sozinha versus quais vieram de outro lugar, e acompanhar se a IA está realmente ajudando a preencher a agenda.',
     comoImplementar: [
       'A etiqueta aparece automaticamente na segunda linha de cada agendamento, junto com o telefone do cliente.',
-      'Se você já usa Google Agenda ou Outlook e quer que ele sincronize com essa Agenda, configure a conexão em Configurações.',
+      'Se você já usa Google Agenda e quer que ele sincronize com essa Agenda, configure a conexão em Treinar IA → Agendamento.',
       'Compare ao longo do tempo quantos agendamentos vêm com a etiqueta "via IA": esse número cresce conforme a IA fica mais treinada em agendamento.',
     ],
     exemploResultado:

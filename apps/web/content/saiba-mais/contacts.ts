@@ -31,7 +31,7 @@ export const contactsContent: SaibaMaisContent[] = [
     paraQueServe:
       'Serve para você priorizar quem atender primeiro quando tem muito contato na base. Em vez de ligar em ordem aleatória, você olha o score e fala primeiro com quem está mais perto de fechar negócio.',
     comoImplementar: [
-      'Olhe a coluna Score na tabela de Contatos: a barrinha azul cheia junto com o número mostra a nota.',
+      'Olhe a coluna Score na tabela de Contatos: a barrinha verde cheia junto com o número mostra a nota.',
       'Ordene mentalmente pelos scores mais altos quando for decidir quem ligar ou mandar mensagem primeiro.',
       'Clique no contato para ver a conversa que gerou aquele score e entender o motivo.',
     ],

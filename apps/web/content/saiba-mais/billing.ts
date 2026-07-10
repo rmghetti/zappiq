@@ -9,7 +9,7 @@ export const billingContent: SaibaMaisContent[] = [
     titulo: 'Plano e Fatura',
     clientSafe: true,
     oQueE:
-      'É a tela financeira da sua conta ZappIQ. Aqui você vê o plano que está pagando, o estado da sua assinatura, quando vence a próxima cobrança, quanto está usando do seu limite e pode trocar de plano ou comprar um add-on.',
+      'É a tela financeira da sua conta ZappIQ. Aqui você vê o plano que está pagando, o estado da sua assinatura, quando vence a próxima cobrança, quanto está usando do seu limite e pode trocar de plano. Add-ons entram junto quando você assina ou troca de plano; se já for assinante e quiser adicionar um depois, é só falar com o suporte.',
     paraQueServe:
       'Serve para você entender exatamente o que está pagando e por quê, sem surpresa no cartão. É também de onde você faz upgrade quando a operação cresce ou ajusta o plano se estiver pagando por algo que não usa.',
     comoImplementar: [

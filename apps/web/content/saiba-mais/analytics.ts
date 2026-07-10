@@ -14,26 +14,26 @@ export const analyticsContent: SaibaMaisContent[] = [
       'Serve para você bater o olho de manhã e saber, em segundos, se a operação está saudável: quantas conversas a IA resolveu sozinha, onde ela precisou de gente, e se apareceu algum problema que pode custar cliente ou venda.',
     comoImplementar: [
       'Abra o menu Analytics e vá até o bloco Pulso, no topo da página.',
-      'Escolha o período que quer enxergar (ontem, últimos 7 dias ou um intervalo personalizado).',
-      'Clique em qualquer indicador para abrir o detalhe e ver as conversas por trás daquele número.',
+      'Leia o resumo do dia anterior, que já vem pronto assim que a página carrega.',
+      'Se quiser uma leitura mais atual, clique em "Atualizar" (ou "Gerar com IA", na primeira vez) dentro do próprio bloco Pulso.',
     ],
     exemploResultado:
-      'Numa loja com 400 conversas por dia, o Pulso mostra pela manhã que a IA resolveu 320 sozinha (80%), que 12 clientes ficaram sem resposta acima de 10 minutos e que o assunto "troca de produto" foi o que mais gerou dúvida. Com isso, o dono já sabe onde treinar a IA e qual fila priorizar, sem abrir uma conversa sequer.',
-    relacionados: ['analytics.ia-vs-humano', 'analytics.vendas-atribuidas'],
+      'Numa loja com 400 conversas no dia anterior, o Pulso mostra pela manhã que a IA automatizou 80% do atendimento, que 36 conversas foram fechadas e que o tempo médio de 1ª resposta ficou em 40 segundos. Com isso, o dono já sabe se a operação está indo bem ou se precisa reforçar a equipe, sem abrir uma conversa sequer.',
+    relacionados: ['analytics.vendas-ia', 'analytics.resultado.kpis'],
   },
   {
     featureKey: 'analytics.pagina',
     titulo: 'Analytics',
     clientSafe: true,
     oQueE:
-      'A página de Analytics reúne em um só lugar os números da sua operação de atendimento. Ela é dividida em três blocos: Resultado (o que a operação entregou), Operação (como está o atendimento no dia a dia) e Campanhas (o alcance dos disparos em massa).',
+      'A página de Analytics reúne em um só lugar os números da sua operação de atendimento. Ela é dividida em quatro blocos: Resultado (o que a operação entregou), Vendas atribuídas à IA (quanto disso virou venda), Operação (como está o atendimento no dia a dia) e Campanhas (o alcance dos disparos em massa).',
     paraQueServe:
       'Serve para você decidir rápido sem abrir conversa por conversa: onde a IA está indo bem, onde precisa de mais treino e se as campanhas estão trazendo resposta.',
     comoImplementar: [
       'Escolha o período no topo da página (24 horas, 7 dias, 30 dias ou um intervalo específico).',
       'Leia o Pulso, o resumo em texto logo abaixo do seletor de período.',
-      'Desça pelos três blocos: Resultado, Operação e Campanhas.',
-      'Clique em qualquer gráfico ou card para abrir a lista de conversas ou mensagens por trás daquele número.',
+      'Desça pelos quatro blocos: Resultado, Vendas atribuídas à IA, Operação e Campanhas.',
+      'Clique numa barra do gráfico de Volume ou numa fatia do gráfico de Sentimento para abrir a lista de mensagens ou conversas por trás daquele número.',
     ],
     exemploResultado:
       'Numa clínica com 300 conversas por mês, o dono abre o Analytics na segunda de manhã, vê que a IA resolveu 78% sozinha na semana anterior, que o sentimento das conversas ficou majoritariamente neutro e que a última campanha de reengajamento trouxe 40 respostas. Em menos de um minuto ele sabe se precisa agir em algo.',
@@ -44,7 +44,7 @@ export const analyticsContent: SaibaMaisContent[] = [
     titulo: 'Resultado da operação',
     clientSafe: true,
     oQueE:
-      'Este bloco mostra quatro números centrais do período escolhido: quanto a IA respondeu sozinha, quantas conversas foram resolvidas, quantos contatos novos entraram e a nota média de satisfação (CSAT). Ao lado de cada número aparece a variação em relação ao período anterior: pp quando é uma taxa (pontos percentuais) ou % quando é uma quantidade.',
+      'Este bloco mostra quatro números centrais do período escolhido: quanto a IA respondeu sozinha, quantas conversas foram resolvidas, quantos contatos novos entraram e a nota média de satisfação (CSAT). Ao lado de cada número aparece a variação em relação ao período anterior: pp quando é uma taxa (pontos percentuais), % quando é uma quantidade, ou um número puro, como +0,4, quando é uma nota, como no caso do CSAT.',
     paraQueServe:
       'Serve para você ver de relance se a operação está melhorando ou piorando, sem precisar comparar planilhas ou abrir relatório nenhum.',
     comoImplementar: [
@@ -61,16 +61,16 @@ export const analyticsContent: SaibaMaisContent[] = [
     titulo: 'CSAT (satisfação do cliente)',
     clientSafe: true,
     oQueE:
-      'CSAT é a sigla em inglês para satisfação do cliente. Aqui ela aparece como uma nota média de 0 a 5, calculada a partir das avaliações que os clientes dão sobre o atendimento que receberam.',
+      'CSAT é a sigla em inglês para satisfação do cliente. Aqui ela aparece como uma nota média de 0 a 5, calculada a partir das avaliações que os clientes respondem sobre o atendimento que receberam. Esse mecanismo de avaliação ainda não vem ativo por padrão: enquanto não houver notas registradas na sua operação, o card mostra "-".',
     paraQueServe:
-      'Serve para você saber se o jeito que a IA e a equipe estão atendendo realmente agrada quem conversa no WhatsApp, não só se as conversas estão sendo resolvidas rápido.',
+      'Quando a avaliação estiver ativa, serve para você saber se o jeito que a IA e a equipe estão atendendo realmente agrada quem conversa no WhatsApp, não só se as conversas estão sendo resolvidas rápido.',
     comoImplementar: [
       'Veja a nota no card CSAT, dentro do bloco Resultado.',
-      'Compare com a variação do período anterior, mostrada logo abaixo do número.',
-      'Se a nota cair, revise as conversas com sentimento negativo no bloco Operação para entender o motivo.',
+      'Se aparecer "-", é porque ainda não há avaliações de clientes registradas nesse período.',
+      'Para ativar a coleta de avaliação de satisfação na sua operação, fale com o suporte da ZappIQ.',
     ],
     exemploResultado:
-      'Numa academia com 200 conversas no mês, o CSAT está em 4,2. Ao comparar com o mês anterior, que estava em 4,6, o dono percebe a queda e vai direto no gráfico de sentimento das conversas para achar o que mudou.',
+      'Numa academia com 200 conversas no mês e avaliação já ativa, o CSAT aparece em 4,2. Ao comparar com o mês anterior, que estava em 4,6, o dono percebe a queda e vai direto no gráfico de sentimento das conversas para achar o que mudou.',
     relacionados: ['analytics.resultado.kpis', 'analytics.operacao.sentimento'],
   },
   {
@@ -83,9 +83,9 @@ export const analyticsContent: SaibaMaisContent[] = [
       'Serve para você enxergar o retorno financeiro real da IA no atendimento, não só o número de conversas que ela respondeu.',
     comoImplementar: [
       'Marque as vendas como ganhas no CRM, na tela de Pipeline, quando elas fecharem normalmente.',
-      'Volte ao Analytics e veja o valor total dividido em Fechada pela Iza e Assistida pela Iza.',
+      'Volte ao Analytics e veja o valor total dividido em "Fechada pela IA" e "Assistida pela IA", no resumo do topo.',
       'Clique num negócio da lista para abrir o detalhe e ver as mensagens da Iza que ajudaram a fechar aquela venda.',
-      'Se aparecer um vínculo sugerido pela IA na caixa amarela no topo, confirme ou recuse: isso ajuda a IA a acertar essas contas no futuro.',
+      'Se aparecer um vínculo sugerido pela IA na caixa amarela no topo, confirme ou recuse: isso evita que a mesma sugestão volte a aparecer para esse negócio e mantém o valor de vendas atribuídas correto.',
     ],
     exemploResultado:
       'Numa clínica odontológica que fechou R$ 18.000 em vendas no mês, o Analytics mostra R$ 11.000 fechados pela Iza sozinha e R$ 7.000 assistidos, onde ela conversou mas um atendente humano finalizou. O dono usa esse número para justificar manter o plano da IA.',
@@ -147,16 +147,16 @@ export const analyticsContent: SaibaMaisContent[] = [
     titulo: 'Sentimento das conversas',
     clientSafe: true,
     oQueE:
-      'É um gráfico de pizza que mostra como a IA classificou automaticamente o clima das conversas: Positivo, Neutro ou Negativo. Essa classificação é feita pela própria IA a partir do que o cliente escreveu, não é uma pesquisa que o cliente responde.',
+      'É um gráfico de pizza que mostra como as conversas são classificadas por sentimento: Positivo, Neutro ou Negativo, a partir do que o cliente escreveu, não é uma pesquisa que o cliente responde. A ideia é que a IA faça essa leitura automaticamente, mas esse recurso ainda não está ligado ao fluxo normal de mensagens: por enquanto, esse gráfico costuma aparecer vazio, com a mensagem "Sem dados de sentimento".',
     paraQueServe:
-      'Serve para você priorizar atenção humana nas conversas marcadas como Negativo antes que o cliente desista ou reclame em outro lugar.',
+      'Quando ativo, serve para você priorizar atenção humana nas conversas marcadas como Negativo antes que o cliente desista ou reclame em outro lugar.',
     comoImplementar: [
       'Veja a fatia de cada sentimento no gráfico, dentro do bloco Operação.',
-      'Clique numa fatia para abrir a lista das conversas daquele sentimento.',
-      'Revise as conversas Negativo primeiro: são as que mais precisam de atenção humana.',
+      'Se o gráfico aparecer vazio, é porque a classificação automática ainda não está ativa na sua operação.',
+      'Quando houver dados, clique numa fatia para abrir a lista das conversas daquele sentimento e revise as marcadas como Negativo primeiro.',
     ],
     exemploResultado:
-      'Numa barbearia com 150 conversas no mês, o gráfico mostra 70% Neutro, 22% Positivo e 8% Negativo. O dono abre as 12 conversas Negativo e descobre que a maioria reclamava do mesmo horário lotado, então ajusta a agenda.',
+      'Numa barbearia com 150 conversas no mês e a classificação já ativa, o gráfico mostra 70% Neutro, 22% Positivo e 8% Negativo. O dono abre as 12 conversas Negativo e descobre que a maioria reclamava do mesmo horário lotado, então ajusta a agenda.',
     relacionados: ['analytics.operacao.volume'],
   },
   {

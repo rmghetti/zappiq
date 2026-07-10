@@ -15,7 +15,7 @@ export const settingsContent: SaibaMaisContent[] = [
     comoImplementar: [
       'Abra Configurações e fique na aba Geral.',
       'Veja o nome do plano logo abaixo do campo Nome da organização.',
-      'Para ver o que está incluso, os limites de uso e comparar com outros planos, vá em Plano e Fatura no menu.',
+      'Para ver o que está incluso, os limites de uso e comparar com outros planos, vá em Plano & Fatura na barra lateral.',
     ],
     exemploResultado:
       'Um dono de pet shop que assinou há três meses não lembra se está no Growth ou no Scale. Ele abre Configurações, aba Geral, vê "Growth" escrito ali e confirma sem precisar procurar o e-mail da assinatura.',
@@ -28,15 +28,16 @@ export const settingsContent: SaibaMaisContent[] = [
     oQueE:
       'É o campo onde você escolhe o tipo do seu negócio: dentista, psicólogo, academia, advogado, salão de beleza, pet shop, imobiliária, restaurante, loja online ou genérico.',
     paraQueServe:
-      'A IA usa esse segmento para responder com o vocabulário certo do seu ramo. Um dentista e uma imobiliária não falam da mesma forma com o cliente, e essa escolha ajusta isso automaticamente.',
+      'A IA usa esse segmento para ajustar o vocabulário do seu ramo quando o agente é configurado. Um dentista e uma imobiliária não falam da mesma forma com o cliente, e essa escolha ajuda a IA a soar mais alinhada com o seu negócio.',
     comoImplementar: [
       'Abra Configurações e vá até a aba IA/Agente.',
       'Escolha o segmento mais parecido com o seu negócio na lista Segmento.',
       'Se o seu ramo não estiver na lista, escolha Genérico.',
       'Clique em Salvar configurações.',
+      'Se o agente já estava em uso e você mudar o segmento depois, teste com uma mensagem real. Se não perceber diferença nas respostas, fale com o suporte para confirmar que a alteração foi aplicada.',
     ],
     exemploResultado:
-      'Numa clínica odontológica que escolheu o segmento Dentista, quando um cliente pergunta "vocês fazem clareamento?" a IA já responde com o vocabulário certo, falando de consulta e avaliação, em vez de dar uma resposta genérica de vendas.',
+      'Numa clínica odontológica que escolheu o segmento Dentista logo na configuração do agente, quando um cliente pergunta "vocês fazem clareamento?" a IA responde com o vocabulário certo, falando de consulta e avaliação, em vez de dar uma resposta genérica de vendas.',
     relacionados: ['settings.ai.tom-de-voz'],
   },
   {
@@ -51,10 +52,10 @@ export const settingsContent: SaibaMaisContent[] = [
       'Abra Configurações e vá até a aba IA/Agente.',
       'Escolha uma opção no campo Tom de voz.',
       'Clique em Salvar configurações.',
-      'Mande uma mensagem de teste no WhatsApp conectado para ver como a IA ficou.',
+      'Mande uma mensagem de teste no WhatsApp conectado para conferir se a IA já está respondendo no tom escolhido. Se não notar diferença, fale com o suporte para confirmar que a alteração foi aplicada ao agente.',
     ],
     exemploResultado:
-      'Numa clínica de estética, o dono trocou o tom de Técnico para Amigável. Antes a IA respondia "o procedimento indicado é a limpeza de pele profunda, com sessão de 60 minutos". Depois passou a responder "oi, pra sua pele recomendamos a limpeza profunda, dura uma horinha e o resultado é ótimo". As duas informam a mesma coisa, mas a segunda soa mais parecida com a clínica.',
+      'Numa clínica de estética, o tom Amigável foi escolhido logo na configuração do agente: em vez de "o procedimento indicado é a limpeza de pele profunda, com sessão de 60 minutos", a IA passou a responder "oi, pra sua pele recomendamos a limpeza profunda, dura uma horinha e o resultado é ótimo". As duas informam a mesma coisa, mas a segunda soa mais parecida com a clínica.',
     relacionados: ['settings.ai.segmento'],
   },
   {
@@ -90,7 +91,7 @@ export const settingsContent: SaibaMaisContent[] = [
       'Clique em Salvar preferências.',
     ],
     exemploResultado:
-      'Com o teto em R$200 e cada mensagem extra custando R$0,50, a IA continua atendendo até acumular R$200 em excedente, o equivalente a cerca de 400 mensagens além do plano, e aí pausa até você fazer upgrade ou o ciclo virar.',
+      'Com o teto em R$200, a IA continua atendendo até acumular R$200 em excedente e aí pausa até você fazer upgrade ou o ciclo virar.',
     relacionados: ['settings.billing.auto-overage'],
   },
   {
@@ -98,18 +99,19 @@ export const settingsContent: SaibaMaisContent[] = [
     titulo: 'Conectar WhatsApp em 1 clique',
     clientSafe: true,
     oQueE:
-      'É a forma mais rápida de ligar seu WhatsApp Business à ZappIQ: você clica em Conectar com a Meta, faz login na conta que administra o negócio e autoriza. Não precisa copiar nenhum código nem token na mão.',
+      'É a forma mais rápida de ligar seu WhatsApp Business à ZappIQ: você clica em Conectar com a Meta, faz login na conta que administra o negócio e autoriza. Não precisa copiar nenhum código nem token na mão. Hoje esse fluxo automático ainda depende de uma liberação da Meta, então pode não concluir a conexão para todo cliente.',
     paraQueServe:
-      'Ativa o canal principal do produto sem exigir que você entre no Meta Business Suite para caçar IDs e tokens.',
+      'Quando disponível, ativa o canal principal do produto sem exigir que você entre no Meta Business Suite para caçar IDs e tokens. Enquanto a liberação da Meta não chega para a sua conta, o caminho garantido é o formulário manual logo abaixo.',
     comoImplementar: [
       'Abra Configurações e vá até a aba Canais.',
       'Marque WhatsApp, ou WhatsApp e Instagram, em "O que você quer ativar?".',
       'Clique em Conectar com a Meta, no card verde.',
       'Faça login com a conta que administra o WhatsApp Business do seu negócio e autorize as permissões pedidas.',
       'Escolha a conta e o número que quer conectar quando o popup da Meta pedir.',
+      'Se travar ou não concluir, use o formulário de conexão manual logo abaixo: hoje é o caminho que funciona para qualquer cliente.',
     ],
     exemploResultado:
-      'Num salão de beleza, a dona clica em Conectar com a Meta, faz login, escolhe o número que já usa para atender clientes e autoriza. Em menos de um minuto o card mostra "WhatsApp conectado". Se travar ou a conexão for recusada, ela pode terminar pelo formulário manual logo abaixo, sem perder o que já tinha feito.',
+      'Num salão de beleza, a dona clica em Conectar com a Meta, faz login e autoriza. Hoje esse fluxo em 1 clique ainda depende de uma liberação da Meta, então pode não concluir a conexão. Quando isso acontece, ela termina pelo formulário manual logo abaixo em poucos minutos, sem perder o que já tinha feito.',
     relacionados: ['settings.canais.whatsapp-manual', 'settings.canais.saude-qualidade'],
   },
   {
@@ -154,17 +156,18 @@ export const settingsContent: SaibaMaisContent[] = [
     titulo: 'Conectar Instagram em 1 clique',
     clientSafe: true,
     oQueE:
-      'É a forma rápida de ligar seu Instagram Direct à ZappIQ: você clica em Conectar com a Meta, faz login na conta vinculada à sua página do Instagram Business e autoriza.',
+      'É a forma rápida de ligar seu Instagram Direct à ZappIQ: você clica em Conectar com a Meta, faz login na conta vinculada à sua página do Instagram Business e autoriza. Esse conector depende de uma configuração adicional feita pelo time da ZappIQ; se ainda não estiver liberado para a sua conta, o botão avisa e indica o modo manual.',
     paraQueServe:
-      'Ativa o atendimento automático pelo Instagram Direct sem precisar copiar IDs nem tokens manualmente.',
+      'Quando disponível, ativa o atendimento automático pelo Instagram Direct sem precisar copiar IDs nem tokens manualmente. Se o conector ainda não estiver liberado, o formulário manual logo abaixo é o caminho que funciona.',
     comoImplementar: [
       'Abra Configurações e vá até a aba Canais.',
       'Marque Instagram Direct, ou WhatsApp e Instagram, em "O que você quer ativar?".',
       'Confirme que sua conta do Instagram é do tipo Business e está vinculada a uma página do Facebook, é um pré-requisito da Meta.',
       'Clique em Conectar com a Meta, no card rosa, e autorize.',
+      'Se aparecer um aviso de que o conector ainda está em configuração, use o formulário de conexão manual logo abaixo.',
     ],
     exemploResultado:
-      'Numa loja de roupas que já vende bastante pelo Instagram, a dona clica em Conectar com a Meta, autoriza e passa a receber e responder as mensagens do Direct direto pela ZappIQ, sem trocar de aplicativo. Se a conta ainda não for Business, ela precisa ajustar isso no próprio Instagram antes de tentar de novo.',
+      'Numa loja de roupas que já vende bastante pelo Instagram, a dona clica em Conectar com a Meta e autoriza. Se o conector já estiver liberado para a conta dela, passa a receber e responder as mensagens do Direct direto pela ZappIQ, sem trocar de aplicativo. Se aparecer o aviso de que ainda está em configuração, ela segue pelo formulário manual logo abaixo. Se a conta ainda não for Business, ela precisa ajustar isso no próprio Instagram antes de tentar de novo.',
     relacionados: ['settings.canais.instagram-manual', 'settings.canais.whatsapp-1-clique'],
   },
   {

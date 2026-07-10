@@ -12,7 +12,7 @@ export const templatesContent: SaibaMaisContent[] = [
     oQueE:
       'Template é um modelo de mensagem pré aprovado pela Meta (a empresa dona do WhatsApp). Diferente de uma mensagem livre, que só pode ser enviada dentro de uma conversa em andamento, o template pode ser usado a qualquer momento, mesmo com um contato que não fala com você há semanas.',
     paraQueServe:
-      'Serve para dois casos que uma mensagem comum não resolve: disparar campanhas para uma lista de contatos e reabrir a conversa com alguém que sumiu há mais de 24 horas. Sem template aprovado, a IA fica de mãos atadas nesses dois casos.',
+      'Serve para dois casos que uma mensagem comum não resolve: disparar campanhas para uma lista de contatos e ter um texto já aprovado pela Meta pra tentar retomar contato com alguém que sumiu há mais de 24 horas. Sem template aprovado, esses dois casos ficam travados.',
     comoImplementar: [
       'Clique em "Novo template" no canto superior direito da página.',
       'Preencha nome, categoria, idioma e o corpo da mensagem no formulário.',
@@ -20,7 +20,7 @@ export const templatesContent: SaibaMaisContent[] = [
       'Acompanhe o status do template na listagem: Pendente, Em análise, Aprovado ou Rejeitado.',
     ],
     exemploResultado:
-      'Uma clínica odontológica cria o template "confirmacao_retorno" para lembrar pacientes que sumiram do acompanhamento. Depois de aprovado pela Meta, a IA usa esse template para reabrir a conversa com 40 pacientes inativos no mês, e 9 deles voltam a agendar consulta.',
+      'Uma clínica odontológica cria o template "confirmacao_retorno" para lembrar pacientes que sumiram do acompanhamento. Depois de aprovado pela Meta, a clínica usa esse template numa campanha para os 40 pacientes inativos do mês, e parte deles volta a agendar consulta.',
     relacionados: ['templates.fluxo-aprovacao-meta', 'templates.status-aprovacao'],
   },
   {
@@ -32,11 +32,11 @@ export const templatesContent: SaibaMaisContent[] = [
     paraQueServe:
       'Entender essa ordem evita erro caro. A Meta é rígida: nome ou categoria escolhidos errado costumam derrubar o pedido, e você só descobre isso dias depois, quando já perdeu tempo esperando. Seguir o passo a passo certo aumenta a chance de aprovação de primeira.',
     comoImplementar: [
-      'Passo 1: clique em "Novo template" e preencha nome (em snake_case, tipo promo_volta_aulas), categoria e corpo da mensagem com cuidado.',
+      'Passo 1: clique em "Novo template" e preencha nome (em letras minúsculas e com underline no lugar de espaço, tipo promo_volta_aulas), categoria e corpo da mensagem com cuidado.',
       'Passo 2: salve o template. Ele nasce com status "Pendente", ainda não foi enviado para ninguém avaliar.',
-      'Passo 3: clique em "Enviar à Meta". A partir daqui o template trava para edição e o status muda para "Em análise".',
+      'Passo 3: clique em "Enviar à Meta". Evite editar o template a partir daqui até a Meta responder, pra não gerar inconsistência entre o que foi enviado e o que está salvo. O status muda para "Em análise".',
       'Passo 4: aguarde a resposta da Meta (normalmente algumas horas, podendo levar até 1 dia). O status muda para "Aprovado" ou "Rejeitado".',
-      'Passo 5: se aprovado, o template já pode ser escolhido em campanhas ou marcado como reengajamento. Se rejeitado, crie um novo template corrigindo o motivo indicado.',
+      'Passo 5: se aprovado, o template já pode ser escolhido em campanhas ou marcado como reengajamento. Se rejeitado, corrija o texto do mesmo template com o motivo indicado e clique em "Enviar à Meta" de novo.',
     ],
     exemploResultado:
       'Uma loja de roupas cria o template "promo_fim_de_semana" com categoria Marketing, envia à Meta na segunda de manhã e recebe a aprovação na terça à tarde. Na quarta já consegue disparar a campanha para 800 contatos usando esse template.',
@@ -53,8 +53,8 @@ export const templatesContent: SaibaMaisContent[] = [
     comoImplementar: [
       'Olhe a etiqueta ao lado do nome do template na listagem.',
       'Se estiver "Em análise", só aguarde. A Meta costuma responder em algumas horas.',
-      'Se estiver "Rejeitado", edite ou crie um novo template corrigindo nome, categoria ou texto, já que o motivo mais comum é escolha errada de categoria.',
-      'Só use o botão "Enviar à Meta" de novo quando o template estiver "Pendente".',
+      'Se estiver "Rejeitado", edite o nome, categoria ou texto do template corrigindo o motivo indicado, já que o erro mais comum é escolha errada de categoria.',
+      'Você pode clicar em "Enviar à Meta" de novo quando o template estiver "Pendente" ou "Rejeitado" (depois de corrigir o texto).',
     ],
     exemploResultado:
       'Um restaurante vê o template "reserva_confirmada" com status "Em análise" na segunda-feira e, na terça, ele já aparece como "Aprovado". A partir daí o template passa a estar disponível para marcar como reengajamento.',
@@ -65,18 +65,18 @@ export const templatesContent: SaibaMaisContent[] = [
     titulo: 'Enviar à Meta',
     clientSafe: true,
     oQueE:
-      'É o botão que manda seu template para a Meta avaliar. A partir do momento em que você clica, o texto do template fica travado para edição até a Meta responder.',
+      'É o botão que manda seu template para a Meta avaliar. A partir do momento em que você clica, o ideal é não editar mais o template até a Meta responder, pra não gerar inconsistência entre o que foi enviado pra avaliação e o que está salvo no sistema.',
     paraQueServe:
-      'É o passo que transforma um rascunho seu num template de verdade, aceito pelo WhatsApp Business. Sem enviar e ser aprovado, o template não pode ser usado em campanha nem para reabrir conversas com contatos inativos.',
+      'É o passo que transforma um rascunho seu num template de verdade, aceito pelo WhatsApp Business. Sem enviar e ser aprovado, o template fica marcado como pendente e não deve ser usado pra reabrir conversas com contatos inativos.',
     comoImplementar: [
-      'Revise nome, categoria e corpo da mensagem com atenção antes de clicar, porque depois de enviado você não consegue mais editar até a resposta.',
+      'Revise nome, categoria e corpo da mensagem com atenção antes de clicar, porque editar depois de enviado pode deixar o texto avaliado pela Meta diferente do texto salvo no sistema.',
       'Clique em "Enviar à Meta" na linha do template.',
-      'Confirme o aviso que aparece: depois de enviado o template não pode ser editado até a Meta responder.',
+      'Depois de enviado, evite editar o template até a Meta responder.',
       'Acompanhe o status na listagem: ele muda de "Pendente" para "Em análise" assim que o envio é feito.',
-      'Se a Meta rejeitar, o texto trava de forma definitiva: crie um novo template com o texto corrigido, em vez de tentar editar o rejeitado.',
+      'Se a Meta rejeitar, corrija o texto desse mesmo template com base no motivo indicado e clique em "Enviar à Meta" de novo.',
     ],
     exemploResultado:
-      'Uma clínica de estética revisa o template "lembrete_retorno" três vezes antes de enviar, porque sabe que não poderá mais editar. Envia à Meta na quinta-feira e recebe aprovação na sexta, a tempo de usar no fim de semana.',
+      'Uma clínica de estética revisa o template "lembrete_retorno" três vezes antes de enviar, pra não perder tempo com uma rejeição evitável. Envia à Meta na quinta-feira e recebe aprovação na sexta, a tempo de usar no fim de semana.',
     relacionados: ['templates.status-aprovacao', 'templates.fluxo-aprovacao-meta'],
   },
   {
@@ -91,10 +91,10 @@ export const templatesContent: SaibaMaisContent[] = [
       'Crie um template pensado para reabrir conversa, como "Oi {{1}}! Faz um tempo que a gente não conversa. Posso te ajudar com algo?".',
       'No formulário, marque a caixa "Template de reengajamento (reabre a janela de 24h)".',
       'Envie o template à Meta e aguarde a aprovação, como qualquer outro template.',
-      'Depois de aprovado, a IA passa a poder usar esse template automaticamente para reabrir conversas com contatos inativos.',
+      'Depois de aprovado, o template fica disponível na lista pra você escolher numa campanha voltada a contatos inativos. A marcação de reengajamento hoje serve só para identificar esse template na listagem, quem decide quando usá-lo é você.',
     ],
     exemploResultado:
-      'Um cliente de uma loja de móveis some do WhatsApp há 3 dias sem responder. Como a janela de 24h já fechou, a IA não pode mandar mensagem livre. Com o template de reengajamento aprovado, ela reabre a conversa, o cliente responde e a venda que estava parada volta a andar.',
+      'Um cliente de uma loja de móveis some do WhatsApp há 3 dias sem responder. Como a janela de 24h já fechou, uma mensagem livre não chega até ele. Com o template de reengajamento aprovado, a loja usa esse template numa campanha pra tentar retomar contato, o cliente responde e a venda que estava parada volta a andar.',
     relacionados: ['templates.overview', 'templates.categoria'],
   },
   {
@@ -102,9 +102,9 @@ export const templatesContent: SaibaMaisContent[] = [
     titulo: 'Categoria do template',
     clientSafe: true,
     oQueE:
-      'É a classificação que a Meta exige para todo template: Marketing (promoções, novidades, ofertas), Utilidade (atualização de pedido, lembrete, aviso) ou Autenticação (código de verificação). Cada categoria segue regras diferentes de aprovação e pode ter custo diferente por conversa.',
+      'É a classificação que a Meta exige para todo template: Marketing (promoções, novidades, ofertas), Utilidade (atualização de pedido, lembrete, aviso) ou Autenticação (código de verificação). Cada categoria segue regras diferentes de aprovação.',
     paraQueServe:
-      'Escolher a categoria certa evita rejeição pela Meta, que revisa Marketing com mais rigor que Utilidade, e ajuda a prever o custo do envio, já que a cobrança por conversa muda conforme a categoria.',
+      'Escolher a categoria certa evita rejeição pela Meta, que revisa Marketing com mais rigor que Utilidade.',
     comoImplementar: [
       'Leia o texto do seu template e pergunte: ele está vendendo algo ou avisando sobre uma promoção? Se sim, é Marketing.',
       'Se o texto avisa sobre algo que o próprio cliente já esperava (pedido, agendamento, cobrança), é Utilidade.',
@@ -120,9 +120,9 @@ export const templatesContent: SaibaMaisContent[] = [
     titulo: 'Escolher a categoria certa',
     clientSafe: true,
     oQueE:
-      'É o seletor com três opções (Marketing, Utilidade, Autenticação) que aparece ao criar ou editar um template. A Meta usa essa escolha para decidir com que rigor vai revisar o template e quanto vai cobrar por conversa quando ele for usado.',
+      'É o seletor com três opções (Marketing, Utilidade, Autenticação) que aparece ao criar ou editar um template. A Meta usa essa escolha para decidir com que rigor vai revisar o template.',
     paraQueServe:
-      'Escolher errado é um dos motivos mais comuns de rejeição pela Meta. Marketing passa por revisão mais rígida e costuma ter custo maior por conversa que Utilidade, então acertar aqui evita atraso e economiza dinheiro.',
+      'Escolher errado é um dos motivos mais comuns de rejeição pela Meta. Marketing passa por revisão mais rígida que Utilidade, então acertar aqui evita atraso.',
     comoImplementar: [
       'Releia o hint abaixo de cada opção no formulário: "Promoções, novidades, ofertas" é Marketing; "Atualizações de pedido, lembretes, avisos" é Utilidade; "Códigos de verificação (OTP)" é Autenticação.',
       'Se o template menciona desconto, oferta ou promoção de qualquer tipo, marque Marketing, mesmo que pareça só um lembrete.',
@@ -138,17 +138,17 @@ export const templatesContent: SaibaMaisContent[] = [
     titulo: 'Corpo da mensagem e variáveis',
     clientSafe: true,
     oQueE:
-      'É o texto principal do template. Nele você pode usar marcadores como {{1}}, {{2}} para deixar partes da mensagem variáveis, que a IA substitui automaticamente por dados do contato (nome, número do pedido) na hora do envio.',
+      'É o texto principal do template. Nele você pode usar marcadores como {{1}}, {{2}} para indicar pra Meta que aquele trecho da mensagem é variável.',
     paraQueServe:
-      'Permite mandar um template genérico, aprovado uma única vez pela Meta, mas que soa personalizado para cada contato. Sem variáveis, você teria que criar um template diferente para cada cliente, o que não é viável.',
+      'Os marcadores {{1}}, {{2}} são exigidos pela Meta quando você quer que um trecho do template mude a cada envio, tipo o nome do contato. Hoje o ZappIQ ainda não preenche esses marcadores sozinho por contato numa campanha: o texto sai do jeito que foi escrito, marcador incluído. Por enquanto, use variáveis só se for você mesmo editar o texto antes de enviar.',
     comoImplementar: [
       'Escreva a mensagem no campo "Corpo da mensagem" usando {{1}} onde quiser inserir o nome do contato, {{2}} para um segundo dado, e assim por diante.',
       'Use os marcadores em ordem, começando de {{1}}, sem pular números.',
       'Escreva um texto natural ao redor das variáveis, tipo "Oi {{1}}! Seu pedido {{2}} já está a caminho.".',
-      'Ao usar o template numa campanha ou reengajamento, o sistema pede os dados que vão preencher cada variável para cada contato.',
+      'Saiba que, ao escolher esse template numa campanha, o texto é enviado exatamente como está salvo: se não precisar variar o conteúdo por contato, prefira escrever o template sem marcadores.',
     ],
     exemploResultado:
-      'Uma ótica cria o template "Oi {{1}}! Seus óculos {{2}} já estão prontos para retirada.". Ao disparar para 60 clientes, cada um recebe a mensagem com seu próprio nome e o modelo do óculos, sem a loja precisar escrever 60 mensagens diferentes.',
+      'Uma ótica cria o template "Oi {{1}}! Seus óculos {{2}} já estão prontos para retirada.". Como o preenchimento automático por contato ainda não existe, ela usa esse texto como base e ajusta nome e modelo à mão nas conversas em que precisa reabrir contato.',
     relacionados: ['templates.form.categoria', 'templates.form.rodape'],
   },
   {
@@ -158,14 +158,14 @@ export const templatesContent: SaibaMaisContent[] = [
     oQueE:
       'É o código que informa à Meta em que idioma o template foi escrito. Para português do Brasil, o valor correto é "pt_BR", exatamente assim, com "pt" minúsculo, underline e "BR" maiúsculo.',
     paraQueServe:
-      'A Meta usa esse código para validar o template durante a aprovação. Se o valor estiver escrito errado, tipo "português" ou "pt-br" com hífen, a submissão pode falhar sem uma explicação clara na tela.',
+      'A Meta usa esse código para validar o template durante a aprovação. Se o valor estiver escrito errado, tipo "português" ou "pt-br" com hífen, a Meta pode rejeitar com uma mensagem de erro técnica, então prefira deixar o campo como veio preenchido.',
     comoImplementar: [
       'Deixe o campo como veio preenchido por padrão: "pt_BR".',
       'Se precisar digitar de novo, use exatamente "pt_BR": letras minúsculas em "pt", underline no meio, "BR" maiúsculo no final.',
       'Evite espaços, acentos ou o nome do idioma por extenso nesse campo.',
     ],
     exemploResultado:
-      'Um salão de beleza edita o campo sem querer e digita "portugues". Ao enviar à Meta, o template é rejeitado sem aviso claro do motivo. Ao corrigir para "pt_BR" e reenviar, o template é aprovado no mesmo dia.',
+      'Um salão de beleza edita o campo sem querer e digita "portugues". Ao enviar à Meta, aparece um alerta na tela com uma mensagem de erro técnica da Meta. Ao corrigir para "pt_BR" e reenviar, o template é aprovado no mesmo dia.',
     relacionados: ['templates.form.categoria'],
   },
   {
@@ -175,14 +175,14 @@ export const templatesContent: SaibaMaisContent[] = [
     oQueE:
       'É uma linha opcional que aparece no final da mensagem, geralmente usada para dar ao contato uma forma de sair da lista, como "Responda SAIR para não receber mais mensagens".',
     paraQueServe:
-      'Em templates de Marketing, a Meta pode exigir esse tipo de aviso de opt-out como condição de aprovação. Deixar em branco sem saber disso pode custar a aprovação do template.',
+      'É uma boa prática incluir uma opção de sair em templates de Marketing, o que pode ajudar na aprovação. A política da Meta sobre isso muda com o tempo, então vale como recomendação, não como regra garantida.',
     comoImplementar: [
       'Para templates de categoria Marketing, adicione uma linha de rodapé oferecendo a opção de sair, como "Responda SAIR para parar de receber promoções".',
       'Para templates de Utilidade ou Autenticação, o rodapé costuma ser dispensável, mas pode ser usado para outra informação curta, como o nome da empresa.',
       'Mantenha o rodapé curto, numa linha só.',
     ],
     exemploResultado:
-      'Uma loja de cosméticos cria um template de Marketing sem rodapé e ele é rejeitado pela Meta. Ao adicionar "Responda SAIR para não receber mais promoções" no rodapé e reenviar, o template é aprovado.',
+      'Uma loja de cosméticos cria um template de Marketing sem rodapé e a Meta rejeita. Ao adicionar "Responda SAIR para não receber mais promoções" no rodapé e reenviar, o template é aprovado.',
     relacionados: ['templates.form.categoria', 'templates.categoria'],
   },
 ];

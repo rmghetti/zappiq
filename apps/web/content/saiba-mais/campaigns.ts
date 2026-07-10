@@ -24,7 +24,7 @@ export const campaignsContent: SaibaMaisContent[] = [
       'Quando estiver satisfeito, clique em "Criar campanha". Ela entra como Rascunho e só sai para os clientes quando você clicar em "Disparar".',
     ],
     exemploResultado:
-      'Numa loja de roupas, o dono escreve "avisar sobre a nova coleção de inverno para quem comprou nos últimos 3 meses". A Iza monta uma campanha para 180 contatos, sugere envio às 11h de quinta-feira e escreve a mensagem já com o tom da loja. Estimativa: 45 respostas e custo de R$ 21. O dono só lê, aprova e dispara.',
+      'Numa loja de roupas, o dono escreve "avisar sobre a nova coleção de inverno para quem comprou nos últimos 3 meses". A Iza monta uma campanha para 180 contatos, sugere envio às 11h de quinta-feira e escreve a mensagem já com o tom da loja. Estimativa: cerca de 18 respostas e custo em torno de R$ 60. O dono só lê, aprova e dispara.',
     relacionados: ['campaigns.status-badge', 'campaigns.coach-insights'],
   },
   {
@@ -36,10 +36,10 @@ export const campaignsContent: SaibaMaisContent[] = [
     paraQueServe:
       'Serve para você saber, só de bater o olho na lista, o que já aconteceu com cada campanha e se precisa fazer alguma coisa agora ou não.',
     comoImplementar: [
-      'Rascunho: a campanha foi criada mas ainda não tem data marcada. Clique em "Disparar" quando quiser enviá-la agora, ou edite antes.',
+      'Rascunho: a campanha foi criada mas ainda não tem data marcada. Clique em "Disparar" quando quiser enviá-la agora. Não dá para editar depois de criada: se precisar mudar algo, exclua e crie de novo com os ajustes.',
       'Agendada: já tem data e hora marcadas. Ela vai sair sozinha no horário certo, você não precisa fazer nada.',
       'Enviando: as mensagens estão sendo entregues aos contatos neste momento.',
-      'Concluída: todos os envios terminaram. Os números finais (Enviados, Entregues, Lidos, Respostas) já estão fechados no card.',
+      'Concluída: a ZappIQ já enfileirou o disparo para todos os contatos. Os números (Enviados, Entregues, Lidos, Respostas) podem continuar subindo por alguns instantes, até o último envio sair de fato e o WhatsApp confirmar entrega e leitura.',
       'Pausada: a campanha foi cancelada antes de terminar e não teve mais envios. Clique em "Disparar" se quiser tentar de novo.',
     ],
     exemploResultado:
@@ -51,7 +51,7 @@ export const campaignsContent: SaibaMaisContent[] = [
     titulo: 'Funil de entrega (Enviados, Entregues, Lidos, Respostas)',
     clientSafe: true,
     oQueE:
-      'São as quatro etapas por onde cada mensagem de campanha passa. Enviados é quanto a ZappIQ tentou mandar. Entregues é quanto chegou de fato no celular do contato. Lidos é quanto foi aberto, mas esse número só conta quem tem a confirmação de leitura (aquele "visto") ativada no WhatsApp, muita gente desativa isso. Respostas é quanto de fato respondeu.',
+      'São as quatro etapas por onde cada mensagem de campanha passa. Enviados é quanto a ZappIQ confirmou que saiu com sucesso (mensagens que falharam no envio não entram nesse número). Entregues é quanto chegou de fato no celular do contato. Lidos é quanto foi aberto, mas esse número só conta quem tem a confirmação de leitura (aquele "visto") ativada no WhatsApp, muita gente desativa isso. Respostas é quanto de fato respondeu.',
     paraQueServe:
       'Serve para você entender onde a campanha está perdendo força. Se Entregues cai muito perto de Enviados, o problema é técnico (número errado, WhatsApp bloqueado). Se Lidos cai bem abaixo de Entregues, não é sinal de problema, é só gente com a confirmação de leitura desligada. O que realmente importa para o resultado é Respostas.',
     comoImplementar: [
@@ -69,16 +69,16 @@ export const campaignsContent: SaibaMaisContent[] = [
     titulo: 'Insights do Coach',
     clientSafe: true,
     oQueE:
-      'São dicas automáticas que a Iza escreve depois de analisar os números de uma campanha em andamento ou concluída. Aparecem como cartões coloridos embaixo dos resultados do card: verde quando algo foi bem, azul quando é só uma informação, e amarelo quando merece atenção.',
+      'São dicas automáticas que a Iza escreve depois de analisar os números de uma campanha. Aparecem como cartões coloridos embaixo dos resultados do card: verde quando algo foi bem, roxo claro quando é só uma informação, e amarelo quando merece atenção.',
     paraQueServe:
       'Serve para você não precisar interpretar número nenhum sozinho. A Iza já olhou os dados e te diz, em português simples, o que está funcionando e o que vale ajustar na próxima campanha.',
     comoImplementar: [
-      'Depois que uma campanha começa a receber respostas, role até o final do card dela.',
+      'Um insight pode aparecer já no Rascunho, antes de disparar, com uma dica de quantos contatos enviar. Depois que a campanha começa a receber respostas, novos cartões vão surgindo. Role até o final do card para ver.',
       'Leia o cartão de insight: o título resume o ponto, e o texto abaixo explica o porquê e o que fazer.',
       'Use a dica para decidir a próxima ação, por exemplo, revisar a oferta, mudar o horário de envio ou repetir uma campanha que foi bem.',
     ],
     exemploResultado:
-      'Uma campanha de recuperação de carrinho fecha com 3% de taxa de resposta, abaixo da média das campanhas anteriores da loja, que é 8%. O Coach mostra um cartão amarelo sugerindo revisar o desconto oferecido ou testar um horário de envio diferente na próxima tentativa.',
+      'Uma campanha de recuperação de carrinho fecha com 2% de taxa de resposta. O Coach mostra um cartão amarelo sugerindo revisar o desconto oferecido ou testar um horário de envio diferente na próxima tentativa.',
     relacionados: ['campaigns.funil-entrega', 'campaigns.iza-estrategista'],
   },
   {

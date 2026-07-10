@@ -12,7 +12,7 @@ export const dashboardContent: SaibaMaisContent[] = [
     titulo: 'Progresso de treinamento do agente',
     clientSafe: true,
     oQueE:
-      'É o card que aparece no topo do dashboard mostrando, em porcentagem, o quanto seu agente de IA já está pronto pra atender bem. Esse número soma 5 partes: as respostas do questionário inicial, a identidade definida (nome e tom de voz), os documentos enviados, as perguntas e respostas cadastradas e o WhatsApp conectado.',
+      'É o card que aparece no topo do dashboard mostrando, em porcentagem, o quanto seu agente de IA já está pronto pra atender bem. Esse número soma 5 partes: as respostas do questionário inicial, a identidade definida (nome e tom de voz), os documentos enviados, as perguntas e respostas cadastradas e o WhatsApp e/ou o Instagram Direct conectado.',
     paraQueServe:
       'Ajuda você a saber, num relance, se pode confiar no agente pra atender clientes reais sozinho ou se ainda falta treino. O card só some quando o agente chega no nível Expert.',
     comoImplementar: [
@@ -21,7 +21,7 @@ export const dashboardContent: SaibaMaisContent[] = [
       "Clique em 'Ver todas as ações de treinamento' pra abrir a página /ai-training com a lista completa.",
     ],
     exemploResultado:
-      'Numa clínica que acabou de assinar a ZappIQ, o agente começa em 20% (Iniciando). Depois que o dono sobe 8 documentos sobre os tratamentos e cadastra 12 perguntas frequentes, o score sobe pra 68% (Aprendendo) e o widget já sugere conectar o WhatsApp como próximo passo.',
+      'Numa clínica que acabou de assinar a ZappIQ, o agente começa em 20% (Iniciando). Depois que o dono sobe 8 documentos sobre os tratamentos e cadastra 12 perguntas frequentes, o score sobe pra 68% (Pronto) e o widget já sugere conectar o WhatsApp ou o Instagram como próximo passo.',
     relacionados: ['ai-training.readiness-score'],
   },
   {
@@ -29,7 +29,7 @@ export const dashboardContent: SaibaMaisContent[] = [
     titulo: 'Taxa de Automação',
     clientSafe: true,
     oQueE:
-      'É o percentual das mensagens recebidas no WhatsApp que a IA respondeu sozinha, sem precisar de um atendente humano digitar nada.',
+      'É o percentual das mensagens recebidas (WhatsApp e/ou Instagram Direct, conforme o que você tiver conectado) que a IA respondeu sozinha, sem precisar de um atendente humano digitar nada.',
     paraQueServe:
       'Mostra quanto trabalho da sua equipe está sendo poupado pelo agente de IA. Quanto maior a taxa, menos sua equipe precisa parar o que está fazendo pra responder o WhatsApp.',
     comoImplementar: [
@@ -46,9 +46,9 @@ export const dashboardContent: SaibaMaisContent[] = [
     titulo: 'Mensagens',
     clientSafe: true,
     oQueE:
-      'É o número de mensagens que seus clientes mandaram para o WhatsApp da empresa no período escolhido. Conta só o que o cliente enviou, não as respostas da IA nem da sua equipe.',
+      'É o número de mensagens que seus clientes mandaram pro WhatsApp e/ou Instagram da empresa, conforme os canais que você tiver conectado, no período escolhido. Conta só o que o cliente enviou, não as respostas da IA nem da sua equipe.',
     paraQueServe:
-      'Mostra o volume de gente entrando em contato pelo WhatsApp, pra você entender se o movimento está subindo ou caindo em relação ao período anterior.',
+      'Mostra o volume de gente entrando em contato pelos seus canais, pra você entender se o movimento está subindo ou caindo em relação ao período anterior.',
     comoImplementar: [
       "Veja o número grande no card 'Mensagens', no topo do dashboard.",
       "O selo ao lado (verde pra cima, vermelho pra baixo) compara com o período anterior de mesma duração.",
@@ -80,9 +80,9 @@ export const dashboardContent: SaibaMaisContent[] = [
     titulo: 'Novos Contatos',
     clientSafe: true,
     oQueE:
-      'É o número de pessoas diferentes que mandaram mensagem pela primeira vez pro seu WhatsApp dentro do período escolhido. Cada telefone novo conta uma vez só, mesmo que a pessoa mande várias mensagens.',
+      'É o número de pessoas diferentes que mandaram mensagem pela primeira vez pra sua empresa, em qualquer canal conectado (WhatsApp e/ou Instagram Direct), dentro do período escolhido. Cada contato novo conta uma vez só, mesmo que a pessoa mande várias mensagens.',
     paraQueServe:
-      'Mostra quantos leads novos estão chegando pelo WhatsApp, pra você acompanhar se anúncios, indicações ou campanhas estão trazendo gente nova.',
+      'Mostra quantos leads novos estão chegando pelos seus canais, pra você acompanhar se anúncios, indicações ou campanhas estão trazendo gente nova.',
     comoImplementar: [
       "Veja o número no card 'Novos Contatos', no topo do dashboard.",
       "Compare com o selo de variação ao lado pra saber se cresceu ou caiu frente ao período anterior.",
@@ -97,7 +97,7 @@ export const dashboardContent: SaibaMaisContent[] = [
     titulo: 'Mensagens no período (gráfico)',
     clientSafe: true,
     oQueE:
-      'É o gráfico de área que mostra, dia a dia (ou hora a hora, em janelas curtas), quantas mensagens os clientes mandaram pro seu WhatsApp. Cada ponto do gráfico é a soma de mensagens recebidas naquele intervalo.',
+      'É o gráfico de área que mostra, dia a dia (ou hora a hora, em janelas curtas), quantas mensagens os clientes mandaram pros seus canais conectados (WhatsApp e/ou Instagram Direct). Cada ponto do gráfico é a soma de mensagens recebidas naquele intervalo.',
     paraQueServe:
       'Ajuda a enxergar picos e quedas de movimento ao longo do tempo, não só o total do período. Serve pra identificar dias parados ou dias de pico que exigem mais atenção.',
     comoImplementar: [
@@ -170,11 +170,11 @@ export const dashboardContent: SaibaMaisContent[] = [
       'Mostra se seus clientes estão saindo satisfeitos do atendimento, feito pela IA ou por um humano, pra você identificar cedo se algo precisa melhorar.',
     comoImplementar: [
       "Veja o marcador em formato de meia-lua no card 'Satisfação (CSAT)', na coluna lateral do dashboard.",
-      "Se aparecer 'Sem avaliações no período', é porque nenhum cliente avaliou ainda: a pesquisa de satisfação enviada ao final do atendimento precisa estar ativa pra essa nota aparecer.",
+      "Se aparecer 'Sem avaliações no período', é porque nenhum cliente avaliou ainda: hoje a ZappIQ ainda não coleta essa nota automaticamente pelo WhatsApp, então o card fica vazio até esse recurso existir.",
       'Troque o período no topo da página pra ver a nota média de janelas diferentes.',
     ],
     exemploResultado:
-      "Numa clínica veterinária, o gauge mostra nota 8.4 de 10 nos últimos 30 dias, classificada como 'ótimo'. No mês seguinte a nota cai pra 6.2 depois de um problema de agenda, e o dono usa isso como aviso pra investigar o que mudou no atendimento.",
+      "Numa clínica veterinária, o card mostra 'Sem avaliações no período', porque hoje a ZappIQ ainda não pergunta essa nota automaticamente ao final do atendimento. Assim que esse recurso existir, a nota média vai aparecer aqui, numa escala de 0 a 10.",
     relacionados: ['dashboard.kpi.taxa-automacao'],
   },
 ];

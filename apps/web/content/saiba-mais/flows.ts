@@ -9,17 +9,17 @@ export const flowsContent: SaibaMaisContent[] = [
     titulo: 'Mapa da Operação',
     clientSafe: true,
     oQueE:
-      'O Mapa da Operação mostra todos os fluxos que você já criou, um do lado do outro, com linhas ligando um fluxo ao outro. Cada seta representa uma "passagem de bastão": quando um atendimento termina num fluxo e continua em outro.',
+      'O Mapa da Operação mostra todos os fluxos que você já criou, um do lado do outro, com linhas ligando um fluxo ao outro. Cada seta é uma conexão que você desenha (ou que o Maestro sugere ao criar os fluxos), representando pra onde o atendimento deveria seguir depois daquele fluxo.',
     paraQueServe:
-      'Serve para você enxergar a jornada completa do cliente de uma vez só, sem abrir fluxo por fluxo. Por exemplo: o cliente entra pelo fluxo de Atendimento, é encaminhado pro fluxo de Vendas, e se fechar negócio vai pro fluxo de Agendamento. O mapa mostra esse caminho inteiro numa tela.',
+      'Serve para você planejar e visualizar a jornada completa do cliente de uma vez só, sem abrir fluxo por fluxo. Por exemplo: você desenha que o cliente entra pelo fluxo de Atendimento, segue pro fluxo de Vendas, e se fechar negócio vai pro fluxo de Agendamento. O mapa mostra esse desenho inteiro numa tela. Importante: hoje o mapa é um documento editável, não um roteador automático. Para o cliente realmente pular de um fluxo pro outro durante a conversa, use o nó "Enviar para outro fluxo" dentro do fluxo de origem.',
     comoImplementar: [
       'Na página inicial do Maestro, o Mapa da Operação já aparece logo abaixo do card MAESTRO INTELIGENTE.',
       'Clique em qualquer fluxo do mapa para abrir e editar aquele trecho da conversa.',
-      'Clique numa seta entre dois fluxos para ver ou editar a condição que faz o cliente pular de um pro outro (ex: "objeção de preço").',
+      'Clique numa seta entre dois fluxos para ver ou editar o rótulo da conexão (ex: "objeção de preço"), ou arraste pra desenhar uma conexão nova.',
       'Use o botão "Tela cheia" se quiser ver o mapa maior, com todos os fluxos e conexões em detalhe.',
     ],
     exemploResultado:
-      'Numa clínica com 3 fluxos (Atendimento, Agendamento e Pós-consulta), o Mapa da Operação mostra que 40% dos atendimentos vão parar em Agendamento e que 15% deles nunca chegam ao Pós-consulta. Com isso o dono percebe que falta uma conexão automática entre esses dois fluxos e ajusta o mapa direto ali.',
+      'Numa clínica com 3 fluxos (Atendimento, Agendamento e Pós-consulta), o dono olha o Mapa da Operação e percebe visualmente que não existe nenhuma seta ligando Agendamento a Pós-consulta. Ele desenha a conexão direto no mapa e, dentro do fluxo de Agendamento, adiciona um nó "Enviar para outro fluxo" apontando pro Pós-consulta, garantindo que o cliente realmente seja encaminhado ao final da consulta.',
     relacionados: ['flows.mapa-operacao.arquitetar'],
   },
   {
@@ -37,7 +37,7 @@ export const flowsContent: SaibaMaisContent[] = [
       'Nenhum fluxo fica ativo sozinho: você ainda precisa publicar cada um quando estiver satisfeito com o conteúdo.',
     ],
     exemploResultado:
-      'Numa academia que nunca usou o Maestro, um clique gera 3 fluxos prontos: Atendimento (tira dúvidas sobre planos), Vendas (fecha matrícula) e Agendamento (marca aula experimental), já ligados entre si. O dono revisa o texto de cada mensagem em 10 minutos e publica, em vez de montar tudo do zero.',
+      'Num salão de beleza que nunca usou o Maestro, um clique gera 6 fluxos prontos: Atendimento, Qualificação, Agendamento, Vendas, FAQ e Pós-venda, já ligados entre si. O dono revisa o texto de cada mensagem em 10 minutos e publica, em vez de montar tudo do zero.',
     relacionados: ['flows.mapa-operacao.visao'],
   },
   {
@@ -108,7 +108,7 @@ export const flowsContent: SaibaMaisContent[] = [
       'Ajuste os pontos que travaram e simule de novo até o resultado ficar consistente.',
     ],
     exemploResultado:
-      'Um salão de beleza roda o Simular no fluxo de Agendamento e descobre que 2 de 5 personas fictícias travaram ao tentar remarcar um horário. O dono ajusta o nó de remarcação e simula de novo: dessa vez as 5 personas concluem o fluxo sem travar.',
+      'Um salão de beleza roda o Simular no fluxo de Agendamento e descobre que 1 de 3 personas fictícias travou ao tentar remarcar um horário. O dono ajusta o nó de remarcação e simula de novo: dessa vez as 3 personas concluem o fluxo sem travar.',
     relacionados: ['flows.editor.testar'],
   },
   {
