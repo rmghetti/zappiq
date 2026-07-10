@@ -16,15 +16,22 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Users, Brain, Plus, Trash2,
-  CheckCircle2, AlertCircle, Loader2, CreditCard, Plug, Clock,
+  CheckCircle2, AlertCircle, Loader2, CreditCard, Plug, Clock, Zap, Copy, HelpCircle,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import ConectarCanais from '../../../components/dashboard/ConectarCanais';
 import { BusinessHoursEditor, defaultBusinessHours, type BusinessHoursConfig } from '../flows/_components/BusinessHoursEditor';
 import { SaibaMais } from '@/components/shared/SaibaMais';
+import { IntegrationHelpModal, type HelpTopic } from '../../../components/settings/IntegrationHelpModal';
 
-type Tab = 'general' | 'team' | 'canais' | 'ai' | 'billing' | 'flows';
+type Tab = 'general' | 'team' | 'canais' | 'ai' | 'billing' | 'flows' | 'integracoes';
+
+// Zap Impulso — status das integrações do Loop de Receita (sem segredo em claro).
+interface ImpulsoIntegrationStatus {
+  capi: { datasetId: string | null; configured: boolean };
+  asaas: { configured: boolean; webhookToken: string | null };
+}
 
 interface BillingSettings {
   autoOverage?: boolean;
@@ -105,7 +112,7 @@ export default function SettingsPage() {
       const h = window.location.hash.replace('#', '').toLowerCase();
       // #whatsapp foi unificado em "Canais" — deep-links antigos caem lá.
       if (h === 'whatsapp') { setTab('canais'); return; }
-      if (h === 'team' || h === 'ai' || h === 'general' || h === 'billing' || h === 'canais' || h === 'flows') {
+      if (h === 'team' || h === 'ai' || h === 'general' || h === 'billing' || h === 'canais' || h === 'flows' || h === 'integracoes') {
         setTab(h as Tab);
       }
     };
@@ -141,6 +148,15 @@ export default function SettingsPage() {
   const [hardCeilingBrl, setHardCeilingBrl] = useState<string>('');
   const [notifyAtPercent, setNotifyAtPercent] = useState<number>(80);
   const [savingBilling, setSavingBilling] = useState(false);
+
+  // Integrações — Zap Impulso (Loop de Receita: Meta CAPI + Asaas Pix)
+  const [impulsoStatus, setImpulsoStatus] = useState<ImpulsoIntegrationStatus | null>(null);
+  const [capiDatasetId, setCapiDatasetId] = useState('');
+  const [capiAccessToken, setCapiAccessToken] = useState('');
+  const [savingCapi, setSavingCapi] = useState(false);
+  const [asaasApiKey, setAsaasApiKey] = useState('');
+  const [savingAsaas, setSavingAsaas] = useState(false);
+  const [helpTopic, setHelpTopic] = useState<HelpTopic | null>(null);
 
   // Invite form (Team tab)
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -197,6 +213,17 @@ export default function SettingsPage() {
         setBusinessHours(orgRes.data.settings?.businessHoursConfig ?? defaultBusinessHours());
       }
       setTeam(teamRes.data || []);
+
+      // Zap Impulso — status das integrações (best-effort; não bloqueia a página)
+      api
+        .get<{ data: ImpulsoIntegrationStatus }>('/api/settings/integrations/zap-impulso')
+        .then((r) => {
+          if (r.data) {
+            setImpulsoStatus(r.data);
+            setCapiDatasetId(r.data.capi?.datasetId || '');
+          }
+        })
+        .catch(() => null);
     } finally {
       setLoading(false);
     }
@@ -296,6 +323,60 @@ export default function SettingsPage() {
     }
   }
 
+  // ─── Zap Impulso — integrações (Loop de Receita) ─────────────
+  // Os segredos (access token / API key) vão em texto puro no corpo do PUT,
+  // via HTTPS, e o SERVIDOR cifra antes de gravar. O campo do segredo é limpo
+  // após salvar para não deixar o valor na tela.
+  async function handleSaveCapi() {
+    if (!capiDatasetId.trim() || !capiAccessToken.trim()) {
+      showToast('error', 'Informe o Dataset ID e o Access Token do Meta.');
+      return;
+    }
+    setSavingCapi(true);
+    try {
+      const res = await api.put<{ data: ImpulsoIntegrationStatus }>('/api/settings/integrations/zap-impulso', {
+        capiDatasetId: capiDatasetId.trim(),
+        capiAccessToken: capiAccessToken.trim(),
+      });
+      if (res.data) setImpulsoStatus(res.data);
+      setCapiAccessToken('');
+      showToast('success', 'Meta CAPI conectado');
+    } catch (err) {
+      showToast('error', (err as { message?: string })?.message || 'Erro ao salvar');
+    } finally {
+      setSavingCapi(false);
+    }
+  }
+
+  async function handleSaveAsaas() {
+    if (!asaasApiKey.trim()) {
+      showToast('error', 'Cole a API Key do Asaas.');
+      return;
+    }
+    setSavingAsaas(true);
+    try {
+      const res = await api.put<{ data: ImpulsoIntegrationStatus }>('/api/settings/integrations/zap-impulso', {
+        asaasApiKey: asaasApiKey.trim(),
+      });
+      if (res.data) setImpulsoStatus(res.data);
+      setAsaasApiKey('');
+      showToast('success', 'Asaas conectado');
+    } catch (err) {
+      showToast('error', (err as { message?: string })?.message || 'Erro ao salvar');
+    } finally {
+      setSavingAsaas(false);
+    }
+  }
+
+  function copyToClipboard(value: string, label: string) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(value).then(
+        () => showToast('success', `${label} copiado`),
+        () => showToast('error', 'Não foi possível copiar'),
+      );
+    }
+  }
+
   // ─── Business hours (Maestro 1A — E4) ────────────────────────
   async function handleSaveBusinessHours() {
     setSavingBusinessHours(true);
@@ -364,6 +445,7 @@ export default function SettingsPage() {
     }
   }
 
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
   const tabs: { key: Tab; label: string; icon: typeof Settings }[] = [
     { key: 'general', label: 'Geral', icon: Settings },
     { key: 'team', label: 'Equipe', icon: Users },
@@ -371,6 +453,7 @@ export default function SettingsPage() {
     { key: 'ai', label: 'IA / Agente', icon: Brain },
     { key: 'billing', label: 'Cobrança & Limites', icon: CreditCard },
     { key: 'flows', label: 'Fluxos', icon: Clock },
+    ...(isAdmin ? [{ key: 'integracoes' as Tab, label: 'Integrações', icon: Zap }] : []),
   ];
 
   if (loading) {
@@ -765,6 +848,150 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {tab === 'integracoes' && (
+        <div className="max-w-2xl space-y-6">
+          <div className="flex items-start gap-3 p-4 bg-violet-50 rounded-lg border border-violet-200">
+            <Zap className="text-violet-600 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <p className="text-sm font-semibold text-violet-900">Zap Impulso — Loop de Receita</p>
+              <p className="text-xs text-violet-700 mt-0.5">
+                Conecte o Meta CAPI e o Asaas para fechar o ciclo: o anúncio traz o lead, a Iza
+                vende no WhatsApp, o Pix confirma o pagamento e a venda volta para o Meta otimizar
+                a campanha. Os tokens são cifrados no servidor e nunca aparecem de volta na tela.
+              </p>
+            </div>
+          </div>
+
+          {/* ── Meta CAPI ── */}
+          <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Meta CAPI (Conversions API)</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Devolve as compras ao Meta para otimizar os anúncios Click-to-WhatsApp.</p>
+                <button type="button" onClick={() => setHelpTopic('capi')} className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-violet-600 hover:text-violet-700">
+                  <HelpCircle size={13} /> Saiba mais e ver o passo a passo
+                </button>
+              </div>
+              {impulsoStatus?.capi.configured ? (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
+                  <CheckCircle2 size={13} /> Configurado
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1">
+                  <AlertCircle size={13} /> Não configurado
+                </span>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Dataset ID (ID do conjunto de dados)</label>
+              <input
+                type="text"
+                value={capiDatasetId}
+                onChange={(e) => setCapiDatasetId(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 outline-none"
+                placeholder="Ex: 1234567890123456"
+              />
+              <p className="text-xs text-gray-500 mt-1">Meta Events Manager → seu conjunto de dados → Configurações.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Access Token (token de acesso)</label>
+              <input
+                type="password"
+                value={capiAccessToken}
+                onChange={(e) => setCapiAccessToken(e.target.value)}
+                autoComplete="off"
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 outline-none font-mono"
+                placeholder={impulsoStatus?.capi.configured ? '•••••••• (já salvo — cole para substituir)' : 'Cole o token gerado no Events Manager'}
+              />
+              <p className="text-xs text-gray-500 mt-1">Gerado em Events Manager → Configurações → Gerar token de acesso. É secreto: cifrado ao salvar.</p>
+            </div>
+
+            <div className="pt-2 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={handleSaveCapi}
+                disabled={savingCapi}
+                className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingCapi && <Loader2 size={14} className="animate-spin" />}
+                {savingCapi ? 'Salvando...' : 'Conectar Meta CAPI'}
+              </button>
+            </div>
+          </div>
+
+          {/* ── Asaas Pix ── */}
+          <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Asaas (Pix na conversa)</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Gera a cobrança Pix copia-e-cola direto no WhatsApp e confirma o pagamento.</p>
+                <button type="button" onClick={() => setHelpTopic('asaas')} className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-violet-600 hover:text-violet-700">
+                  <HelpCircle size={13} /> Saiba mais e ver o passo a passo
+                </button>
+              </div>
+              {impulsoStatus?.asaas.configured ? (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
+                  <CheckCircle2 size={13} /> Configurado
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1">
+                  <AlertCircle size={13} /> Não configurado
+                </span>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">API Key do Asaas</label>
+              <input
+                type="password"
+                value={asaasApiKey}
+                onChange={(e) => setAsaasApiKey(e.target.value)}
+                autoComplete="off"
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 outline-none font-mono"
+                placeholder={impulsoStatus?.asaas.configured ? '•••••••• (já salvo — cole para substituir)' : 'Cole a API Key (Asaas → Integrações → API)'}
+              />
+              <p className="text-xs text-gray-500 mt-1">Asaas → Configurações → Integrações → Chave de API. É secreta: cifrada ao salvar.</p>
+            </div>
+
+            {impulsoStatus?.asaas.configured && impulsoStatus.asaas.webhookToken && (
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
+                <p className="text-xs font-semibold text-gray-700">Configure o webhook no Asaas com estes dois valores:</p>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-0.5">URL do webhook</label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-white border border-gray-200 rounded px-2 py-1 truncate">{(process.env.NEXT_PUBLIC_API_URL || '') + '/api/webhook/asaas'}</code>
+                    <button type="button" onClick={() => copyToClipboard((process.env.NEXT_PUBLIC_API_URL || '') + '/api/webhook/asaas', 'URL')} className="p-1.5 text-gray-500 hover:text-violet-600" title="Copiar URL"><Copy size={14} /></button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Token de autenticação (Access Token do webhook)</label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-white border border-gray-200 rounded px-2 py-1 truncate font-mono">{impulsoStatus.asaas.webhookToken}</code>
+                    <button type="button" onClick={() => copyToClipboard(impulsoStatus.asaas.webhookToken || '', 'Token')} className="p-1.5 text-gray-500 hover:text-violet-600" title="Copiar token"><Copy size={14} /></button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-500">No Asaas: Configurações → Integrações → Webhooks → Adicionar. Cole a URL, marque os eventos de pagamento e ponha o token no campo de autenticação.</p>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={handleSaveAsaas}
+                disabled={savingAsaas}
+                className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingAsaas && <Loader2 size={14} className="animate-spin" />}
+                {savingAsaas ? 'Salvando...' : 'Conectar Asaas'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Saiba mais das integrações (popup ilustrado) */}
+      <IntegrationHelpModal topic={helpTopic} onClose={() => setHelpTopic(null)} />
     </div>
   );
 }

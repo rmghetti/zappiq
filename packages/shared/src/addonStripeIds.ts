@@ -85,14 +85,14 @@ export const ADDONS_V4_STRIPE: Record<string, AddonStripeIds & { meterId?: strin
   // ─────────────────────────────────────────────────────────
   IMPULSO_START: {
     productId: 'prod_Upxg7QwSAF4AwV',
-    priceIds: { monthly: 'price_1TqHl2Klp5SWv74XtGvDttlw' },  // R$ 197/mes (LIVE)
+    priceIds: { monthly: 'price_1TqHl2Klp5SWv74XtGvDttlw', annual: 'price_1TrR8GKlp5SWv74X2EVdSzv1' },  // R$ 197/mes | R$ 1.891,20/ano (LIVE)
   },
   IMPULSO_PRO: {
     productId: 'prod_Upxg2WAOdMB7NN',
-    priceIds: { monthly: 'price_1TrQaMKlp5SWv74XbiwjK4i7' },  // R$ 597/mes (LIVE)
+    priceIds: { monthly: 'price_1TrQaMKlp5SWv74XbiwjK4i7', annual: 'price_1TrR8GKlp5SWv74XSneQJ3ZJ' },  // R$ 597/mes | R$ 5.731,20/ano (LIVE)
   },
   IMPULSO_SCALE: {
     productId: 'prod_UpxguUhshUR7wM',
-    priceIds: { monthly: 'price_1TrQaNKlp5SWv74X396FZRe8' },  // R$ 1.297/mes (LIVE)
+    priceIds: { monthly: 'price_1TrQaNKlp5SWv74X396FZRe8', annual: 'price_1TrR8HKlp5SWv74XAH5kKpLg' },  // R$ 1.297/mes | R$ 12.451,20/ano (LIVE)
   },
 };

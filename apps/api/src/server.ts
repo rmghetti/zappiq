@@ -51,6 +51,7 @@ import settingsRoutes from './routes/settings.js';
 import onboardingRoutes from './routes/onboarding.js';
 import embeddedSignupRoutes from './routes/embeddedSignup.js'; // #273/#274 — callbacks OAuth WA/IG Embedded Signup
 import stripeWebhookRoutes from './routes/stripeWebhook.js';
+import asaasWebhookRoutes from './routes/asaasWebhook.js'; // Impulso — confirmacao de pagamento Pix (Asaas)
 import auditLogsRoutes from './routes/auditLogs.js';
 import dsrRoutes from './routes/dataSubjectRequests.js';
 import adminWhatsappRoutes from './routes/adminWhatsapp.js';
@@ -190,6 +191,9 @@ app.use('/api/webhook/instagram', express.raw({ type: 'application/json', limit:
 // original que a Meta assinou. Se for parseado pelo express.json, JSON.stringify
 // volta diferente (ordem de chaves, espacos) e a assinatura nunca bate.
 app.use('/api/webhook/whatsapp', express.raw({ type: 'application/json', limit: '10mb' }));
+
+// ── Asaas Webhook POST (raw body) — confirmacao de pagamento Pix do Impulso ──
+app.use('/api/webhook/asaas', express.raw({ type: 'application/json', limit: '2mb' }), asaasWebhookRoutes);
 
 // ── Global Middleware ────────────────────────────
 app.use(helmet());

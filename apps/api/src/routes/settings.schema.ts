@@ -33,21 +33,52 @@ export const updateSettingsSchema = z
 
 export type UpdateSettingsInput = z.infer<typeof updateSettingsSchema>;
 
-// Campos sensíveis nunca expostos na resposta do GET.
+// Zap Impulso — credenciais de integração (Meta CAPI + Asaas). Todos opcionais
+// para permitir salvar uma de cada vez; null/"" limpa. Os segredos são cifrados
+// no servidor (nunca chegam cifrados do cliente).
+export const impulsoIntegrationSchema = z
+  .object({
+    capiDatasetId: z.string().max(200).nullable().optional(),
+    capiAccessToken: z.string().max(1000).nullable().optional(),
+    asaasApiKey: z.string().max(1000).nullable().optional(),
+    asaasWebhookToken: z.string().max(200).nullable().optional(),
+  })
+  .strict();
+
+export type ImpulsoIntegrationRequest = z.infer<typeof impulsoIntegrationSchema>;
+
+// Campos sensíveis (colunas de topo) nunca expostos na resposta do GET.
 export const SETTINGS_REDACTED_FIELDS = [
   'whatsappAccessToken',
   'instagramAccessToken',
   'metaAppSecret',
 ] as const;
 
+// Segredos que vivem DENTRO do JSON `settings` — removidos do settings antes de
+// responder o GET genérico (defesa em profundidade; o painel dedicado lê o
+// status por rota própria, sem devolver o valor cifrado).
+export const SETTINGS_JSON_REDACTED_KEYS = [
+  'asaasApiKeyEnc',
+  'capiAccessTokenEnc',
+  'asaasWebhookToken',
+] as const;
+
 /**
- * Remove segredos de canal do objeto Organization antes de serializar.
- * Não muta o input — devolve uma cópia rasa sem os campos sensíveis.
+ * Remove segredos do objeto Organization antes de serializar: os de canal (topo)
+ * e os do Zap Impulso (dentro de `settings`). Não muta o input — devolve cópia
+ * rasa; quando há `settings`, clona-o raso e remove as chaves sensíveis.
  */
 export function redactOrgSecrets<T extends Record<string, any>>(org: T): Omit<T, (typeof SETTINGS_REDACTED_FIELDS)[number]> {
   const clone: Record<string, any> = { ...org };
   for (const field of SETTINGS_REDACTED_FIELDS) {
     delete clone[field];
+  }
+  if (clone.settings && typeof clone.settings === 'object' && !Array.isArray(clone.settings)) {
+    const s = { ...clone.settings };
+    for (const key of SETTINGS_JSON_REDACTED_KEYS) {
+      delete s[key];
+    }
+    clone.settings = s;
   }
   return clone as Omit<T, (typeof SETTINGS_REDACTED_FIELDS)[number]>;
 }
