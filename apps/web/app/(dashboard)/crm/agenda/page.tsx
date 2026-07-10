@@ -13,6 +13,7 @@ import {
   CalendarClock, Loader2, Check, X, UserX, CheckCheck, ChevronLeft, RefreshCw,
 } from 'lucide-react';
 import { api } from '../../../../lib/api';
+import { SaibaMais } from '../../../../components/shared/SaibaMais';
 
 type Status = 'pending' | 'confirmed' | 'cancelled' | 'no_show' | 'completed';
 interface Appointment {
@@ -96,6 +97,7 @@ export default function AgendaPage() {
           </div>
           <h1 className="text-2xl font-display font-bold text-gray-900 flex items-center gap-2">
             <CalendarClock size={22} /> Agenda
+            <SaibaMais featureKey="crm.agenda" />
           </h1>
           <p className="text-gray-500 text-sm mt-1">
             Tudo o que a sua IA agendar aparece aqui. Confirme, remarque ou registre o comparecimento.
@@ -105,6 +107,13 @@ export default function AgendaPage() {
           <RefreshCw size={14} /> Atualizar
         </button>
       </div>
+
+      {!loading && grouped.length > 0 && (
+        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+          <span>As etiquetas &quot;via IA&quot; e &quot;calendário externo&quot; mostram de onde veio cada agendamento.</span>
+          <SaibaMais featureKey="crm.agenda.origem" variant="link" />
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center h-40 text-gray-400"><Loader2 size={18} className="animate-spin mr-2" /> Carregando…</div>

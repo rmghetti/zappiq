@@ -46,6 +46,8 @@ import { AskNodeFields } from './_components/AskNodeFields';
 import { PredicateBuilder, summarizePredicates, type Predicate } from './_components/PredicateBuilder';
 import { MessageRichFields } from './_components/MessageRichFields';
 import { AiToolsFields, type WebhookTool } from './_components/AiToolsFields';
+import { SaibaMais } from '@/components/shared/SaibaMais';
+import { TourLauncher } from '@/components/shared/GuidedTour';
 
 // Tutorial interativo "Reja sua IA" (HTML self-contained do Claude Design) + PDF
 // baixável. Servidos estaticamente de apps/web/public/tutoriais/. Mesmo padrão do
@@ -786,15 +788,18 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
           <button onClick={runTest} disabled={testing} className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {testing ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Testar
           </button>
+          <SaibaMais featureKey="flows.editor.testar" />
           <button
             onClick={() => setShowMetrics((v) => !v)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 ${showMetrics ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
           >
             <BarChart3 size={13} /> Métricas{showMetrics && metrics ? ` · ${metrics.total} (7d)` : ''}
           </button>
+          <SaibaMais featureKey="flows.editor.metricas-por-no" />
           <button onClick={runSimulation} disabled={simulating} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {simulating ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />} {simulating ? 'Simulando…' : 'Simular'}
           </button>
+          <SaibaMais featureKey="flows.editor.simular" />
           <button onClick={save} disabled={saving} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar
           </button>
@@ -804,6 +809,7 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
           <button onClick={openAbPanel} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-violet-200 text-violet-700 hover:bg-violet-50 flex items-center gap-1.5">
             <FlaskConical size={14} /> A/B
           </button>
+          <SaibaMais featureKey="flows.editor.experimento-ab" />
           <button onClick={publish} disabled={publishing} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 flex items-center gap-1.5 disabled:opacity-50">
             {publishing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Publicar
           </button>
@@ -1620,6 +1626,7 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
               {architecting ? 'O Maestro está desenhando…' : 'Maestro, arquitete minha operação'}
             </button>
           )}
+          <SaibaMais featureKey="flows.mapa-operacao.arquitetar" variant="link" />
         </div>
       ) : (
         <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
@@ -1700,7 +1707,10 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shrink-0"><Workflow size={20} /></div>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-gray-900">Mapa da Operação</h2>
+              <h2 className="text-base font-semibold text-gray-900 flex items-center gap-1.5">
+                Mapa da Operação
+                <SaibaMais featureKey="flows.mapa-operacao.visao" />
+              </h2>
               <p className="text-xs text-gray-500">Todos os seus fluxos e como se interligam, numa visão única. Clique num fluxo pra abrir a cadeia de atividades.</p>
             </div>
           </div>
@@ -1735,8 +1745,11 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
         <div className="flex items-center gap-3">
           {onBack && <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ArrowLeft size={18} /></button>}
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Mapa da Operação</h1>
-            
+            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-1.5">
+              Mapa da Operação
+              <SaibaMais featureKey="flows.mapa-operacao.visao" />
+            </h1>
+
         <Link href="/flows/templates" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-full hover:bg-violet-100 mb-4">
           ✨ Ver 15 templates prontos por vertical
         </Link>
@@ -2051,7 +2064,10 @@ export default function FlowsPage() {
     <div className="max-w-4xl mx-auto py-2">
       {/* Intro Maestro — espelha o design (print): manual antes do 1º fluxo */}
       <div className="mb-2">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">Construa o atendimento da sua IA</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">Construa o atendimento da sua IA</h1>
+          <TourLauncher tourKey="primeiro-fluxo-maestro" autoStart />
+        </div>
         <p className="text-sm text-gray-500 mt-1 max-w-2xl">
           Antes de montar, dá uma olhada no tutorial do MAESTRO INTELIGENTE 2.0. Em 5 a 7 minutos:
           a virada de chave, os 7 passos na tela e a prova de que ele desenha a operação inteira sozinho.
@@ -2061,7 +2077,7 @@ export default function FlowsPage() {
       {error && <div className="my-4 px-4 py-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">{error}</div>}
 
       {/* Card: Manual interativo — Reja sua IA (Baixar PDF + Abrir tutorial) */}
-      <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+      <div data-tour="maestro-tutorial" className="mt-5 rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-600">
@@ -2090,7 +2106,7 @@ export default function FlowsPage() {
       </div>
 
       {/* Card: Novo fluxo (do zero ou deixe o Maestro montar) */}
-      <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm flex items-center gap-4">
+      <div data-tour="maestro-novo-fluxo" className="mt-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm flex items-center gap-4">
         <div className="w-11 h-11 rounded-xl bg-primary-500 flex items-center justify-center text-white shrink-0">
           <Zap size={22} />
         </div>
@@ -2117,7 +2133,7 @@ export default function FlowsPage() {
 
 
       {/* MAESTRO INTELIGENTE — gerador autônomo que lê todo o ai-training */}
-      <div className="mb-6 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-blue-50 to-white p-5">
+      <div data-tour="maestro-inteligente" className="mb-6 rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-blue-50 to-white p-5">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shrink-0">
             <Sparkles size={20} />

@@ -106,6 +106,53 @@ export async function sendReplyText(input: SendReplyInput): Promise<SendReplyRes
   };
 }
 
+export interface SendReplyTemplateInput {
+  organizationId: string;
+  conversationId: string;
+  templateName: string;
+  languageCode: string;
+  /** Componentes da Meta (variáveis). Vazio = template sem parâmetros. */
+  components?: any[];
+}
+
+/**
+ * Envia um TEMPLATE aprovado da Meta pela conversa de WhatsApp. Diferente do
+ * texto livre, o template é aceito também fora da janela de 24h (reengajamento).
+ * Só WhatsApp: templates não existem no Instagram. Reusa a mesma resolução de
+ * credenciais por org do sendReplyText.
+ */
+export async function sendReplyTemplate(input: SendReplyTemplateInput): Promise<SendReplyResult> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: input.conversationId },
+    select: { channel: true, contact: { select: { whatsappId: true, phone: true } } },
+  });
+  if (!conversation) {
+    throw new Error(`Conversation ${input.conversationId} not found`);
+  }
+  if (conversation.channel === 'instagram') {
+    throw new Error('Template só é suportado no WhatsApp');
+  }
+  const phone = conversation.contact?.whatsappId || conversation.contact?.phone || '';
+  if (!phone) {
+    throw new Error(`Conversation ${input.conversationId} sem phone/whatsappId no contact`);
+  }
+  const waOrg = await prisma.organization.findUnique({
+    where: { id: input.organizationId },
+    select: { whatsappPhoneNumberId: true, whatsappAccessToken: true },
+  });
+  const result = await waService.sendTemplate(
+    phone,
+    input.templateName,
+    input.languageCode,
+    input.components ?? [],
+    {
+      accessToken: waOrg?.whatsappAccessToken ?? undefined,
+      phoneNumberId: waOrg?.whatsappPhoneNumberId ?? undefined,
+    },
+  );
+  return { channel: 'whatsapp', externalMessageId: result?.messages?.[0]?.id };
+}
+
 /**
  * Marca a mensagem inbound como lida no canal de origem.
  * IG = sender_action 'mark_seen' (com IGSID, não com message ID).

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Sparkles, Check, ArrowRight, Star } from 'lucide-react';
 import { api } from '../../../lib/api';
 import type { PaywallMode } from '../../../stores/authStore';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 type BillingCycle = 'monthly' | 'annual';
 
@@ -124,6 +125,7 @@ export function RecommendationHero({
       <div className="flex items-center gap-2 text-violet-700">
         <Sparkles size={18} />
         <span className="text-xs font-bold uppercase tracking-wide">Recomendado pra você</span>
+        <SaibaMais featureKey="billing.recomendacao-plano" />
       </div>
       <h2 className="mt-2 text-xl font-extrabold text-gray-900">{headline}</h2>
 
@@ -167,7 +169,10 @@ export function RecommendationHero({
 
           {/* Addons compráveis no pacote (recorrentes, entram na mesma assinatura) */}
           <div className="rounded-xl border border-gray-200 bg-white/60 p-5">
-            <p className="text-sm font-bold text-gray-800">Adicione serviços extras ao pacote</p>
+            <p className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+              Adicione serviços extras ao pacote
+              <SaibaMais featureKey="billing.addons-hero" />
+            </p>
             {rec.addonSuggestions.length > 0 && (
               <p className="mt-1 text-xs text-fuchsia-600">
                 Pelo seu uso, vale olhar: {rec.addonSuggestions.map((a) => a.label).join(', ')}.

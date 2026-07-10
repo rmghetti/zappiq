@@ -1,0 +1,1 @@
+export { IzaAjuda } from './IzaAjuda';

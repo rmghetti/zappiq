@@ -32,6 +32,7 @@ import type {
   AgentEvalRunDetailScenario,
   AgentEvalFixDecision,
 } from '@/lib/adminApi';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 const TRIGGER_LABELS: Record<string, string> = {
   cron: 'Semanal automático',
@@ -165,7 +166,10 @@ export default function QualidadeIAClientePage() {
     <div className="p-6 bg-white min-h-screen">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-neutral-900">Qualidade da IA</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-neutral-900">Qualidade da IA</h1>
+          <SaibaMais featureKey="qualidade.overview" />
+        </div>
         <p className="text-sm text-neutral-600 mt-1">
           Diagnóstico contínuo de como o seu agente está respondendo. Rodamos cenários reais
           (descontentamento, intenção de compra, encaminhamento) e a IA propõe correções que
@@ -187,13 +191,16 @@ export default function QualidadeIAClientePage() {
             </option>
           ))}
         </select>
-        <button
-          onClick={handleTrigger}
-          disabled={triggering || !selectedAgent}
-          className="ml-auto px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {triggering ? 'Executando teste (3–5 min)…' : 'Executar teste agora'}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleTrigger}
+            disabled={triggering || !selectedAgent}
+            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {triggering ? 'Executando teste (3–5 min)…' : 'Executar teste agora'}
+          </button>
+          <SaibaMais featureKey="qualidade.executar-teste" />
+        </div>
       </div>
 
       {/* Cooldown banner */}
@@ -211,8 +218,9 @@ export default function QualidadeIAClientePage() {
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
         {/* ─ Coluna esquerda: histórico ─ */}
         <aside className="bg-white border border-neutral-200 rounded">
-          <div className="p-3 border-b border-neutral-200">
+          <div className="p-3 border-b border-neutral-200 flex items-center gap-1.5">
             <h2 className="text-sm font-semibold text-neutral-900">Últimas execuções</h2>
+            <SaibaMais featureKey="qualidade.historico-execucoes" />
           </div>
           <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
             {runs.length === 0 ? (
@@ -355,7 +363,10 @@ function RunDetailPanel({
       <div className="p-5 border-b border-neutral-200">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="text-xs text-neutral-500 mb-1">Saúde do {currentAgentName}</div>
+            <div className="text-xs text-neutral-500 mb-1 flex items-center gap-1.5">
+              Saúde do {currentAgentName}
+              <SaibaMais featureKey="qualidade.saude-score" />
+            </div>
             <div className="flex items-center gap-3">
               <span className={`text-3xl font-bold ${labels.color}`}>{labels.label}</span>
               {run.scorePercent != null && (
@@ -376,11 +387,16 @@ function RunDetailPanel({
         </div>
         {/* KPIs simplificados */}
         {!isRunning && run.totalScenarios > 0 && (
-          <div className="grid grid-cols-4 gap-3 mt-4">
-            <KPISmall label="Aprovados" value={String(run.passed ?? 0)} tint="green" />
-            <KPISmall label="Parciais" value={String(run.partial ?? 0)} tint="amber" />
-            <KPISmall label="Reprovados" value={String(run.failed ?? 0)} tint="red" />
-            <KPISmall label="Críticos" value={String(run.criticalFailed ?? 0)} tint="red-strong" />
+          <div className="mt-4">
+            <div className="flex items-center gap-1.5 mb-2">
+              <SaibaMais featureKey="qualidade.kpis-cenarios" />
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              <KPISmall label="Aprovados" value={String(run.passed ?? 0)} tint="green" />
+              <KPISmall label="Parciais" value={String(run.partial ?? 0)} tint="amber" />
+              <KPISmall label="Reprovados" value={String(run.failed ?? 0)} tint="red" />
+              <KPISmall label="Críticos" value={String(run.criticalFailed ?? 0)} tint="red-strong" />
+            </div>
           </div>
         )}
       </div>
@@ -417,10 +433,11 @@ function RunDetailPanel({
 
       {/* Lista de cenários com problema + sugestão IA */}
       <div className="p-5">
-        <h3 className="text-sm font-semibold text-neutral-900 mb-3">
+        <h3 className="text-sm font-semibold text-neutral-900 mb-3 flex items-center gap-1.5">
           {failedScenarios.length === 0 && !isRunning
             ? '✅ Nenhum desvio identificado nessa execução.'
             : `Comportamentos para revisar (${failedScenarios.length})`}
+          <SaibaMais featureKey="qualidade.cenarios-revisar" />
         </h3>
         {failedScenarios.length === 0 && !isRunning && (
           <p className="text-sm text-neutral-600">
@@ -644,8 +661,9 @@ function ClientFixCard({
         {/* FASE 2.2c (#246): contexto completo da interação testada — pergunta enviada + resposta do agente. */}
         {(scenario.userMessage || scenario.response) && (
           <div className="mb-3 p-3 bg-white border border-neutral-200 rounded">
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500 mb-2">
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 mb-2 flex items-center gap-1.5">
               Interação testada
+              <SaibaMais featureKey="qualidade.interacao-testada" />
             </div>
             {scenario.userMessage && (
               <div className="mb-2">
@@ -690,7 +708,10 @@ function ClientFixCard({
         ) : (
           <div className="p-3 bg-blue-50 border border-blue-200 rounded">
             <div className="flex items-center justify-between gap-2 mb-2">
-              <strong className="text-xs text-blue-900">💡 Correção sugerida</strong>
+              <span className="flex items-center gap-1.5">
+                <strong className="text-xs text-blue-900">💡 Correção sugerida</strong>
+                <SaibaMais featureKey="qualidade.correcao-sugerida" />
+              </span>
               <span className="text-[10px] text-blue-700">
                 confiança {(scenario.suggestedFix!.confidence * 100).toFixed(0)}%
               </span>
@@ -728,13 +749,16 @@ function ClientFixCard({
                 </>
               )}
               {!decisionMade && (
-                <button
-                  onClick={() => setEditing(!editing)}
-                  className="mt-2 text-[10px] text-blue-700 hover:text-blue-900 hover:underline"
-                  disabled={loadingAction !== null}
-                >
-                  {editing ? '↺ Voltar à sugestão original' : '✎ Editar antes de aplicar'}
-                </button>
+                <span className="mt-2 inline-flex items-center gap-1">
+                  <button
+                    onClick={() => setEditing(!editing)}
+                    className="text-[10px] text-blue-700 hover:text-blue-900 hover:underline"
+                    disabled={loadingAction !== null}
+                  >
+                    {editing ? '↺ Voltar à sugestão original' : '✎ Editar antes de aplicar'}
+                  </button>
+                  <SaibaMais featureKey="qualidade.editar-correcao" />
+                </span>
               )}
             </div>
 
@@ -785,7 +809,7 @@ function ClientFixCard({
               </div>
             )}
 
-            <div className="flex gap-2 mt-3">
+            <div className="flex gap-2 mt-3 items-center">
               {!decisionMade ? (
                 <>
                   <button
@@ -802,6 +826,7 @@ function ClientFixCard({
                   >
                     {loadingAction === 'reject' ? 'Recusando…' : '✕ Recusar'}
                   </button>
+                  <SaibaMais featureKey="qualidade.aplicar-correcao" />
                 </>
               ) : existingDecision.decision === 'applied' ? (
                 <>

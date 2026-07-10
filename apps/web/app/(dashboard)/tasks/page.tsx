@@ -15,6 +15,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { ListChecks, Check, User, Target, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 interface Task {
   id: string;
@@ -98,7 +99,10 @@ export default function TasksPage() {
             <ListChecks className="text-primary-600" size={22} />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Tarefas</h1>
+            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-1.5">
+              Tarefas
+              <SaibaMais featureKey="tasks.overview" />
+            </h1>
             <p className="text-sm text-gray-500">
               Follow-ups e ações criadas pela IA a partir das suas conversas.
             </p>

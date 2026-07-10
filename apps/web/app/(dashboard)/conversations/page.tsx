@@ -10,6 +10,7 @@ import { api } from '../../../lib/api';
 import { getSocket } from '../../../lib/socket';
 import { useAuthStore } from '../../../stores/authStore';
 import { AgentMessageActions } from '../../../components/conversations/AgentMessageActions';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 interface Conversation {
   id: string;
@@ -359,6 +360,9 @@ export default function ConversationsPage() {
               <MessageSquare size={56} className="mx-auto text-gray-200 mb-4" />
               <h3 className="text-lg font-semibold text-gray-400">Selecione uma conversa</h3>
               <p className="text-sm text-gray-400 mt-1">Veja a conversa e o contexto de CRM do contato</p>
+              <div className="mt-3">
+                <SaibaMais featureKey="conversations.inbox" variant="link" />
+              </div>
             </div>
           </div>
         ) : (
@@ -377,6 +381,7 @@ export default function ConversationsPage() {
                       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${selected.status === 'OPEN' ? 'bg-green-100 text-green-700' : selected.status === 'WAITING' ? 'bg-yellow-100 text-yellow-700' : selected.status === 'ASSIGNED' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                         {selected.status}
                       </span>
+                      <SaibaMais featureKey="conversations.status-badge" />
                     </div>
                   </div>
                 </div>
@@ -384,15 +389,21 @@ export default function ConversationsPage() {
                 {/* Feature 5a.1 — ações de handoff */}
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   {selected.status !== 'CLOSED' && !isHumanHandoffActive(selected) && (
-                    <button onClick={handleAssume} disabled={actionBusy || !currentUser?.id}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                      <Hand size={13} /> Assumir
-                    </button>
+                    <span className="flex items-center gap-0.5">
+                      <button onClick={handleAssume} disabled={actionBusy || !currentUser?.id}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                        <Hand size={13} /> Assumir
+                      </button>
+                      <SaibaMais featureKey="conversations.assumir-handoff" />
+                    </span>
                   )}
-                  <button onClick={() => setNoteOpen((v) => !v)} disabled={actionBusy}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 transition-colors">
-                    <StickyNote size={13} /> Nota
-                  </button>
+                  <span className="flex items-center gap-0.5">
+                    <button onClick={() => setNoteOpen((v) => !v)} disabled={actionBusy}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 transition-colors">
+                      <StickyNote size={13} /> Nota
+                    </button>
+                    <SaibaMais featureKey="conversations.nota-interna" />
+                  </span>
                   {selected.status === 'CLOSED' ? (
                     <button onClick={handleReopen} disabled={actionBusy}
                       className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50 transition-colors">
@@ -412,6 +423,7 @@ export default function ConversationsPage() {
                 <div className="mt-2 flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
                   <span className="flex items-center gap-1.5 text-xs font-medium text-amber-800">
                     <PauseCircle size={14} /> IA pausada — em atendimento humano
+                    <SaibaMais featureKey="conversations.retomar-ia" />
                   </span>
                   <button onClick={handleResumeAi} disabled={actionBusy}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-accent-500 text-white hover:bg-accent-600 disabled:opacity-50 transition-colors">
@@ -527,18 +539,24 @@ function CrmPanel({ crm, formatDay }: { crm: CrmContext | null; formatDay: (d: s
     <div className="p-4 space-y-4">
       {/* Card do contato */}
       <div className="rounded-xl bg-white border border-gray-100 p-4 space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full bg-secondary-500 flex items-center justify-center text-white font-bold">
-            {c.name?.charAt(0)?.toUpperCase() || '?'}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-full bg-secondary-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+              {c.name?.charAt(0)?.toUpperCase() || '?'}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{c.name || c.phone}</p>
+              <p className="text-xs text-gray-500 truncate">{c.company || c.phone}</p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">{c.name || c.phone}</p>
-            <p className="text-xs text-gray-500 truncate">{c.company || c.phone}</p>
-          </div>
+          <SaibaMais featureKey="conversations.crm.contato" />
         </div>
         <div className="flex items-center justify-between">
           <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
-          <span className="text-[11px] text-gray-500 flex items-center gap-1"><Flame size={12} className="text-amber-500" /> Score {c.leadScore}</span>
+          <span className="text-[11px] text-gray-500 flex items-center gap-1">
+            <Flame size={12} className="text-amber-500" /> Score {c.leadScore}
+            <SaibaMais featureKey="conversations.crm.lead-score" />
+          </span>
         </div>
         <ScoreBar score={c.leadScore} />
         {c.tags?.length > 0 && (
@@ -552,7 +570,10 @@ function CrmPanel({ crm, formatDay }: { crm: CrmContext | null; formatDay: (d: s
 
       {/* Negócio (deal) */}
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5 flex items-center gap-1"><Target size={12} /> Oportunidade</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5 flex items-center gap-1">
+          <Target size={12} /> Oportunidade
+          <SaibaMais featureKey="conversations.crm.oportunidade" />
+        </p>
         {crm.deal ? (
           <div className="rounded-xl bg-white border border-gray-100 p-3">
             <p className="text-sm font-medium text-gray-900">{crm.deal.title}</p>
@@ -571,7 +592,10 @@ function CrmPanel({ crm, formatDay }: { crm: CrmContext | null; formatDay: (d: s
 
       {/* Próximos passos (tasks) */}
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5 flex items-center gap-1"><CheckSquare size={12} /> Próximos passos</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5 flex items-center gap-1">
+          <CheckSquare size={12} /> Próximos passos
+          <SaibaMais featureKey="conversations.crm.tarefas" />
+        </p>
         {crm.tasks.length > 0 ? (
           <div className="space-y-1.5">
             {crm.tasks.map((t) => (
@@ -591,7 +615,10 @@ function CrmPanel({ crm, formatDay }: { crm: CrmContext | null; formatDay: (d: s
 
       {/* Timeline */}
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5 flex items-center gap-1"><Clock size={12} /> Linha do tempo</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5 flex items-center gap-1">
+          <Clock size={12} /> Linha do tempo
+          <SaibaMais featureKey="conversations.crm.timeline" />
+        </p>
         {crm.activities.length > 0 ? (
           <div className="space-y-0">
             {crm.activities.map((a, i) => {

@@ -25,6 +25,7 @@ import { api } from '../../../lib/api';
 import { DealFormModal } from '../../../components/crm/DealFormModal';
 import { LossReasonModal } from '../../../components/crm/LossReasonModal'; // PR #220 CRM 3c
 import { DealDrawer } from '../../../components/crm/DealDrawer'; // Feature 5a.3 — detalhe/edição
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 interface Deal {
   id: string;
@@ -193,9 +194,13 @@ export default function CrmPage() {
       {/* ─── Header + CTA ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pipeline de Vendas</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-1.5">
+            Pipeline de Vendas
+            <SaibaMais featureKey="crm.pipeline" />
+          </h1>
+          <p className="text-sm text-gray-500 mt-1 flex items-center gap-1.5">
             {deals.length} deals · arraste cards entre as colunas pra mover de estágio
+            <SaibaMais featureKey="crm.pipeline.kanban" />
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -217,13 +222,19 @@ export default function CrmPage() {
 
       {/* ─── Barra de 6 KPIs (Onda 3a) ───────────────────────────── */}
       {metrics && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+        <>
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Indicadores</span>
+            <SaibaMais featureKey="crm.pipeline.kpis" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
           <KpiCard
             label="Win Rate"
             value={fmtPct(metrics.kpis.winRate, 1)}
             sub={`${metrics.kpis.wonsJanela} de ${metrics.kpis.totalFechadosJanela} fechados`}
             tint="green"
             icon={<TrendingUp size={14} />}
+            helpKey="crm.pipeline.kpis.win-rate"
           />
           <KpiCard
             label="Ticket Médio"
@@ -238,6 +249,7 @@ export default function CrmPage() {
             sub={`${metrics.kpis.totalAbertos} deals abertos`}
             tint="purple"
             icon={<Target size={14} />}
+            helpKey="crm.pipeline.kpis.forecast"
           />
           <KpiCard
             label="Sales Velocity"
@@ -245,6 +257,7 @@ export default function CrmPage() {
             sub="receita esperada/dia"
             tint="indigo"
             icon={<TrendingUp size={14} />}
+            helpKey="crm.pipeline.kpis.sales-velocity"
           />
           <KpiCard
             label="Ciclo Médio"
@@ -264,7 +277,8 @@ export default function CrmPage() {
             tint="red"
             icon={<AlertTriangle size={14} />}
           />
-        </div>
+          </div>
+        </>
       )}
 
       {/* ─── Kanban com drag-and-drop ─────────────────────────────── */}
@@ -346,8 +360,9 @@ export default function CrmPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
           {/* Funil de conversão por estágio */}
           <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
               Conversão por estágio · últimos {metrics.windowDays}d
+              <SaibaMais featureKey="crm.pipeline.conversao-estagio" />
             </h4>
             <div className="space-y-2">
               {metrics.conversaoPorEstagio.map((c) => {
@@ -374,8 +389,9 @@ export default function CrmPage() {
 
           {/* PR #220 CRM 3c — Forecast breakdown por estágio */}
           <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
               De onde vem o forecast · pipeline-weighted
+              <SaibaMais featureKey="crm.pipeline.forecast-breakdown" />
             </h4>
             {!metrics.forecastBreakdown || metrics.forecastBreakdown.length === 0 ? (
               <p className="text-xs text-gray-500 italic">Sem deals abertos pra projetar.</p>
@@ -501,12 +517,14 @@ function KpiCard({
   sub,
   tint,
   icon,
+  helpKey,
 }: {
   label: string;
   value: string;
   sub: string;
   tint: 'green' | 'blue' | 'purple' | 'indigo' | 'amber' | 'red';
   icon: React.ReactNode;
+  helpKey?: string;
 }) {
   const colors: Record<typeof tint, { bg: string; text: string; iconBg: string }> = {
     green: { bg: 'bg-green-50 border-green-200', text: 'text-green-900', iconBg: 'bg-green-100 text-green-700' },
@@ -524,6 +542,7 @@ function KpiCard({
         <span className={`text-[10px] font-semibold uppercase tracking-wide ${c.text} opacity-70`}>
           {label}
         </span>
+        {helpKey && <SaibaMais featureKey={helpKey} />}
       </div>
       <div className={`text-lg font-bold ${c.text} leading-tight`}>{value}</div>
       <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={sub}>

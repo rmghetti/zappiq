@@ -9,6 +9,7 @@ import {
 } from '../config/metrics.js';
 import { resolveAudienceWhere } from './impulsoAudience.js';
 import { resolveCampaignMessage } from './impulsoChannels.js';
+import { resolveCampaignSend, buildTemplateComponents, type TemplateVariable } from './impulsoTemplateSend.js';
 
 // ── Conexão Redis para BullMQ ────────────────────
 // BullMQ requer uma conexão própria (não reutiliza ioredis do app)
@@ -96,6 +97,13 @@ export interface MessageSendJobData {
   organizationId?: string;
   content: string;
   to?: string;
+  /**
+   * Presente só no caminho de campanha quando a campanha usa um template da Meta
+   * APROVADO com mapa de variáveis válido (ou sem variáveis): o envio sai como
+   * template (vale fora da janela de 24h). As variáveis são resolvidas por
+   * contato no envio. Se ausente, envia texto livre (comportamento padrão).
+   */
+  template?: { name: string; language: string; bodyText: string; variables: TemplateVariable[] };
 }
 
 /**
@@ -112,7 +120,7 @@ export async function processMessageSendJob(
   data: MessageSendJobData,
 ): Promise<{ success: true; messageId: string; externalMessageId?: string }> {
   const { prisma } = await import('@zappiq/database');
-  const { sendReplyText } = await import('./channelDispatcher.js');
+  const { sendReplyText, sendReplyTemplate } = await import('./channelDispatcher.js');
 
   // ── 1. Resolve messageId, conversationId e organizationId ─────────
   // Inbox humano: chega com messageId + conversationId, mas sem organizationId.
@@ -188,11 +196,41 @@ export async function processMessageSendJob(
 
   // ── 2. Envio real via channelDispatcher (mesmo caminho da IA) ─────
   try {
-    const result = await sendReplyText({
-      organizationId,
-      conversationId,
-      content: data.content,
-    });
+    // Campanha com template aprovado sem variável → envia como TEMPLATE (vale
+    // fora da janela de 24h). Qualquer erro no caminho de template cai de volta
+    // pra texto livre: nunca fica pior que o comportamento anterior.
+    let result;
+    if (data.template) {
+      try {
+        // Resolve as variáveis {{N}} para este contato (nome, empresa) e monta
+        // os components da Meta. Sem variáveis, components fica vazio.
+        let components: any[] = [];
+        if (data.template.variables?.length) {
+          const contact = data.contactId
+            ? await prisma.contact.findUnique({
+                where: { id: data.contactId },
+                select: { name: true, company: true },
+              })
+            : null;
+          components = buildTemplateComponents(data.template.bodyText, data.template.variables, contact ?? {});
+        }
+        result = await sendReplyTemplate({
+          organizationId,
+          conversationId,
+          templateName: data.template.name,
+          languageCode: data.template.language,
+          components,
+        });
+      } catch (tplErr) {
+        logger.warn(
+          `[MessageSend] envio como template "${data.template.name}" falhou, caindo pra texto`,
+          { err: String(tplErr) },
+        );
+        result = await sendReplyText({ organizationId, conversationId, content: data.content });
+      }
+    } else {
+      result = await sendReplyText({ organizationId, conversationId, content: data.content });
+    }
 
     // ── 3. Sucesso: grava externalMessageId + marca SENT ────────────
     await prisma.message.update({
@@ -321,6 +359,25 @@ export async function dispatchCampaignJob(
       },
     });
 
+    // Decide UMA vez como a campanha vai (texto ou template aprovado sem
+    // variável). Como o caminho de template exige corpo fixo, o plano é o mesmo
+    // pra todos os contatos. Fora desse caso, cai em texto (sem regressão).
+    const sendPlan = resolveCampaignSend(campaign as any, 'whatsapp');
+    const templateData =
+      sendPlan.kind === 'template'
+        ? {
+            name: sendPlan.templateName,
+            language: sendPlan.languageCode,
+            bodyText: sendPlan.bodyText,
+            variables: sendPlan.variables,
+          }
+        : undefined;
+    if (templateData) {
+      logger.info(
+        `[Queue:CampaignDispatch] Campaign ${campaignId} usa template aprovado "${templateData.name}" (${templateData.variables.length} variáveis; envio fora da janela de 24h habilitado)`,
+      );
+    }
+
     const batchSize = 50;
     let enqueued = 0;
     for (let i = 0; i < contacts.length; i += batchSize) {
@@ -333,8 +390,9 @@ export async function dispatchCampaignJob(
           to: contact.whatsappId,
           // Texto que vai de fato: a copy salva/editada pelo cliente (por canal)
           // vence; sem ela, cai no bodyText do template legado.
-          content: resolveCampaignMessage(campaign, 'whatsapp'),
+          content: sendPlan.content,
           organizationId,
+          ...(templateData ? { template: templateData } : {}),
         },
       }));
       await messageSendQueue.addBulk(jobs);

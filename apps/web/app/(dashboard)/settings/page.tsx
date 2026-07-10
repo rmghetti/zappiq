@@ -22,6 +22,7 @@ import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import ConectarCanais from '../../../components/dashboard/ConectarCanais';
 import { BusinessHoursEditor, defaultBusinessHours, type BusinessHoursConfig } from '../flows/_components/BusinessHoursEditor';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 import { IntegrationHelpModal, type HelpTopic } from '../../../components/settings/IntegrationHelpModal';
 
 type Tab = 'general' | 'team' | 'canais' | 'ai' | 'billing' | 'flows' | 'integracoes';
@@ -183,16 +184,18 @@ export default function SettingsPage() {
         setOrg(orgRes.data);
         setOrgName(orgRes.data.name || '');
 
-        const agent = orgRes.data.settings?.agent;
-        if (agent) {
-          setAgentName(agent.name || '');
-          setAgentTone(agent.tone || 'friendly');
-          setAgentSegment(agent.segment || 'generic');
-          setAgentHandoff(
-            agent.handoffMessage ||
-              'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido!'
-          );
-        }
+        // Prefere as chaves top-level (que o backend realmente lê); cai pro
+        // objeto aninhado `agent` só como legado de orgs salvas antes do fix.
+        const s = (orgRes.data.settings || {}) as Record<string, any>;
+        const agent = s.agent || {};
+        setAgentName(s.agentName ?? agent.name ?? '');
+        setAgentTone(s.tone ?? agent.tone ?? 'friendly');
+        setAgentSegment(s.segmento ?? s.niche ?? agent.segment ?? 'generic');
+        setAgentHandoff(
+          s.handoffMessage ??
+            agent.handoffMessage ??
+            'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido!'
+        );
 
         // PR #111 — billing (Quota Mgmt #4 + #5)
         const billing = (orgRes.data.settings as { billing?: BillingSettings } | null | undefined)?.billing;
@@ -258,16 +261,24 @@ export default function SettingsPage() {
     }
     setSavingAI(true);
     try {
-      // Merge na chave settings.agent preservando outras chaves de settings
+      // Grava nas chaves TOP-LEVEL que o backend realmente lê (tone, segmento,
+      // niche, agentName, handoffMessage) — é isso que alimenta o prompt do
+      // agente (fallback), o Maestro e o readiness. Mantém o objeto `agent`
+      // aninhado por compatibilidade com telas que ainda o leem.
       const mergedSettings: OrgSettings = {
         ...(org?.settings || {}),
+        agentName: agentName.trim(),
+        tone: agentTone,
+        segmento: agentSegment,
+        niche: agentSegment,
+        handoffMessage: agentHandoff.trim(),
         agent: {
           name: agentName.trim(),
           tone: agentTone,
           segment: agentSegment,
           handoffMessage: agentHandoff.trim(),
         },
-      };
+      } as OrgSettings;
       const res = await api.put<{ data: Organization }>('/api/settings', { settings: mergedSettings });
       if (res.data) setOrg(res.data);
       showToast('success', 'Configurações de IA salvas');
@@ -508,7 +519,10 @@ export default function SettingsPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Plano atual</label>
+            <label className="text-sm font-medium text-gray-700 mb-1 inline-flex items-center gap-1">
+              Plano atual
+              <SaibaMais featureKey="settings.general.plano-atual" />
+            </label>
             <p className="text-sm text-primary-600 font-semibold">{org?.plan || '—'}</p>
           </div>
           <button
@@ -526,7 +540,10 @@ export default function SettingsPage() {
       {tab === 'team' && (
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden max-w-3xl">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">Membros da equipe ({team.length})</h3>
+            <h3 className="text-sm font-semibold text-gray-900 inline-flex items-center gap-1">
+              Membros da equipe ({team.length})
+              <SaibaMais featureKey="settings.team.papeis" />
+            </h3>
             <button
               onClick={() => setInviteOpen((v) => !v)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-500 text-white rounded-lg text-xs font-medium hover:bg-primary-600"
@@ -648,7 +665,10 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-500 mt-1">É o nome que aparece nas mensagens do WhatsApp.</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tom de voz</label>
+            <label className="text-sm font-medium text-gray-700 mb-1 inline-flex items-center gap-1">
+              Tom de voz
+              <SaibaMais featureKey="settings.ai.tom-de-voz" />
+            </label>
             <select
               value={agentTone}
               onChange={(e) => setAgentTone(e.target.value)}
@@ -662,7 +682,10 @@ export default function SettingsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Segmento</label>
+            <label className="text-sm font-medium text-gray-700 mb-1 inline-flex items-center gap-1">
+              Segmento
+              <SaibaMais featureKey="settings.ai.segmento" />
+            </label>
             <select
               value={agentSegment}
               onChange={(e) => setAgentSegment(e.target.value)}
@@ -700,7 +723,10 @@ export default function SettingsPage() {
       {tab === 'flows' && (
         <div className="bg-white rounded-xl border border-gray-100 p-6 max-w-2xl space-y-5">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-1">Horário comercial</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-1 inline-flex items-center gap-1">
+              Horário comercial
+              <SaibaMais featureKey="settings.flows.horario-comercial" />
+            </h3>
             <p className="text-xs text-gray-500 mb-4">
               Define os horários em que seu negócio está aberto. Usado pelas condições <span className="font-medium">"Horário comercial"</span> nos fluxos de automação.
             </p>
@@ -734,8 +760,9 @@ export default function SettingsPage() {
           {/* Auto-overage toggle */}
           <div className="flex items-start justify-between gap-4 p-4 border border-gray-200 rounded-lg">
             <div className="flex-1">
-              <label className="block text-sm font-semibold text-gray-900">
+              <label className="text-sm font-semibold text-gray-900 inline-flex items-center gap-1">
                 Auto-overage (continuar atendendo após limite)
+                <SaibaMais featureKey="settings.billing.auto-overage" />
               </label>
               <p className="text-xs text-gray-500 mt-1">
                 Quando ativo, a IA continua respondendo mesmo após o limite mensal — você paga apenas pelo excedente.
@@ -762,8 +789,9 @@ export default function SettingsPage() {
 
           {/* Hard ceiling */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="text-sm font-medium text-gray-700 mb-1 inline-flex items-center gap-1">
               Teto de gasto mensal em overage (R$)
+              <SaibaMais featureKey="settings.billing.teto-gasto" />
             </label>
             <input
               type="number"

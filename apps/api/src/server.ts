@@ -39,6 +39,7 @@ import flowsRoutes from './routes/flows.js';
 import flowTemplatesRoutes from './routes/flowTemplates.js';
 import knowledgeBaseRoutes from './routes/knowledgeBase.js';
 import aiTrainingRoutes from './routes/aiTraining.js'; // PR #106.1 — readiness score + KB upload + Q&A + identity
+import izaAjudaRoutes from './routes/izaAjuda.js'; // Fase 2 — chat de suporte da plataforma
 import appointmentsRoutes from './routes/appointments.js'; // Agendamento — agenda interna (hub)
 import integrationsGoogleRoutes from './routes/integrationsGoogle.js'; // Agendamento — OAuth Google Calendar
 import templatesRoutes from './routes/templates.js';
@@ -314,6 +315,9 @@ app.use('/api/flows/templates', authMiddleware, rlsTenantMiddleware, requireActi
 app.use('/api/flows', authMiddleware, rlsTenantMiddleware, requireActivePlan, flowsRoutes);
 app.use('/api/kb', authMiddleware, rlsTenantMiddleware, requireActivePlan, knowledgeBaseRoutes);
 app.use('/api/ai-training', authMiddleware, rlsTenantMiddleware, requireActivePlan, aiTrainingRoutes); // PR #106.1
+// Iza Ajuda (Fase 2): ajuda de plataforma disponivel a qualquer cliente logado,
+// inclusive trial/vencido (sem requireActivePlan de proposito).
+app.use('/api/iza-ajuda', authMiddleware, rlsTenantMiddleware, izaAjudaRoutes);
 app.use('/api/templates', authMiddleware, rlsTenantMiddleware, requireActivePlan, templatesRoutes);
 app.use('/api/deals', authMiddleware, rlsTenantMiddleware, requireActivePlan, dealsRoutes);
 app.use('/api/crm', authMiddleware, rlsTenantMiddleware, requireActivePlan, crmRoutes); // PR #217 CRM 3a — métricas executivas

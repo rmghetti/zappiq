@@ -8,6 +8,14 @@ import { META_TEMPLATE_CATEGORIES } from '../utils/messageTemplate.js';
 
 const router = Router();
 
+// Mapa de preenchimento de uma variável {{N}} do corpo por contato.
+const templateVariableSchema = z.object({
+  index: z.number().int().positive(),
+  source: z.enum(['contact.firstName', 'contact.name', 'contact.company', 'fixed']),
+  fixedText: z.string().max(200).optional(),
+  fallback: z.string().max(200).optional(),
+});
+
 const createSchema = z.object({
   name: z.string().min(2),
   category: z.enum(META_TEMPLATE_CATEGORIES).default('MARKETING'),
@@ -17,6 +25,8 @@ const createSchema = z.object({
   bodyText: z.string().min(1),
   footerText: z.string().optional(),
   buttons: z.any().optional(),
+  // Mapa das variáveis {{1}}, {{2}}... do corpo, preenchidas por contato no envio.
+  variables: z.array(templateVariableSchema).optional(),
   // FEATURE 5b.2 — template pra REABRIR a janela de 24h da Meta.
   isReengagement: z.boolean().default(false),
 });
@@ -33,6 +43,7 @@ const updateSchema = z.object({
   bodyText: z.string().min(1).optional(),
   footerText: z.string().nullable().optional(),
   buttons: z.any().optional(),
+  variables: z.array(templateVariableSchema).nullable().optional(),
   isReengagement: z.boolean().optional(),
 });
 

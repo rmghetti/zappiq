@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { CalendarClock, Plus, Trash2, Loader2, CheckCircle2, MapPin, Video, Phone, Building2, Calendar, Link2, Unlink, HelpCircle, ArrowRight } from 'lucide-react';
 import { api } from '../../lib/api';
 import { GoogleConnectGuide } from './GoogleConnectGuide';
+import { SaibaMais } from '../shared/SaibaMais';
 
 type Modality = 'in_person' | 'online' | 'phone' | 'video';
 interface BookingField { key: string; label: string; type: 'text' | 'phone' | 'email' | 'select'; required: boolean }
@@ -280,7 +281,10 @@ export function SchedulingPanel({ onChange }: { onChange: () => void }) {
           {/* Lista de tipos */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><CalendarClock size={16} /> Tipos de agendamento</h3>
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <CalendarClock size={16} /> Tipos de agendamento
+                <SaibaMais featureKey="ai-training.scheduling.tipo-agendamento" />
+              </h3>
               <span className="text-xs text-gray-500">{types.length} tipo(s)</span>
             </div>
             {types.length === 0 ? (
@@ -376,6 +380,7 @@ export function SchedulingPanel({ onChange }: { onChange: () => void }) {
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={draft.requiresConfirmation} onChange={(e) => setDraft((d) => ({ ...d, requiresConfirmation: e.target.checked }))} />
                 Exigir minha confirmação antes de valer
+                <SaibaMais featureKey="ai-training.scheduling.confirmacao-manual" />
               </label>
 
               {/* Campos que o cliente final preenche */}

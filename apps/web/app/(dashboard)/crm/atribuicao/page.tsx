@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, TrendingUp, DollarSign, Target, Trophy, MessageCircle } from 'lucide-react';
 import { api } from '../../../../lib/api';
+import { SaibaMais } from '../../../../components/shared/SaibaMais';
 
 interface Campanha {
   id: string;
@@ -104,7 +105,10 @@ export default function CrmAttributionPage() {
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Atribuição de campanhas</h1>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-1.5">
+              Atribuição de campanhas
+              <SaibaMais featureKey="crm.atribuicao" />
+            </h1>
             <p className="text-sm text-gray-500 mt-1">Funil campanha → venda · últimos {data?.windowDays || 90} dias</p>
           </div>
         </div>
@@ -136,7 +140,10 @@ export default function CrmAttributionPage() {
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Atribuição de campanhas</h1>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-1.5">
+              Atribuição de campanhas
+              <SaibaMais featureKey="crm.atribuicao" />
+            </h1>
             <p className="text-sm text-gray-500 mt-1">
               Funil campanha → venda · últimos {data.windowDays} dias · {k.totalCampanhas} campanha{k.totalCampanhas !== 1 ? 's' : ''}
             </p>
@@ -152,6 +159,7 @@ export default function CrmAttributionPage() {
           sub={`${k.totalDealsAtribuidos} deals ganhos`}
           icon={<DollarSign size={16} />}
           tint="green"
+          helpKey="crm.atribuicao.kpis.receita-atribuida"
         />
         <KpiBig
           label="ROI geral"
@@ -159,6 +167,7 @@ export default function CrmAttributionPage() {
           sub={`CAC estimado: ${fmtBRL(k.totalCacEstimado)}`}
           icon={<TrendingUp size={16} />}
           tint={k.roiGeral >= 0 ? 'green' : 'red'}
+          helpKey="crm.atribuicao.kpis.roi"
         />
         <KpiBig
           label="Reply rate médio"
@@ -182,6 +191,7 @@ export default function CrmAttributionPage() {
         <SortBtn current={sortBy} value="roi" label="ROI" onClick={setSortBy} />
         <SortBtn current={sortBy} value="receita" label="Receita" onClick={setSortBy} />
         <SortBtn current={sortBy} value="recent" label="Mais recentes" onClick={setSortBy} />
+        <SaibaMais featureKey="crm.atribuicao.tabela-campanhas" className="ml-auto" />
       </div>
 
       {/* Tabela */}
@@ -258,12 +268,14 @@ function KpiBig({
   sub,
   icon,
   tint,
+  helpKey,
 }: {
   label: string;
   value: string;
   sub: string;
   icon: React.ReactNode;
   tint: 'green' | 'red' | 'blue' | 'purple';
+  helpKey?: string;
 }) {
   const colors = {
     green: { bg: 'bg-green-50 border-green-200', text: 'text-green-900', iconBg: 'bg-green-100 text-green-700' },
@@ -278,6 +290,7 @@ function KpiBig({
         <span className={`text-[10px] font-semibold uppercase tracking-wide ${colors.text} opacity-70`}>
           {label}
         </span>
+        {helpKey && <SaibaMais featureKey={helpKey} />}
       </div>
       <div className={`text-2xl font-bold ${colors.text} leading-tight`}>{value}</div>
       <div className="text-[11px] text-gray-500 mt-1 truncate" title={sub}>

@@ -24,6 +24,7 @@ import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import { RecommendationHero } from './RecommendationHero';
 import { PlanChangeModal } from './PlanChangeModal';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 // Enum do banco (org.plan) → tier lógico V4. STARTER/legado = Iza Lite.
 function orgEnumToTier(planEnum: string | null | undefined): PlanTier {
@@ -175,17 +176,23 @@ export default function BillingPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Plano e Fatura</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900">Plano e Fatura</h1>
+            <SaibaMais featureKey="billing.pagina" />
+          </div>
           <p className="text-sm text-gray-500 mt-1">
             Plano atual: <span className="font-semibold text-primary-600">{currentPlan}</span>
           </p>
         </div>
-        <button
-          onClick={handlePortal}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
-        >
-          <ExternalLink size={16} /> Portal de faturas
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handlePortal}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
+          >
+            <ExternalLink size={16} /> Portal de faturas
+          </button>
+          <SaibaMais featureKey="billing.portal-faturas" />
+        </div>
       </div>
 
       {/* Estado REAL da assinatura (FEATURE 5b.1) */}
@@ -223,6 +230,9 @@ export default function BillingPage() {
       )}
 
       {/* Billing cycle toggle */}
+      <div className="mb-2 flex items-center justify-center gap-1.5 text-xs text-gray-400">
+        Planos disponíveis <SaibaMais featureKey="billing.comparativo-planos" />
+      </div>
       <div className="mb-6 flex items-center justify-center gap-2">
         <div className="inline-flex bg-gray-100 rounded-full p-1">
           <button
@@ -356,6 +366,11 @@ export default function BillingPage() {
                   )}
                 </button>
               )}
+              {plan.priceMonthly !== null && !isCurrentPaid && !change && (
+                <div className="mt-1.5 flex justify-center">
+                  <SaibaMais featureKey="billing.assinar-checkout" variant="link" />
+                </div>
+              )}
             </div>
           );
         })}
@@ -366,18 +381,24 @@ export default function BillingPage() {
         <div className="flex items-center gap-2 mb-3">
           <Zap size={18} className="text-amber-500" />
           <h3 className="text-base font-bold text-gray-900">Add-ons (cobrados além do plano)</h3>
+          <SaibaMais featureKey="billing.addons-catalogo" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {[
-            { name: 'Voice add-on', desc: '6 pacotes (200 a 4.000 min/mes)', price: 'R$ 79,90 a R$ 929,90/mes' },
-            { name: 'Mensagens IA extras', desc: 'Pacote 10.000 mensagens', price: 'R$ 197 / pacote' },
-            { name: 'Disparos extras', desc: 'Pacote 10.000 disparos', price: 'R$ 247 / pacote' },
-            { name: 'Atendente extra', desc: 'Seat adicional', price: 'R$ 89/mes' },
-            { name: 'Número WA adicional', desc: '+ 1 número com fila própria', price: 'R$ 147/mes' },
-            { name: 'Integração Meta gerenciada', desc: 'Embedded Signup + configuração', price: 'R$ 297 setup' },
-          ].map((a) => (
+          {(
+            [
+              { name: 'Voice add-on', desc: '6 pacotes (200 a 4.000 min/mes)', price: 'R$ 79,90 a R$ 929,90/mes' },
+              { name: 'Mensagens IA extras', desc: 'Pacote 10.000 mensagens', price: 'R$ 197 / pacote' },
+              { name: 'Disparos extras', desc: 'Pacote 10.000 disparos', price: 'R$ 247 / pacote' },
+              { name: 'Atendente extra', desc: 'Seat adicional', price: 'R$ 89/mes' },
+              { name: 'Número WA adicional', desc: '+ 1 número com fila própria', price: 'R$ 147/mes' },
+              { name: 'Integração Meta gerenciada', desc: 'Embedded Signup + configuração', price: 'R$ 297 setup', featureKey: 'billing.addon-integracao-meta' },
+            ] as Array<{ name: string; desc: string; price: string; featureKey?: string }>
+          ).map((a) => (
             <div key={a.name} className="border border-gray-200 rounded-xl p-4">
-              <p className="text-sm font-semibold text-gray-900">{a.name}</p>
+              <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                {a.name}
+                {a.featureKey && <SaibaMais featureKey={a.featureKey} />}
+              </p>
               <p className="text-xs text-gray-500 mt-1">{a.desc}</p>
               <p className="text-xs font-medium text-primary-600 mt-2">{a.price}</p>
             </div>
@@ -390,6 +411,7 @@ export default function BillingPage() {
         <div className="mt-8 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-2xl p-5">
           <h3 className="text-sm font-bold text-purple-900 flex items-center gap-2">
             <Sparkles size={16} /> Beta — Conversa Convertida (outcome-based)
+            <SaibaMais featureKey="billing.outcome-beta" />
           </h3>
           <p className="text-xs text-purple-800 mt-2 leading-relaxed">
             Você esta no beta privado de pricing por resultado. R$ 19,90 por lead qualificado
@@ -401,7 +423,10 @@ export default function BillingPage() {
 
       {/* Usage info — dados REAIS via GET /api/billing/usage (FIX W3.1) */}
       <div className="mt-8 bg-white rounded-xl border border-gray-100 p-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Uso do plano atual</h3>
+        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          Uso do plano atual
+          <SaibaMais featureKey="billing.uso-do-plano" />
+        </h3>
         {usageLoading ? (
           <p className="text-sm text-gray-400">Carregando uso...</p>
         ) : !usage ? (
@@ -534,6 +559,7 @@ function SubscriptionCard({
               >
                 {meta.label}
               </span>
+              {sub.status === 'past_due' && <SaibaMais featureKey="billing.pagamento-pendente" />}
               <span className="text-sm font-semibold text-gray-900">{sub.plan}</span>
               {cycleLabel && (
                 <span className="text-xs text-gray-500">· ciclo {cycleLabel}</span>
@@ -545,9 +571,12 @@ function SubscriptionCard({
 
         {sub.status === 'trialing' && sub.trialDaysLeft !== null && (
           <div className="text-right">
-            <p className="text-2xl font-extrabold text-teal-600 leading-none">
-              {sub.trialDaysLeft}
-            </p>
+            <div className="flex items-center justify-end gap-1">
+              <p className="text-2xl font-extrabold text-teal-600 leading-none">
+                {sub.trialDaysLeft}
+              </p>
+              <SaibaMais featureKey="billing.dias-trial" />
+            </div>
             <p className="text-[11px] text-gray-500 mt-1">
               {sub.trialDaysLeft === 1 ? 'dia restante' : 'dias restantes'}
             </p>

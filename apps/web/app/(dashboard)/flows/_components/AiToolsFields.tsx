@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 // ---------------------------------------------------------------------------
 // Types — espelha WebhookToolConfig do backend (apps/api/src/agents/webhookTool.ts)
@@ -93,6 +94,7 @@ export function AiToolsFields({
           className="accent-primary-500"
         />
         <span className="font-medium">Usar uma ferramenta (webhook)</span>
+        <SaibaMais featureKey="flows.no-ia.ferramenta-webhook" />
       </label>
       <p className="text-[10px] text-gray-400 mt-0.5 ml-5">
         A IA pode chamar um endpoint externo durante a conversa.

@@ -18,6 +18,7 @@ import { api } from '../../../lib/api';
 import { computeDelta, buildAreaPath, type VolumePoint, type DeltaResult } from '@zappiq/shared';
 import { AgentTrainingWidget } from '../../../components/dashboard/AgentTrainingWidget';
 import { CanaisTutorialCard } from '../../../components/dashboard/CanaisTutorialCard';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 // Janela anterior (mesma duracao, imediatamente antes) devolvida pela API
 // para calcular os deltas REAIS. Sem isso, a home inventava "+12,5%".
@@ -96,6 +97,7 @@ export default function DashboardPage() {
   const kpis = data ? [
     {
       label: 'Mensagens',
+      featureKey: 'dashboard.kpi.mensagens',
       value: fmtNum(data.totalMessages),
       delta: computeDelta(data.totalMessages, prev?.totalMessages),
       icon: MessageSquare,
@@ -105,6 +107,7 @@ export default function DashboardPage() {
       // Conversas abertas e contagem no momento (status atual), nao tem
       // "janela anterior" equivalente => sem delta, e honesto.
       label: 'Conversas Abertas',
+      featureKey: 'dashboard.kpi.conversas-abertas',
       value: fmtNum(data.openConversations),
       delta: { available: false } as DeltaResult,
       icon: TrendingUp,
@@ -112,6 +115,7 @@ export default function DashboardPage() {
     },
     {
       label: 'Novos Contatos',
+      featureKey: 'dashboard.kpi.novos-contatos',
       value: fmtNum(data.newContacts),
       delta: computeDelta(data.newContacts, prev?.newContacts),
       icon: Users,
@@ -119,6 +123,7 @@ export default function DashboardPage() {
     },
     {
       label: 'Taxa de Automação',
+      featureKey: 'dashboard.kpi.taxa-automacao',
       value: `${data.automationRate}%`,
       delta: computeDelta(data.automationRate, prev?.automationRate),
       icon: Bot,
@@ -166,7 +171,10 @@ export default function DashboardPage() {
               className="bg-white rounded-2xl p-5 border border-gray-100 hover:shadow-md transition-shadow"
             >
               <div className="flex items-center justify-between mb-4">
-                <span className="text-sm font-medium text-gray-500">{kpi.label}</span>
+                <span className="text-sm font-medium text-gray-500 inline-flex items-center gap-1">
+                  {kpi.label}
+                  <SaibaMais featureKey={kpi.featureKey} />
+                </span>
                 <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${kpi.gradient} flex items-center justify-center text-white shadow-sm`}>
                   <kpi.icon size={16} />
                 </div>
@@ -191,7 +199,10 @@ export default function DashboardPage() {
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h3 className="text-sm font-semibold text-gray-700">Mensagens no período</h3>
+                <h3 className="text-sm font-semibold text-gray-700 inline-flex items-center gap-1">
+                  Mensagens no período
+                  <SaibaMais featureKey="dashboard.grafico.volume-mensagens" />
+                </h3>
                 <p className="text-3xl font-bold text-gray-900 mt-2">{data ? fmtNum(data.totalMessages) : '—'}</p>
                 <div className="flex items-center gap-1 text-xs mt-1">
                   <DeltaBadge delta={data ? computeDelta(data.totalMessages, data.prev?.totalMessages) : { available: false }} />
@@ -206,7 +217,10 @@ export default function DashboardPage() {
 
           {/* Customer Segments (mock Shopeers Resellers/Distrib/Wholesalers) */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Leads por estágio</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 inline-flex items-center gap-1">
+              Leads por estágio
+              <SaibaMais featureKey="dashboard.leads-por-estagio" />
+            </h3>
             <div className="grid grid-cols-3 gap-3">
               <SegmentCard label="Novos" value={data?.newContacts ?? 0} color="bg-blue-50 border-blue-200 text-blue-900" dot="bg-blue-500" />
               <SegmentCard label="Em atendimento" value={data?.openConversations ?? 0} color="bg-amber-50 border-amber-200 text-amber-900" dot="bg-amber-500" />
@@ -217,7 +231,10 @@ export default function DashboardPage() {
           {/* Atividade Recente (mantida da versão anterior, polida) */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-700">Atividade recente</h3>
+              <h3 className="text-sm font-semibold text-gray-700 inline-flex items-center gap-1">
+                Atividade recente
+                <SaibaMais featureKey="dashboard.status-conversa" />
+              </h3>
               <Link
                 href="/conversations"
                 className="text-xs text-primary-600 hover:text-primary-700 font-medium inline-flex items-center gap-1"
@@ -282,14 +299,20 @@ export default function DashboardPage() {
         <div className="space-y-5">
           {/* Dia mais ativo — barras REAIS agregadas de volumeByDay */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Dia mais ativo</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 inline-flex items-center gap-1">
+              Dia mais ativo
+              <SaibaMais featureKey="dashboard.dia-mais-ativo" />
+            </h3>
             <WeekdayBarChart points={data?.volumeByDay} loading={loading} />
           </div>
 
           {/* Satisfação (CSAT) — valor REAL; vazio honesto quando não há nota.
               (Antes exibia "Taxa de retorno" com fallback inventado 68.) */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Satisfação (CSAT)</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 inline-flex items-center gap-1">
+              Satisfação (CSAT)
+              <SaibaMais featureKey="dashboard.csat" />
+            </h3>
             <CsatGauge csat={data ? data.csat : null} loading={loading} />
           </div>
         </div>

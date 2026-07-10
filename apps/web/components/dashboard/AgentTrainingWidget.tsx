@@ -22,6 +22,7 @@ import Link from 'next/link';
 import { Sparkles, ArrowRight, Upload, MessageSquareText, Settings, Globe, User } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useAgentReadiness, readinessLevelColor, readinessLevelLabel } from '../../hooks/useAgentReadiness';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 const ACTION_ICONS: Record<string, any> = {
   complete_survey: MessageSquareText,
@@ -74,6 +75,7 @@ export function AgentTrainingWidget() {
             <span className={`px-2 py-0.5 rounded-full ${colors.bg} ${colors.text} text-xs font-bold`}>
               {readiness.score}%
             </span>
+            <SaibaMais featureKey="dashboard.agent-training-widget" />
           </div>
 
           {/* Progress bar */}
