@@ -12,7 +12,7 @@ export const templatesContent: SaibaMaisContent[] = [
     oQueE:
       'Template é um modelo de mensagem pré aprovado pela Meta (a empresa dona do WhatsApp). Diferente de uma mensagem livre, que só pode ser enviada dentro de uma conversa em andamento, o template pode ser usado a qualquer momento, mesmo com um contato que não fala com você há semanas.',
     paraQueServe:
-      'Serve para dois casos que uma mensagem comum não resolve: disparar campanhas para uma lista de contatos e ter um texto já aprovado pela Meta pra tentar retomar contato com alguém que sumiu há mais de 24 horas. Sem template aprovado, esses dois casos ficam travados.',
+      'Serve para dois casos que uma mensagem comum não resolve: disparar campanhas para uma lista de contatos e ter um texto já aprovado pela Meta pra tentar retomar contato com alguém que sumiu há mais de 24 horas. Campanhas podem rodar com ou sem template (dá pra mandar mensagem livre para quem está na janela de 24h); o template é o que permite falar com quem já passou desse prazo.',
     comoImplementar: [
       'Clique em "Novo template" no canto superior direito da página.',
       'Preencha nome, categoria, idioma e o corpo da mensagem no formulário.',
@@ -72,7 +72,7 @@ export const templatesContent: SaibaMaisContent[] = [
       'Revise nome, categoria e corpo da mensagem com atenção antes de clicar, porque editar depois de enviado pode deixar o texto avaliado pela Meta diferente do texto salvo no sistema.',
       'Clique em "Enviar à Meta" na linha do template.',
       'Depois de enviado, evite editar o template até a Meta responder.',
-      'Acompanhe o status na listagem: ele muda de "Pendente" para "Em análise" assim que o envio é feito.',
+      'Acompanhe o status na listagem: depois do envio ele passa a refletir a análise da Meta, que pode aparecer como "Pendente" ou "Em análise" até a Meta responder.',
       'Se a Meta rejeitar, corrija o texto desse mesmo template com base no motivo indicado e clique em "Enviar à Meta" de novo.',
     ],
     exemploResultado:
@@ -94,7 +94,7 @@ export const templatesContent: SaibaMaisContent[] = [
       'Depois de aprovado, o template fica disponível na lista pra você escolher numa campanha voltada a contatos inativos. A marcação de reengajamento hoje serve só para identificar esse template na listagem, quem decide quando usá-lo é você.',
     ],
     exemploResultado:
-      'Um cliente de uma loja de móveis some do WhatsApp há 3 dias sem responder. Como a janela de 24h já fechou, uma mensagem livre não chega até ele. Com o template de reengajamento aprovado, a loja usa esse template numa campanha pra tentar retomar contato, o cliente responde e a venda que estava parada volta a andar.',
+      'Um cliente de uma loja de móveis some do WhatsApp há 3 dias sem responder. Como a janela de 24h já fechou, uma mensagem livre não chega até ele. A loja prepara um template de reengajamento aprovado, que é o formato previsto pela Meta para reabrir esse tipo de conversa, e o deixa pronto na lista para as ações com contatos inativos.',
     relacionados: ['templates.overview', 'templates.categoria'],
   },
   {

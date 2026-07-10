@@ -14,7 +14,7 @@ export const flowsContent: SaibaMaisContent[] = [
       'Serve para você planejar e visualizar a jornada completa do cliente de uma vez só, sem abrir fluxo por fluxo. Por exemplo: você desenha que o cliente entra pelo fluxo de Atendimento, segue pro fluxo de Vendas, e se fechar negócio vai pro fluxo de Agendamento. O mapa mostra esse desenho inteiro numa tela. Importante: hoje o mapa é um documento editável, não um roteador automático. Para o cliente realmente pular de um fluxo pro outro durante a conversa, use o nó "Enviar para outro fluxo" dentro do fluxo de origem.',
     comoImplementar: [
       'Na página inicial do Maestro, o Mapa da Operação já aparece logo abaixo do card MAESTRO INTELIGENTE.',
-      'Clique em qualquer fluxo do mapa para abrir e editar aquele trecho da conversa.',
+      'Clique em qualquer fluxo do mapa para expandir e ver a cadeia de atividades dele; dentro do card aberto, clique em "Abrir e editar fluxo" para editar aquele trecho da conversa.',
       'Clique numa seta entre dois fluxos para ver ou editar o rótulo da conexão (ex: "objeção de preço"), ou arraste pra desenhar uma conexão nova.',
       'Use o botão "Tela cheia" se quiser ver o mapa maior, com todos os fluxos e conexões em detalhe.',
     ],
