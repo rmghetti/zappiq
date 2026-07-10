@@ -42,7 +42,7 @@ Rotas em `apps/web/app/(dashboard)` visíveis ao cliente, conforme `components/S
 
 - Sem sistema de i18n multi-idioma (o produto é pt-BR).
 - Sem CMS/editor visual de conteúdo nesta fase. O conteúdo mora em código, versionado.
-- Sem tour guiado passo a passo (walkthrough). Só popups sob demanda.
+- Sem infraestrutura genérica de tour para todas as telas. O tour existe apenas de forma pontual, em 3 fluxos P0 (ver secção 5.5), como complemento e não substituto do Saiba mais.
 
 ## 3. Modelo de conteúdo
 
@@ -126,12 +126,24 @@ A construção total é precedida por uma varredura-catálogo **interna** (artef
 
 Botões óbvios (ex.: "salvar") não recebem Saiba mais. A varredura marca `precisaSaibaMais: false` nesses casos.
 
+## 5.5 Tour pontual (complemento nos fluxos difíceis)
+
+O Saiba mais explica "o que é" e "como fazer", mas não guia a ordem dos cliques. Para 3 fluxos sequenciais onde o cliente leigo mais erra a ordem das ações, um tour leve resolve o que o popup estático não resolve.
+
+- **Fluxos com tour** (apenas estes): (1) conectar canal do WhatsApp, (2) montar o primeiro fluxo no Maestro, (3) configurar o Treinar IA.
+- **Forma:** tooltips sequenciais tipo spotlight, 3 a 5 passos, com "próximo/anterior/pular". Dispara na primeira visita ao fluxo ou por um botão "Ver tour" sempre disponível.
+- **Fonte de texto:** reaproveita o mesmo registro central da secção 4.1 (um tour é uma sequência de `featureKey` mais um passo curto de ação). Nada de copy nova espalhada.
+- **Componente:** `apps/web/components/shared/GuidedTour/`, dirigido por um registro `apps/web/content/tours/` que lista, por tour, os passos (seletor do alvo na tela + featureKey + microcopy da ação).
+- **Não-objetivo:** não é um walkthrough de produto inteiro nem substitui o Saiba mais. Fora desses 3 fluxos, só popup sob demanda.
+- Persistência do "já viu o tour" no mesmo mecanismo de estado do onboarding existente (o repo já tem `OnboardingWizard`), sem inventar storage novo.
+
 ## 6. Fases de execução
 
 1. **Varredura** — agentes em paralelo produzem o catálogo; consolidação gera o backlog priorizado. Checkpoint de revisão rápido do backlog.
 2. **Fundação técnica** — `types.ts`, `index.ts` do registro, componente `<SaibaMais />` e telemetria. Ligado em uma tela P0 como prova de conceito.
 3. **Conteúdo + wiring** — redação de todos os itens P0, depois P1, depois P2, cada um ligado na sua tela. Conteúdo passa pela voz /voz-humana.
-4. **Verificação** — preview local, screenshots dos popups nas telas P0/P1, checagem de console/erros, e revisão do diff.
+4. **Tour pontual** — componente `GuidedTour` + registro de tours + ligação nos 3 fluxos da secção 5.5, reusando o conteúdo já redigido.
+5. **Verificação** — preview local, screenshots dos popups e do tour nas telas P0/P1, checagem de console/erros, e revisão do diff.
 
 Tudo numa branch (`feat/saiba-mais-dashboard`), entregue junto para revisão do Rodrigo antes de qualquer deploy. Preview antes de produção; nada de `--prod` sem confirmação ou verificação automatizada.
 
