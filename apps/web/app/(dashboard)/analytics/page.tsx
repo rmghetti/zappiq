@@ -10,6 +10,7 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts';
 import { api } from '../../../lib/api';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 // Guard global: nunca renderiza "undefined"/"null" na tela (V4 fix 2026-05-27).
 function fmtNum(v: unknown, opts: { suffix?: string; fallback?: string; decimals?: number } = {}): string {
@@ -325,6 +326,7 @@ export default function AnalyticsPage() {
               <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-white/70 text-gray-500 border border-gray-200">
                 {insight ? (insight.source === 'llm' ? 'Pulso · IA' : 'Pulso · automático') : 'Pulso'}
               </span>
+              <SaibaMais featureKey="analytics.pulso" className="ml-1" />
               <button
                 onClick={handleRefreshPulse}
                 disabled={refreshingPulse}
