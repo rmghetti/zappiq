@@ -91,10 +91,10 @@ export const templatesContent: SaibaMaisContent[] = [
       'Crie um template pensado para reabrir conversa, como "Oi {{1}}! Faz um tempo que a gente não conversa. Posso te ajudar com algo?".',
       'No formulário, marque a caixa "Template de reengajamento (reabre a janela de 24h)".',
       'Envie o template à Meta e aguarde a aprovação, como qualquer outro template.',
-      'Depois de aprovado, o template fica disponível na lista pra você escolher numa campanha voltada a contatos inativos. A marcação de reengajamento hoje serve só para identificar esse template na listagem, quem decide quando usá-lo é você.',
+      'Depois de aprovado, escolha esse template numa campanha para contatos inativos: ele é disparado de verdade e alcança quem já passou das 24 horas. Modelos sem variáveis já funcionam por completo; os que usam o nome do cliente ({{1}}) dependem do preenchimento por contato, que está em desenvolvimento.',
     ],
     exemploResultado:
-      'Um cliente de uma loja de móveis some do WhatsApp há 3 dias sem responder. Como a janela de 24h já fechou, uma mensagem livre não chega até ele. A loja prepara um template de reengajamento aprovado, que é o formato previsto pela Meta para reabrir esse tipo de conversa, e o deixa pronto na lista para as ações com contatos inativos.',
+      'Um cliente de uma loja de móveis some do WhatsApp há 3 dias. Como a janela de 24h fechou, uma mensagem livre não chega até ele. A loja usa um template de reengajamento aprovado e sem variáveis, tipo "Faz um tempo que a gente não conversa por aqui. Posso te ajudar com algo?", numa campanha para os inativos, e a mensagem chega, reabrindo a conversa.',
     relacionados: ['templates.overview', 'templates.categoria'],
   },
   {
