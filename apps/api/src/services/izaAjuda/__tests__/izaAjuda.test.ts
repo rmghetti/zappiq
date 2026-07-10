@@ -1,51 +1,51 @@
-/**
- * Testes da lógica pura da Iza Ajuda (retrieval + prompt).
- * Rodar: npx tsx apps/api/src/services/izaAjuda/__tests__/izaAjuda.test.ts
- */
+import { describe, it, expect } from 'vitest';
 import { tokenize, retrieve } from '../retrieval.js';
 import { IZA_AJUDA_SYSTEM, buildContext, buildUserMessage } from '../prompt.js';
 import { IZA_AJUDA_CORPUS } from '../../../data/izaAjudaCorpus.js';
 
-let falhas = 0;
-function check(cond: boolean, msg: string) {
-  if (!cond) { falhas++; console.error('  FALHOU: ' + msg); }
-}
+describe('tokenize', () => {
+  it('mantém termos relevantes e remove stopwords', () => {
+    const toks = tokenize('Como funciona o Pulso da IA?');
+    expect(toks).toContain('funciona');
+    expect(toks).toContain('pulso');
+    expect(toks).not.toContain('como');
+    expect(toks).not.toContain('da');
+  });
+});
 
-// tokenize: minúsculas, sem acento, sem stopword, sem termo curto
-const toks = tokenize('Como funciona o Pulso da IA?');
-check(toks.includes('funciona'), 'tokenize deve manter "funciona"');
-check(toks.includes('pulso'), 'tokenize deve manter "pulso"');
-check(!toks.includes('como') && !toks.includes('da'), 'tokenize deve remover stopwords');
+describe('corpus', () => {
+  it('carregou e é grande o suficiente', () => {
+    expect(IZA_AJUDA_CORPUS.length).toBeGreaterThanOrEqual(120);
+  });
+});
 
-// corpus não vazio e só clientSafe (o gerador já filtra; aqui garante que carregou)
-check(IZA_AJUDA_CORPUS.length >= 120, `corpus deveria ter >=120 docs, tem ${IZA_AJUDA_CORPUS.length}`);
+describe('retrieve', () => {
+  it('acha o doc certo para uma pergunta conhecida', () => {
+    const r = retrieve('o que é o pulso do analytics?', 6);
+    expect(r.length).toBeGreaterThan(0);
+    expect(r.some((s) => s.doc.featureKey.includes('pulso'))).toBe(true);
+  });
+  it('retorna vazio para termo inexistente', () => {
+    expect(retrieve('zzzzqwykx', 6)).toHaveLength(0);
+  });
+});
 
-// retrieve: pergunta sobre um recurso conhecido traz o doc certo no topo
-const r1 = retrieve('o que é o pulso do analytics?', 6);
-check(r1.length > 0, 'retrieve deve achar algo para "pulso"');
-check(r1[0].doc.featureKey.includes('pulso') || r1.some((s) => s.doc.featureKey.includes('pulso')),
-  'retrieve deve trazer analytics.pulso entre os tops');
+describe('guardrails no system prompt', () => {
+  it('contém as marcas de segurança', () => {
+    for (const marca of ['Iza Ajuda', 'NUNCA', 'administrativos', 'travessão', 'invente']) {
+      expect(IZA_AJUDA_SYSTEM.toLowerCase()).toContain(marca.toLowerCase());
+    }
+  });
+});
 
-// retrieve: pergunta sem correspondência retorna vazio (modelo dirá que não sabe)
-const r2 = retrieve('zzzzqwykx', 6);
-check(r2.length === 0, 'retrieve deve retornar vazio para termo inexistente');
-
-// guardrails presentes no system prompt
-for (const marca of ['Iza Ajuda', 'NUNCA', 'administrativos', 'travessão', 'invente']) {
-  check(IZA_AJUDA_SYSTEM.toLowerCase().includes(marca.toLowerCase()), `system prompt deve conter "${marca}"`);
-}
-
-// contexto vazio quando não há docs
-check(buildContext([]).includes('nenhum trecho relevante'), 'buildContext vazio deve avisar que não achou');
-
-// user message inclui a pergunta e o material
-const um = buildUserMessage('como conecto o whatsapp?', r1.map((s) => s.doc));
-check(um.includes('como conecto o whatsapp?'), 'buildUserMessage deve conter a pergunta');
-check(um.includes('MATERIAL DE AJUDA'), 'buildUserMessage deve conter o material');
-
-if (falhas === 0) {
-  console.log(`OK: Iza Ajuda logica pura integra (corpus ${IZA_AJUDA_CORPUS.length} docs).`);
-} else {
-  console.error(`\n${falhas} verificacao(oes) falharam.`);
-  process.exit(1);
-}
+describe('montagem de contexto e mensagem', () => {
+  it('avisa quando não há docs', () => {
+    expect(buildContext([])).toContain('nenhum trecho relevante');
+  });
+  it('inclui a pergunta e o material', () => {
+    const r = retrieve('como conecto o whatsapp?', 6);
+    const um = buildUserMessage('como conecto o whatsapp?', r.map((s) => s.doc));
+    expect(um).toContain('como conecto o whatsapp?');
+    expect(um).toContain('MATERIAL DE AJUDA');
+  });
+});

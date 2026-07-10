@@ -55,7 +55,7 @@ export const settingsContent: SaibaMaisContent[] = [
       'Se quiser detalhar ainda mais a personalidade, use o Treinar IA, na aba Identidade do agente.',
     ],
     exemploResultado:
-      'Numa clínica de estética, o dono escolhe o tom Amigável. Nas respostas e nos fluxos, em vez de "o procedimento indicado é a limpeza de pele profunda, com sessão de 60 minutos", a IA passa a soar mais próxima: "oi, pra sua pele a gente recomenda a limpeza profunda, dura uma horinha e o resultado é ótimo".',
+      'Numa clínica de estética, o dono escolhe o tom Amigável. Nas respostas pelo texto padrão e nos fluxos, em vez de "o procedimento indicado é a limpeza de pele profunda, com sessão de 60 minutos", a IA passa a soar mais próxima: "oi, pra sua pele a gente recomenda a limpeza profunda, dura uma horinha e o resultado é ótimo".',
     relacionados: ['settings.ai.segmento'],
   },
   {

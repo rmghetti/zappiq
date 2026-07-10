@@ -88,7 +88,7 @@ export const templatesContent: SaibaMaisContent[] = [
     paraQueServe:
       'Sem um template de reengajamento, contatos que sumiram há mais de um dia ficam fora de alcance: a IA não consegue mandar mensagem nenhuma para eles, mesmo que você queira retomar o atendimento ou avisar sobre uma promoção.',
     comoImplementar: [
-      'Crie um template pensado para reabrir conversa, como "Oi {{1}}! Faz um tempo que a gente não conversa. Posso te ajudar com algo?".',
+      'Crie um template pensado para reabrir conversa. Sem variáveis ele já funciona por completo, como "Faz um tempo que a gente não conversa por aqui. Posso te ajudar com algo?".',
       'No formulário, marque a caixa "Template de reengajamento (reabre a janela de 24h)".',
       'Envie o template à Meta e aguarde a aprovação, como qualquer outro template.',
       'Depois de aprovado, escolha esse template numa campanha para contatos inativos: ele é disparado de verdade e alcança quem já passou das 24 horas. Modelos sem variáveis já funcionam por completo; os que usam o nome do cliente ({{1}}) dependem do preenchimento por contato, que está em desenvolvimento.',
