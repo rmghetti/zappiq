@@ -1,6 +1,8 @@
 /**
  * Gera o corpus de conhecimento da Iza Ajuda a partir do registro de Saiba mais
- * (Fase 1). SO entram itens clientSafe: true. Saida: apps/api/src/data/iza-ajuda-corpus.json.
+ * (Fase 1). SO entram itens clientSafe: true. Saida: um .ts tipado em
+ * apps/api/src/data/izaAjudaCorpus.ts (nao JSON, pra ser compilado junto e
+ * nunca sumir do dist).
  *
  * Rodar: npx tsx apps/api/scripts/build-iza-ajuda-corpus.ts
  * Reexecutar sempre que o conteudo de Saiba mais mudar (idealmente no build).
@@ -36,16 +38,27 @@ for (const c of Object.values(SAIBA_MAIS)) {
   docs.push({ featureKey: c.featureKey, titulo: c.titulo, texto });
 }
 
-const out = {
-  geradoDe: 'apps/web/content/saiba-mais (registro Saiba mais clientSafe)',
-  total: docs.length,
-  docs,
-};
+const banner = `/**
+ * GERADO AUTOMATICAMENTE por apps/api/scripts/build-iza-ajuda-corpus.ts
+ * NAO EDITAR A MAO. Fonte: apps/web/content/saiba-mais (itens clientSafe).
+ * Regenerar: npx tsx apps/api/scripts/build-iza-ajuda-corpus.ts
+ */`;
+
+const body = `${banner}
+
+export interface HelpDoc {
+  featureKey: string;
+  titulo: string;
+  texto: string;
+}
+
+export const IZA_AJUDA_CORPUS: HelpDoc[] = ${JSON.stringify(docs, null, 2)};
+`;
 
 const outDir = join(__dirname, '..', 'src', 'data');
 mkdirSync(outDir, { recursive: true });
-const outPath = join(outDir, 'iza-ajuda-corpus.json');
-writeFileSync(outPath, JSON.stringify(out, null, 2), 'utf-8');
+const outPath = join(outDir, 'izaAjudaCorpus.ts');
+writeFileSync(outPath, body, 'utf-8');
 
 console.log(`Corpus Iza Ajuda gerado: ${docs.length} docs clientSafe (${excluidosNaoSafe} excluidos por nao serem clientSafe).`);
 console.log(`Arquivo: ${outPath}`);
