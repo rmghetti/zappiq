@@ -168,16 +168,18 @@ export default function SettingsPage() {
         setOrg(orgRes.data);
         setOrgName(orgRes.data.name || '');
 
-        const agent = orgRes.data.settings?.agent;
-        if (agent) {
-          setAgentName(agent.name || '');
-          setAgentTone(agent.tone || 'friendly');
-          setAgentSegment(agent.segment || 'generic');
-          setAgentHandoff(
-            agent.handoffMessage ||
-              'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido!'
-          );
-        }
+        // Prefere as chaves top-level (que o backend realmente lê); cai pro
+        // objeto aninhado `agent` só como legado de orgs salvas antes do fix.
+        const s = (orgRes.data.settings || {}) as Record<string, any>;
+        const agent = s.agent || {};
+        setAgentName(s.agentName ?? agent.name ?? '');
+        setAgentTone(s.tone ?? agent.tone ?? 'friendly');
+        setAgentSegment(s.segmento ?? s.niche ?? agent.segment ?? 'generic');
+        setAgentHandoff(
+          s.handoffMessage ??
+            agent.handoffMessage ??
+            'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido!'
+        );
 
         // PR #111 — billing (Quota Mgmt #4 + #5)
         const billing = (orgRes.data.settings as { billing?: BillingSettings } | null | undefined)?.billing;
@@ -232,16 +234,24 @@ export default function SettingsPage() {
     }
     setSavingAI(true);
     try {
-      // Merge na chave settings.agent preservando outras chaves de settings
+      // Grava nas chaves TOP-LEVEL que o backend realmente lê (tone, segmento,
+      // niche, agentName, handoffMessage) — é isso que alimenta o prompt do
+      // agente (fallback), o Maestro e o readiness. Mantém o objeto `agent`
+      // aninhado por compatibilidade com telas que ainda o leem.
       const mergedSettings: OrgSettings = {
         ...(org?.settings || {}),
+        agentName: agentName.trim(),
+        tone: agentTone,
+        segmento: agentSegment,
+        niche: agentSegment,
+        handoffMessage: agentHandoff.trim(),
         agent: {
           name: agentName.trim(),
           tone: agentTone,
           segment: agentSegment,
           handoffMessage: agentHandoff.trim(),
         },
-      };
+      } as OrgSettings;
       const res = await api.put<{ data: Organization }>('/api/settings', { settings: mergedSettings });
       if (res.data) setOrg(res.data);
       showToast('success', 'Configurações de IA salvas');

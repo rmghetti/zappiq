@@ -28,16 +28,16 @@ export const settingsContent: SaibaMaisContent[] = [
     oQueE:
       'É o campo onde você escolhe o tipo do seu negócio: dentista, psicólogo, academia, advogado, salão de beleza, pet shop, imobiliária, restaurante, loja online ou genérico.',
     paraQueServe:
-      'Guarda o segmento do seu negócio nas configurações. Hoje o vocabulário que a IA usa vem principalmente do que você preenche em Treinar IA (qualificação, documentos e perguntas e respostas); mantenha o segmento certo aqui para orientar os próximos ajustes do agente.',
+      'Diz à IA de que ramo é o seu negócio. Ela usa isso para calibrar o vocabulário quando monta as respostas e os fluxos do Maestro, para soar como quem entende do seu mercado. Se o seu agente já tem um texto personalizado no Treinar IA, é esse texto que manda no vocabulário final.',
     comoImplementar: [
       'Abra Configurações e vá até a aba IA/Agente.',
       'Escolha o segmento mais parecido com o seu negócio na lista Segmento.',
       'Se o seu ramo não estiver na lista, escolha Genérico.',
       'Clique em Salvar configurações.',
-      'Para mudar de fato como a IA fala do seu ramo, atualize também o Treinar IA com o vocabulário e os exemplos do seu negócio.',
+      'Para reforçar o vocabulário do seu ramo, cadastre também perguntas, respostas e documentos no Treinar IA.',
     ],
     exemploResultado:
-      'Uma clínica odontológica marca o segmento Dentista nas configurações e, no Treinar IA, cadastra suas perguntas e respostas sobre clareamento e avaliação. É esse conteúdo do Treinar IA que faz a IA responder com o vocabulário certo do consultório.',
+      'Uma clínica odontológica escolhe o segmento Dentista. A partir daí, quando o Maestro monta um fluxo ou quando o agente responde pelo texto padrão, a IA já usa termos de consultório, como consulta e avaliação, em vez de uma linguagem genérica de vendas.',
     relacionados: ['settings.ai.tom-de-voz'],
   },
   {
@@ -47,15 +47,15 @@ export const settingsContent: SaibaMaisContent[] = [
     oQueE:
       'É o campo onde você escolhe como a IA vai soar ao conversar com seus clientes: Amigável, Formal ou Técnico.',
     paraQueServe:
-      'Guarda sua preferência de tom nas configurações. Hoje o tom das respostas é definido principalmente na configuração inicial do agente e no que você ensina em Treinar IA; deixe sua preferência marcada aqui e ajuste a identidade do agente no Treinar IA para mudar como a IA soa.',
+      'Define o jeito que a IA fala com seus clientes. O tom escolhido passa a valer no atendimento e nos fluxos que o Maestro monta. Se você já personalizou a identidade do agente no Treinar IA, ajuste o tom por lá também para manter tudo alinhado.',
     comoImplementar: [
       'Abra Configurações e vá até a aba IA/Agente.',
       'Escolha uma opção no campo Tom de voz.',
       'Clique em Salvar configurações.',
-      'Para ajustar de fato o tom das respostas, use o Treinar IA, na aba Identidade do agente.',
+      'Se quiser detalhar ainda mais a personalidade, use o Treinar IA, na aba Identidade do agente.',
     ],
     exemploResultado:
-      'Numa clínica de estética, o dono deixa a preferência de tom marcada como Amigável e, no Treinar IA (Identidade do agente), descreve que a marca fala de um jeito próximo e caloroso. É esse ajuste na identidade que faz a IA responder "oi, pra sua pele recomendamos a limpeza profunda, dura uma horinha" em vez de um texto seco.',
+      'Numa clínica de estética, o dono escolhe o tom Amigável. Nas respostas e nos fluxos, em vez de "o procedimento indicado é a limpeza de pele profunda, com sessão de 60 minutos", a IA passa a soar mais próxima: "oi, pra sua pele a gente recomenda a limpeza profunda, dura uma horinha e o resultado é ótimo".',
     relacionados: ['settings.ai.segmento'],
   },
   {
