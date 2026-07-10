@@ -109,7 +109,10 @@ router.get('/integrations/zap-impulso', async (req: Request, res: Response, next
 
 // PUT /api/settings/integrations/zap-impulso — grava/atualiza credenciais.
 // Recebe texto puro; cifra no servidor; mescla em settings; devolve só status.
-router.put('/integrations/zap-impulso', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+// SUPERADMIN também pode: é mais privilegiado que ADMIN e é justamente o papel da
+// org que dogfooda o WhatsApp/Impulso (ZappIQ-Superadmin). Barrar SUPERADMIN aqui
+// só gerava 403 sem motivo.
+router.put('/integrations/zap-impulso', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.organizationId!;
     const parsed = impulsoIntegrationSchema.safeParse(req.body);
