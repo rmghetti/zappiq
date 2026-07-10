@@ -16,6 +16,7 @@ import { Pencil, Check, X, Loader2, AlertCircle } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import { useAgentReadiness } from '../../hooks/useAgentReadiness';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 interface Props {
   /** Pergunta original do cliente (mensagem INBOUND anterior) */
@@ -103,8 +104,9 @@ export function AgentMessageActions({ question, agentAnswer }: Props) {
               <>
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">
+                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-1.5">
                       Corrigir resposta de {agentName}
+                      <SaibaMais featureKey="conversations.corrigir-treinar" />
                     </h3>
                     <p className="text-sm text-gray-500 mt-0.5">
                       Vamos transformar isso em Q&A — {agentName} aprende pra próxima.

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { TemplateFormModal, type TemplateRecord } from '../../../components/templates/TemplateFormModal';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 const STATUS_BADGE: Record<string, { cls: string; icon: any; label: string }> = {
   APPROVED: { cls: 'bg-green-100 text-green-700', icon: CheckCircle2, label: 'Aprovado' },
@@ -82,7 +83,10 @@ export default function TemplatesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Templates de WhatsApp</h1>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-1.5">
+            Templates de WhatsApp
+            <SaibaMais featureKey="templates.overview" />
+          </h1>
           <p className="text-sm text-gray-500 mt-1">
             Modelos aprovados pela Meta — usados em campanhas e pra reabrir a janela de 24h.
           </p>
@@ -116,6 +120,9 @@ export default function TemplatesPage() {
             >
               <Plus size={16} /> Criar primeiro template
             </button>
+            <div className="mt-3">
+              <SaibaMais featureKey="templates.fluxo-aprovacao-meta" variant="link" />
+            </div>
           </div>
         ) : (
           templates.map((t) => {
@@ -135,9 +142,11 @@ export default function TemplatesPage() {
                           <RefreshCw size={10} /> Reengajamento 24h
                         </span>
                       )}
+                      {t.isReengagement && <SaibaMais featureKey="templates.reengajamento-24h" />}
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
                       {CATEGORY_LABEL[t.category] || t.category} · {t.language}
+                      <SaibaMais featureKey="templates.categoria" />
                     </p>
                     <p className="text-sm text-gray-600 mt-2 line-clamp-2 whitespace-pre-wrap">{t.bodyText}</p>
                     {t.footerText && (
@@ -148,6 +157,7 @@ export default function TemplatesPage() {
                     <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${status.cls}`}>
                       <StatusIcon size={12} /> {status.label}
                     </span>
+                    <SaibaMais featureKey="templates.status-aprovacao" />
                     <div className="flex items-center gap-1">
                       {canSubmit && (
                         <button
@@ -159,6 +169,7 @@ export default function TemplatesPage() {
                           {isBusy ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Enviar à Meta
                         </button>
                       )}
+                      {canSubmit && <SaibaMais featureKey="templates.enviar-meta" />}
                       <button
                         onClick={() => openEdit(t)}
                         disabled={isBusy}

@@ -24,6 +24,7 @@ import {
   X, User, Phone, MessageCircle, ExternalLink, Loader2, Check, AlertCircle, Pencil,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { SaibaMais } from '../shared/SaibaMais';
 
 interface DealActivity {
   id: string;
@@ -175,7 +176,10 @@ export function DealDrawer({ dealId, onClose, onSaved }: Props) {
               <div className="h-6 bg-gray-200 rounded w-3/4 animate-pulse" />
             ) : (
               <>
-                <h2 className="text-xl font-bold text-gray-900 break-words">{deal?.title ?? '—'}</h2>
+                <h2 className="text-xl font-bold text-gray-900 break-words flex items-center gap-1.5">
+                  {deal?.title ?? '—'}
+                  <SaibaMais featureKey="crm.pipeline.deal-drawer" />
+                </h2>
                 {deal && (
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <span className={`px-2.5 py-1 text-xs font-semibold rounded ${STAGE_BADGE[deal.stage] ?? 'bg-gray-100 text-gray-700'}`}>
@@ -363,7 +367,10 @@ export function DealDrawer({ dealId, onClose, onSaved }: Props) {
 
               {/* Timeline de activities */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Atividades</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
+                  Atividades
+                  <SaibaMais featureKey="crm.pipeline.deal-drawer.timeline" />
+                </h3>
                 {deal.activities.length === 0 ? (
                   <p className="text-xs text-gray-400">Sem atividades registradas para este deal.</p>
                 ) : (

@@ -10,6 +10,7 @@ import { api } from '../../../lib/api';
 import { CampaignFormModal } from '../../../components/campaigns/CampaignFormModal';
 import { IzaStrategistModal } from '../../../components/campaigns/IzaStrategistModal';
 import { ImpulsoUpsellModal, type ImpulsoEntitlement } from '../../../components/campaigns/ImpulsoUpsellModal';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 interface CoachInsight {
   severity: 'good' | 'info' | 'warning';
@@ -168,6 +169,7 @@ export default function CampaignsPage() {
           >
             <Sparkles size={16} /> Criar com a Iza
           </button>
+          <SaibaMais featureKey="campaigns.iza-estrategista" />
           <button
             onClick={() => guard(() => setModalOpen(true))}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
@@ -212,7 +214,7 @@ export default function CampaignsPage() {
         <MetricCard icon={Megaphone} label="Campanhas ativas" value={metrics.active} hint="enviando ou agendadas" loading={loading} />
         <MetricCard icon={Send} label="Disparos" value={metrics.sent} hint="mensagens enviadas" loading={loading} />
         <MetricCard icon={Reply} label="Taxa de resposta" value={`${metrics.replyRate}%`} hint="quem respondeu" loading={loading} />
-        <MetricCard icon={DollarSign} label="Receita atribuída" value="R$ 0" hint="conecte anúncios para medir" loading={loading} accent />
+        <MetricCard icon={DollarSign} label="Receita atribuída" value="R$ 0" hint="conecte anúncios para medir" loading={loading} accent help="campaigns.metrica.receita-atribuida" />
       </div>
 
       {/* ── Como funciona o Impulso ───────────────────────── */}
@@ -258,7 +260,10 @@ export default function CampaignsPage() {
       {/* ── Suas campanhas ────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold text-gray-900">Suas campanhas</h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-base font-bold text-gray-900">Suas campanhas</h2>
+            <SaibaMais featureKey="campaigns.status-badge" />
+          </div>
           {hasCampaigns && <span className="text-xs text-gray-400">{campaigns.length} no total</span>}
         </div>
 
@@ -307,14 +312,15 @@ export default function CampaignsPage() {
 
 // ── Componentes ──────────────────────────────────────────
 
-function MetricCard({ icon: Icon, label, value, hint, loading, accent }: {
-  icon: any; label: string; value: string | number; hint: string; loading: boolean; accent?: boolean;
+function MetricCard({ icon: Icon, label, value, hint, loading, accent, help }: {
+  icon: any; label: string; value: string | number; hint: string; loading: boolean; accent?: boolean; help?: string;
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4">
       <div className="flex items-center gap-2 text-gray-400">
         <Icon size={15} className={accent ? 'text-[#4A52D0]' : ''} />
         <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
+        {help && <SaibaMais featureKey={help} />}
       </div>
       <div className="mt-2 text-2xl font-bold text-gray-900 tabular-nums">
         {loading ? <span className="inline-block h-7 w-16 bg-gray-100 rounded animate-pulse" /> : value}
@@ -366,6 +372,10 @@ function CampaignRow({ c, busy, onSend, onDelete }: {
           </button>
         </div>
       </div>
+      <div className="flex items-center gap-1 mb-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Funil de entrega</span>
+        <SaibaMais featureKey="campaigns.funil-entrega" />
+      </div>
       <div className="grid grid-cols-4 gap-4">
         <Stat value={c.sentCount} label="Enviados" />
         <Stat value={c.deliveredCount} label="Entregues" color="text-blue-600" bar="bg-blue-400" pct={(c.deliveredCount / total) * 100} />
@@ -374,6 +384,10 @@ function CampaignRow({ c, busy, onSend, onDelete }: {
       </div>
       {(c.coachInsights?.length ?? 0) > 0 && (
         <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+          <div className="flex items-center gap-1 mb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Insights do Coach</span>
+            <SaibaMais featureKey="campaigns.coach-insights" />
+          </div>
           {c.coachInsights!.map((insight, i) => (
             <CoachTip key={i} insight={insight} />
           ))}

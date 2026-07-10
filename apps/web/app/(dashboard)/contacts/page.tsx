@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Users, Search, Plus, Download, Filter, ChevronLeft, ChevronRight, Mail, Phone } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { ContactFormModal, type Contact } from '../../../components/contacts/ContactFormModal';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 const STATUS_COLORS: Record<string, string> = {
   NEW: 'bg-blue-100 text-blue-700',
@@ -77,7 +78,10 @@ export default function ContactsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Contatos</h1>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-1.5">
+            Contatos
+            <SaibaMais featureKey="contacts.overview" />
+          </h1>
           <p className="text-sm text-gray-500 mt-1">{total} contatos no total</p>
         </div>
         <div className="flex gap-2">
@@ -88,6 +92,7 @@ export default function ContactsPage() {
           >
             <Download size={16} /> {exporting ? 'Exportando...' : 'Exportar'}
           </button>
+          <SaibaMais featureKey="contacts.export" className="self-center" />
           <button
             onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600"
@@ -120,6 +125,7 @@ export default function ContactsPage() {
           <option value="UNQUALIFIED">Não qualificado</option>
           <option value="CONVERTED">Convertido</option>
         </select>
+        <SaibaMais featureKey="contacts.lead-status" />
       </div>
 
       {/* Table */}
@@ -127,11 +133,26 @@ export default function ContactsPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Contato</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">
+                <span className="inline-flex items-center gap-1">
+                  Contato
+                  <SaibaMais featureKey="contacts.row-click-edit" />
+                </span>
+              </th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Telefone</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Score</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Tags</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">
+                <span className="inline-flex items-center gap-1">
+                  Score
+                  <SaibaMais featureKey="contacts.lead-score" />
+                </span>
+              </th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">
+                <span className="inline-flex items-center gap-1">
+                  Tags
+                  <SaibaMais featureKey="contacts.tags" />
+                </span>
+              </th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Última interação</th>
             </tr>
           </thead>
@@ -143,7 +164,14 @@ export default function ContactsPage() {
                 </tr>
               ))
             ) : contacts.length === 0 ? (
-              <tr><td colSpan={6} className="px-5 py-12 text-center text-sm text-gray-400">Nenhum contato encontrado</td></tr>
+              <tr>
+                <td colSpan={6} className="px-5 py-12 text-center text-sm text-gray-400">
+                  <p>Nenhum contato encontrado</p>
+                  <div className="mt-2 flex justify-center">
+                    <SaibaMais featureKey="contacts.empty-state" variant="link" />
+                  </div>
+                </td>
+              </tr>
             ) : (
               contacts.map((c) => (
                 <tr

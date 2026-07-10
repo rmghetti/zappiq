@@ -46,6 +46,7 @@ import { AskNodeFields } from './_components/AskNodeFields';
 import { PredicateBuilder, summarizePredicates, type Predicate } from './_components/PredicateBuilder';
 import { MessageRichFields } from './_components/MessageRichFields';
 import { AiToolsFields, type WebhookTool } from './_components/AiToolsFields';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 // Tutorial interativo "Reja sua IA" (HTML self-contained do Claude Design) + PDF
 // baixável. Servidos estaticamente de apps/web/public/tutoriais/. Mesmo padrão do
@@ -786,15 +787,18 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
           <button onClick={runTest} disabled={testing} className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {testing ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Testar
           </button>
+          <SaibaMais featureKey="flows.editor.testar" />
           <button
             onClick={() => setShowMetrics((v) => !v)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 ${showMetrics ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
           >
             <BarChart3 size={13} /> Métricas{showMetrics && metrics ? ` · ${metrics.total} (7d)` : ''}
           </button>
+          <SaibaMais featureKey="flows.editor.metricas-por-no" />
           <button onClick={runSimulation} disabled={simulating} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {simulating ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />} {simulating ? 'Simulando…' : 'Simular'}
           </button>
+          <SaibaMais featureKey="flows.editor.simular" />
           <button onClick={save} disabled={saving} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar
           </button>
@@ -804,6 +808,7 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
           <button onClick={openAbPanel} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-violet-200 text-violet-700 hover:bg-violet-50 flex items-center gap-1.5">
             <FlaskConical size={14} /> A/B
           </button>
+          <SaibaMais featureKey="flows.editor.experimento-ab" />
           <button onClick={publish} disabled={publishing} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 flex items-center gap-1.5 disabled:opacity-50">
             {publishing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Publicar
           </button>
@@ -1620,6 +1625,7 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
               {architecting ? 'O Maestro está desenhando…' : 'Maestro, arquitete minha operação'}
             </button>
           )}
+          <SaibaMais featureKey="flows.mapa-operacao.arquitetar" variant="link" />
         </div>
       ) : (
         <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
@@ -1700,7 +1706,10 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shrink-0"><Workflow size={20} /></div>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-gray-900">Mapa da Operação</h2>
+              <h2 className="text-base font-semibold text-gray-900 flex items-center gap-1.5">
+                Mapa da Operação
+                <SaibaMais featureKey="flows.mapa-operacao.visao" />
+              </h2>
               <p className="text-xs text-gray-500">Todos os seus fluxos e como se interligam, numa visão única. Clique num fluxo pra abrir a cadeia de atividades.</p>
             </div>
           </div>
@@ -1735,8 +1744,11 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
         <div className="flex items-center gap-3">
           {onBack && <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ArrowLeft size={18} /></button>}
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Mapa da Operação</h1>
-            
+            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-1.5">
+              Mapa da Operação
+              <SaibaMais featureKey="flows.mapa-operacao.visao" />
+            </h1>
+
         <Link href="/flows/templates" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-full hover:bg-violet-100 mb-4">
           ✨ Ver 15 templates prontos por vertical
         </Link>

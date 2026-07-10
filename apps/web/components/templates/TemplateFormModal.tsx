@@ -17,6 +17,7 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2, Check, AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 export interface TemplateRecord {
   id: string;
@@ -140,7 +141,10 @@ export function TemplateFormModal({ open, template, onClose, onSaved }: Props) {
 
           {/* Categoria */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Categoria (Meta)</label>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1">
+              Categoria (Meta)
+              <SaibaMais featureKey="templates.form.categoria" />
+            </label>
             <div className="grid grid-cols-3 gap-2">
               {CATEGORIES.map((c) => {
                 const active = category === c.value;
@@ -165,7 +169,10 @@ export function TemplateFormModal({ open, template, onClose, onSaved }: Props) {
 
           {/* Idioma */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Idioma</label>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1">
+              Idioma
+              <SaibaMais featureKey="templates.form.idioma" />
+            </label>
             <input
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
@@ -176,7 +183,10 @@ export function TemplateFormModal({ open, template, onClose, onSaved }: Props) {
 
           {/* Corpo */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Corpo da mensagem *</label>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1">
+              Corpo da mensagem *
+              <SaibaMais featureKey="templates.form.corpo-variaveis" />
+            </label>
             <textarea
               value={bodyText}
               onChange={(e) => setBodyText(e.target.value)}
@@ -189,7 +199,10 @@ export function TemplateFormModal({ open, template, onClose, onSaved }: Props) {
 
           {/* Rodapé */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Rodapé (opcional)</label>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1">
+              Rodapé (opcional)
+              <SaibaMais featureKey="templates.form.rodape" />
+            </label>
             <input
               value={footerText}
               onChange={(e) => setFooterText(e.target.value)}
@@ -210,6 +223,10 @@ export function TemplateFormModal({ open, template, onClose, onSaved }: Props) {
               <span className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
                 <RefreshCw size={13} className="text-primary-600" />
                 Template de reengajamento (reabre a janela de 24h)
+                {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+                <span onClick={(e) => e.stopPropagation()}>
+                  <SaibaMais featureKey="templates.reengajamento-24h" />
+                </span>
               </span>
               <span className="block text-[11px] text-gray-500 mt-0.5 leading-snug">
                 Fora da janela de 24h a Meta rejeita mensagem livre. Marque aqui os templates aprovados

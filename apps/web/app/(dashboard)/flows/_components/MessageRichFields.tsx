@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
 import { Trash2, Plus } from 'lucide-react';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 export interface MediaData { type: 'image' | 'audio' | 'document'; url: string; caption?: string }
 export interface InteractiveData { type: 'button' | 'list'; options: { id: string; title: string }[] }
@@ -34,13 +35,14 @@ export function MessageRichFields({ data, onChange }: { data: MessageData; onCha
 
   return (
     <div className="space-y-2 pt-2 mt-2 border-t border-gray-100">
-      <div className="flex gap-1">
+      <div className="flex items-center gap-1">
         {(['text', 'interactive', 'media'] as Mode[]).map((m) => (
           <button key={m} onClick={() => setMode(m)}
             className={`px-2 py-1 rounded text-[11px] border ${mode === m ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-200 text-gray-500'}`}>
             {m === 'text' ? 'Texto' : m === 'interactive' ? 'Botões/Lista' : 'Mídia'}
           </button>
         ))}
+        <SaibaMais featureKey="flows.no-mensagem.botoes-midia" />
       </div>
 
       {mode === 'media' && data.media && (

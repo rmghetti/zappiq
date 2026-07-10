@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import { FileLock, Clock, CheckCircle2, XCircle, AlertTriangle, Download, Trash2 } from 'lucide-react';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 interface DSR {
   id: string;
@@ -159,13 +160,15 @@ export default function DSRPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <FileLock className="text-primary-600" /> Requisições do Titular (LGPD Art. 18)
+          <SaibaMais featureKey="dsr.pagina" />
         </h1>
         <p className="text-sm text-gray-500 mt-1">
           Prazo legal: 15 dias (Art. 19). Acima do prazo = descumprimento passível de sanção.
         </p>
+        <SaibaMais featureKey="dsr.fluxo-atendimento" variant="link" className="mt-2" />
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         {['', 'PENDING', 'IN_PROGRESS', 'COMPLETED', 'REJECTED', 'EXPIRED'].map((s) => (
           <button
             key={s}
@@ -179,6 +182,7 @@ export default function DSRPage() {
             {s || 'Todas'}
           </button>
         ))}
+        <SaibaMais featureKey="dsr.filtro-status" />
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -186,10 +190,16 @@ export default function DSRPage() {
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-gray-700">Protocolo</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Tipo</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-700">
+                <span className="inline-flex items-center gap-1">Tipo <SaibaMais featureKey="dsr.tipo-solicitacao" /></span>
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-700">Titular</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Status</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Prazo (dias)</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-700">
+                <span className="inline-flex items-center gap-1">Status <SaibaMais featureKey="dsr.status-badge" /></span>
+              </th>
+              <th className="text-left px-4 py-3 font-medium text-gray-700">
+                <span className="inline-flex items-center gap-1">Prazo (dias) <SaibaMais featureKey="dsr.prazo" /></span>
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-700">Ações</th>
             </tr>
           </thead>
@@ -267,13 +277,16 @@ export default function DSRPage() {
                         )}
 
                         {(r.type === 'ACCESS' || r.type === 'PORTABILITY') ? (
-                          <button
-                            onClick={() => completeExport(r.id)}
-                            disabled={busyId === r.id}
-                            className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded hover:bg-green-100 disabled:opacity-50"
-                          >
-                            Concluir + avisar
-                          </button>
+                          <span className="inline-flex items-center gap-0.5">
+                            <button
+                              onClick={() => completeExport(r.id)}
+                              disabled={busyId === r.id}
+                              className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded hover:bg-green-100 disabled:opacity-50"
+                            >
+                              Concluir + avisar
+                            </button>
+                            <SaibaMais featureKey="dsr.concluir-exportacao" />
+                          </span>
                         ) : (
                           <button
                             onClick={() => updateStatus(r.id, 'COMPLETED')}

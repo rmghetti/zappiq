@@ -45,6 +45,7 @@ import { SchedulingPanel } from '../../../components/ai-training/SchedulingPanel
 import { FeatureGuide, GUIDES } from '../../../components/ai-training/FeatureGuide';
 import { NotIndexedAlert, type NotIndexedItem } from '../../../components/ai-training/NotIndexedAlert';
 import { ClipboardPaste, CalendarClock } from 'lucide-react';
+import { SaibaMais } from '../../../components/shared/SaibaMais';
 
 // ── Tipos alinhados ao service backend ───────────────────
 interface Readiness {
@@ -334,7 +335,10 @@ function ReadinessCard({
       <div className="bg-gradient-to-r from-primary-500 to-secondary-500 p-6 text-white">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-xs opacity-80 font-medium uppercase tracking-wide">AI Readiness Score</p>
+            <p className="text-xs opacity-80 font-medium uppercase tracking-wide flex items-center gap-1.5">
+              AI Readiness Score
+              <SaibaMais featureKey="ai-training.readiness-score" className="text-white/70 hover:text-white" />
+            </p>
             <p className="text-4xl font-extrabold font-display">
               {readiness.score}<span className="text-xl opacity-60">%</span>
             </p>
@@ -762,6 +766,7 @@ function TrainingHistory() {
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
           <History size={16} className="text-gray-500" /> Histórico de treinamento
+          <SaibaMais featureKey="ai-training.training-history" />
         </h3>
         <span className="text-xs text-gray-500">{items.length} evento(s)</span>
       </div>

@@ -260,11 +260,11 @@ export default function AnalyticsPage() {
     return d === 0 ? { text: 'estável', dir: 'flat' } : { text: `${d > 0 ? '+' : ''}${d.toLocaleString('pt-BR')}`, dir: d > 0 ? 'up' : 'down' };
   };
 
-  const resultCards = [
+  const resultCards: Array<{ label: string; value: string; icon: any; hint: string; delta: Delta; helpKey?: string }> = [
     { label: 'Respostas pela IA', value: fmtNum(iaShare, { suffix: '%' }), icon: Bot, hint: `${fmtNum(botOutbound)} IA · ${fmtNum(humanOutbound)} humano`, delta: prev ? deltaPP(iaShare, prev.iaShare) : null },
     { label: 'Conversas resolvidas', value: fmtNum(closed), icon: CheckCheck, hint: typeof aiResolvedRate === 'number' ? `${aiResolvedRate}% sem precisar de humano` : 'fechadas no período', delta: prev ? deltaPct(closed, prev.closedConversations) : null },
     { label: 'Novos contatos', value: fmtNum(newContacts), icon: Users, hint: 'entraram no período', delta: prev ? deltaPct(newContacts, prev.newContacts) : null },
-    { label: 'CSAT', value: fmtNum(csat, { decimals: 1 }), icon: Smile, hint: 'satisfação média (0–5)', delta: prev ? deltaAbs(csat, prev.csat) : null },
+    { label: 'CSAT', value: fmtNum(csat, { decimals: 1 }), icon: Smile, hint: 'satisfação média (0–5)', delta: prev ? deltaAbs(csat, prev.csat) : null, helpKey: 'analytics.resultado.csat' },
   ];
 
   return (
@@ -272,7 +272,10 @@ export default function AnalyticsPage() {
       {/* Cabeçalho + seletor de período */}
       <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+            <SaibaMais featureKey="analytics.pagina" />
+          </div>
           <p className="text-sm text-gray-500 mt-1">Visão geral da sua operação</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -368,7 +371,7 @@ export default function AnalyticsPage() {
       })()}
 
       {/* Camada 1 — Resultado */}
-      <SectionTitle icon={TrendingUp} title="Resultado" hint="o que a operação entregou" />
+      <SectionTitle icon={TrendingUp} title="Resultado" hint="o que a operação entregou" featureKey="analytics.resultado.kpis" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {loading
           ? [...Array(4)].map((_, i) => (
@@ -379,7 +382,10 @@ export default function AnalyticsPage() {
           : resultCards.map((kpi) => (
               <div key={kpi.label} className="bg-white rounded-xl p-5 border border-gray-100">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-500 uppercase font-medium">{kpi.label}</span>
+                  <span className="text-xs text-gray-500 uppercase font-medium flex items-center gap-1">
+                    {kpi.label}
+                    {kpi.helpKey && <SaibaMais featureKey={kpi.helpKey} />}
+                  </span>
                   <kpi.icon size={16} className="text-[#1B6B3A]" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900">{kpi.value}</p>
@@ -398,7 +404,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Vendas atribuídas à IA */}
-      <SectionTitle icon={Bot} title="Vendas atribuídas à IA" hint="quanto a IA fechou e assistiu" />
+      <SectionTitle icon={Bot} title="Vendas atribuídas à IA" hint="quanto a IA fechou e assistiu" featureKey="analytics.vendas-ia" />
       <div className="mb-8">
         {salesSuggestions.length > 0 && (
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -466,9 +472,10 @@ export default function AnalyticsPage() {
                     {open && (
                       <div className="pb-3 pl-5">
                         {typeof d.influenceScore === 'number' && (
-                          <div className="text-[12px] text-gray-600 mb-2">
+                          <div className="text-[12px] text-gray-600 mb-2 flex items-center gap-1 flex-wrap">
                             Influência da Iza: <span className="font-semibold text-[#1B6B3A]">{d.influenceScore}%</span>
                             <span className="text-gray-400"> ({fmtNum(d.izaMsgs)} msgs IA · {fmtNum(d.humanMsgs)} humanas)</span>
+                            <SaibaMais featureKey="analytics.vendas-ia.influencia" />
                           </div>
                         )}
                         <div className="text-[11px] text-gray-400 mb-2">Momentos que a Iza destravou</div>
@@ -504,7 +511,10 @@ export default function AnalyticsPage() {
         {/* Volume (clicável) */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Volume de mensagens recebidas</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-900">Volume de mensagens recebidas</h3>
+              <SaibaMais featureKey="analytics.operacao.volume" />
+            </div>
             <span className="text-[11px] text-gray-400">clique numa barra para ver as mensagens</span>
           </div>
           {hasVolume ? (
@@ -527,7 +537,8 @@ export default function AnalyticsPage() {
         {/* Indicadores operacionais */}
         <div className="flex flex-col gap-4">
           <MiniStat icon={Clock} label="1ª resposta (média)" value={fmtDuration(avgMs)}
-            hint={typeof p95Ms === 'number' && p95Ms > 0 ? `p95: ${fmtDuration(p95Ms)}` : 'mediana do período'} />
+            hint={typeof p95Ms === 'number' && p95Ms > 0 ? `p95: ${fmtDuration(p95Ms)}` : 'mediana do período'}
+            featureKey="analytics.operacao.primeira-resposta" />
           <MiniStat icon={MessageSquare} label="Conversas abertas" value={fmtNum(open)} hint="aguardando ou em andamento" />
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <div className="flex items-center gap-2 mb-2">
@@ -556,7 +567,10 @@ export default function AnalyticsPage() {
         {/* Sentimento (clicável) */}
         <div className="bg-white rounded-xl border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Sentimento das conversas</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-900">Sentimento das conversas</h3>
+              <SaibaMais featureKey="analytics.operacao.sentimento" />
+            </div>
             <span className="text-[11px] text-gray-400">clique numa fatia</span>
           </div>
           {sentimentData.length > 0 ? (
@@ -604,7 +618,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Camada 3 — Funil de campanhas */}
-      <SectionTitle icon={Send} title="Campanhas" hint="alcance das mensagens enviadas em massa" />
+      <SectionTitle icon={Send} title="Campanhas" hint="alcance das mensagens enviadas em massa" featureKey="analytics.campanhas.funil" />
       <div className="bg-white rounded-xl border border-gray-100 p-6">
         {hasCampaigns ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -637,22 +651,24 @@ export default function AnalyticsPage() {
   );
 }
 
-function SectionTitle({ icon: Icon, title, hint }: { icon: any; title: string; hint: string }) {
+function SectionTitle({ icon: Icon, title, hint, featureKey }: { icon: any; title: string; hint: string; featureKey?: string }) {
   return (
     <div className="flex items-center gap-2 mb-3">
       <Icon size={18} className="text-gray-400" />
       <span className="text-base font-semibold text-gray-900">{title}</span>
       <span className="text-sm text-gray-400">{hint}</span>
+      {featureKey && <SaibaMais featureKey={featureKey} />}
     </div>
   );
 }
 
-function MiniStat({ icon: Icon, label, value, hint }: { icon: any; label: string; value: string; hint?: string }) {
+function MiniStat({ icon: Icon, label, value, hint, featureKey }: { icon: any; label: string; value: string; hint?: string; featureKey?: string }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5">
       <div className="flex items-center gap-2 mb-1.5">
         <Icon size={15} className="text-gray-400" />
         <span className="text-xs text-gray-500">{label}</span>
+        {featureKey && <SaibaMais featureKey={featureKey} />}
       </div>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
       {hint && <p className="text-[11px] text-gray-400 mt-1">{hint}</p>}

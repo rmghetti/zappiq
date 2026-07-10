@@ -8,11 +8,36 @@
  * exporte o array e inclua abaixo em ALL_AREAS.
  */
 import type { SaibaMaisContent } from './types';
+import { dashboardContent } from './dashboard';
+import { conversationsContent } from './conversations';
+import { contactsContent } from './contacts';
+import { crmContent } from './crm';
+import { tasksContent } from './tasks';
+import { campaignsContent } from './campaigns';
+import { templatesContent } from './templates';
+import { flowsContent } from './flows';
 import { analyticsContent } from './analytics';
+import { aiTrainingContent } from './ai-training';
+import { qualidadeContent } from './qualidade';
+import { settingsContent } from './settings';
+import { billingContent } from './billing';
+import { auditoriaContent } from './auditoria';
 
 const ALL_AREAS: SaibaMaisContent[][] = [
+  dashboardContent,
+  conversationsContent,
+  contactsContent,
+  crmContent,
+  tasksContent,
+  campaignsContent,
+  templatesContent,
+  flowsContent,
   analyticsContent,
-  // demais áreas entram aqui após a varredura (ai-training, billing, campaigns, crm, ...)
+  aiTrainingContent,
+  qualidadeContent,
+  settingsContent,
+  billingContent,
+  auditoriaContent,
 ];
 
 const ALL: SaibaMaisContent[] = ALL_AREAS.flat();

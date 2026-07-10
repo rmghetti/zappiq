@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import { ShieldCheck, CheckCircle2, AlertTriangle, RefreshCw, Search } from 'lucide-react';
+import { SaibaMais } from '@/components/shared/SaibaMais';
 
 interface AuditLog {
   id: string;
@@ -109,19 +110,23 @@ export default function AuditLogsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <ShieldCheck className="text-primary-600" /> Trilha de Auditoria
+            <SaibaMais featureKey="audit-logs.pagina" />
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             Registros LGPD — Art. 37 (ROPA) e Art. 46 (integridade). Cadeia SHA-256 tamper-evident.
           </p>
         </div>
-        <button
-          onClick={verifyChain}
-          disabled={verifying}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
-        >
-          {verifying ? <RefreshCw className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
-          Verificar Integridade
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={verifyChain}
+            disabled={verifying}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+          >
+            {verifying ? <RefreshCw className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
+            Verificar Integridade
+          </button>
+          <SaibaMais featureKey="audit-logs.verificar-integridade" />
+        </div>
       </div>
 
       {verifyResult && (
@@ -136,10 +141,11 @@ export default function AuditLogsPage() {
             <AlertTriangle className="text-red-600 flex-shrink-0" />
           )}
           <div>
-            <p className={`font-medium ${verifyResult.valid ? 'text-green-900' : 'text-red-900'}`}>
+            <p className={`font-medium flex items-center gap-1.5 ${verifyResult.valid ? 'text-green-900' : 'text-red-900'}`}>
               {verifyResult.valid
                 ? `Cadeia íntegra — ${verifyResult.checkedCount} registros verificados.`
                 : `CADEIA VIOLADA na sequência ${verifyResult.brokenAtSequence}.`}
+              <SaibaMais featureKey="audit-logs.resultado-verificacao" />
             </p>
             {!verifyResult.valid && (
               <p className="mt-1 text-sm text-red-700">
@@ -188,7 +194,9 @@ export default function AuditLogsPage() {
               <th className="text-left px-4 py-3 font-medium text-gray-700">Ação</th>
               <th className="text-left px-4 py-3 font-medium text-gray-700">Recurso</th>
               <th className="text-left px-4 py-3 font-medium text-gray-700">Ator</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-700">Base legal</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-700">
+                <span className="inline-flex items-center gap-1">Base legal <SaibaMais featureKey="audit-logs.base-legal" /></span>
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-700">IP</th>
             </tr>
           </thead>
@@ -254,7 +262,10 @@ export default function AuditLogsPage() {
           >
             <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Evento #{selectedLog.sequence}</h2>
+                <h2 className="text-lg font-semibold flex items-center gap-1.5">
+                  Evento #{selectedLog.sequence}
+                  <SaibaMais featureKey="audit-logs.detalhe-evento" />
+                </h2>
                 <p className="text-sm text-gray-500 mt-1 font-mono">{selectedLog.action}</p>
               </div>
               <button onClick={() => setSelectedLog(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
