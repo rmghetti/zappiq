@@ -16,12 +16,13 @@
 import { useEffect, useState } from 'react';
 import {
   Settings, Users, Brain, Plus, Trash2,
-  CheckCircle2, AlertCircle, Loader2, CreditCard, Plug, Clock, Zap, Copy,
+  CheckCircle2, AlertCircle, Loader2, CreditCard, Plug, Clock, Zap, Copy, HelpCircle,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import ConectarCanais from '../../../components/dashboard/ConectarCanais';
 import { BusinessHoursEditor, defaultBusinessHours, type BusinessHoursConfig } from '../flows/_components/BusinessHoursEditor';
+import { IntegrationHelpModal, type HelpTopic } from '../../../components/settings/IntegrationHelpModal';
 
 type Tab = 'general' | 'team' | 'canais' | 'ai' | 'billing' | 'flows' | 'integracoes';
 
@@ -154,6 +155,7 @@ export default function SettingsPage() {
   const [savingCapi, setSavingCapi] = useState(false);
   const [asaasApiKey, setAsaasApiKey] = useState('');
   const [savingAsaas, setSavingAsaas] = useState(false);
+  const [helpTopic, setHelpTopic] = useState<HelpTopic | null>(null);
 
   // Invite form (Team tab)
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -839,6 +841,9 @@ export default function SettingsPage() {
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">Meta CAPI (Conversions API)</h3>
                 <p className="text-xs text-gray-500 mt-0.5">Devolve as compras ao Meta para otimizar os anúncios Click-to-WhatsApp.</p>
+                <button type="button" onClick={() => setHelpTopic('capi')} className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-violet-600 hover:text-violet-700">
+                  <HelpCircle size={13} /> Saiba mais e ver o passo a passo
+                </button>
               </div>
               {impulsoStatus?.capi.configured ? (
                 <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
@@ -894,6 +899,9 @@ export default function SettingsPage() {
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">Asaas (Pix na conversa)</h3>
                 <p className="text-xs text-gray-500 mt-0.5">Gera a cobrança Pix copia-e-cola direto no WhatsApp e confirma o pagamento.</p>
+                <button type="button" onClick={() => setHelpTopic('asaas')} className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-violet-600 hover:text-violet-700">
+                  <HelpCircle size={13} /> Saiba mais e ver o passo a passo
+                </button>
               </div>
               {impulsoStatus?.asaas.configured ? (
                 <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
@@ -953,6 +961,9 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Saiba mais das integrações (popup ilustrado) */}
+      <IntegrationHelpModal topic={helpTopic} onClose={() => setHelpTopic(null)} />
     </div>
   );
 }
