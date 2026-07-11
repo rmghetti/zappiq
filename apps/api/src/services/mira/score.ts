@@ -37,7 +37,7 @@ const norm = (s: string) =>
   s
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '');
+    .replace(/[\u0300-\u036f]/g, '');
 
 function matchCnae(perfil: PerfilLike, alvo: CnpjData): { hit: boolean; parcial: boolean } {
   const alvoCnae = (alvo.cnae ?? '').replace(/\D/g, '');
@@ -182,4 +182,98 @@ export function computeMiraScoreV1(perfil: PerfilLike, alvo: CnpjData, decisores
   const confianca = Math.min(100, conf);
 
   return { score, breakdown: { fatores }, confianca };
+}
+
+/* ── Score B2C (descoberta local) ─────────────────────────────────── */
+export interface PlaceLike {
+  nome: string;
+  telefone: string | null;
+  site: string | null;
+  rating: number | null;
+  totalAvaliacoes: number | null;
+}
+
+/**
+ * Mira Score para Alvo B2C/negócio local (Motor B via Places). Mesmos
+ * cinco fatores, adaptados ao que é observável num estabelecimento:
+ * fit (região/termo da busca), sinais (avaliações/atividade), decisor
+ * (o próprio dono; sem QSA), portfólio (heurístico) e janela (fase 2).
+ */
+export function computeMiraScoreB2C(
+  perfil: PerfilLike & { icpB2c?: { regioes?: string[] } },
+  place: PlaceLike,
+  local: { municipio: string | null; uf: string | null }
+): MiraScoreResult {
+  const fatores: ScoreFator[] = [];
+
+  // 1) Fit de ICP (25) — a busca já parte do perfil; região confirma
+  {
+    let v = 12; // veio da busca orientada pelo perfil
+    const motivos: string[] = ['descoberto pela busca orientada ao seu perfil'];
+    const regioes = [...(perfil.icpB2c?.regioes ?? []), ...(perfil.icpFirmografia?.regioes ?? [])];
+    const alvoLocal = norm([local.municipio, local.uf].filter(Boolean).join(' '));
+    if (regioes.length && alvoLocal && regioes.some((r) => alvoLocal.includes(norm(r)) || norm(r).includes(alvoLocal))) {
+      v += 13;
+      motivos.push('região dentro do alvo do perfil');
+    }
+    fatores.push({ nome: 'Fit de ICP', peso: 25, valor: Math.min(25, v), motivo: motivos.join('; ') });
+  }
+
+  // 2) Demanda e sinais (25) — presença/atividade pública
+  {
+    let v = 0;
+    const motivos: string[] = [];
+    if ((place.totalAvaliacoes ?? 0) >= 20) {
+      v += 8;
+      motivos.push(`${place.totalAvaliacoes} avaliações públicas (negócio ativo)`);
+    } else if ((place.totalAvaliacoes ?? 0) > 0) {
+      v += 4;
+      motivos.push('poucas avaliações públicas');
+    }
+    if (!place.site) {
+      v += 5;
+      motivos.push('sem site público (oportunidade para oferta digital)');
+    }
+    motivos.push('sinais profundos (notícias/atividade) entram na próxima fase');
+    fatores.push({ nome: 'Demanda e sinais', peso: 25, valor: Math.min(25, v), motivo: motivos.join('; ') });
+  }
+
+  // 3) Cobertura de decisores (20) — no local, o decisor é o dono/gestor
+  {
+    const temContato = Boolean(place.telefone || place.site);
+    fatores.push({
+      nome: 'Cobertura de decisores',
+      peso: 20,
+      valor: temContato ? 10 : 0,
+      motivo: temContato
+        ? 'contato direto do estabelecimento (decisor = dono/gestor no balcão)'
+        : 'sem contato verificável ainda',
+    });
+  }
+
+  // 4) Encaixe de portfólio (15)
+  {
+    const temCatalogo = (perfil.catalogo?.length ?? 0) > 0;
+    fatores.push({
+      nome: 'Encaixe de portfólio',
+      peso: 15,
+      valor: temCatalogo ? 8 : 0,
+      motivo: temCatalogo
+        ? 'segmento buscado casa com o seu catálogo (cruzamento fino com Aprofundar com IA)'
+        : 'cadastre o catálogo no Perfil',
+    });
+  }
+
+  // 5) Janela e incumbente (15) — fase 2
+  {
+    fatores.push({ nome: 'Janela e incumbente', peso: 15, valor: 0, motivo: 'entra com os agentes de pesquisa (próxima fase)' });
+  }
+
+  const score = Math.max(0, Math.min(100, fatores.reduce((a, f) => a + f.valor, 0)));
+  let conf = 20; // identidade Google (placeId)
+  if (place.telefone) conf += 25;
+  if (place.site) conf += 15;
+  if (local.municipio && local.uf) conf += 15;
+  if ((place.totalAvaliacoes ?? 0) > 0) conf += 10;
+  return { score, breakdown: { fatores }, confianca: Math.min(100, conf) };
 }

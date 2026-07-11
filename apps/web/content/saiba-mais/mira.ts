@@ -165,6 +165,39 @@ export const miraContent: SaibaMaisContent[] = [
       'Um distribuidor cola 30 CNPJs de clientes antigos. Em um minuto, 24 viram Alvos verificados com sócios mapeados; 4 estavam inativos (não gastaram cota) e 2 eram duplicados. A fila aparece ordenada por score e ele redescobre 6 contas quentes esquecidas.',
   },
   {
+    featureKey: 'mira.motorB',
+    titulo: 'Descobrir novos',
+    clientSafe: true,
+    oQueE:
+      'A descoberta de novos é o motor que busca negócios que ainda não estão na sua carteira. Você descreve o que procurar (por exemplo, "clínicas de estética") e onde, e a Mira varre a fonte pública do Google, qualifica cada negócio encontrado e cria os Alvos.',
+    paraQueServe:
+      'Serve para encher o topo do funil com o perfil certo, sem comprar lista fria. Só entra negócio com identidade e contato verificáveis; o que não tem contato fica em qualificação e não gasta a sua cota.',
+    comoImplementar: [
+      'Clique em Descobrir novos na tela de Alvos.',
+      'Descreva o que procurar e, se quiser, a cidade ou região.',
+      'Clique em Descobrir agora: os Alvos aparecem na fila, priorizados pelo Mira Score.',
+      'A busca por atividade (CNAE) e região na base pública de CNPJ chega na sequência.',
+    ],
+    exemploResultado:
+      'Uma empresa de uniformes busca "restaurantes em Sorocaba". A Mira encontra 20, cria 14 Alvos prontos (com telefone ou site) e deixa 6 em qualificação. O vendedor começa pelos 5 de maior nota no mesmo dia.',
+  },
+  {
+    featureKey: 'mira.aprofundar',
+    titulo: 'Aprofundar com IA',
+    clientSafe: true,
+    oQueE:
+      'O botão Aprofundar com IA chama os agentes de análise para um Alvo específico: eles cruzam os dados verificados da conta com o seu catálogo e escrevem as oportunidades número 1 e 2, a dor provável e o roteiro de primeira mensagem para cada decisor.',
+    paraQueServe:
+      'Serve para transformar dado em conversa. Em vez de olhar a firmografia crua, você recebe a pauta pronta: qual produto oferecer, por quê, e como abrir o papo com cada pessoa do comitê.',
+    comoImplementar: [
+      'Abra o dossiê do Alvo e clique em Aprofundar com IA.',
+      'A análise usa só os dados verificados: um verificador descarta qualquer item sem lastro (produto fora do catálogo, decisor desconhecido, contato inventado).',
+      'Revise o roteiro antes de usar: análise de IA tem confiança de inferência, marcada no dossiê.',
+    ],
+    exemploResultado:
+      'Num Alvo de indústria, a análise aponta a oportunidade número 1 (serviço de backup gerenciado, pela atividade e porte) e escreve o roteiro para o sócio-administrador. O vendedor ajusta uma frase e envia. Resposta em duas horas.',
+  },
+  {
     featureKey: 'mira.alvos',
     titulo: 'Alvos (fila de prospecção)',
     clientSafe: true,

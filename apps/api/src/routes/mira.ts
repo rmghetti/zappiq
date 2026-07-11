@@ -13,6 +13,8 @@ import { validate } from '../middleware/validate.js';
 import { getMiraEntitlement } from '../middleware/requireMira.js';
 import { runMotorA, crmCandidates } from '../services/mira/motorA.js';
 import { pousarNoCrm } from '../services/mira/pousarCrm.js';
+import { runMotorB, placesDisponivel } from '../services/mira/motorB.js';
+import { aprofundarAlvo } from '../services/mira/agentes.js';
 
 const router = Router();
 
@@ -47,6 +49,80 @@ router.get('/motor-a/crm-candidates', async (req: Request, res: Response, next: 
     const data = await crmCandidates(req.organizationId!);
     res.json({ success: true, data });
   } catch (err) {
+    next(err);
+  }
+});
+
+// ── Motor B (descoberta net-new) ───────────────────────────────────
+
+const motorBSchema = z.object({
+  consulta: z.string().trim().min(3).max(160),
+  regiao: z.string().trim().max(120).optional().nullable(),
+});
+
+// GET /api/mira/motor-b/status — quais fontes de descoberta estão ativas
+router.get('/motor-b/status', async (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: {
+      places: placesDisponivel(),
+      // Descoberta B2B por CNAE/região exige a base pública de CNPJ ingerida
+      // (job mensal) ou provedor licenciado — honestidade de fonte (doc 08).
+      cnaeBase: false,
+    },
+  });
+});
+
+// POST /api/mira/motor-b/descobrir — descoberta de negócios locais (Places)
+router.post('/motor-b/descobrir', validate(motorBSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { consulta, regiao } = req.body as z.infer<typeof motorBSchema>;
+    const result = await runMotorB(req.organizationId!, consulta, regiao ?? null);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    if (err?.status === 501) {
+      res.status(501).json({
+        success: false,
+        error: 'fonte_indisponivel',
+        message:
+          'A descoberta local usa o Google Places e ainda não está habilitada nesta instalação (falta a chave). O time já foi avisado.',
+      });
+      return;
+    }
+    if (err?.status === 412) {
+      res.status(412).json({
+        success: false,
+        error: 'perfil_incompleto',
+        message: 'Complete o Perfil de Prospecção (mínimo 60%) para os motores largarem.',
+      });
+      return;
+    }
+    if (err?.status === 502) {
+      res.status(502).json({ success: false, error: 'places_erro', message: 'A fonte de descoberta falhou agora. Tente novamente.' });
+      return;
+    }
+    next(err);
+  }
+});
+
+// POST /api/mira/alvos/:id/aprofundar — agentes de qualificação profunda
+router.post('/alvos/:id/aprofundar', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await aprofundarAlvo(req.organizationId!, req.params.id);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    if (err?.status === 404) {
+      res.status(404).json({ success: false, error: 'alvo_not_found' });
+      return;
+    }
+    if (err?.status === 412) {
+      res.status(412).json({
+        success: false,
+        error: 'catalogo_vazio',
+        message: 'Cadastre o catálogo no Perfil de Prospecção para a análise de portfólio.',
+      });
+      return;
+    }
     next(err);
   }
 });

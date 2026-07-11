@@ -21,7 +21,7 @@ import {
   Import,
 } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
-import { miraApi, type MiraAlvoListItem, type MiraQuota, type MotorAResult } from '@/lib/miraApi';
+import { miraApi, type MiraAlvoListItem, type MiraQuota, type MotorAResult, type MotorBResult } from '@/lib/miraApi';
 
 const STATUS_FILTERS = [
   { key: '', label: 'Todos' },
@@ -45,6 +45,7 @@ export default function MiraAlvosPage() {
   const [status, setStatus] = useState<string>('');
   const [q, setQ] = useState('');
   const [showMapear, setShowMapear] = useState(false);
+  const [showDescobrir, setShowDescobrir] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -93,6 +94,12 @@ export default function MiraAlvosPage() {
             </span>
           )}
           <button
+            onClick={() => setShowDescobrir(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary-200 text-primary-700 text-sm font-medium hover:bg-primary-50"
+          >
+            <Search size={15} /> Descobrir novos
+          </button>
+          <button
             onClick={() => setShowMapear(true)}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
           >
@@ -106,6 +113,15 @@ export default function MiraAlvosPage() {
           onClose={() => setShowMapear(false)}
           onDone={() => {
             setShowMapear(false);
+            setReloadKey((k) => k + 1);
+          }}
+        />
+      )}
+      {showDescobrir && (
+        <DescobrirModal
+          onClose={() => setShowDescobrir(false)}
+          onDone={() => {
+            setShowDescobrir(false);
             setReloadKey((k) => k + 1);
           }}
         />
@@ -352,6 +368,134 @@ function MapearCarteiraModal({ onClose, onDone }: { onClose: () => void; onDone:
                 <p className="text-xs text-red-600">
                   Sua cota do mês esgotou{result.naoProcessados.length > 0 ? ` (${result.naoProcessados.length} CNPJs ficaram na fila)` : ''}.
                   Contrate um pacote avulso em <Link href="/billing" className="font-semibold underline">Plano &amp; Fatura</Link> ou aguarde a virada do mês.
+                </p>
+              </div>
+            )}
+            <button
+              onClick={onDone}
+              className="w-full px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+            >
+              Ver os Alvos
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Modal: Descobrir novos (Motor B) ────────────────────────────── */
+function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [consulta, setConsulta] = useState('');
+  const [regiao, setRegiao] = useState('');
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<MotorBResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [placesOk, setPlacesOk] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    miraApi
+      .motorBStatus()
+      .then((r) => setPlacesOk(r.data.places))
+      .catch(() => setPlacesOk(null));
+  }, []);
+
+  const descobrir = async () => {
+    if (consulta.trim().length < 3) {
+      setError('Descreva o que procurar (ex.: "clínicas de estética").');
+      return;
+    }
+    setRunning(true);
+    setError(null);
+    try {
+      const res = await miraApi.descobrir(consulta.trim(), regiao.trim() || undefined);
+      setResult(res.data);
+    } catch (e: any) {
+      if (e?.status === 501) setError('A descoberta local ainda não está habilitada nesta instalação (chave do Google Places pendente).');
+      else if (e?.status === 412) setError('Complete o Perfil de Prospecção (mínimo 60%) antes de descobrir.');
+      else setError(e?.message || 'A descoberta falhou agora. Tente novamente.');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900 flex items-center gap-1.5">
+            <Search size={17} className="text-primary-600" /> Descobrir novos
+            <SaibaMais featureKey="mira.motorB" />
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Fechar">
+            <X size={18} />
+          </button>
+        </div>
+
+        {!result ? (
+          <div className="p-5">
+            <p className="text-sm text-gray-500 mb-3">
+              A Mira busca negócios com o perfil que você descrever (fonte: Google, legalmente limpa),
+              qualifica cada um e cria os Alvos. Só Alvos com contato verificável descontam da cota.
+            </p>
+            <label className="block text-xs font-medium text-gray-500 mb-1">O que procurar</label>
+            <input
+              type="text"
+              value={consulta}
+              onChange={(e) => setConsulta(e.target.value)}
+              placeholder='Ex.: "clínicas de estética", "distribuidoras de bebidas"'
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 mb-3"
+            />
+            <label className="block text-xs font-medium text-gray-500 mb-1">Onde (opcional)</label>
+            <input
+              type="text"
+              value={regiao}
+              onChange={(e) => setRegiao(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && descobrir()}
+              placeholder="Ex.: Campinas, zona sul de SP…"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-200"
+            />
+            {placesOk === false && (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-3">
+                A fonte de descoberta local ainda não está habilitada nesta instalação. A busca por CNAE e
+                região (base pública de CNPJ) chega na sequência.
+              </p>
+            )}
+            {error && <p className="text-xs text-red-500 mt-3">{error}</p>}
+            <button
+              onClick={descobrir}
+              disabled={running || placesOk === false}
+              className="w-full mt-4 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-60"
+            >
+              {running ? (
+                <>
+                  <Loader2 className="animate-spin" size={15} /> Descobrindo…
+                </>
+              ) : (
+                <>
+                  <Search size={15} /> Descobrir agora
+                </>
+              )}
+            </button>
+          </div>
+        ) : (
+          <div className="p-5">
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              <ResultStat label="Encontrados" value={result.encontrados} tone="gray" />
+              <ResultStat label="Prontos" value={result.prontos} tone="emerald" />
+              <ResultStat label="Restante da cota" value={result.quota.remaining} tone="primary" />
+            </div>
+            <ul className="text-xs text-gray-500 space-y-1 mb-4">
+              {result.duplicados > 0 && <li>{result.duplicados} já estavam mapeados (pulados).</li>}
+              {result.criados - result.prontos > 0 && (
+                <li>{result.criados - result.prontos} sem contato verificável ficaram em qualificação (não gastam cota).</li>
+              )}
+            </ul>
+            {result.blocked && (
+              <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2.5 mb-4">
+                <p className="text-xs text-red-600">
+                  Sua cota do mês esgotou. Contrate um pacote avulso em{' '}
+                  <Link href="/billing" className="font-semibold underline">Plano &amp; Fatura</Link> ou aguarde a virada do mês.
                 </p>
               </div>
             )}

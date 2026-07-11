@@ -28,6 +28,8 @@ import {
   Send,
   Archive,
   CheckCircle2,
+  Sparkles,
+  MessageSquareText,
 } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { miraApi, type MiraAlvoDossie } from '@/lib/miraApi';
@@ -37,6 +39,8 @@ export default function MiraAlvoDossiePage() {
   const [loading, setLoading] = useState(true);
   const [alvo, setAlvo] = useState<MiraAlvoDossie | null>(null);
   const [notFound, setNotFound] = useState(false);
+
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!params?.id) return;
@@ -49,7 +53,7 @@ export default function MiraAlvoDossiePage() {
     return () => {
       alive = false;
     };
-  }, [params?.id]);
+  }, [params?.id, reloadKey]);
 
   if (loading) {
     return (
@@ -118,7 +122,11 @@ export default function MiraAlvoDossiePage() {
         </div>
         {alvo.resumo && <p className="text-sm text-gray-600 mt-4 leading-relaxed">{alvo.resumo}</p>}
 
-        <AlvoActions alvo={alvo} onChange={(patch) => setAlvo((a) => (a ? { ...a, ...patch } : a))} />
+        <AlvoActions
+          alvo={alvo}
+          onChange={(patch) => setAlvo((a) => (a ? { ...a, ...patch } : a))}
+          onReload={() => setReloadKey((k) => k + 1)}
+        />
 
         {/* Por que essa nota (score breakdown) */}
         {alvo.scoreBreakdown?.fatores?.length ? (
@@ -205,6 +213,21 @@ export default function MiraAlvoDossiePage() {
                   <span className="font-bold text-primary-600 mr-1.5">nº {o.rank}</span>
                   <span className="font-medium text-gray-800">{o.produto}</span>
                   <p className="text-xs text-gray-500 mt-0.5 pl-6">{o.racional}</p>
+                  {Array.isArray(o.roteiro?.porSponsor) && o.roteiro.porSponsor.length > 0 && (
+                    <div className="mt-2 ml-6 space-y-1.5">
+                      {o.roteiro.porSponsor.map((r: any, i: number) => (
+                        <div key={i} className="bg-primary-50/60 border border-primary-100 rounded-lg px-3 py-2">
+                          <p className="text-[11px] font-semibold text-primary-700 flex items-center gap-1">
+                            <MessageSquareText size={11} /> Roteiro para {r.decisor}
+                          </p>
+                          <p className="text-xs text-primary-900 mt-0.5 whitespace-pre-line">{r.mensagem}</p>
+                        </div>
+                      ))}
+                      <p className="text-[10px] text-gray-400">
+                        Gerado por IA sobre os dados verificados (confiança de inferência). Revise antes de enviar.
+                      </p>
+                    </div>
+                  )}
                 </li>
               ))}
             </ol>
@@ -299,17 +322,46 @@ export default function MiraAlvoDossiePage() {
   );
 }
 
-/* Ações do Alvo: pousar no CRM (Contact + Deal) e arquivar. */
+/* Ações do Alvo: aprofundar com IA, pousar no CRM (Contact + Deal) e arquivar. */
 function AlvoActions({
   alvo,
   onChange,
+  onReload,
 }: {
   alvo: MiraAlvoDossie;
   onChange: (patch: Partial<MiraAlvoDossie>) => void;
+  onReload: () => void;
 }) {
   const [sending, setSending] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [deepening, setDeepening] = useState(false);
+  const [deepMsg, setDeepMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const aprofundar = async () => {
+    setDeepening(true);
+    setError(null);
+    setDeepMsg(null);
+    try {
+      const res = await miraApi.aprofundarAlvo(alvo.id);
+      if (res.data.ok) {
+        setDeepMsg(
+          `Análise concluída: ${res.data.oportunidades} oportunidade(s) e ${res.data.roteiros} roteiro(s).` +
+            (res.data.descartadosPeloVerificador.length
+              ? ` O verificador descartou ${res.data.descartadosPeloVerificador.length} item(ns) sem lastro.`
+              : '')
+        );
+        onReload();
+      } else {
+        setError('A análise não respondeu agora. Tente de novo em instantes.');
+      }
+    } catch (e: any) {
+      if (e?.status === 412) setError('Cadastre o catálogo no Perfil de Prospecção antes de aprofundar.');
+      else setError(e?.message || 'A análise falhou agora.');
+    } finally {
+      setDeepening(false);
+    }
+  };
 
   const pousar = async () => {
     setSending(true);
@@ -339,6 +391,16 @@ function AlvoActions({
 
   return (
     <div className="mt-4 border-t border-gray-100 pt-4 flex flex-wrap items-center gap-2.5">
+      {alvo.status !== 'ARCHIVED' && (
+        <button
+          onClick={aprofundar}
+          disabled={deepening}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary-200 text-primary-700 text-sm font-medium hover:bg-primary-50 disabled:opacity-60"
+        >
+          {deepening ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} />}
+          {deepening ? 'Analisando…' : 'Aprofundar com IA'}
+        </button>
+      )}
       {alvo.status === 'DELIVERED' && alvo.dealId ? (
         <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
           <CheckCircle2 size={15} /> No CRM
@@ -371,6 +433,7 @@ function AlvoActions({
         </button>
       )}
       {error && <span className="text-xs text-red-500">{error}</span>}
+      {deepMsg && <span className="text-xs text-emerald-600">{deepMsg}</span>}
     </div>
   );
 }

@@ -156,6 +156,24 @@ export interface MotorAResult {
   quota: { used: number; total: number; remaining: number };
 }
 
+export interface MotorBResult {
+  fonte: string;
+  encontrados: number;
+  criados: number;
+  prontos: number;
+  duplicados: number;
+  blocked: boolean;
+  quota: { used: number; total: number; remaining: number };
+}
+
+export interface AprofundarResult {
+  ok: boolean;
+  oportunidades: number;
+  roteiros: number;
+  descartadosPeloVerificador: string[];
+  motivo?: string;
+}
+
 // ── Client ───────────────────────────────────────────────────────────
 export const miraApi = {
   access: (): Promise<{ success: boolean; data: MiraAccessData }> => api.get('/api/mira-access'),
@@ -184,6 +202,12 @@ export const miraApi = {
   pousarCrm: (alvoId: string): Promise<{ success: boolean; data: { contactId: string; dealId: string; reused: boolean } }> =>
     api.post(`/api/mira/alvos/${alvoId}/crm`, {}),
   arquivarAlvo: (alvoId: string): Promise<{ success: boolean }> => api.post(`/api/mira/alvos/${alvoId}/arquivar`, {}),
+  motorBStatus: (): Promise<{ success: boolean; data: { places: boolean; cnaeBase: boolean } }> =>
+    api.get('/api/mira/motor-b/status'),
+  descobrir: (consulta: string, regiao?: string): Promise<{ success: boolean; data: MotorBResult }> =>
+    api.post('/api/mira/motor-b/descobrir', { consulta, regiao: regiao || null }),
+  aprofundarAlvo: (alvoId: string): Promise<{ success: boolean; data: AprofundarResult }> =>
+    api.post(`/api/mira/alvos/${alvoId}/aprofundar`, {}),
 };
 
 export function formatBRL(v: number): string {
