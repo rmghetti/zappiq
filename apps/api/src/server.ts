@@ -34,6 +34,9 @@ import campaignsRoutes from './routes/campaigns.js';
 import impulsoRoutes from './routes/impulso.js';
 import impulsoAccessRoutes from './routes/impulsoAccess.js';
 import { requireImpulso } from './middleware/requireImpulso.js';
+import miraRoutes from './routes/mira.js';
+import miraAccessRoutes from './routes/miraAccess.js';
+import { requireMira } from './middleware/requireMira.js';
 import analyticsRoutes from './routes/analytics.js';
 import flowsRoutes from './routes/flows.js';
 import flowTemplatesRoutes from './routes/flowTemplates.js';
@@ -307,6 +310,10 @@ app.use('/api/campaigns', authMiddleware, rlsTenantMiddleware, requireActivePlan
 app.use('/api/impulso-access', authMiddleware, rlsTenantMiddleware, requireActivePlan, impulsoAccessRoutes);
 // Impulso — features (gated por requireImpulso: precisa do add-on/trial/alpha do Impulso ativo).
 app.use('/api/impulso', authMiddleware, rlsTenantMiddleware, requireActivePlan, requireImpulso(), impulsoRoutes);
+// Mira Prospects — status/vitrine (SEM requireMira: todo cliente ativo consulta pra ver a oferta).
+app.use('/api/mira-access', authMiddleware, rlsTenantMiddleware, requireActivePlan, miraAccessRoutes);
+// Mira Prospects — features (gated por requireMira: faixa assinada, incluída no plano ou alpha).
+app.use('/api/mira', authMiddleware, rlsTenantMiddleware, requireActivePlan, requireMira(), miraRoutes);
 app.use('/api/analytics', authMiddleware, rlsTenantMiddleware, requireActivePlan, analyticsRoutes);
 // IMPORTANT: /api/flows/templates MUST be mounted before /api/flows, otherwise
 // GET /api/flows/templates would be captured by GET /:id in flowsRoutes (id="templates")
