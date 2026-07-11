@@ -25,6 +25,9 @@ import {
   ShieldCheck,
   ExternalLink,
   Crown,
+  Send,
+  Archive,
+  CheckCircle2,
 } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { miraApi, type MiraAlvoDossie } from '@/lib/miraApi';
@@ -114,6 +117,8 @@ export default function MiraAlvoDossiePage() {
           </div>
         </div>
         {alvo.resumo && <p className="text-sm text-gray-600 mt-4 leading-relaxed">{alvo.resumo}</p>}
+
+        <AlvoActions alvo={alvo} onChange={(patch) => setAlvo((a) => (a ? { ...a, ...patch } : a))} />
 
         {/* Por que essa nota (score breakdown) */}
         {alvo.scoreBreakdown?.fatores?.length ? (
@@ -290,6 +295,82 @@ export default function MiraAlvoDossiePage() {
           </ul>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/* Ações do Alvo: pousar no CRM (Contact + Deal) e arquivar. */
+function AlvoActions({
+  alvo,
+  onChange,
+}: {
+  alvo: MiraAlvoDossie;
+  onChange: (patch: Partial<MiraAlvoDossie>) => void;
+}) {
+  const [sending, setSending] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const pousar = async () => {
+    setSending(true);
+    setError(null);
+    try {
+      const res = await miraApi.pousarCrm(alvo.id);
+      onChange({ status: 'DELIVERED', contactId: res.data.contactId, dealId: res.data.dealId });
+    } catch (e: any) {
+      setError(e?.message || 'Não foi possível enviar para o CRM agora.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const arquivar = async () => {
+    setArchiving(true);
+    setError(null);
+    try {
+      await miraApi.arquivarAlvo(alvo.id);
+      onChange({ status: 'ARCHIVED' });
+    } catch (e: any) {
+      setError(e?.message || 'Não foi possível arquivar agora.');
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 border-t border-gray-100 pt-4 flex flex-wrap items-center gap-2.5">
+      {alvo.status === 'DELIVERED' && alvo.dealId ? (
+        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
+          <CheckCircle2 size={15} /> No CRM
+          <Link href="/crm" className="text-primary-600 hover:underline text-xs font-medium ml-1">
+            abrir pipeline →
+          </Link>
+        </span>
+      ) : alvo.status === 'READY' ? (
+        <button
+          onClick={pousar}
+          disabled={sending}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-60"
+        >
+          {sending ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />}
+          Enviar para o CRM
+        </button>
+      ) : alvo.status === 'ARCHIVED' ? (
+        <span className="text-sm text-gray-400 font-medium">Alvo arquivado</span>
+      ) : (
+        <span className="text-xs text-gray-400 italic">Em qualificação: o Alvo pousa no CRM quando passar a verificação.</span>
+      )}
+      {alvo.status !== 'ARCHIVED' && alvo.status !== 'DELIVERED' && (
+        <button
+          onClick={arquivar}
+          disabled={archiving}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 text-gray-500 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+        >
+          {archiving ? <Loader2 className="animate-spin" size={14} /> : <Archive size={14} />}
+          Arquivar
+        </button>
+      )}
+      {error && <span className="text-xs text-red-500">{error}</span>}
     </div>
   );
 }

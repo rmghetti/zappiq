@@ -148,6 +148,23 @@ export const miraContent: SaibaMaisContent[] = [
       'Sabendo que a conta usa um concorrente com suporte lento e que seu diferencial é SLA de 4 horas, o roteiro sugere abrir a conversa por continuidade de operação, não por preço.',
   },
   {
+    featureKey: 'mira.motorA',
+    titulo: 'Mapear carteira',
+    clientSafe: true,
+    oQueE:
+      'O mapeamento da carteira transforma os clientes e contatos que você já tem em Alvos qualificados. Você cola os CNPJs (ou importa do CRM) e a Mira enriquece cada conta na fonte oficial da Receita Federal: razão social, atividade, porte, situação e o quadro societário, que vira o mapa de decisores.',
+    paraQueServe:
+      'Serve para vender mais para quem você já conhece. Cliente atual tem muito mais chance de comprar de novo do que um desconhecido, e a carteira costuma estar desorganizada em planilhas. A Mira organiza, enriquece e prioriza tudo pelo Mira Score.',
+    comoImplementar: [
+      'Clique em Mapear carteira na tela de Alvos.',
+      'Cole os CNPJs (um por linha, até 50 por vez) ou clique em Importar CNPJs do meu CRM.',
+      'Clique em Mapear agora e aguarde: a Mira busca cada conta na fonte oficial.',
+      'Contas inativas na Receita e duplicadas são puladas e não gastam a sua cota.',
+    ],
+    exemploResultado:
+      'Um distribuidor cola 30 CNPJs de clientes antigos. Em um minuto, 24 viram Alvos verificados com sócios mapeados; 4 estavam inativos (não gastaram cota) e 2 eram duplicados. A fila aparece ordenada por score e ele redescobre 6 contas quentes esquecidas.',
+  },
+  {
     featureKey: 'mira.alvos',
     titulo: 'Alvos (fila de prospecção)',
     clientSafe: true,

@@ -11,8 +11,84 @@ import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { getMiraEntitlement } from '../middleware/requireMira.js';
+import { runMotorA, crmCandidates } from '../services/mira/motorA.js';
+import { pousarNoCrm } from '../services/mira/pousarCrm.js';
 
 const router = Router();
+
+// ── Motor A (base instalada) ───────────────────────────────────────
+
+const motorASchema = z.object({
+  cnpjs: z.array(z.string().trim().min(11).max(20)).min(1).max(50),
+});
+
+// POST /api/mira/motor-a/run — mapeia uma lista de CNPJs da carteira
+router.post('/motor-a/run', validate(motorASchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { cnpjs } = req.body as z.infer<typeof motorASchema>;
+    const result = await runMotorA(req.organizationId!, cnpjs);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    if (err?.status === 412) {
+      res.status(412).json({
+        success: false,
+        error: 'perfil_incompleto',
+        message: 'Complete o Perfil de Prospecção (mínimo 60%) para os motores largarem.',
+      });
+      return;
+    }
+    next(err);
+  }
+});
+
+// GET /api/mira/motor-a/crm-candidates — CNPJs achados no CRM (customFields)
+router.get('/motor-a/crm-candidates', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await crmCandidates(req.organizationId!);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/mira/alvos/:id/crm — pousa o Alvo no CRM (Contact + Deal)
+router.post('/alvos/:id/crm', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await pousarNoCrm(req.organizationId!, req.params.id);
+    res.json({ success: true, data });
+  } catch (err: any) {
+    if (err?.status === 404) {
+      res.status(404).json({ success: false, error: 'alvo_not_found' });
+      return;
+    }
+    if (err?.status === 409) {
+      res.status(409).json({
+        success: false,
+        error: 'alvo_nao_pronto',
+        message: 'Só Alvos prontos (verificados) pousam no CRM.',
+      });
+      return;
+    }
+    next(err);
+  }
+});
+
+// POST /api/mira/alvos/:id/arquivar — descarta um Alvo da fila
+router.post('/alvos/:id/arquivar', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const r = await (prisma as any).miraAlvo.updateMany({
+      where: { id: req.params.id, organizationId: req.organizationId! },
+      data: { status: 'ARCHIVED' },
+    });
+    if (r.count === 0) {
+      res.status(404).json({ success: false, error: 'alvo_not_found' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ── Perfil de Prospecção (Motor 0) ─────────────────────────────────
 

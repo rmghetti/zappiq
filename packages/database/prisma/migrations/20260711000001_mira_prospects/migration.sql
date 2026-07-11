@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS "mira_alvos" (
   "municipio" TEXT,
   "uf" TEXT,
   "site" TEXT,
+  "telefone" TEXT,
   "placeId" TEXT,
   "miraScore" INTEGER,
   "scoreBreakdown" JSONB,

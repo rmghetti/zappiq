@@ -16,9 +16,12 @@ import {
   Store,
   Users,
   Newspaper,
+  Radar,
+  X,
+  Import,
 } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
-import { miraApi, type MiraAlvoListItem, type MiraQuota } from '@/lib/miraApi';
+import { miraApi, type MiraAlvoListItem, type MiraQuota, type MotorAResult } from '@/lib/miraApi';
 
 const STATUS_FILTERS = [
   { key: '', label: 'Todos' },
@@ -41,6 +44,8 @@ export default function MiraAlvosPage() {
   const [quota, setQuota] = useState<MiraQuota | null>(null);
   const [status, setStatus] = useState<string>('');
   const [q, setQ] = useState('');
+  const [showMapear, setShowMapear] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -60,7 +65,7 @@ export default function MiraAlvosPage() {
       alive = false;
       clearTimeout(t);
     };
-  }, [status, q]);
+  }, [status, q, reloadKey]);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -81,12 +86,30 @@ export default function MiraAlvosPage() {
             <p className="text-sm text-gray-500">A fila de prospecção, priorizada pelo Mira Score.</p>
           </div>
         </div>
-        {quota && (
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${quota.blocked ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600'}`}>
-            {quota.used}/{quota.total} no mês
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {quota && (
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${quota.blocked ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600'}`}>
+              {quota.used}/{quota.total} no mês
+            </span>
+          )}
+          <button
+            onClick={() => setShowMapear(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+          >
+            <Radar size={15} /> Mapear carteira
+          </button>
+        </div>
       </div>
+
+      {showMapear && (
+        <MapearCarteiraModal
+          onClose={() => setShowMapear(false)}
+          onDone={() => {
+            setShowMapear(false);
+            setReloadKey((k) => k + 1);
+          }}
+        />
+      )}
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -197,6 +220,161 @@ export default function MiraAlvosPage() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Modal: Mapear carteira (Motor A) ────────────────────────────── */
+function MapearCarteiraModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [texto, setTexto] = useState('');
+  const [running, setRunning] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<MotorAResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const parseCnpjs = (t: string) =>
+    t
+      .split(/[\n;,]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.replace(/\D/g, '').length >= 11)
+      .slice(0, 50);
+
+  const importarDoCrm = async () => {
+    setImporting(true);
+    setError(null);
+    try {
+      const res = await miraApi.crmCandidates();
+      if (res.data.cnpjs.length === 0) {
+        setError('Nenhum CNPJ encontrado nos contatos do CRM (campo personalizado "cnpj").');
+      } else {
+        setTexto((prev) => [prev.trim(), ...res.data.cnpjs].filter(Boolean).join('\n'));
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Não foi possível ler o CRM agora.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const mapear = async () => {
+    const cnpjs = parseCnpjs(texto);
+    if (cnpjs.length === 0) {
+      setError('Cole ao menos um CNPJ válido (14 dígitos), um por linha.');
+      return;
+    }
+    setRunning(true);
+    setError(null);
+    try {
+      const res = await miraApi.runMotorA(cnpjs);
+      setResult(res.data);
+    } catch (e: any) {
+      if (e?.status === 412) {
+        setError('Complete o Perfil de Prospecção (mínimo 60%) antes de mapear. Vá em Mira Prospects > Perfil.');
+      } else {
+        setError(e?.message || 'O mapeamento falhou. Tente novamente.');
+      }
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900 flex items-center gap-1.5">
+            <Radar size={17} className="text-primary-600" /> Mapear carteira
+            <SaibaMais featureKey="mira.motorA" />
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Fechar">
+            <X size={18} />
+          </button>
+        </div>
+
+        {!result ? (
+          <div className="p-5">
+            <p className="text-sm text-gray-500 mb-3">
+              Cole os CNPJs da sua carteira (um por linha, até 50 por vez). A Mira enriquece cada conta na
+              fonte oficial, mapeia os decisores do quadro societário e calcula o Mira Score. Só Alvos
+              verificados descontam da cota.
+            </p>
+            <textarea
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder={'12.345.678/0001-90\n98.765.432/0001-10'}
+              rows={7}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-200"
+            />
+            <div className="flex items-center justify-between mt-2">
+              <button
+                onClick={importarDoCrm}
+                disabled={importing}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:underline disabled:opacity-50"
+              >
+                {importing ? <Loader2 className="animate-spin" size={13} /> : <Import size={13} />}
+                Importar CNPJs do meu CRM
+              </button>
+              <span className="text-xs text-gray-400">{parseCnpjs(texto).length}/50</span>
+            </div>
+            {error && <p className="text-xs text-red-500 mt-3">{error}</p>}
+            <button
+              onClick={mapear}
+              disabled={running}
+              className="w-full mt-4 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-60"
+            >
+              {running ? (
+                <>
+                  <Loader2 className="animate-spin" size={15} /> Mapeando (fonte oficial)…
+                </>
+              ) : (
+                <>
+                  <Radar size={15} /> Mapear agora
+                </>
+              )}
+            </button>
+          </div>
+        ) : (
+          <div className="p-5">
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              <ResultStat label="Prontos" value={result.prontos} tone="emerald" />
+              <ResultStat label="Criados" value={result.criados} tone="primary" />
+              <ResultStat label="Restante da cota" value={result.quota.remaining} tone="gray" />
+            </div>
+            <ul className="text-xs text-gray-500 space-y-1 mb-4">
+              {result.duplicados.length > 0 && <li>{result.duplicados.length} já estavam mapeados (pulados).</li>}
+              {result.inativos.length > 0 && <li>{result.inativos.length} inativos na Receita (não gastam cota).</li>}
+              {result.naoEncontrados.length > 0 && <li>{result.naoEncontrados.length} não encontrados na fonte.</li>}
+              {result.invalidos.length > 0 && <li>{result.invalidos.length} CNPJs inválidos.</li>}
+              {result.erros.length > 0 && <li>{result.erros.length} com erro de fonte (tente de novo mais tarde).</li>}
+            </ul>
+            {result.blocked && (
+              <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2.5 mb-4">
+                <p className="text-xs text-red-600">
+                  Sua cota do mês esgotou{result.naoProcessados.length > 0 ? ` (${result.naoProcessados.length} CNPJs ficaram na fila)` : ''}.
+                  Contrate um pacote avulso em <Link href="/billing" className="font-semibold underline">Plano &amp; Fatura</Link> ou aguarde a virada do mês.
+                </p>
+              </div>
+            )}
+            <button
+              onClick={onDone}
+              className="w-full px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+            >
+              Ver os Alvos
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResultStat({ label, value, tone }: { label: string; value: number; tone: 'emerald' | 'primary' | 'gray' }) {
+  const cls =
+    tone === 'emerald' ? 'bg-emerald-50 text-emerald-700' : tone === 'primary' ? 'bg-primary-50 text-primary-700' : 'bg-gray-50 text-gray-600';
+  return (
+    <div className={`rounded-lg px-3 py-2.5 text-center ${cls}`}>
+      <p className="text-lg font-bold leading-none">{value}</p>
+      <p className="text-[10px] uppercase tracking-wide mt-1 opacity-80">{label}</p>
     </div>
   );
 }

@@ -142,6 +142,20 @@ export interface MiraReleaseItem {
   alvo?: { id: string; nome: string; miraScore: number | null };
 }
 
+export interface MotorAResult {
+  processados: number;
+  criados: number;
+  prontos: number;
+  duplicados: string[];
+  invalidos: string[];
+  naoEncontrados: string[];
+  inativos: string[];
+  erros: string[];
+  blocked: boolean;
+  naoProcessados: string[];
+  quota: { used: number; total: number; remaining: number };
+}
+
 // ── Client ───────────────────────────────────────────────────────────
 export const miraApi = {
   access: (): Promise<{ success: boolean; data: MiraAccessData }> => api.get('/api/mira-access'),
@@ -163,6 +177,13 @@ export const miraApi = {
   listReleases: (unreadOnly = false): Promise<{ success: boolean; data: MiraReleaseItem[] }> =>
     api.get(`/api/mira/releases${unreadOnly ? '?unread=1' : ''}`),
   markReleaseLida: (id: string): Promise<{ success: boolean }> => api.post(`/api/mira/releases/${id}/lida`, {}),
+  runMotorA: (cnpjs: string[]): Promise<{ success: boolean; data: MotorAResult }> =>
+    api.post('/api/mira/motor-a/run', { cnpjs }),
+  crmCandidates: (): Promise<{ success: boolean; data: { total: number; cnpjs: string[] } }> =>
+    api.get('/api/mira/motor-a/crm-candidates'),
+  pousarCrm: (alvoId: string): Promise<{ success: boolean; data: { contactId: string; dealId: string; reused: boolean } }> =>
+    api.post(`/api/mira/alvos/${alvoId}/crm`, {}),
+  arquivarAlvo: (alvoId: string): Promise<{ success: boolean }> => api.post(`/api/mira/alvos/${alvoId}/arquivar`, {}),
 };
 
 export function formatBRL(v: number): string {
