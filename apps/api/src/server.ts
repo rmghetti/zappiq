@@ -37,6 +37,7 @@ import { requireImpulso } from './middleware/requireImpulso.js';
 import miraRoutes from './routes/mira.js';
 import miraAccessRoutes from './routes/miraAccess.js';
 import { requireMira } from './middleware/requireMira.js';
+import { initMiraReleasesCronJob } from './services/mira/releasesCron.js'; // Mira — Releases dos Alvos (semanal)
 import analyticsRoutes from './routes/analytics.js';
 import flowsRoutes from './routes/flows.js';
 import flowTemplatesRoutes from './routes/flowTemplates.js';
@@ -390,6 +391,11 @@ initAgentEvalCronJob().catch((err) => {
 // ── Analytics "Pulso" cron diário (03:20 UTC) — insight narrado por org ──
 initAnalyticsPulseCronJob().catch((err) => {
   logger.error('[Server] Failed to initialize analytics pulse cron job:', err);
+});
+
+// ── Mira Prospects: Releases dos Alvos (semanal, segunda 06:00 UTC) ──
+initMiraReleasesCronJob().catch((err) => {
+  logger.error('[Server] Failed to initialize mira releases cron job:', err);
 });
 
 // ── Área Clientes Fase 1: expiração de trial + recompute lifecycle (03:40 UTC) ──

@@ -5,8 +5,9 @@
  * --------------------------------------------------------------------------
  * LÓGICA PRESERVADA 100%:
  *   - 4 planos ativos via listActivePlans() de @zappiq/shared (Iza Lite/Growth/Scale/Enterprise)
- *   - toggle anual (-20%) + Radar 360° add-on + Voz outbound (none/padrao/premium)
- *   - Enterprise: voz incluída, Radar incluso, sob consulta
+ *   - toggle anual (-20%) + Mira Prospects (seletor de faixa) + Voz outbound
+ *   - Radar 360° saiu do seletor (produto a retrabalhar); Mira incluída em
+ *     Business (Pro) e Enterprise (Scale); indisponível no Lite
  *   - Business: SLA 99,9% destaque
  *   - Card "Com vs Sem ZappIQ" no fim
  *
@@ -17,11 +18,20 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, Radar, Shield, Sparkles, Crown } from 'lucide-react';
-import { listActivePlans, ADDONS, getAnnualPrice, type PlanConfig } from '@zappiq/shared';
+import { Check, Shield, Sparkles, Crown, Crosshair } from 'lucide-react';
+import {
+  listActivePlans,
+  getAnnualPrice,
+  listMiraTiers,
+  MIRA_TIERS,
+  MIRA_INCLUDED_TIER_BY_PLAN,
+  MIRA_ELIGIBLE_PLANS,
+  type PlanConfig,
+  type MiraTier,
+} from '@zappiq/shared';
 
 const PLANS: PlanConfig[] = listActivePlans();
-const RADAR_ADDON = ADDONS.RADAR_360;
+const MIRA_TIER_LIST = listMiraTiers();
 
 // V2-020 (Sprint 0 Blocker 6): seletor de Voz removido até julho/2026.
 // Backend (Whisper STT + TTS) está em roadmap. Ver /roadmap pra timeline.
@@ -29,20 +39,29 @@ const RADAR_ADDON = ADDONS.RADAR_360;
 
 export function Pricing() {
   const [annual, setAnnual] = useState(false);
-  const [addRadar, setAddRadar] = useState(false);
+  // Mira Prospects (add-on de inteligência de oportunidades) — seletor de
+  // faixa substitui o antigo toggle do Radar 360° (produto a retrabalhar).
+  const [miraTier, setMiraTier] = useState<MiraTier | ''>('');
 
   const computePrice = (plan: PlanConfig): number | null => {
     if (plan.priceMonthly === null) return null;
     return annual ? getAnnualPrice(plan) : plan.priceMonthly;
   };
 
-  const computeRadarExtra = (plan: PlanConfig): number => {
-    if (!addRadar) return 0;
-    if (plan.features.radar360) return 0;
-    if (RADAR_ADDON.priceMonthly === null) return 0;
+  // Mira incluída no plano (Business→Pro, Enterprise→Scale)?
+  const miraIncludedIn = (plan: PlanConfig): MiraTier | null =>
+    (MIRA_INCLUDED_TIER_BY_PLAN as Record<string, MiraTier>)[plan.id] ?? null;
+
+  const miraEligible = (plan: PlanConfig): boolean => (MIRA_ELIGIBLE_PLANS as string[]).includes(plan.id);
+
+  const computeMiraExtra = (plan: PlanConfig): number => {
+    if (!miraTier) return 0;
+    if (!miraEligible(plan)) return 0; // Lite: indisponível (nota no card)
+    if (miraIncludedIn(plan)) return 0; // Business/Enterprise: incluída
+    const t = MIRA_TIERS[miraTier];
     return annual
-      ? Math.round(RADAR_ADDON.priceMonthly * (1 - plan.annualDiscountPercent / 100))
-      : RADAR_ADDON.priceMonthly;
+      ? Math.round(t.priceMonthly * (1 - t.annualDiscountPercent / 100))
+      : t.priceMonthly;
   };
 
   return (
@@ -85,25 +104,38 @@ export function Pricing() {
             </span>
           </div>
 
-          {/* Radar add-on (Voz removida até jul/2026 — ver /roadmap) */}
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <div className="flex items-center gap-3 bg-bg-soft border border-line rounded-full px-4 py-2">
-              <button
-                onClick={() => setAddRadar(!addRadar)}
-                className={`relative w-11 h-6 rounded-full transition-colors ${
-                  addRadar ? 'bg-accent' : 'bg-line'
-                }`}
-                aria-label="Adicionar Radar 360"
-              >
-                <div
-                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
-                    addRadar ? 'translate-x-5' : 'translate-x-0.5'
-                  }`}
-                />
-              </button>
-              <span className="text-[12.5px] font-medium text-ink flex items-center gap-1.5">
-                <Radar size={13} className="text-accent" /> Radar 360°
+          {/* Mira Prospects — seletor de faixa (add-on de inteligência de oportunidades) */}
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 bg-bg-soft border border-line rounded-full px-3 py-2">
+              <span className="text-[12.5px] font-medium text-ink flex items-center gap-1.5 pl-1">
+                <Crosshair size={13} className="text-accent" /> Mira Prospects
               </span>
+              <button
+                onClick={() => setMiraTier('')}
+                className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${
+                  miraTier === '' ? 'bg-ink text-white' : 'text-muted hover:text-ink'
+                }`}
+              >
+                Sem add-on
+              </button>
+              {MIRA_TIER_LIST.map((t) => {
+                const preco = annual
+                  ? Math.round(t.priceMonthly * (1 - t.annualDiscountPercent / 100))
+                  : t.priceMonthly;
+                const shortName = t.name.replace('Mira ', '');
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => setMiraTier(t.key)}
+                    className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${
+                      miraTier === t.key ? 'bg-accent text-white' : 'text-muted hover:text-ink'
+                    }`}
+                    aria-label={`Adicionar Mira Prospects ${shortName}`}
+                  >
+                    {shortName} · {t.alvosPerMonth} alvos · +R${preco.toLocaleString('pt-BR')}
+                  </button>
+                );
+              })}
             </div>
 
             <Link href="/voz" className="text-[11.5px] font-medium text-accent hover:underline">Voz outbound · 6 pacotes a partir de R$ 79,90 →</Link>
@@ -114,8 +146,8 @@ export function Pricing() {
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-3 max-w-7xl mx-auto">
           {PLANS.map((plan) => {
             const basePrice = computePrice(plan);
-            const radarExtra = computeRadarExtra(plan);
-            const totalPrice = basePrice !== null ? basePrice + radarExtra : null;
+            const miraExtra = computeMiraExtra(plan);
+            const totalPrice = basePrice !== null ? basePrice + miraExtra : null;
             const isEnterprise = plan.id === 'ENTERPRISE';
             const isBusiness = plan.id === 'BUSINESS';
             const isHighlight = plan.highlight && !isBusiness && !isEnterprise;
@@ -182,9 +214,9 @@ export function Pricing() {
                       <span className={`text-[12px] ml-1 ${isEnterprise ? 'text-white/60' : 'text-muted'}`}>
                         /mês
                       </span>
-                      {radarExtra > 0 && (
+                      {miraExtra > 0 && miraTier && (
                         <div className="text-[11px] text-accent mt-1 flex items-center gap-1">
-                          <Radar size={10} /> +R${radarExtra} Radar 360°
+                          <Crosshair size={10} /> +R${miraExtra.toLocaleString('pt-BR')} {MIRA_TIERS[miraTier].name}
                         </div>
                       )}
                       {/* V4 #163 (PR #75 hotfix) — refs voice (extra/tier)
@@ -227,10 +259,24 @@ export function Pricing() {
                       +{plan.bullets.length - 9} recursos adicionais
                     </li>
                   )}
-                  {!plan.features.radar360 && addRadar && (
+                  {miraTier && miraIncludedIn(plan) && (
                     <li className="flex items-start gap-2 text-[11px] text-accent bg-accent/5 rounded-[8px] px-2 py-1.5 border border-accent/15">
-                      <Radar size={12} className="flex-shrink-0 mt-0.5 text-accent" />
-                      <span className="font-medium">Radar 360° incluído</span>
+                      <Crosshair size={12} className="flex-shrink-0 mt-0.5 text-accent" />
+                      <span className="font-medium">{MIRA_TIERS[miraIncludedIn(plan) as MiraTier].name} incluído no plano</span>
+                    </li>
+                  )}
+                  {miraTier && miraEligible(plan) && !miraIncludedIn(plan) && (
+                    <li className="flex items-start gap-2 text-[11px] text-accent bg-accent/5 rounded-[8px] px-2 py-1.5 border border-accent/15">
+                      <Crosshair size={12} className="flex-shrink-0 mt-0.5 text-accent" />
+                      <span className="font-medium">
+                        {MIRA_TIERS[miraTier].name}: {MIRA_TIERS[miraTier].alvosPerMonth} alvos qualificados/mês
+                      </span>
+                    </li>
+                  )}
+                  {miraTier && !miraEligible(plan) && (
+                    <li className="flex items-start gap-2 text-[11px] text-muted bg-bg-soft rounded-[8px] px-2 py-1.5 border border-line">
+                      <Crosshair size={12} className="flex-shrink-0 mt-0.5" />
+                      <span className="font-medium">Mira Prospects disponível a partir do Growth</span>
                     </li>
                   )}
                 </ul>
@@ -252,7 +298,7 @@ export function Pricing() {
           })}
         </div>
 
-        {/* CTA Radar */}
+        {/* CTA Mira Prospects */}
         <div className="mt-10 max-w-4xl mx-auto card-soft bg-white p-6 flex flex-col sm:flex-row items-start gap-4">
           <div
             className="w-11 h-11 rounded-[12px] flex items-center justify-center flex-shrink-0 shadow-[0_8px_16px_-8px_rgba(74,82,208,0.4)]"
@@ -260,22 +306,23 @@ export function Pricing() {
               background: 'linear-gradient(135deg, #2FB57A 0%, #2F7FB5 45%, #4A52D0 100%)',
             }}
           >
-            <Radar size={20} className="text-white" />
+            <Crosshair size={20} className="text-white" />
           </div>
           <div className="flex-1">
             <h4 className="text-[16px] font-medium text-ink tracking-tight mb-1">
-              Radar 360° · dashboards que viram decisão
+              Mira Prospects · quem está pronto para comprar, entregue com dossiê
             </h4>
             <p className="text-[13.5px] text-muted mb-3 leading-relaxed">
-              Dashboards executivos, alertas quando algo foge do normal, previsão de vendas por IA
-              e comparativo anônimo com o seu setor. Exporta pro Power BI ou Looker.{' '}
-              <strong className="text-ink">Já vem incluso em Business e Enterprise.</strong>
+              Você diz o que vende e para quem. Agentes de IA mapeiam o seu mercado no dado público
+              brasileiro (CNPJ, quadro societário), qualificam cada conta e entregam o alvo com quem
+              decide, a dor e o roteiro de abordagem. Tudo grava no CRM.{' '}
+              <strong className="text-ink">Incluído em Business e Enterprise.</strong>
             </p>
             <Link
-              href="/observabilidade"
+              href="/signup"
               className="text-[13px] font-medium text-accent hover:underline inline-flex items-center gap-1"
             >
-              Conhecer o Radar 360° →
+              Começar com o Mira Prospects →
             </Link>
           </div>
         </div>
