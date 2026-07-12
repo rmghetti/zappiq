@@ -32,6 +32,7 @@ import {
   MessageSquareText,
   UserSearch,
   Globe,
+  Linkedin,
 } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { miraApi, type MiraAlvoDossie } from '@/lib/miraApi';
@@ -174,10 +175,16 @@ export default function MiraAlvoDossiePage() {
                         <ShieldCheck size={10} /> QSA
                       </span>
                     )}
-                    {!d.vinculoQsa && d.perfilPublico?.fontes?.length ? (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded-full">
-                        <Globe size={10} /> web
-                      </span>
+                    {!d.vinculoQsa && (d.perfilPublico?.fontes?.length || d.fonte) ? (
+                      d.fonte?.includes('linkedin') || d.perfilPublico?.fontes?.some((f) => f.includes('linkedin')) ? (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#0a66c2] bg-sky-50 px-1.5 py-0.5 rounded-full">
+                          <Linkedin size={10} /> LinkedIn
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded-full">
+                          <Globe size={10} /> web
+                        </span>
+                      )
                     ) : null}
                     <span className="text-[10px] text-gray-400">{d.confianca}% conf.</span>
                   </div>
@@ -443,7 +450,7 @@ function AlvoActions({
         <button
           onClick={mapearDecisores}
           disabled={mappingDec}
-          title="Mapeia decisores por cargo a partir da pegada pública (índice de busca e páginas públicas). Não usa login de rede social."
+          title="Mapeia decisores por cargo no LinkedIn e em páginas públicas (via índice de busca, sem login). Traz o responsável atual por cada área que você mapeou."
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary-200 text-primary-700 text-sm font-medium hover:bg-primary-50 disabled:opacity-60"
         >
           {mappingDec ? <Loader2 className="animate-spin" size={15} /> : <UserSearch size={15} />}
