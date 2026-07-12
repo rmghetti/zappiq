@@ -7,8 +7,9 @@
  *   - quadro societário mudou (entrou/saiu decisor)  → janela clássica
  *   - situação cadastral mudou                        → risco/limpeza
  *   - porte mudou                                     → sinal de expansão
- * Nada de notícia inventada: monitoramento de mídia/editais entra quando
- * houver fonte de busca plugada (doc 08, honestidade de fonte).
+ * 2o nível (pegada pública): quando há fonte de busca plugada, também traz
+ * posts de LinkedIn indexados + notícias da conta, filtrados pelo catálogo,
+ * com confiança menor (web) e sempre apontando para a fonte real (doc 08).
  *
  * Estrutura espelhada de analyticsPulseCron.ts (BullMQ repeatable).
  * Fail-soft por org e por alvo; pausa curta entre lookups (rate da fonte).
@@ -18,6 +19,8 @@ import { prisma } from '@zappiq/database';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { fetchCnpj } from './cnpj.js';
+import { buscarReleasesPublicos } from './releasesPublico.js';
+import { buscaPublicaDisponivel } from './buscaPublica.js';
 import { getMiraEntitlement } from '../../middleware/requireMira.js';
 
 const redisUrl = new URL(env.REDIS_URL);
@@ -39,6 +42,10 @@ let miraReleasesWorker: Worker | null = null;
 
 const MAX_ALVOS_POR_ORG = 50;
 const PAUSA_ENTRE_LOOKUPS_MS = 1200;
+// Pegada pública (2o nível): teto por org e por ciclo para caber no tier
+// gratuito do provedor de busca (Google Programmable Search = 100/dia).
+const MAX_ALVOS_BUSCA_PUBLICA = 8;
+const MAX_BUSCAS_PUBLICAS_CICLO = 60;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -117,6 +124,8 @@ export async function runMiraReleasesCycle(): Promise<{
   let orgsProcessed = 0;
   let alvosChecked = 0;
   let releasesCreated = 0;
+  let publicReleasesCreated = 0;
+  let globalBuscasPublicas = 0;
   let failed = 0;
 
   const orgs = await prisma.organization.findMany({ select: { id: true } });
@@ -125,6 +134,13 @@ export async function runMiraReleasesCycle(): Promise<{
       const ent = await getMiraEntitlement(org.id);
       if (!ent.access.entitled) continue;
       orgsProcessed++;
+
+      const perfil = await (prisma as any).miraPerfil.findUnique({
+        where: { organizationId: org.id },
+        select: { catalogo: true },
+      });
+      const catalogo: { nome: string }[] = Array.isArray(perfil?.catalogo) ? perfil.catalogo : [];
+      let alvosBuscaFeitas = 0;
 
       const alvos = await (prisma as any).miraAlvo.findMany({
         where: { organizationId: org.id, cnpj: { not: null }, status: { in: ['READY', 'DELIVERED'] } },
@@ -169,6 +185,44 @@ export async function runMiraReleasesCycle(): Promise<{
             where: { id: alvo.id },
             data: { situacaoCadastral: atual.situacaoCadastral, porte: atual.porte },
           });
+
+          // 2o nível: pegada pública da conta (posts de LinkedIn indexados +
+          // notícias) filtrada pelo catálogo. Teto por org e por ciclo.
+          if (
+            buscaPublicaDisponivel() &&
+            alvosBuscaFeitas < MAX_ALVOS_BUSCA_PUBLICA &&
+            globalBuscasPublicas < MAX_BUSCAS_PUBLICAS_CICLO
+          ) {
+            alvosBuscaFeitas++;
+            try {
+              const { drafts, buscas } = await buscarReleasesPublicos(org.id, alvo, catalogo);
+              globalBuscasPublicas += buscas;
+              for (const d of drafts) {
+                const dup = await (prisma as any).miraRelease.findFirst({
+                  where: { alvoId: alvo.id, url: d.url, createdAt: { gte: new Date(Date.now() - 45 * 86400000) } },
+                  select: { id: true },
+                });
+                if (dup) continue;
+                await (prisma as any).miraRelease.create({
+                  data: {
+                    organizationId: org.id,
+                    alvoId: alvo.id,
+                    titulo: d.titulo,
+                    resumo: d.resumo,
+                    url: d.url,
+                    relevancia: d.relevancia,
+                    anguloAbordagem: d.anguloAbordagem,
+                    produtoRelacionado: d.produtoRelacionado,
+                    confianca: d.confianca,
+                  },
+                });
+                releasesCreated++;
+                publicReleasesCreated++;
+              }
+            } catch (e) {
+              logger.warn(`[MiraReleases] pegada publica alvo=${alvo.id} falhou: ${String(e)}`);
+            }
+          }
           await sleep(PAUSA_ENTRE_LOOKUPS_MS);
         } catch (e) {
           failed++;
@@ -183,7 +237,7 @@ export async function runMiraReleasesCycle(): Promise<{
 
   const durationMs = Date.now() - startedAt;
   logger.info(
-    `[MiraReleases] ciclo: orgs=${orgsProcessed} alvos=${alvosChecked} releases=${releasesCreated} falhas=${failed} em ${durationMs}ms`
+    `[MiraReleases] ciclo: orgs=${orgsProcessed} alvos=${alvosChecked} releases=${releasesCreated} (publicos=${publicReleasesCreated}, buscas=${globalBuscasPublicas}) falhas=${failed} em ${durationMs}ms`
   );
   return { organizationsProcessed: orgsProcessed, alvosChecked, releasesCreated, failed, durationMs };
 }

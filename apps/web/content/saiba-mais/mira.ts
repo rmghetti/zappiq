@@ -325,9 +325,9 @@ export const miraContent: SaibaMaisContent[] = [
     titulo: 'Releases dos Alvos',
     clientSafe: true,
     oQueE:
-      'A vigilância semanal das suas contas mapeadas. Toda semana os agentes varrem os Alvos e trazem só as novidades relevantes para as suas ofertas: comunicados, notícias, expansões, mudanças de liderança. Cada item explica por que importa e sugere o gancho de abordagem.',
+      'A vigilância semanal das suas contas mapeadas. Toda semana os agentes varrem os Alvos em duas camadas: o registro oficial (Receita: mudança de sócio, situação, porte) e a pegada pública da conta (posts de LinkedIn quando indexados publicamente e notícias), trazendo só o que é relevante para as suas ofertas. Cada item explica por que importa, aponta a fonte e sugere o gancho de abordagem.',
     paraQueServe:
-      'Serve para reabordar na hora certa sem monitorar nada manualmente. O Alvo que não respondeu no mês passado pode ter acabado de anunciar a expansão que muda a conversa.',
+      'Serve para reabordar na hora certa sem monitorar nada manualmente. O Alvo que não respondeu no mês passado pode ter acabado de postar no LinkedIn a expansão que muda a conversa. Os itens da Receita têm confiança alta (registro oficial); os da pegada pública vêm marcados com confiança menor e o link da fonte.',
     comoImplementar: [
       'Abra Releases dos Alvos toda semana (os não lidos ficam destacados).',
       'Use o gancho sugerido para reabrir a conversa com contexto novo.',
