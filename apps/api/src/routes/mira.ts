@@ -14,6 +14,9 @@ import { getMiraEntitlement } from '../middleware/requireMira.js';
 import { runMotorA, crmCandidates } from '../services/mira/motorA.js';
 import { pousarNoCrm } from '../services/mira/pousarCrm.js';
 import { runMotorB, placesDisponivel } from '../services/mira/motorB.js';
+import { runDescobertaPublica } from '../services/mira/descobertaPublica.js';
+import { buscaPublicaDisponivel, buscaPublicaProvider } from '../services/mira/buscaPublica.js';
+import { enriquecerDecisoresPublico } from '../services/mira/decisoresPublico.js';
 import { aprofundarAlvo } from '../services/mira/agentes.js';
 
 const router = Router();
@@ -58,6 +61,9 @@ router.get('/motor-a/crm-candidates', async (req: Request, res: Response, next: 
 const motorBSchema = z.object({
   consulta: z.string().trim().min(3).max(160),
   regiao: z.string().trim().max(120).optional().nullable(),
+  // B2B = descoberta pública (busca + Receita/BrasilAPI, grátis).
+  // B2C = negócio local (Google Places). Default segue o modo do perfil.
+  kind: z.enum(['B2B', 'B2C']).optional(),
 });
 
 // GET /api/mira/motor-b/status — quais fontes de descoberta estão ativas
@@ -65,27 +71,34 @@ router.get('/motor-b/status', async (_req: Request, res: Response) => {
   res.json({
     success: true,
     data: {
+      // B2C local — Google Places (opcional, pago). Sem chave = desabilitado.
       places: placesDisponivel(),
-      // Descoberta B2B por CNAE/região exige a base pública de CNPJ ingerida
-      // (job mensal) ou provedor licenciado — honestidade de fonte (doc 08).
-      cnaeBase: false,
+      // B2B — descoberta pública gratuita (busca no índice + verificação na
+      // Receita). Ativa quando há um provedor de busca configurado.
+      buscaPublica: buscaPublicaDisponivel(),
+      provider: buscaPublicaProvider(),
     },
   });
 });
 
-// POST /api/mira/motor-b/descobrir — descoberta de negócios locais (Places)
+// POST /api/mira/motor-b/descobrir — descoberta net-new (B2B público ou B2C Places)
 router.post('/motor-b/descobrir', validate(motorBSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { consulta, regiao } = req.body as z.infer<typeof motorBSchema>;
-    const result = await runMotorB(req.organizationId!, consulta, regiao ?? null);
-    res.json({ success: true, data: result });
+    const { consulta, regiao, kind } = req.body as z.infer<typeof motorBSchema>;
+    const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId: req.organizationId! } });
+    const modo = kind ?? (perfil?.modo === 'B2C' ? 'B2C' : 'B2B');
+    const result =
+      modo === 'B2C'
+        ? await runMotorB(req.organizationId!, consulta, regiao ?? null)
+        : await runDescobertaPublica(req.organizationId!, consulta, regiao ?? null);
+    res.json({ success: true, data: { modo, ...result } });
   } catch (err: any) {
     if (err?.status === 501) {
       res.status(501).json({
         success: false,
         error: 'fonte_indisponivel',
         message:
-          'A descoberta local usa o Google Places e ainda não está habilitada nesta instalação (falta a chave). O time já foi avisado.',
+          'Esta fonte de descoberta ainda não está habilitada nesta instalação (B2B precisa de um provedor de busca; B2C local precisa do Google Places). O time já foi avisado.',
       });
       return;
     }
@@ -120,6 +133,30 @@ router.post('/alvos/:id/aprofundar', async (req: Request, res: Response, next: N
         success: false,
         error: 'catalogo_vazio',
         message: 'Cadastre o catálogo no Perfil de Prospecção para a análise de portfólio.',
+      });
+      return;
+    }
+    next(err);
+  }
+});
+
+// POST /api/mira/alvos/:id/decisores-publico — mapeia decisores por pegada
+// pública (índice de busca + páginas públicas). Nunca usa conta logada.
+router.post('/alvos/:id/decisores-publico', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await enriquecerDecisoresPublico(req.organizationId!, req.params.id);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    if (err?.status === 404) {
+      res.status(404).json({ success: false, error: 'alvo_not_found' });
+      return;
+    }
+    if (err?.status === 501) {
+      res.status(501).json({
+        success: false,
+        error: 'fonte_indisponivel',
+        message:
+          'O mapeamento de decisores por pegada pública precisa de um provedor de busca configurado (ex.: Google Programmable Search, grátis). O time já foi avisado.',
       });
       return;
     }

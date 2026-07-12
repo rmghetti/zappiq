@@ -169,17 +169,17 @@ export const miraContent: SaibaMaisContent[] = [
     titulo: 'Descobrir novos',
     clientSafe: true,
     oQueE:
-      'A descoberta de novos é o motor que busca negócios que ainda não estão na sua carteira. Você descreve o que procurar (por exemplo, "clínicas de estética") e onde, e a Mira varre a fonte pública do Google, qualifica cada negócio encontrado e cria os Alvos.',
+      'A descoberta de novos é o motor que busca negócios que ainda não estão na sua carteira. Você descreve o que procurar e onde, e a Mira tem duas trilhas: para Empresas (B2B), ela procura no índice público, colhe os CNPJs e verifica cada um na Receita; para Negócio local (B2C), usa a presença no Google Places. Em ambos os casos, qualifica e cria os Alvos.',
     paraQueServe:
-      'Serve para encher o topo do funil com o perfil certo, sem comprar lista fria. Só entra negócio com identidade e contato verificáveis; o que não tem contato fica em qualificação e não gasta a sua cota.',
+      'Serve para encher o topo do funil com o perfil certo, sem comprar lista fria. No B2B, só desconta cota o Alvo verificado (ativo na Receita e com decisor no quadro societário); empresas achadas sem CNPJ resolvido ficam como candidatos, para qualificar depois, e não gastam cota. No B2C, só entra negócio com contato verificável.',
     comoImplementar: [
       'Clique em Descobrir novos na tela de Alvos.',
+      'Escolha a trilha: Empresas (B2B) ou Negócio local (B2C).',
       'Descreva o que procurar e, se quiser, a cidade ou região.',
-      'Clique em Descobrir agora: os Alvos aparecem na fila, priorizados pelo Mira Score.',
-      'A busca por atividade (CNAE) e região na base pública de CNPJ chega na sequência.',
+      'Clique em Descobrir agora: os Alvos verificados e os candidatos aparecem na fila, priorizados pelo Mira Score.',
     ],
     exemploResultado:
-      'Uma empresa de uniformes busca "restaurantes em Sorocaba". A Mira encontra 20, cria 14 Alvos prontos (com telefone ou site) e deixa 6 em qualificação. O vendedor começa pelos 5 de maior nota no mesmo dia.',
+      'Uma empresa de uniformes busca "restaurantes em Sorocaba". A Mira acha 20, resolve e verifica 12 CNPJs na Receita (viram Alvos prontos, com sócios mapeados) e deixa 8 como candidatos para qualificar. O vendedor começa pelos de maior nota no mesmo dia.',
   },
   {
     featureKey: 'mira.aprofundar',
@@ -236,13 +236,14 @@ export const miraContent: SaibaMaisContent[] = [
     oQueE:
       'As pessoas que participam da decisão na conta-alvo, com nome e papel: quem aprova o orçamento, quem decide tecnicamente, quem usa e quem pode vetar. O selo QSA indica que a pessoa vem do registro público do CNPJ (sócio ou administrador), a fonte mais confiável.',
     paraQueServe:
-      'Serve para não vender para a pessoa errada. Comprar é decisão de grupo; o comitê mostra o mapa do grupo e marca o provável campeão (quem tem a ganhar com a mudança).',
+      'Serve para não vender para a pessoa errada. Comprar é decisão de grupo; o comitê mostra o mapa do grupo e marca o provável campeão (quem tem a ganhar com a mudança). O botão Mapear decisores busca cargos atuais (Diretor, Head, Gerente) na pegada pública: o que os buscadores já indexaram e páginas públicas de liderança. O selo web marca quem veio dessa pegada; o selo QSA, do registro do CNPJ. A Mira nunca usa login de rede social, então a conta da empresa fica protegida.',
     comoImplementar: [
       'Comece pelo campeão marcado com a coroa, ou pelo papel mais próximo da dor.',
-      'Confira a porcentagem de confiança de cada pessoa antes de abordar.',
+      'Clique em Mapear decisores no dossiê para trazer cargos atuais da pegada pública.',
+      'Confira a porcentagem de confiança de cada pessoa antes de abordar: nome sem fonte é descartado pelo verificador.',
     ],
     exemploResultado:
-      'Em vez de mandar mensagem para o e-mail geral, o vendedor fala com o sócio-diretor (do QSA) sobre o gargalo de operação e pede ponte para o gestor de TI. Duas conversas, uma reunião marcada.',
+      'Em vez de mandar mensagem para o e-mail geral, o vendedor mapeia os decisores, encontra a Diretora de TI atual (selo web, 2 fontes) e fala com ela sobre o gargalo de operação, com ponte do sócio-administrador (selo QSA). Duas conversas, uma reunião marcada.',
   },
   {
     featureKey: 'mira.dossie.demandas',

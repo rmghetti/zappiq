@@ -30,6 +30,8 @@ import {
   CheckCircle2,
   Sparkles,
   MessageSquareText,
+  UserSearch,
+  Globe,
 } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { miraApi, type MiraAlvoDossie } from '@/lib/miraApi';
@@ -172,6 +174,11 @@ export default function MiraAlvoDossiePage() {
                         <ShieldCheck size={10} /> QSA
                       </span>
                     )}
+                    {!d.vinculoQsa && d.perfilPublico?.fontes?.length ? (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded-full">
+                        <Globe size={10} /> web
+                      </span>
+                    ) : null}
                     <span className="text-[10px] text-gray-400">{d.confianca}% conf.</span>
                   </div>
                   {d.perfilPublico?.ganchos?.length ? (
@@ -336,7 +343,38 @@ function AlvoActions({
   const [archiving, setArchiving] = useState(false);
   const [deepening, setDeepening] = useState(false);
   const [deepMsg, setDeepMsg] = useState<string | null>(null);
+  const [mappingDec, setMappingDec] = useState(false);
+  const [decMsg, setDecMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const mapearDecisores = async () => {
+    setMappingDec(true);
+    setError(null);
+    setDecMsg(null);
+    try {
+      const res = await miraApi.decisoresPublico(alvo.id);
+      if (res.data.ok) {
+        const total = res.data.criados + res.data.enriquecidos;
+        setDecMsg(
+          total > 0
+            ? `${res.data.criados} decisor(es) novo(s) e ${res.data.enriquecidos} enriquecido(s) a partir de pegada pública.` +
+                (res.data.descartadosPeloVerificador.length
+                  ? ` O verificador descartou ${res.data.descartadosPeloVerificador.length} sem fonte.`
+                  : '')
+            : 'Nenhum decisor novo encontrado no índice público desta vez.'
+        );
+        onReload();
+      } else {
+        setError('O mapeamento não respondeu agora. Tente de novo em instantes.');
+      }
+    } catch (e: any) {
+      if (e?.status === 501)
+        setError('O provedor de busca ainda não está configurado nesta instalação (o time já foi avisado).');
+      else setError(e?.message || 'O mapeamento de decisores falhou agora.');
+    } finally {
+      setMappingDec(false);
+    }
+  };
 
   const aprofundar = async () => {
     setDeepening(true);
@@ -401,6 +439,17 @@ function AlvoActions({
           {deepening ? 'Analisando…' : 'Aprofundar com IA'}
         </button>
       )}
+      {alvo.status !== 'ARCHIVED' && (
+        <button
+          onClick={mapearDecisores}
+          disabled={mappingDec}
+          title="Mapeia decisores por cargo a partir da pegada pública (índice de busca e páginas públicas). Não usa login de rede social."
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary-200 text-primary-700 text-sm font-medium hover:bg-primary-50 disabled:opacity-60"
+        >
+          {mappingDec ? <Loader2 className="animate-spin" size={15} /> : <UserSearch size={15} />}
+          {mappingDec ? 'Mapeando…' : 'Mapear decisores'}
+        </button>
+      )}
       {alvo.status === 'DELIVERED' && alvo.dealId ? (
         <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
           <CheckCircle2 size={15} /> No CRM
@@ -434,6 +483,7 @@ function AlvoActions({
       )}
       {error && <span className="text-xs text-red-500">{error}</span>}
       {deepMsg && <span className="text-xs text-emerald-600">{deepMsg}</span>}
+      {decMsg && <span className="text-xs text-emerald-600">{decMsg}</span>}
     </div>
   );
 }

@@ -107,7 +107,7 @@ export interface MiraDecisor {
   isChampion: boolean;
   vinculoQsa: boolean;
   contato: { email?: string; phone?: string; whatsapp?: string } | null;
-  perfilPublico: { temas?: string[]; estilo?: string; ganchos?: string[] } | null;
+  perfilPublico: { temas?: string[]; estilo?: string | null; ganchos?: string[]; fontes?: string[] } | null;
   fonte: string | null;
   confianca: number;
   contactId: string | null;
@@ -156,7 +156,10 @@ export interface MotorAResult {
   quota: { used: number; total: number; remaining: number };
 }
 
-export interface MotorBResult {
+// Cobre o resultado de descoberta B2C (Places) e B2B (busca pública): campos
+// comuns + os específicos de cada trilha como opcionais.
+export interface DescobrirResult {
+  modo?: 'B2B' | 'B2C';
   fonte: string;
   encontrados: number;
   criados: number;
@@ -164,12 +167,27 @@ export interface MotorBResult {
   duplicados: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
+  // Específicos da descoberta B2B pública:
+  buscas?: number;
+  cnpjsVerificados?: number;
+  candidatos?: number;
 }
+export type MotorBResult = DescobrirResult;
 
 export interface AprofundarResult {
   ok: boolean;
   oportunidades: number;
   roteiros: number;
+  descartadosPeloVerificador: string[];
+  motivo?: string;
+}
+
+export interface DecisoresPublicoResult {
+  ok: boolean;
+  buscas: number;
+  candidatos: number;
+  criados: number;
+  enriquecidos: number;
   descartadosPeloVerificador: string[];
   motivo?: string;
 }
@@ -202,12 +220,20 @@ export const miraApi = {
   pousarCrm: (alvoId: string): Promise<{ success: boolean; data: { contactId: string; dealId: string; reused: boolean } }> =>
     api.post(`/api/mira/alvos/${alvoId}/crm`, {}),
   arquivarAlvo: (alvoId: string): Promise<{ success: boolean }> => api.post(`/api/mira/alvos/${alvoId}/arquivar`, {}),
-  motorBStatus: (): Promise<{ success: boolean; data: { places: boolean; cnaeBase: boolean } }> =>
-    api.get('/api/mira/motor-b/status'),
-  descobrir: (consulta: string, regiao?: string): Promise<{ success: boolean; data: MotorBResult }> =>
-    api.post('/api/mira/motor-b/descobrir', { consulta, regiao: regiao || null }),
+  motorBStatus: (): Promise<{
+    success: boolean;
+    data: { places: boolean; buscaPublica: boolean; provider: string | null };
+  }> => api.get('/api/mira/motor-b/status'),
+  descobrir: (
+    consulta: string,
+    regiao?: string,
+    kind?: 'B2B' | 'B2C'
+  ): Promise<{ success: boolean; data: MotorBResult }> =>
+    api.post('/api/mira/motor-b/descobrir', { consulta, regiao: regiao || null, ...(kind ? { kind } : {}) }),
   aprofundarAlvo: (alvoId: string): Promise<{ success: boolean; data: AprofundarResult }> =>
     api.post(`/api/mira/alvos/${alvoId}/aprofundar`, {}),
+  decisoresPublico: (alvoId: string): Promise<{ success: boolean; data: DecisoresPublicoResult }> =>
+    api.post(`/api/mira/alvos/${alvoId}/decisores-publico`, {}),
 };
 
 export function formatBRL(v: number): string {

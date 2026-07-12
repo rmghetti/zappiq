@@ -386,19 +386,22 @@ function MapearCarteiraModal({ onClose, onDone }: { onClose: () => void; onDone:
 
 /* ── Modal: Descobrir novos (Motor B) ────────────────────────────── */
 function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [kind, setKind] = useState<'B2B' | 'B2C'>('B2B');
   const [consulta, setConsulta] = useState('');
   const [regiao, setRegiao] = useState('');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<MotorBResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [placesOk, setPlacesOk] = useState<boolean | null>(null);
+  const [fontes, setFontes] = useState<{ places: boolean; buscaPublica: boolean; provider: string | null } | null>(null);
 
   useEffect(() => {
     miraApi
       .motorBStatus()
-      .then((r) => setPlacesOk(r.data.places))
-      .catch(() => setPlacesOk(null));
+      .then((r) => setFontes(r.data))
+      .catch(() => setFontes(null));
   }, []);
+
+  const fonteOk = fontes ? (kind === 'B2C' ? fontes.places : fontes.buscaPublica) : null;
 
   const descobrir = async () => {
     if (consulta.trim().length < 3) {
@@ -408,10 +411,15 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
     setRunning(true);
     setError(null);
     try {
-      const res = await miraApi.descobrir(consulta.trim(), regiao.trim() || undefined);
+      const res = await miraApi.descobrir(consulta.trim(), regiao.trim() || undefined, kind);
       setResult(res.data);
     } catch (e: any) {
-      if (e?.status === 501) setError('A descoberta local ainda não está habilitada nesta instalação (chave do Google Places pendente).');
+      if (e?.status === 501)
+        setError(
+          kind === 'B2C'
+            ? 'A descoberta local (Google Places) ainda não está habilitada nesta instalação.'
+            : 'A descoberta B2B precisa de um provedor de busca configurado (ex.: Google Programmable Search, grátis).'
+        );
       else if (e?.status === 412) setError('Complete o Perfil de Prospecção (mínimo 60%) antes de descobrir.');
       else setError(e?.message || 'A descoberta falhou agora. Tente novamente.');
     } finally {
@@ -434,16 +442,33 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
 
         {!result ? (
           <div className="p-5">
+            {/* Trilha B2B (empresa) x B2C (negócio local) */}
+            <div className="flex gap-2 mb-3">
+              {(['B2B', 'B2C'] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setKind(k)}
+                  className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                    kind === k ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {k === 'B2B' ? <Building2 size={14} /> : <Store size={14} />}
+                  {k === 'B2B' ? 'Empresas (B2B)' : 'Negócio local (B2C)'}
+                </button>
+              ))}
+            </div>
+
             <p className="text-sm text-gray-500 mb-3">
-              A Mira busca negócios com o perfil que você descrever (fonte: Google, legalmente limpa),
-              qualifica cada um e cria os Alvos. Só Alvos com contato verificável descontam da cota.
+              {kind === 'B2B'
+                ? 'A Mira descobre empresas com o perfil que você descrever no índice público, colhe os CNPJs e verifica cada um na Receita. Só o Alvo verificado (ativo, com decisor no quadro societário) desconta da cota; os demais ficam como candidatos.'
+                : 'A Mira busca negócios locais com o perfil que você descrever (Google Places). Só Alvos com contato verificável (telefone ou site) descontam da cota.'}
             </p>
             <label className="block text-xs font-medium text-gray-500 mb-1">O que procurar</label>
             <input
               type="text"
               value={consulta}
               onChange={(e) => setConsulta(e.target.value)}
-              placeholder='Ex.: "clínicas de estética", "distribuidoras de bebidas"'
+              placeholder={kind === 'B2B' ? 'Ex.: "distribuidoras de bebidas", "indústrias metalúrgicas"' : 'Ex.: "clínicas de estética", "academias"'}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 mb-3"
             />
             <label className="block text-xs font-medium text-gray-500 mb-1">Onde (opcional)</label>
@@ -455,16 +480,17 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
               placeholder="Ex.: Campinas, zona sul de SP…"
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-200"
             />
-            {placesOk === false && (
+            {fonteOk === false && (
               <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-3">
-                A fonte de descoberta local ainda não está habilitada nesta instalação. A busca por CNAE e
-                região (base pública de CNPJ) chega na sequência.
+                {kind === 'B2B'
+                  ? 'A busca pública ainda não está habilitada nesta instalação (falta configurar o provedor de busca, ex.: Google Programmable Search, grátis).'
+                  : 'A descoberta local (Google Places) ainda não está habilitada nesta instalação.'}
               </p>
             )}
             {error && <p className="text-xs text-red-500 mt-3">{error}</p>}
             <button
               onClick={descobrir}
-              disabled={running || placesOk === false}
+              disabled={running || fonteOk === false}
               className="w-full mt-4 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-60"
             >
               {running ? (
@@ -481,13 +507,20 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
         ) : (
           <div className="p-5">
             <div className="grid grid-cols-3 gap-2 mb-4">
-              <ResultStat label="Encontrados" value={result.encontrados} tone="gray" />
+              <ResultStat
+                label={result.modo === 'B2C' ? 'Encontrados' : 'Verificados'}
+                value={result.modo === 'B2C' ? result.encontrados : result.cnpjsVerificados ?? 0}
+                tone="gray"
+              />
               <ResultStat label="Prontos" value={result.prontos} tone="emerald" />
               <ResultStat label="Restante da cota" value={result.quota.remaining} tone="primary" />
             </div>
             <ul className="text-xs text-gray-500 space-y-1 mb-4">
               {result.duplicados > 0 && <li>{result.duplicados} já estavam mapeados (pulados).</li>}
-              {result.criados - result.prontos > 0 && (
+              {result.modo !== 'B2C' && (result.candidatos ?? 0) > 0 && (
+                <li>{result.candidatos} candidato(s) sem CNPJ resolvido ficaram para qualificar (não gastam cota).</li>
+              )}
+              {result.modo === 'B2C' && result.criados - result.prontos > 0 && (
                 <li>{result.criados - result.prontos} sem contato verificável ficaram em qualificação (não gastam cota).</li>
               )}
             </ul>
