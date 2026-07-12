@@ -105,19 +105,19 @@ export const ADDONS_V4_STRIPE: Record<string, AddonStripeIds & { meterId?: strin
   // Preços fonte: miraEntitlement.ts (MIRA_TIERS / MIRA_PACKS).
   // ─────────────────────────────────────────────────────────
   MIRA_ESSENCIAL: {
-    productId: '',
-    priceIds: { monthly: '', annual: '' },  // R$ 297/mes | R$ 2.851,20/ano
+    productId: 'prod_UrwBNAGANErGnN',
+    priceIds: { monthly: 'price_1TsCJLKlp5SWv74XFNich22q', annual: 'price_1TsCJMKlp5SWv74XQGIE5zY3' },  // R$ 297/mes | R$ 2.851,20/ano
   },
   MIRA_PRO: {
-    productId: '',
-    priceIds: { monthly: '', annual: '' },  // R$ 597/mes | R$ 5.731,20/ano
+    productId: 'prod_UrwBXrFf9KMHCd',
+    priceIds: { monthly: 'price_1TsCJNKlp5SWv74XENFhNjVt', annual: 'price_1TsCJOKlp5SWv74XKfLIRo06' },  // R$ 597/mes | R$ 5.731,20/ano
   },
   MIRA_SCALE: {
-    productId: '',
-    priceIds: { monthly: '', annual: '' },  // R$ 1.197/mes | R$ 11.491,20/ano
+    productId: 'prod_UrwBso5H4AFMUT',
+    priceIds: { monthly: 'price_1TsCJPKlp5SWv74XMsqUeMVI', annual: 'price_1TsCJPKlp5SWv74XWqVDwz9L' },  // R$ 1.197/mes | R$ 11.491,20/ano
   },
   MIRA_PACKS: {
-    productId: '',
-    priceIds: { pack_50: '', pack_200: '', pack_600: '' },  // R$ 356 | R$ 716 | R$ 1.436 one-shot
+    productId: 'prod_UrwBJAG2NqJ4pq',
+    priceIds: { pack_50: 'price_1TsCJQKlp5SWv74Xs28rfNF2', pack_200: 'price_1TsCJRKlp5SWv74XZp2xb5nJ', pack_600: 'price_1TsCJRKlp5SWv74XR3CIhTLh' },  // R$ 356 | R$ 716 | R$ 1.436 one-shot
   },
 };
