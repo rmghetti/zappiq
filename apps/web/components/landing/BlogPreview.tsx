@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * BlogPreview — Design V4 (Chatbase-style · Geist + gradient g→b→p)
+ * BlogPreview: Design V4 (Chatbase-style · Geist + gradient g→b→p)
  * --------------------------------------------------------------------------
  * 3 cards de blog em grid. Card minimalista: eyebrow de categoria, título,
  * resumo, reading time. Hover sutil (borda accent + leve lift).

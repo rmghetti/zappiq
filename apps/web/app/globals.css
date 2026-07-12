@@ -54,6 +54,21 @@
 
   html {
     scroll-behavior: smooth;
+    /* Ancoras (#precos, CTA do Hero) nao param escondidas atras da navbar fixa */
+    scroll-padding-top: calc(var(--zappiq-banner-h, 0px) + 84px);
+  }
+
+  /* Acessibilidade: respeita quem pede menos animacao (WCAG 2.3.3) e poupa
+     INP/bateria no mobile. Neutraliza os loops infinite decorativos. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   body {

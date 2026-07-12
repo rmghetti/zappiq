@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { PublicLayout } from '../../components/landing/PublicLayout';
 
 export const metadata: Metadata = {
-  title: 'ZappIQ Partners — Programa de Parceiros (Integradores & Agências)',
+  title: 'ZappIQ Partners: Programa de Parceiros (Integradores & Agências)',
   description:
     'Programa ZappIQ Partners: comissão recorrente até 30%, co-marketing, stack técnico e sandbox. Vagas limitadas no cohort de pré-lançamento.',
 };
@@ -45,7 +45,7 @@ export default function ParceirosPage() {
       <div className="max-w-5xl mx-auto px-6 pb-24">
         <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">Programa de Parceiros</p>
         <h1 className="font-display text-4xl lg:text-5xl font-extrabold text-gray-900 leading-tight mb-6">
-          ZappIQ Partners — construa receita recorrente vendendo a plataforma brasileira de inteligência conversacional.
+          ZappIQ Partners: construa receita recorrente vendendo a plataforma brasileira de inteligência conversacional.
         </h1>
         <p className="text-lg text-gray-500 mb-12 max-w-3xl">
           Programa estruturado em 3 tiers com comissão recorrente, co-marketing, stack técnico e sandbox.

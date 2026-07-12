@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 export const metadata = {
-  title: 'Radar 360° — Observabilidade de Negócio para WhatsApp | ZappIQ',
+  title: 'Radar 360°: Observabilidade de Negócio para WhatsApp | ZappIQ',
   description: 'Transforme conversas em decisões. BI conversacional com cohort analysis, previsão de pipeline (ML), benchmarking e alertas proativos. Exporta para Power BI e Looker.',
 };
 
@@ -14,7 +14,7 @@ const FEATURES = [
   {
     icon: BarChart3,
     title: 'Dashboards executivos customizáveis',
-    desc: '20+ widgets drag-and-drop. Branding com sua logo e cores. Compartilhamento por link com senha. Export PDF agendado por e-mail — o board recebe relatório sem você apertar um botão.',
+    desc: '20+ widgets drag-and-drop. Branding com sua logo e cores. Compartilhamento por link com senha. Export PDF agendado por e-mail: o board recebe relatório sem você apertar um botão.',
     accent: 'from-purple-600 to-indigo-600',
   },
   {
@@ -50,7 +50,7 @@ const FEATURES = [
   {
     icon: Clock,
     title: 'Heatmap operacional',
-    desc: 'Mapa de calor de volume por hora/dia. Horários ótimos para campanhas. Distribuição de carga por agente. Mostra onde sua operação suaja — e onde sobra capacidade.',
+    desc: 'Mapa de calor de volume por hora/dia. Horários ótimos para campanhas. Distribuição de carga por agente. Mostra onde sua operação suaja, e onde sobra capacidade.',
     accent: 'from-sky-500 to-blue-600',
   },
   {
@@ -68,11 +68,11 @@ const FEATURES = [
 ];
 
 const VALUE_POINTS = [
-  '40% dos seus leads caem entre a segunda e terceira mensagem — agora você sabe qual',
+  '40% dos seus leads caem entre a segunda e terceira mensagem: agora você sabe qual',
   'Seu melhor agente tem 3x mais conversão às 10h vs às 16h',
-  '60% dos clientes que mencionam "concorrente" cancelam em 30 dias — alerta preventivo',
-  'Campanha A teve 2x mais resposta — replicar template em produtos similares',
-  'Retenção D30 do cohort de março caiu 15% — investigar onboarding',
+  '60% dos clientes que mencionam "concorrente" cancelam em 30 dias: alerta preventivo',
+  'Campanha A teve 2x mais resposta: replicar template em produtos similares',
+  'Retenção D30 do cohort de março caiu 15%: investigar onboarding',
 ];
 
 const PRICING_TIERS = [
@@ -97,7 +97,7 @@ export default function ObservabilidadePage() {
             Transforme conversas em <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">decisões de negócio</span>.
           </h1>
           <p className="text-lg lg:text-xl text-gray-300 max-w-3xl mb-8 leading-relaxed">
-            Radar 360° é o produto de BI conversacional da ZappIQ. Não é dashboard bonito engavetado — é inteligência que vira margem e crescimento. Descubra onde seus leads caem, que agente converte mais, que palavra prevê cancelamento.
+            Radar 360° é o produto de BI conversacional da ZappIQ. Não é dashboard bonito engavetado, é inteligência que vira margem e crescimento. Descubra onde seus leads caem, que agente converte mais, que palavra prevê cancelamento.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link href="#precos"
@@ -134,7 +134,7 @@ export default function ObservabilidadePage() {
               Sua operação de WhatsApp gera dados. A pergunta é: você está usando?
             </h2>
             <p className="text-gray-500 max-w-2xl mx-auto leading-relaxed">
-              A maioria das empresas usa WhatsApp como canal de atendimento. As que crescem tratam WhatsApp como fonte de inteligência. Radar 360° é a infraestrutura que faz essa travessia — sem precisar contratar time de BI.
+              A maioria das empresas usa WhatsApp como canal de atendimento. As que crescem tratam WhatsApp como fonte de inteligência. Radar 360° é a infraestrutura que faz essa travessia, sem precisar contratar time de BI.
             </p>
           </div>
 
@@ -241,7 +241,7 @@ export default function ObservabilidadePage() {
             Por que Radar 360° vem incluído no Enterprise?
           </h2>
           <p className="text-gray-300 max-w-2xl mx-auto leading-relaxed mb-8">
-            Operação estratégica não pode depender de achismo. Enterprise é quem trata WhatsApp como canal crítico — e canal crítico exige BI em tempo real para suporte à decisão do board. Radar 360° é parte indissociável da proposta de valor Enterprise.
+            Operação estratégica não pode depender de achismo. Enterprise é quem trata WhatsApp como canal crítico, e canal crítico exige BI em tempo real para suporte à decisão do board. Radar 360° é parte indissociável da proposta de valor Enterprise.
           </p>
           <Link href="/enterprise"
             className="bg-amber-400 text-gray-900 font-semibold px-7 py-4 rounded-xl hover:bg-amber-300 transition-colors inline-flex items-center gap-2">

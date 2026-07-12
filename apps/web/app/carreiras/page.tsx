@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { PublicLayout } from '../../components/landing/PublicLayout';
 
 export const metadata: Metadata = {
-  title: 'Carreiras na ZappIQ — Trabalhe com Inteligência Conversacional',
+  title: 'Carreiras na ZappIQ: Trabalhe com Inteligência Conversacional',
   description:
     'Vagas na ZappIQ: engenharia (backend/frontend), IA, pré-vendas, sucesso do cliente, marketing e compliance. Remote-first, base em São Paulo.',
 };
@@ -49,18 +49,18 @@ export default function CarreirasPage() {
         </h1>
         <p className="text-lg text-gray-500 mb-10">
           Somos remote-first com sede operacional em São Paulo. Estamos em processo de pré-lançamento e
-          montando o núcleo de ZappIQ — engenharia, IA, GTM e compliance.
+          montando o núcleo de ZappIQ: engenharia, IA, GTM e compliance.
         </p>
 
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-12">
           <h2 className="font-display text-lg font-bold text-gray-900 mb-2">Status: pipeline de talento aberto</h2>
           <p className="text-sm text-gray-700 leading-relaxed">
-            Ainda não estamos divulgando vagas nominais públicas — preferimos conversar antes para avaliar
+            Ainda não estamos divulgando vagas nominais públicas, preferimos conversar antes para avaliar
             fit cultural e técnico. Se alguma das áreas abaixo conversa com sua experiência,{' '}
             <a href="mailto:carreiras@zappiq.com.br" className="text-primary-600 hover:underline">
               envie um email com CV/portfolio/LinkedIn
-            </a>{' '}
-            — respondemos toda triagem ativa, positivo ou negativo, em até 7 dias.
+            </a>
+            . Respondemos toda triagem ativa, positivo ou negativo, em até 7 dias.
           </p>
         </div>
 

@@ -3,12 +3,12 @@ import Link from 'next/link';
 import { PublicLayout } from '../../../components/landing/PublicLayout';
 
 export const metadata: Metadata = {
-  title: 'Endereços Comerciais — ZappIQ',
+  title: 'Endereços Comerciais da ZappIQ',
   description:
-    'Endereços fiscais, técnicos e de atendimento da ZappIQ — Onze e Onze Consultoria Empresarial Ltda (CNPJ 46.788.145/0001-08).',
+    'Endereços fiscais, técnicos e de atendimento da ZappIQ, Onze e Onze Consultoria Empresarial Ltda (CNPJ 46.788.145/0001-08).',
 };
 
-/* V2-027: registro público de endereços comerciais — exigência
+/* V2-027: registro público de endereços comerciais, exigência
  * CDC Art. 39 XII para venda à distância / contratação eletrônica. */
 
 export default function EnderecosComerciaisPage() {
@@ -29,12 +29,12 @@ export default function EnderecosComerciaisPage() {
 
         <h2>2. Endereço fiscal e correspondência</h2>
         <p>
-          Av. das Nações Unidas, 12901 — CENU Torre Norte, 25° andar<br />
+          Av. das Nações Unidas, 12901, CENU Torre Norte, 25° andar<br />
           Bairro Brooklin · São Paulo / SP · CEP 04578-910
         </p>
         <p className="text-sm text-gray-500">
           Este é o endereço oficial para correspondência, notificações extrajudiciais e documentação
-          fiscal. Visitas presenciais exigem agendamento prévio — nossa operação é remote-first.
+          fiscal. Visitas presenciais exigem agendamento prévio: nossa operação é remote-first.
         </p>
 
         <h2>3. Endereço técnico (infraestrutura)</h2>
@@ -42,7 +42,7 @@ export default function EnderecosComerciaisPage() {
           Dados de clientes ZappIQ são hospedados no Brasil em provedor de nuvem com residência de
           dados garantida em território nacional (região <em>BR/SA-East-1</em>). Backups replicados em
           segunda região brasileira. Mais detalhes em{' '}
-          <Link href="/legal/dpa">DPA — Seção 5</Link>.
+          <Link href="/legal/dpa">DPA, Seção 5</Link>.
         </p>
 
         <h2>4. Endereço de atendimento</h2>

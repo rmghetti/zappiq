@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { PublicLayout } from '../../components/landing/PublicLayout';
 
 export const metadata: Metadata = {
-  title: 'Sobre a ZappIQ — Plataforma Brasileira de Inteligência Conversacional',
+  title: 'Sobre a ZappIQ: Plataforma Brasileira de Inteligência Conversacional',
   description:
     'ZappIQ é a plataforma brasileira de inteligência conversacional para PMEs via WhatsApp. Conheça nossa tese, time e compromissos públicos.',
 };
@@ -16,7 +16,7 @@ export default function SobrePage() {
       <div className="max-w-4xl mx-auto px-6 pb-24">
         <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-3">Sobre</p>
         <h1 className="font-display text-4xl lg:text-5xl font-extrabold text-gray-900 leading-tight mb-8">
-          PMEs brasileiras merecem inteligência conversacional de classe mundial — sem setup fee abusivo.
+          PMEs brasileiras merecem inteligência conversacional de classe mundial, sem setup fee abusivo.
         </h1>
 
         <div className="prose prose-lg max-w-none text-gray-700 leading-relaxed space-y-6">
@@ -38,9 +38,9 @@ export default function SobrePage() {
 
           <h2 className="font-display text-2xl font-bold text-gray-900 mt-12">O que entregamos</h2>
           <p>
-            Oito módulos canônicos — ZappIQCore (engine conversacional), PulseAI (IA generativa),
+            Oito módulos canônicos: ZappIQCore (engine conversacional), PulseAI (IA generativa),
             SparkCampaigns (campanhas), RadarInsights (analytics), NexusCRM (CRM integrado), ZappIQ Maestro
-            (construtor de fluxos), EchoCopilot (assistente do atendente) e ShieldCompliance (LGPD by-default) —
+            (construtor de fluxos), EchoCopilot (assistente do atendente) e ShieldCompliance (LGPD by-default),
             operando em infraestrutura brasileira com dados residentes no Brasil, SLA 99,9% contratual
             Enterprise e observabilidade de negócio via Radar 360°.
           </p>

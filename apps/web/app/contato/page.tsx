@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { PublicLayout } from '../../components/landing/PublicLayout';
 
 export const metadata: Metadata = {
-  title: 'Contato — ZappIQ',
+  title: 'Contato | ZappIQ',
   description:
     'Fale com o time de ZappIQ. Canais oficiais para vendas, suporte, imprensa, compliance (LGPD) e parcerias.',
 };
@@ -53,7 +53,7 @@ export default function ContatoPage() {
           Fale com o time de ZappIQ
         </h1>
         <p className="text-lg text-gray-500 mb-12 max-w-3xl">
-          Escolha o canal certo para sua solicitação — respondemos mais rápido assim. Para demos ao vivo,
+          Escolha o canal certo para sua solicitação: respondemos mais rápido assim. Para demos ao vivo,
           prefira a página <Link href="/demo" className="text-primary-600 hover:underline">/demo</Link> ou
           o WhatsApp oficial.
         </p>
@@ -73,7 +73,7 @@ export default function ContatoPage() {
           <p>
             <strong>Onze e Onze Consultoria Empresarial Ltda</strong> (d.b.a. ZappIQ)<br />
             CNPJ 46.788.145/0001-08<br />
-            Av. das Nações Unidas, 12901 — CENU Torre Norte, 25° andar<br />
+            Av. das Nações Unidas, 12901, CENU Torre Norte, 25° andar<br />
             Brooklin · São Paulo / SP · CEP 04578-910
           </p>
           <p className="text-xs text-gray-500 pt-3 border-t border-gray-200">

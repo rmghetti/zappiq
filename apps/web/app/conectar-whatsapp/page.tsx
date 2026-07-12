@@ -3,9 +3,9 @@ import { PublicLayout } from '../../components/landing/PublicLayout';
 import { ConectarWhatsApp } from '../../components/landing/ConectarWhatsApp';
 
 export const metadata: Metadata = {
-  title: 'Como conectar WhatsApp à ZappIQ — Guia completo Cloud API',
+  title: 'Como conectar WhatsApp à ZappIQ: Guia completo Cloud API',
   description:
-    'Tutorial completo de conexão WhatsApp Cloud API à plataforma ZappIQ. Pré-requisitos, 3 caminhos de onboarding, FAQ, vídeo. Conexão oficial Meta — sem atravessador.',
+    'Tutorial completo de conexão WhatsApp Cloud API à plataforma ZappIQ. Pré-requisitos, 3 caminhos de onboarding, FAQ, vídeo. Conexão oficial Meta, sem atravessador.',
   keywords: [
     'WhatsApp Cloud API',
     'conectar WhatsApp na ZappIQ',
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     'tutorial WhatsApp Cloud API',
   ],
   openGraph: {
-    title: 'Como conectar WhatsApp à ZappIQ — Guia completo',
+    title: 'Como conectar WhatsApp à ZappIQ: Guia completo',
     description:
       'Pré-requisitos, 3 caminhos de onboarding e FAQ. Conexão oficial WhatsApp Cloud API com a Meta. Trial 14 dias sem cartão.',
     type: 'website',

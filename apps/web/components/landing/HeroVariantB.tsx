@@ -182,7 +182,7 @@ export function HeroVariantB() {
             </h1>
 
             <p className="text-lg text-gray-600 leading-relaxed max-w-xl mb-6">
-              Enquanto concorrentes cobram R$ 3.000 a R$ 15.000 para você ligar, aqui você não paga nada no começo. Testa, valida, aprova — tudo sem risco. Depois que você vê o ROI, paga apenas pelo que usa. Simples.
+              Enquanto concorrentes cobram R$ 3.000 a R$ 15.000 para você ligar, aqui você não paga nada no começo. Testa, valida, aprova, tudo sem risco. Depois que você vê o ROI, paga apenas pelo que usa. Simples.
             </p>
 
             <div className="flex flex-wrap gap-4 mb-6">

@@ -3,10 +3,10 @@ import type { SegmentPageData } from '../../../components/landing/SegmentTemplat
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'ZappIQ para Varejo — Automação WhatsApp para Lojas e E-commerce',
+  title: 'ZappIQ para Varejo: Automação WhatsApp para Lojas e E-commerce',
   description: 'Venda mais pelo WhatsApp com IA. Recupere carrinhos abandonados, envie ofertas e atenda clientes 24/7. +35% de conversão no primeiro mês.',
   openGraph: {
-    title: 'ZappIQ para Varejo — Venda Mais pelo WhatsApp',
+    title: 'ZappIQ para Varejo: Venda Mais pelo WhatsApp',
     description: 'Recupere carrinhos abandonados, envie ofertas e atenda clientes 24/7 com IA.',
   },
 };
@@ -17,10 +17,10 @@ const data: SegmentPageData = {
   name: 'Varejo',
   businessType: 'Lojas e E-commerce',
   heroTitle: 'ZappIQ para Varejo: Transforme o WhatsApp no seu melhor canal de vendas',
-  heroSubtitle: 'Recupere carrinhos abandonados, envie ofertas personalizadas, responda dúvidas sobre produtos e feche vendas — tudo automatizado pelo WhatsApp.',
+  heroSubtitle: 'Recupere carrinhos abandonados, envie ofertas personalizadas, responda dúvidas sobre produtos e feche vendas, tudo automatizado pelo WhatsApp.',
   pains: [
     { icon: 'ShoppingCart', title: 'Carrinhos abandonados', desc: 'Clientes adicionam ao carrinho mas não finalizam. Sem follow-up, essa receita é perdida.' },
-    { icon: 'Clock', title: 'Respostas lentas', desc: 'Cliente perguntou sobre tamanho, cor ou frete — demorou para responder? Comprou no concorrente.' },
+    { icon: 'Clock', title: 'Respostas lentas', desc: 'Cliente perguntou sobre tamanho, cor ou frete e demorou para responder? Comprou no concorrente.' },
     { icon: 'TrendingDown', title: 'Baixa recorrência', desc: 'Vende uma vez e perde o contato. Sem pós-venda automatizado, o cliente não volta.' },
     { icon: 'Eye', title: 'Sem visão do funil', desc: 'Não sabe de onde vêm os leads, quais produtos interessam mais, nem o ticket médio por canal.' },
   ],

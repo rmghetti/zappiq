@@ -1,13 +1,13 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Pricing — Design V4 (5 tiers + toggles · Chatbase-style)
+ * Pricing: Design V4 (5 tiers + toggles · Chatbase-style)
  * --------------------------------------------------------------------------
  * LÓGICA PRESERVADA 100%:
  *   - 4 planos ativos via listActivePlans() de @zappiq/shared (Iza Lite/Growth/Scale/Enterprise)
  *   - toggle anual (-20%) + Radar 360° add-on + Voz outbound (none/padrao/premium)
  *   - Enterprise: voz incluída, Radar incluso, sob consulta
- *   - Business: SLA 99,9% destaque
+ *   - Scale: SLA 99,9% destaque
  *   - Card "Com vs Sem ZappIQ" no fim
  *
  * Visual novo: tier cards card-soft, featured com shadow-tier-feat,
@@ -17,7 +17,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, Radar, Shield, Sparkles, Crown } from 'lucide-react';
+import { Check, Radar, Shield, Sparkles } from 'lucide-react';
 import { listActivePlans, ADDONS, getAnnualPrice, type PlanConfig } from '@zappiq/shared';
 
 const PLANS: PlanConfig[] = listActivePlans();
@@ -85,7 +85,7 @@ export function Pricing() {
             </span>
           </div>
 
-          {/* Radar add-on (Voz removida até jul/2026 — ver /roadmap) */}
+          {/* Radar add-on (Voz removida até jul/2026, ver /roadmap) */}
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <div className="flex items-center gap-3 bg-bg-soft border border-line rounded-full px-4 py-2">
               <button
@@ -117,8 +117,7 @@ export function Pricing() {
             const radarExtra = computeRadarExtra(plan);
             const totalPrice = basePrice !== null ? basePrice + radarExtra : null;
             const isEnterprise = plan.id === 'ENTERPRISE';
-            const isBusiness = plan.id === 'BUSINESS';
-            const isHighlight = plan.highlight && !isBusiness && !isEnterprise;
+            const isHighlight = plan.highlight && !isEnterprise;
 
             return (
               <div
@@ -130,11 +129,9 @@ export function Pricing() {
                 } ${
                   isHighlight
                     ? 'border-2 border-accent shadow-[0_30px_50px_-20px_rgba(74,82,208,0.25)]'
-                    : isBusiness
-                      ? 'border-2 border-accent/40 shadow-card'
-                      : isEnterprise
-                        ? 'border-2 border-white/10'
-                        : 'border border-line hover:border-accent/25 hover:shadow-card'
+                    : isEnterprise
+                      ? 'border-2 border-white/10'
+                      : 'border border-line hover:border-accent/25 hover:shadow-card'
                 }`}
                 style={
                   isEnterprise
@@ -148,11 +145,6 @@ export function Pricing() {
                 {isHighlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-grad text-white text-[10.5px] font-semibold px-3 py-1 rounded-full tracking-wide">
                     Mais Popular
-                  </div>
-                )}
-                {isBusiness && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-ink text-white text-[10.5px] font-semibold px-3 py-1 rounded-full flex items-center gap-1 tracking-wide">
-                    <Crown size={10} /> SLA 99,9%
                   </div>
                 )}
                 {isEnterprise && (
@@ -187,11 +179,11 @@ export function Pricing() {
                           <Radar size={10} /> +R${radarExtra} Radar 360°
                         </div>
                       )}
-                      {/* V4 #163 (PR #75 hotfix) — refs voice (extra/tier)
+                      {/* V4 #163 (PR #75 hotfix): refs voice (extra/tier)
                           legadas REMOVIDAS. Voz era inline no Pricing V3.
                           Sprint 0 Blocker 6 (PR #108) descopou Voz Padrão e
                           Premium do planConfig público; agora voz é add-on
-                          separado (PR #72 v4 — pacotes 200/400/600/800/1500/
+                          separado (PR #72 v4, pacotes 200/400/600/800/1500/
                           4000 com preços R$ 79,90 a R$ 929,90). Pra exibir
                           voz add-on aqui, criar componente VoiceAddons.tsx
                           separado em PR futuro. */}
@@ -240,7 +232,7 @@ export function Pricing() {
                   className={`block w-full text-center py-2.5 rounded-[12px] text-[13px] font-medium transition-colors ${
                     isEnterprise
                       ? 'bg-white text-ink hover:bg-white/90'
-                      : isHighlight || isBusiness
+                      : isHighlight
                         ? 'bg-ink text-white hover:bg-black'
                         : 'border border-line text-ink hover:border-ink'
                   }`}
@@ -269,7 +261,7 @@ export function Pricing() {
             <p className="text-[13.5px] text-muted mb-3 leading-relaxed">
               Dashboards executivos, alertas quando algo foge do normal, previsão de vendas por IA
               e comparativo anônimo com o seu setor. Exporta pro Power BI ou Looker.{' '}
-              <strong className="text-ink">Já vem incluso em Business e Enterprise.</strong>
+              <strong className="text-ink">Já vem incluso no Scale e no Enterprise.</strong>
             </p>
             <Link
               href="/observabilidade"
@@ -290,7 +282,7 @@ export function Pricing() {
           </div>
           <div className="flex-1">
             <h4 className="text-[16px] font-medium mb-1 tracking-tight">
-              Uptime 99,9% em contrato a partir de Business.
+              Uptime 99,9% em contrato a partir do Scale.
             </h4>
             <p className="text-[13.5px] text-white/70 mb-3 leading-relaxed">
               Se a plataforma cair além do combinado, você recebe crédito automático.

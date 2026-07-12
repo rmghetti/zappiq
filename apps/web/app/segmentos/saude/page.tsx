@@ -3,10 +3,10 @@ import type { SegmentPageData } from '../../../components/landing/SegmentTemplat
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'ZappIQ para Saúde — Automação WhatsApp para Clínicas e Consultórios',
+  title: 'ZappIQ para Saúde: Automação WhatsApp para Clínicas e Consultórios',
   description: 'Automatize agendamentos, confirmações e atendimento de pacientes pelo WhatsApp. Reduza faltas em 60% e agilize o atendimento da sua clínica.',
   openGraph: {
-    title: 'ZappIQ para Saúde — Automação WhatsApp para Clínicas',
+    title: 'ZappIQ para Saúde: Automação WhatsApp para Clínicas',
     description: 'Reduza faltas em 60%. Agende consultas automaticamente. Atenda pacientes 24/7 com IA.',
   },
 };
@@ -17,7 +17,7 @@ const data: SegmentPageData = {
   name: 'Saúde',
   businessType: 'Clínicas e Consultórios',
   heroTitle: 'ZappIQ para Saúde: Automação WhatsApp feita para clínicas e consultórios',
-  heroSubtitle: 'Agende consultas, confirme horários, envie lembretes e atenda pacientes 24/7 — tudo pelo WhatsApp, com IA que entende o contexto médico.',
+  heroSubtitle: 'Agende consultas, confirme horários, envie lembretes e atenda pacientes 24/7, tudo pelo WhatsApp, com IA que entende o contexto médico.',
   pains: [
     { icon: 'Clock', title: 'Pacientes esperando resposta', desc: 'Pacientes ligam e mandam WhatsApp, mas ninguém responde a tempo. Muitos desistem e vão para outro consultório.' },
     { icon: 'Users', title: 'Recepção sobrecarregada', desc: 'A equipe gasta horas confirmando consultas, reagendando e respondendo perguntas repetitivas.' },
@@ -35,7 +35,7 @@ const data: SegmentPageData = {
     role: 'Diretora Clínica',
     company: 'Clínica Vida Plena',
     initials: 'CF',
-    text: 'Reduzimos o no-show de 28% para 8% em dois meses. A IA agenda, confirma e lembra — minha recepcionista agora foca no acolhimento presencial.',
+    text: 'Reduzimos o no-show de 28% para 8% em dois meses. A IA agenda, confirma e lembra, e minha recepcionista agora foca no acolhimento presencial.',
   },
 };
 

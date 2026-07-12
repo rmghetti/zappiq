@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * OnboardingZero — Design V4 (Chatbase-style · mercado vs ZappIQ)
+ * OnboardingZero: Design V4 (Chatbase-style · mercado vs ZappIQ)
  * --------------------------------------------------------------------------
  * Tese V3.2 preservada: setup fee é fraude intelectual (R$ 3–8k virou R$ 0).
  * Visual novo: comparativo 2-col em card-soft, tipografia Geist, gradient
@@ -20,7 +20,7 @@ const MERCADO = [
 ];
 
 const ZAPPIQ = [
-  'Formulário guiado de 30 a 90 minutos — você mesmo faz',
+  'Formulário guiado de 30 a 90 minutos, você mesmo faz',
   'Você mesmo sobe seus documentos (PDF, planilha, site)',
   'A Iza é calibrada automaticamente no painel',
   'Score de prontidão de 0 a 100, você vê em tempo real',
@@ -48,7 +48,7 @@ export function OnboardingZero() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-5 lg:gap-6 max-w-5xl mx-auto">
-          {/* Mercado — card neutro */}
+          {/* Mercado: card neutro */}
           <div className="card-soft p-8 lg:p-9 relative">
             <div className="absolute -top-3 left-7 px-3 py-1 rounded-full bg-[#FEF3F2] border border-[#FECDD3] text-[11px] font-semibold text-[#B42318] tracking-wide">
               Padrão do mercado
@@ -69,7 +69,7 @@ export function OnboardingZero() {
             </ul>
           </div>
 
-          {/* ZappIQ — card gradient */}
+          {/* ZappIQ: card gradient */}
           <div
             className="rounded-[20px] p-8 lg:p-9 text-white relative overflow-hidden"
             style={{
@@ -108,13 +108,13 @@ export function OnboardingZero() {
           </Link>
         </div>
 
-        {/* Âncora humana — card claro */}
+        {/* Âncora humana: card claro */}
         <div className="mt-14 card-soft p-6 lg:p-8 max-w-4xl mx-auto bg-white">
           <p className="text-[13.5px] text-ink leading-relaxed">
             <strong className="font-semibold">E se eu preferir ajuda humana?</strong>{' '}
             <span className="text-muted">
               Se você não finalizar o survey em 7 dias, um consultor ZappIQ entra em contato
-              por WhatsApp pra destravar o que estiver pendente — sem custo adicional.
+              por WhatsApp pra destravar o que estiver pendente, sem custo adicional.
               Self-service é o padrão, mas nunca deixamos você empacar.
             </span>
           </p>

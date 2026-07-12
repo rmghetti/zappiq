@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * IzaEstaAqui — Design V4 (dogfooding ao vivo · Chatbase-style)
+ * IzaEstaAqui: Design V4 (dogfooding ao vivo · Chatbase-style)
  * --------------------------------------------------------------------------
  * Preserva tese V3.2: o próprio ZappIQ é atendido pela Iza rodando no
  * ZappIQ. Prova pública de funcionamento. IZA_WA_URL via env com fallback.
@@ -64,7 +64,7 @@ export function IzaEstaAqui() {
 
       <div className="relative zappiq-wrap">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Esquerda — copy + CTA */}
+          {/* Esquerda: copy + CTA */}
           <div>
             <div className="inline-flex items-center gap-2 bg-white/10 border border-white/15 text-white text-[11px] font-semibold px-3 py-1.5 rounded-full mb-5 backdrop-blur-sm uppercase tracking-[0.12em]">
               <Sparkles size={12} /> Teste você mesmo · agora
@@ -83,7 +83,7 @@ export function IzaEstaAqui() {
               </span>
             </h2>
             <p className="text-[17px] text-white/80 leading-relaxed mb-4">
-              A Iza é a nossa IA oficial. Pergunta sobre produto, preço, trial, implementação —
+              A Iza é a nossa IA oficial. Pergunta sobre produto, preço, trial, implementação,
               ela responde no WhatsApp, 24/7. Quem atende você agora é a própria ZappIQ rodando no ZappIQ.
             </p>
             <p className="text-[14px] text-white/65 leading-relaxed mb-8">
@@ -101,7 +101,7 @@ export function IzaEstaAqui() {
             </a>
           </div>
 
-          {/* Direita — card chat claro */}
+          {/* Direita: card chat claro */}
           <div className="bg-white rounded-[20px] p-6 lg:p-8 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.4)] text-ink">
             <div className="flex items-center gap-3 mb-5">
               <div

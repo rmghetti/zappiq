@@ -6,8 +6,8 @@
  * redireciona pro próximo passo (default: /cadastro?verified=1).
  *
  * UPSERT do signup row (PR #90 hotfix):
- * - Magic Link cria row em /api/signup ANTES do email — callback só atualiza
- * - Google OAuth NÃO cria row antes — callback precisa criar com defaults
+ * - Magic Link cria row em /api/signup ANTES do email; callback só atualiza
+ * - Google OAuth NÃO cria row antes; callback precisa criar com defaults
  *
  * Por isso fazemos SELECT + INSERT/UPDATE em vez de UPDATE direto.
  */
@@ -19,7 +19,7 @@ import { isSelfSignupPlan, type PlanId } from '@zappiq/shared';
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
-  // PR #101 (Onda 2A) — P0 #2 Signup duplicado: callback redirect direto
+  // PR #101 (Onda 2A), P0 #2 Signup duplicado: callback redirect direto
   // pra /onboarding (não mais /cadastro?verified=1 que mandava pra /register).
   const next = url.searchParams.get('next') || '/onboarding?step=0&from=auth_callback';
   const planParam = url.searchParams.get('plan');
@@ -96,10 +96,10 @@ export async function GET(req: Request) {
     }
   } catch (err) {
     console.error('[auth/callback] Signup upsert error:', err);
-    // Não bloqueia — usuário ainda está autenticado em auth.users
+    // Não bloqueia, usuário ainda está autenticado em auth.users
   }
 
-  // PR #101.2 — Pré-popular dados do user em /onboarding pra evitar
+  // PR #101.2: Pré-popular dados do user em /onboarding pra evitar
   // pedir email/senha de novo (P0 #2 Signup Duplicado).
   // Email e name vão por query string (email não é segredo + name é público).
   const meta = data.user.user_metadata || {};

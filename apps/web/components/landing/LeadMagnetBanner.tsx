@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
- * LeadMagnetBanner — Design V4 (Chatbase-style · Geist + gradient g→b→p)
+ * LeadMagnetBanner: Design V4 (Chatbase-style · Geist + gradient g→b→p)
  * --------------------------------------------------------------------------
  * Banner horizontal compacto entre Pricing e BlogPreview. Fundo bg-soft com
  * ícone gradient, título institucional e CTA minimalista.

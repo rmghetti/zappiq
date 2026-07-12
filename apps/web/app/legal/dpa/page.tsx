@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Data Processing Agreement — ZappIQ',
+  title: 'Data Processing Agreement | ZappIQ',
   description: 'Data Processing Agreement (DPA) entre Cliente e ZappIQ.',
 };
 
@@ -119,7 +119,7 @@ export default function DPAPage() {
 
         <h2>10. Transferência Internacional de Dados</h2>
         <p>
-          Dados são armazenados em AWS us-east-1 (EUA) e processados por Anthropic (potencialmente em jurisdições distintas). Aplicam-se Cláusulas Contratuais Padrão (Standard Contractual Clauses — SCCs) aprovadas pela Comissão Europeia como mecanismo de adequação.
+          Dados são armazenados em AWS us-east-1 (EUA) e processados por Anthropic (potencialmente em jurisdições distintas). Aplicam-se Cláusulas Contratuais Padrão (Standard Contractual Clauses, SCCs) aprovadas pela Comissão Europeia como mecanismo de adequação.
         </p>
 
         <h2>11. Notificação de Violação de Dados</h2>
@@ -153,8 +153,8 @@ export default function DPAPage() {
           Este DPA opera em conformidade com:
         </p>
         <ul>
-          <li>Lei Geral de Proteção de Dados Pessoais — LGPD (Lei nº 13.709/2018).</li>
-          <li>Regulamento Geral sobre a Proteção de Dados — GDPR (UE 2016/679).</li>
+          <li>Lei Geral de Proteção de Dados Pessoais, LGPD (Lei nº 13.709/2018).</li>
+          <li>Regulamento Geral sobre a Proteção de Dados, GDPR (UE 2016/679).</li>
           <li>Legislação de privacidade aplicável em outras jurisdições relevantes.</li>
         </ul>
 
@@ -173,13 +173,13 @@ export default function DPAPage() {
           Alterações ao DPA que reduzem proteções requerem consentimento prévio do Controlador. Alterações por exigência legal podem ser aplicadas com notificação de 30 dias.
         </p>
 
-        <h2>18. Contato — Data Protection Officer (Encarregado)</h2>
+        <h2>18. Contato: Data Protection Officer (Encarregado)</h2>
         {/* V2-025: DPO externo independente (LGPD Art. 41). Nome do encarregado
             será publicado após homologação do contrato (BLOCKER B-03). */}
         <ul>
-          <li><strong>Encarregado:</strong> DPO externo em homologação — nome será publicado após assinatura do contrato de prestação de serviço de encarregado (compliance LGPD Art. 41 — independência em relação à área operacional)</li>
+          <li><strong>Encarregado:</strong> DPO externo em homologação: nome será publicado após assinatura do contrato de prestação de serviço de encarregado (compliance LGPD Art. 41, independência em relação à área operacional)</li>
           <li><strong>Email:</strong> dpo@zappiq.com.br</li>
-          <li><strong>Endereço postal:</strong> Av. das Nações Unidas, 12901 — CENU Torre Norte, 25° andar — São Paulo/SP — CEP 04578-910</li>
+          <li><strong>Endereço postal:</strong> Av. das Nações Unidas, 12901, CENU Torre Norte, 25° andar, São Paulo/SP, CEP 04578-910</li>
           <li><strong>Prazo de resposta (ANPD art. 19):</strong> até 15 dias corridos</li>
         </ul>
 

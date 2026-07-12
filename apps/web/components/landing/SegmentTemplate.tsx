@@ -35,9 +35,9 @@ export interface SegmentTestimonial {
  *  no self-service de treinamento da IA. Mantém a narrativa
  *  "você treina sua IA sozinho" contextual por vertical. */
 export interface SegmentTrainingExample {
-  /** Tipo do material — ex: "Tabela de preços", "Protocolo clínico". */
+  /** Tipo do material, ex: "Tabela de preços", "Protocolo clínico". */
   label: string;
-  /** Formato aceito — ex: "PDF · XLSX · URL". */
+  /** Formato aceito, ex: "PDF · XLSX · URL". */
   format: string;
   /** O que a IA vai passar a responder com esse material. */
   outcome: string;
@@ -52,9 +52,9 @@ export interface SegmentPageData {
   pains: SegmentPain[];
   solutions: SegmentSolution[];
   testimonial: SegmentTestimonial;
-  /** Exemplos de material self-service — se omitido, a seção não aparece. */
+  /** Exemplos de material self-service, se omitido, a seção não aparece. */
   trainingExamples?: SegmentTrainingExample[];
-  /** Headline da seção self-service — fallback padrão se omitido. */
+  /** Headline da seção self-service, fallback padrão se omitido. */
   selfServiceHeadline?: string;
 }
 
@@ -92,7 +92,7 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
               </Link>
             </div>
 
-            {/* Badges de confiança — reforço do storytelling self-service */}
+            {/* Badges de confiança: reforço do storytelling self-service */}
             <div className="mt-8 flex flex-wrap items-center gap-3 text-xs font-medium text-gray-600">
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 border border-green-100">
                 <CheckCircle2 size={14} /> 14 dias grátis · sem cartão
@@ -101,7 +101,7 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
                 <CheckCircle2 size={14} /> Zero setup fee
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200">
-                <CheckCircle2 size={14} /> Você treina — sem consultor
+                <CheckCircle2 size={14} /> Você treina, sem consultor
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200">
                 <CheckCircle2 size={14} /> LGPD · SLA · Observabilidade
@@ -186,7 +186,7 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
 
             <div className="mt-10 flex items-center justify-center gap-3 flex-wrap">
               <Link href="/cadastro" className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-400 text-white font-semibold px-7 py-3.5 rounded-xl transition-colors shadow-lg shadow-primary-500/30">
-                Começar agora — 14 dias grátis <ArrowRight size={18} />
+                Começar agora, 14 dias grátis <ArrowRight size={18} />
               </Link>
               <Link href="/comparativo" className="inline-flex items-center gap-2 text-white/70 hover:text-white font-semibold px-5 py-3.5 transition-colors">
                 Ver comparativo vs. concorrentes →
@@ -202,13 +202,13 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
           {/* PLACEHOLDER: substituir por imagem real de fluxo de automação do segmento */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-12 text-center">
             <div className="w-full h-64 bg-gray-50 rounded-xl flex items-center justify-center border border-dashed border-gray-300">
-              <p className="text-gray-400 text-sm">Mockup de fluxo de automação — {data.name}</p>
+              <p className="text-gray-400 text-sm">Mockup de fluxo de automação: {data.name}</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Depoimento — PLACEHOLDER: substituir por depoimento real */}
+      {/* Depoimento, PLACEHOLDER: substituir por depoimento real */}
       <section className="py-16 bg-white">
         <div className="max-w-3xl mx-auto px-6">
           <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
@@ -220,7 +220,7 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-xs font-bold">{data.testimonial.initials}</div>
               <div className="text-left">
                 <p className="text-sm font-semibold text-gray-900">{data.testimonial.name}</p>
-                <p className="text-xs text-gray-400">{data.testimonial.role} — {data.testimonial.company}</p>
+                <p className="text-xs text-gray-400">{data.testimonial.role}, {data.testimonial.company}</p>
               </div>
             </div>
           </div>
@@ -234,7 +234,7 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
             Pronto para automatizar seu {data.businessType.toLowerCase()}?
           </h2>
           <p className="text-gray-400 mb-8">
-            14 dias grátis. Zero setup fee. Você treina a IA com seus próprios documentos — sem esperar consultor.
+            14 dias grátis. Zero setup fee. Você treina a IA com seus próprios documentos, sem esperar consultor.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/cadastro" className="inline-flex items-center justify-center gap-2 bg-primary-500 hover:bg-primary-400 text-white font-semibold px-8 py-4 rounded-xl transition-colors shadow-lg shadow-primary-500/30">

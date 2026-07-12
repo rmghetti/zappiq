@@ -3,10 +3,10 @@ import type { SegmentPageData } from '../../../components/landing/SegmentTemplat
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'ZappIQ para Serviços B2B — Automação WhatsApp para Empresas',
+  title: 'ZappIQ para Serviços B2B: Automação WhatsApp para Empresas',
   description: 'Qualifique leads, agende reuniões e acompanhe propostas pelo WhatsApp com IA. Ideal para consultorias, agências e prestadores de serviço.',
   openGraph: {
-    title: 'ZappIQ para Serviços B2B — Qualifique Leads com IA',
+    title: 'ZappIQ para Serviços B2B: Qualifique Leads com IA',
     description: 'Qualifique leads, agende reuniões e acompanhe propostas pelo WhatsApp com IA.',
   },
 };

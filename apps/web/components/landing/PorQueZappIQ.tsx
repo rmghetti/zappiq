@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * PorQueZappIQ — Design V4 (bento asymmetric · Chatbase-style)
+ * PorQueZappIQ: Design V4 (bento asymmetric · Chatbase-style)
  * --------------------------------------------------------------------------
  * Substitui a grade chata 4×2 por bento assimétrico com mini-visuais
  * dentro de cada card. Mantém as 8 razões V3.2 (Cloud API Meta, IA Claude,
@@ -45,7 +45,7 @@ export function PorQueZappIQ() {
 
         {/* Row 1: Cloud API Meta (big) + IA Claude/OpenAI */}
         <div className="grid lg:grid-cols-5 gap-5 mb-5">
-          {/* Multicanal Meta — hero card (V2 17/05/2026: pivotado pra narrativa multichannel) */}
+          {/* Multicanal Meta: hero card (V2 17/05/2026: pivotado pra narrativa multichannel) */}
           <div className="lg:col-span-3 card-soft p-8 lg:p-10 relative overflow-hidden">
             <div className="flex items-center gap-2 mb-5">
               <div className="w-9 h-9 rounded-[10px] bg-grad flex items-center justify-center shadow-[0_8px_16px_-8px_rgba(74,82,208,0.4)]">
@@ -57,7 +57,7 @@ export function PorQueZappIQ() {
               WhatsApp + Instagram Direct. A ZappIQ utiliza a Iza, mas você cria o melhor nome para seu agente em todas plataformas, mesma marca.
             </h3>
             <p className="text-[14.5px] text-muted leading-relaxed mb-6">
-              Conexão oficial com a infraestrutura da Meta — sem atravessador, sem taxa de
+              Conexão oficial com a infraestrutura da Meta, sem atravessador, sem taxa de
               intermediário, seu número e seu @ são seus. WhatsApp ativo hoje, Instagram Direct
               em rollout (aprovação Meta em andamento). Quando o cliente puxar assunto pelo
               Insta, a Iza responde com a mesma inteligência do WhatsApp.
@@ -90,7 +90,7 @@ export function PorQueZappIQ() {
               A mesma IA que Fortune 500 usa. Pro seu negócio.
             </h3>
             <p className="text-[13.5px] text-muted leading-relaxed mb-5">
-              A Iza roda sobre a IA mais avançada do planeta — a mesma que grandes empresas
+              A Iza roda sobre a IA mais avançada do planeta, a mesma que grandes empresas
               globais usam. Seus dados não viram treino. E se um provedor cair, o outro assume.
             </p>
             <div className="flex gap-2 flex-wrap">
@@ -100,7 +100,7 @@ export function PorQueZappIQ() {
           </div>
         </div>
 
-        {/* Row 2: 3 cards iguais — LGPD, Observabilidade, Onboarding zero */}
+        {/* Row 2: 3 cards iguais (LGPD, Observabilidade, Onboarding zero) */}
         <div className="grid lg:grid-cols-3 gap-5 mb-5">
           {/* LGPD */}
           <div className="card-soft p-7">
@@ -116,7 +116,7 @@ export function PorQueZappIQ() {
             <p className="text-[13px] text-muted leading-relaxed mb-4">
               A gente nasceu LGPD-first. Contrato de privacidade (DPA) pronto em 2 cliques,
               encarregado de dados acessível, e seu cliente pode pedir pra apagar os dados dele
-              em 48 horas — tudo pela plataforma.
+              em 48 horas, tudo pela plataforma.
             </p>
             <ul className="space-y-1.5 text-[12px] text-muted">
               <li className="flex items-center gap-2"><Check size={12} className="text-[#2FB57A]" /> Direitos do titular resolvidos</li>
@@ -138,7 +138,7 @@ export function PorQueZappIQ() {
             </h3>
             <p className="text-[13px] text-muted leading-relaxed mb-4">
               Quantos atendimentos a Iza fechou hoje, quanto converteu, quanto você gastou,
-              qual fila está travada. Tudo num dashboard executivo — sem precisar de analista.
+              qual fila está travada. Tudo num dashboard executivo, sem precisar de analista.
             </p>
             {/* mini sparkline */}
             <svg viewBox="0 0 200 40" className="w-full h-10" aria-hidden>
@@ -231,7 +231,7 @@ export function PorQueZappIQ() {
                 Seu cliente é brasileiro, manda áudio. A Iza entende tudo
                 <span className="font-semibold text-ink"> sem custo extra</span>. Quer que ela
                 responda falando? Ativa voz a partir de <span className="font-semibold text-ink">R$ 79,90/mês</span>
-                {' '}— 6 pacotes de 200 a 4.000 minutos.
+                {' '}(6 pacotes de 200 a 4.000 minutos).
               </p>
             </div>
           </div>

@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
- * /roadmap — Página pública de transparência (V2-020 Sprint 0 Blocker 6)
+ * /roadmap: Página pública de transparência (V2-020 Sprint 0 Blocker 6)
  * --------------------------------------------------------------------------
  * Desativa o discurso de "Voz Padrão R$197 / Voz Premium R$497" no
  * planConfig público e oferece em troca:
@@ -9,7 +9,7 @@
  *   - opções para clientes que compraram add-on Voz no trial
  *
  * Server Component (SEO friendly, sem state). Forms são links mailto
- * por enquanto — reaproveitar /api/leads em Onda 2 quando entrar.
+ * por enquanto: reaproveitar /api/leads em Onda 2 quando entrar.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import type { Metadata } from 'next';
@@ -18,7 +18,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Roadmap · ZappIQ',
   description:
-    'O que vem por aí na ZappIQ — voz, RAG avançado, builder self-service, observabilidade. Timeline transparente, status real.',
+    'O que vem por aí na ZappIQ: voz, RAG avançado, builder self-service, observabilidade. Timeline transparente, status real.',
   openGraph: {
     title: 'Roadmap · ZappIQ',
     description: 'Timeline pública do que estamos construindo.',
@@ -40,7 +40,7 @@ const ROADMAP: RoadmapItem[] = [
   {
     title: 'Iza com Anthropic Claude Sonnet 4.6',
     description:
-      'Conversação principal com Claude Sonnet 4.6 — modelo frontier da Anthropic, calibrado para português brasileiro.',
+      'Conversação principal com Claude Sonnet 4.6, modelo frontier da Anthropic, calibrado para português brasileiro.',
     eta: 'Disponível',
     status: 'shipped',
   },
@@ -100,14 +100,14 @@ const ROADMAP: RoadmapItem[] = [
   {
     title: 'Builder self-service da Iza',
     description:
-      'Wizard de 8 etapas (15-25min) para o próprio cliente configurar a Iza dele — identidade, tom, conhecimento, habilidades, escalação.',
+      'Wizard de 8 etapas (15-25min) para o próprio cliente configurar a Iza dele: identidade, tom, conhecimento, habilidades, escalação.',
     eta: 'Julho-Agosto/2026',
     status: 'planned',
   },
   {
     title: 'RAG avançado: hybrid search + Cohere Rerank + Contextual Retrieval',
     description:
-      'BM25 + dense retrieval com fusion, reranker multilíngue, chunks contextualizados — ganho esperado 35-49% recall.',
+      'BM25 + dense retrieval com fusion, reranker multilíngue, chunks contextualizados, ganho esperado 35-49% recall.',
     eta: 'Agosto/2026',
     status: 'planned',
   },
@@ -159,8 +159,8 @@ export default function RoadmapPage() {
               marginBottom: 16,
             }}
           >
-            Roadmap{' '}
-            <span style={{ color: '#737373' }}>— o que vem por aí.</span>
+            Roadmap:{' '}
+            <span style={{ color: '#737373' }}>o que vem por aí.</span>
           </h1>
           <p
             style={{
@@ -171,7 +171,7 @@ export default function RoadmapPage() {
             }}
           >
             Construímos a ZappIQ em público. Esta página mostra o que já está
-            no ar, o que estamos terminando agora, e o que vem depois — com
+            no ar, o que estamos terminando agora, e o que vem depois, com
             datas reais e status honesto. Atualizada mensalmente.
           </p>
         </div>
@@ -192,7 +192,7 @@ export default function RoadmapPage() {
           <p style={{ fontSize: 15, lineHeight: 1.55, color: '#7C2D12' }}>
             A funcionalidade de Voz (áudio de entrada via Whisper, áudio de saída via TTS premium)
             era inicialmente planejada para o lançamento. Decidimos adiá-la para julho/2026 para
-            entregá-la com qualidade — não queremos vender o que não está pronto. Se você se
+            entregá-la com qualidade. Não queremos vender o que não está pronto. Se você se
             inscreveu para o add-on de Voz no trial,{' '}
             <a
               href="mailto:rodrigo.ghetti@zappiq.com.br?subject=Add-on%20Voz%20-%20opc%C3%A3o%20escolhida"

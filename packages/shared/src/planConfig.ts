@@ -86,7 +86,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       'Trial 14 dias gratuito. Apos isso, R\$ 247,00/mes (ou R\$ 197,60/mes no plano anual). Pensado pra autonomo, solo e PME validando o canal antes de escalar pro Growth.',
     priceMonthly: 247.00,
     annualDiscountPercent: 20,
-    highlight: true,
+    highlight: false,
     premium: false,
     order: 0,
     trialDays: 14,

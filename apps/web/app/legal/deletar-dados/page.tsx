@@ -1,9 +1,9 @@
 /**
- * /legal/deletar-dados — Endpoint público DSR LGPD Art. 18
+ * /legal/deletar-dados: Endpoint público DSR LGPD Art. 18
  *
  * Criado pro D-Day Onda 1 (14/05/2026). A Política de Privacidade V3.2 referência
  * esta URL como canal de autoatendimento para direitos do titular. Sem esta página,
- * a Política de Privacidade fica apontando pra 404 — gate obrigatório de compliance.
+ * a Política de Privacidade fica apontando pra 404, gate obrigatório de compliance.
  *
  * Backend: POST /api/dsr/request (a ser implementado pelo dev lead antes do 14/05).
  * Se a rota ainda não existir em produção, o fallback no onSubmit aciona mailto
@@ -71,12 +71,12 @@ export default function DeletarDadosPage() {
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as { protocolo?: string };
-      setProtocolo(json.protocolo || '—');
+      setProtocolo(json.protocolo || '-');
       setStatus('success');
       form.reset();
     } catch (err) {
       // Fallback: abrir mailto pré-preenchido pro DPO
-      const assunto = `Direitos LGPD — ${REQUEST_TYPE_LABELS[payload.tipo] || payload.tipo}`;
+      const assunto = `Direitos LGPD: ${REQUEST_TYPE_LABELS[payload.tipo] || payload.tipo}`;
       const corpo = [
         `Tipo de solicitação: ${REQUEST_TYPE_LABELS[payload.tipo] || payload.tipo}`,
         `Nome completo: ${payload.nomeCompleto}`,

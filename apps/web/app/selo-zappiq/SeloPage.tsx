@@ -94,7 +94,7 @@ function ZappIQBadge({ size = 200 }: { size?: number }) {
 /* ------------------------------------------------------------------ */
 
 /* V2-009/V2-011: enquanto autorização LGPD dos cases não chega (BLOCKER B-01
- * e B-02), exibimos segmentos representativos — zero nome fictício de cliente
+ * e B-02), exibimos segmentos representativos, zero nome fictício de cliente
  * associado a dado mensurável. Quando logos reais chegarem, preencher. */
 const CERTIFIED_COMPANIES = [
   { name: 'Clínica de Saúde (beta)', segment: 'Saúde', initials: 'CS' },
@@ -140,7 +140,7 @@ export function SeloPage() {
             Selo ZappIQ de Atendimento 5 Estrelas
           </h1>
           <p className="text-lg text-gray-500">
-            Empresas que mantem CSAT acima de 4.5 recebem nosso selo digital de excelencia — uma prova social poderosa para site, Instagram e WhatsApp.
+            Empresas que mantem CSAT acima de 4.5 recebem nosso selo digital de excelencia, uma prova social poderosa para site, Instagram e WhatsApp.
           </p>
         </div>
       </div>
@@ -204,7 +204,7 @@ export function SeloPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {CERTIFIED_COMPANIES.map((company) => (
             <div key={company.name} className="bg-white rounded-2xl border border-gray-200 p-6 flex flex-col items-center text-center hover:shadow-lg transition-shadow">
-              {/* PLACEHOLDER: substituir por dado real — logo da empresa */}
+              {/* PLACEHOLDER: substituir por dado real, logo da empresa */}
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-xl font-bold mb-4">
                 {company.initials}
               </div>

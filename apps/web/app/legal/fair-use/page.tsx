@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { PublicLayout } from '../../../components/landing/PublicLayout';
 
 export const metadata: Metadata = {
-  title: 'Política de Fair-Use & Limites Técnicos — ZappIQ',
+  title: 'Política de Fair-Use & Limites Técnicos | ZappIQ',
   description:
     'Política de fair-use da ZappIQ: limites por plano (mensagens, sessões, armazenamento, automações), hardcap de abuso e procedimento de upgrade.',
 };

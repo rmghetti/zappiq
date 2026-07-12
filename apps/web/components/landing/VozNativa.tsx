@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * VozNativa — Design V4 (PR #73 · pricing real v4 LIVE no Stripe)
+ * VozNativa: Design V4 (PR #73 · pricing real v4 LIVE no Stripe)
  * --------------------------------------------------------------------------
  * Inbound (Whisper STT) incluso em todos os planos. R$ 0.
  * Outbound (TTS Neural2-C pt-BR) em 6 pacotes. Aqui a home mostra 3 destaque
@@ -13,9 +13,9 @@ import { Mic, Headphones, Check, Star, ArrowRight } from 'lucide-react';
 
 const INBOUND_ITEMS = [
   'Seu cliente manda áudio de 1 minuto perguntando sobre produto',
-  'A Iza transcreve em segundos — entende o que ele quer',
+  'A Iza transcreve em segundos, entende o que ele quer',
   'Responde em texto na hora, sem pedir pra ele "digitar de novo"',
-  'Zero custo adicional — já vem incluso em qualquer plano',
+  'Zero custo adicional, já vem incluso em qualquer plano',
 ];
 
 interface VoiceTeaserCard {
@@ -76,7 +76,7 @@ export function VozNativa() {
         </div>
 
         <div className="grid lg:grid-cols-2 gap-5 lg:gap-6 max-w-6xl mx-auto">
-          {/* Inbound — INCLUSO */}
+          {/* Inbound: INCLUSO */}
           <div className="card-soft p-8 relative flex flex-col">
             <div className="absolute -top-3 left-7 px-3 py-1 rounded-full bg-[#2FB57A] text-white text-[11px] font-semibold tracking-wide">
               Incluso em todos os planos
@@ -116,7 +116,7 @@ export function VozNativa() {
             </ul>
           </div>
 
-          {/* Outbound — 6 pacotes (3 destaque na home, ver todos em /voz) */}
+          {/* Outbound: 6 pacotes (3 destaque na home, ver todos em /voz) */}
           <div className="card-soft overflow-hidden">
             <div
               className="px-8 py-5 text-white flex items-center justify-between"

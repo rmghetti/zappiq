@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { PublicLayout } from '../../components/landing/PublicLayout';
 
 export const metadata: Metadata = {
-  title: 'Cohort Founders ZappIQ — 30% de desconto vitalício',
+  title: 'Cohort Founders ZappIQ: 30% de desconto vitalício',
   description:
     'Programa Fundadores ZappIQ: 30% de desconto vitalício para os primeiros 50 clientes pagantes. Preço congelado enquanto o contrato seguir ativo. Critérios e aplicação.',
 };
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
  * Testimonials.tsx alinhado pra mesma oferta (sem 50% off 12m). */
 
 const PERKS = [
-  'Desconto vitalício de 30% sobre qualquer plano contratado — congelado enquanto o contrato seguir ativo, sem cliff, sem reajuste promocional',
+  'Desconto vitalício de 30% sobre qualquer plano contratado, congelado enquanto o contrato seguir ativo, sem cliff, sem reajuste promocional',
   'Prioridade em roadmap: até 2 features por ano votadas pelo cohort',
   'Canal Slack direto com o time fundador · resposta de até 1h em horário comercial',
   'Early access a novos módulos com 60 dias de antecedência',
@@ -36,7 +36,7 @@ export default function FoundersPage() {
         </h1>
         <p className="text-lg text-gray-500 mb-12 max-w-3xl">
           Sem cliff no mês 13. Sem reajuste promocional. Sem letra miúda. Você paga 30% menos pelo
-          plano contratado enquanto o contrato seguir ativo — pra sempre. Em troca, pedimos feedback
+          plano contratado enquanto o contrato seguir ativo, pra sempre. Em troca, pedimos feedback
           qualificado, abertura para case study (opcional) e disposição para testar features em beta
           antes do rollout geral.
         </p>

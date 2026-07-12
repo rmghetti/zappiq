@@ -3,13 +3,13 @@ import { PublicLayout } from '../../components/landing/PublicLayout';
 import { Pricing } from '../../components/landing/Pricing';
 
 export const metadata: Metadata = {
-  title: 'Planos e Preços — ZappIQ',
+  title: 'Planos e preços ZappIQ: a partir de R$ 247/mês',
   description:
-    'Conheça os planos ZappIQ: Starter, Growth, Scale e Enterprise. IA nativa, WhatsApp oficial, CRM integrado. Comece grátis por 14 dias, sem setup fee.',
+    'Lite R$ 247, Growth R$ 497 (mais popular), Scale R$ 1.497 e Enterprise sob consulta. IA que atende, vende e faz campanha no WhatsApp e Instagram, com CRM integrado. Zero setup fee, mensalidade fixa, 14 dias grátis sem cartão.',
   openGraph: {
-    title: 'Planos e Preços — ZappIQ',
+    title: 'Planos e preços ZappIQ: a partir de R$ 247/mês',
     description:
-      'Automação WhatsApp com IA a partir de R$ 197/mês. Zero setup fee, 14 dias grátis. Compare planos e escolha o ideal para seu negócio.',
+      'Atendimento, vendas e campanhas com IA no WhatsApp e Instagram, a partir de R$ 247/mês. Zero setup fee, 14 dias grátis, sem cartão. Compare os planos.',
   },
   alternates: {
     canonical: 'https://zappiq.com.br/precos',

@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { Calculator, ArrowRight, Sparkles } from 'lucide-react';
 import { PLAN_CONFIG } from '@zappiq/shared';
 
-/** Preço Starter derivado de planConfig.ts (single source of truth) */
-const STARTER_PRICE = PLAN_CONFIG.STARTER.priceMonthly!;
+/** Preço Lite derivado de planConfig.ts (single source of truth) */
+const LITE_PRICE = PLAN_CONFIG.IZA_LITE.priceMonthly!;
 const GROWTH_PRICE = PLAN_CONFIG.GROWTH.priceMonthly!;
 const SCALE_PRICE = PLAN_CONFIG.SCALE.priceMonthly!;
 
@@ -19,7 +19,7 @@ const SCALE_PRICE = PLAN_CONFIG.SCALE.priceMonthly!;
  *   • Onboarding step opcional (variant="compact")
  *
  * Filosofia: um único lugar de verdade para o pitch de economia. Alterar
- * pricing do Starter ou a baseline de comparação aqui propaga para todos
+ * pricing do Lite ou a baseline de comparação aqui propaga para todos
  * os pontos de contato automaticamente.
  * ═══════════════════════════════════════════════════════════════════════ */
 
@@ -31,9 +31,9 @@ export interface SavingsCalculatorProps {
   initialSetup?: number;
   /** Mensalidade inicial do campo (R$). Default = 1500. */
   initialMonthly?: number;
-  /** Preço do tier de referência (R$/mês). Default = Starter (via planConfig). */
+  /** Preço do tier de referência (R$/mês). Default = Lite (via planConfig). */
   zappiqMonthly?: number;
-  /** Label customizado para o tier da ZappIQ. Default = "ZappIQ Starter". */
+  /** Label customizado para o tier da ZappIQ. Default = "ZappIQ Lite". */
   zappiqTierLabel?: string;
   /** Mostrar CTA no final. Default depende da variant. */
   showCta?: boolean;
@@ -56,7 +56,7 @@ export interface SavingsCalculatorProps {
 export function computeSavings(
   competitorSetup: number,
   competitorMonthly: number,
-  zappiqMonthly: number = STARTER_PRICE,
+  zappiqMonthly: number = LITE_PRICE,
 ) {
   const firstYearCompetitor = Math.max(0, competitorSetup) + Math.max(0, competitorMonthly) * 12;
   const firstYearZappiq = Math.max(0, zappiqMonthly) * 12;
@@ -76,8 +76,8 @@ export function SavingsCalculator({
   variant = 'full',
   initialSetup = 8000,
   initialMonthly = 1500,
-  zappiqMonthly = STARTER_PRICE,
-  zappiqTierLabel = 'ZappIQ Starter',
+  zappiqMonthly = LITE_PRICE,
+  zappiqTierLabel = 'ZappIQ Lite',
   showCta,
   ctaHref = '/cadastro',
   ctaLabel = 'Começar 14 dias grátis',

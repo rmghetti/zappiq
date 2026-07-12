@@ -1,11 +1,11 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * LandingPage — V4 Chatbase-style (fidelidade modelo Claude Design)
+ * LandingPage: V4 Chatbase-style (fidelidade modelo Claude Design)
  * --------------------------------------------------------------------------
  * Hybrid cut (V4_DESIGN_REFERENCE.md Onda C seletiva):
- *   - REMOVIDO: LeadMagnetBanner (CTA band 202px — modelo não tem)
- *   - REMOVIDO: BlogPreview (teaser de blog — modelo não tem; /blog vive no nav)
+ *   - REMOVIDO: LeadMagnetBanner (CTA band 202px, modelo não tem)
+ *   - REMOVIDO: BlogPreview (teaser de blog, modelo não tem; /blog vive no nav)
  *   - MANTIDO: OnboardingZero + VozNativa + IzaEstaAqui (strategic commercial blocks)
  *   - MANTIDO: SocialProof (pode ser compactado via prop `compact` depois)
  *
@@ -36,6 +36,9 @@ import { ComVsSem } from './ComVsSem';
 import { OnboardingZero } from './OnboardingZero';
 import { VozNativa } from './VozNativa';
 import { HowItWorks } from './HowItWorks';
+import { PlataformaAutonoma } from './PlataformaAutonoma';
+import { JornadaLead } from './JornadaLead';
+import { MiraProspects } from './MiraProspects';
 import { MaestroSection } from './MaestroSection';
 import { ROICalculator } from './ROICalculator';
 import { AgentQualityProactive } from './AgentQualityProactive';
@@ -47,6 +50,7 @@ import { FAQ } from './FAQ';
 import { CTAFinal } from './CTAFinal';
 import { Footer } from './LandingFooter';
 import { WhatsAppButton } from './WhatsAppButton';
+import { MobileStickyCTA } from './MobileStickyCTA';
 import { SocialProofToast } from './SocialProofToast';
 import { MetaNovidadesPopup } from './MetaNovidadesPopup';
 
@@ -59,6 +63,9 @@ export function LandingPage() {
       <SocialProof />
       <PorQueZappIQ />
       <ComVsSem />
+      <PlataformaAutonoma />
+      <JornadaLead />
+      <MiraProspects />
       <OnboardingZero />
       <VozNativa />
       <HowItWorks />
@@ -73,6 +80,7 @@ export function LandingPage() {
       <CTAFinal />
       <Footer />
       <WhatsAppButton />
+      <MobileStickyCTA />
       <SocialProofToast />
       <MetaNovidadesPopup />
     </div>

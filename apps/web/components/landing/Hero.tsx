@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Hero — Design V4 multichannel (WhatsApp ↔ Instagram Direct)
+ * Hero: Design V4 multichannel (WhatsApp ↔ Instagram Direct)
  * --------------------------------------------------------------------------
  * V5 (17/05/2026): iPhone alterna entre 2 frames de canal:
  *   - WhatsApp screen (verde #075E54, bg #F5F3EE, bolhas DCF8C6 + brancas)
@@ -9,13 +9,13 @@
  *
  * 8 cenários intercalados (sempre WA → IG → WA → IG):
  *   1. WA · Sorriso & Cia          (clínica odonto)
- *   2. IG · @horizonte.imóveis     (imobiliária — DM após story)
- *   3. WA · Torque Auto Center     (mecânica — áudio)
- *   4. IG · @clínica.allure        (estética — DM lead)
- *   5. WA · Moda Viva              (e-commerce — status pedido)
- *   6. IG · @fitcorp.br            (academia — DM matrícula)
+ *   2. IG · @horizonte.imóveis     (imobiliária, DM após story)
+ *   3. WA · Torque Auto Center     (mecânica, áudio)
+ *   4. IG · @clínica.allure        (estética, DM lead)
+ *   5. WA · Moda Viva              (e-commerce, status pedido)
+ *   6. IG · @fitcorp.br            (academia, DM matrícula)
  *   7. WA · Vila Madá              (delivery)
- *   8. IG · @safira.joias          (varejo luxo — DM purchase intent)
+ *   8. IG · @safira.joias          (varejo luxo, DM purchase intent)
  *
  * Pacing: cada msg respeita seu dur + 1.8s entre cenários. Loop infinito.
  * ══════════════════════════════════════════════════════════════════════════ */
@@ -88,7 +88,7 @@ const SCENARIOS: Scenario[] = [
     sub: 'online · IA + técnico humano',
     script: [
       { role: 'me', text: 'audio', audio: '00:14', dur: 1800 },
-      { role: 'ia', text: 'Entendi — barulho no freio do <b>Civic 2019</b>. Soa como pastilha gasta. Revisão custa <b>R$ 320</b> e dura 2h.', dur: 2900 },
+      { role: 'ia', text: 'Entendi, barulho no freio do <b>Civic 2019</b>. Soa como pastilha gasta. Revisão custa <b>R$ 320</b> e dura 2h.', dur: 2900 },
       { role: 'me', text: 'Fecha pra amanhã?', dur: 1200 },
       { role: 'ia', text: '✓ Agendado <b>quarta 09h</b>. Enviei endereço e PIX pro sinal. Seu carro volta no mesmo dia.', dur: 2600 },
     ],
@@ -398,22 +398,21 @@ export function Hero() {
             </div>
 
             <h1 className="text-[44px] sm:text-[56px] lg:text-[72px] leading-[1.0] tracking-[-0.045em] font-semibold text-ink mb-6">
-              Atenda no WhatsApp e Instagram 24 horas por dia. <span className="text-grad">Sem contratar mais ninguém.</span>
+              A Iza atende, vende e faz campanha pela sua operação. <span className="text-grad">Você aprova, ela executa.</span>
             </h1>
 
             <p className="text-[17px] lg:text-[18.5px] text-muted leading-[1.55] max-w-[560px] mb-8">
-              <b className="text-ink">Dê o nome ao seu agente</b> — sua IA treinada com o próprio negócio — atende, tira dúvidas,
-              agenda e qualifica lead no <b className="text-ink">WhatsApp e Instagram Direct</b>, 24/7, em texto e em áudio.
-              Mesma inteligência, mesma marca, em todos os canais Meta. Ative em minutos,
-              teste <b className="text-ink">14 dias grátis</b> e decide depois.
+              Não é um chatbot. É a sua <b className="text-ink">operação de atendimento e vendas</b> rodando sozinha no
+              <b className="text-ink"> WhatsApp e Instagram</b>, 24/7, em texto e áudio. A IA monta o fluxo, cria a campanha,
+              atualiza o CRM na origem e se corrige sozinha. Ative em minutos e teste <b className="text-ink">14 dias grátis</b>.
             </p>
 
             <div className="flex flex-wrap gap-3 mb-8">
               <Link href="/cadastro" className="btn btn-accent btn-lg">
                 Começar 14 dias grátis <span aria-hidden>→</span>
               </Link>
-              <a href="/agendar" className="btn btn-line btn-lg">
-                Agendar conversa
+              <a href="#plataforma-autonoma" className="btn btn-line btn-lg">
+                Ver a Iza trabalhando
               </a>
             </div>
 
@@ -478,7 +477,7 @@ export function Hero() {
               >
                 {/* Status bar fake */}
                 <div className="absolute top-0 left-0 right-0 h-[42px] flex items-center justify-between px-5 text-[11px] font-medium text-white z-[5] pointer-events-none">
-                  <span>{clock || '—'}</span>
+                  <span>{clock || '--:--'}</span>
                   <span className="flex items-center gap-1.5 text-[10px]">
                     <span>•••</span>
                     <span>📡</span>

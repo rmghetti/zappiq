@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /auth/login-callback — PR #102 (v2 com Suspense)
+ * /auth/login-callback: PR #102 (v2 com Suspense)
  * --------------------------------------------------------------------------
  * Page client-side que recebe redirect pós-Google OAuth ou pós-Magic Link.
  *
@@ -46,7 +46,7 @@ function LoginCallbackInner() {
       let accessToken: string | null = null;
       let refreshToken: string | null = null;
 
-      // Fluxo 1 — PKCE OAuth Google: ?code=...
+      // Fluxo 1, PKCE OAuth Google: ?code=...
       const code = search.get('code');
       if (code) {
         const res = await fetch('/api/auth/exchange-code', {
@@ -62,7 +62,7 @@ function LoginCallbackInner() {
         refreshToken = j.refresh_token || null;
       }
 
-      // Fluxo 2 — Magic Link implicit: #access_token=...
+      // Fluxo 2, Magic Link implicit: #access_token=...
       if (!accessToken && typeof window !== 'undefined') {
         const hash = window.location.hash;
         if (hash && hash.includes('access_token=')) {
@@ -73,7 +73,7 @@ function LoginCallbackInner() {
       }
 
       if (!accessToken) {
-        throw new Error('Sessão Supabase não encontrada — link inválido ou expirado');
+        throw new Error('Sessão Supabase não encontrada, link inválido ou expirado');
       }
 
       // Limpa hash da URL (não vazar tokens)

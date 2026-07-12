@@ -2,10 +2,10 @@ import { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'ZappIQ — IA para WhatsApp sem setup fee',
+    name: 'ZappIQ: IA que atende e vende no WhatsApp e Instagram',
     short_name: 'ZappIQ',
     description:
-      'Plataforma de IA conversacional para WhatsApp Business. Treine sua IA sozinho, sem consultor, sem setup fee. 14 dias grátis.',
+      'Operação autônoma de atendimento e vendas no WhatsApp e Instagram. A Iza atende, vende e faz campanha; você aprova, ela executa. 14 dias grátis, sem setup fee.',
     start_url: '/',
     display: 'standalone',
     background_color: '#ffffff',

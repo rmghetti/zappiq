@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { PublicLayout } from '../../../components/landing/PublicLayout';
 
 export const metadata: Metadata = {
-  title: 'Política de Cookies — ZappIQ',
+  title: 'Política de Cookies · ZappIQ',
   description:
-    'Política de Cookies da ZappIQ — categorias (estritamente necessários, analíticos, marketing), base legal, duração e instruções de revogação.',
+    'Política de Cookies da ZappIQ: categorias (estritamente necessários, analíticos, marketing), base legal, duração e instruções de revogação.',
 };
 
 /* V2-028: Política de Cookies obrigatória (LGPD + diretiva ANPD). */

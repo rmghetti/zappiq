@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * WhatsAppButton — V3 Chat Launcher dual (WhatsApp + Iza Chat in-page LIVE)
+ * WhatsAppButton: V3 Chat Launcher dual (WhatsApp + Iza Chat in-page LIVE)
  * --------------------------------------------------------------------------
  * FAB único no canto inferior direito que abre menu com 2 opções:
  *   1. Conversar pelo WhatsApp  → wa.me link (web/app)
@@ -16,7 +16,7 @@
  *     idêntica. Resposta no chat web = resposta no WhatsApp.
  *   - sessionId UUID estável em localStorage pra rastrear conversas únicas.
  *   - history[] enviado a cada turno (stateless server-side, frontend é a
- *     fonte de verdade) — máx 20 turnos.
+ *     fonte de verdade), máx 20 turnos.
  *   - Fallback gracioso em erro: oferece WhatsApp como saída.
  * ══════════════════════════════════════════════════════════════════════════ */
 
@@ -78,7 +78,7 @@ async function callIzaBackend(
     }));
 
   const ctrl = new AbortController();
-  const timeoutId = setTimeout(() => ctrl.abort(), 45_000); // 45s — cascade pode levar
+  const timeoutId = setTimeout(() => ctrl.abort(), 45_000); // 45s, cascade pode levar
 
   try {
     const res = await fetch(`${API_BASE}/api/web-chat/iza-message`, {
@@ -105,7 +105,7 @@ async function callIzaBackend(
 
 /* ── Renderiza texto da mensagem suportando Markdown links + URL bare ──
  * Por que: a Iza recebe instrução pra mandar links em formato `[label](url)`,
- * mas o frontend exibia tudo como texto puro — usuário tinha que copiar e colar.
+ * mas o frontend exibia tudo como texto puro, usuário tinha que copiar e colar.
  *
  * Pipeline:
  *   1. Split por Markdown links `[text](url)` → preserva como segmentos com link
@@ -113,7 +113,7 @@ async function callIzaBackend(
  *   3. Quebras de linha viram <div> separadas (preserva layout de chat)
  *
  * Anti-XSS: usamos React (nada de innerHTML); rel="noopener noreferrer" + target=_blank.
- * Aceita só http(s) — javascript:/data: são ignorados pelo regex.
+ * Aceita só http(s), javascript:/data: são ignorados pelo regex.
  */
 const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
 const URL_RE = /(https?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]])/g;
@@ -206,7 +206,7 @@ function saveToStorage(key: string, value: unknown) {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    /* quota / private mode — ignore */
+    /* quota / private mode, ignore */
   }
 }
 
@@ -225,7 +225,7 @@ export function WhatsAppButton() {
     if (savedMsgs.length > 0) {
       setMessages(savedMsgs);
     }
-    /* só restaura inpage/minimized — não auto-abre menu */
+    /* só restaura inpage/minimized, não auto-abre menu */
     if (savedState === 'inpage' || savedState === 'minimized') {
       setMode(savedState);
     }
@@ -287,7 +287,7 @@ export function WhatsAppButton() {
       ts: Date.now(),
     };
     /* Snapshot do history ANTES de adicionar a msg do user (o backend já
-     * recebe a msg nova separadamente — não devemos duplicar). */
+     * recebe a msg nova separadamente, não devemos duplicar). */
     const historySnapshot = messages;
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
@@ -305,7 +305,7 @@ export function WhatsAppButton() {
       setMessages((prev) => [...prev, izaMsg]);
     } catch (err) {
       /* Fallback gracioso: explica que houve instabilidade e oferece WhatsApp.
-       * NUNCA inventa resposta — é melhor admitir que esticar uma alucinação. */
+       * NUNCA inventa resposta, é melhor admitir que esticar uma alucinação. */
       const fallback: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'iza',
@@ -333,7 +333,7 @@ export function WhatsAppButton() {
 
   /* ─────────────────────────── RENDER ─────────────────────────── */
 
-  /* Estado MINIMIZED — pílula compacta no canto */
+  /* Estado MINIMIZED: pílula compacta no canto */
   if (mode === 'minimized') {
     const unread = messages.filter((m) => m.role === 'iza').length > 0 ? 1 : 0;
     return (
@@ -356,7 +356,7 @@ export function WhatsAppButton() {
     );
   }
 
-  /* Estado INPAGE — janela de chat fixa */
+  /* Estado INPAGE: janela de chat fixa */
   if (mode === 'inpage') {
     return (
       <div
@@ -463,7 +463,7 @@ export function WhatsAppButton() {
     );
   }
 
-  /* Estado MENU — popup com 2 opções */
+  /* Estado MENU: popup com 2 opções */
   return (
     <>
       {mode === 'menu' && (
@@ -503,7 +503,7 @@ export function WhatsAppButton() {
               <div className="flex-1 min-w-0">
                 <div className="text-[14px] font-semibold text-gray-900">Conversar pelo WhatsApp</div>
                 <div className="text-[12px] text-gray-600 leading-snug">
-                  Abre no app ou no WhatsApp Web — sua conversa fica salva no histórico
+                  Abre no app ou no WhatsApp Web, sua conversa fica salva no histórico
                 </div>
               </div>
               <ExternalLink size={14} className="text-gray-400 group-hover:text-emerald-600 mt-1 flex-shrink-0" />
@@ -555,7 +555,7 @@ export function WhatsAppButton() {
         </div>
       )}
 
-      {/* FAB principal — abre menu */}
+      {/* FAB principal: abre menu */}
       <button
         type="button"
         onClick={openMenu}

@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Agendar — Design V4 (Chatbase-style · Geist + gradient g→b→p)
+ * Agendar: Design V4 (Chatbase-style · Geist + gradient g→b→p)
  * --------------------------------------------------------------------------
  * CTA externo pra booking page Google Appointment Schedules.
  *
@@ -46,11 +46,11 @@ function nextWeekdays(count = 5): Array<{ label: string; sub: string; full: stri
   return days;
 }
 
-// ─── O que esperar — 5 bullets ─────────────────────────────────────
+// ─── O que esperar: 5 bullets ─────────────────────────────────────
 const ESPERAR = [
   { icon: Building2, t: 'Entender seu negócio', d: 'Quem você atende, qual o canal hoje, o que está travando.' },
   { icon: ShieldCheck, t: 'Configurar Meta Business', d: 'Verificação de Negócio + WhatsApp Business Account.' },
-  { icon: MessageCircle, t: 'Vincular seu número', d: 'Conexão oficial Cloud API com a Meta — sem atravessador.' },
+  { icon: MessageCircle, t: 'Vincular seu número', d: 'Conexão oficial Cloud API com a Meta, sem atravessador.' },
   { icon: Sparkles, t: 'Criar o agente IA', d: 'Nome, persona, primeira base de conhecimento.' },
   { icon: CheckCircle2, t: 'Primeiro teste real', d: 'Você manda mensagem, IA responde. Tudo ao vivo.' },
 ];
@@ -91,7 +91,7 @@ export function Agendar() {
       <section className="pb-20 lg:pb-28">
         <div className="zappiq-wrap max-w-7xl">
           <div className="grid lg:grid-cols-[1fr_320px] gap-8 lg:gap-12">
-            {/* Coluna principal — preview dias + CTA */}
+            {/* Coluna principal: preview dias + CTA */}
             <div
               className="relative bg-white border border-line rounded-[24px] p-8 lg:p-12 shadow-[var(--shadow-card)] overflow-hidden"
             >
@@ -173,7 +173,7 @@ export function Agendar() {
               </div>
             </div>
 
-            {/* Sidebar — O que esperar */}
+            {/* Sidebar: O que esperar */}
             <aside className="space-y-6">
               <div className="bg-bg-soft border border-line rounded-[20px] p-6">
                 <span className="eyebrow">Na call de 30 minutos</span>

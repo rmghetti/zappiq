@@ -15,18 +15,18 @@ import { HashAuthRedirect } from '@/components/landing/HashAuthRedirect';
 export const metadata: Metadata = {
   metadataBase: new URL('https://zappiq.com.br'),
   title: {
-    default: 'ZappIQ · IA para WhatsApp sem setup fee',
+    default: 'ZappIQ · IA que atende e vende no WhatsApp e Instagram',
     template: '%s · ZappIQ',
   },
-  description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 14 dias grátis para testar ZappIQ, plataforma de IA conversacional para WhatsApp Business.',
-  keywords: 'automação whatsapp, chatbot ia, whatsapp business api, crm whatsapp, atendimento automatizado, pulse ai, zappiq',
+  description: 'A Iza atende, vende e faz campanha no WhatsApp e Instagram. Você aprova, ela executa. Operação autônoma de atendimento e vendas, 14 dias grátis, sem setup fee.',
+  keywords: 'agente de ia para whatsapp, ia que atende e vende no whatsapp, operação autônoma de atendimento e vendas, ia para whatsapp e instagram, crm no whatsapp, atendimento e vendas com ia, iza, zappiq',
   openGraph: {
     type: 'website',
     locale: 'pt_BR',
     url: 'https://zappiq.com.br',
     siteName: 'ZappIQ',
-    title: 'ZappIQ · IA para WhatsApp sem setup fee',
-    description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 14 dias grátis para testar ZappIQ.',
+    title: 'ZappIQ · IA que atende e vende no WhatsApp e Instagram',
+    description: 'A Iza atende, vende e faz campanha no WhatsApp e Instagram. Você aprova, ela executa. 14 dias grátis, sem setup fee.',
     images: [
       {
         url: '/og-default.png',
@@ -38,8 +38,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ZappIQ · IA para WhatsApp sem setup fee',
-    description: 'Você treina sua IA sozinho, sem consultor, sem setup fee. 14 dias grátis para testar ZappIQ.',
+    title: 'ZappIQ · IA que atende e vende no WhatsApp e Instagram',
+    description: 'A Iza atende, vende e faz campanha no WhatsApp e Instagram. Você aprova, ela executa. 14 dias grátis, sem setup fee.',
     images: ['/og-default.png'],
   },
   alternates: {
@@ -49,7 +49,7 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
-  // Prova de posse do dominio no Google Search Console — pre-requisito do
+  // Prova de posse do dominio no Google Search Console: pre-requisito do
   // "Branding status" na verificacao do app OAuth (Agendamento/Google
   // Calendar). Gera <meta name="google-site-verification" ...> no <head>.
   verification: {
@@ -64,7 +64,7 @@ const schemaOrg = {
   name: 'ZappIQ',
   url: 'https://zappiq.com.br',
   logo: 'https://zappiq.com.br/logo-positivo.svg',
-  description: 'Plataforma SaaS de IA conversacional para WhatsApp Business. Automação de atendimento, vendas e campanhas para PMEs brasileiras.',
+  description: 'Plataforma de operação autônoma de atendimento e vendas no WhatsApp e Instagram. A IA atende, vende e faz campanha; você aprova, ela executa. Para PMEs brasileiras.',
   foundingDate: '2025',
   address: {
     '@type': 'PostalAddress',
@@ -81,16 +81,10 @@ const schemaSoftware = {
   operatingSystem: 'Web',
   offers: {
     '@type': 'AggregateOffer',
-    lowPrice: '297',
-    highPrice: '997',
+    lowPrice: '247',
+    highPrice: '1497',
     priceCurrency: 'BRL',
     offerCount: 3,
-  },
-  aggregateRating: {
-    '@type': 'AggregateRating',
-    ratingValue: '4.8',
-    ratingCount: '500',
-    bestRating: '5',
   },
 };
 

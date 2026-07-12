@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * IzaChatStream — V5.3 pré-lançamento
+ * IzaChatStream: V5.3 pré-lançamento
  * --------------------------------------------------------------------------
  * Conversa animada da Iza atendendo a clínica "Sorriso & Cia" no WhatsApp.
  * Cenário consistente com a home V5 (mesma persona/contexto).

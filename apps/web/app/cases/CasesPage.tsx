@@ -5,7 +5,7 @@ import { ArrowRight, Clock, Stethoscope, ShoppingBag, Wrench, GraduationCap, Bui
 import { PublicLayout } from '../../components/landing/PublicLayout';
 
 /* ═══════════════════════════════════════════════════════════════════════
- * CasesPage — versão pré-launch (honesta)
+ * CasesPage: versão pré-launch (honesta)
  *
  * Em vez de cases fictícios com métricas inventadas, mostramos:
  *   1. Segmentos-alvo com os problemas que resolvemos (sem fabricar dados)
@@ -115,7 +115,7 @@ export function CasesPage() {
         </div>
       </div>
 
-      {/* Founder Case — convite */}
+      {/* Founder Case: convite */}
       <section className="py-16 bg-[#F8FAF9]">
         <div className="max-w-3xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 bg-secondary-100 text-secondary-700 text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full mb-6">

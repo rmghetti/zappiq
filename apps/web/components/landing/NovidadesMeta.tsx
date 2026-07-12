@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * NovidadesMeta — conteúdo da página /novidades-meta
+ * NovidadesMeta: conteúdo da página /novidades-meta
  * --------------------------------------------------------------------------
  * Fonte: Conversations Brasil 2026 (10/jun) + GA global do Meta Business
  * Agent (3/jun/2026). Sem preços/tiers por decisão comercial (2026-06-10).
@@ -53,7 +53,7 @@ const NOVIDADES: Novidade[] = [
     resumo:
       'IA nativa da Meta que responde, recomenda produtos do catálogo, entende áudio, agenda e conduz vendas.',
     detalhe: [
-      'É o agente de IA nativo da Meta para empresas, disponível no WhatsApp, Instagram e Messenger. Ele aprende com o site, as redes e o catálogo da sua marca para responder no seu tom, recomendar produtos, agendar compromissos, qualificar clientes e conduzir vendas — inclusive entendendo mensagens de áudio, essencial no Brasil.',
+      'É o agente de IA nativo da Meta para empresas, disponível no WhatsApp, Instagram e Messenger. Ele aprende com o site, as redes e o catálogo da sua marca para responder no seu tom, recomendar produtos, agendar compromissos, qualificar clientes e conduzir vendas, inclusive entendendo mensagens de áudio, essencial no Brasil.',
       'No evento da Meta, marcas demonstraram o agente recomendando produtos com memória de preferências ("da última vez você escolheu um SUV") e fechando pagamentos sem sair da conversa.',
     ],
     como: [
@@ -74,11 +74,11 @@ const NOVIDADES: Novidade[] = [
     resumo:
       'Camada enterprise para agentes que executam ações nos seus sistemas: pedidos, cobrança, agendamento.',
     detalhe: [
-      'A plataforma para construir e implantar agentes em escala, conectados aos sistemas da sua empresa — e-commerce, CRM, ERP, atendimento. O agente deixa de só responder e passa a executar ações: consultar pedidos, gerar cobranças, agendar serviços.',
-      'No palco do Conversations Brasil, a Meta validou o modelo agente-a-agente: o agente nativo da Meta trabalhando em conjunto com a IA própria da empresa — cada um no fluxo em que é melhor.',
+      'A plataforma para construir e implantar agentes em escala, conectados aos sistemas da sua empresa (e-commerce, CRM, ERP, atendimento). O agente deixa de só responder e passa a executar ações: consultar pedidos, gerar cobranças, agendar serviços.',
+      'No palco do Conversations Brasil, a Meta validou o modelo agente-a-agente: o agente nativo da Meta trabalhando em conjunto com a IA própria da empresa, cada um no fluxo em que é melhor.',
     ],
     como: [
-      'Orquestramos quem responde cada conversa: agente da Meta, IA da ZappIQ ou seu time — por intenção e valor',
+      'Orquestramos quem responde cada conversa: agente da Meta, IA da ZappIQ ou seu time, por intenção e valor',
       'Conectamos o agente aos seus sistemas (e-commerce, CRM, ERP) com segurança e governança',
       'Projetos piloto em andamento com clientes e em frente de colaboração com a Meta',
       'Governança completa: LGPD, trilha de auditoria e controle de custos',
@@ -95,7 +95,7 @@ const NOVIDADES: Novidade[] = [
     resumo:
       'Sua marca pesquisável pelo nome no WhatsApp, sem depender do número de telefone.',
     detalhe: [
-      'O WhatsApp está ganhando usernames (@suamarca) e uma busca por nome com IA. Na prática, o WhatsApp vira um diretório de negócios: quem o cliente encontra primeiro, vende primeiro. Empresas podem reivindicar seu @ a partir de junho — com prioridade para nomes e contas já verificadas.',
+      'O WhatsApp está ganhando usernames (@suamarca) e uma busca por nome com IA. Na prática, o WhatsApp vira um diretório de negócios: quem o cliente encontra primeiro, vende primeiro. Empresas podem reivindicar seu @ a partir de junho, com prioridade para nomes e contas já verificadas.',
       'Junto vem o BSUID, um novo identificador de cliente que substitui o telefone em parte das integrações. Quem não se adequar pode ter fluxos de atendimento e de anúncios interrompidos sem perceber.',
     ],
     como: [
@@ -114,10 +114,10 @@ const NOVIDADES: Novidade[] = [
     title: 'Marketing Messages API',
     tag: 'Entrega otimizada por IA da Meta',
     resumo:
-      'Mensagens de marketing otimizadas pela IA da Meta — mais alcance para campanhas de alto engajamento.',
+      'Mensagens de marketing otimizadas pela IA da Meta: mais alcance para campanhas de alto engajamento.',
     detalhe: [
-      'A nova API dedicada a mensagens de marketing usa a IA da Meta para priorizar a entrega a quem tem mais chance de engajar — em teste oficial, mensagens de alto engajamento alcançaram até 9% mais pessoas. Vêm junto otimizações criativas automáticas (no estilo dos anúncios Advantage+) e novos formatos: álbum, GIF, tag de produto.',
-      'O outro lado: a Meta passa a pausar templates com baixa leitura ou feedback negativo. Campanha mal cuidada agora significa entrega bloqueada — gestão de qualidade virou obrigação.',
+      'A nova API dedicada a mensagens de marketing usa a IA da Meta para priorizar a entrega a quem tem mais chance de engajar. Em teste oficial, mensagens de alto engajamento alcançaram até 9% mais pessoas. Vêm junto otimizações criativas automáticas (no estilo dos anúncios Advantage+) e novos formatos: álbum, GIF, tag de produto.',
+      'O outro lado: a Meta passa a pausar templates com baixa leitura ou feedback negativo. Campanha mal cuidada agora significa entrega bloqueada. Gestão de qualidade virou obrigação.',
     ],
     como: [
       'Migramos seus envios de marketing para a nova API, mantendo seu número e seus templates',
@@ -135,14 +135,14 @@ const NOVIDADES: Novidade[] = [
     title: 'Pagamentos sem atrito',
     tag: 'Disponível no Brasil',
     resumo:
-      'Pix com um toque, cartão salvo em 1 clique, boleto e link de pagamento — o checkout inteiro na conversa.',
+      'Pix com um toque, cartão salvo em 1 clique, boleto e link de pagamento, o checkout inteiro na conversa.',
     detalhe: [
-      'O WhatsApp agora cobre os principais trilhos de pagamento do Brasil dentro da conversa: Pix estruturado com botão de copiar (adeus, código cru de 200 caracteres), Pix com redirecionamento para o app do banco, cartão salvo em 1 clique, boleto e link de pagamento. A Meta não processa o pagamento — você continua com seu meio de pagamento atual.',
+      'O WhatsApp agora cobre os principais trilhos de pagamento do Brasil dentro da conversa: Pix estruturado com botão de copiar (adeus, código cru de 200 caracteres), Pix com redirecionamento para o app do banco, cartão salvo em 1 clique, boleto e link de pagamento. A Meta não processa o pagamento, você continua com seu meio de pagamento atual.',
       'No evento, o case de uma grande varejista mostrou 75% dos pagamentos do canal feitos por Pix copia-e-cola dentro do próprio WhatsApp.',
     ],
     como: [
       'Ativamos o checkout dentro da conversa, integrado ao seu gateway/PSP atual',
-      'Pedido estruturado com botão de pagamento — mais conversão, menos abandono',
+      'Pedido estruturado com botão de pagamento, mais conversão, menos abandono',
       'Recuperação automática de Pix não pago e de carrinho abandonado',
       'Cada venda amarrada à conversa que a gerou, no seu dashboard',
     ],
@@ -158,12 +158,12 @@ const NOVIDADES: Novidade[] = [
     resumo:
       'A estratégia oficial da Meta de janelas de conversa: a mensagem certa, na janela certa, pelo menor custo.',
     detalhe: [
-      'A Meta apresentou no evento sua estratégia recomendada em duas etapas. Engajar: abrir a janela de conversa com interações de alto valor — anúncios que levam ao WhatsApp (janela de 72h grátis) e mensagens de utilidade como confirmação de pedido e aviso de entrega (janela de 24h). Converter: aproveitar a janela aberta para enviar a oferta certa — o follow-up "Plus One": venda cruzada, upgrade ou reengajamento, no momento de maior atenção do cliente.',
+      'A Meta apresentou no evento sua estratégia recomendada em duas etapas. Engajar: abrir a janela de conversa com interações de alto valor, como anúncios que levam ao WhatsApp (janela de 72h grátis) e mensagens de utilidade como confirmação de pedido e aviso de entrega (janela de 24h). Converter: aproveitar a janela aberta para enviar a oferta certa, o follow-up "Plus One": venda cruzada, upgrade ou reengajamento, no momento de maior atenção do cliente.',
       'Resultado: mais conversão por real investido, porque o marketing só dispara para quem já está na conversa.',
     ],
     como: [
       'Mapeamos os eventos do seu negócio que abrem janelas (pedido, envio, agendamento, fatura)',
-      'Automatizamos o follow-up contextual dentro da janela aberta — sem disparo às cegas',
+      'Automatizamos o follow-up contextual dentro da janela aberta, sem disparo às cegas',
       'Desenhamos seus fluxos para usar as janelas gratuitas e as categorias mais baratas primeiro',
       'Você acompanha custo por conversa e receita gerada por cada régua',
     ],
@@ -175,15 +175,15 @@ const NOVIDADES: Novidade[] = [
 const FAQS = [
   {
     q: 'O agente da Meta é grátis. Por que preciso da ZappIQ?',
-    a: 'O motor de IA é grátis — mas ele só vende bem com as camadas que a Meta não entrega: conhecimento do seu negócio, catálogo curado, integrações, regras de transbordo para humanos, testes e medição de receita. É exatamente isso que implementamos, operamos e otimizamos.',
+    a: 'O motor de IA é grátis, mas ele só vende bem com as camadas que a Meta não entrega: conhecimento do seu negócio, catálogo curado, integrações, regras de transbordo para humanos, testes e medição de receita. É exatamente isso que implementamos, operamos e otimizamos.',
   },
   {
     q: 'O Business Agent substitui minha operação atual de WhatsApp?',
-    a: 'Não. A própria Meta posiciona o agente como complemento à plataforma atual. O padrão vencedor mostrado no evento é híbrido: a IA qualifica e resolve o volume, seu time fecha o que vale mais — com tudo medido.',
+    a: 'Não. A própria Meta posiciona o agente como complemento à plataforma atual. O padrão vencedor mostrado no evento é híbrido: a IA qualifica e resolve o volume, seu time fecha o que vale mais, com tudo medido.',
   },
   {
     q: 'O que acontece se eu não fizer nada em junho?',
-    a: 'Dois riscos: outra empresa pode reivindicar um @username melhor que o seu, e integrações que dependem do telefone do cliente podem quebrar silenciosamente com o novo identificador (BSUID). Os dois têm solução simples — se feita agora.',
+    a: 'Dois riscos: outra empresa pode reivindicar um @username melhor que o seu, e integrações que dependem do telefone do cliente podem quebrar silenciosamente com o novo identificador (BSUID). Os dois têm solução simples, se feita agora.',
   },
   {
     q: 'E a LGPD?',
@@ -191,7 +191,7 @@ const FAQS = [
   },
   {
     q: 'Quanto custa a mensagem no WhatsApp?',
-    a: 'Repassamos a tarifa oficial da Meta com transparência total — zero markup. E desenhamos seus fluxos para usar as janelas gratuitas e as categorias mais baratas antes de qualquer envio pago.',
+    a: 'Repassamos a tarifa oficial da Meta com transparência total, zero markup. E desenhamos seus fluxos para usar as janelas gratuitas e as categorias mais baratas antes de qualquer envio pago.',
   },
 ];
 
@@ -240,8 +240,8 @@ export function NovidadesMeta() {
             <span className="text-emerald-400">A ZappIQ chegou primeiro.</span>
           </h1>
           <p className="mt-5 text-lg text-white/70 max-w-2xl leading-relaxed">
-            A Meta lançou o <strong className="text-white">Business Agent</strong> — um vendedor de
-            IA nativo no WhatsApp, Instagram e Messenger — além de usernames, busca por nome e
+            A Meta lançou o <strong className="text-white">Business Agent</strong>, um vendedor de
+            IA nativo no WhatsApp, Instagram e Messenger, além de usernames, busca por nome e
             pagamentos sem atrito. A ZappIQ é{' '}
             <strong className="text-white">uma das primeiras plataformas da América Latina</strong>{' '}
             a levar essas novidades ao mercado, com{' '}
@@ -278,7 +278,7 @@ export function NovidadesMeta() {
       <section id="novidades" className="py-20 bg-bg-soft">
         <div className="zappiq-wrap">
           <h2 className="text-3xl lg:text-4xl font-bold text-ink max-w-2xl">
-            O que a Meta acabou de lançar — e o que a ZappIQ já faz com isso
+            O que a Meta acabou de lançar, e o que a ZappIQ já faz com isso
           </h2>
           <p className="mt-3 text-muted max-w-2xl">
             Direto do Conversations Brasil 2026: as novidades que mudam como sua empresa vende por
@@ -332,19 +332,19 @@ export function NovidadesMeta() {
                 icon: Rocket,
                 k: 'Primeira onda',
                 t: 'Uma das primeiras da América Latina',
-                d: 'O Meta Business Agent foi lançado globalmente em 3 de junho. A ZappIQ esteve no Conversations Brasil 2026 e iniciou imediatamente a incorporação dos lançamentos à plataforma — antes da primeira onda virar fila.',
+                d: 'O Meta Business Agent foi lançado globalmente em 3 de junho. A ZappIQ esteve no Conversations Brasil 2026 e iniciou imediatamente a incorporação dos lançamentos à plataforma, antes da primeira onda virar fila.',
               },
               {
                 icon: Users,
                 k: 'Pilotos ativos',
                 t: 'Projetos piloto com clientes reais',
-                d: 'Estamos ativando o Business Agent em operações de clientes selecionados, por segmento, com medição de resultado desde o primeiro dia — conversão, receita atribuída e satisfação.',
+                d: 'Estamos ativando o Business Agent em operações de clientes selecionados, por segmento, com medição de resultado desde o primeiro dia: conversão, receita atribuída e satisfação.',
               },
               {
                 icon: Handshake,
                 k: 'Junto à Meta',
                 t: 'Trabalho direto com a Meta',
-                d: 'Atuamos com integração direta à API oficial e em frente de colaboração com a Meta para as novas capacidades — incluindo a preparação para usernames, BSUID e a plataforma enterprise de agentes.',
+                d: 'Atuamos com integração direta à API oficial e em frente de colaboração com a Meta para as novas capacidades, incluindo a preparação para usernames, BSUID e a plataforma enterprise de agentes.',
               },
             ].map((p) => {
               const Icon = p.icon;
@@ -418,8 +418,8 @@ export function NovidadesMeta() {
             A conversa é a nova interface de negócios. Seu negócio está pronto para ela?
           </h2>
           <p className="mt-4 text-white/85 max-w-xl mx-auto">
-            Diagnóstico gratuito de 20 minutos: onde sua operação está na régua da Meta — e o plano
-            para chegar à frente. Quem te atende é a Iza, a IA oficial da ZappIQ — prova pública, ao
+            Diagnóstico gratuito de 20 minutos: onde sua operação está na régua da Meta, e o plano
+            para chegar à frente. Quem te atende é a Iza, a IA oficial da ZappIQ, prova pública, ao
             vivo.
           </p>
           <a

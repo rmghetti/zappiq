@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Navbar — Design V4 (Chatbase-style · Geist + gradient g→b→p)
+ * Navbar: Design V4 (Chatbase-style · Geist + gradient g→b→p)
  * --------------------------------------------------------------------------
  * Minimalista: wordmark ZappIQ, 7 links centrais, CTA dual (Entrar + Começar).
  * Sticky com backdrop-blur. Preserva mega menu de produtos (8 módulos) e
@@ -27,19 +27,20 @@ import {
 } from 'lucide-react';
 
 const PRODUCTS = [
-  { icon: Inbox,       name: 'Central de conversas',    desc: 'Todas as mensagens num só inbox',              href: '#produtos' },
-  { icon: Brain,       name: 'Iza · IA 24/7',           desc: 'Agente inteligente que atende em texto e voz',  href: '#produtos' },
-  { icon: Megaphone,   name: 'Campanhas WhatsApp',      desc: 'Disparos em massa com templates aprovados',     href: '#produtos' },
+  { icon: Inbox,       name: 'Central de conversas',    desc: 'Todas as mensagens num só inbox',              href: '#plataforma-autonoma' },
+  { icon: Brain,       name: 'Iza · IA 24/7',           desc: 'Agente inteligente que atende em texto e voz',  href: '#iza' },
+  { icon: Megaphone,   name: 'Campanhas WhatsApp',      desc: 'Disparos em massa com templates aprovados',     href: '#plataforma-autonoma' },
   { icon: BarChart3,   name: 'Dashboard gerencial',     desc: 'Métricas, previsão e alertas do seu negócio',   href: '/observabilidade' },
-  { icon: Users,       name: 'CRM no WhatsApp',         desc: 'Histórico do cliente em um só lugar',           href: '#produtos' },
-  { icon: Workflow,    name: 'Automações visuais',      desc: 'Arraste e conecte — sem programar',             href: '#produtos' },
-  { icon: Headphones,  name: 'Copiloto para atendentes', desc: 'A IA sugere respostas em tempo real',          href: '#produtos' },
+  { icon: Users,       name: 'CRM no WhatsApp',         desc: 'Histórico do cliente em um só lugar',           href: '#plataforma-autonoma' },
+  { icon: Workflow,    name: 'Automações visuais',      desc: 'Arraste e conecte, sem programar',             href: '#maestro' },
+  { icon: Headphones,  name: 'Copiloto para atendentes', desc: 'A IA sugere respostas em tempo real',          href: '#agent-quality' },
   { icon: ShieldCheck, name: 'Conformidade LGPD',       desc: 'Privacidade e direitos do titular resolvidos',  href: '/lgpd' },
 ];
 
 const NAV_ITEMS: { label: string; href: string; mega?: boolean }[] = [
-  { label: 'Produtos',          href: '#produtos', mega: true },
+  { label: 'Produtos',          href: '#plataforma-autonoma', mega: true },
   { label: 'Preços',            href: '#precos' },
+  { label: 'Meu plano ideal',   href: '/diagnostico' },
   { label: 'Conectar WhatsApp', href: '/conectar-whatsapp' },
   { label: 'Cases',             href: '/cases' },
   { label: 'Blog',              href: '/blog' },
@@ -89,12 +90,12 @@ export function Navbar() {
       style={{ top: 'var(--zappiq-banner-h, 0px)' }}
     >
       <div className="zappiq-wrap flex items-center justify-between h-[68px]">
-        {/* Logo ZappIQ + Patch MACHIA (selo "A Platform MACHIA Company" — dark variant com borda preta).
+        {/* Logo ZappIQ + Patch MACHIA (selo "A Platform MACHIA Company", dark variant com borda preta).
             Gap reduzido (8-10px) sem divider pra cobrand mais coeso e harmonico. */}
         <Link
           href="/"
           className="flex items-center gap-2 lg:gap-2.5"
-          aria-label="ZappIQ — uma plataforma da MACHIA"
+          aria-label="ZappIQ, uma plataforma da MACHIA"
         >
           <Image
             src="/logo-positivo.svg"
@@ -163,7 +164,7 @@ export function Navbar() {
                     })}
                     <div className="col-span-2 border-t border-line pt-3 mt-1">
                       <a
-                        href="#produtos"
+                        href="#plataforma-autonoma"
                         onClick={() => setMegaOpen(false)}
                         className="inline-flex items-center gap-1 text-[13px] font-medium text-accent hover:underline"
                       >

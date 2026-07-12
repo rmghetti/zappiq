@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
- * PrelaunchPage — V5.3
+ * PrelaunchPage: V5.3
  * --------------------------------------------------------------------------
  * Página de pré-lançamento (teaser) da ZappIQ.
  * Live até 04/05/2026. Depois desse dia, LAUNCH_MODE=live no Vercel

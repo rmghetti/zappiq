@@ -1,12 +1,12 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /login — PR #102 (Auth Login Resilience)
+ * /login: PR #102 (Auth Login Resilience)
  * --------------------------------------------------------------------------
  * Refactor pra 3 caminhos refletindo a realidade do produto (passwordless-first):
- *   1. Continuar com Google (OAuth) — pra quem cadastrou via Google
- *   2. Receber link mágico no e-mail — funciona pra QUALQUER cliente
- *   3. Email + Senha (collapse "Entrar com senha") — fallback opcional
+ *   1. Continuar com Google (OAuth): pra quem cadastrou via Google
+ *   2. Receber link mágico no e-mail: funciona pra QUALQUER cliente
+ *   3. Email + Senha (collapse "Entrar com senha"): fallback opcional
  *
  * P0 fixes:
  *   - P0 #1 do audit: faltava Google no /login
@@ -37,7 +37,7 @@ function LoginInner() {
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // PR #103.4 — Banner explicativo quando vem do /onboarding com 409
+  // PR #103.4: Banner explicativo quando vem do /onboarding com 409
   // (cliente JA tinha conta e tentou completar onboarding de novo).
   useEffect(() => {
     const reason = search.get('reason');
@@ -157,7 +157,7 @@ function LoginInner() {
           <Link
             href="/"
             className="inline-flex items-center justify-center gap-2 lg:gap-2.5 mb-3"
-            aria-label="ZappIQ — uma plataforma da MACHIA"
+            aria-label="ZappIQ, uma plataforma da MACHIA"
           >
             <Logo variant="positivo" height={48} />
             <Image
@@ -300,8 +300,8 @@ function LoginInner() {
   );
 }
 
-// PR #103.4 — Suspense boundary obrigatório porque LoginInner usa useSearchParams.
-// Mesmo padrão do /auth/login-callback — Next.js 14 App Router exige.
+// PR #103.4: Suspense boundary obrigatório porque LoginInner usa useSearchParams.
+// Mesmo padrão do /auth/login-callback: Next.js 14 App Router exige.
 export default function LoginPage() {
   return (
     <Suspense fallback={

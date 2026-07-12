@@ -4,7 +4,7 @@ import { PublicLayout } from '../../../components/landing/PublicLayout';
 import { COMPETITOR_BENCHMARKS } from '../../../content/competitor-benchmarks';
 
 export const metadata: Metadata = {
-  title: 'Metodologia de Benchmarks Concorrentes — ZappIQ',
+  title: 'Metodologia de Benchmarks Concorrentes | ZappIQ',
   description:
     'Metodologia pública dos benchmarks entre ZappIQ e concorrentes. Fonte, data de captura, status de verificação e política de atualização.',
 };
@@ -74,7 +74,7 @@ export default function BenchmarksPage() {
                   <td className="px-4 py-3 font-semibold">{b.competitor}</td>
                   <td className="px-4 py-3">{b.feature}</td>
                   <td className="px-4 py-3 font-mono text-xs">{b.deltaSummary}</td>
-                  <td className="px-4 py-3 text-gray-500">{b.capturedAt ?? '—'}</td>
+                  <td className="px-4 py-3 text-gray-500">{b.capturedAt ?? 'n/a'}</td>
                   <td className="px-4 py-3">
                     {b.verifiedBy ? (
                       <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5 text-xs font-medium">

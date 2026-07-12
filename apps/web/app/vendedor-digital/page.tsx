@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /vendedor-digital — Landing pública do manifesto V4
+ * /vendedor-digital: Landing pública do manifesto V4
  *
  * Hero forte + 6 cases mensuraveis (placeholders editaveis) + calculadora ROI
  * (reusa componente existente) + CTA Lite trial.
@@ -82,7 +82,7 @@ export default function VendedorDigitalPage() {
               <span className="text-grad">O comeco do vendedor digital.</span>
             </h1>
             <p className="text-[18px] lg:text-[20px] text-muted leading-[1.5] mb-10 max-w-3xl mx-auto">
-              Em 2026, responder rápido nao basta mais. Os melhores agentes vendem, qualificam, agendam e fecham —
+              Em 2026, responder rápido nao basta mais. Os melhores agentes vendem, qualificam, agendam e fecham,
               com KPI auditavel e <strong className="text-ink">pricing opcional por resultado</strong>.
               A Iza ja faz isso pra centenas de PMEs brasileiras.
             </p>
@@ -121,13 +121,13 @@ export default function VendedorDigitalPage() {
               {
                 icon: <Target size={22} />,
                 title: 'Qualifica antes de passar',
-                desc: 'A Iza nao so responde — ela faz BANT (orcamento, autoridade, necessidade, prazo) e marca lead score 0-100. Vendedor humano so atende quem ja esta próximo de fechar.',
+                desc: 'A Iza nao so responde, ela faz BANT (orcamento, autoridade, necessidade, prazo) e marca lead score 0-100. Vendedor humano so atende quem ja esta próximo de fechar.',
                 color: 'text-primary-600 bg-primary-50',
               },
               {
                 icon: <BarChart3 size={22} />,
                 title: 'KPI auditavel real-time',
-                desc: 'Veja em tempo real: msgs trocadas, leads qualificados, oportunidades criadas, ticket medio gerado. Nada de "achismo" — dado bruto pra decidir investimento.',
+                desc: 'Veja em tempo real: msgs trocadas, leads qualificados, oportunidades criadas, ticket medio gerado. Nada de "achismo", dado bruto pra decidir investimento.',
                 color: 'text-emerald-600 bg-emerald-50',
               },
               {
@@ -188,7 +188,7 @@ export default function VendedorDigitalPage() {
                 </div>
 
                 <blockquote className="text-[13px] text-muted italic leading-relaxed mb-3">"{c.quote}"</blockquote>
-                <p className="text-[11px] text-ink font-medium">— {c.author}</p>
+                <p className="text-[11px] text-ink font-medium">{c.author}</p>
               </div>
             ))}
           </div>

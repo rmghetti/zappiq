@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * /billing/success — página de retorno do Stripe Checkout.
+ * /billing/success: página de retorno do Stripe Checkout.
  * ------------------------------------------------------------------
  * Antes esta rota NÃO existia: o success_url do Checkout apontava para
  * /billing/success?session_id=... e o Next.js devolvia 404 ("This page
@@ -11,7 +11,7 @@
  * lógica do webhook) e, com o cliente já reconhecido como ATIVO, leva ao
  * painel. Resiliente a atraso de webhook: tenta o confirm, faz fallback
  * pra polling do status da assinatura, e sempre oferece o botão manual
- * pro painel — nunca mais uma tela morta.
+ * pro painel. Nunca mais uma tela morta.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -63,7 +63,7 @@ export default function BillingSuccessPage() {
             if (d?.active) return true;
           }
         } catch {
-          /* rede — tenta o fallback */
+          /* rede: tenta o fallback */
         }
       }
 
@@ -89,7 +89,7 @@ export default function BillingSuccessPage() {
         return;
       }
       if (attempts >= MAX_ATTEMPTS) {
-        // Não confirmou a tempo (webhook ainda processando) — manda pro painel
+        // Não confirmou a tempo (webhook ainda processando), manda pro painel
         // mesmo assim; a ativação materializa em segundos e o painel reflete.
         goToDashboard();
         return;

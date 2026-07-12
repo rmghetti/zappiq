@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * HashAuthRedirect — Detecta tokens de auth Supabase no hash da URL
+ * HashAuthRedirect: Detecta tokens de auth Supabase no hash da URL
  * (implicit flow Confirm Signup, Magic Link, Password Recovery, OAuth) e
  * redireciona pra /cadastro?verified=1 mantendo o hash.
  *
@@ -12,7 +12,7 @@
  *
  * Comportamento (PR #91 atualizado):
  * - Detecta `#access_token=...&type=signup|magiclink|recovery` (Magic Link path)
- * - Detecta `#access_token=...&provider_token=...` (OAuth path — Google etc)
+ * - Detecta `#access_token=...&provider_token=...` (OAuth path, Google etc)
  * - Se já está em /cadastro, NÃO redireciona (deixa Cadastro.tsx processar)
  * - Senão, redireciona pra /cadastro?verified=1#hash (preserva tokens)
  */
@@ -32,7 +32,7 @@ export function HashAuthRedirect() {
 
     // Aceita 3 cenários auth conhecidos:
     //  1. type=signup|magiclink|recovery (Confirm Signup, Magic Link, Recovery)
-    //  2. provider_token presente (OAuth implicit flow — Google etc)
+    //  2. provider_token presente (OAuth implicit flow, Google etc)
     const isKnownAuthFlow =
       (type !== null && ['signup', 'magiclink', 'recovery'].includes(type)) ||
       providerToken !== null;

@@ -1,13 +1,13 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * AnnouncementBanner — Top-of-page ribbon
+ * AnnouncementBanner: Top-of-page ribbon
  *
  * V3 (10/06/2026): Pivô pra anunciar os lançamentos Meta (Conversations
  * Brasil 2026): Meta Business Agent + usernames + pagamentos. Link pra
  * /novidades-meta. Pioneirismo LATAM com pilotos junto a clientes e à Meta.
  *
- * V2 (17/05/2026): Pivô pra anunciar Instagram Direct em rollout — narrativa
+ * V2 (17/05/2026): Pivô pra anunciar Instagram Direct em rollout, narrativa
  * multichannel reforçada pra demos enterprise/investidores.
  *
  * V1 (29/04/2026): Meta Ads AI Connectors first-mover LATAM (PR #96).
@@ -65,7 +65,7 @@ export function AnnouncementBanner() {
     try {
       window.localStorage.setItem(STORAGE_KEY, '1');
     } catch {
-      // localStorage bloqueado — só some na sessão atual, ok
+      // localStorage bloqueado, só some na sessão atual, ok
     }
   };
 
@@ -89,7 +89,7 @@ export function AnnouncementBanner() {
             <strong className="text-white uppercase tracking-wide">Meta Business Agent</strong>{' '}
             <span className="text-white/85">chegou.</span>{' '}
             <span className="text-emerald-300">A ZappIQ é uma das primeiras da América Latina a implementar</span>
-            <span className="hidden md:inline text-white/85"> — com pilotos junto a clientes e à Meta</span>
+            <span className="hidden md:inline text-white/85">, com pilotos junto a clientes e à Meta</span>
             <span className="hidden lg:inline text-white/85">. Usernames, busca por nome e pagamentos no chat</span>
             <span className="text-white/60">.</span>
           </p>

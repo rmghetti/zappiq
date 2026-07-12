@@ -97,7 +97,7 @@ export function RecursosPage() {
       setErrors(e);
       return;
     }
-    /* PLACEHOLDER: substituir por dado real — enviar para backend / CRM */
+    /* PLACEHOLDER: substituir por dado real: enviar para backend / CRM */
     setSubmitted(true);
   }
 
@@ -111,7 +111,7 @@ export function RecursosPage() {
             Materiais para acelerar sua automação
           </h1>
           <p className="text-lg text-gray-500">
-            E-books, templates, planilhas e checklists — tudo gratis. Baixe e comece a aplicar hoje.
+            E-books, templates, planilhas e checklists, tudo gratis. Baixe e comece a aplicar hoje.
           </p>
         </div>
       </div>
@@ -123,7 +123,7 @@ export function RecursosPage() {
             <div key={r.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow flex flex-col">
               {/* Mockup image placeholder */}
               <div className="h-48 bg-gradient-to-br from-[#F8FAF9] to-gray-100 flex items-center justify-center">
-                {/* PLACEHOLDER: substituir por dado real — imagem do material */}
+                {/* PLACEHOLDER: substituir por dado real: imagem do material */}
                 <div className={`w-16 h-16 rounded-2xl ${r.color} flex items-center justify-center`}>
                   {r.icon}
                 </div>

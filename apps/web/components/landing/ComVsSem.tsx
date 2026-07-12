@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * ComVsSem — Seção standalone V5 (promovida de dentro do Pricing)
+ * ComVsSem: Seção standalone V5 (promovida de dentro do Pricing)
  * --------------------------------------------------------------------------
  * Comparativo lado-a-lado: "Como é hoje" vs "Como fica com ZappIQ".
  * Posição: entre PorQueZappIQ e OnboardingZero. Tom "diga na lata",
@@ -11,7 +11,7 @@
 import { X as XIcon, Check } from 'lucide-react';
 import { listPlans } from '@zappiq/shared';
 
-const STARTER_PRICE = listPlans()[0]?.priceMonthly ?? 197;
+const LITE_PRICE = listPlans()[0]?.priceMonthly ?? 247;
 
 const COMPARISON = [
   {
@@ -20,7 +20,7 @@ const COMPARISON = [
   },
   {
     without: `R$ 15.000 por mês só de folha`,
-    with: `A partir de R$ ${STARTER_PRICE} por mês`,
+    with: `A partir de R$ ${LITE_PRICE} por mês`,
   },
   {
     without: 'Cliente espera 2 horas pra ter resposta',
@@ -44,7 +44,7 @@ export function ComVsSem() {
           </h2>
           <p className="text-[16px] lg:text-[17px] text-muted leading-relaxed">
             A conta é simples. Menos folha, menos espera, mais venda. A gente não
-            inventou mágica — só tirou o atrito do caminho.
+            inventou mágica, só tirou o atrito do caminho.
           </p>
         </div>
 

@@ -38,7 +38,7 @@ const SCENARIOS = [
       { type: 'out', text: 'Olá! Avaliação diagnóstica: R$ 80 (abate no serviço) 🔧\n\nHorários disponíveis amanhã:\n🕐 8h\n🕐 10h30\n🕐 14h\n\nQual prefere?', ai: true, delay: 800 },
       { type: 'in', text: '10h30 por favor!', delay: 1200 },
       { type: 'typing', delay: 1500 },
-      { type: 'out', text: '✅ Confirmado! Amanhã, 10h30\n📍 Av. Brasil, 1500 — AutoTech\n\nTraga o documento do veículo. Até amanhã! 🚗', ai: true, delay: 800 },
+      { type: 'out', text: '✅ Confirmado! Amanhã, 10h30\n📍 Av. Brasil, 1500, AutoTech\n\nTraga o documento do veículo. Até amanhã! 🚗', ai: true, delay: 800 },
     ],
   },
 ];
@@ -190,11 +190,11 @@ export function HeroVariantA() {
             </div>
 
             <h1 className="font-display text-4xl lg:text-5xl xl:text-[3.5rem] font-extrabold text-gray-900 leading-[1.1] tracking-tight mb-6">
-              Você treina a IA do seu WhatsApp <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">em minutos</span> — sem consultor, sem setup pago.
+              Você treina a IA do seu WhatsApp <span className="bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">em minutos</span>, sem consultor, sem setup pago.
             </h1>
 
             <p className="text-lg text-gray-600 leading-relaxed max-w-xl mb-6">
-              Survey guiado, upload de documentos, Q&A editável. A IA aprende do seu jeito e <strong className="text-gray-900">ROI medido em tempo real</strong> no dashboard — tudo self-service. Enquanto concorrentes cobram de R$ 3.000 a R$ 15.000 só para você ligar, aqui você sai do zero ao ar hoje.
+              Survey guiado, upload de documentos, Q&A editável. A IA aprende do seu jeito e <strong className="text-gray-900">ROI medido em tempo real</strong> no dashboard, tudo self-service. Enquanto concorrentes cobram de R$ 3.000 a R$ 15.000 só para você ligar, aqui você sai do zero ao ar hoje.
             </p>
 
             <div className="flex flex-wrap gap-4 mb-6">
@@ -210,7 +210,7 @@ export function HeroVariantA() {
               <span className="w-8 h-8 rounded-full bg-primary-100 group-hover:bg-primary-200 flex items-center justify-center transition-colors">
                 <Play size={14} className="text-primary-600 ml-0.5" />
               </span>
-              Ver demo de 2 minutos — treinando a IA ao vivo
+              Ver demo de 2 minutos: treinando a IA ao vivo
             </button>
 
             <div className="flex flex-wrap gap-4 text-sm text-gray-600">

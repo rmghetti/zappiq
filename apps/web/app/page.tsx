@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
- * app/page.tsx — root dispatcher (V5.3)
+ * app/page.tsx: root dispatcher (V5.3)
  * --------------------------------------------------------------------------
  * Renderiza PrelaunchPage ou LandingPage com base na env LAUNCH_MODE.
  *   LAUNCH_MODE=prelaunch (default até 04/05/2026) → PrelaunchPage

@@ -9,9 +9,9 @@ const problems = [
     title: 'Mensagens sem resposta',
     desc: '60% dos clientes desistem se não recebem resposta em 1 hora',
     details: {
-      problem: 'Estudos mostram que 60% dos consumidores desistem da compra quando não recebem resposta em até 1 hora. À noite, fins de semana e feriados, seu WhatsApp fica mudo — e seus concorrentes ficam ativos.',
+      problem: 'Estudos mostram que 60% dos consumidores desistem da compra quando não recebem resposta em até 1 hora. À noite, fins de semana e feriados, seu WhatsApp fica mudo, e seus concorrentes ficam ativos.',
       examples: [
-        'Cliente manda mensagem às 22h pedindo orçamento — fica sem resposta até 9h do dia seguinte',
+        'Cliente manda mensagem às 22h pedindo orçamento, fica sem resposta até 9h do dia seguinte',
         'Leads de campanhas no Instagram chegam no WhatsApp e ninguém responde a tempo',
         'Clientes recorrentes pedem informações simples e esperam horas por uma resposta'
       ],
@@ -45,7 +45,7 @@ const problems = [
         'Nenhum controle sobre taxa de conversão ou tempo de resposta da equipe',
         'Leads entram e somem sem nenhum acompanhamento sistemático'
       ],
-      solution: 'O Radar Insights oferece dashboards completos com métricas de conversão, performance por agente, análise de sentimento e receita gerada — tudo em tempo real.',
+      solution: 'O Radar Insights oferece dashboards completos com métricas de conversão, performance por agente, análise de sentimento e receita gerada, tudo em tempo real.',
       metric: '3x mais conversões com dados acionáveis'
     }
   },
@@ -184,7 +184,7 @@ export function ProblemSolution() {
               {/* Chart + Conversations */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2 bg-gray-50 rounded-xl p-4 border border-gray-100">
-                  <p className="text-xs font-semibold text-gray-700 mb-3">Volume de conversas — últimos 7 dias</p>
+                  <p className="text-xs font-semibold text-gray-700 mb-3">Volume de conversas (últimos 7 dias)</p>
                   <div className="flex items-end gap-2 h-24">
                     {[45, 62, 55, 78, 92, 85, 100].map((h, i) => (
                       <div key={i} className="flex-1 flex flex-col items-center gap-1">

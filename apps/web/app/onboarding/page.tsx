@@ -299,7 +299,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // HOTFIX 2026-05-19 — Auth provider detectado em detectAndPrefillForm.
+  // HOTFIX 2026-05-19: Auth provider detectado em detectAndPrefillForm.
   // 'google'      = Google OAuth: cliente NUNCA define senha (loga sempre por Google)
   // 'magic_link'  = Magic Link: cliente DEVE definir senha forte no Step 0
   // 'unknown'     = acesso direto /onboarding (legacy): comportamento padrão = magic_link
@@ -318,7 +318,7 @@ export default function OnboardingPage() {
       segment: '',
       // Step 2 - Subsegmentos
       subsegments: [] as string[],
-      // #150 — escolha de comportamento ao atingir limite
+      // #150: escolha de comportamento ao atingir limite
       quotaLimitBehavior: 'notify_decide' as 'notify_decide' | 'auto_charge' | 'hard_block',
       // Step 3 - Global survey answers
       globalAnswers: {} as Record<string, any>,
@@ -334,7 +334,7 @@ export default function OnboardingPage() {
       businessHours: Object.fromEntries(DAYS_OF_WEEK.map((d) => [d, { open: '', close: '', closed: d === 'Domingo' }])) as Record<string, { open: string; close: string; closed: boolean }>,
   });
 
-  // PR #101.2 — Pré-popular form quando user vem do callback OAuth/Magic Link
+  // PR #101.2: Pré-popular form quando user vem do callback OAuth/Magic Link
   // (P0 #2 Signup duplicado). Eliminamos a tela "Crie sua conta" pedindo email/senha
   // de novo. Em vez disso, callback redirecciona para /onboarding com:
   //   ?from=auth_callback&email=user@email.com&name=John%20Doe
@@ -349,10 +349,10 @@ export default function OnboardingPage() {
 
   async function detectAndPrefillForm() {
     try {
-      // PR #103.5 — Skip onboarding inteiro se cliente JA tem JWT valido
+      // PR #103.5: Skip onboarding inteiro se cliente JA tem JWT valido
       // (User Prisma + Org existe). Antes esse cliente passava pelos 8 steps,
       // backend retornava 409, caia em loop /login (fix 103.4 deu workaround
-      // com banner azul, mas UX continua ruim — preencher 8 steps em vao).
+      // com banner azul, mas UX continua ruim, preencher 8 steps em vao).
       //
       // Agora: detecta zappiq_token, valida via /api/auth/me, se 200 -> direto
       // pro /dashboard. Cliente NUNCA mais ve /onboarding se ja tem org.
@@ -373,10 +373,10 @@ export default function OnboardingPage() {
           }
         }
       } catch {
-        // Ignora — continua flow normal de onboarding
+        // Ignora: continua flow normal de onboarding
       }
 
-      // PR #101.3 — Detection robusta multi-source pra skip Step 0.
+      // PR #101.3: Detection robusta multi-source pra skip Step 0.
       // Caminho A: URL ?from=auth_callback&email=...&name=... (route.ts callback)
       // Caminho B: localStorage zappiq_oauth_email (Cadastro.tsx hash detection)
       // Caminho C: localStorage zappiq_token legacy (apps/api JWT)
@@ -388,14 +388,14 @@ export default function OnboardingPage() {
       // localStorage fallback (Cadastro.tsx salva email/name após decode JWT)
       const oauthEmail = localStorage.getItem('zappiq_oauth_email') || '';
       const oauthName = localStorage.getItem('zappiq_oauth_name') || '';
-      // HOTFIX 2026-05-19 — detectar provider pra ramificar Step 0:
+      // HOTFIX 2026-05-19: detectar provider pra ramificar Step 0:
       // Google OAuth: NÃO pede senha (cliente loga sempre por Google)
       // Magic Link: PEDE senha forte + confirmação (cliente loga email+senha depois)
       const oauthProvider = localStorage.getItem('zappiq_oauth_provider') || '';
 
       // FONTE DE VERDADE = token Supabase vivo. Bug 2026-05-23: o onboarding
       // mostrava email/provider de OUTRA conta (flags stale de uma sessão
-      // anterior). Decodifica o access_token e prefere o que está NELE — é a
+      // anterior). Decodifica o access_token e prefere o que está NELE, é a
       // identidade realmente autenticada agora.
       let tokenEmail = '';
       let tokenProvider = '';
@@ -406,7 +406,7 @@ export default function OnboardingPage() {
           tokenEmail = p.email || '';
           tokenProvider = (p.app_metadata && p.app_metadata.provider) || '';
         }
-      } catch { /* token ilegível — cai nos flags abaixo */ }
+      } catch { /* token ilegível, cai nos flags abaixo */ }
 
       const detectedEmail = urlEmail || tokenEmail || oauthEmail;
       const detectedName = urlName || oauthName;
@@ -436,7 +436,7 @@ export default function OnboardingPage() {
           businessName: orgName || prev.businessName,
           password,
         }));
-        // HOTFIX 2026-05-19 — Magic Link NUNCA pode pular Step 0 (precisa
+        // HOTFIX 2026-05-19: Magic Link NUNCA pode pular Step 0 (precisa
         // capturar senha). Google OAuth pode pular se já temos nome+empresa.
         const hasName = (detectedName || '').trim().length >= 2;
         const hasOrgName = orgName.trim().length >= 2;
@@ -448,7 +448,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      // Caminho C — Legacy: detectar zappiq_token (apps/api JWT)
+      // Caminho C, Legacy: detectar zappiq_token (apps/api JWT)
       const token = localStorage.getItem('zappiq_token');
       if (token) {
         setStep(1);
@@ -529,7 +529,7 @@ export default function OnboardingPage() {
   function canAdvance(): boolean {
     switch (step) {
       case 0: {
-        // HOTFIX 2026-05-19 — validação ramificada por provider.
+        // HOTFIX 2026-05-19: validação ramificada por provider.
         // Google OAuth: dispensa checagem de senha (placeholder gerado em detect).
         // Magic Link: exige senha forte + confirmação batendo.
         const baseOk = !!(form.name && form.email && form.businessName);
@@ -546,7 +546,7 @@ export default function OnboardingPage() {
       case 1: return !!form.segment;
       case 2: return form.subsegments.length > 0;
       case 3: {
-        // Permite avançar sempre — o preenchimento é progressivo e opcional
+        // Permite avançar sempre: o preenchimento é progressivo e opcional
         // O progresso (%) é mostrado no UI para incentivar completar
         return true;
       }
@@ -574,13 +574,13 @@ export default function OnboardingPage() {
     }
   }
 
-  // PR #101.2 — Wire backend real. Cria Organization + User + Agent default
+  // PR #101.2: Wire backend real. Cria Organization + User + Agent default
   // + Knowledge Base + RAG ingestion do survey. Antes era só localStorage mock.
   async function handleSubmit() {
     setLoading(true);
     setError('');
     try {
-      // HOTFIX 2026-05-19 — Magic Link: setar senha real no Supabase ANTES de
+      // HOTFIX 2026-05-19, Magic Link: setar senha real no Supabase ANTES de
       // criar org+user no backend Prisma. Se set-password falha, abortamos
       // pra cliente nao ficar sem senha (so com magic link expirado).
       if (authProvider === 'magic_link') {
@@ -597,7 +597,7 @@ export default function OnboardingPage() {
           const errData = await setPwdRes.json().catch(() => ({}));
           throw new Error(errData?.error || 'Não foi possível salvar a senha. Tente novamente.');
         }
-        // Senha persistida com sucesso — limpa tokens Supabase do localStorage
+        // Senha persistida com sucesso, limpa tokens Supabase do localStorage
         // (próxima sessao do cliente vai usar email+senha, nao magic link)
         localStorage.removeItem('zappiq_supabase_access_token');
         localStorage.removeItem('zappiq_supabase_refresh_token');
@@ -643,7 +643,7 @@ export default function OnboardingPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         if (res.status === 409) {
-          // PR #103.4 — Email ja registrado: cliente JA tem User no Prisma
+          // PR #103.4, Email ja registrado: cliente JA tem User no Prisma
           // (provavelmente fez signup/onboarding antes via Magic Link ou OAuth).
           // ANTES esse branch redirecionava pra /dashboard SEM JWT, e /dashboard
           // rejeitava por falta de token, mandando o cliente pra /login. Loop.
@@ -655,9 +655,9 @@ export default function OnboardingPage() {
           router.push('/login?reason=already_registered');
           return;
         }
-        // PR #103.2 — Mostra detalhes da validação Zod pro user (e log no console
+        // PR #103.2: Mostra detalhes da validação Zod pro user (e log no console
         // pra debug). Antes só mostrava "Validation failed" genérico, sem dizer
-        // qual campo falhou — frustrante quando o erro é trivial (ex: name vazio
+        // qual campo falhou, frustrante quando o erro é trivial (ex: name vazio
         // por OAuth Google sem scope completo).
         if (res.status === 400 && Array.isArray(data?.details) && data.details.length > 0) {
           const fieldErrors = data.details
@@ -670,7 +670,7 @@ export default function OnboardingPage() {
       }
 
       const data = await res.json();
-      // Persiste token JWT do backend Prisma — autenticação dashboard
+      // Persiste token JWT do backend Prisma: autenticação dashboard
       if (data.token) localStorage.setItem('zappiq_token', data.token);
       if (data.refreshToken) localStorage.setItem('zappiq_refresh_token', data.refreshToken);
       if (data.organization?.name) localStorage.setItem('zappiq_org_name', data.organization.name);
@@ -824,7 +824,7 @@ export default function OnboardingPage() {
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
                 />
               </div>
-              {/* HOTFIX 2026-05-19 — bloco senha CONDICIONAL ao provider de auth */}
+              {/* HOTFIX 2026-05-19: bloco senha CONDICIONAL ao provider de auth */}
               {authProvider === 'google' ? (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
@@ -1120,7 +1120,7 @@ export default function OnboardingPage() {
           {/* ──────── Step 6: Agente IA ──────── */}
           {step === 6 && (
             <div className="space-y-6">
-              {/* #150 — Cliente escolhe comportamento ao atingir limite */}
+              {/* #150: Cliente escolhe comportamento ao atingir limite */}
               <div className="bg-gradient-to-br from-violet-50/40 via-white to-blue-50/40 rounded-2xl p-6 border border-violet-100">
                 <QuotaBehaviorStep
                   value={form.quotaLimitBehavior}

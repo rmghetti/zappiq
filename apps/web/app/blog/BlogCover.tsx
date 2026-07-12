@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
- * BlogCover — capas temáticas dos artigos do blog (V1 · 11/06/2026)
+ * BlogCover: capas temáticas dos artigos do blog (V1 · 11/06/2026)
  * --------------------------------------------------------------------------
  * Substitui o placeholder verde "ZappIQ" por composições visuais por tema:
  * gradiente próprio + logos de marca (Meta via /partners/meta.svg, WhatsApp

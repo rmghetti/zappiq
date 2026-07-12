@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * TrustAndCompliance — Design V4 (seção dark · Chatbase-style)
+ * TrustAndCompliance: Design V4 (seção dark · Chatbase-style)
  * --------------------------------------------------------------------------
  * Preserva 3 pilares institucionais (LGPD, SLA 99,9%, Observabilidade Radar)
  * e grid de 6 certificações técnicas. Visual novo: bloco dark (#0A0B12) com
@@ -29,7 +29,7 @@ const PILLARS = [
   },
   {
     icon: Activity,
-    title: 'Uptime 99,9% — escrito em contrato.',
+    title: 'Uptime 99,9%, escrito em contrato.',
     summary:
       'Se a plataforma cair além do combinado, você recebe crédito automático. Sem precisar brigar.',
     points: [
@@ -46,7 +46,7 @@ const PILLARS = [
     icon: Radar,
     title: 'Dashboards que viram decisão.',
     summary:
-      'O Radar 360° transforma suas conversas em BI executável. Incluído nos planos Business e Enterprise.',
+      'O Radar 360° transforma suas conversas em BI executável. Incluído nos planos Scale e Enterprise.',
     points: [
       'Dashboards executivos do jeito que você precisa',
       'Alertas automáticos quando algo foge do normal',
@@ -80,7 +80,7 @@ export function TrustAndCompliance() {
           </h2>
           <p className="text-[16px] text-muted leading-relaxed">
             ZappIQ não é um "chatbotzinho". É infraestrutura crítica pro seu negócio.
-            Por isso segurança, LGPD e visibilidade são produto aqui — não um capricho de marketing.
+            Por isso segurança, LGPD e visibilidade são produto aqui, não um capricho de marketing.
           </p>
         </div>
 

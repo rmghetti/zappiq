@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * FAQ — Design V4 (Chatbase-style · Geist + gradient g→b→p)
+ * FAQ: Design V4 (Chatbase-style · Geist + gradient g→b→p)
  * --------------------------------------------------------------------------
  * 21 perguntas em 6 grupos: Onboarding · Trial · Voz Nativa · Tecnologia ·
  * LGPD · Planos · Iza. Filtro por grupo, accordion minimalista.
@@ -10,9 +10,8 @@
 
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { PLAN_CONFIG, ADDONS } from '@zappiq/shared';
+import { ADDONS } from '@zappiq/shared';
 
-const BUSINESS_PRICE = PLAN_CONFIG.BUSINESS.priceMonthly!;
 const ENTERPRISE_MIN = 9900;
 const RADAR_360_PRICE = ADDONS.RADAR_360.priceMonthly!;
 const EXTRA_BROADCASTS_PRICE = ADDONS.EXTRA_BROADCASTS.priceMonthly!;
@@ -24,17 +23,17 @@ const FAQS: FaqItem[] = [
   {
     group: 'Negócio',
     q: 'Funciona pro meu setor?',
-    a: 'Funciona em qualquer negócio que atende cliente por WhatsApp: clínicas (médica, odonto, estética), varejo, e-commerce, imobiliária, autoescola, serviços, salão, academia, escritório de advocacia, contabilidade, hotelaria, agência. A Iza aprende o seu negócio a partir dos SEUS documentos — não é um script genérico pronto.',
+    a: 'Funciona em qualquer negócio que atende cliente por WhatsApp: clínicas (médica, odonto, estética), varejo, e-commerce, imobiliária, autoescola, serviços, salão, academia, escritório de advocacia, contabilidade, hotelaria, agência. A Iza aprende o seu negócio a partir dos SEUS documentos. Não é um script genérico pronto.',
   },
   {
     group: 'Negócio',
     q: 'Preciso mudar meu número de WhatsApp?',
-    a: 'Não. Você conecta o seu número atual — comercial ou pessoal de empresa — à plataforma via integração oficial com a Meta. O cliente continua te mandando mensagem no mesmo número de sempre. Seu número é seu, a gente só liga a IA nele.',
+    a: 'Não. Você conecta o seu número atual (comercial ou pessoal de empresa) à plataforma via integração oficial com a Meta. O cliente continua te mandando mensagem no mesmo número de sempre. Seu número é seu, a gente só liga a IA nele.',
   },
   {
     group: 'Negócio',
     q: 'Quanto tempo até eu ver os primeiros resultados?',
-    a: 'Nas primeiras 24 horas já vê: a Iza responde em segundos, não deixa cliente esperando, dispara agendamento na hora. Resultado em reais (mais venda, menos folha) costuma aparecer na 2ª a 4ª semana — quando o volume do trial vira padrão de operação.',
+    a: 'Nas primeiras 24 horas já vê: a Iza responde em segundos, não deixa cliente esperando, dispara agendamento na hora. Resultado em reais (mais venda, menos folha) costuma aparecer na 2ª a 4ª semana, quando o volume do trial vira padrão de operação.',
   },
 
   // ──────────────────────────── Onboarding ──────────────────────────────
@@ -68,12 +67,12 @@ const FAQS: FaqItem[] = [
   {
     group: 'Trial',
     q: 'Existe fidelidade contratual?',
-    a: 'Não nos planos self-serve (Starter, Growth, Scale, Business). Assinatura mensal ou anual, cancelamento self-service, sem multa. No Enterprise oferecemos desconto para contratos de 24 ou 36 meses conforme volume negociado.',
+    a: 'Não nos planos mensais (Lite, Growth e Scale). Assinatura mensal ou anual, cancelamento self-service, sem multa. No Enterprise oferecemos desconto para contratos de 24 ou 36 meses conforme volume negociado.',
   },
   {
     group: 'Trial',
     q: 'Como cancelo se quiser parar?',
-    a: 'Um clique no dashboard. Você continua com acesso até o fim do ciclo já pago. Se estiver no trial de 14 dias, não há cobrança nenhuma — é só deixar o trial expirar ou cancelar pelo painel.',
+    a: 'Um clique no dashboard. Você continua com acesso até o fim do ciclo já pago. Se estiver no trial de 14 dias, não há cobrança nenhuma: é só deixar o trial expirar ou cancelar pelo painel.',
   },
   {
     group: 'Trial',
@@ -90,51 +89,51 @@ const FAQS: FaqItem[] = [
   {
     group: 'Conexão WhatsApp',
     q: 'Sou pessoa física sem CNPJ. Posso usar?',
-    a: 'A Cloud API exige CNPJ — restrição da Meta, não da ZappIQ. Solução: abrir MEI grátis no Portal do Empreendedor (gov.br/empresas-e-negocios) leva 15 minutos. Aí você cadastra normalmente.',
+    a: 'A Cloud API exige CNPJ (restrição da Meta, não da ZappIQ). Solução: abrir MEI grátis no Portal do Empreendedor (gov.br/empresas-e-negocios) leva 15 minutos. Aí você cadastra normalmente.',
   },
   {
     group: 'Conexão WhatsApp',
     q: 'Quanto tempo demora para meu bot estar 100% no ar?',
-    a: 'Tempo de calendário: 1 a 15 dias úteis (depende da Verificação de Negócio Meta). Tempo ATIVO seu: 30-60 minutos. O resto é espera por aprovação Meta — você usa esse tempo pra preparar o conteúdo do bot.',
+    a: 'Tempo de calendário: 1 a 15 dias úteis (depende da Verificação de Negócio Meta). Tempo ATIVO seu: 30-60 minutos. O resto é espera por aprovação Meta: você usa esse tempo pra preparar o conteúdo do bot.',
   },
   {
     group: 'Conexão WhatsApp',
     q: 'Posso fazer onboarding sem ajuda da ZappIQ?',
-    a: 'Pode. Oferecemos 3 caminhos: Assistido (especialista faz com você em call de 30-60 min — recomendado pra 80% dos casos), Embedded Signup (self-service guiado pelo painel oficial Meta) e Setup Manual (pra times técnicos com Permanent Access Token). Detalhes em /conectar-whatsapp.',
+    a: 'Pode. Oferecemos 3 caminhos: Assistido (especialista faz com você em call de 30-60 min, recomendado pra 80% dos casos), Embedded Signup (self-service guiado pelo painel oficial Meta) e Setup Manual (pra times técnicos com Permanent Access Token). Detalhes em /conectar-whatsapp.',
   },
   {
     group: 'Conexão WhatsApp',
     q: 'Quanto a Meta cobra por mês?',
-    a: 'A Meta cobra por "conversa" (janela de 24h). Pequena loja: R$ 30-80/mês. PME ativa: R$ 200-500/mês. Operação grande com marketing: R$ 1.500-4.000/mês. ZappIQ NÃO marca up sobre Meta — você paga direto à Meta, com dashboard de gasto em tempo real no nosso painel.',
+    a: 'A Meta cobra por "conversa" (janela de 24h). Pequena loja: R$ 30-80/mês. PME ativa: R$ 200-500/mês. Operação grande com marketing: R$ 1.500-4.000/mês. ZappIQ NÃO marca up sobre Meta: você paga direto à Meta, com dashboard de gasto em tempo real no nosso painel.',
   },
 
   // ─────────────────────────── Instagram Direct ─────────────────────────
   {
     group: 'Instagram Direct',
     q: 'A Iza também atende no Instagram Direct?',
-    a: 'Sim. Estamos em rollout do Instagram Direct — mesma Iza, mesma base de conhecimento e mesma marca atendendo DMs do Instagram 24/7. Backend já está em produção; aprovação Meta pra liberação pública está em andamento (App Review). Demos guiadas pra investidores e early adopters já disponíveis.',
+    a: 'Sim. Estamos em rollout do Instagram Direct: mesma Iza, mesma base de conhecimento e mesma marca atendendo DMs do Instagram 24/7. Backend já está em produção; aprovação Meta pra liberação pública está em andamento (App Review). Demos guiadas pra investidores e early adopters já disponíveis.',
   },
   {
     group: 'Instagram Direct',
     q: 'O Instagram precisa de número novo ou conta separada?',
-    a: 'Não. Usa a conta Instagram Business da sua empresa que já existe. Basta conectar a Página do Facebook vinculada ao seu @ e autorizar o ZappIQ — leva 5 minutos pelo painel.',
+    a: 'Não. Usa a conta Instagram Business da sua empresa que já existe. Basta conectar a Página do Facebook vinculada ao seu @ e autorizar o ZappIQ. Leva 5 minutos pelo painel.',
   },
   {
     group: 'Instagram Direct',
     q: 'A Iza distingue se a mensagem veio do WhatsApp ou do Instagram?',
-    a: 'Sim — cada conversa é etiquetada pelo canal de origem. A Iza adapta tom e formato (Instagram tende a ser mais visual e curto), mas mantém memória unificada do cliente. Quem te chamou no IG ontem e no WhatsApp hoje é o mesmo lead, com histórico consolidado.',
+    a: 'Sim, cada conversa é etiquetada pelo canal de origem. A Iza adapta tom e formato (Instagram tende a ser mais visual e curto), mas mantém memória unificada do cliente. Quem te chamou no IG ontem e no WhatsApp hoje é o mesmo lead, com histórico consolidado.',
   },
   {
     group: 'Instagram Direct',
     q: 'O Instagram Direct sai mais caro?',
-    a: 'Não. O custo de mensagens Instagram pela Meta hoje é zero (não há cobrança por janela de conversa como no WhatsApp). Você paga apenas o plano ZappIQ + o consumo opcional de IA — mesma tabela que WhatsApp.',
+    a: 'Não. O custo de mensagens Instagram pela Meta hoje é zero (não há cobrança por janela de conversa como no WhatsApp). Você paga apenas o plano ZappIQ + o consumo opcional de IA, mesma tabela que WhatsApp.',
   },
 
   // ─────────────────────────── Voz Nativa ───────────────────────────────
   {
     group: 'Voz Nativa',
     q: 'A IA entende áudio que o cliente manda no WhatsApp?',
-    a: 'Entende. Já vem em todos os planos, sem custo adicional. Cliente manda áudio de 30 segundos ou 2 minutos — a Iza transcreve em segundos, entende o que ele quer e responde na hora, em texto.',
+    a: 'Entende. Já vem em todos os planos, sem custo adicional. Cliente manda áudio de 30 segundos ou 2 minutos: a Iza transcreve em segundos, entende o que ele quer e responde na hora, em texto.',
   },
   {
     group: 'Voz Nativa',
@@ -156,34 +155,34 @@ const FAQS: FaqItem[] = [
   {
     group: 'Tecnologia',
     q: 'Como é a relação do ZappIQ com a Meta?',
-    a: 'Conexão oficial, direta com o WhatsApp da Meta — sem atravessador. Isso significa resposta mais rápida pro seu cliente, custo repassado direto da tabela oficial e seu número continua sendo seu (a gente não é dono do seu WhatsApp, você é).',
+    a: 'Conexão oficial, direta com o WhatsApp da Meta, sem atravessador. Isso significa resposta mais rápida pro seu cliente, custo repassado direto da tabela oficial e seu número continua sendo seu (a gente não é dono do seu WhatsApp, você é).',
   },
   {
     group: 'Tecnologia',
     q: 'Como funciona a IA do ZappIQ?',
-    a: 'A Iza roda sobre a mesma IA de ponta que empresas Fortune 500 usam no mundo. A gente tem contrato que garante: seus dados nunca viram treino, não ficam armazenados lá fora e são isolados de qualquer outro cliente. Se um provedor cair, outro assume no automático — sua operação não para.',
+    a: 'A Iza roda sobre a mesma IA de ponta que empresas Fortune 500 usam no mundo. A gente tem contrato que garante: seus dados nunca viram treino, não ficam armazenados lá fora e são isolados de qualquer outro cliente. Se um provedor cair, outro assume no automático. Sua operação não para.',
   },
   {
     group: 'Tecnologia',
     q: 'Com quais empresas o ZappIQ divide operação?',
-    a: 'A gente opera com parceiros de primeira linha: provedores globais de IA, Meta (pra infra do WhatsApp), Stripe (pra cobrança), AWS no Brasil (pra dados) e alguns serviços técnicos de apoio. A lista completa e atualizada fica em /legal/privacidade, seção 4 — seu jurídico pode conferir a qualquer momento.',
+    a: 'A gente opera com parceiros de primeira linha: provedores globais de IA, Meta (pra infra do WhatsApp), Stripe (pra cobrança), AWS no Brasil (pra dados) e alguns serviços técnicos de apoio. A lista completa e atualizada fica em /legal/privacidade, seção 4: seu jurídico pode conferir a qualquer momento.',
   },
   {
     group: 'Tecnologia',
     q: 'Onde meus dados ficam armazenados?',
-    a: 'Banco primário em servidor brasileiro (AWS São Paulo). Quando precisamos consultar IA fora do país, isso acontece sob cláusulas contratuais padrão exigidas pela LGPD, apenas pra cada consulta — nada fica armazenado lá fora.',
+    a: 'Banco primário em servidor brasileiro (AWS São Paulo). Quando precisamos consultar IA fora do país, isso acontece sob cláusulas contratuais padrão exigidas pela LGPD, apenas pra cada consulta, nada fica armazenado lá fora.',
   },
 
   // ───────────────────────────── LGPD ───────────────────────────────────
   {
     group: 'LGPD',
     q: 'Como exerço meus direitos LGPD (acesso, exclusão, correção)?',
-    a: 'Autoatendimento em /legal/deletar-dados — você preenche um formulário e recebe um protocolo na hora. Prazo de resposta: 15 dias úteis (48h para planos Business e Enterprise com DPO direto). Fallback por e-mail em privacidade@zappiq.com.br.',
+    a: 'Autoatendimento em /legal/deletar-dados: você preenche um formulário e recebe um protocolo na hora. Prazo de resposta: 15 dias úteis (48h para planos Scale e Enterprise com DPO direto). Fallback por e-mail em privacidade@zappiq.com.br.',
   },
   {
     group: 'LGPD',
     q: 'Quem é o DPO do ZappIQ?',
-    a: 'Encarregado de Dados (DPO) — contato direto em dpo@zappiq.com.br. Resposta em 15 dias úteis (48h nos planos Business e Enterprise). Em caso de incidente crítico, notificamos autoridade e cliente em até 72 horas, como a LGPD exige.',
+    a: 'Encarregado de Dados (DPO), contato direto em dpo@zappiq.com.br. Resposta em 15 dias úteis (48h nos planos Scale e Enterprise). Em caso de incidente crítico, notificamos autoridade e cliente em até 72 horas, como a LGPD exige.',
   },
   {
     group: 'LGPD',
@@ -195,29 +194,29 @@ const FAQS: FaqItem[] = [
   {
     group: 'Planos',
     q: 'Qual a diferença entre Radar Insights e Radar 360°?',
-    a: `Radar Insights é o painel de métricas que já vem em todos os planos — quantos atendimentos, conversões, tempo médio, etc. Radar 360° é o BI executivo: dashboards do jeito que você precisa, alertas quando algo foge do normal, previsão de vendas por IA, comparativo anônimo com o seu setor e exportação pro Power BI/Looker. Já vem incluso em Business e Enterprise; nos planos menores vira add-on opcional de R$ ${RADAR_360_PRICE}/mês.`,
+    a: `Radar Insights é o painel de métricas que já vem em todos os planos: quantos atendimentos, conversões, tempo médio, etc. Radar 360° é o BI executivo: dashboards do jeito que você precisa, alertas quando algo foge do normal, previsão de vendas por IA, comparativo anônimo com o seu setor e exportação pro Power BI/Looker. Já vem incluso no Scale e no Enterprise; nos planos menores vira add-on opcional de R$ ${RADAR_360_PRICE}/mês.`,
   },
   {
     group: 'Planos',
-    q: 'O que diferencia os planos Business e Enterprise?',
-    a: `Business (R$ ${BUSINESS_PRICE.toLocaleString('pt-BR')}/mês) já vem com uptime 99,9% em contrato e crédito automático se cair, Radar 360° incluso, login único corporativo, contato direto com o DPO (resposta em 48h), gerente de conta dedicado, 20h por mês pra integrações customizadas e histórico de 24 meses. Enterprise (sob consulta, a partir de R$ ${ENTERPRISE_MIN.toLocaleString('pt-BR')}/mês) adiciona ambiente isolado só seu, time de monitoramento dedicado 24/7, 40h por mês pra integrações, histórico de até 5 anos e contratos sob medida.`,
+    q: 'O que diferencia os planos Scale e Enterprise?',
+    a: `Scale (R$ 1.497/mês) já vem com uptime 99,9% em contrato e crédito automático se cair, Radar 360° incluso, login único corporativo, contato direto com o DPO (resposta em 48h), gerente de conta dedicado, 20h por mês pra integrações customizadas e histórico de 24 meses. Enterprise (sob consulta, a partir de R$ ${ENTERPRISE_MIN.toLocaleString('pt-BR')}/mês) adiciona ambiente isolado só seu, time de monitoramento dedicado 24/7, 40h por mês pra integrações, histórico de até 5 anos e contratos sob medida.`,
   },
   {
     group: 'Planos',
     q: 'Quantas mensagens posso enviar em cada plano?',
-    a: `Starter inclui 500 disparos por mês, Growth 5.000, Scale 20.000, Business 60.000 e Enterprise ilimitado. Precisou de mais? Pacote de 10 mil disparos extras por R$ ${EXTRA_BROADCASTS_PRICE}. A tarifa que a Meta cobra pelas conversas é repassada direto da tabela oficial dela — sem remarcação.`,
+    a: `Lite inclui 200 disparos por mês, Growth 5.000, Scale 60.000 e Enterprise ilimitado. Precisou de mais? Pacote de 10 mil disparos extras por R$ ${EXTRA_BROADCASTS_PRICE}. A tarifa que a Meta cobra pelas conversas é repassada direto da tabela oficial dela, sem remarcação.`,
   },
   {
     group: 'Planos',
     q: 'Existe garantia de uptime no contrato?',
-    a: 'Sim, a partir do plano Business. 99,9% de uptime escrito em contrato, com crédito automático de 10%, 25% ou 50% da mensalidade se cair além do combinado. Recuperação completa em até 4 horas. Relatório mensal público em status.zappiq.com.br. Starter, Growth e Scale rodam na mesma infra, mas sem SLA contratual (alvo interno de 99,5%).',
+    a: 'Sim, a partir do plano Scale. 99,9% de uptime escrito em contrato, com crédito automático de 10%, 25% ou 50% da mensalidade se cair além do combinado. Recuperação completa em até 4 horas. Relatório mensal público em status.zappiq.com.br. Lite e Growth rodam na mesma infra, mas sem SLA contratual (alvo interno de 99,5%).',
   },
 
   // ────────────────────────────── Iza ───────────────────────────────────
   {
     group: 'Iza',
     q: 'Quem é a Iza?',
-    a: 'A Iza é a agente de IA oficial do ZappIQ — a própria ZappIQ rodando no ZappIQ. Ela atende no WhatsApp 24/7, responde dúvidas sobre produto, preço, trial e implementação, e escala para um humano quando não consegue resolver.',
+    a: 'A Iza é a agente de IA oficial do ZappIQ, a própria ZappIQ rodando no ZappIQ. Ela atende no WhatsApp 24/7, responde dúvidas sobre produto, preço, trial e implementação, e escala para um humano quando não consegue resolver.',
   },
 ];
 

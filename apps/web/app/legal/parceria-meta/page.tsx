@@ -3,13 +3,13 @@ import Link from 'next/link';
 import { PublicLayout } from '../../../components/landing/PublicLayout';
 
 export const metadata: Metadata = {
-  title: 'Parceria WhatsApp Business — ZappIQ via Cloud API direto',
+  title: 'Parceria WhatsApp Business: ZappIQ via Cloud API direto',
   description:
     'ZappIQ integra WhatsApp Business Cloud API diretamente com a Meta, sem camada de BSP intermediário. Esclarecimento institucional sobre posicionamento, custos pass-through e obrigações contratuais.',
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /legal/parceria-meta — V3.2 (sem BSP)
+ * /legal/parceria-meta: V3.2 (sem BSP)
  * --------------------------------------------------------------------------
  * V2-013 (histórico) criou esta página com foco em BSP 360Dialog. V3.2
  * migra para WhatsApp Cloud API direto Meta (sem BSP). Esta revisão
@@ -33,7 +33,7 @@ export default function ParceriaMetaPage() {
         <p>
           ZappIQ opera o WhatsApp Business Platform (WABA) por meio do{' '}
           <strong>WhatsApp Business Cloud API</strong>, hospedado e operado pela própria Meta. Não há
-          BSP (Business Solution Provider) intermediário na nossa arquitetura V3.2 — a comunicação é
+          BSP (Business Solution Provider) intermediário na nossa arquitetura V3.2. A comunicação é
           direta entre ZappIQ e a infraestrutura oficial da Meta.
         </p>
         <p>
@@ -53,7 +53,7 @@ export default function ParceriaMetaPage() {
           <li>
             <strong>Recursos oficiais imediatos:</strong> templates aprovados, message_reactions, CTWA
             (Click-to-WhatsApp Ads), Flows e Payments ficam disponíveis assim que a Meta libera
-            regionalmente — sem esperar repasse de BSP.
+            regionalmente, sem esperar repasse de BSP.
           </li>
           <li>
             <strong>Zero setup fee de BSP:</strong> o modelo V3.2 elimina a taxa de ativação cobrada por
@@ -98,7 +98,7 @@ export default function ParceriaMetaPage() {
           Caso um cliente ZappIQ queira migrar o número WABA para outro provedor (seja outro SaaS que use
           Cloud API, seja um BSP tradicional, seja infraestrutura própria), cooperamos integralmente com
           o processo oficial da Meta. <strong>Não retemos</strong> o número, o histórico de templates,
-          o opt-in/opt-out history ou metadados da conta WABA — a conta WABA pertence ao cliente, está
+          o opt-in/opt-out history ou metadados da conta WABA. A conta WABA pertence ao cliente, está
           no Business Manager dele.
         </p>
         <p>

@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * PrelaunchHero — V5.3
+ * PrelaunchHero: V5.3
  * --------------------------------------------------------------------------
  * Hero da página de pré-lançamento. Lado esquerdo: copy + countdown + CTAs.
  * Lado direito: mockup iPhone com chat animado da Iza + 3 insight cards
@@ -41,7 +41,7 @@ export function PrelaunchHero() {
             <p className={s.heroLead}>
               No dia <strong>04 de maio</strong>, a <strong>ZappIQ</strong> ativa uma nova camada de inteligência
               sobre o WhatsApp das empresas brasileiras. Atendimento autônomo 24/7, voz nativa em português e
-              dashboards que viram decisão — tudo em uma só plataforma.
+              dashboards que viram decisão, tudo em uma só plataforma.
             </p>
 
             <Countdown />

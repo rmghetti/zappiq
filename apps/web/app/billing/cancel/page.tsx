@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * /billing/cancel — retorno quando o cliente desiste no Stripe Checkout.
+ * /billing/cancel: retorno quando o cliente desiste no Stripe Checkout.
  * ------------------------------------------------------------------
  * Antes esta rota NÃO existia (cancel_url apontava pra cá) → 404. Agora
  * volta pros planos sem tela morta e deixa claro que nada foi cobrado.
