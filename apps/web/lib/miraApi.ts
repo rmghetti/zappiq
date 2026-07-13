@@ -38,7 +38,9 @@ export interface MiraAccessData {
     reason: 'included' | 'addon' | 'none';
     tier: MiraTierKey | null;
     eligible: boolean;
-    source: 'addon' | 'included' | 'alpha' | null;
+    source: 'addon' | 'included' | 'alpha' | 'trial' | null;
+    /** Pode ativar o teste grátis agora (nunca ativou e não tem faixa/inclusão). */
+    trialAvailable: boolean;
   };
   quota: MiraQuota;
   monthKey: string;
@@ -47,6 +49,7 @@ export interface MiraAccessData {
     tiers: MiraTierInfo[];
     packs: MiraPackInfo[];
     includedByPlan: Record<string, MiraTierKey>;
+    trialAlvos: number;
   };
 }
 
@@ -218,6 +221,9 @@ export interface MiraAnalyticsData {
 // ── Client ───────────────────────────────────────────────────────────
 export const miraApi = {
   access: (): Promise<{ success: boolean; data: MiraAccessData }> => api.get('/api/mira-access'),
+  // Ativa o teste grátis (sem cartão, sem Stripe) — uma vez por conta.
+  activateTrial: (): Promise<{ success: boolean; data: MiraAccessData }> =>
+    api.post('/api/mira-access/trial/activate', {}),
   // Assina uma faixa (recorrente) → devolve a URL do checkout do Stripe.
   checkout: (tier: MiraTierKey, cycle: 'monthly' | 'annual' = 'monthly'): Promise<{ success: boolean; url: string }> =>
     api.post('/api/mira-access/checkout', { tier, cycle }),

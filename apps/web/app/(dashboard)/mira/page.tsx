@@ -96,12 +96,17 @@ export default function MiraOverviewPage() {
             {accessData.access.source === 'included' && ' · incluído no plano'}
           </span>
         )}
+        {entitled && accessData?.access.source === 'trial' && (
+          <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
+            Teste grátis
+          </span>
+        )}
       </div>
 
       {entitled && accessData ? (
         <EntitledPanel accessData={accessData} alvos={alvos} />
       ) : (
-        <ActivationShowcase accessData={accessData} />
+        <ActivationShowcase accessData={accessData} onActivated={setAccessData} />
       )}
     </div>
   );
@@ -109,10 +114,26 @@ export default function MiraOverviewPage() {
 
 /* ── Painel (contratado) ─────────────────────────────────────────── */
 function EntitledPanel({ accessData, alvos }: { accessData: MiraAccessData; alvos: MiraAlvoListItem[] }) {
-  const { quota, perfil, monthKey } = accessData;
+  const { quota, perfil, monthKey, access, catalog } = accessData;
+  const isTrial = access.source === 'trial';
   const pct = quota.total > 0 ? Math.min(100, Math.round((quota.used / quota.total) * 100)) : 0;
   const prontidao = perfil?.prontidao ?? 0;
   const perfilPronto = prontidao >= 60;
+  const [subBusy, setSubBusy] = useState<string | null>(null);
+  const [subError, setSubError] = useState<string | null>(null);
+
+  const subscribe = async (tierKey: string) => {
+    setSubBusy(tierKey);
+    setSubError(null);
+    try {
+      const res = await miraApi.checkout(tierKey as any, 'monthly');
+      if (res.url) window.location.href = res.url;
+      else setSubError('Não consegui abrir o checkout agora.');
+    } catch (e: any) {
+      setSubError(e?.message || 'Não foi possível iniciar a assinatura agora.');
+      setSubBusy(null);
+    }
+  };
 
   return (
     <>
@@ -121,11 +142,11 @@ function EntitledPanel({ accessData, alvos }: { accessData: MiraAccessData; alvo
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-              Alvos do mês ({monthKey})
+              {isTrial ? 'Alvos do teste grátis' : `Alvos do mês (${monthKey})`}
               <SaibaMais featureKey="mira.quota" />
             </h3>
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${quota.blocked ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-              {quota.blocked ? 'Cota esgotada' : `${quota.remaining} restantes`}
+              {quota.blocked ? (isTrial ? 'Teste esgotado' : 'Cota esgotada') : `${quota.remaining} restantes`}
             </span>
           </div>
           <div className="text-2xl font-bold text-gray-900 mb-2">
@@ -138,10 +159,10 @@ function EntitledPanel({ accessData, alvos }: { accessData: MiraAccessData; alvo
               style={{ width: `${pct}%` }}
             />
           </div>
-          {quota.packExtra > 0 && (
+          {quota.packExtra > 0 && !isTrial && (
             <p className="text-xs text-gray-400 mt-2">Inclui +{quota.packExtra} de pack avulso neste mês.</p>
           )}
-          {quota.blocked && (
+          {quota.blocked && !isTrial && (
             <p className="text-xs text-gray-500 mt-2">
               A geração de novos Alvos volta na virada do mês, ou contrate um pack avulso em{' '}
               <Link href="/billing" className="text-primary-600 font-medium hover:underline">
@@ -149,6 +170,26 @@ function EntitledPanel({ accessData, alvos }: { accessData: MiraAccessData; alvo
               </Link>
               .
             </p>
+          )}
+          {quota.blocked && isTrial && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs text-gray-600 mb-2">
+                Seu teste grátis acabou. Assine uma faixa para continuar gerando Alvos:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {catalog.tiers.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => subscribe(t.key)}
+                    disabled={subBusy !== null}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-primary-200 text-primary-700 hover:bg-primary-50 disabled:opacity-60"
+                  >
+                    {subBusy === t.key ? 'Abrindo…' : `${t.name} · ${formatBRL(t.priceMonthly)}/mês`}
+                  </button>
+                ))}
+              </div>
+              {subError && <p className="text-xs text-red-500 mt-2">{subError}</p>}
+            </div>
           )}
         </div>
 
@@ -253,17 +294,40 @@ function QuickLink({ href, icon: Icon, title, desc }: { href: string; icon: any;
 }
 
 /* ── Vitrine (não contratado) ────────────────────────────────────── */
-function ActivationShowcase({ accessData }: { accessData: MiraAccessData | null }) {
+function ActivationShowcase({
+  accessData,
+  onActivated,
+}: {
+  accessData: MiraAccessData | null;
+  onActivated: (data: MiraAccessData) => void;
+}) {
   const eligible = accessData?.access.eligible ?? false;
+  const trialAvailable = accessData?.access.trialAvailable ?? false;
+  const trialAlvos = accessData?.catalog.trialAlvos ?? 10;
   const tiers = accessData?.catalog.tiers ?? [];
   const [cycle, setCycle] = useState<'monthly' | 'annual'>('monthly');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ativando, setAtivando] = useState(false);
+  const [trialBusy, setTrialBusy] = useState(false);
+  const [trialError, setTrialError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.search.includes('ativado=1')) setAtivando(true);
   }, []);
+
+  const activateTrial = async () => {
+    setTrialBusy(true);
+    setTrialError(null);
+    try {
+      const res = await miraApi.activateTrial();
+      onActivated(res.data);
+    } catch (e: any) {
+      setTrialError(e?.message || 'Não foi possível ativar o teste agora.');
+    } finally {
+      setTrialBusy(false);
+    }
+  };
 
   const subscribe = async (tierKey: string) => {
     setBusy(tierKey);
@@ -320,6 +384,26 @@ function ActivationShowcase({ accessData }: { accessData: MiraAccessData | null 
           ))}
         </ul>
       </div>
+
+      {eligible && trialAvailable && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Quer testar antes de assinar?</p>
+            <p className="text-xs text-gray-600 mt-0.5">
+              {trialAlvos} Alvos grátis, sem cartão e sem compromisso. Dá pra ver o dossiê completo antes de escolher a faixa.
+            </p>
+          </div>
+          <button
+            onClick={activateTrial}
+            disabled={trialBusy}
+            className="px-4 py-2.5 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 shrink-0 disabled:opacity-60 inline-flex items-center gap-1.5"
+          >
+            {trialBusy ? <Loader2 className="animate-spin" size={15} /> : null}
+            {trialBusy ? 'Ativando…' : `Testar grátis com ${trialAlvos} Alvos`}
+          </button>
+        </div>
+      )}
+      {trialError && <p className="text-xs text-red-500 mb-4 text-center">{trialError}</p>}
 
       {ativando && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3 mb-6 flex items-center gap-2">
