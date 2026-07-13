@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * HowItWorks — Design V4 (3 passos horizontal · Chatbase-style)
+ * HowItWorks: Design V4 (3 passos horizontal · Chatbase-style)
  * --------------------------------------------------------------------------
  * Substitui a grade V3.2 (ícones chapados + números grandes) por uma timeline
  * horizontal com mini-visuais Geist-friendly. IntersectionObserver preservado.
@@ -14,22 +14,22 @@ const STEPS = [
   {
     num: '01',
     icon: Smartphone,
-    title: 'Conecte seu WhatsApp',
-    desc: 'Em 5 minutos, você vincula seu número de WhatsApp comercial à ZappIQ. Oficial, seguro, sem mudar nada pro seu cliente.',
+    title: 'Conecte seus canais',
+    desc: 'Em minutos você liga seu WhatsApp e o Instagram à ZappIQ, pela conexão oficial da Meta. Seu número e seu @ continuam seus, o cliente não muda nada.',
     animation: 'qr',
   },
   {
     num: '02',
     icon: Brain,
-    title: 'Calibre sua IA',
-    desc: 'Você sobe FAQs, catálogo, políticas — e a Iza aprende seu negócio sozinha. Sem consultor, sem reunião.',
+    title: 'Aprove a operação que a Iza monta',
+    desc: 'Você diz o objetivo e a Iza desenha o atendimento, as vendas e as campanhas a partir do seu negócio. Você revisa e aprova. Sem consultor, sem tela em branco.',
     animation: 'faq',
   },
   {
     num: '03',
     icon: Rocket,
-    title: 'Escale o atendimento',
-    desc: 'Sua equipe só mexe no que importa. A Iza cuida de 65% dos atendimentos sozinha, 24 horas por dia.',
+    title: 'Ela executa sozinha, 24/7',
+    desc: 'A Iza atende, qualifica, agenda, vende e ainda se corrige quando desvia. Sua equipe entra só no que importa e você acompanha tudo em reais.',
     animation: 'scale',
   },
 ];
@@ -91,7 +91,7 @@ function StepAnimation({ type, visible }: { type: string; visible: boolean }) {
     );
   }
 
-  /* scale — conversas sobrepostas */
+  /* scale: conversas sobrepostas */
   return (
     <div className={baseClass}>
       <div className="w-28 h-20 mx-auto relative">

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 export const metadata = {
-  title: 'ZappIQ Enterprise — Plano premium com SLA 99,9% e LGPD auditável',
+  title: 'ZappIQ Enterprise: Plano premium com SLA 99,9% e LGPD auditável',
   description: 'Operações estratégicas exigem SLA contratual, observabilidade profunda e conformidade auditável. ZappIQ Enterprise entrega tudo isso com SOC/NOC dedicado 24/7.',
 };
 
@@ -20,8 +20,8 @@ const FEATURES_BLOCKS = [
   {
     icon: Radar,
     accent: 'from-purple-600 to-indigo-600',
-    title: 'Radar 360° incluído',
-    desc: 'Observabilidade de negócio com BI, previsão de pipeline por ML e benchmarking. Valor equivalente a R$ 397/mês — incluso no plano.',
+    title: 'Radar 360° Pro incluído',
+    desc: 'Observabilidade de negócio com BI, previsão de pipeline por ML e benchmarking. Valor equivalente a R$ 397/mês, incluso no plano.',
   },
   {
     icon: Headphones,
@@ -72,7 +72,7 @@ const WHO_ITS_FOR = [
 
 const PRICING_TABLE = [
   { item: 'Base mensal', value: 'R$ 2.997/mês' },
-  { item: 'Setup fee (one-time)', value: 'R$ 9.997 — isento em contrato anual' },
+  { item: 'Setup fee (one-time)', value: 'R$ 9.997, isento em contrato anual' },
   { item: 'Desconto anual', value: '15% (R$ 30.567/ano)' },
   { item: 'Desconto 2 anos', value: '25% (R$ 53.946 total)' },
   { item: 'Dev customizado extra', value: 'R$ 250/hora após 40h/mês inclusas' },
@@ -94,7 +94,7 @@ export default function EnterprisePage() {
             Quando o WhatsApp vira <span className="text-amber-400">infraestrutura crítica</span> da sua operação.
           </h1>
           <p className="text-lg lg:text-xl text-gray-300 max-w-3xl mb-8 leading-relaxed">
-            Para empresas que não podem parar, precisam responder pra auditoria e tratam conversação como canal estratégico. SLA contratual, observabilidade profunda, SOC/NOC dedicado e conformidade LGPD auditável — em uma plataforma única.
+            Para empresas que não podem parar, precisam responder pra auditoria e tratam conversação como canal estratégico. SLA contratual, observabilidade profunda, SOC/NOC dedicado e conformidade LGPD auditável, em uma plataforma única.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link href="#falar-com-especialista"
@@ -133,7 +133,7 @@ export default function EnterprisePage() {
               Tudo ilimitado. E muito mais.
             </h2>
             <p className="text-gray-500 max-w-2xl mx-auto">
-              Enterprise inclui tudo do Scale sem limites — e soma camadas de serviço, conformidade e observabilidade que operações estratégicas exigem.
+              Enterprise inclui tudo do Scale sem limites e soma camadas de serviço, conformidade e observabilidade que operações estratégicas exigem.
             </p>
           </div>
 
@@ -161,7 +161,7 @@ export default function EnterprisePage() {
                 Para quem trata WhatsApp como canal estratégico
               </h2>
               <p className="text-gray-600 leading-relaxed">
-                Enterprise é pra operações em que uma hora de indisponibilidade custa caro, o compliance cobra todo trimestre e a diretoria quer dashboards que virem decisão — não relatório engavetado.
+                Enterprise é pra operações em que uma hora de indisponibilidade custa caro, o compliance cobra todo trimestre e a diretoria quer dashboards que virem decisão, não relatório engavetado.
               </p>
             </div>
 
@@ -214,7 +214,7 @@ export default function EnterprisePage() {
           </div>
 
           <p className="text-center text-xs text-gray-500 mt-6">
-            Payback típico: 30–90 dias, considerando substituição de atendentes + redução de perda de leads + ganho de conversão via Radar 360°.
+            Payback típico: 30–90 dias, considerando substituição de atendentes + redução de perda de leads + ganho de conversão via Radar 360° Pro.
           </p>
         </div>
       </section>

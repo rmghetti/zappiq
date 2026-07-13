@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * AgentQualityProactive — Seção Self-Healing (única no mundo)
+ * AgentQualityProactive: Seção Self-Healing (única no mundo)
  * --------------------------------------------------------------------------
  * Apresenta o diferencial competitivo da ZappIQ: a única plataforma
  * conversacional do mundo que (a) detecta sozinha desvios/alucinações
@@ -31,7 +31,7 @@ export function AgentQualityProactive() {
       <div className="zappiq-wrap">
         {/* ─── Header ─── */}
         <div className="text-center max-w-3xl mx-auto mb-12">
-          {/* Selo "Única no mundo" — design profissional + harmônico
+          {/* Selo "Única no mundo": design profissional + harmônico
               Gradient dark da brand (ink → indigo deep) · Award icon · pulse luminoso · tracking generoso */}
           <div className="inline-flex items-center gap-2.5 mb-5">
             <span
@@ -42,22 +42,21 @@ export function AgentQualityProactive() {
             >
               <Award size={14} className="text-amber-300" strokeWidth={2.2} />
               <span className="relative">
-                Única plataforma do mundo
+                A IA que se corrige sozinha
                 <span className="absolute -right-3.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.85)] animate-pulse" />
               </span>
             </span>
           </div>
           <h2 className="text-[36px] lg:text-[44px] font-medium text-[#0F172A] leading-[1.08] tracking-[-0.025em] mb-4">
-            A primeira IA conversacional que{' '}
-            <span className="text-grad">aprende com os próprios erros</span> — e te avisa antes
+            A operação de atendimento que{' '}
+            <span className="text-grad">aprende com os próprios erros</span>, e te avisa antes
             de você descobrir
           </h2>
           <p className="text-[15px] lg:text-[16.5px] text-[#475569] leading-relaxed">
-            A ZappIQ é a <b className="text-[#0F172A]">única plataforma conversacional do mundo</b>{' '}
-            onde a IA detecta sozinha anormalidades e alucinações do seu agente, sugere correções
-            e deixa <b className="text-[#0F172A]">você decidir</b> se aprova, edita ou recusa.
-            Cada sugestão aprovada é gravada na base de conhecimento — nas próximas interações,
-            o agente responde do jeito certo, automaticamente.
+            Na ZappIQ, a IA detecta sozinha os desvios e as alucinações do seu agente, sugere a
+            correção e deixa <b className="text-[#0F172A]">você decidir</b> se aprova, edita ou
+            recusa. Cada correção aprovada vira conhecimento: na próxima vez, o agente já
+            responde do jeito certo, sozinho.
           </p>
         </div>
 
@@ -176,7 +175,7 @@ export function AgentQualityProactive() {
             <div className="text-[12px] text-[#0F6E56] leading-[1.5]">
               Ao aplicar, esta versão é gravada no <b>system prompt</b> do seu agente. Da próxima
               vez que alguém perguntar sobre clareamento, a Iza responde do jeito que você
-              aprovou — sem precisar de re-treinamento, sem custo de consultor, sem fricção.
+              aprovou, sem precisar de re-treinamento, sem custo de consultor, sem fricção.
             </div>
           </div>
         </div>
@@ -213,7 +212,7 @@ export function AgentQualityProactive() {
         >
           <div className="text-white">
             <div className="text-[15px] font-medium mb-1">
-              Nenhuma outra plataforma do mundo faz isso por você.
+              A IA se corrige sozinha. Você fica no comando.
             </div>
             <div className="text-[13px] opacity-85">
               Iza identifica · sugere · você decide · plataforma aprende. Loop fechado.

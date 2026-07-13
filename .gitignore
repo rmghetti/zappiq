@@ -68,3 +68,4 @@ apps/api/scripts/v4_gate1_*_results_*.json
 apps/api/scripts/v4_gate1_*_report_*.md
 *.tmp
 .worktrees/
+.env*

@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /recuperar-senha — PR #102
+ * /recuperar-senha: PR #102
  * --------------------------------------------------------------------------
  * Form simples: cliente digita email → backend envia link de reset →
  * cliente abre email → cai em /redefinir-senha pra criar nova senha.

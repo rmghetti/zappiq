@@ -1,8 +1,8 @@
 /**
- * Política de Privacidade — ZappIQ V3.2
+ * Política de Privacidade: ZappIQ V3.2
  *
  * Aprovada pelo jurídico em 21/04/2026 (texto exato da minuta V3.2).
- * Publicada em 27/04/2026 (junto com patch dos Termos de Uso V3.2 — necessário
+ * Publicada em 27/04/2026 (junto com patch dos Termos de Uso V3.2, necessário
  * para fechar inconsistência interna detectada na auditoria Tech Provider).
  * Vigência: 14/05/2026 (Onda 1).
  * Evidência: ZappIQ_V32_Actions/sprint_1_pricing_garantia_cloud_api/PRIVACY_V32_APROVADA_JURIDICO.md
@@ -15,7 +15,7 @@
  */
 
 export const metadata = {
-  title: 'Política de Privacidade — ZappIQ',
+  title: 'Política de Privacidade: ZappIQ',
   description:
     'Política de Privacidade da ZappIQ (LGPD Art. 5º e Art. 7º): controladoria, operadoria, sub-processadores, retenção, direitos do titular e contato com o DPO.',
   alternates: {
@@ -95,12 +95,12 @@ export default function PrivacidadePage() {
           <strong>Dados de end-users (mensagens WhatsApp):</strong> texto, áudio, imagem,
           localização e metadados das conversas entre o Cliente e seus contatos via WhatsApp
           Business. Finalidade: operação do serviço de automação conforme instruções do Cliente
-          controlador (LGPD Art. 7º, V — execução de contrato com o Cliente).
+          controlador (LGPD Art. 7º, V: execução de contrato com o Cliente).
         </p>
         <p>
           <strong>Dados de uso e telemetria:</strong> IP, user-agent, identificadores de sessão,
           métricas de performance, logs de erro. Finalidade: operação, segurança e melhoria do
-          serviço (LGPD Art. 7º, IX — interesse legítimo documentado).
+          serviço (LGPD Art. 7º, IX: interesse legítimo documentado).
         </p>
 
         <h2>4. Sub-processadores</h2>
@@ -133,21 +133,21 @@ export default function PrivacidadePage() {
           </li>
           <li>
             <strong>Cloudflare, Inc.</strong> (CDN, proteção DDoS e Workers em edge para
-            recebimento de webhooks Meta). Sem acesso ao conteúdo das conversas — apenas metadados
+            recebimento de webhooks Meta). Sem acesso ao conteúdo das conversas, apenas metadados
             de roteamento. Sob contrato DPA 2024 com certificação SOC 2 Type II.
           </li>
           <li>
             <strong>Stripe, Inc.</strong> (processamento de pagamentos). Dados de cartão nunca
-            passam pelos servidores ZappIQ — são tokenizados direto no browser e enviados a
+            passam pelos servidores ZappIQ, são tokenizados direto no browser e enviados a
             Stripe. Certificação PCI-DSS Level 1.
           </li>
           <li>
-            <strong>Resend, Inc.</strong> (envio de e-mails transacionais — confirmação de conta,
+            <strong>Resend, Inc.</strong> (envio de e-mails transacionais: confirmação de conta,
             recuperação de senha, notificações de cobrança). Recebe apenas endereço de e-mail e
             conteúdo específico do aviso.
           </li>
           <li>
-            <strong>Meta Platforms Ireland Ltd.</strong> (WhatsApp Business Platform — Cloud API
+            <strong>Meta Platforms Ireland Ltd.</strong> (WhatsApp Business Platform, Cloud API
             direta). A ZappIQ é parceira conectada via Cloud API oficial, sem intermediário BSP.
             Dados de mensagens trafegam pela infraestrutura Meta conforme WhatsApp Business Policy.
           </li>
@@ -207,8 +207,8 @@ export default function PrivacidadePage() {
 
         <h2>9. Como exercer seus direitos de titular</h2>
         <p>
-          Titulares de dados pessoais podem exercer os direitos previstos na LGPD Art. 18 —
-          acesso, correção, anonimização, portabilidade, eliminação, revogação de consentimento —
+          Titulares de dados pessoais podem exercer os direitos previstos na LGPD Art. 18
+          (acesso, correção, anonimização, portabilidade, eliminação, revogação de consentimento)
           através dos seguintes canais:
         </p>
         <ul>
@@ -227,7 +227,7 @@ export default function PrivacidadePage() {
             >
               rodrigo.ghetti@zappiq.com.br
             </a>{' '}
-            com assunto &ldquo;Direitos LGPD — [tipo de solicitação]&rdquo;. Resposta em até 15 dias
+            com assunto &ldquo;Direitos LGPD: [tipo de solicitação]&rdquo;. Resposta em até 15 dias
             corridos (prazo ANPD).
           </li>
           <li>
@@ -255,7 +255,7 @@ export default function PrivacidadePage() {
             rodrigo.ghetti@zappiq.com.br
           </a>
           <br />
-          <strong>Endereço postal:</strong> ZappIQ Brasil Sistemas de IA LTDA — consulte{' '}
+          <strong>Endereço postal:</strong> ZappIQ Brasil Sistemas de IA LTDA, consulte{' '}
           <a href="/legal/enderecos-comerciais" className="text-blue-600 hover:text-blue-700">
             endereços comerciais
           </a>
@@ -274,7 +274,7 @@ export default function PrivacidadePage() {
           Platform, a ZappIQ opera em conformidade com a WhatsApp Business Policy, a Meta Commerce
           Policy e os Termos de Serviço da Meta Platforms. Clientes ZappIQ são responsáveis por
           respeitar políticas de opt-in, consentimento e qualidade de conta WhatsApp. Violações
-          podem resultar em suspensão da conta WhatsApp Business do Cliente pela Meta — situação
+          podem resultar em suspensão da conta WhatsApp Business do Cliente pela Meta, situação
           alheia à responsabilidade da ZappIQ. Mais detalhes na{' '}
           <a href="/legal/parceria-meta" className="text-blue-600 hover:text-blue-700">
             página de Parceria Meta

@@ -1,12 +1,12 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Countdown — V5.3 pré-lançamento
+ * Countdown: V5.3 pré-lançamento
  * --------------------------------------------------------------------------
  * Contagem regressiva pro lançamento oficial: 11 May 2026, 09:00 BRT (UTC-3)
  * Atualiza a cada segundo. Para de atualizar quando chega a zero.
  *
- * V4 #163 (2026-05-04) — bumped de 04/05 → 11/05 (D-Day antigo passou,
+ * V4 #163 (2026-05-04): bumped de 04/05 → 11/05 (D-Day antigo passou,
  * ganho de 7 dias pra finalizar onboarding/marketing/CSM playbook).
  * ══════════════════════════════════════════════════════════════════════════ */
 

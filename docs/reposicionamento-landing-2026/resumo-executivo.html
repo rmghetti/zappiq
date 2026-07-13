@@ -1,0 +1,357 @@
+<title>Reposicionamento da landing ZappIQ</title>
+<style>
+  :root{
+    --ground:#F4F7FB; --surface:#FFFFFF; --surface-2:#EAF0F7;
+    --ink:#0A1F3D; --body:#233044; --muted:#4A5A70; --faint:#8698AE;
+    --line:#DCE4EE; --accent:#B0863A; --accent-soft:#C9A961;
+    --band:#0A1F3D; --band-ink:#F4F7FB; --band-muted:#A9B8CC;
+    --good:#1C7C50; --good-bg:#E4F2EA; --good-line:#BFE0CD;
+    --warn:#9A6512; --warn-bg:#FaF0DA; --warn-line:#EAD3A0;
+    --radius:14px;
+    --sans:"Helvetica Neue",Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#080F1A; --surface:#0E1E33; --surface-2:#122741;
+      --ink:#F4F7FB; --body:#D5DEEA; --muted:#98A8BE; --faint:#65788F;
+      --line:#20374F; --accent:#D8BC77; --accent-soft:#C9A961;
+      --band:#050C16; --band-ink:#F4F7FB; --band-muted:#93A6BD;
+      --good:#4FD196; --good-bg:#0F2C1F; --good-line:#1E4C36;
+      --warn:#EAC172; --warn-bg:#2E2410; --warn-line:#4E3D16;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#080F1A; --surface:#0E1E33; --surface-2:#122741;
+    --ink:#F4F7FB; --body:#D5DEEA; --muted:#98A8BE; --faint:#65788F;
+    --line:#20374F; --accent:#D8BC77; --accent-soft:#C9A961;
+    --band:#050C16; --band-ink:#F4F7FB; --band-muted:#93A6BD;
+    --good:#4FD196; --good-bg:#0F2C1F; --good-line:#1E4C36;
+    --warn:#EAC172; --warn-bg:#2E2410; --warn-line:#4E3D16;
+  }
+  :root[data-theme="light"]{
+    --ground:#F4F7FB; --surface:#FFFFFF; --surface-2:#EAF0F7;
+    --ink:#0A1F3D; --body:#233044; --muted:#4A5A70; --faint:#8698AE;
+    --line:#DCE4EE; --accent:#B0863A; --accent-soft:#C9A961;
+    --band:#0A1F3D; --band-ink:#F4F7FB; --band-muted:#A9B8CC;
+    --good:#1C7C50; --good-bg:#E4F2EA; --good-line:#BFE0CD;
+    --warn:#9A6512; --warn-bg:#FAF0DA; --warn-line:#EAD3A0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--body);
+    font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;
+    font-feature-settings:"ss01";}
+  .wrap{max-width:940px;margin:0 auto;padding:0 22px}
+  .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--accent);font-weight:700}
+  h1,h2,h3{color:var(--ink);text-wrap:balance;letter-spacing:-.02em;line-height:1.12;margin:0}
+  p{margin:0}
+  a{color:var(--accent);text-decoration:none}
+  .tnum{font-variant-numeric:tabular-nums}
+
+  /* HERO band */
+  .hero{background:var(--band);color:var(--band-ink);
+    border-bottom:1px solid var(--line)}
+  .hero .wrap{padding-top:54px;padding-bottom:52px}
+  .hero .eyebrow{color:var(--accent-soft)}
+  .hero h1{color:var(--band-ink);font-size:clamp(30px,5.4vw,50px);font-weight:800;margin:16px 0 0}
+  .hero .lede{color:var(--band-muted);font-size:clamp(16px,2.2vw,20px);
+    max-width:60ch;margin-top:18px;line-height:1.5}
+  .rule{height:1px;background:linear-gradient(90deg,var(--accent),transparent);
+    width:64px;margin:22px 0 0}
+  .stamp{display:inline-flex;align-items:center;gap:8px;margin-top:26px;
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--band-muted);
+    border:1px solid rgba(201,169,97,.35);border-radius:999px;padding:7px 13px}
+  .stamp .dot{width:6px;height:6px;border-radius:50%;background:var(--accent-soft)}
+
+  section{padding:44px 0}
+  section + section{border-top:1px solid var(--line)}
+  .sec-head{margin-bottom:22px}
+  .sec-head h2{font-size:clamp(21px,3vw,27px);font-weight:800;margin-top:10px}
+  .sec-head p{color:var(--muted);margin-top:8px;max-width:66ch}
+
+  /* GAP before/after */
+  .gap{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .gap .col{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+  .gap .col.now{border-left:3px solid var(--faint)}
+  .gap .col.new{border-left:3px solid var(--accent)}
+  .gap h3{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .gap.new h3{color:var(--accent)}
+  .gap ul{margin:14px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+  .gap li{position:relative;padding-left:18px;color:var(--body);font-size:14.5px}
+  .gap li::before{content:"";position:absolute;left:0;top:9px;width:6px;height:6px;border-radius:1px;background:var(--faint)}
+  .gap .new li::before{background:var(--accent);border-radius:50%}
+
+  /* message callout */
+  .msg{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:var(--radius);padding:24px 26px}
+  .msg .cat{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  .msg blockquote{margin:14px 0 0;font-size:clamp(19px,2.7vw,25px);font-weight:700;color:var(--ink);
+    line-height:1.32;letter-spacing:-.015em}
+  .msg .sub{margin-top:14px;color:var(--muted);font-size:14.5px}
+
+  /* pillars grid */
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .card .n{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:700}
+  .card h3{font-size:16px;font-weight:750;margin:8px 0 6px}
+  .card p{font-size:13.5px;color:var(--muted)}
+
+  /* suite groups */
+  .suite{display:flex;flex-direction:column;gap:12px}
+  .grp{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px 18px;display:grid;grid-template-columns:170px 1fr;gap:16px;align-items:start}
+  .grp .label{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700;padding-top:3px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-size:13px;background:var(--surface-2);border:1px solid var(--line);color:var(--body);
+    border-radius:8px;padding:5px 11px;font-weight:550}
+  .chip b{color:var(--ink);font-weight:750}
+  .chip.soon{color:var(--muted);border-style:dashed}
+
+  /* journey */
+  .journey{display:flex;flex-direction:column;gap:2px}
+  .step{display:grid;grid-template-columns:34px 1fr;gap:16px;padding:13px 0}
+  .step + .step{border-top:1px dashed var(--line)}
+  .step .num{font-family:var(--mono);font-weight:700;color:var(--band-ink);background:var(--band);
+    width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .step h3{font-size:15px;font-weight:700;margin-bottom:3px}
+  .step p{font-size:13.5px;color:var(--muted)}
+  .step b{color:var(--accent);font-weight:700}
+
+  /* stat tiles */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 16px}
+  .stat .big{font-size:30px;font-weight:800;color:var(--ink);letter-spacing:-.03em;line-height:1}
+  .stat .lbl{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .stat.good{background:var(--good-bg);border-color:var(--good-line)}
+  .stat.good .big{color:var(--good)}
+
+  /* callout warn */
+  .callout{border-radius:var(--radius);padding:20px 22px;background:var(--warn-bg);border:1px solid var(--warn-line)}
+  .callout h3{color:var(--warn);font-size:16px;font-weight:750;display:flex;align-items:center;gap:9px}
+  .callout p{color:var(--body);font-size:14px;margin-top:8px}
+  .callout .blocks{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+  .callout .blk{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 14px}
+  .callout .blk .h{font-weight:750;color:var(--ink);font-size:13.5px}
+  .callout .blk .d{font-size:12.5px;color:var(--muted);margin-top:4px}
+
+  /* waves */
+  .waves{display:flex;flex-direction:column;gap:10px}
+  .wave{display:grid;grid-template-columns:88px 1fr;gap:16px;background:var(--surface);
+    border:1px solid var(--line);border-radius:var(--radius);padding:15px 18px;align-items:center}
+  .wave .tag{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent);
+    text-transform:uppercase;letter-spacing:.08em}
+  .wave h3{font-size:15px;font-weight:700;margin-bottom:2px}
+  .wave p{font-size:13px;color:var(--muted)}
+
+  /* skills */
+  .skills{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .skill{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .skill .name{font-family:var(--mono);font-size:13px;color:var(--ink);font-weight:700}
+  .skill .name.star{color:var(--accent)}
+  .skill p{font-size:13px;color:var(--muted);margin-top:6px}
+
+  footer{background:var(--band);color:var(--band-muted);padding:30px 0;border-top:1px solid var(--line)}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;justify-content:space-between}
+  footer .path{font-family:var(--mono);font-size:12px;color:var(--accent-soft)}
+  footer .meta{font-size:12px;letter-spacing:.04em}
+
+  @media (max-width:760px){
+    .gap,.grid3,.stats,.callout .blocks,.skills{grid-template-columns:1fr}
+    .grp,.wave{grid-template-columns:1fr;gap:9px}
+    .stats{grid-template-columns:1fr 1fr}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .reveal{opacity:0;transform:translateY(10px);animation:rise .6s ease forwards}
+    @keyframes rise{to{opacity:1;transform:none}}
+  }
+</style>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="eyebrow">ZappIQ &middot; A Platform MACHIA Company</div>
+    <h1>A landing vende um chatbot.<br>O produto já é uma operação inteira.</h1>
+    <p class="lede">Plano completo para reposicionar zappiq.com.br de "plataforma de IA conversacional para WhatsApp" para o que o código de julho de 2026 prova que ela é: uma operação de atendimento, vendas e campanhas que roda sozinha, com CRM que se preenche na origem e você aprovando.</p>
+    <div class="rule"></div>
+    <div class="stamp"><span class="dot"></span>mais de 50 agentes de análise, catálogo, auditoria e enriquecimento &middot; base no código real</div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">O diagnóstico</div>
+      <h2>O site diz "atende". O código faz muito mais.</h2>
+      <p>Ao se chamar de chatbot de WhatsApp, a ZappIQ se compara com Blip, Zenvia e Poli pelo eixo errado, o preço por conversa, e esconde o que tem de único.</p>
+    </div>
+    <div class="gap">
+      <div class="col now">
+        <h3>O que a landing comunica hoje</h3>
+        <ul>
+          <li>Atendimento conversacional 24 horas</li>
+          <li>Um chatbot com nome (Iza)</li>
+          <li>CRM como bullet de plano</li>
+          <li>Fluxos e campanhas quase invisíveis</li>
+          <li>Agendamento só no verbo do hero</li>
+          <li>Analytics como um card</li>
+        </ul>
+      </div>
+      <div class="col new new">
+        <h3>O que o produto já é</h3>
+        <ul>
+          <li>Operação de atendimento, vendas e campanhas autônoma</li>
+          <li>Um agente com a receita atribuída a ele</li>
+          <li>CRM que se preenche sozinho a cada conversa</li>
+          <li>A IA que monta o fluxo e a campanha, você aprova</li>
+          <li>Agendamento executado por tools mais Google Calendar</li>
+          <li>Pulso: a operação narrada todo dia, sobre fatos</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">A proposta</div>
+      <h2>Liderar uma subcategoria própria</h2>
+    </div>
+    <div class="msg">
+      <div class="cat">Categoria: Operação Autônoma de Atendimento e Vendas</div>
+      <blockquote>"A Iza atende, vende e faz campanha pela sua operação, no WhatsApp e no Instagram. Você aprova, ela executa, o resultado aparece no painel."</blockquote>
+      <p class="sub">Outcome primeiro, a Iza como rosto da operação, e termina em prova, não em adjetivo. O concorrente entrega uma peça e deixa você integrar o resto. A ZappIQ entrega a operação inteira já costurada.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Arquitetura de mensagem</div>
+      <h2>Seis pilares</h2>
+      <p>Cada um com a dor do dono de PME, a capacidade da ZappIQ, os produtos que sustentam e o resultado mensurável.</p>
+    </div>
+    <div class="grid3">
+      <div class="card"><div class="n">01</div><h3>Atendimento que resolve</h3><p>Atende 24/7 em texto e áudio, resolve sozinho, chama o humano só no que importa.</p></div>
+      <div class="card"><div class="n">02</div><h3>Vendas que a IA fecha e prova</h3><p>Qualifica, cria o follow-up e tem a receita atribuída a ela.</p></div>
+      <div class="card"><div class="n">03</div><h3>Campanhas que vendem pela base</h3><p>Um objetivo em português vira campanha, e quem responde cai no atendimento da Iza.</p></div>
+      <div class="card"><div class="n">04</div><h3>CRM que se preenche sozinho</h3><p>O dado de venda entra limpo na origem, sem ninguém digitar.</p></div>
+      <div class="card"><div class="n">05</div><h3>Agenda cheia sem secretária</h3><p>A IA marca, remarca e cancela na conversa, sem alucinar horário.</p></div>
+      <div class="card"><div class="n">06</div><h3>Confiança auditável</h3><p>A IA se corrige com você aprovando, e a operação se mede e se explica todo dia.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">A suíte de produtos</div>
+      <h2>Os nomes do Dash, agrupados por função</h2>
+      <p>Doze produtos catalogados com material marketeiro. Os codinomes antigos em inglês (Pulse AI, Nexus CRM, Spark, Radar Insights) foram descartados.</p>
+    </div>
+    <div class="suite">
+      <div class="grp"><div class="label">Atendimento</div><div class="chips"><span class="chip"><b>Iza</b> agente 24/7</span><span class="chip"><b>Conversas</b> inbox</span><span class="chip soon">Echo Copilot (beta)</span><span class="chip"><b>Voz Nativa</b> add-on</span></div></div>
+      <div class="grp"><div class="label">Vendas e relação</div><div class="chips"><span class="chip"><b>CRM</b></span><span class="chip"><b>Contatos</b></span><span class="chip"><b>Agenda</b> agendamento IA</span><span class="chip"><b>Tarefas</b></span></div></div>
+      <div class="grp"><div class="label">Campanhas</div><div class="chips"><span class="chip"><b>Zap Impulso</b> disparos</span><span class="chip"><b>Templates</b></span></div></div>
+      <div class="grp"><div class="label">Automação e inteligência</div><div class="chips"><span class="chip"><b>Maestro</b> fluxos</span><span class="chip"><b>Analytics</b> + Pulso</span><span class="chip"><b>Radar 360</b> add-on</span><span class="chip"><b>Treinar IA</b> base</span><span class="chip"><b>Qualidade da IA</b></span></div></div>
+      <div class="grp"><div class="label">Governança</div><div class="chips"><span class="chip"><b>Auditoria</b></span><span class="chip"><b>Requisições LGPD</b></span></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">O coração do reposicionamento</div>
+      <h2>A jornada de um lead, do anúncio à receita, sem você tocar</h2>
+    </div>
+    <div class="journey">
+      <div class="step"><div class="num">1</div><div><h3>Chega o lead</h3><p>Um clique no anúncio do Instagram vira DM. A <b>Iza</b> responde em segundos, em texto ou áudio, na voz da sua marca.</p></div></div>
+      <div class="step"><div class="num">2</div><div><h3>O CRM enche sozinho</h3><p>Enquanto conversa, a IA cria o contato, marca o estágio do funil e dá o lead score. Você não digitou nada. <b>CRM</b>.</p></div></div>
+      <div class="step"><div class="num">3</div><div><h3>A IA qualifica e agenda</h3><p>Qualifica pelo fluxo que o <b>Maestro</b> montou e marca na <b>Agenda</b>, checando o horário real.</p></div></div>
+      <div class="step"><div class="num">4</div><div><h3>A venda fecha e vira número</h3><p>A <b>atribuição</b> credita a Iza pela receita que passou por ela. No fim do mês você vê, em reais, quanto a IA vendeu.</p></div></div>
+      <div class="step"><div class="num">5</div><div><h3>A base volta a comprar</h3><p>Você diz ao <b>Zap Impulso</b> "reativar quem parou há 60 dias". A campanha sai pronta e quem responde volta para a Iza.</p></div></div>
+      <div class="step"><div class="num">6</div><div><h3>A operação se explica e se corrige</h3><p>Todo dia o <b>Pulso</b> conta o que aconteceu. O loop de auto-correção pega o desvio, você aprova, a plataforma comprova em minutos.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Auditoria de consistência</div>
+      <h2>O material foi conferido contra o código</h2>
+      <p>Seis auditores cruzaram os 17 arquivos de marketing com a folha de fatos extraída do código. Correção que aproxima o texto da verdade, nunca o contrário.</p>
+    </div>
+    <div class="stats">
+      <div class="stat good"><div class="big tnum">78</div><div class="lbl">correções aplicadas (nomes, preços, status, travessão, hype)</div></div>
+      <div class="stat good"><div class="big tnum">9/10</div><div class="lbl">confiança na base factual (planos, preços, nomes, status)</div></div>
+      <div class="stat"><div class="big tnum">0</div><div class="lbl">travessões e zero codinome antigo como marca</div></div>
+      <div class="stat good"><div class="big tnum">12</div><div class="lbl">produtos com business case e exemplo por segmento</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="callout">
+      <h3>Decisões aplicadas, e o que segue com você</h3>
+      <p>Você decidiu e o material foi atualizado: Bloco A liberado (os claims afirmam direto, a revisão jurídica fica com você), 360Dialog eliminado, add-ons na lista V4. Cada produto ganhou business case e exemplo por segmento.</p>
+      <div class="blocks">
+        <div class="blk"><div class="h">Bloco A &middot; Liberado</div><div class="d">Meta Business Partner, dados no Brasil, SLA, comparativos: agora afirmam na copy. Falta só a sua revisão jurídica, com o risco assumido.</div></div>
+        <div class="blk"><div class="h">Bloco B &middot; Em resolução</div><div class="d">Status do Google Calendar, trial do Radar 360 e métricas do copiloto seguem marcados. Você está resolvendo.</div></div>
+        <div class="blk"><div class="h">Add-ons &middot; Estudar</div><div class="d">Código e /billing ainda com preços legados contra o V4. Detalhes em RELATORIO-ADDONS.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Como implementar</div>
+      <h2>Quatro ondas, do mais barato ao contínuo</h2>
+    </div>
+    <div class="waves">
+      <div class="wave"><div class="tag">Onda 0</div><div><h3>Higiene técnica</h3><p>Remover o rating fabricado no schema, corrigir a metadata de /precos que ainda cita Starter R$ 197, a razão social errada, slugs com 404 e a âncora de menu quebrada. Quase tudo one-liner.</p></div></div>
+      <div class="wave"><div class="tag">Onda 1</div><div><h3>Reposicionar a home</h3><p>Nova hero, faixa de bandeiras, FAQ com schema, usando só os claims já verdadeiros.</p></div></div>
+      <div class="wave"><div class="tag">Onda 2</div><div><h3>Páginas de produto e solução</h3><p>Criar /produtos e as páginas por produto, o maior gap do site hoje, e religar o mega-menu.</p></div></div>
+      <div class="wave"><div class="tag">Onda 3</div><div><h3>SEO de conteúdo e GEO</h3><p>Posts de fundo de funil, páginas de migração por concorrente, hub de confiança e presença em respostas de IA.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="eyebrow">Skills para manter a landing viva</div>
+      <h2>Informada por uma fonte de verdade, afiada pela voz certa</h2>
+    </div>
+    <div class="skills">
+      <div class="skill"><div class="name star">criar: zappiq-landing</div><p>Recomendação principal: uma skill de fonte única de verdade (nomes, planos, add-ons, status, guardrails), com a folha de fatos desta entrega como semente. Toda sessão futura escreve landing certa por padrão.</p></div>
+      <div class="skill"><div class="name">voz-humana</div><p>O último passe em toda copy: natural, sem cara de IA, sem travessão. É a que mais entrega o "marketeira" sem cair em hype.</p></div>
+      <div class="skill"><div class="name">machia</div><p>A régua de marca: posicionamento, ofertas, preços e tom de voz oficiais.</p></div>
+      <div class="skill"><div class="name">machia-app-privacy &middot; dataviz</div><p>Privacidade para a página de confiança (/seguranca-lgpd), e visualização para o comparativo e a calculadora de ROI.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="meta">Reposicionamento da landing ZappIQ &middot; 10/07/2026</span>
+    <span class="path">~/zappiq-main/docs/reposicionamento-landing-2026/</span>
+  </div>
+</footer>
+
+<script>
+  (function(){
+    if(matchMedia('(prefers-reduced-motion: no-preference)').matches){
+      var els=document.querySelectorAll('section .wrap > *, .hero .wrap');
+      var io=new IntersectionObserver(function(es){
+        es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('reveal');io.unobserve(e.target);}});
+      },{threshold:.08});
+      document.querySelectorAll('section > .wrap').forEach(function(w){io.observe(w);});
+    }
+  })();
+</script>

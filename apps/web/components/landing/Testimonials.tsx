@@ -1,8 +1,8 @@
 /* ══════════════════════════════════════════════════════════════════════════
- * Testimonials (Programa Fundadores) — Design V4 (Chatbase-style)
+ * Testimonials (Programa Fundadores): Design V4 (Chatbase-style)
  * --------------------------------------------------------------------------
  * FASE 4 P7+ (2026-05-18): alinhamento de oferta com /founders.
- * Antes: "50% off por 12 meses" — divergia de /founders que dizia 30% vitalício.
+ * Antes: "50% off por 12 meses", divergia de /founders que dizia 30% vitalício.
  * Agora: 30% off vitalício (oferta única). CTA aponta pra /founders pra critérios
  * e aplicação formal (não mais pra /cadastro direto).
  * Fonte de verdade: apps/web/app/founders/page.tsx
@@ -16,7 +16,7 @@ const PERKS = [
     icon: Percent,
     title: '30% off vitalício',
     description:
-      'Desconto permanente em qualquer plano, enquanto seu contrato seguir ativo. Sem cliff no mês 13, sem reajuste promocional — preço congelado pra sempre.',
+      'Desconto permanente em qualquer plano, enquanto seu contrato seguir ativo. Sem cliff no mês 13, sem reajuste promocional, preço congelado pra sempre.',
   },
   {
     icon: Users,
@@ -44,7 +44,7 @@ export function Testimonials() {
           </h2>
           <p className="text-[16px] text-muted leading-relaxed">
             50 vagas para empresas que adotam ZappIQ antes do resto do mercado acordar.
-            Em troca do seu feedback qualificado, garantimos 30% de desconto vitalício — sem
+            Em troca do seu feedback qualificado, garantimos 30% de desconto vitalício, sem
             cliff, sem reajuste promocional, sem letra miúda.
           </p>
         </div>
@@ -80,7 +80,7 @@ export function Testimonials() {
             Ver critérios e aplicar <ArrowRight size={16} />
           </Link>
           <p className="text-[11.5px] text-muted mt-4">
-            50 vagas · encerramento ao atingir o limite ou em 30/06/2026 · 14 dias grátis no trial, sem cartão
+            50 vagas · encerramos assim que a cohort fecha · 14 dias grátis no trial, sem cartão
           </p>
         </div>
       </div>

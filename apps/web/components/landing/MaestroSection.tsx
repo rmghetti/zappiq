@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * MaestroSection — ZappIQ Maestro na landing (Track B, #281)
+ * MaestroSection: ZappIQ Maestro na landing (Track B, #281)
  * --------------------------------------------------------------------------
  * Flow builder visual HÍBRIDO: cada nó é trilho fixo (determinístico) OU nó-IA
  * (a Iza decide). Diferencial vs. construtores determinísticos puros (ex: Blip
@@ -11,7 +11,7 @@
  * Estrutura: bandeira + 4 tipos de nó (cores semânticas) + comparativo
  * determinístico-puro vs híbrido + simulação estática "Maestro monta pra você".
  * Visual no mesmo sistema da landing (zappiq-wrap / eyebrow / text-grad /
- * card-soft). Badge "Em breve" — honesto: ainda em construção (Fase B).
+ * card-soft). Badge "Em breve", honesto: ainda em construção (Fase B).
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { Workflow, Sparkles, Zap, Headset, Check, X as XIcon } from 'lucide-react';
@@ -63,7 +63,7 @@ const COMPARISON = [
   },
   {
     rigid: 'Manutenção vira um labirinto de condições',
-    hybrid: 'Menos nós, mais inteligência — fácil de manter',
+    hybrid: 'Menos nós, mais inteligência, fácil de manter',
   },
 ];
 
@@ -139,7 +139,7 @@ export function MaestroSection() {
               Cada bloco acima é um nó: <span className="text-slate-600 font-medium">cinza</span> é trilho fixo,{' '}
               <span className="text-blue-600 font-medium">azul</span> é a Iza decidindo,{' '}
               <span className="text-emerald-600 font-medium">verde</span> é ação,{' '}
-              <span className="text-amber-600 font-medium">âmbar</span> é humano. Você arrasta, conecta e pública — no WhatsApp, no Instagram e no chat do site, ao mesmo tempo.
+              <span className="text-amber-600 font-medium">âmbar</span> é humano. Você arrasta, conecta e pública, no WhatsApp, no Instagram e no chat do site, ao mesmo tempo.
             </p>
           </div>
         </div>

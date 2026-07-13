@@ -14,14 +14,14 @@ import {
 } from 'lucide-react';
 
 /**
- * SelfServiceTraining — Seção "Você treina sua IA".
+ * SelfServiceTraining: Seção "Você treina sua IA".
  *
  * Mensagem central: independência total do cliente na capacitação da IA.
  * Sem consultor, sem onboarding pago (que concorrentes cobram entre
  * R$ 3k e R$ 15k). O cliente responde o survey, sobe documentos/URLs,
  * cria Q&A e vê o AI Readiness Score subir em tempo real.
  *
- * Cada "card de passo" replica a UI do app — reforçando a percepção de
+ * Cada "card de passo" replica a UI do app, reforçando a percepção de
  * que o que está na landing é exatamente o que ele vai ver ao entrar
  * na plataforma. Isso reduz a fricção de conversão.
  */
@@ -39,7 +39,7 @@ const STEPS = [
     icon: Upload,
     title: 'Upload de contratos e documentos',
     description:
-      'PDFs, planilhas, FAQs, contratos, políticas, catálogos. Sua IA responde com base no SEU acervo — sem alucinação e sem limite de uploads.',
+      'PDFs, planilhas, FAQs, contratos, políticas, catálogos. Sua IA responde com base no SEU acervo, sem alucinação e sem limite de uploads.',
     deliverable: 'Base de conhecimento vetorizada automaticamente',
     points: '+25 pontos no AI Readiness',
   },
@@ -55,7 +55,7 @@ const STEPS = [
     icon: FileText,
     title: 'URL do site ingerida automaticamente',
     description:
-      'Cole a URL do seu site ou de páginas específicas. Nosso crawler monta o mapa de conhecimento sozinho — você não precisa mexer em nada.',
+      'Cole a URL do seu site ou de páginas específicas. Nosso crawler monta o mapa de conhecimento sozinho, você não precisa mexer em nada.',
     deliverable: 'Crawler inteligente com respeito a robots.txt',
     points: 'Complemento à base documental',
   },
@@ -112,7 +112,7 @@ export function SelfServiceTraining() {
             Não precisa de especialista, consultor ou pacote de implantação pago.
             Você responde o survey de qualificação, sobe documentos e cria Q&A
             direto na plataforma. A IA aprende com o <strong>seu</strong> negócio,
-            com os <strong>seus</strong> contratos, do <strong>seu</strong> jeito —
+            com os <strong>seus</strong> contratos, do <strong>seu</strong> jeito,
             e o dashboard te mostra exatamente o quanto ela já está pronta.
           </p>
         </div>
@@ -295,7 +295,7 @@ export function SelfServiceTraining() {
             href="/cadastro"
             className="inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-8 py-4 rounded-xl text-base transition-all shadow-lg shadow-primary-500/25 hover:shadow-xl hover:-translate-y-0.5"
           >
-            Treinar minha IA agora — grátis por 14 dias <ArrowRight size={18} />
+            Treinar minha IA agora, grátis por 14 dias <ArrowRight size={18} />
           </Link>
           <p className="text-xs text-gray-500 mt-3">
             Sem cartão de crédito. Sem consultor. Sem setup fee. Sem surpresa.

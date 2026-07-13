@@ -48,19 +48,37 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.7,
     },
     {
-      url: `${baseUrl}/segmentos/ecommerce`,
+      url: `${baseUrl}/diagnostico`,
+      lastModified: today,
+      changeFrequency: 'monthly',
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/conectar-whatsapp`,
+      lastModified: today,
+      changeFrequency: 'monthly',
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/segmentos/varejo`,
       lastModified: today,
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/segmentos/servicos`,
+      url: `${baseUrl}/segmentos/servicos-b2b`,
       lastModified: today,
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/segmentos/educação`,
+      url: `${baseUrl}/segmentos/saude`,
+      lastModified: today,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/segmentos/educacao`,
       lastModified: today,
       changeFrequency: 'monthly',
       priority: 0.8,
@@ -79,12 +97,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${baseUrl}/legal/cookies`,
-      lastModified: today,
-      changeFrequency: 'yearly',
-      priority: 0.3,
-    },
-    {
-      url: `${baseUrl}/sla`,
       lastModified: today,
       changeFrequency: 'yearly',
       priority: 0.3,

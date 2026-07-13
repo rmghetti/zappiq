@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * SocialProof — Design V4 (strip animado de parceiros tecnológicos)
+ * SocialProof: Design V4 (strip animado de parceiros tecnológicos)
  * --------------------------------------------------------------------------
  * Strip infinito horizontal com 8 marcas oficiais (2 sets duplicados p/
  * seamless loop). Assets em /public/partners/*.svg (wordmarks oficiais,

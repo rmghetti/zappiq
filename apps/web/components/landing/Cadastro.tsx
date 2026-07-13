@@ -1,12 +1,12 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Cadastro — Self-Signup Wizard V4 (Chatbase-style · Geist + g→b→p)
+ * Cadastro: Self-Signup Wizard V4 (Chatbase-style · Geist + g→b→p)
  * --------------------------------------------------------------------------
  * Wizard 3 steps:
- *   Step 1 — Dados básicos (nome, e-mail, plano) + Google OAuth alternativo
- *   Step 2 — Aguarde Magic Link (e-mail confirmation)
- *   Step 3 — Escolha caminho onboarding (Assistido → /agendar / Self-service)
+ *   Step 1: Dados básicos (nome, e-mail, plano) + Google OAuth alternativo
+ *   Step 2: Aguarde Magic Link (e-mail confirmation)
+ *   Step 3: Escolha caminho onboarding (Assistido → /agendar / Self-service)
  *
  * Decisões aplicadas (memory: project_self_signup_decisions):
  *   - Auth: Magic Link Supabase + Google OAuth (sem WhatsApp OTP)
@@ -23,7 +23,7 @@ import {
   ArrowRight, CheckCircle2, Mail, Calendar, Rocket,
   Users, Wrench, Loader2, AlertCircle, Sparkles,
 } from 'lucide-react';
-import { PLAN_CONFIG, type PlanId } from '@zappiq/shared';
+import { isSelfSignupPlan, type PlanId } from '@zappiq/shared';
 import { track, getUtm } from '@/lib/analytics';
 
 type Step = 1 | 2 | 3;
@@ -38,12 +38,27 @@ interface FormData {
 
 // V4 (2026-05-27): Pricing reorganizado.
 // IZA_LITE eh o entry tier com Trial 14d. Default no signup novo.
-// STARTER e BUSINESS deprecated — escondidos pra signup novo.
+// STARTER e BUSINESS deprecated, escondidos pra signup novo.
 const PLAN_OPTIONS: { id: PlanId; label: string; price: string; sub: string; highlight?: boolean }[] = [
-  { id: 'IZA_LITE', label: 'Lite', price: 'R$ 249,90', sub: '14 dias gratis · entrada', highlight: true },
+  { id: 'IZA_LITE', label: 'Lite', price: 'R$ 247', sub: '14 dias gratis · entrada', highlight: true },
   { id: 'GROWTH', label: 'Growth', price: 'R$ 497', sub: 'Para crescer' },
-  { id: 'SCALE', label: 'Scale', price: 'R$ 1.497', sub: 'Operação seria com SLA' },
+  { id: 'SCALE', label: 'Scale', price: 'R$ 1.497', sub: 'Operação séria, multi-time' },
 ];
+
+// Deep-link de plano: normaliza o ?plan da URL (Pricing, ROI, diagnostico,
+// vendedor-digital) pro PlanId canonico. Aceita apelidos pt-BR e legados.
+const PLAN_PARAM_ALIASES: Record<string, PlanId> = {
+  lite: 'IZA_LITE', iza_lite: 'IZA_LITE', 'iza-lite': 'IZA_LITE',
+  growth: 'GROWTH',
+  scale: 'SCALE',
+  enterprise: 'ENTERPRISE',
+  starter: 'IZA_LITE', // legado -> entrada atual
+  business: 'SCALE',   // legado -> Scale absorveu o Business V3.2
+};
+function planFromParam(raw: string | null): PlanId | null {
+  if (!raw) return null;
+  return PLAN_PARAM_ALIASES[raw.trim().toLowerCase()] ?? null;
+}
 
 // ═══════════════════════════════════════════════════════════════════
 export function Cadastro() {
@@ -64,6 +79,16 @@ export function Cadastro() {
   useEffect(() => {
     track('cadastro_view');
   }, []);
+
+  // Deep-link de plano: pre-seleciona o card conforme ?plan (Pricing, ROI,
+  // diagnostico, vendedor-digital). Sem isso todo CTA caia no Lite e derrubava
+  // o ticket medio.
+  useEffect(() => {
+    const p = planFromParam(search.get('plan'));
+    if (p && isSelfSignupPlan(p)) {
+      setForm((f) => ({ ...f, plan: p }));
+    }
+  }, [search]);
 
   // Detecta retorno de magic link / OAuth callback
   useEffect(() => {
@@ -95,14 +120,14 @@ export function Cadastro() {
     // Aceita QUALQUER retorno autenticado do Supabase (access_token presente),
     // EXCETO recovery (reset de senha tem fluxo próprio). Bug 2026-05-23: antes
     // só aceitava type==='signup' OU provider_token (Google), o que IGNORAVA o
-    // Magic Link de RETORNO (type=magiclink) — deixando o localStorage stale de
+    // Magic Link de RETORNO (type=magiclink), deixando o localStorage stale de
     // uma sessão anterior (email/provider errados aparecendo no /onboarding).
     // O token é validado server-side em passwordless-exchange/confirm-signup.
     if (type === 'recovery') return;
 
-    // PR #101.3 — Decodifica JWT Supabase pra extrair email/name e salvar
+    // PR #101.3: Decodifica JWT Supabase pra extrair email/name e salvar
     // em localStorage. /onboarding useEffect lê e pula Step 0 ("Crie sua conta")
-    // pre-populando os dados — elimina P0 #2 do audit (signup duplicado).
+    // pre-populando os dados, elimina P0 #2 do audit (signup duplicado).
     try {
       const jwtPayload = JSON.parse(atob(accessToken.split('.')[1]));
       const sbEmail = jwtPayload.email || '';
@@ -116,7 +141,7 @@ export function Cadastro() {
         localStorage.setItem('zappiq_oauth_email', sbEmail);
         localStorage.setItem('zappiq_oauth_name', sbName);
         localStorage.setItem('zappiq_oauth_provider', isGoogle ? 'google' : 'magic_link');
-        // HOTFIX 2026-05-19 — persistir access_token Supabase pra /onboarding usar
+        // HOTFIX 2026-05-19: persistir access_token Supabase pra /onboarding usar
         // ao chamar /api/auth/set-password (caminho magic_link). TTL ~1h
         // (Supabase JWT default), cliente termina onboarding antes disso na prática.
         localStorage.setItem('zappiq_supabase_access_token', accessToken);
@@ -133,7 +158,7 @@ export function Cadastro() {
       track('signup_email_confirmed', { provider: 'email' });
     }
 
-    // PR #105 — Tentativa LOGIN RETORNO antes de signup flow.
+    // PR #105: Tentativa LOGIN RETORNO antes de signup flow.
     // Quando cliente já tem conta (User + Org Prisma), Supabase OAuth retorna
     // pra /cadastro?verified=1 mesmo sendo login (bug arquitetural com user
     // existente). Fix: chama passwordless-exchange ANTES de setStep(3).
@@ -169,7 +194,7 @@ export function Cadastro() {
         console.warn('[cadastro] passwordless-exchange failed, falling back to signup:', err);
       }
 
-      // FALLBACK — flow signup atual (cliente novo)
+      // FALLBACK: flow signup atual (cliente novo)
       setStep(3);
 
       // Limpa hash da URL pra não vazar tokens em logs/screenshots
@@ -177,9 +202,9 @@ export function Cadastro() {
       window.history.replaceState({}, document.title, cleanUrl);
 
       // Lê plan da query string (passado pelo OAuth flow via /api/signup/google)
-      const planFromQuery = search.get('plan') || undefined;
+      const planFromQuery = planFromParam(search.get('plan')) || undefined;
 
-      // UTM first-touch (PR #94) — pra OAuth path, pegamos do storage
+      // UTM first-touch (PR #94), pra OAuth path, pegamos do storage
       // e mandamos pro confirm-signup que faz UPSERT incluindo as colunas.
       const utm = getUtm();
 
@@ -209,7 +234,7 @@ export function Cadastro() {
     setLoading(true);
     setError(null);
 
-    // Analytics: step 1 submit (props sanitizadas — sem PII direto)
+    // Analytics: step 1 submit (props sanitizadas, sem PII direto)
     track('signup_step_1_submit', {
       plan: form.plan,
       hasCnpj: form.cnpj.trim().length > 0,
@@ -331,7 +356,7 @@ export function Cadastro() {
       {/* Conteúdo do step */}
       <section className="pb-24">
         <div className="zappiq-wrap max-w-2xl">
-          {/* ─── STEP 1 — Form básico + OAuth ───────────────────── */}
+          {/* ─── STEP 1: Form básico + OAuth ───────────────────── */}
           {step === 1 && (
             <div className="bg-white border border-line rounded-[20px] p-6 lg:p-8 shadow-[var(--shadow-card)]">
               {/* Google OAuth */}
@@ -467,7 +492,7 @@ export function Cadastro() {
             </div>
           )}
 
-          {/* ─── STEP 2 — Confirme e-mail ──────────────────────── */}
+          {/* ─── STEP 2: Confirme e-mail ──────────────────────── */}
           {step === 2 && (
             <div className="bg-white border border-line rounded-[20px] p-8 lg:p-12 text-center shadow-[var(--shadow-card)]">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-accent-soft mb-5">
@@ -496,14 +521,14 @@ export function Cadastro() {
             </div>
           )}
 
-          {/* ─── STEP 3 — Escolha caminho onboarding ─────────────── */}
+          {/* ─── STEP 3: Escolha caminho onboarding ─────────────── */}
           {step === 3 && (
             <div className="space-y-5">
               <p className="text-[14px] text-muted text-center mb-6">
                 Você ganhou 14 dias grátis. Como prefere começar?
               </p>
 
-              {/* Caminho A — Assistido */}
+              {/* Caminho A: Assistido */}
               <Link
                 href="/agendar"
                 onClick={() => track('signup_path_chosen', { path: 'assistido' })}
@@ -532,7 +557,7 @@ export function Cadastro() {
                 </div>
               </Link>
 
-              {/* Caminho B — Self-service */}
+              {/* Caminho B: Self-service */}
               <Link
                 href="/onboarding"
                 onClick={() => track('signup_path_chosen', { path: 'self_service' })}

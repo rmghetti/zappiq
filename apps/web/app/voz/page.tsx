@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 /* Voice add-on data inlinado aqui pra não depender do rebuild do pacote
  * @zappiq/shared. Source-of-truth canônico permanece em
- * packages/shared/src/planConfig.ts — ADDONS.VOICE_* + VOICE_ADDON_META.
+ * packages/shared/src/planConfig.ts: ADDONS.VOICE_* + VOICE_ADDON_META.
  * Se mudar pricing aqui, ATUALIZE planConfig.ts também.
  */
 const VOICE_ADDON_DATA = {
@@ -19,7 +19,7 @@ const VOICE_ADDON_DATA = {
 } as const;
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /voz — Voz Nativa ZappIQ V4 (PR #73 · pricing real v4 LIVE no Stripe)
+ * /voz: Voz Nativa ZappIQ V4 (PR #73 · pricing real v4 LIVE no Stripe)
  * --------------------------------------------------------------------------
  * Inbound (Whisper STT): incluído em TODOS os planos. R$ 0 adicional.
  *
@@ -36,7 +36,7 @@ const VOICE_ADDON_DATA = {
  * ══════════════════════════════════════════════════════════════════════════ */
 
 export const metadata = {
-  title: 'Voz Nativa — IA que fala no WhatsApp | ZappIQ',
+  title: 'Voz Nativa: IA que fala no WhatsApp | ZappIQ',
   description:
     'Inbound (cliente manda áudio, Whisper transcreve) incluído em todos os planos. Outbound (IA responde em voz pt-BR Neural2) a partir de R$ 79,90/mês com 200 minutos. 6 pacotes até 4.000 min.',
 };
@@ -80,7 +80,7 @@ const INBOUND_FEATURES = [
   'Transcrição automática via Whisper (OpenAI) em pt-BR',
   'IA entende contexto e responde igual a texto',
   'Suporte a sotaques regionais brasileiros',
-  'Funciona em todos os planos — inclusive Starter R$ 197',
+  'Funciona em todos os planos, inclusive Starter R$ 197',
   'Zero cobrança adicional, zero configuração',
 ];
 
@@ -103,14 +103,14 @@ const USE_CASES = [
     icon: Headphones,
     title: 'Atendimento noturno / fora de horário',
     body:
-      'Cliente pede orçamento às 23h. IA responde em áudio com acolhimento natural — 24/7 sem precisar atendente humano de plantão.',
+      'Cliente pede orçamento às 23h. IA responde em áudio com acolhimento natural, 24/7 sem precisar atendente humano de plantão.',
     tier: 'Outbound · qualquer pacote',
   },
   {
     icon: Waves,
     title: 'Lembrete de consulta / aula / evento',
     body:
-      'IA manda áudio 24h antes do evento. Cliente ouve, reconhece, responde — taxa de comparecimento sobe vs lembrete em texto.',
+      'IA manda áudio 24h antes do evento. Cliente ouve, reconhece, responde. Taxa de comparecimento sobe vs lembrete em texto.',
     tier: 'Outbound · 400+ recomendado',
   },
 ];
@@ -139,10 +139,10 @@ export default function VozPage() {
             </span>
           </div>
           <h1 className="text-[44px] lg:text-[64px] font-medium leading-[1.05] tracking-[-0.03em] mb-6 max-w-4xl">
-            IA no WhatsApp que <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-300 to-violet-300">ouve, entende e responde</span> — em texto ou áudio.
+            IA no WhatsApp que <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-300 to-violet-300">ouve, entende e responde</span>, em texto ou áudio.
           </h1>
           <p className="text-[17px] lg:text-[19px] text-white/70 max-w-3xl mb-10 leading-relaxed">
-            Cliente mandando áudio (inbound) já é padrão em todos os planos — sem custo extra. IA respondendo em áudio (outbound) é add-on com 6 pacotes a partir de <strong className="text-white">R$ 79,90/mês</strong>.
+            Cliente mandando áudio (inbound) já é padrão em todos os planos, sem custo extra. IA respondendo em áudio (outbound) é add-on com 6 pacotes a partir de <strong className="text-white">R$ 79,90/mês</strong>.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link
@@ -161,7 +161,7 @@ export default function VozPage() {
         </div>
       </section>
 
-      {/* Inbound — incluído */}
+      {/* Inbound: incluído */}
       <section className="py-20 lg:py-24 bg-white">
         <div className="zappiq-wrap">
           <div className="grid md:grid-cols-2 gap-12 items-center">
@@ -173,10 +173,10 @@ export default function VozPage() {
                 </span>
               </div>
               <h2 className="text-[36px] lg:text-[44px] font-medium leading-[1.05] tracking-[-0.02em] text-ink mb-4">
-                Inbound — cliente manda áudio, IA entende.
+                Inbound: cliente manda áudio, IA entende.
               </h2>
               <p className="text-muted text-[15.5px] leading-relaxed mb-6">
-                70% dos clientes preferem mandar áudio no WhatsApp. Antes, atendente parava 3 min ouvindo. Agora Whisper transcreve em segundos e IA responde com contexto — igual a texto.
+                70% dos clientes preferem mandar áudio no WhatsApp. Antes, atendente parava 3 min ouvindo. Agora Whisper transcreve em segundos e IA responde com contexto, igual a texto.
               </p>
               <ul className="space-y-3">
                 {INBOUND_FEATURES.map((f) => (
@@ -218,7 +218,7 @@ export default function VozPage() {
         </div>
       </section>
 
-      {/* Outbound — 6 pacotes v4 */}
+      {/* Outbound: 6 pacotes v4 */}
       <section id="pacotes" className="py-20 lg:py-28 bg-bg-soft">
         <div className="zappiq-wrap">
           <div className="text-center max-w-3xl mx-auto mb-14">
@@ -229,7 +229,7 @@ export default function VozPage() {
               </span>
             </div>
             <h2 className="text-[36px] lg:text-[48px] font-medium leading-[1.05] tracking-[-0.02em] text-ink mb-3">
-              Outbound — IA responde em áudio. <span className="text-grad">6 pacotes.</span>
+              Outbound: IA responde em áudio. <span className="text-grad">6 pacotes.</span>
             </h2>
             <p className="text-[15.5px] text-muted">
               Voz natural pt-BR (Google Neural2-C). Trocar de pacote a qualquer momento. Excedente cobrado por minuto.
@@ -315,7 +315,7 @@ export default function VozPage() {
               </div>
               <div className="p-4 bg-bg-soft rounded-xl">
                 <p className="font-semibold text-ink mb-1">Volume alto? <span className="text-violet-600">Voice 1.500+</span></p>
-                <p className="text-muted leading-relaxed">Multi-unidade, franquia ou alto volume diário. R$/min cai pra R$ 0,25 — preço por minuto melhor.</p>
+                <p className="text-muted leading-relaxed">Multi-unidade, franquia ou alto volume diário. R$/min cai pra R$ 0,25, preço por minuto melhor.</p>
               </div>
             </div>
             <p className="text-[12px] text-muted mt-5 italic">
@@ -369,13 +369,13 @@ export default function VozPage() {
               </h3>
               <ul className="space-y-2.5 text-[14px] text-ink-2 leading-relaxed">
                 <li>
-                  <strong className="text-ink">Minutos não acumulam:</strong> minutos não usados não rolam pro mês seguinte. Padrão TTS — custo do provedor é fixo por mês.
+                  <strong className="text-ink">Minutos não acumulam:</strong> minutos não usados não rolam pro mês seguinte. Padrão TTS, custo do provedor é fixo por mês.
                 </li>
                 <li>
-                  <strong className="text-ink">Excedente cobrado:</strong> ultrapassou os minutos inclusos? Paga R$ 0,20 a R$ 0,35/min (depende do pacote — quanto maior, menor o R$/min). Notificamos em 80% e 100%.
+                  <strong className="text-ink">Excedente cobrado:</strong> ultrapassou os minutos inclusos? Paga R$ 0,20 a R$ 0,35/min (depende do pacote: quanto maior, menor o R$/min). Notificamos em 80% e 100%.
                 </li>
                 <li>
-                  <strong className="text-ink">Hard ceiling:</strong> 2× minutos inclusos. Acima disso, conversa Enterprise (não há cobrança automática infinita — você nunca leva susto na fatura).
+                  <strong className="text-ink">Hard ceiling:</strong> 2× minutos inclusos. Acima disso, conversa Enterprise (não há cobrança automática infinita, você nunca leva susto na fatura).
                 </li>
                 <li>
                   <strong className="text-ink">Conteúdo sensível:</strong> voz NÃO é usada pra cobrança imitando terceiros, golpes, deepfake. Violação → suspensão imediata + 1 aviso.

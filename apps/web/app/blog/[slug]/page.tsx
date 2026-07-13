@@ -18,11 +18,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const article = getArticleBySlug(slug);
 
   if (!article) {
-    return { title: 'Artigo não encontrado — Blog ZappIQ' };
+    return { title: 'Artigo não encontrado | Blog ZappIQ' };
   }
 
   return {
-    title: `${article.title} — Blog ZappIQ`,
+    title: `${article.title} | Blog ZappIQ`,
     description: article.excerpt,
     openGraph: {
       title: article.title,

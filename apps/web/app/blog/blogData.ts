@@ -1,7 +1,7 @@
 /* PLACEHOLDER: substituir por dados reais do CMS ou API */
 /* NOTA: Preços mencionados no conteúdo editorial devem acompanhar
    packages/shared/src/planConfig.ts (single source of truth).
-   Valores atuais (V3.2 — 21/04/2026): STARTER=R$197, GROWTH=R$497, SCALE=R$997, BUSINESS=R$1.997. */
+   Valores atuais (V3.2, 21/04/2026): STARTER=R$197, GROWTH=R$497, SCALE=R$997, BUSINESS=R$1.997. */
 
 export interface BlogAuthor {
   name: string;
@@ -29,7 +29,7 @@ export const articles: BlogArticle[] = [
   {
     slug: 'meta-business-agent-platform-o-que-muda',
     coverTheme: 'meta-agent',
-    title: 'Meta Business Agent: o WhatsApp ganhou um vendedor de IA. O que muda para o seu negócio — e como transformar o lançamento em receita',
+    title: 'Meta Business Agent: o WhatsApp ganhou um vendedor de IA. O que muda para o seu negócio, e como transformar o lançamento em receita',
     excerpt:
       'Em 3 de junho a Meta lançou globalmente o Business Agent e a Business Agent Platform. Em 10 de junho, no Conversations Brasil, mostrou a estratégia para o país. Análise completa: o que foi lançado, cenários de aplicação com a ZappIQ e um business case com as premissas na mesa.',
     category: 'Tecnologia',
@@ -40,88 +40,88 @@ export const articles: BlogArticle[] = [
     content: `
 <p><em>Por Caio Menezes, COO da ZappIQ.</em></p>
 
-<p>Em 3 de junho de 2026, no Conversations em Londres, a Meta colocou em disponibilidade global o <strong>Meta Business Agent</strong> — um agente de IA nativo para empresas no WhatsApp, Messenger e Instagram — e a <strong>Meta Business Agent Platform</strong>, a camada corporativa para construir e implantar agentes em escala. Uma semana depois, em 10 de junho, o Conversations Brasil detalhou a estratégia para o país, com cases nacionais no palco.</p>
+<p>Em 3 de junho de 2026, no Conversations em Londres, a Meta colocou em disponibilidade global o <strong>Meta Business Agent</strong> (um agente de IA nativo para empresas no WhatsApp, Messenger e Instagram) e a <strong>Meta Business Agent Platform</strong>, a camada corporativa para construir e implantar agentes em escala. Uma semana depois, em 10 de junho, o Conversations Brasil detalhou a estratégia para o país, com cases nacionais no palco.</p>
 
-<p>A tese por trás dos dois lançamentos é direta: o WhatsApp deixa de ser um canal de mensagens e passa a operar como plataforma de negócios. A conversa vira a interface — descoberta, recomendação, pagamento e pós-venda acontecem sem sair do chat. E o Brasil, onde o WhatsApp está em 99% dos smartphones e 92% das empresas o usam para atendimento (Mobile Time/Opinion Box), é o laboratório global dessa virada.</p>
+<p>A tese por trás dos dois lançamentos é direta: o WhatsApp deixa de ser um canal de mensagens e passa a operar como plataforma de negócios. A conversa vira a interface: descoberta, recomendação, pagamento e pós-venda acontecem sem sair do chat. E o Brasil, onde o WhatsApp está em 99% dos smartphones e 92% das empresas o usam para atendimento (Mobile Time/Opinion Box), é o laboratório global dessa virada.</p>
 
-<p>Neste artigo: o que exatamente foi lançado, o contexto regulatório que poucos estão lendo direito, cenários práticos de aplicação com a ZappIQ e um exemplo de business case — com todas as premissas declaradas, do jeito que a gente acha que business case deve ser feito.</p>
+<p>Neste artigo: o que exatamente foi lançado, o contexto regulatório que poucos estão lendo direito, cenários práticos de aplicação com a ZappIQ e um exemplo de business case, com todas as premissas declaradas, do jeito que a gente acha que business case deve ser feito.</p>
 
 <h2>O que exatamente a Meta lançou</h2>
 
-<h3>1. Meta Business Agent — o agente nativo</h3>
-<p>É um agente de IA que a empresa ativa sem código, direto nas plataformas da Meta. Ele aprende com o site, a página do Facebook e o catálogo do negócio, e a partir daí responde perguntas no tom da marca, recomenda produtos, agenda horários, qualifica leads, entende <strong>mensagens de áudio</strong> — detalhe decisivo no Brasil — e conduz vendas, decidindo quando passar a conversa para um humano.</p>
+<h3>1. Meta Business Agent: o agente nativo</h3>
+<p>É um agente de IA que a empresa ativa sem código, direto nas plataformas da Meta. Ele aprende com o site, a página do Facebook e o catálogo do negócio, e a partir daí responde perguntas no tom da marca, recomenda produtos, agenda horários, qualifica leads, entende <strong>mensagens de áudio</strong> (detalhe decisivo no Brasil) e conduz vendas, decidindo quando passar a conversa para um humano.</p>
 <p>A Meta descreve o agente em quatro camadas: <strong>Conhecimento</strong> (as fontes do negócio), <strong>Habilidades</strong> (o que ele sabe fazer: vender, agendar, cobrar), <strong>Ferramentas</strong> (integrações e ações em sistemas) e <strong>Inteligência</strong> (o modelo de IA). Números declarados no lançamento: mais de 1 milhão de empresas já usam um Business Agent e há mais de 1 bilhão de conversas ativas por dia entre pessoas e empresas nos três aplicativos.</p>
-<p>Sobre preço: a ativação é <strong>gratuita hoje</strong>. A Meta afirmou que "nos próximos meses" o agente passa a ser oferecido por assinatura — a imprensa especializada (TechCrunch, Mobile Time) aponta tiers via WhatsApp Business Premium/Meta One para PMEs e cobrança por consumo (tokens) para grandes contas. Tabela oficial não existe até a publicação deste artigo.</p>
+<p>Sobre preço: a ativação é <strong>gratuita hoje</strong>. A Meta afirmou que "nos próximos meses" o agente passa a ser oferecido por assinatura; a imprensa especializada (TechCrunch, Mobile Time) aponta tiers via WhatsApp Business Premium/Meta One para PMEs e cobrança por consumo (tokens) para grandes contas. Tabela oficial não existe até a publicação deste artigo.</p>
 
-<h3>2. Business Agent Platform — o agente que executa</h3>
-<p>A camada enterprise conecta o agente aos sistemas da empresa — a Meta cita "centenas de sistemas", nomeando Shopify, Zendesk e Shopee — para que ele não apenas responda, mas <strong>execute ações</strong>: consultar um pedido, gerar uma cobrança, agendar um serviço. Vem com controles corporativos, guardrails e medição embutidos, e funciona ao lado da API atual do WhatsApp Business — não a substitui. O acesso, hoje, é mediado por relacionamento com a Meta.</p>
-<p>Dois cases brasileiros estrearam a plataforma. A <strong>Movida</strong> opera a jornada completa de aluguel de carro no WhatsApp — do áudio do cliente à escolha do carro, seguro e pagamento — e declarou que o custo da locação pelo canal caiu de 10% para 2% do valor do contrato, com o dobro de conversão digital (números autorrelatados pela empresa; Bloomberg Línea, Baguete, jun/2026). O <strong>Sem Parar</strong> resolve consulta e pagamento de pedágios free flow direto no chat — são 5,5 milhões de passagens mensais sem cancela no país. No palco internacional, a Air France-KLM reportou 33 milhões de mensagens em 2025, com um terço dos contatos resolvidos pelo agente.</p>
-<p>No Conversations Brasil, marcas como Magalu e Leroy Merlin também apresentaram resultados de comércio conversacional com IA — conversão multiplicada em relação a site e app, e o WhatsApp operando como canal de vendas de nove dígitos. São números autorrelatados, apresentados pelas próprias empresas no evento, e a Meta faz a ressalva de que não são replicáveis de forma idêntica. Ainda assim, o sinal é inequívoco: a jornada completa dentro da conversa deixou de ser experimento.</p>
+<h3>2. Business Agent Platform: o agente que executa</h3>
+<p>A camada enterprise conecta o agente aos sistemas da empresa (a Meta cita "centenas de sistemas", nomeando Shopify, Zendesk e Shopee) para que ele não apenas responda, mas <strong>execute ações</strong>: consultar um pedido, gerar uma cobrança, agendar um serviço. Vem com controles corporativos, guardrails e medição embutidos, e funciona ao lado da API atual do WhatsApp Business, não a substitui. O acesso, hoje, é mediado por relacionamento com a Meta.</p>
+<p>Dois cases brasileiros estrearam a plataforma. A <strong>Movida</strong> opera a jornada completa de aluguel de carro no WhatsApp (do áudio do cliente à escolha do carro, seguro e pagamento) e declarou que o custo da locação pelo canal caiu de 10% para 2% do valor do contrato, com o dobro de conversão digital (números autorrelatados pela empresa; Bloomberg Línea, Baguete, jun/2026). O <strong>Sem Parar</strong> resolve consulta e pagamento de pedágios free flow direto no chat: são 5,5 milhões de passagens mensais sem cancela no país. No palco internacional, a Air France-KLM reportou 33 milhões de mensagens em 2025, com um terço dos contatos resolvidos pelo agente.</p>
+<p>No Conversations Brasil, marcas como Magalu e Leroy Merlin também apresentaram resultados de comércio conversacional com IA: conversão multiplicada em relação a site e app, e o WhatsApp operando como canal de vendas de nove dígitos. São números autorrelatados, apresentados pelas próprias empresas no evento, e a Meta faz a ressalva de que não são replicáveis de forma idêntica. Ainda assim, o sinal é inequívoco: a jornada completa dentro da conversa deixou de ser experimento.</p>
 
-<h3>3. Usernames e BSUID — a mudança silenciosa com prazo</h3>
-<p>Junto com os agentes, o WhatsApp está implantando <strong>usernames</strong> (@suamarca) e uma busca por nome dentro do aplicativo — o WhatsApp vira, na prática, um diretório de negócios. Empresas podem reivindicar seu @ a partir de junho, com prioridade para nomes e contas já verificadas.</p>
-<p>A parte que quase ninguém está olhando: junto vem o <strong>BSUID</strong> (Business-Scoped User ID), um identificador que substitui o número de telefone nas integrações quando o usuário adota username. Ele é único por par usuário-empresa — o mesmo cliente tem IDs diferentes em empresas diferentes. Provedores como Twilio já comunicaram que o suporte ao novo identificador é obrigatório a partir de junho de 2026. Sistemas que usam o telefone como chave primária — CRMs, integrações próprias, réguas de mensagem — podem quebrar em silêncio. É um problema técnico com prazo, e a solução é simples se feita agora.</p>
+<h3>3. Usernames e BSUID: a mudança silenciosa com prazo</h3>
+<p>Junto com os agentes, o WhatsApp está implantando <strong>usernames</strong> (@suamarca) e uma busca por nome dentro do aplicativo: o WhatsApp vira, na prática, um diretório de negócios. Empresas podem reivindicar seu @ a partir de junho, com prioridade para nomes e contas já verificadas.</p>
+<p>A parte que quase ninguém está olhando: junto vem o <strong>BSUID</strong> (Business-Scoped User ID), um identificador que substitui o número de telefone nas integrações quando o usuário adota username. Ele é único por par usuário-empresa: o mesmo cliente tem IDs diferentes em empresas diferentes. Provedores como Twilio já comunicaram que o suporte ao novo identificador é obrigatório a partir de junho de 2026. Sistemas que usam o telefone como chave primária (CRMs, integrações próprias, réguas de mensagem) podem quebrar em silêncio. É um problema técnico com prazo, e a solução é simples se feita agora.</p>
 
 <h2>O contexto regulatório que muda o cálculo</h2>
-<p>Desde 11 de março de 2026, a Meta cobra cerca de US$ 0,0625 por mensagem processada por <strong>IAs de terceiros</strong> no WhatsApp no Brasil — cobrança distinta do pricing futuro do Business Agent, e que está sob escrutínio: o CADE chegou a impor multa diária, suspensa por liminar em abril, e em 9 de junho a <strong>Comissão Europeia ordenou que a Meta restabeleça o acesso gratuito de assistentes de IA rivais ao WhatsApp</strong> (Folha, jun/2026). O desfecho regulatório está aberto.</p>
-<p>A leitura estratégica que fazemos na ZappIQ: nenhuma empresa deveria apostar a operação em um único cenário. A arquitetura racional é <strong>híbrida</strong> — usar o agente nativo da Meta onde ele é imbatível em custo, manter inteligência própria nos fluxos de alto valor e ter um roteador que rebalanceia conforme as regras do jogo mudam. Se a tarifa cai, a IA própria volta a ganhar espaço; se os tiers pagos do agente saírem caros, recua-se para o que já funciona. Quem tem orquestração não fica refém de nenhum cenário.</p>
+<p>Desde 11 de março de 2026, a Meta cobra cerca de US$ 0,0625 por mensagem processada por <strong>IAs de terceiros</strong> no WhatsApp no Brasil, cobrança distinta do pricing futuro do Business Agent, e que está sob escrutínio: o CADE chegou a impor multa diária, suspensa por liminar em abril, e em 9 de junho a <strong>Comissão Europeia ordenou que a Meta restabeleça o acesso gratuito de assistentes de IA rivais ao WhatsApp</strong> (Folha, jun/2026). O desfecho regulatório está aberto.</p>
+<p>A leitura estratégica que fazemos na ZappIQ: nenhuma empresa deveria apostar a operação em um único cenário. A arquitetura racional é <strong>híbrida</strong>: usar o agente nativo da Meta onde ele é imbatível em custo, manter inteligência própria nos fluxos de alto valor e ter um roteador que rebalanceia conforme as regras do jogo mudam. Se a tarifa cai, a IA própria volta a ganhar espaço; se os tiers pagos do agente saírem caros, recua-se para o que já funciona. Quem tem orquestração não fica refém de nenhum cenário.</p>
 
 <h2>Cenários de aplicabilidade com a ZappIQ</h2>
-<p>O agente da Meta entrega o motor. O que ele não entrega — e é onde os resultados aparecem — são as camadas de conhecimento curado, integração, governança e medição. É exatamente o trabalho da ZappIQ. Quatro cenários práticos:</p>
+<p>O agente da Meta entrega o motor. O que ele não entrega (e é onde os resultados aparecem) são as camadas de conhecimento curado, integração, governança e medição. É exatamente o trabalho da ZappIQ. Quatro cenários práticos:</p>
 
 <h3>Varejo e e-commerce: do carrinho abandonado ao Pix na conversa</h3>
-<p>O agente nativo cobre dúvidas e catálogo. A ZappIQ orquestra o que vem depois: recuperação de carrinho com a janela de mensagem certa (a estratégia oficial da Meta de abrir janela com mensagem de utilidade e converter dentro dela), pagamento por Pix estruturado sem sair do chat e cada venda amarrada à conversa que a originou. O varejo brasileiro convive com cerca de 72% de abandono de carrinho — cada ponto recuperado é receita que já estava paga pela mídia.</p>
+<p>O agente nativo cobre dúvidas e catálogo. A ZappIQ orquestra o que vem depois: recuperação de carrinho com a janela de mensagem certa (a estratégia oficial da Meta de abrir janela com mensagem de utilidade e converter dentro dela), pagamento por Pix estruturado sem sair do chat e cada venda amarrada à conversa que a originou. O varejo brasileiro convive com cerca de 72% de abandono de carrinho: cada ponto recuperado é receita que já estava paga pela mídia.</p>
 
 <h3>Serviços e clínicas: agenda cheia, no-show controlado</h3>
-<p>Agendamento conversacional 24/7 (em texto e áudio), confirmação e reagendamento automáticos, lembretes na cadência certa e transbordo para a recepção com o contexto completo. O agente da Meta marca o horário; a régua de confirmação, a fila por profissional e a medição de ocupação são camada ZappIQ — com o construtor híbrido Maestro definindo onde o fluxo é trilho fixo e onde a IA decide.</p>
+<p>Agendamento conversacional 24/7 (em texto e áudio), confirmação e reagendamento automáticos, lembretes na cadência certa e transbordo para a recepção com o contexto completo. O agente da Meta marca o horário; a régua de confirmação, a fila por profissional e a medição de ocupação são camada ZappIQ, com o construtor híbrido Maestro definindo onde o fluxo é trilho fixo e onde a IA decide.</p>
 
 <h3>Cobrança e financeiro: o padrão Sem Parar ao alcance da PME</h3>
-<p>Segunda via, negociação assistida, Pix copia-e-cola estruturado e baixa automática — a jornada que o Sem Parar mostrou no palco, desenhada para o porte da empresa brasileira média. Mensagens de utilidade abrem a janela; a conversa resolve a pendência; o humano entra só na exceção. Réguas de cobrança conversacionais costumam ser o caso de uso com payback mais rápido do portfólio.</p>
+<p>Segunda via, negociação assistida, Pix copia-e-cola estruturado e baixa automática: a jornada que o Sem Parar mostrou no palco, desenhada para o porte da empresa brasileira média. Mensagens de utilidade abrem a janela; a conversa resolve a pendência; o humano entra só na exceção. Réguas de cobrança conversacionais costumam ser o caso de uso com payback mais rápido do portfólio.</p>
 
 <h3>B2B e distribuição: onde o agente gratuito não chega</h3>
-<p>Pedido recorrente multi-item, cotação, reposição programada do pequeno varejo e integração com ERP — fluxos proprietários que exigem conhecimento profundo do negócio e integrações que o agente de prateleira não cobre. É o vácuo natural para inteligência própria orquestrada: o agente da Meta atende o topo do funil, a camada ZappIQ executa a operação.</p>
+<p>Pedido recorrente multi-item, cotação, reposição programada do pequeno varejo e integração com ERP: fluxos proprietários que exigem conhecimento profundo do negócio e integrações que o agente de prateleira não cobre. É o vácuo natural para inteligência própria orquestrada: o agente da Meta atende o topo do funil, a camada ZappIQ executa a operação.</p>
 
-<h2>Um business case de exemplo — com as premissas na mesa</h2>
-<p>Business case sério não esconde premissa. O cenário abaixo é <strong>ilustrativo</strong>, construído com as mesmas premissas públicas da nossa calculadora de ROI (base de clientes beta, ago/2025–fev/2026): a IA resolve cerca de 65% dos atendimentos sem humano e a conversão sobe na ordem de 30% quando a resposta cai de horas para segundos. Seu resultado real depende do setor, da base de conhecimento e das regras de transbordo — por isso limitamos institucionalmente o ROI projetado e tratamos payback mínimo de 90 dias.</p>
+<h2>Um business case de exemplo, com as premissas na mesa</h2>
+<p>Business case sério não esconde premissa. O cenário abaixo é <strong>ilustrativo</strong>, construído com as mesmas premissas públicas da nossa calculadora de ROI (base de clientes beta, ago/2025–fev/2026): a IA resolve cerca de 65% dos atendimentos sem humano e a conversão sobe na ordem de 30% quando a resposta cai de horas para segundos. Seu resultado real depende do setor, da base de conhecimento e das regras de transbordo, por isso limitamos institucionalmente o ROI projetado e tratamos payback mínimo de 90 dias.</p>
 <p><strong>O cenário:</strong> e-commerce de nicho, ticket médio de R$ 450, cerca de 3.000 conversas/mês no WhatsApp, dois atendentes dedicados ao canal, primeira resposta em torno de 4 horas no pico, conversão de 8% das conversas em venda.</p>
 <p><strong>Três números antes:</strong></p>
 <ul>
-<li>Conversão de 8% — 240 vendas/mês (R$ 108 mil)</li>
+<li>Conversão de 8%: 240 vendas/mês (R$ 108 mil)</li>
 <li>Primeira resposta em até 4 horas fora do horário comercial</li>
 <li>Dois atendentes 100% dedicados ao canal (R$ 5,6 mil/mês de folha direta)</li>
 </ul>
 <p><strong>A intervenção:</strong> agente de IA com a base de conhecimento do negócio em produção (catálogo, políticas, tom de marca), resposta em segundos 24/7, recuperação automática de carrinho dentro das janelas de mensagem, pagamento estruturado no chat e atribuição de receita por conversa no dashboard.</p>
 <p><strong>Três números depois (projeção com as premissas acima):</strong></p>
 <ul>
-<li>Conversão na casa de 10,4% (+30%) — cerca de 312 vendas/mês (R$ 140 mil): <strong>~R$ 32 mil/mês de receita incremental</strong></li>
-<li>65% dos atendimentos resolvidos sem humano — um atendente realocado para venda ativa (R$ 2,8 mil/mês de eficiência direta)</li>
+<li>Conversão na casa de 10,4% (+30%), cerca de 312 vendas/mês (R$ 140 mil): <strong>~R$ 32 mil/mês de receita incremental</strong></li>
+<li>65% dos atendimentos resolvidos sem humano: um atendente realocado para venda ativa (R$ 2,8 mil/mês de eficiência direta)</li>
 <li>Primeira resposta em menos de 1 minuto, 24/7, com 100% das respostas da IA auditadas automaticamente</li>
 </ul>
-<p>Contra uma mensalidade fixa de plataforma — sem setup fee e sem cobrança por conversa — a conta fecha com folga mesmo aplicando um desconto severo sobre a projeção. E é justamente por isso que nós não pedimos que ninguém acredite na projeção: pedimos 30 dias de medição.</p>
+<p>Contra uma mensalidade fixa de plataforma (sem setup fee e sem cobrança por conversa) a conta fecha com folga mesmo aplicando um desconto severo sobre a projeção. E é justamente por isso que nós não pedimos que ninguém acredite na projeção: pedimos 30 dias de medição.</p>
 
 <h2>Como a ZappIQ constrói esse business case com você</h2>
-<p>Projeção não fecha contrato — telemetria fecha. Nosso método tem quatro passos:</p>
+<p>Projeção não fecha contrato. Telemetria fecha. Nosso método tem quatro passos:</p>
 <ul>
 <li><strong>1. Baseline instrumentado.</strong> Antes de mudar qualquer coisa, medimos sua operação atual por 30 dias: volume de conversas, tempo de primeira resposta, taxa de conversão, custo por atendimento. Sem baseline, qualquer "resultado" é narrativa.</li>
-<li><strong>2. Piloto com escopo fechado.</strong> Agente em produção com a base de conhecimento do seu negócio, regras de transbordo definidas com seu time e testes — inclusive por áudio — antes do go-live.</li>
+<li><strong>2. Piloto com escopo fechado.</strong> Agente em produção com a base de conhecimento do seu negócio, regras de transbordo definidas com seu time e testes (inclusive por áudio) antes do go-live.</li>
 <li><strong>3. Medição contínua e auditada.</strong> Todas as respostas do agente passam por auditoria automática de qualidade; desvios geram sugestão de correção que <em>você</em> aprova, edita ou recusa. Dashboard com receita atribuída à conversa, não métrica de vaidade.</li>
 <li><strong>4. Decisão de escala com números.</strong> Ao fim do ciclo, o business case deixa de ser projeção: são os seus três números antes e os seus três números depois. A decisão de escalar é sua, com a planilha na mesa.</li>
 </ul>
-<p>Resultado medido, não prometido. É a única forma honesta de vender IA — e, convenientemente, a que mais renova contrato.</p>
+<p>Resultado medido, não prometido. É a única forma honesta de vender IA e, convenientemente, a que mais renova contrato.</p>
 
 <h2>O que fazer ainda em junho</h2>
 <ul>
 <li><strong>Reivindique o username da sua marca.</strong> A janela de claim abriu em junho e a nova busca por nome favorece quem ativar primeiro. Defina a convenção (@marca, @marca_unidade) antes que outro defina por você.</li>
 <li><strong>Audite suas integrações para o BSUID.</strong> Se algum sistema seu usa o telefone do cliente como chave, ele tem um problema com prazo. A correção é simples agora e cara depois.</li>
-<li><strong>Ative o agente enquanto é grátis.</strong> O motor da Meta não tem custo hoje e os tiers pagos vêm aí. Quem ativa agora aprende — e mede — antes da concorrência.</li>
+<li><strong>Ative o agente enquanto é grátis.</strong> O motor da Meta não tem custo hoje e os tiers pagos vêm aí. Quem ativa agora aprende (e mede) antes da concorrência.</li>
 <li><strong>Instrumente antes de escalar.</strong> Trinta dias de baseline transformam a conversa com seu sócio, seu diretor ou seu conselho. Números antes, números depois.</li>
 </ul>
 
-<p>O lançamento da Meta confirmou a direção que apostamos desde o primeiro dia da ZappIQ: a conversa é a nova interface de negócios, e a IA não é o "quê" — é o "como". A camada que separa quem vai vender mais de quem vai assistir é implementação, orquestração e medição. É nela que trabalhamos.</p>
+<p>O lançamento da Meta confirmou a direção que apostamos desde o primeiro dia da ZappIQ: a conversa é a nova interface de negócios, e a IA não é o "quê"; é o "como". A camada que separa quem vai vender mais de quem vai assistir é implementação, orquestração e medição. É nela que trabalhamos.</p>
 
-<p>Quer ver onde sua operação está nessa régua? A Iza, nossa agente oficial, faz o primeiro diagnóstico com você no WhatsApp — é a própria ZappIQ rodando no ZappIQ. E na página <a href="/novidades-meta">Novidades Meta</a> você encontra o detalhe de cada lançamento e como implementamos cada um.</p>
+<p>Quer ver onde sua operação está nessa régua? A Iza, nossa agente oficial, faz o primeiro diagnóstico com você no WhatsApp: é a própria ZappIQ rodando no ZappIQ. E na página <a href="/novidades-meta">Novidades Meta</a> você encontra o detalhe de cada lançamento e como implementamos cada um.</p>
 
-<p><em><strong>Caio Menezes</strong> é COO da ZappIQ, plataforma brasileira de IA conversacional para WhatsApp e Instagram — A Platform MACHIA Company.</em></p>
+<p><em><strong>Caio Menezes</strong> é COO da ZappIQ, plataforma brasileira de IA conversacional para WhatsApp e Instagram. A Platform MACHIA Company.</em></p>
 
 <p><em>Notas: fatos oficiais conforme anúncio da Meta (about.fb.com, 3/jun/2026) e apresentações do Conversations Brasil 2026 (10/jun/2026); pricing do Business Agent não publicado pela Meta até a data deste artigo. Resultados de Movida, Sem Parar, Air France-KLM, Magalu e Leroy Merlin são autorrelatados pelas empresas e não constituem promessa de resultado. O business case apresentado é ilustrativo, com premissas declaradas; resultados individuais variam. Cobrança de US$ 0,0625/mensagem refere-se a IAs de terceiros no WhatsApp Brasil (em discussão no CADE e objeto de decisão da Comissão Europeia em 9/jun/2026), não ao pricing do Business Agent.</em></p>
     `,
@@ -131,22 +131,22 @@ export const articles: BlogArticle[] = [
     coverTheme: 'meta-ads',
     title: 'Meta Ads AI Connectors + ZappIQ: a primeira integração ponta-a-ponta da América Latina',
     excerpt:
-      'A Meta lançou Ads AI Connectors em 29/04/2026 — o gerador de leads agora é AI-driven. Mas ela deixou um gap proposital: receber e converter o lead. ZappIQ é a primeira plataforma da LATAM a fechar essa ponte. 6 business cases reais por vertical com ROI calculado.',
+      'A Meta lançou Ads AI Connectors em 29/04/2026: o gerador de leads agora é AI-driven. Mas ela deixou um gap proposital: receber e converter o lead. ZappIQ é a primeira plataforma da LATAM a fechar essa ponte. 6 business cases reais por vertical com ROI calculado.',
     category: 'Tecnologia',
     date: '2026-05-05',
     readingTime: '9 min',
     author: { name: 'Rodrigo Ghetti', initials: 'RG' },
     relatedSlugs: ['como-recuperar-leads-perdidos-whatsapp', 'roi-chatbots-ia-como-calcular'],
     /* Conteúdo completo migrado da antiga página dedicada (removida em
-       11/06/2026 por conflito de rota com /blog/[slug] — produção servia só
+       11/06/2026 por conflito de rota com /blog/[slug]: produção servia só
        o teaser). Preços atualizados pro pricing V4 (Lite R$ 247). */
     content: `
 <p><em>Por Rodrigo Ghetti, CEO da ZappIQ.</em></p>
 
-<p>Em 29 de abril de 2026 a Meta lançou os <strong>Ads AI Connectors</strong> — um servidor MCP oficial que permite a qualquer agente de IA gerenciar campanhas no Meta Ads. Mas a Meta resolveu metade do problema: <strong>gerar lead inteligente</strong>. A outra metade — receber, qualificar e converter esse lead no WhatsApp — ficou em aberto. A ZappIQ é a primeira plataforma da América Latina a fechar essa ponte, formando o primeiro funil ponta-a-ponta conduzido por IA: a Meta gera, a Iza converte, seu time fecha.</p>
+<p>Em 29 de abril de 2026 a Meta lançou os <strong>Ads AI Connectors</strong>, um servidor MCP oficial que permite a qualquer agente de IA gerenciar campanhas no Meta Ads. Mas a Meta resolveu metade do problema: <strong>gerar lead inteligente</strong>. A outra metade (receber, qualificar e converter esse lead no WhatsApp) ficou em aberto. A ZappIQ é a primeira plataforma da América Latina a fechar essa ponte, formando o primeiro funil ponta-a-ponta conduzido por IA: a Meta gera, a Iza converte, seu time fecha.</p>
 
 <h2>O que é o Meta Ads AI Connectors (e por que chegou agora)</h2>
-<p>É um servidor <strong>MCP oficial</strong> + CLI que conecta agentes de IA (Claude, ChatGPT e similares) diretamente à Marketing API da Meta. Na prática: você pede em linguagem natural e o agente executa na conta de anúncios — sem código, sem integração customizada, sem esperar o relatório da semana.</p>
+<p>É um servidor <strong>MCP oficial</strong> + CLI que conecta agentes de IA (Claude, ChatGPT e similares) diretamente à Marketing API da Meta. Na prática: você pede em linguagem natural e o agente executa na conta de anúncios: sem código, sem integração customizada, sem esperar o relatório da semana.</p>
 <p><strong>Model Context Protocol (MCP)</strong> é um padrão aberto criado pela Anthropic em novembro/2024 e adotado pela OpenAI em março/2025. Funciona como uma tomada universal entre modelos de IA e plataformas externas: antes, cada integração era artesanal; agora, qualquer IA compatível pluga em qualquer ferramenta compatível.</p>
 <p>O conector entrega quatro categorias de operação na conta:</p>
 <ul>
@@ -155,11 +155,11 @@ export const articles: BlogArticle[] = [
 <li><strong>Catalog Management:</strong> construir e diagnosticar catálogos de produtos</li>
 <li><strong>Signal Diagnostics:</strong> validar a saúde do Pixel e da Conversions API</li>
 </ul>
-<blockquote><p>Antes, você gerenciava anúncios manualmente. Agora, um agente gerencia. A diferença não é incremental — é estrutural.</p></blockquote>
+<blockquote><p>Antes, você gerenciava anúncios manualmente. Agora, um agente gerencia. A diferença não é incremental. É estrutural.</p></blockquote>
 
 <div class="ab-card ab-card-accent">
-<span class="ab-kicker">Rollout gradual — a ZappIQ já está dentro</span>
-<p>A Meta libera os Ads AI Connectors por ondas; nem toda conta da América Latina tem acesso ainda. A ZappIQ já recebeu a liberação e foi a primeira plataforma da região a operar a integração ponta-a-ponta na prática (Meta Ads → Iza → WhatsApp → conversão). Cliente ZappIQ não espera fila: a infraestrutura de captação inteligente já está pronta — com a Iza do outro lado, qualificando lead por lead.</p>
+<span class="ab-kicker">Rollout gradual: a ZappIQ já está dentro</span>
+<p>A Meta libera os Ads AI Connectors por ondas; nem toda conta da América Latina tem acesso ainda. A ZappIQ já recebeu a liberação e foi a primeira plataforma da região a operar a integração ponta-a-ponta na prática (Meta Ads → Iza → WhatsApp → conversão). Cliente ZappIQ não espera fila: a infraestrutura de captação inteligente já está pronta, com a Iza do outro lado, qualificando lead por lead.</p>
 </div>
 
 <h2>Por que a América Latina é o mercado privilegiado</h2>
@@ -167,35 +167,35 @@ export const articles: BlogArticle[] = [
 <div class="ab-stat"><span class="n">58%</span><span class="l">das PMEs brasileiras usam Meta Ads (vs 42% Google Ads)</span></div>
 <div class="ab-stat"><span class="n">R$ 3–15</span><span class="l">CPL médio no Meta Ads Brasil, variando por vertical</span></div>
 <div class="ab-stat"><span class="n">#1</span><span class="l">WhatsApp é o app mais presente nos smartphones brasileiros</span></div>
-<div class="ab-stat"><span class="n">+40% a/a</span><span class="l">crescimento do Click-to-WhatsApp — o formato que mais cresce</span></div>
+<div class="ab-stat"><span class="n">+40% a/a</span><span class="l">crescimento do Click-to-WhatsApp, o formato que mais cresce</span></div>
 </div>
-<p>Anúncios Click-to-WhatsApp (CTWA) convertem na ordem de <strong>40% mais que landing pages tradicionais</strong> no Brasil: eliminam a fricção do formulário, mantêm a conversa onde o lead já está e abrem uma janela de 72 horas de mensagens gratuitas para nutrição automática. Para uma PME que já investe R$ 1.500–3.000/mês em Meta Ads, integrar o anúncio ao WhatsApp não é diferencial — é condição de competitividade.</p>
+<p>Anúncios Click-to-WhatsApp (CTWA) convertem na ordem de <strong>40% mais que landing pages tradicionais</strong> no Brasil: eliminam a fricção do formulário, mantêm a conversa onde o lead já está e abrem uma janela de 72 horas de mensagens gratuitas para nutrição automática. Para uma PME que já investe R$ 1.500–3.000/mês em Meta Ads, integrar o anúncio ao WhatsApp não é diferencial, é condição de competitividade.</p>
 
 <h2>O gap que a Meta deixou de propósito</h2>
 <p>Lendo o lançamento com atenção, fica claro o que o Ads AI Connectors <strong>não</strong> inclui: sincronização de leads para CRMs externos, recuperação de dados de Lead Forms, gerenciamento direto de anúncios Click-to-WhatsApp, notificações de novos leads e qualquer coisa parecida com qualificação conversacional ou transbordo humano.</p>
-<p>Isso não é falha de roadmap — é decisão estratégica. A Meta resolve <strong>o anúncio</strong>. Quem resolve <strong>o lead</strong> captura o resto da cadeia de valor. E sem um agente inteligente recebendo o lead que clicou, o investimento em mídia vira vela acesa: a maior parte dos leads esfria nas primeiras 48 horas — principalmente os gerados fora do horário comercial, quando ninguém responde.</p>
-<blockquote><p>O Ads AI Connectors é o momento em que o gerador de demanda finalmente conversa com o receptor. Uma IA capta, outra IA qualifica — e seu time entra só quando o lead está pronto.</p></blockquote>
+<p>Isso não é falha de roadmap, é decisão estratégica. A Meta resolve <strong>o anúncio</strong>. Quem resolve <strong>o lead</strong> captura o resto da cadeia de valor. E sem um agente inteligente recebendo o lead que clicou, o investimento em mídia vira vela acesa: a maior parte dos leads esfria nas primeiras 48 horas, principalmente os gerados fora do horário comercial, quando ninguém responde.</p>
+<blockquote><p>O Ads AI Connectors é o momento em que o gerador de demanda finalmente conversa com o receptor. Uma IA capta, outra IA qualifica, e seu time entra só quando o lead está pronto.</p></blockquote>
 
 <h2>Por que ZappIQ + Meta = funil ponta-a-ponta com IA</h2>
 <p>O funil completo tem três camadas, cada uma com um dono claro:</p>
 <ul>
-<li><strong>Gerador — Meta Ads AI Connectors:</strong> segmenta por intenção, otimiza orçamento em tempo real, testa criativos e escala o vencedor.</li>
-<li><strong>Receptor — ZappIQ (Iza):</strong> responde 24/7 em segundos, qualifica por conversa natural (texto e áudio), agenda automaticamente, nutre o lead e coleta dados em conformidade com a LGPD.</li>
-<li><strong>Fechador — seu time + CRM:</strong> recebe o lead já contextualizado, negocia e fecha. Comercial vira closer, não triador.</li>
+<li><strong>Gerador, Meta Ads AI Connectors:</strong> segmenta por intenção, otimiza orçamento em tempo real, testa criativos e escala o vencedor.</li>
+<li><strong>Receptor, ZappIQ (Iza):</strong> responde 24/7 em segundos, qualifica por conversa natural (texto e áudio), agenda automaticamente, nutre o lead e coleta dados em conformidade com a LGPD.</li>
+<li><strong>Fechador, seu time + CRM:</strong> recebe o lead já contextualizado, negocia e fecha. Comercial vira closer, não triador.</li>
 </ul>
 <p>A matemática para uma PME média (CPL R$ 10, 100 leads/mês, 15% de conversão lead→venda, ticket R$ 300):</p>
 <div class="ab-grid">
 <div class="ab-stat"><span class="n">R$ 4.500</span><span class="l">Sem receptor inteligente: R$ 1.000 de mídia, 15% de conversão, 15 vendas/mês</span></div>
-<div class="ab-stat"><span class="n">R$ 8.400</span><span class="l">Com a Iza (plano Lite, R$ 247/mês): conversão na casa de 28%, 28 vendas/mês — +86% de receita</span></div>
+<div class="ab-stat"><span class="n">R$ 8.400</span><span class="l">Com a Iza (plano Lite, R$ 247/mês): conversão na casa de 28%, 28 vendas/mês, +86% de receita</span></div>
 </div>
-<p>O payback do plano vem na primeira venda incremental. Os números acima são projeção com premissas declaradas — e é exatamente por isso que a nossa recomendação é medir 30 dias de baseline antes de escalar.</p>
+<p>O payback do plano vem na primeira venda incremental. Os números acima são projeção com premissas declaradas, e é exatamente por isso que a nossa recomendação é medir 30 dias de baseline antes de escalar.</p>
 
 <h2>6 cenários por vertical (premissas na mesa)</h2>
 <p><em>Os cenários abaixo são ilustrativos, construídos sobre benchmarks de mercado e perfis típicos de PMEs com investimento ativo em Meta Ads. Resultados individuais variam conforme setor, base de conhecimento e operação.</em></p>
 
 <div class="ab-card">
 <span class="ab-kicker">Clínica odontológica · São Paulo · R$ 1.000/mês em Meta Ads</span>
-<p><strong>Antes:</strong> CPL R$ 12 · conversão 35% · receita do canal R$ 13 mil/mês. <strong>Depois:</strong> CPL R$ 7 · conversão 62% · R$ 21 mil/mês. O ganho escondido: no-show de 23% para 8% com confirmação automática — agenda cheia vale tanto quanto lead novo.</p>
+<p><strong>Antes:</strong> CPL R$ 12 · conversão 35% · receita do canal R$ 13 mil/mês. <strong>Depois:</strong> CPL R$ 7 · conversão 62% · R$ 21 mil/mês. O ganho escondido: no-show de 23% para 8% com confirmação automática, agenda cheia vale tanto quanto lead novo.</p>
 </div>
 <div class="ab-card">
 <span class="ab-kicker">E-commerce de moda · Rio de Janeiro · R$ 3.000/mês</span>
@@ -211,25 +211,25 @@ export const articles: BlogArticle[] = [
 </div>
 <div class="ab-card">
 <span class="ab-kicker">Academia · Salvador · R$ 2.000/mês</span>
-<p><strong>Antes:</strong> 30 matrículas/mês. <strong>Depois:</strong> 87 matrículas/mês — e retenção maior: aluno que recebe acompanhamento no WhatsApp permanece mais.</p>
+<p><strong>Antes:</strong> 30 matrículas/mês. <strong>Depois:</strong> 87 matrículas/mês, e retenção maior: aluno que recebe acompanhamento no WhatsApp permanece mais.</p>
 </div>
 <div class="ab-card">
 <span class="ab-kicker">Restaurante delivery · Recife · R$ 1.200/mês</span>
-<p><strong>Antes:</strong> 33 pedidos/mês vindos de anúncio, conversão 22%. <strong>Depois:</strong> 96 pedidos/mês, conversão 64% — com a IA sugerindo acompanhamento e sobremesa no fluxo do pedido (ticket médio sobe junto).</p>
+<p><strong>Antes:</strong> 33 pedidos/mês vindos de anúncio, conversão 22%. <strong>Depois:</strong> 96 pedidos/mês, conversão 64%, com a IA sugerindo acompanhamento e sobremesa no fluxo do pedido (ticket médio sobe junto).</p>
 </div>
 
 <h2>Como começar em 24 horas</h2>
 <ol>
-<li><strong>Hora 0:</strong> cadastre-se na ZappIQ — 14 dias grátis, sem cartão e sem setup fee.</li>
+<li><strong>Hora 0:</strong> cadastre-se na ZappIQ, 14 dias grátis, sem cartão e sem setup fee.</li>
 <li><strong>Hora 2:</strong> conecte seu número de WhatsApp Business pelo wizard guiado. Zero código, sem trocar de número.</li>
 <li><strong>Hora 4:</strong> treine sua IA com seus documentos e 2–3 variações de primeira mensagem (templates por vertical já vêm prontos).</li>
 <li><strong>Hora 6:</strong> crie seu primeiro anúncio Click-to-WhatsApp no Gerenciador de Anúncios da Meta.</li>
-<li><strong>Hora 24:</strong> rode a primeira campanha com orçamento de validação — a IA atende cada lead em segundos.</li>
+<li><strong>Hora 24:</strong> rode a primeira campanha com orçamento de validação: a IA atende cada lead em segundos.</li>
 <li><strong>Dia 7:</strong> otimize a campanha via Ads AI Connectors: o agente reduz CPL e realoca orçamento para o que converte.</li>
 </ol>
 
 <h2>A pergunta executiva desta semana</h2>
-<p>A pergunta não é se o funil conduzido por IA vai virar padrão — os dois lados dele acabam de ficar prontos. A pergunta é: você quer ser <strong>um gerador de leads caros que esfriam em 48 horas</strong>, ou <strong>um funil que qualifica, nutre e só te chama quando o lead está pronto para fechar</strong>?</p>
+<p>A pergunta não é se o funil conduzido por IA vai virar padrão. Os dois lados dele acabam de ficar prontos. A pergunta é: você quer ser <strong>um gerador de leads caros que esfriam em 48 horas</strong>, ou <strong>um funil que qualifica, nutre e só te chama quando o lead está pronto para fechar</strong>?</p>
 
 <p><em>Notas: cenários e projeções são ilustrativos, com premissas declaradas no texto; resultados individuais variam. Preços ZappIQ conforme tabela vigente em zappiq.com.br. Disponibilidade dos Meta Ads AI Connectors sujeita ao rollout da Meta por conta de anúncios.</em></p>
     `,
@@ -247,7 +247,7 @@ export const articles: BlogArticle[] = [
     /* PLACEHOLDER: substituir por conteúdo real do blog */
     content: `
 <h2>Por que leads somem no WhatsApp?</h2>
-<p>Se você já investiu em tráfego pago e gerou dezenas — ou centenas — de leads no WhatsApp, sabe que nem todos respondem. Segundo pesquisa da Opinion Box (2025), 79% dos brasileiros usam o WhatsApp para se comunicar com empresas, mas apenas 34% das conversas iniciadas por marcas resultam em resposta. Isso significa que quase dois terços dos seus leads podem estar "perdidos" no limbo digital.</p>
+<p>Se você já investiu em tráfego pago e gerou dezenas (ou centenas) de leads no WhatsApp, sabe que nem todos respondem. Segundo pesquisa da Opinion Box (2025), 79% dos brasileiros usam o WhatsApp para se comunicar com empresas, mas apenas 34% das conversas iniciadas por marcas resultam em resposta. Isso significa que quase dois terços dos seus leads podem estar "perdidos" no limbo digital.</p>
 <p>A boa notícia: leads perdidos não são leads mortos. Eles simplesmente precisam do estímulo certo, no momento certo, com a mensagem certa. Neste guia, vamos explorar técnicas práticas para reengajar esses contatos e aumentar sua taxa de conversão.</p>
 
 <h2>1. Entenda o motivo do silêncio</h2>
@@ -264,7 +264,7 @@ export const articles: BlogArticle[] = [
 <h2>2. Segmente antes de reengajar</h2>
 <p>Não trate todos os leads inativos da mesma forma. Crie segmentos com base em:</p>
 <ul>
-<li><strong>Tempo de inatividade:</strong> 24h, 3 dias, 7 dias, 30 dias — cada faixa exige uma abordagem diferente</li>
+<li><strong>Tempo de inatividade:</strong> 24h, 3 dias, 7 dias, 30 dias; cada faixa exige uma abordagem diferente</li>
 <li><strong>Estágio do funil:</strong> quem apenas perguntou o preço vs. quem chegou a negociar condições</li>
 <li><strong>Canal de origem:</strong> leads de Instagram Ads costumam ter comportamento diferente de leads orgânicos</li>
 <li><strong>Interesse demonstrado:</strong> qual produto ou serviço o lead perguntou</li>
@@ -276,13 +276,13 @@ export const articles: BlogArticle[] = [
 <h2>3. Mensagens que reengajam: modelos testados</h2>
 <p>A automação via IA permite criar mensagens personalizadas em escala. Aqui estão modelos que apresentam taxa de resposta acima de 40%:</p>
 
-<h3>Modelo 1 — Valor antes de vender</h3>
+<h3>Modelo 1: Valor antes de vender</h3>
 <p>"Oi [nome]! 😊 Vi que você se interessou por [produto/serviço]. Preparei um material exclusivo sobre [tema relevante] que pode te ajudar. Posso enviar?"</p>
 
-<h3>Modelo 2 — Prova social</h3>
-<p>"[Nome], a [cliente similar] acabou de fechar conosco e está adorando os resultados. Queria te contar o que mudou para ela — posso te mandar um resumo rápido?"</p>
+<h3>Modelo 2: Prova social</h3>
+<p>"[Nome], a [cliente similar] acabou de fechar conosco e está adorando os resultados. Queria te contar o que mudou para ela, posso te mandar um resumo rápido?"</p>
 
-<h3>Modelo 3 — Oferta com urgência real</h3>
+<h3>Modelo 3: Oferta com urgência real</h3>
 <p>"Oi [nome]! Consegui uma condição especial para [produto/serviço] que vale até [data]. Antes de liberar para todo mundo, queria te oferecer primeiro. Tem interesse?"</p>
 
 <h2>4. Automação inteligente: como a IA transforma o reengajamento</h2>
@@ -305,7 +305,7 @@ export const articles: BlogArticle[] = [
 </ul>
 
 <h2>Conclusão: leads perdidos são oportunidades escondidas</h2>
-<p>Recuperar leads no WhatsApp não é questão de insistência — é questão de inteligência. Com segmentação adequada, mensagens de valor e automação por IA, você pode transformar até 30% dos seus leads "perdidos" em clientes pagantes.</p>
+<p>Recuperar leads no WhatsApp não é questão de insistência, é questão de inteligência. Com segmentação adequada, mensagens de valor e automação por IA, você pode transformar até 30% dos seus leads "perdidos" em clientes pagantes.</p>
 <p>O ZappIQ foi projetado exatamente para isso: qualificar, reengajar e converter leads via WhatsApp de forma automática e personalizada, respeitando as regras do seu negócio e do Meta Business Platform.</p>
     `,
   },
@@ -370,8 +370,8 @@ export const articles: BlogArticle[] = [
 <h2>5. Conformidade com LGPD e CFM</h2>
 <p>É essencial que qualquer automação em saúde respeite a legislação vigente:</p>
 <ul>
-<li><strong>LGPD:</strong> dados de saúde são sensíveis — exigem consentimento explícito e criptografia</li>
-<li><strong>CFM/CRO:</strong> o bot não pode realizar diagnóstico ou prescrição — apenas triagem e agendamento</li>
+<li><strong>LGPD:</strong> dados de saúde são sensíveis, exigem consentimento explícito e criptografia</li>
+<li><strong>CFM/CRO:</strong> o bot não pode realizar diagnóstico ou prescrição, apenas triagem e agendamento</li>
 <li><strong>Opt-out claro:</strong> o paciente deve poder parar de receber mensagens a qualquer momento</li>
 </ul>
 <p>O ZappIQ foi desenvolvido com essas regras incorporadas: consentimento é coletado na primeira interação, dados sensíveis são criptografados, e o agente IA reconhece quando deve encaminhar para o profissional humano.</p>
@@ -420,10 +420,10 @@ export const articles: BlogArticle[] = [
 <p>Se seu negócio recebe até 30 mensagens por dia, tem no máximo 2 atendentes, e não precisa de integração com CRM ou sistema de gestão, o app gratuito atende bem. Exemplos: freelancers, profissionais liberais com agenda pequena, MEIs.</p>
 
 <h2>WhatsApp Business API: escala profissional</h2>
-<p>A API (agora oferecida como Cloud API pela Meta) é a versão empresarial robusta, projetada para médias e grandes empresas — ou pequenas empresas que querem crescer:</p>
+<p>A API (agora oferecida como Cloud API pela Meta) é a versão empresarial robusta, projetada para médias e grandes empresas, ou pequenas empresas que querem crescer:</p>
 <ul>
 <li><strong>Custo:</strong> taxa por conversa (a partir de R$0,25 por conversa de 24h, valor varia por categoria)</li>
-<li><strong>Dispositivos/Usuários:</strong> ilimitados — múltiplos atendentes simultâneos</li>
+<li><strong>Dispositivos/Usuários:</strong> ilimitados, múltiplos atendentes simultâneos</li>
 <li><strong>Automação:</strong> fluxos ilimitados, integração com IA, chatbots avançados</li>
 <li><strong>Integrações:</strong> conecta com CRM, ERP, calendários, e-commerce, qualquer sistema via API</li>
 <li><strong>Templates:</strong> mensagens pré-aprovadas pela Meta para disparo ativo</li>
@@ -445,7 +445,7 @@ export const articles: BlogArticle[] = [
 <p>Vamos comparar os pontos mais relevantes lado a lado:</p>
 
 <h3>Atendimento simultâneo</h3>
-<p>No app, se dois atendentes tentam responder ao mesmo tempo, gera confusão — não há fila, não há atribuição automática. Na API, cada conversa é roteada para o atendente correto (ou para a IA), com fila organizada e histórico centralizado.</p>
+<p>No app, se dois atendentes tentam responder ao mesmo tempo, gera confusão: não há fila, não há atribuição automática. Na API, cada conversa é roteada para o atendente correto (ou para a IA), com fila organizada e histórico centralizado.</p>
 
 <h3>Automação e IA</h3>
 <p>O app oferece respostas rápidas estáticas (ex: "/horario" → "Nosso horário é de 8h às 18h"). A API permite IA conversacional completa: o agente entende a intenção do cliente, consulta dados em tempo real, agenda, vende e encaminha para humano quando necessário.</p>
@@ -458,7 +458,7 @@ export const articles: BlogArticle[] = [
 <p>Em menos de 10 minutos, você conecta seu número à API via ZappIQ, configura seu agente IA com base no seu segmento, e começa a atender. Sem código, sem devops, sem dor de cabeça.</p>
 
 <h2>Conclusão: pense no futuro</h2>
-<p>Se hoje o app gratuito atende seu volume, ótimo — use-o. Mas planeje a migração para a API antes de atingir o limite. A transição mais suave acontece quando você migra proativamente (com calma, testando), não quando está desesperado com leads acumulados e clientes sem resposta.</p>
+<p>Se hoje o app gratuito atende seu volume, ótimo, use-o. Mas planeje a migração para a API antes de atingir o limite. A transição mais suave acontece quando você migra proativamente (com calma, testando), não quando está desesperado com leads acumulados e clientes sem resposta.</p>
     `,
   },
   {
@@ -474,7 +474,7 @@ export const articles: BlogArticle[] = [
     /* PLACEHOLDER: substituir por conteúdo real do blog */
     content: `
 <h2>WhatsApp como canal de vendas para e-commerce</h2>
-<p>O WhatsApp já é o canal digital mais importante para o varejo brasileiro. Dados da Ebit|Nielsen mostram que 62% dos consumidores online brasileiros preferem tirar dúvidas sobre produtos via WhatsApp antes de comprar. Para lojas virtuais, automatizar esse canal não é mais opcional — é estratégico.</p>
+<p>O WhatsApp já é o canal digital mais importante para o varejo brasileiro. Dados da Ebit|Nielsen mostram que 62% dos consumidores online brasileiros preferem tirar dúvidas sobre produtos via WhatsApp antes de comprar. Para lojas virtuais, automatizar esse canal não é mais opcional, é estratégico.</p>
 <p>Neste artigo, apresentamos 5 fluxos de automação que toda loja virtual deveria implementar no WhatsApp para vender mais, atender melhor e fidelizar clientes.</p>
 
 <h2>Fluxo 1: Recuperação de carrinho abandonado</h2>
@@ -522,7 +522,7 @@ export const articles: BlogArticle[] = [
 </ul>
 
 <h3>Cross-sell inteligente com IA</h3>
-<p>A IA analisa o histórico de compra do cliente e sugere produtos complementares de forma natural, como um vendedor experiente faria. "Você comprou o tênis de corrida — que tal uma meia de compressão para melhorar o desempenho?"</p>
+<p>A IA analisa o histórico de compra do cliente e sugere produtos complementares de forma natural, como um vendedor experiente faria. "Você comprou o tênis de corrida, que tal uma meia de compressão para melhorar o desempenho?"</p>
 
 <h2>Fluxo 5: Campanhas segmentadas e lançamentos</h2>
 <p>Em vez de disparar promoções genéricas para toda a base, use a segmentação inteligente para enviar ofertas relevantes:</p>
@@ -544,7 +544,7 @@ export const articles: BlogArticle[] = [
 </ul>
 
 <h2>Comece pelo fluxo de maior impacto</h2>
-<p>Não tente implementar tudo de uma vez. Comece pela recuperação de carrinho abandonado — é o fluxo com ROI mais rápido e fácil de medir. Com o ZappIQ, a configuração leva menos de 15 minutos e os resultados aparecem na primeira semana.</p>
+<p>Não tente implementar tudo de uma vez. Comece pela recuperação de carrinho abandonado: é o fluxo com ROI mais rápido e fácil de medir. Com o ZappIQ, a configuração leva menos de 15 minutos e os resultados aparecem na primeira semana.</p>
     `,
   },
   {
@@ -561,7 +561,7 @@ export const articles: BlogArticle[] = [
     content: `
 <h2>Por que calcular o ROI do chatbot é essencial</h2>
 <p>Investir em tecnologia sem medir resultados é como dirigir sem painel. Muitas empresas implementam chatbots no WhatsApp porque "todo mundo está fazendo", mas não sabem se o investimento está gerando retorno real. Este guia apresenta uma metodologia clara e prática para calcular o ROI do seu chatbot com IA.</p>
-<p>Spoiler: quando bem implementado, o retorno costuma surpreender. Segundo a Juniper Research, chatbots com IA geram economia média de US$ 0,70 por interação comparado ao atendimento humano. Para empresas brasileiras com volume médio de 1.000 conversas/mês, isso pode significar economia de R$ 4.000 a R$ 8.000 mensais — sem contar o aumento de receita.</p>
+<p>Spoiler: quando bem implementado, o retorno costuma surpreender. Segundo a Juniper Research, chatbots com IA geram economia média de US$ 0,70 por interação comparado ao atendimento humano. Para empresas brasileiras com volume médio de 1.000 conversas/mês, isso pode significar economia de R$ 4.000 a R$ 8.000 mensais, sem contar o aumento de receita.</p>
 
 <h2>A fórmula do ROI</h2>
 <p>O ROI (Retorno sobre Investimento) é calculado pela fórmula clássica:</p>
@@ -645,7 +645,7 @@ export const articles: BlogArticle[] = [
 </ul>
 
 <h2>Conclusão: ROI é consequência de implementação bem feita</h2>
-<p>O ROI de um chatbot com IA não depende apenas da tecnologia — depende de como você o implementa e mantém. Com a abordagem certa (segmentação vertical, base de conhecimento robusta, supervisão ativa), retornos de 300% a 800% em 6 meses são absolutamente alcançáveis para PMEs brasileiras.</p>
+<p>O ROI de um chatbot com IA não depende apenas da tecnologia: depende de como você o implementa e mantém. Com a abordagem certa (segmentação vertical, base de conhecimento robusta, supervisão ativa), retornos de 300% a 800% em 6 meses são absolutamente alcançáveis para PMEs brasileiras.</p>
 <p>O ZappIQ foi projetado para maximizar esse ROI desde o primeiro dia, com onboarding guiado por segmento, métricas em tempo real e otimização contínua por IA. Comece seu teste grátis de 14 dias e meça os resultados você mesmo.</p>
     `,
   },

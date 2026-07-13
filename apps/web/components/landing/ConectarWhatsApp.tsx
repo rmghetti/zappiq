@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * ConectarWhatsApp — Design V4 (Chatbase-style · Geist + gradient g→b→p)
+ * ConectarWhatsApp: Design V4 (Chatbase-style · Geist + gradient g→b→p)
  * --------------------------------------------------------------------------
  * Página educacional de pré-cadastro: explica WhatsApp Cloud API, pré-reqs,
  * 3 caminhos de onboarding, tutorial passo-a-passo, FAQ específico, vídeo
@@ -63,7 +63,7 @@ const CAMINHOS = [
     icon: Zap,
     badge: '15% dos clientes',
     nome: 'Embedded Signup',
-    desc: 'Self-service guiado pelo painel oficial Meta dentro da ZappIQ. UX similar a "Login com Google" — sem token, sem código.',
+    desc: 'Self-service guiado pelo painel oficial Meta dentro da ZappIQ. UX similar a "Login com Google", sem token, sem código.',
     bullets: [
       'Conexão em 20-40 minutos no seu ritmo',
       'Popup oficial Meta dentro da ZappIQ',
@@ -91,12 +91,12 @@ const CAMINHOS = [
 
 // ─── Pré-requisitos · checklist visual ─────────────────────────────
 const PRE_REQS = [
-  { icon: Building2, title: 'CNPJ ativo', desc: 'MEI, ME, EPP, LTDA, SA — qualquer formato regular. Pessoa física pura não pode (restrição Meta). Não tem? Abra MEI grátis em 15 min no Portal do Empreendedor.' },
+  { icon: Building2, title: 'CNPJ ativo', desc: 'MEI, ME, EPP, LTDA, SA: qualquer formato regular. Pessoa física pura não pode (restrição Meta). Não tem? Abra MEI grátis em 15 min no Portal do Empreendedor.' },
   { icon: FileCheck, title: 'Documentos da empresa', desc: 'Cartão CNPJ atualizado, contrato social, comprovante de endereço em nome da empresa, RG/CNH do sócio responsável.' },
-  { icon: Smartphone, title: 'Número dedicado', desc: 'Pode ser celular, fixo ou linha empresarial — mas não pode estar simultaneamente no WhatsApp comum ou Business app. Recomendamos chip novo só pro bot.' },
-  { icon: ShieldCheck, title: 'Conta Facebook', desc: 'Pessoal ou corporativa. Usada só na autenticação inicial — quem fica com acesso é a ZappIQ via token oficial.' },
+  { icon: Smartphone, title: 'Número dedicado', desc: 'Pode ser celular, fixo ou linha empresarial, mas não pode estar simultaneamente no WhatsApp comum ou Business app. Recomendamos chip novo só pro bot.' },
+  { icon: ShieldCheck, title: 'Conta Facebook', desc: 'Pessoal ou corporativa. Usada só na autenticação inicial: quem fica com acesso é a ZappIQ via token oficial.' },
   { icon: MessageCircle, title: 'E-mail corporativo', desc: 'Idealmente no domínio da empresa. Recebe notificações Meta, alertas de qualidade e códigos 2FA. Use alias compartilhado se possível.' },
-  { icon: Clock, title: '1 a 15 dias úteis', desc: 'Tempo total até estar 100% no ar. Tempo ATIVO seu: 30-60 min. O resto é espera por aprovação Meta — você pode preparar o bot enquanto isso.' },
+  { icon: Clock, title: '1 a 15 dias úteis', desc: 'Tempo total até estar 100% no ar. Tempo ATIVO seu: 30-60 min. O resto é espera por aprovação Meta; você pode preparar o bot enquanto isso.' },
 ];
 
 // ─── Tutorial passo a passo · Caminho A (Assistido) ────────────────
@@ -116,27 +116,27 @@ const FAQ_WHATSAPP = [
   },
   {
     q: 'Sou pessoa física sem CNPJ. Posso usar a ZappIQ?',
-    a: 'A Cloud API exige CNPJ — restrição da Meta, não da ZappIQ. Saída prática: abra MEI grátis no Portal do Empreendedor (gov.br/empresas-e-negocios), leva 15 minutos. Aí você cadastra normalmente.',
+    a: 'A Cloud API exige CNPJ, restrição da Meta, não da ZappIQ. Saída prática: abra MEI grátis no Portal do Empreendedor (gov.br/empresas-e-negocios), leva 15 minutos. Aí você cadastra normalmente.',
   },
   {
     q: 'Já uso WhatsApp Business app na empresa, posso migrar?',
-    a: 'Pode. Mas o histórico de conversas anteriores não é trazido para a Cloud API — perde do ponto de vista do bot, ainda que clientes tenham no celular deles. Recomendamos exportar conversas críticas via "Exportar conversa" antes de migrar.',
+    a: 'Pode. Mas o histórico de conversas anteriores não é trazido para a Cloud API; perde do ponto de vista do bot, ainda que clientes tenham no celular deles. Recomendamos exportar conversas críticas via "Exportar conversa" antes de migrar.',
   },
   {
     q: 'Quanto tempo demora a Verificação de Negócio Meta?',
-    a: 'Tipicamente 1-7 dias úteis. Em casos raros vai a 15. A maior causa de demora é divergência entre dados digitados e documentos enviados — nosso time confere tudo na call de onboarding antes de submeter.',
+    a: 'Tipicamente 1-7 dias úteis. Em casos raros vai a 15. A maior causa de demora é divergência entre dados digitados e documentos enviados; nosso time confere tudo na call de onboarding antes de submeter.',
   },
   {
     q: 'Quanto a Meta cobra por mês?',
-    a: 'A Meta cobra por "conversa" (janela de 24h). Pequena loja com atendimento reativo: R$ 30-80/mês. PME com vendas ativas: R$ 200-500/mês. Operação grande com marketing pesado: R$ 1.500-4.000/mês. ZappIQ não marca up — você paga Meta direto, com dashboard de gasto em tempo real.',
+    a: 'A Meta cobra por "conversa" (janela de 24h). Pequena loja com atendimento reativo: R$ 30-80/mês. PME com vendas ativas: R$ 200-500/mês. Operação grande com marketing pesado: R$ 1.500-4.000/mês. ZappIQ não marca up: você paga Meta direto, com dashboard de gasto em tempo real.',
   },
   {
     q: 'Posso ter mais de um número conectado?',
-    a: 'Sim. Starter aceita 1 número. Growth: 2. Scale: 5. Business: 15. Enterprise: ilimitado. Cada número é gerenciado independentemente — fluxos, agentes e relatórios separados.',
+    a: 'Sim. Lite aceita 1 número. Growth: 2. Scale: 15. Enterprise: ilimitado. Cada número é gerenciado independentemente: fluxos, agentes e relatórios separados.',
   },
   {
     q: 'A IA da ZappIQ é GPT? Gemini?',
-    a: 'Usamos orquestração proprietária com múltiplos modelos de ponta. Para cada interação escolhemos automaticamente o modelo mais eficiente em qualidade e custo. Você não precisa escolher — fica tudo abstraído no painel.',
+    a: 'Usamos orquestração proprietária com múltiplos modelos de ponta. Para cada interação escolhemos automaticamente o modelo mais eficiente em qualidade e custo. Você não precisa escolher, fica tudo abstraído no painel.',
   },
   {
     q: 'Os dados ficam seguros?',
@@ -168,7 +168,7 @@ export function ConectarWhatsApp() {
           </h1>
           <p className="text-[18px] lg:text-[20px] text-muted leading-relaxed max-w-3xl mx-auto mb-10">
             Tutorial completo, sem jargão. Pré-requisitos, 3 caminhos de onboarding,
-            FAQ e tudo o que você precisa saber antes de começar — em um só lugar.
+            FAQ e tudo o que você precisa saber antes de começar, em um só lugar.
             Tempo de leitura: 8 minutos.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
@@ -325,7 +325,7 @@ export function ConectarWhatsApp() {
               Conexão do seu jeito, <span className="text-grad">no seu ritmo.</span>
             </h2>
             <p className="text-[16px] text-muted max-w-2xl mx-auto">
-              Não existe "o melhor" — existe o que serve melhor pro seu perfil.
+              Não existe "o melhor", existe o que serve melhor pro seu perfil.
               Recomendamos o assistido pra grande maioria.
             </p>
           </div>
@@ -390,7 +390,7 @@ export function ConectarWhatsApp() {
             </h2>
             <p className="text-[16px] text-muted max-w-2xl mx-auto">
               Fluxo recomendado pra quem prefere zero dor de cabeça técnica.
-              Tempo total: 1 a 15 dias (a maior parte é espera Meta — você não trabalha).
+              Tempo total: 1 a 15 dias (a maior parte é espera Meta, você não trabalha).
             </p>
           </div>
           <div className="space-y-3">
@@ -447,7 +447,7 @@ export function ConectarWhatsApp() {
               O que você <span className="text-grad">não pode fazer.</span>
             </h2>
             <p className="text-[16px] text-muted max-w-2xl mx-auto">
-              Restrições da Cloud API que você precisa saber antes — não depois.
+              Restrições da Cloud API que você precisa saber antes, não depois.
             </p>
           </div>
           <div className="space-y-4">

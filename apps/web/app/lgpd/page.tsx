@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 export const metadata = {
-  title: 'LGPD — Conformidade e Privacidade | ZappIQ',
+  title: 'LGPD: Conformidade e Privacidade | ZappIQ',
   description: 'ZappIQ é 100% compatível com a Lei Geral de Proteção de Dados (LGPD). Saiba como protegemos os dados dos seus clientes e como atendemos a todas as obrigações legais.',
 };
 
@@ -15,7 +15,7 @@ const LGPD_ARTICLES = [
     art: 'Art. 6º',
     icon: Shield,
     title: 'Princípios de tratamento',
-    desc: 'Finalidade, adequação, necessidade, livre acesso, qualidade dos dados, transparência, segurança, prevenção, não discriminação e responsabilização. Todos codificados na arquitetura — não só no termo de uso.',
+    desc: 'Finalidade, adequação, necessidade, livre acesso, qualidade dos dados, transparência, segurança, prevenção, não discriminação e responsabilização. Todos codificados na arquitetura, não só no termo de uso.',
   },
   {
     art: 'Art. 18',
@@ -27,7 +27,7 @@ const LGPD_ARTICLES = [
     art: 'Art. 37',
     icon: FileCheck,
     title: 'Registro de Operações (ROP)',
-    desc: 'Mantemos ROP auditável de todas as operações de tratamento — finalidade, bases legais, compartilhamentos, retenção, medidas de segurança. Disponibilizado a controladores sob solicitação.',
+    desc: 'Mantemos ROP auditável de todas as operações de tratamento: finalidade, bases legais, compartilhamentos, retenção, medidas de segurança. Disponibilizado a controladores sob solicitação.',
   },
   {
     art: 'Art. 46',
@@ -81,7 +81,7 @@ export default function LGPDPage() {
             LGPD não é um <span className="text-emerald-400">checkbox</span>.<br className="hidden sm:block" /> É a <span className="text-emerald-400">arquitetura</span>.
           </h1>
           <p className="text-lg lg:text-xl text-gray-300 max-w-3xl mb-8 leading-relaxed">
-            ZappIQ é 100% compatível com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Segurança, privacidade e conformidade estão no código — não no rodapé. Sua empresa ganha tranquilidade legal e credibilidade com clientes que exigem conformidade comprovada.
+            ZappIQ é 100% compatível com a Lei Geral de Proteção de Dados (Lei 13.709/2018). Segurança, privacidade e conformidade estão no código, não no rodapé. Sua empresa ganha tranquilidade legal e credibilidade com clientes que exigem conformidade comprovada.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link href="#o-que-e-lgpd"
@@ -109,13 +109,13 @@ export default function LGPDPage() {
                 A <strong>Lei Geral de Proteção de Dados (Lei 13.709/2018)</strong> é a legislação brasileira que regula como empresas coletam, armazenam, usam e compartilham dados pessoais. Entrou em vigor em setembro de 2020 e tem regulamentação pela ANPD (Autoridade Nacional de Proteção de Dados).
               </p>
               <p>
-                Se a sua empresa lida com dados de clientes — nome, CPF, telefone, e-mail, preferências, histórico de compras —, a LGPD se aplica. <strong>Independente do porte</strong>, do setor ou se você é controladora ou operadora dos dados.
+                Se a sua empresa lida com dados de clientes (nome, CPF, telefone, e-mail, preferências, histórico de compras), a LGPD se aplica. <strong>Independente do porte</strong>, do setor ou se você é controladora ou operadora dos dados.
               </p>
               <p className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded">
                 <strong className="text-amber-900">Multas podem chegar a R$ 50 milhões por infração</strong> ou 2% do faturamento anual (limitado a esse teto). Mais que a multa, o risco reputacional de um vazamento público pode ser muito maior.
               </p>
               <p>
-                Quando sua empresa usa uma plataforma como ZappIQ, você se torna a <strong>controladora</strong> dos dados dos seus clientes, e a ZappIQ se torna a <strong>operadora</strong>. Isso significa que ambos têm obrigações — e que escolher um operador com conformidade sólida protege você do risco.
+                Quando sua empresa usa uma plataforma como ZappIQ, você se torna a <strong>controladora</strong> dos dados dos seus clientes, e a ZappIQ se torna a <strong>operadora</strong>. Isso significa que ambos têm obrigações, e que escolher um operador com conformidade sólida protege você do risco.
               </p>
             </div>
           </div>
@@ -131,7 +131,7 @@ export default function LGPDPage() {
               Artigo por artigo, em código
             </h2>
             <p className="text-gray-500 max-w-2xl mx-auto">
-              Não é política escrita e esquecida. É funcionalidade que o produto entrega — e que sua equipe de compliance pode auditar.
+              Não é política escrita e esquecida. É funcionalidade que o produto entrega, e que sua equipe de compliance pode auditar.
             </p>
           </div>
 
@@ -187,7 +187,7 @@ export default function LGPDPage() {
                   Portal do Titular (DSR)
                 </h2>
                 <p className="text-gray-600 leading-relaxed mb-5">
-                  Todos os clientes ZappIQ têm um portal nativo para atender solicitações de titulares (Art. 18). Acesso, correção, portabilidade, anonimização, eliminação e revogação de consentimento — em fluxo auditável, com registro completo para compliance.
+                  Todos os clientes ZappIQ têm um portal nativo para atender solicitações de titulares (Art. 18). Acesso, correção, portabilidade, anonimização, eliminação e revogação de consentimento, em fluxo auditável, com registro completo para compliance.
                 </p>
                 <div className="grid sm:grid-cols-2 gap-3 text-sm">
                   <div className="flex items-center gap-2 text-gray-700">
@@ -273,11 +273,11 @@ export default function LGPDPage() {
       <section className="py-10 bg-gray-100 border-t border-gray-200">
         <div className="max-w-4xl mx-auto px-6 text-center text-sm text-gray-600 space-y-1">
           <p className="font-semibold text-gray-800">Controladora</p>
-          <p>ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA (d.b.a. ZappIQ) — CNPJ 46.788.145/0001-08</p>
-          <p>Av. das Nações Unidas, 12901 — CENU Torre Norte, 25° andar — São Paulo/SP — CEP 04578-910</p>
+          <p>ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA (d.b.a. ZappIQ), CNPJ 46.788.145/0001-08</p>
+          <p>Av. das Nações Unidas, 12901, CENU Torre Norte, 25° andar, São Paulo/SP, CEP 04578-910</p>
           {/* V2-025: DPO externo em homologação (LGPD Art. 41). Nome publicado
               quando contrato de prestação de serviço for assinado (BLOCKER B-03). */}
-          <p>Encarregado (DPO): em homologação — <a href="mailto:dpo@zappiq.com.br" className="text-emerald-600 hover:underline">dpo@zappiq.com.br</a></p>
+          <p>Encarregado (DPO): em homologação, <a href="mailto:dpo@zappiq.com.br" className="text-emerald-600 hover:underline">dpo@zappiq.com.br</a></p>
         </div>
       </section>
     </PublicLayout>

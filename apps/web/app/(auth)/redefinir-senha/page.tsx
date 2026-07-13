@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /redefinir-senha — PR #102
+ * /redefinir-senha: PR #102
  * --------------------------------------------------------------------------
  * Page client-side que recebe redirect do email de reset Supabase.
  *
@@ -46,7 +46,7 @@ export default function RedefinirSenhaPage() {
         setError('Link inválido ou expirado');
       }
     } else {
-      setError('Link inválido — abra direto pelo e-mail de redefinição');
+      setError('Link inválido. Abra direto pelo e-mail de redefinição');
     }
   }, []);
 

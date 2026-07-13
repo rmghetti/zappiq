@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
- * LandingFooter — Design V4 (Chatbase-style · dark #0A0B12 · Geist)
+ * LandingFooter: Design V4 (Chatbase-style · dark #0A0B12 · Geist)
  * --------------------------------------------------------------------------
  * Footer institucional com 5 colunas (Produto · Planos · Empresa · Recursos ·
  * Conformidade), badges de segurança, razão social CNPJ, DPO LGPD, créditos.
@@ -17,27 +17,26 @@ const COLUMNS = [
   {
     title: 'Produto',
     links: [
-      { label: 'Central de conversas', href: '/#produtos' },
-      { label: 'Iza · IA 24/7', href: '/#produtos' },
-      { label: 'Campanhas WhatsApp', href: '/#produtos' },
-      { label: 'Dashboard gerencial', href: '/#produtos' },
-      { label: 'CRM no WhatsApp', href: '/#produtos' },
-      { label: 'Automações visuais', href: '/#produtos' },
-      { label: 'Copiloto para atendentes', href: '/#produtos' },
-      { label: 'Conformidade LGPD', href: '/#produtos' },
-      { label: 'Radar 360° (add-on)', href: '/observabilidade' },
+      { label: 'Central de conversas', href: '/#plataforma-autonoma' },
+      { label: 'Iza · IA 24/7', href: '/#plataforma-autonoma' },
+      { label: 'Campanhas WhatsApp', href: '/#plataforma-autonoma' },
+      { label: 'Dashboard gerencial', href: '/#plataforma-autonoma' },
+      { label: 'CRM no WhatsApp', href: '/#plataforma-autonoma' },
+      { label: 'Automações visuais', href: '/#plataforma-autonoma' },
+      { label: 'Copiloto para atendentes', href: '/#plataforma-autonoma' },
+      { label: 'Conformidade LGPD', href: '/#plataforma-autonoma' },
+      { label: 'Radar 360° Pro (add-on)', href: '/observabilidade' },
     ],
   },
   {
     title: 'Planos',
     links: [
-      { label: 'Starter · Growth · Scale', href: '/#precos' },
-      { label: 'Business', href: '/#precos' },
+      { label: 'Lite, Growth e Scale', href: '/#precos' },
+      { label: 'Comparar planos', href: '/#precos' },
       { label: 'Enterprise', href: '/enterprise' },
       { label: '14 dias grátis', href: '/#precos' },
       { label: 'Voz Nativa (add-on)', href: '/voz' },
-      { label: 'Migração Zenvia', href: '/migração-zenvia' },
-      { label: 'SLA contratual', href: '/sla' },
+      { label: 'Migração Zenvia', href: '/migracao-zenvia' },
     ],
   },
   {
@@ -83,8 +82,8 @@ const SECURITY_BADGES = [
   { icon: Shield, label: 'LGPD no núcleo do produto' },
   { icon: Lock, label: 'Dados criptografados ponta a ponta' },
   { icon: Server, label: 'Servidores 100% no Brasil' },
-  { icon: Activity, label: 'Uptime 99,9% em contrato (Business)' },
-  { icon: Radar, label: 'Dashboards que viram decisão (Radar 360°)' },
+  { icon: Activity, label: 'Monitoramento contínuo da plataforma' },
+  { icon: Radar, label: 'Dashboards que viram decisão (Radar 360° Pro)' },
 ];
 
 export function Footer() {
@@ -137,9 +136,9 @@ export function Footer() {
               </Link>
             </div>
             <p className="text-[12.5px] text-white/55 leading-relaxed">
-              Inteligência conversacional para PMEs brasileiras via WhatsApp.
+              Operação autônoma de atendimento e vendas no WhatsApp e Instagram.
             </p>
-            {/* Patch MACHIA — selo "A Platform MACHIA Company" (variante dark + white border) */}
+            {/* Patch MACHIA: selo "A Platform MACHIA Company" (variante dark + white border) */}
             <div className="mt-5">
               <Image
                 src="/partners/machia/machia-platform-badge-dark-white.svg"
@@ -197,9 +196,9 @@ export function Footer() {
               MACHIA TECNOLOGIA DISRUPTIVA LTDA{' '}
               <span className="text-white/40 font-normal">(d.b.a. ZappIQ)</span>
             </p>
-            <p>CNPJ 46.788.145/0001-08 — detentora da marca ZappIQ</p>
+            <p>CNPJ 46.788.145/0001-08, detentora da marca ZappIQ</p>
             <p>
-              Av. das Nações Unidas, 12901 — CENU Torre Norte, 25° andar — São Paulo/SP —
+              Av. das Nações Unidas, 12901, CENU Torre Norte, 25° andar, São Paulo/SP,
               CEP 04578-910
             </p>
             <p className="mt-3">
@@ -225,7 +224,7 @@ export function Footer() {
             </p>
             <p className="text-[10.5px] text-white/30 mt-1">
               Encarregado de Dados com contato direto, como a LGPD exige. Resposta em até 15 dias
-              úteis (48h nos planos Business/Enterprise).
+              úteis (48h nos planos Scale/Enterprise).
             </p>
           </div>
 

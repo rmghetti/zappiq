@@ -1,14 +1,12 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Pricing — Design V4 (5 tiers + toggles · Chatbase-style)
+ * Pricing: Design V4 (5 tiers + toggles · Chatbase-style)
  * --------------------------------------------------------------------------
  * LÓGICA PRESERVADA 100%:
  *   - 4 planos ativos via listActivePlans() de @zappiq/shared (Iza Lite/Growth/Scale/Enterprise)
- *   - toggle anual (-20%) + Mira Prospects (seletor de faixa) + Voz outbound
- *   - Radar 360° saiu do seletor (produto a retrabalhar); Mira incluída em
- *     Business (Pro) e Enterprise (Scale); indisponível no Lite
- *   - Business: SLA 99,9% destaque
+ *   - toggle anual (-20%) + seletor de add-ons (soma valor ao plano na hora)
+ *   - Enterprise: voz incluída, Radar incluso, sob consulta
  *   - Card "Com vs Sem ZappIQ" no fim
  *
  * Visual novo: tier cards card-soft, featured com shadow-tier-feat,
@@ -18,20 +16,44 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, Shield, Sparkles, Crown, Crosshair } from 'lucide-react';
-import {
-  listActivePlans,
-  getAnnualPrice,
-  listMiraTiers,
-  MIRA_TIERS,
-  MIRA_INCLUDED_TIER_BY_PLAN,
-  MIRA_ELIGIBLE_PLANS,
-  type PlanConfig,
-  type MiraTier,
-} from '@zappiq/shared';
+import { type LucideIcon, Check, Radar, Sparkles, Megaphone, CalendarCheck, Mic, Phone, Crosshair } from 'lucide-react';
+import { listActivePlans, ADDONS, getAnnualPrice, MIRA_TIERS, MIRA_ELIGIBLE_PLANS, MIRA_INCLUDED_TIER_BY_PLAN, type PlanConfig } from '@zappiq/shared';
 
 const PLANS: PlanConfig[] = listActivePlans();
-const MIRA_TIER_LIST = listMiraTiers();
+
+/* Formata BRL: sem casas quando inteiro (R$ 247), com 2 casas quando tem
+   centavos (R$ 79,90), pra o preço não virar "R$ 326,9" ao somar add-ons. */
+function fmtBRL(v: number): string {
+  return v % 1 === 0
+    ? v.toLocaleString('pt-BR')
+    : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* Seletor de add-ons do Pricing. Valores conforme planConfig (ADDONS /
+   ADDONS_V4_LIST, 13/07/2026). includedFor = planos onde o add-on já vem
+   incluso (não soma no preço, aparece como "incluído" no card). */
+type PricingAddon = {
+  key: string;
+  name: string;
+  price: number;
+  fromLabel?: boolean; // "a partir de" (pacotes com faixa de preço)
+  icon: LucideIcon;
+  includedFor: (p: PlanConfig) => boolean;
+  unavailableFor?: (p: PlanConfig) => boolean; // add-on indisponível neste plano
+  unavailableNote?: string;
+};
+
+const PRICING_ADDONS: PricingAddon[] = [
+  { key: 'mira', name: 'Mira Prospects', price: MIRA_TIERS.MIRA_ESSENCIAL.priceMonthly, fromLabel: true, icon: Crosshair,
+    includedFor: (p) => MIRA_INCLUDED_TIER_BY_PLAN[p.id] != null,
+    unavailableFor: (p) => !MIRA_ELIGIBLE_PLANS.includes(p.id),
+    unavailableNote: 'disponível a partir do Growth' },
+  { key: 'radar', name: 'Radar 360° Pro', price: ADDONS.RADAR_360.priceMonthly ?? 397, icon: Radar, includedFor: (p) => p.features.radar360 },
+  { key: 'impulso', name: 'Zap Impulso', price: 197, fromLabel: true, icon: Megaphone, includedFor: () => false },
+  { key: 'agenda', name: 'Agendamento pela IA', price: 49, icon: CalendarCheck, includedFor: (p) => p.id !== 'IZA_LITE' },
+  { key: 'voz', name: 'Voz Nativa', price: 79.9, fromLabel: true, icon: Mic, includedFor: (p) => p.id === 'ENTERPRISE' },
+  { key: 'numero', name: 'Número WhatsApp extra', price: 137, icon: Phone, includedFor: () => false },
+];
 
 // V2-020 (Sprint 0 Blocker 6): seletor de Voz removido até julho/2026.
 // Backend (Whisper STT + TTS) está em roadmap. Ver /roadmap pra timeline.
@@ -39,29 +61,29 @@ const MIRA_TIER_LIST = listMiraTiers();
 
 export function Pricing() {
   const [annual, setAnnual] = useState(false);
-  // Mira Prospects (add-on de inteligência de oportunidades) — seletor de
-  // faixa substitui o antigo toggle do Radar 360° (produto a retrabalhar).
-  const [miraTier, setMiraTier] = useState<MiraTier | ''>('');
+  const [selectedAddons, setSelectedAddons] = useState<Record<string, boolean>>({});
+  const toggleAddon = (key: string) =>
+    setSelectedAddons((s) => ({ ...s, [key]: !s[key] }));
 
   const computePrice = (plan: PlanConfig): number | null => {
     if (plan.priceMonthly === null) return null;
     return annual ? getAnnualPrice(plan) : plan.priceMonthly;
   };
 
-  // Mira incluída no plano (Business→Pro, Enterprise→Scale)?
-  const miraIncludedIn = (plan: PlanConfig): MiraTier | null =>
-    (MIRA_INCLUDED_TIER_BY_PLAN as Record<string, MiraTier>)[plan.id] ?? null;
+  /* Valor mensal de um add-on pra um plano (0 se já incluso). Aplica o mesmo
+     desconto anual do plano quando o toggle Anual está ligado. */
+  const addonPriceFor = (addon: PricingAddon, plan: PlanConfig): number => {
+    if (addon.unavailableFor?.(plan)) return 0;
+    if (addon.includedFor(plan)) return 0;
+    return annual ? addon.price * (1 - plan.annualDiscountPercent / 100) : addon.price;
+  };
 
-  const miraEligible = (plan: PlanConfig): boolean => (MIRA_ELIGIBLE_PLANS as string[]).includes(plan.id);
-
-  const computeMiraExtra = (plan: PlanConfig): number => {
-    if (!miraTier) return 0;
-    if (!miraEligible(plan)) return 0; // Lite: indisponível (nota no card)
-    if (miraIncludedIn(plan)) return 0; // Business/Enterprise: incluída
-    const t = MIRA_TIERS[miraTier];
-    return annual
-      ? Math.round(t.priceMonthly * (1 - t.annualDiscountPercent / 100))
-      : t.priceMonthly;
+  const computeAddonsExtra = (plan: PlanConfig): number => {
+    if (plan.priceMonthly === null) return 0;
+    return PRICING_ADDONS.reduce(
+      (sum, a) => (selectedAddons[a.key] ? sum + addonPriceFor(a, plan) : sum),
+      0,
+    );
   };
 
   return (
@@ -104,41 +126,39 @@ export function Pricing() {
             </span>
           </div>
 
-          {/* Mira Prospects — seletor de faixa (add-on de inteligência de oportunidades) */}
-          <div className="flex flex-col items-center gap-2">
-            <div className="flex flex-wrap items-center justify-center gap-2 bg-bg-soft border border-line rounded-full px-3 py-2">
-              <span className="text-[12.5px] font-medium text-ink flex items-center gap-1.5 pl-1">
-                <Crosshair size={13} className="text-accent" /> Mira Prospects
-              </span>
-              <button
-                onClick={() => setMiraTier('')}
-                className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${
-                  miraTier === '' ? 'bg-ink text-white' : 'text-muted hover:text-ink'
-                }`}
-              >
-                Sem add-on
-              </button>
-              {MIRA_TIER_LIST.map((t) => {
-                const preco = annual
-                  ? Math.round(t.priceMonthly * (1 - t.annualDiscountPercent / 100))
-                  : t.priceMonthly;
-                const shortName = t.name.replace('Mira ', '');
+          {/* Seletor de add-ons: clicando, o preço de cada plano se ajusta na hora */}
+          <div className="w-full max-w-4xl">
+            <p className="text-center text-[13px] text-muted mb-3">
+              Monte seu plano: adicione módulos e veja o preço se ajustar na hora.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {PRICING_ADDONS.map((a) => {
+                const on = !!selectedAddons[a.key];
+                const Icon = a.icon;
                 return (
                   <button
-                    key={t.key}
-                    onClick={() => setMiraTier(t.key)}
-                    className={`px-3 py-1 rounded-full text-[12px] font-medium transition-colors ${
-                      miraTier === t.key ? 'bg-accent text-white' : 'text-muted hover:text-ink'
+                    key={a.key}
+                    type="button"
+                    onClick={() => toggleAddon(a.key)}
+                    aria-pressed={on}
+                    className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-full border text-[12.5px] font-medium transition-colors ${
+                      on
+                        ? 'border-accent bg-accent-soft text-ink'
+                        : 'border-line bg-white text-muted hover:border-accent/40'
                     }`}
-                    aria-label={`Adicionar Mira Prospects ${shortName}`}
                   >
-                    {shortName} · {t.alvosPerMonth} alvos · +R${preco.toLocaleString('pt-BR')}
+                    <Icon size={14} className={on ? 'text-accent' : 'text-muted'} />
+                    {a.name}
+                    <span className={on ? 'text-accent' : 'text-muted-2'}>
+                      {a.fromLabel ? 'a partir de ' : '+'}R$ {fmtBRL(a.price)}
+                    </span>
                   </button>
                 );
               })}
             </div>
-
-            <Link href="/voz" className="text-[11.5px] font-medium text-accent hover:underline">Voz outbound · 6 pacotes a partir de R$ 79,90 →</Link>
+            <p className="text-center text-[11px] text-muted-2 mt-2">
+              Add-ons já inclusos no plano aparecem como "incluído", sem custo extra.
+            </p>
           </div>
         </div>
 
@@ -146,11 +166,14 @@ export function Pricing() {
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-3 max-w-7xl mx-auto">
           {PLANS.map((plan) => {
             const basePrice = computePrice(plan);
-            const miraExtra = computeMiraExtra(plan);
-            const totalPrice = basePrice !== null ? basePrice + miraExtra : null;
+            const addonsExtra = computeAddonsExtra(plan);
+            const totalPrice = basePrice !== null ? basePrice + addonsExtra : null;
+            const availPlanAddons = PRICING_ADDONS.filter((a) => selectedAddons[a.key] && !a.unavailableFor?.(plan));
+            const addedAddons = availPlanAddons.filter((a) => !a.includedFor(plan));
+            const includedAddons = availPlanAddons.filter((a) => a.includedFor(plan));
+            const unavailableAddons = PRICING_ADDONS.filter((a) => selectedAddons[a.key] && a.unavailableFor?.(plan));
             const isEnterprise = plan.id === 'ENTERPRISE';
-            const isBusiness = plan.id === 'BUSINESS';
-            const isHighlight = plan.highlight && !isBusiness && !isEnterprise;
+            const isHighlight = plan.highlight && !isEnterprise;
 
             return (
               <div
@@ -162,11 +185,9 @@ export function Pricing() {
                 } ${
                   isHighlight
                     ? 'border-2 border-accent shadow-[0_30px_50px_-20px_rgba(74,82,208,0.25)]'
-                    : isBusiness
-                      ? 'border-2 border-accent/40 shadow-card'
-                      : isEnterprise
-                        ? 'border-2 border-white/10'
-                        : 'border border-line hover:border-accent/25 hover:shadow-card'
+                    : isEnterprise
+                      ? 'border-2 border-white/10'
+                      : 'border border-line hover:border-accent/25 hover:shadow-card'
                 }`}
                 style={
                   isEnterprise
@@ -180,11 +201,6 @@ export function Pricing() {
                 {isHighlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-grad text-white text-[10.5px] font-semibold px-3 py-1 rounded-full tracking-wide">
                     Mais Popular
-                  </div>
-                )}
-                {isBusiness && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-ink text-white text-[10.5px] font-semibold px-3 py-1 rounded-full flex items-center gap-1 tracking-wide">
-                    <Crown size={10} /> SLA 99,9%
                   </div>
                 )}
                 {isEnterprise && (
@@ -209,24 +225,19 @@ export function Pricing() {
                   {totalPrice !== null ? (
                     <>
                       <span className={`text-[28px] lg:text-[32px] font-semibold tracking-tight ${isEnterprise ? 'text-white' : 'text-ink'}`}>
-                        R${totalPrice.toLocaleString('pt-BR')}
+                        R${fmtBRL(totalPrice)}
                       </span>
                       <span className={`text-[12px] ml-1 ${isEnterprise ? 'text-white/60' : 'text-muted'}`}>
                         /mês
                       </span>
-                      {miraExtra > 0 && miraTier && (
-                        <div className="text-[11px] text-accent mt-1 flex items-center gap-1">
-                          <Crosshair size={10} /> +R${miraExtra.toLocaleString('pt-BR')} {MIRA_TIERS[miraTier].name}
-                        </div>
-                      )}
-                      {/* V4 #163 (PR #75 hotfix) — refs voice (extra/tier)
-                          legadas REMOVIDAS. Voz era inline no Pricing V3.
-                          Sprint 0 Blocker 6 (PR #108) descopou Voz Padrão e
-                          Premium do planConfig público; agora voz é add-on
-                          separado (PR #72 v4 — pacotes 200/400/600/800/1500/
-                          4000 com preços R$ 79,90 a R$ 929,90). Pra exibir
-                          voz add-on aqui, criar componente VoiceAddons.tsx
-                          separado em PR futuro. */}
+                      {addedAddons.map((a) => {
+                        const Icon = a.icon;
+                        return (
+                          <div key={a.key} className="text-[11px] text-accent mt-1 flex items-center gap-1">
+                            <Icon size={10} /> +R$ {fmtBRL(addonPriceFor(a, plan))} {a.name}
+                          </div>
+                        );
+                      })}
                     </>
                   ) : (
                     <>
@@ -259,26 +270,21 @@ export function Pricing() {
                       +{plan.bullets.length - 9} recursos adicionais
                     </li>
                   )}
-                  {miraTier && miraIncludedIn(plan) && (
-                    <li className="flex items-start gap-2 text-[11px] text-accent bg-accent/5 rounded-[8px] px-2 py-1.5 border border-accent/15">
-                      <Crosshair size={12} className="flex-shrink-0 mt-0.5 text-accent" />
-                      <span className="font-medium">{MIRA_TIERS[miraIncludedIn(plan) as MiraTier].name} incluído no plano</span>
+                  {includedAddons.map((a) => {
+                    const Icon = a.icon;
+                    return (
+                      <li key={a.key} className="flex items-start gap-2 text-[11px] text-accent bg-accent/5 rounded-[8px] px-2 py-1.5 border border-accent/15">
+                        <Icon size={12} className="flex-shrink-0 mt-0.5 text-accent" />
+                        <span className="font-medium">{a.name} incluído</span>
+                      </li>
+                    );
+                  })}
+                  {unavailableAddons.map((a) => (
+                    <li key={a.key} className={`flex items-start gap-2 text-[11px] italic ${isEnterprise ? 'text-white/50' : 'text-muted'}`}>
+                      <span className="flex-shrink-0 mt-0.5">·</span>
+                      <span>{a.name}: {a.unavailableNote}</span>
                     </li>
-                  )}
-                  {miraTier && miraEligible(plan) && !miraIncludedIn(plan) && (
-                    <li className="flex items-start gap-2 text-[11px] text-accent bg-accent/5 rounded-[8px] px-2 py-1.5 border border-accent/15">
-                      <Crosshair size={12} className="flex-shrink-0 mt-0.5 text-accent" />
-                      <span className="font-medium">
-                        {MIRA_TIERS[miraTier].name}: {MIRA_TIERS[miraTier].alvosPerMonth} alvos qualificados/mês
-                      </span>
-                    </li>
-                  )}
-                  {miraTier && !miraEligible(plan) && (
-                    <li className="flex items-start gap-2 text-[11px] text-muted bg-bg-soft rounded-[8px] px-2 py-1.5 border border-line">
-                      <Crosshair size={12} className="flex-shrink-0 mt-0.5" />
-                      <span className="font-medium">Mira Prospects disponível a partir do Growth</span>
-                    </li>
-                  )}
+                  ))}
                 </ul>
 
                 <Link
@@ -286,7 +292,7 @@ export function Pricing() {
                   className={`block w-full text-center py-2.5 rounded-[12px] text-[13px] font-medium transition-colors ${
                     isEnterprise
                       ? 'bg-white text-ink hover:bg-white/90'
-                      : isHighlight || isBusiness
+                      : isHighlight
                         ? 'bg-ink text-white hover:bg-black'
                         : 'border border-line text-ink hover:border-ink'
                   }`}
@@ -298,7 +304,7 @@ export function Pricing() {
           })}
         </div>
 
-        {/* CTA Mira Prospects */}
+        {/* CTA Radar */}
         <div className="mt-10 max-w-4xl mx-auto card-soft bg-white p-6 flex flex-col sm:flex-row items-start gap-4">
           <div
             className="w-11 h-11 rounded-[12px] flex items-center justify-center flex-shrink-0 shadow-[0_8px_16px_-8px_rgba(74,82,208,0.4)]"
@@ -306,49 +312,22 @@ export function Pricing() {
               background: 'linear-gradient(135deg, #2FB57A 0%, #2F7FB5 45%, #4A52D0 100%)',
             }}
           >
-            <Crosshair size={20} className="text-white" />
+            <Radar size={20} className="text-white" />
           </div>
           <div className="flex-1">
             <h4 className="text-[16px] font-medium text-ink tracking-tight mb-1">
-              Mira Prospects · quem está pronto para comprar, entregue com dossiê
+              Radar 360° Pro · dashboards que viram decisão
             </h4>
             <p className="text-[13.5px] text-muted mb-3 leading-relaxed">
-              Você diz o que vende e para quem. Agentes de IA mapeiam o seu mercado no dado público
-              brasileiro (CNPJ, quadro societário), qualificam cada conta e entregam o alvo com quem
-              decide, a dor e o roteiro de abordagem. Tudo grava no CRM.{' '}
-              <strong className="text-ink">Incluído em Business e Enterprise.</strong>
+              Dashboards executivos, alertas quando algo foge do normal, previsão de vendas por IA
+              e comparativo anônimo com o seu setor. Exporta pro Power BI ou Looker.{' '}
+              <strong className="text-ink">Já vem incluso no Scale e no Enterprise.</strong>
             </p>
             <Link
-              href="/signup"
+              href="/observabilidade"
               className="text-[13px] font-medium text-accent hover:underline inline-flex items-center gap-1"
             >
-              Começar com o Mira Prospects →
-            </Link>
-          </div>
-        </div>
-
-        {/* SLA destaque (dark) */}
-        <div
-          className="mt-6 max-w-4xl mx-auto rounded-[20px] p-6 flex flex-col sm:flex-row items-start gap-4 text-white"
-          style={{ background: '#0A0B12' }}
-        >
-          <div className="w-11 h-11 rounded-[12px] bg-white flex items-center justify-center flex-shrink-0">
-            <Shield size={20} className="text-ink" />
-          </div>
-          <div className="flex-1">
-            <h4 className="text-[16px] font-medium mb-1 tracking-tight">
-              Uptime 99,9% em contrato a partir de Business.
-            </h4>
-            <p className="text-[13.5px] text-white/70 mb-3 leading-relaxed">
-              Se a plataforma cair além do combinado, você recebe crédito automático.
-              Relatório mensal público. Recuperação completa em até 4 horas.
-              Enterprise ainda tem time de monitoramento 24/7 dedicado só pra você.
-            </p>
-            <Link
-              href="/sla"
-              className="text-[13px] font-medium text-white hover:underline inline-flex items-center gap-1"
-            >
-              Ver termos do SLA →
+              Conhecer o Radar 360° Pro →
             </Link>
           </div>
         </div>

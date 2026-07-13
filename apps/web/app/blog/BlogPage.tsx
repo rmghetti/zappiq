@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * BlogPage — índice do blog (V2 · redesign 11/06/2026)
+ * BlogPage: índice do blog (V2 · redesign 11/06/2026)
  * --------------------------------------------------------------------------
  * V2: hero escuro com aurora (emerald+violet), busca glass moderna, artigo
  * em destaque (primeiro do array) em card largo, grid com capas temáticas
@@ -74,7 +74,7 @@ export default function BlogPage() {
             </span>
           </h1>
           <p className="mt-4 text-lg text-white/60 max-w-2xl mx-auto">
-            Automação no WhatsApp e Instagram, agentes de IA, vendas e gestão — direto da
+            Automação no WhatsApp e Instagram, agentes de IA, vendas e gestão, direto da
             operação, para PMEs brasileiras.
           </p>
 
@@ -85,7 +85,7 @@ export default function BlogPage() {
               <Search className="ml-5 h-5 w-5 text-white/50 shrink-0" />
               <input
                 type="text"
-                placeholder="Buscar artigos — ex.: Meta, carrinho abandonado, ROI..."
+                placeholder="Buscar artigos, ex.: Meta, carrinho abandonado, ROI..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full bg-transparent border-0 py-4 px-4 text-white placeholder:text-white/40 focus:ring-0 focus:outline-none text-[15px]"
@@ -255,7 +255,7 @@ export default function BlogPage() {
                   Coloque a leitura em produção.
                 </h3>
                 <p className="mt-2 text-[13.5px] text-white/65 leading-relaxed">
-                  Teste a ZappIQ por 14 dias, grátis. IA atendendo seu WhatsApp e Instagram —
+                  Teste a ZappIQ por 14 dias, grátis. IA atendendo seu WhatsApp e Instagram,
                   sem cartão, sem setup fee.
                 </p>
                 <Link

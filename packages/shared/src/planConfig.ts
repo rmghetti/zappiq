@@ -86,7 +86,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       'Trial 14 dias gratuito. Apos isso, R\$ 247,00/mes (ou R\$ 197,60/mes no plano anual). Pensado pra autonomo, solo e PME validando o canal antes de escalar pro Growth.',
     priceMonthly: 247.00,
     annualDiscountPercent: 20,
-    highlight: true,
+    highlight: false,
     premium: false,
     order: 0,
     trialDays: 14,
@@ -128,7 +128,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       '1 numero WhatsApp Business + 1 Instagram Direct',
       'Base de conhecimento RAG (10 docs)',
       'Agent Quality (Eval continuo da IA)',
-      'Radar Insights (analytics operacional)',
+      'Radar 360° (analytics operacional)',
       'Suporte por e-mail',
     ],
     cta: { label: 'Comecar 14 dias gratis', href: '/cadastro?plan=iza_lite' },
@@ -181,7 +181,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       '3 fluxos de automação',
       '1 número WhatsApp Business',
       'Base de conhecimento RAG (10 docs)',
-      'Radar Insights (analytics operacional)',
+      'Radar 360° (analytics operacional)',
       'Suporte por e-mail',
     ],
     cta: { label: 'Começar 14 dias grátis', href: '/cadastro?plan=starter' },
@@ -243,15 +243,15 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
   SCALE: {
     id: 'SCALE',
     name: 'Scale',
-    tagline: 'Operação seria com KPI auditavel',
+    tagline: 'Operação séria, self-serve, com KPI auditável',
     description:
-      'Redes, franquias e operacoes multi-time com volume alto, observabilidade avancada, SLA contratual e governanca LGPD madura. Absorve tudo do antigo Business V3.2.',
+      'Redes, franquias e operações multi-time com volume alto, observabilidade avançada e governança LGPD madura. Absorve tudo do antigo Business V3.2.',
     priceMonthly: 1497,
     annualDiscountPercent: 20,
     highlight: false,
     premium: false,
     order: 3,
-    trialDays: 0,
+    trialDays: 14,
     limits: {
       agents: 75,
       aiMessagesPerMonth: 80000,
@@ -286,8 +286,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       '200.000 contatos no CRM',
       '15 numeros WhatsApp Business',
       'Base de conhecimento ilimitada',
-      'Radar 360 Observabilidade incluida',
-      'SLA contratual 99,9% com creditos automaticos',
+      'Radar 360° Pro incluido',
       'SSO (SAML 2.0 / OIDC) + auditoria LGPD completa',
       '20h/mes de integracao customizada',
       'White-label + Customer Success Manager dedicado',
@@ -298,7 +297,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       'Vision inbound (imagens WA/IG)',
       'Outcome Beta opt-in (Conversa Convertida)',
     ],
-    cta: { label: 'Falar com especialista', href: '/contato?plan=scale' },
+    cta: { label: 'Começar 14 dias grátis', href: '/cadastro?plan=scale' },
   },
 
   BUSINESS: {
@@ -347,7 +346,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       '200.000 contatos no CRM',
       '15 números WhatsApp Business',
       'Base de conhecimento ilimitada',
-      'Radar 360° Observabilidade incluída',
+      'Radar 360° Pro incluído',
       'SLA contratual 99,9% com créditos automáticos',
       'SSO (SAML 2.0 / OIDC) + auditoria LGPD completa',
       '20h/mês de integração customizada',
@@ -398,7 +397,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       support: 'multichannel-24x7',
     },
     bullets: [
-      'Tudo do Business, sem limites',
+      'Tudo do Scale, sem limites',
       'Infraestrutura isolada (pool dedicado)',
       'SOC / NOC dedicado 24/7',
       'Onboarding white-glove (30 dias)',
@@ -434,7 +433,7 @@ export interface AddonConfig {
 export const ADDONS: Record<string, AddonConfig> = {
   RADAR_360: {
     id: 'RADAR_360',
-    name: 'Radar 360° Observabilidade',
+    name: 'Radar 360° Pro',
     description:
       'BI conversacional com cohort analysis, previsão de pipeline (ML), benchmarking de mercado e alertas proativos. Exporta para Power BI e Looker.',
     priceMonthly: 397,

@@ -1,11 +1,11 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * ArticlePage — página de artigo do blog (V2 · redesign 11/06/2026)
+ * ArticlePage: página de artigo do blog (V2 · redesign 11/06/2026)
  * --------------------------------------------------------------------------
  * V2: hero escuro com capa temática (BlogCover) e título sobreposto no lugar
  * do placeholder "ZappIQ Blog"; corpo com tipografia própria `.article-body`
- * (o projeto NÃO usa @tailwindcss/typography — plugins: [] — então as
+ * (o projeto NÃO usa @tailwindcss/typography, plugins: [], então as
  * classes `prose` da V1 nunca tiveram efeito: era essa a causa do texto
  * corrido). Estilos do corpo vivem em globals.css. Relacionados com capas.
  * ══════════════════════════════════════════════════════════════════════════ */
@@ -81,7 +81,7 @@ export default function ArticlePage({ slug }: ArticlePageProps) {
       </div>
 
       <article className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
-        {/* Corpo do artigo — tipografia em globals.css (.article-body) */}
+        {/* Corpo do artigo: tipografia em globals.css (.article-body) */}
         <div
           className="article-body"
           dangerouslySetInnerHTML={{ __html: article.content }}
@@ -102,7 +102,7 @@ export default function ArticlePage({ slug }: ArticlePageProps) {
             </h2>
             <p className="mt-2.5 text-white/65 max-w-lg mx-auto text-[14.5px] leading-relaxed">
               Teste a ZappIQ gratuitamente por 14 dias. Sem cartão de crédito, sem setup fee,
-              sem compromisso — sua IA no ar em minutos.
+              sem compromisso, sua IA no ar em minutos.
             </p>
             <Link
               href="/cadastro"

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Inbox, Brain, Megaphone, BarChart3, Users, Workflow, Headphones, CheckCircle2, Star } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════
-// Logos SVG inline — mesma linguagem visual em todos os produtos
+// Logos SVG inline: mesma linguagem visual em todos os produtos
 // ═══════════════════════════════════════════════════════════════════
 
 interface LogoConfig {
@@ -128,13 +128,13 @@ function ProductTabLogo({ id }: { id: string }) {
       textRendering="optimizeLegibility"
     >
       <defs>
-        {/* objectBoundingBox: gradiente independente do transform — sempre top-right→bottom-left */}
+        {/* objectBoundingBox: gradiente independente do transform, sempre top-right→bottom-left */}
         <linearGradient id={gid} x1="0.9" y1="0" x2="0.1" y2="1" gradientUnits="objectBoundingBox">
           <stop offset="0" stopColor="#25D366" />
           <stop offset="1" stopColor="#4361EE" />
         </linearGradient>
       </defs>
-      {/* Bubble + ícone + sparkles — escala 0.37 da viewBox original */}
+      {/* Bubble + ícone + sparkles: escala 0.37 da viewBox original */}
       <g transform="translate(2, 2) scale(0.37)">
         <path
           d="M60 95C82.0914 95 100 77.0914 100 55C100 32.9086 82.0914 15 60 15C37.9086 15 20 32.9086 20 55C20 63.271 22.508 70.9554 26.8407 77.2646L20 95L38.9912 89.6133C45.242 93.1171 52.4096 95 60 95Z"
@@ -179,7 +179,7 @@ function ProductFullLogo({ id }: { id: string }) {
           <stop offset="1" stopColor="#4361EE" />
         </linearGradient>
       </defs>
-      {/* Bubble + ícone + sparkles — escala 0.55 */}
+      {/* Bubble + ícone + sparkles: escala 0.55 */}
       <g transform="translate(2, 4) scale(0.55)">
         <path
           d="M60 95C82.0914 95 100 77.0914 100 55C100 32.9086 82.0914 15 60 15C37.9086 15 20 32.9086 20 55C20 63.271 22.508 70.9554 26.8407 77.2646L20 95L38.9912 89.6133C45.242 93.1171 52.4096 95 60 95Z"
@@ -238,18 +238,18 @@ const PRODUCTS = [
     ],
     // V2-010: case canônico importa de apps/web/content/cases/vida-plena.ts.
     // Enquanto autorização LGPD não chega (BLOCKER B-01), renderizamos versão
-    // genérica com métricas-benchmark beta — sem atribuir a cliente específico.
+    // genérica com métricas-benchmark beta, sem atribuir a cliente específico.
     caseStudy: {
       business: 'Exemplo ilustrativo · Clínica Saúde (beta)', segment: 'Saúde',
       quote: 'A taxa de resposta saltou para 99,2% e o tempo médio de atendimento caiu de 4 horas para 3 minutos depois que a IA assumiu o primeiro contato no WhatsApp.',
-      author: 'Diretora Clínica (identidade preservada)', role: 'Case em validação — LGPD Art. 7 IX',
+      author: 'Diretora Clínica (identidade preservada)', role: 'Case em validação, LGPD Art. 7 IX',
       results: ['99,2% taxa de resposta¹', '3 min tempo médio¹', '+45% agendamentos¹'],
     },
     mockup: 'inbox',
   },
   {
     id: 'pulse', icon: Brain, name: 'Pulse AI', tagline: 'Assistente Virtual com IA Generativa',
-    desc: 'Um agente de IA que aprende tudo sobre seu negócio e atende seus clientes 24/7 com linguagem natural, empatia e precisão. Não é um chatbot com respostas prontas — é inteligência de verdade.',
+    desc: 'Um agente de IA que aprende tudo sobre seu negócio e atende seus clientes 24/7 com linguagem natural, empatia e precisão. Não é um chatbot com respostas prontas, é inteligência de verdade.',
     bullets: [
       'Aprende com documentos, FAQs, catálogos, políticas e até o tom de voz do seu negócio',
       'Agenda consultas automaticamente integrando com Google Calendar',
@@ -296,7 +296,7 @@ const PRODUCTS = [
     mockup: 'campaign',
   },
   {
-    id: 'radar', icon: BarChart3, name: 'Radar Insights', tagline: 'Inteligência Analítica em Tempo Real',
+    id: 'radar', icon: BarChart3, name: 'Radar 360°', tagline: 'Inteligência Analítica em Tempo Real',
     desc: 'Dashboards executivos com todas as métricas que importam: conversão, performance de agentes, sentimento de clientes, receita gerada e tendências. Decisões baseadas em dados, não em achismo.',
     bullets: [
       'KPIs em tempo real: conversas, automação, CSAT, receita gerada via WhatsApp',
@@ -417,7 +417,7 @@ const MOCKUPS: Record<string, React.ReactNode> = {
         {[
           { name: 'Ana Lima', msg: 'Consulta agendada para quinta 14h ✅', tag: 'IA', tagColor: 'bg-green-100 text-green-700' },
           { name: 'Carlos Santos', msg: 'Pedindo orçamento de clareamento', tag: 'Novo', tagColor: 'bg-blue-100 text-blue-700' },
-          { name: 'Maria Oliveira', msg: 'Pagamento confirmado — R$890', tag: 'Venda', tagColor: 'bg-purple-100 text-purple-700' },
+          { name: 'Maria Oliveira', msg: 'Pagamento confirmado: R$890', tag: 'Venda', tagColor: 'bg-purple-100 text-purple-700' },
           { name: 'Pedro Alves', msg: 'Quer remarcar para segunda', tag: 'Agente', tagColor: 'bg-yellow-100 text-yellow-700' },
         ].map((c, i) => (
           <div key={i} className="px-3 py-2.5 border-b border-gray-50 flex items-center gap-2 hover:bg-gray-50">
@@ -576,7 +576,7 @@ const MOCKUPS: Record<string, React.ReactNode> = {
     <div className="space-y-3">
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="bg-primary-50 px-3 py-2 border-b border-primary-100">
-          <p className="text-[10px] font-bold text-primary-700">💡 Echo Copilot — Sugestões em tempo real</p>
+          <p className="text-[10px] font-bold text-primary-700">💡 Echo Copilot: Sugestões em tempo real</p>
         </div>
         <div className="p-3 space-y-2">
           <div className="bg-green-50 border border-green-200 rounded-lg p-2.5">
@@ -670,13 +670,13 @@ export function Products() {
                 <div className="flex">
                   {[...Array(5)].map((_, i) => <Star key={i} size={12} className="text-yellow-400 fill-yellow-400" />)}
                 </div>
-                <span className="text-[10px] text-gray-400">Case real — {product.caseStudy.segment}</span>
+                <span className="text-[10px] text-gray-400">Case real: {product.caseStudy.segment}</span>
               </div>
               <p className="text-sm text-gray-700 italic leading-relaxed mb-3">"{product.caseStudy.quote}"</p>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-gray-900">{product.caseStudy.author}</p>
-                  <p className="text-xs text-gray-500">{product.caseStudy.role} — {product.caseStudy.business}</p>
+                  <p className="text-xs text-gray-500">{product.caseStudy.role}, {product.caseStudy.business}</p>
                 </div>
                 <div className="flex gap-2 flex-wrap justify-end">
                   {product.caseStudy.results.map((r) => (

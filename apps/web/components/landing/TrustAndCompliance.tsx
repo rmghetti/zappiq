@@ -1,11 +1,13 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * TrustAndCompliance — Design V4 (seção dark · Chatbase-style)
+ * TrustAndCompliance: Design V4 (seção dark · Chatbase-style)
  * --------------------------------------------------------------------------
- * Preserva 3 pilares institucionais (LGPD, SLA 99,9%, Observabilidade Radar)
- * e grid de 6 certificações técnicas. Visual novo: bloco dark (#0A0B12) com
- * gradient accent nos pilares.
+ * Preserva 3 pilares institucionais (LGPD, Infraestrutura, Observabilidade
+ * Radar) e grid de 6 certificações técnicas. Visual novo: bloco dark
+ * (#0A0B12) com gradient accent nos pilares.
+ * SLA contratual removido temporariamente (decisão do fundador, 12/07/2026):
+ * volta quando a faixa exata estiver formalizada.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import Link from 'next/link';
@@ -29,24 +31,24 @@ const PILLARS = [
   },
   {
     icon: Activity,
-    title: 'Uptime 99,9% — escrito em contrato.',
+    title: 'Infraestrutura séria, sem drama.',
     summary:
-      'Se a plataforma cair além do combinado, você recebe crédito automático. Sem precisar brigar.',
+      'Sua operação de atendimento e vendas não pode parar. Por isso tratamos infraestrutura como produto, não como detalhe técnico.',
     points: [
-      'Relatório mensal de disponibilidade, público',
-      'Créditos automáticos de 10% a 50% por incidente',
-      'Atualizações sem tirar sua operação do ar',
-      'Recuperação completa em até 4 horas',
+      'Monitoramento contínuo da plataforma',
       'Backup criptografado, fora do site, toda semana',
+      'Atualizações sem tirar sua operação do ar',
+      'Plano de recuperação de incidente documentado',
+      'Time técnico de prontidão quando algo foge do normal',
     ],
-    href: '/sla',
-    cta: 'Ver termos do SLA',
+    href: '/contato',
+    cta: 'Falar com o time técnico',
   },
   {
     icon: Radar,
     title: 'Dashboards que viram decisão.',
     summary:
-      'O Radar 360° transforma suas conversas em BI executável. Incluído nos planos Business e Enterprise.',
+      'O Radar 360° Pro transforma suas conversas em BI executável. Incluído nos planos Scale e Enterprise.',
     points: [
       'Dashboards executivos do jeito que você precisa',
       'Alertas automáticos quando algo foge do normal',
@@ -55,7 +57,7 @@ const PILLARS = [
       'Exporta pra Power BI e Looker sem dor',
     ],
     href: '/observabilidade',
-    cta: 'Conhecer Radar 360°',
+    cta: 'Conhecer Radar 360° Pro',
   },
 ];
 
@@ -80,7 +82,7 @@ export function TrustAndCompliance() {
           </h2>
           <p className="text-[16px] text-muted leading-relaxed">
             ZappIQ não é um "chatbotzinho". É infraestrutura crítica pro seu negócio.
-            Por isso segurança, LGPD e visibilidade são produto aqui — não um capricho de marketing.
+            Por isso segurança, LGPD e visibilidade são produto aqui, não um capricho de marketing.
           </p>
         </div>
 

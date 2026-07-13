@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * ROICalculator — Design V4 (Chatbase-style)
+ * ROICalculator: Design V4 (Chatbase-style)
  * --------------------------------------------------------------------------
  * LÓGICA PRESERVADA 100% · apenas restyle:
  *   - recommendPlan() + caps V2-003 (ROI ≤300%, payback ≥90d)
@@ -31,7 +31,8 @@ export const PAYBACK_MIN_DAYS = 90;
 // VoiceTier + slider correspondente. Ver /roadmap.
 
 function recommendPlan(aiMessagesPerMonth: number, agents: number): PlanId {
-  const tryOrder: PlanId[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
+  // Só planos ativos (Starter e Business foram descontinuados em 2026-05-27).
+  const tryOrder: PlanId[] = ['IZA_LITE', 'GROWTH', 'SCALE', 'ENTERPRISE'];
   for (const id of tryOrder) {
     const limits = PLAN_CONFIG[id].limits;
     const fitsAi =
@@ -169,10 +170,10 @@ export function ROICalculator() {
   const isEnterprise = results.plan.id === 'ENTERPRISE';
   const ctaHref = isEnterprise
     ? '/enterprise'
-    : `/register?plan=${results.plan.id}&utm_source=roi_calc`;
+    : `/cadastro?plan=${results.plan.id.toLowerCase()}&utm_source=roi_calc`;
   const ctaLabel = isEnterprise
     ? 'Falar com especialista'
-    : `Começar com ${results.plan.name} — 14 dias grátis`;
+    : `Começar com ${results.plan.name}, 14 dias grátis`;
 
   return (
     <section className="py-20 lg:py-28 bg-bg-soft">
@@ -296,7 +297,7 @@ export function ROICalculator() {
                   <Zap size={11} className="text-accent" /> Payback
                 </div>
                 <p className="text-[26px] font-semibold text-ink tracking-tight leading-none">
-                  {results.paybackDays < 900 ? `${results.paybackDays} dias` : '—'}
+                  {results.paybackDays < 900 ? `${results.paybackDays} dias` : 'n/d'}
                 </p>
                 <p className="text-[11px] text-muted mt-1">do investimento</p>
               </div>
@@ -400,7 +401,7 @@ export function ROICalculator() {
               <strong className="block text-[#78350F] mb-1">Como a estimativa é feita (e seus limites)</strong>
               Números observados em clientes beta ZappIQ entre ago/25 e fev/26. O seu resultado real
               depende do seu setor, da qualidade da base de conhecimento e de quando você passa pro humano.
-              A gente separa economia de pessoal e ganho de conversão — não inventa um "ROI único" inflado.
+              A gente separa economia de pessoal e ganho de conversão, não inventa um "ROI único" inflado.
               Limitamos o retorno mensal a {ROI_MONTHLY_CAP_PERCENT}% e o payback mínimo a {PAYBACK_MIN_DAYS} dias pra dar tempo da operação amadurecer.
             </div>
           </div>

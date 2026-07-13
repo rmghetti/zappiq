@@ -3,7 +3,7 @@ import { PublicLayout } from '../../components/landing/PublicLayout';
 import { Agendar } from '../../components/landing/Agendar';
 
 export const metadata: Metadata = {
-  title: 'Agendar Onboarding ZappIQ — 30 minutos com especialista',
+  title: 'Agendar Onboarding ZappIQ: 30 minutos com especialista',
   description:
     'Agende sua call de onboarding ZappIQ. 30 minutos com especialista, configuração WhatsApp Cloud API ao vivo, primeiro teste real do bot. Google Meet automático. Sem custo.',
   keywords: [
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     'consultoria WhatsApp Cloud API',
   ],
   openGraph: {
-    title: 'Agendar Onboarding ZappIQ — 30 minutos',
+    title: 'Agendar Onboarding ZappIQ: 30 minutos',
     description:
       'Especialista configura WhatsApp Cloud API com você ao vivo. Bot funcionando ao final da call.',
     type: 'website',

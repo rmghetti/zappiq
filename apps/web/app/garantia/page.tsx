@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /garantia — DEPRECATED (V4 purge · abr/2026)
+ * /garantia: DEPRECATED (V4 purge · abr/2026)
  * --------------------------------------------------------------------------
  * A política "Garantia 60 dias" foi removida do produto em V4. Substituída
  * por trial de 14 dias corridos, ao fim dos quais o cliente escolhe a forma

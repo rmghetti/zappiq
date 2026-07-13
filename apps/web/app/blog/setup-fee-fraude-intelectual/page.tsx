@@ -128,7 +128,7 @@ export default function SetupFeeArticle() {
             </p>
             <p>
               Terceiro, a ancoragem comercial. Um ticket mensal de R$ 2 mil parece barato quando o
-              comprador acabou de assinar R$ 12 mil de setup. É psicologia de venda básica — a
+              comprador acabou de assinar R$ 12 mil de setup. É psicologia de venda básica: a
               cobrança grande legitima a cobrança contínua.
             </p>
 
@@ -173,8 +173,8 @@ export default function SetupFeeArticle() {
               revisão.
             </p>
             <p>
-              Mesmo assumindo que o fornecedor queira margem bruta saudável na revisão — R$ 500
-              por hora de um especialista sênior, duas horas de trabalho — o custo direto não passa
+              Mesmo assumindo que o fornecedor queira margem bruta saudável na revisão (R$ 500
+              por hora de um especialista sênior, duas horas de trabalho), o custo direto não passa
               de R$ 1 mil.
             </p>
             <p>
@@ -197,9 +197,9 @@ export default function SetupFeeArticle() {
               consultor.
             </p>
             <p>
-              Quando a plataforma expõe corretamente as ferramentas — upload de documentos,
+              Quando a plataforma expõe corretamente as ferramentas (upload de documentos,
               cadastro de pares de pergunta e resposta, configuração de identidade do agente,
-              score de prontidão em tempo real — o cliente chega a um nível de treinamento
+              score de prontidão em tempo real), o cliente chega a um nível de treinamento
               equivalente em 30 a 90 minutos sozinho.
             </p>
             <p>
@@ -232,7 +232,7 @@ export default function SetupFeeArticle() {
               </li>
               <li>
                 <strong>Quatorze dias de trial grátis</strong> com cap de US$ 15 em custo de LLM.
-                Se o cliente abusar, a plataforma protege a margem sem parar o trial — o fundador
+                Se o cliente abusar, a plataforma protege a margem sem parar o trial: o fundador
                 absorve a diferença no período, porque o trial gratuito sem dor na margem é a prova
                 de que o modelo funciona. Ao fim dos 14 dias, o cliente escolhe a forma de pagamento
                 e segue contratando.
@@ -262,7 +262,7 @@ export default function SetupFeeArticle() {
             <p>
               A ZappIQ nasceu para ser a resposta concreta dessa pergunta. Zero setup. Self-service
               completo. Quatorze dias grátis, sem cartão, para provar que funciona. Ao fim do trial,
-              você escolhe a forma de pagamento — mensal, anual ou PIX.
+              você escolhe a forma de pagamento: mensal, anual ou PIX.
             </p>
             <p className="text-lg font-semibold text-gray-900">A régua mudou.</p>
           </section>

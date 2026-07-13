@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 /* FASE 4 P7+ (2026-05-18 v2): reescrita honesta pos-questionamento CEO.
- * Decisão estratégica: A — programa ASSISTIDO POR HUMANO (não produto
+ * Decisão estratégica: A, programa ASSISTIDO POR HUMANO (não produto
  * auto-serviço). Pricing, owner, SLA, pre-requisitos explicitos.
  * Generalizado pra todos os 6 BSPs principais BR (não só Zenvia).
  * Migration Suite (wizard auto-serviço) fica em roadmap Q3. */
@@ -82,12 +82,7 @@ const GATILHOS_COMERCIAIS = [
   {
     name: 'Trade-in BSP',
     headline: 'Migração Express GRÁTIS',
-    body: 'Prove com fatura que paga +R$ 2.000/mês de fee pro seu BSP atual. Cobrimos sua migração Express (até 5.000 msgs/mês) sem custo — economia mensal paga nosso investimento em 1 mês.',
-  },
-  {
-    name: 'Founders Bonus',
-    headline: '50% off na migração',
-    body: 'Já tem ou está aplicando pro Cohort Founders 2026? Migração de qualquer tier sai pela metade do preço. Combinado com 30% off vitalício do plano, payback médio em 4 meses.',
+    body: 'Prove com fatura que paga +R$ 2.000/mês de fee pro seu BSP atual. Cobrimos sua migração Express (até 5.000 msgs/mês) sem custo, economia mensal paga nosso investimento em 1 mês.',
   },
   {
     name: 'Plano Anual Upfront',
@@ -128,7 +123,7 @@ const PHASES = [
     items: [
       'Você decide o ritmo: começa com 10% do volume na ZappIQ + 90% no BSP atual',
       'Aumenta gradualmente conforme métricas (CSAT, TMR, taxa de resolução)',
-      'Nosso time monta dashboard comparativo manual semanal (não é UI auto-serviço — ainda)',
+      'Nosso time monta dashboard comparativo manual semanal (não é UI auto-serviço, ainda)',
       'Ajuste fino de prompts e guardrails do agente IA',
     ],
   },
@@ -136,7 +131,7 @@ const PHASES = [
     phase: 'Fase 4 · Dias 26-30',
     title: 'Cutover e desligamento do BSP',
     items: [
-      'Migração final do número WABA: do BSP para Cloud API direto Meta — sem perder o número, sem nova verificação verde',
+      'Migração final do número WABA: do BSP para Cloud API direto Meta, sem perder o número, sem nova verificação verde',
       'Você notifica desligamento ao BSP atual (carta-modelo fornecida)',
       'Relatório executivo de ganho: economia mensal, CSAT, TMR comparados',
       'Suporte aumentado 30 dias pós-cutover (incluso) + SLA contratual regular',
@@ -159,15 +154,15 @@ const FAQ_TECNICO = [
   },
   {
     q: 'E os templates já aprovados no BSP atual?',
-    a: 'A Meta não permite portar template ID entre BSPs ou entre BSP e Cloud API. Re-submetemos cópias idênticas pelo seu WABA novo (aprovação típica em 24-48h por template). O conteúdo do template é seu — não fica preso ao BSP.',
+    a: 'A Meta não permite portar template ID entre BSPs ou entre BSP e Cloud API. Re-submetemos cópias idênticas pelo seu WABA novo (aprovação típica em 24-48h por template). O conteúdo do template é seu, não fica preso ao BSP.',
   },
   {
     q: 'Isso é wizard self-service no dashboard ou serviço assistido?',
-    a: 'Hoje é assistido por humano — nosso time conduz contigo as 4 fases. Estamos planejando uma Migration Suite self-service para Q3/2026, mas enquanto isso a migração é executada por nós (com seu acompanhamento) usando os tiers de pricing acima.',
+    a: 'Hoje é assistido por humano: nosso time conduz contigo as 4 fases. Estamos planejando uma Migration Suite self-service para Q3/2026, mas enquanto isso a migração é executada por nós (com seu acompanhamento) usando os tiers de pricing acima.',
   },
   {
     q: 'Migração é incluída no Onboarding Zero ou cobrada à parte?',
-    a: 'Onboarding Zero (setup inicial sem custo) é pra cliente novo que NUNCA teve WhatsApp Business automatizado. Migração de BSP existente é serviço à parte, com escopo e preço definidos nos tiers acima — porque envolve export/import de dados sensíveis, re-templating e paralelo controlado.',
+    a: 'Onboarding Zero (setup inicial sem custo) é pra cliente novo que NUNCA teve WhatsApp Business automatizado. Migração de BSP existente é serviço à parte, com escopo e preço definidos nos tiers acima, porque envolve export/import de dados sensíveis, re-templating e paralelo controlado.',
   },
   {
     q: 'Atendem outros BSPs além dos 6 listados?',
@@ -183,7 +178,7 @@ export default function MigracaoZenviaPage() {
           Programa de Migração BSP · Serviço assistido por nosso time
         </p>
         <h1 className="font-display text-4xl lg:text-5xl font-extrabold text-gray-900 leading-tight mb-6">
-          Pare de pagar pedágio. Você é dono do canal — não a gente.
+          Pare de pagar pedágio. Você é dono do canal, não a gente.
         </h1>
         <p className="text-lg text-gray-500 mb-10 max-w-3xl">
           Zenvia, Twilio, 360Dialog, Yalo, Take Blip e Sirena são BSPs (Business Solution Providers):
@@ -239,7 +234,7 @@ export default function MigracaoZenviaPage() {
         <section className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-6 mb-12">
           <h3 className="font-display text-lg font-bold text-amber-900 mb-2">Importante: como funciona a migração hoje</h3>
           <p className="text-sm text-amber-900 leading-relaxed">
-            Migração de BSP <strong>não é wizard self-service no dashboard ainda</strong> — é serviço
+            Migração de BSP <strong>não é wizard self-service no dashboard ainda</strong>, é serviço
             assistido por humano. Nosso time executa contigo as 4 fases descritas abaixo, com escopo,
             pricing e SLA definidos. A Migration Suite self-service está no roadmap Q3/2026. Enquanto
             isso, o processo é manual mas estruturado, com owner ZappIQ dedicado e cronograma assinado
@@ -276,8 +271,8 @@ export default function MigracaoZenviaPage() {
         </div>
         <p className="text-xs text-gray-500 mb-12">
           ✓ Setup fee da plataforma ZappIQ continua zero (Onboarding Zero é padrão). O pricing acima
-          é exclusivamente do serviço humano de migração — export, re-templating, paralelo controlado,
-          cutover. Cliente Founders ou Business+ recebe desconto adicional (veja modelos comerciais abaixo).
+          é exclusivamente do serviço humano de migração: export, re-templating, paralelo controlado,
+          cutover. Cliente que assina plano anual à vista recebe desconto adicional (veja modelos comerciais abaixo).
         </p>
 
         {/* Modelos comerciais (gatilhos) */}

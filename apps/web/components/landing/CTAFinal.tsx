@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * CTAFinal — Design V4 (Chatbase-style · seção dark #0A0B12 + gradient glows)
+ * CTAFinal: Design V4 (Chatbase-style · seção dark #0A0B12 + gradient glows)
  * --------------------------------------------------------------------------
  * Fecho da landing. Dark bg + 3 glows radiais (g1/g2/g3). CTA duplo (primário
  * Começar grátis / secundário Falar com especialista). Trust row inferior com
@@ -70,7 +70,7 @@ function ExitIntentPopup() {
         </div>
 
         <h3 className="text-[22px] font-medium text-ink mb-3 tracking-tight">
-          Espera — 60 segundos,{' '}
+          Espera: 60 segundos,{' '}
           <span className="text-grad">1 demo</span>
         </h3>
         <p className="text-[14px] text-muted mb-6 leading-relaxed">
@@ -155,7 +155,7 @@ export function CTAFinal() {
 
           <p className="text-[17px] text-white/75 mb-10 max-w-xl mx-auto leading-relaxed">
             Ative a Iza em minutos. Tem 14 dias pra testar com clientes reais, sem pagar nada.
-            Se funcionar — e vai funcionar — você escolhe como pagar. Se não, é só deixar expirar.
+            Se funcionar (e vai funcionar), você escolhe como pagar. Se não, é só deixar expirar.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">

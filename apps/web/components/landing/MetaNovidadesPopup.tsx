@@ -1,14 +1,14 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * MetaNovidadesPopup — popup automático leve na home (V1 · 10/06/2026)
+ * MetaNovidadesPopup: popup automático leve na home (V1 · 10/06/2026)
  * --------------------------------------------------------------------------
  * Card discreto no canto inferior direito que promove /novidades-meta
  * (lançamentos Meta: Business Agent, usernames, pagamentos).
  *
  * Comportamento (deliberadamente não intrusivo):
- *   - aparece 5s após o load — não bloqueia a tela, não é modal
- *   - se recolhe sozinho após 25s se ignorado (sem marcar dismissed —
+ *   - aparece 5s após o load, não bloqueia a tela, não é modal
+ *   - se recolhe sozinho após 25s se ignorado (sem marcar dismissed,
  *     volta na próxima visita)
  *   - fechar (X / "Agora não" / ESC) silencia por 7 dias
  *   - clicar no CTA silencia por 30 dias
@@ -41,7 +41,7 @@ function silence(days: number) {
   try {
     window.localStorage.setItem(STORAGE_KEY, String(Date.now() + days * 86400000));
   } catch {
-    // localStorage bloqueado — só some na sessão atual, ok
+    // localStorage bloqueado: só some na sessão atual, ok
   }
 }
 
@@ -114,7 +114,7 @@ export function MetaNovidadesPopup() {
       <div className="px-5 py-4">
         <p className="text-[12.5px] text-muted leading-relaxed">
           Meta Business Agent, @usernames e pagamentos no chat. Somos uma das primeiras plataformas
-          da América Latina a implementar — com pilotos já em andamento junto a clientes e à Meta.
+          da América Latina a implementar, com pilotos já em andamento junto a clientes e à Meta.
         </p>
         <Link
           href="/novidades-meta"

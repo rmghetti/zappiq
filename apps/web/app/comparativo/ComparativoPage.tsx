@@ -8,12 +8,11 @@ import { SavingsCalculator } from '../../components/shared/SavingsCalculator';
 import { PLAN_CONFIG } from '@zappiq/shared';
 
 /** Preços derivados de planConfig.ts (single source of truth) */
-const STARTER_PRICE = PLAN_CONFIG.STARTER.priceMonthly!;
-const BUSINESS_PRICE = PLAN_CONFIG.BUSINESS.priceMonthly!;
-const ENTERPRISE_MIN = '9.9k'; // Enterprise é sob consulta — baseline do modelo comercial
+const LITE_PRICE = PLAN_CONFIG.IZA_LITE.priceMonthly!;
+const ENTERPRISE_MIN = '9.9k'; // Enterprise é sob consulta, baseline do modelo comercial
 
 /* ═════════════════════════════════════════════════════════════════════
- * Página /comparativo — versão 2026.04 (Launch)
+ * Página /comparativo: versão 2026.04 (Launch)
  *
  * Objetivo: deixar explícito que competidores cobram setup fee e exigem
  * consultor para treinar a IA, enquanto ZappIQ é 100% self-service.
@@ -43,11 +42,11 @@ const COMPETITORS = [
 const ROWS: Row[] = [
   // Preço e fricção financeira
   { feature: 'Setup fee / taxa de implantação', zappiq: 'R$ 0', blip: 'R$ 8k–15k', huggy: 'R$ 3k–8k', zenvia: 'R$ 10k+', poli: 'R$ 1,5k–5k', emphasis: true },
-  { feature: 'Mensalidade de entrada', zappiq: `R$ ${STARTER_PRICE}`, blip: 'R$ 1.800+', huggy: 'R$ 489+', zenvia: 'R$ 2.500+', poli: 'R$ 249+' },
+  { feature: 'Mensalidade de entrada', zappiq: `R$ ${LITE_PRICE}`, blip: 'R$ 1.800+', huggy: 'R$ 489+', zenvia: 'R$ 2.500+', poli: 'R$ 249+' },
   { feature: 'Trial gratuito', zappiq: '14 dias', blip: 'Não', huggy: '7 dias', zenvia: 'Não', poli: '7 dias' },
-  { feature: 'Exige cartão no trial', zappiq: 'no', blip: '—', huggy: 'yes', zenvia: '—', poli: 'yes' },
+  { feature: 'Exige cartão no trial', zappiq: 'no', blip: 'n/a', huggy: 'yes', zenvia: 'n/a', poli: 'yes' },
 
-  // Treinamento da IA — pilar do storytelling
+  // Treinamento da IA: pilar do storytelling
   { feature: 'Cliente treina a IA sozinho', zappiq: 'yes', blip: 'no', huggy: 'partial', zenvia: 'no', poli: 'partial', emphasis: true },
   { feature: 'Consultor/squad obrigatório', zappiq: 'no', blip: 'yes', huggy: 'partial', zenvia: 'yes', poli: 'partial', emphasis: true },
   { feature: 'Survey guiado por segmento', zappiq: 'yes', blip: 'no', huggy: 'no', zenvia: 'no', poli: 'no' },
@@ -74,7 +73,7 @@ const ROWS: Row[] = [
   { feature: 'Página pública de status', zappiq: 'yes', blip: 'partial', huggy: 'no', zenvia: 'yes', poli: 'no' },
 
   // Cap trial (protege cliente)
-  { feature: 'Cap de custo no trial', zappiq: 'US$ 15', blip: '—', huggy: '—', zenvia: '—', poli: '—' },
+  { feature: 'Cap de custo no trial', zappiq: 'US$ 15', blip: 'n/a', huggy: 'n/a', zenvia: 'n/a', poli: 'n/a' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -104,21 +103,21 @@ function CellContent({ value, highlight }: { value: CellValue; highlight?: boole
 }
 
 /* ------------------------------------------------------------------ */
-/* Objeções — FAQ estilo battle card                                  */
+/* Objeções: FAQ estilo battle card                                  */
 /* ------------------------------------------------------------------ */
 
 const OBJECTIONS = [
   {
     q: 'Se não tem consultor, quem vai ajudar minha equipe?',
-    a: 'A própria plataforma. Survey guiado por segmento, upload de documentos com drag-and-drop, editor de Q&A em linguagem natural e AI Readiness Score mostrando o que falta a cada passo. Em caso de dúvida específica, o time de suporte responde em menos de 2 horas úteis — sem cobrar consultoria.',
+    a: 'A própria plataforma. Survey guiado por segmento, upload de documentos com drag-and-drop, editor de Q&A em linguagem natural e AI Readiness Score mostrando o que falta a cada passo. Em caso de dúvida específica, o time de suporte responde em menos de 2 horas úteis, sem cobrar consultoria.',
   },
   {
     q: 'Setup fee não garante qualidade da implantação?',
-    a: 'Não. Setup fee nasceu quando integrar WhatsApp era um problema de TI. Hoje é um modelo de cobrança, não de valor. Quem cobra setup fee vende horas de consultoria terceirizada para transcrever o que você já sabe sobre o seu negócio. Com self-service, você transfere esse conhecimento direto — e mantém o controle.',
+    a: 'Não. Setup fee nasceu quando integrar WhatsApp era um problema de TI. Hoje é um modelo de cobrança, não de valor. Quem cobra setup fee vende horas de consultoria terceirizada para transcrever o que você já sabe sobre o seu negócio. Com self-service, você transfere esse conhecimento direto, e mantém o controle.',
   },
   {
     q: 'Preciso de IA enterprise. ZappIQ atende?',
-    a: `Sim. O tier Business (R$ ${BUSINESS_PRICE.toLocaleString('pt-BR')}) e Enterprise (a partir de R$ ${ENTERPRISE_MIN}) entregam multi-tenant, SLA contratual, observabilidade dedicada, RAG isolado, SSO e auditoria LGPD. A única diferença: o setup continua self-service. Se o cliente Enterprise quiser consultoria, ela é opcional e precificada à parte, sem amarrar o contrato principal.`,
+    a: `Sim. O tier Scale (R$ 1.497) e o Enterprise (a partir de R$ ${ENTERPRISE_MIN}) entregam multi-tenant, SLA contratual, observabilidade dedicada, RAG isolado, SSO e auditoria LGPD. A única diferença: o setup continua self-service. Se o cliente Enterprise quiser consultoria, ela é opcional e precificada à parte, sem amarrar o contrato principal.`,
   },
   {
     q: 'O trial de 14 dias é suficiente para avaliar?',
@@ -126,15 +125,15 @@ const OBJECTIONS = [
   },
   {
     q: 'E se minha equipe não for técnica?',
-    a: 'Melhor ainda. A UX foi desenhada para gestor comercial, atendimento e CX — não para TI. Quem sobe documento é quem conhece o produto. Quem escreve Q&A é quem atende o cliente todo dia. TI só entra se você quiser integrar com um ERP legado — e nesse caso usamos API pública documentada.',
+    a: 'Melhor ainda. A UX foi desenhada para gestor comercial, atendimento e CX, não para TI. Quem sobe documento é quem conhece o produto. Quem escreve Q&A é quem atende o cliente todo dia. TI só entra se você quiser integrar com um ERP legado, e nesse caso usamos API pública documentada.',
   },
   {
     q: 'Por que o competidor X cobra mais caro?',
-    a: 'Três motivos: (1) estrutura de vendas com BDR, AE, SDR e consultoria — headcount caro; (2) modelo antigo de contrato anual com setup fee; (3) infra legada que precisa ser mantida. ZappIQ foi construída para escalar via produto, não via pessoas. A economia vai direto para o cliente.',
+    a: 'Três motivos: (1) estrutura de vendas com BDR, AE, SDR e consultoria (headcount caro); (2) modelo antigo de contrato anual com setup fee; (3) infra legada que precisa ser mantida. ZappIQ foi construída para escalar via produto, não via pessoas. A economia vai direto para o cliente.',
   },
   {
     q: 'Como comparo ROI real?',
-    a: 'Use a calculadora acima com os números que você recebeu do competidor. No primeiro ano, a economia média nos cotações recebidas fica entre 60% e 85%. A partir do segundo ano, compare a mensalidade pura — o setup fee some da conta, mas não some o fato de que o consultor cobra reativo para qualquer mudança de IA. Na ZappIQ, você muda em tempo real.',
+    a: 'Use a calculadora acima com os números que você recebeu do competidor. No primeiro ano, a economia média nos cotações recebidas fica entre 60% e 85%. A partir do segundo ano, compare a mensalidade pura: o setup fee some da conta, mas não some o fato de que o consultor cobra reativo para qualquer mudança de IA. Na ZappIQ, você muda em tempo real.',
   },
 ];
 
@@ -177,7 +176,7 @@ export function ComparativoPage() {
             <span className="text-primary-600">Na ZappIQ, R$ 0.</span>
           </h1>
           <p className="text-lg text-gray-500 mb-8">
-            Você treina sua IA de conversação sozinho — survey guiado, upload de documentos, editor de Q&A e Readiness Score em tempo real.
+            Você treina sua IA de conversação sozinho: survey guiado, upload de documentos, editor de Q&A e Readiness Score em tempo real.
             Sem consultor. Sem setup fee. Sem espera.
           </p>
           <div className="flex items-center justify-center gap-4 flex-wrap">
@@ -306,7 +305,7 @@ export function ComparativoPage() {
               Quanto você economiza no primeiro ano?
             </h2>
             <p className="text-gray-500">
-              Cole o número da cotação que você recebeu. A ZappIQ Starter serve para tickets médios e volumes de PME.
+              Cole o número da cotação que você recebeu. A ZappIQ Lite serve para tickets médios e volumes de PME.
             </p>
           </div>
           <SavingsCalculator />
@@ -319,7 +318,7 @@ export function ComparativoPage() {
           <div className="text-center mb-10">
             <p className="text-sm font-semibold text-primary-600 uppercase tracking-wider mb-2">Objeções que surgem na cotação</p>
             <h2 className="font-display text-3xl lg:text-4xl font-extrabold text-gray-900">
-              Respostas diretas — sem floreio
+              Respostas diretas, sem floreio
             </h2>
           </div>
           <div className="space-y-3">

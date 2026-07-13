@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * EarlyAccessForm — V5.3
+ * EarlyAccessForm: V5.3
  * --------------------------------------------------------------------------
  * Form de captura de leads pra lista Fundadores. POST /api/leads.
  * Estado: idle → submitting → success | error.
@@ -137,7 +137,7 @@ export function EarlyAccessForm() {
                   <circle cx="9" cy="9" r="7" />
                   <path d="M5 9l3 3 5-6" />
                 </svg>
-                <span>Vaga reservada. Te avisamos no dia 04.05 — fique de olho na sua caixa.</span>
+                <span>Vaga reservada. Te avisamos no dia 04.05, fique de olho na sua caixa.</span>
               </div>
             )}
           </form>

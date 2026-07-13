@@ -3,10 +3,10 @@ import type { SegmentPageData } from '../../../components/landing/SegmentTemplat
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'ZappIQ para Educação — Automação WhatsApp para Escolas e Cursos',
+  title: 'ZappIQ para Educação: Automação WhatsApp para Escolas e Cursos',
   description: 'Automatize matrículas, envie lembretes de aulas, responda dúvidas e reduza inadimplência. Ideal para escolas, cursos e instituições de ensino.',
   openGraph: {
-    title: 'ZappIQ para Educação — Automatize Matrículas e Atendimento',
+    title: 'ZappIQ para Educação: Automatize Matrículas e Atendimento',
     description: 'Automatize matrículas, envie lembretes de aulas e reduza inadimplência pelo WhatsApp.',
   },
 };
@@ -17,7 +17,7 @@ const data: SegmentPageData = {
   name: 'Educação',
   businessType: 'Escolas e Cursos',
   heroTitle: 'ZappIQ para Educação: Automatize matrículas e comunicação escolar',
-  heroSubtitle: 'Responda pais e alunos instantaneamente, automatize matrículas, envie lembretes e reduza inadimplência — tudo pelo WhatsApp com IA.',
+  heroSubtitle: 'Responda pais e alunos instantaneamente, automatize matrículas, envie lembretes e reduza inadimplência, tudo pelo WhatsApp com IA.',
   pains: [
     { icon: 'GraduationCap', title: 'Matrículas perdidas', desc: 'Pais perguntam sobre vagas e valores, mas a secretaria demora para responder. Eles matriculam na concorrência.' },
     { icon: 'Clock', title: 'Secretaria sobrecarregada', desc: 'A equipe gasta o dia respondendo as mesmas perguntas: horários, valores, documentos necessários.' },
@@ -35,7 +35,7 @@ const data: SegmentPageData = {
     role: 'Coordenadora',
     company: 'Escola Nova Era',
     initials: 'AB',
-    text: 'Aumentamos as matrículas em 45% no semestre passado. A IA responde pais no fim de semana e de madrugada — quando eles realmente pesquisam.',
+    text: 'Aumentamos as matrículas em 45% no semestre passado. A IA responde pais no fim de semana e de madrugada, quando eles realmente pesquisam.',
   },
 };
 

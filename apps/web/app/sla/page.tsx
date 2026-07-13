@@ -3,7 +3,7 @@ import { PublicLayout } from '@/components/landing/PublicLayout';
 import { Activity, Clock, Shield, TrendingDown, Zap, FileText, ArrowRight, Check, AlertTriangle } from 'lucide-react';
 
 export const metadata = {
-  title: 'SLA — Disponibilidade e Garantias Contratuais | ZappIQ',
+  title: 'SLA: Disponibilidade e Garantias Contratuais | ZappIQ',
   description: 'SLA formal 99,9% de uptime nos planos Business e Enterprise. Créditos automáticos por descumprimento. RPO 1h, RTO 4h. Transparência total de disponibilidade.',
 };
 
@@ -11,9 +11,9 @@ export const metadata = {
 // SLA contratual 99,9% + créditos automáticos (definido em planConfig.ts:
 // features.slaContractual=true), mas a tabela pública só listava Enterprise.
 const SLA_TABLE = [
-  { plan: 'Starter', uptime: 'Best effort', credits: '—', rpo: '24h', rto: '24h' },
-  { plan: 'Growth', uptime: 'Best effort', credits: '—', rpo: '24h', rto: '24h' },
-  { plan: 'Scale', uptime: '99,5% alvo', credits: '—', rpo: '4h', rto: '8h' },
+  { plan: 'Starter', uptime: 'Best effort', credits: 'Não', rpo: '24h', rto: '24h' },
+  { plan: 'Growth', uptime: 'Best effort', credits: 'Não', rpo: '24h', rto: '24h' },
+  { plan: 'Scale', uptime: '99,5% alvo', credits: 'Não', rpo: '4h', rto: '8h' },
   { plan: 'Business', uptime: '99,9% contratual', credits: 'Sim', rpo: '1h', rto: '4h' },
   { plan: 'Enterprise', uptime: '99,9% contratual', credits: 'Sim', rpo: '1h', rto: '4h' },
 ];
@@ -41,7 +41,7 @@ export default function SLAPage() {
         <div className="max-w-7xl mx-auto px-6 relative">
           <div className="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/30 rounded-full px-4 py-1.5 mb-6">
             <Activity size={14} className="text-amber-300" />
-            <span className="text-xs font-semibold text-amber-200 uppercase tracking-wider">SLA — Service Level Agreement</span>
+            <span className="text-xs font-semibold text-amber-200 uppercase tracking-wider">SLA: Service Level Agreement</span>
           </div>
           <h1 className="font-display text-4xl lg:text-6xl font-extrabold mb-6 max-w-4xl leading-tight">
             <span className="text-amber-400">99,9%</span> de uptime, formalmente contratado.
@@ -64,8 +64,8 @@ export default function SLAPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-14 pt-10 border-t border-white/10">
             {[
               { value: '99,9%', label: 'Uptime Business/Enterprise' },
-              { value: '1h', label: 'RPO — Recovery Point' },
-              { value: '4h', label: 'RTO — Recovery Time' },
+              { value: '1h', label: 'RPO: Recovery Point' },
+              { value: '4h', label: 'RTO: Recovery Time' },
               { value: '72h', label: 'Notificação de incidente' },
             ].map((kpi) => (
               <div key={kpi.label}>
@@ -92,11 +92,11 @@ export default function SLAPage() {
               Por isso o SLA Business e Enterprise é contratual: se a gente passar desses 43 minutos, você recebe crédito proporcional automaticamente, sem precisar abrir ticket nem negociar.
             </p>
             <div className="bg-amber-50 border-l-4 border-amber-400 p-5 rounded">
-              <p className="font-semibold text-amber-900 mb-2">RPO e RTO — o que ninguém te conta</p>
+              <p className="font-semibold text-amber-900 mb-2">RPO e RTO: o que ninguém te conta</p>
               <p className="text-amber-900 text-sm">
                 <strong>RPO (Recovery Point Objective):</strong> quanto de dado sua empresa pode perder em um disaster recovery. No Business e Enterprise, no máximo 1h. Traduzindo: se acontecer o pior, você perde no máximo 1 hora de conversas.
                 <br /><br />
-                <strong>RTO (Recovery Time Objective):</strong> em quanto tempo voltamos ao ar. No Business e Enterprise, 4h. Comparação: a maioria dos concorrentes promete SLA mas não documenta RPO/RTO — e isso é o que realmente importa em incidente.
+                <strong>RTO (Recovery Time Objective):</strong> em quanto tempo voltamos ao ar. No Business e Enterprise, 4h. Comparação: a maioria dos concorrentes promete SLA mas não documenta RPO/RTO, e isso é o que realmente importa em incidente.
               </p>
             </div>
           </div>

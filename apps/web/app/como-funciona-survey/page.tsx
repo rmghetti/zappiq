@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * /como-funciona-survey — Onboarding Zero ZappIQ V3.2
+ * /como-funciona-survey: Onboarding Zero ZappIQ V3.2
  * --------------------------------------------------------------------------
  * Explica em detalhe o processo de Survey Onboarding Zero:
  *   • Self-service por padrão: lead responde um questionário de 30-90 min
@@ -63,7 +63,7 @@ const STEPS = [
     title: 'Fallback humano',
     time: 'D+7 se lead não finalizar',
     body:
-      'Se você travar em qualquer etapa e não finalizar em 7 dias, um CSM entra em contato para destravar — sem cobrança adicional, faz parte do onboarding.',
+      'Se você travar em qualquer etapa e não finalizar em 7 dias, um CSM entra em contato para destravar, sem cobrança adicional, faz parte do onboarding.',
   },
 ];
 
@@ -100,7 +100,7 @@ const WHY_WORKS = [
   {
     title: 'IA aprende por exemplo, não por regra',
     body:
-      'Claude é bom o suficiente pra montar base de conhecimento coerente a partir de respostas de negócio — sem precisar de analista de processo redigindo fluxogramas.',
+      'Claude é bom o suficiente pra montar base de conhecimento coerente a partir de respostas de negócio, sem precisar de analista de processo redigindo fluxogramas.',
   },
   {
     title: 'WhatsApp Cloud API é padronizado',
@@ -326,7 +326,7 @@ export default function ComoFuncionaSurveyPage() {
                   <Link href="/legal/deletar-dados" className="text-primary-600 hover:underline">
                     /legal/deletar-dados
                   </Link>{' '}
-                  — resposta em até 15 dias úteis.
+                  com resposta em até 15 dias úteis.
                 </li>
                 <li>
                   <strong className="text-gray-900">Se você não virar cliente:</strong> suas respostas ficam

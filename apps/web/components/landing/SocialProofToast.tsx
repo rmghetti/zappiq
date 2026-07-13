@@ -6,10 +6,9 @@ import { X } from 'lucide-react';
 const HIGHLIGHTS = [
   'Iza responde seu cliente em menos de 3 segundos',
   'CRM pronto, direto dentro do WhatsApp',
-  'Seus dados no Brasil — servidor em São Paulo',
+  'Seus dados no Brasil, servidor em São Paulo',
   'LGPD resolvida, pronta pra auditoria do jurídico',
-  'Programa Fundadores: 50% off no 1º ano',
-  'Liga em 5 minutos — sem ligar pra TI',
+  'Liga em 5 minutos, sem ligar pra TI',
 ];
 
 export function SocialProofToast() {

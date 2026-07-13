@@ -20,7 +20,7 @@ export function PrelaunchPillars() {
         </p>
 
         <div className={s.pillars}>
-          {/* Pillar 1 — Iza */}
+          {/* Pillar 1: Iza */}
           <article className={s.pillar}>
             <div className={s.pillarVisual}>
               <div className={s.pillarNumTag}>01 · IZA</div>
@@ -38,11 +38,11 @@ export function PrelaunchPillars() {
             <h3 className={s.pillarH3}>Iza, a IA que entende seu negócio</h3>
             <p className={s.pillarP}>
               Treinada com seus documentos, calibrada em minutos, fala em texto e em voz. Resolve 65% dos
-              atendimentos sem precisar de humano — com a mesma IA que empresas Fortune 500 usam.
+              atendimentos sem precisar de humano, com a mesma IA que empresas Fortune 500 usam.
             </p>
           </article>
 
-          {/* Pillar 2 — Voz */}
+          {/* Pillar 2: Voz */}
           <article className={s.pillar}>
             <div className={s.pillarVisual}>
               <div className={s.pillarNumTag}>02 · VOZ</div>
@@ -92,12 +92,12 @@ export function PrelaunchPillars() {
             </div>
             <h3 className={s.pillarH3}>Voz nativa em português</h3>
             <p className={s.pillarP}>
-              Cliente manda áudio? A Iza entende. Quer que ela responda falando? Ela fala — com entonação natural,
+              Cliente manda áudio? A Iza entende. Quer que ela responda falando? Ela fala, com entonação natural,
               praticamente humana, no mesmo WhatsApp. Do jeito que o brasileiro conversa.
             </p>
           </article>
 
-          {/* Pillar 3 — Radar 360 */}
+          {/* Pillar 3: Radar 360 */}
           <article className={s.pillar}>
             <div className={s.pillarVisual}>
               <div className={s.pillarNumTag}>03 · RADAR 360°</div>
@@ -111,7 +111,7 @@ export function PrelaunchPillars() {
                 ))}
               </div>
             </div>
-            <h3 className={s.pillarH3}>Radar 360° — dashboards que viram decisão</h3>
+            <h3 className={s.pillarH3}>Radar 360°: dashboards que viram decisão</h3>
             <p className={s.pillarP}>
               Conversas viram BI executável. Alertas quando algo foge do normal, previsão de vendas por IA,
               comparativo anônimo com seu setor. Tudo em tempo real, sem analista.

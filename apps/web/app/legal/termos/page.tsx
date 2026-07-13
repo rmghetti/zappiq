@@ -1,5 +1,5 @@
 /**
- * Termos de Uso — ZappIQ V3.2
+ * Termos de Uso: ZappIQ V3.2
  *
  * Patch aplicado em 27/04/2026 para fechar inconsistência com Privacy V3.2 e
  * atender requisitos do Meta Tech Provider Program (WhatsApp Business Policy,
@@ -25,7 +25,7 @@
  */
 
 export const metadata = {
-  title: 'Termos de Uso — ZappIQ',
+  title: 'Termos de Uso ZappIQ',
   description:
     'Termos de Uso da plataforma ZappIQ. Conformidade com WhatsApp Business Policy, Meta Commerce Policy, LGPD e Cloud API direta.',
   alternates: {
@@ -172,13 +172,13 @@ export default function TermosPage() {
         </p>
         <ul>
           <li>
-            <strong>WhatsApp Business Messaging Policy</strong> — janela de
+            <strong>WhatsApp Business Messaging Policy</strong>: janela de
             atendimento de 24 horas, uso de templates aprovados pela Meta para
             mensagens fora da janela, restrições a categorias de conteúdo
             (financeiro regulado, saúde sensível, etc.).
           </li>
           <li>
-            <strong>WhatsApp Business Policy</strong> — proibição de conteúdo
+            <strong>WhatsApp Business Policy</strong>: proibição de conteúdo
             ilegal, conteúdo enganoso, comércio de itens proibidos, e demais
             restrições publicadas pela Meta em{' '}
             <a
@@ -192,15 +192,15 @@ export default function TermosPage() {
             .
           </li>
           <li>
-            <strong>Meta Commerce Policy</strong> — quando o Cliente utilizar
+            <strong>Meta Commerce Policy</strong>: quando o Cliente utilizar
             funcionalidades de comércio (catálogo, carrinho, checkout WhatsApp),
             cumprir integralmente a política comercial publicada pela Meta.
           </li>
           <li>
-            <strong>Qualidade de conta WhatsApp Business (WABA)</strong> — manter
+            <strong>Qualidade de conta WhatsApp Business (WABA)</strong>: manter
             qualidade de mensagens em nível verde ou amarelo, evitando bloqueios por
             alta taxa de bloqueio/denúncia. Quedas de qualidade podem resultar em
-            suspensão da WABA pela Meta — situação alheia à responsabilidade da
+            suspensão da WABA pela Meta, situação alheia à responsabilidade da
             ZappIQ.
           </li>
         </ul>
@@ -260,7 +260,7 @@ export default function TermosPage() {
         <p>
           Este contrato vigora a partir da data de aceitação até rescisão por
           qualquer das partes. Você pode cancelar sua conta a qualquer momento, sem
-          multa ou penalidade — o cancelamento não gera reembolso de períodos já
+          multa ou penalidade. O cancelamento não gera reembolso de períodos já
           pagos, salvo quando expressamente previsto na{' '}
           <a href="/garantia" className="text-blue-600 hover:text-blue-700">
             Garantia ZappIQ
