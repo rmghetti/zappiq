@@ -16,8 +16,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { type LucideIcon, Check, Radar, Sparkles, Megaphone, CalendarCheck, Mic, Phone } from 'lucide-react';
-import { listActivePlans, ADDONS, getAnnualPrice, type PlanConfig } from '@zappiq/shared';
+import { type LucideIcon, Check, Radar, Sparkles, Megaphone, CalendarCheck, Mic, Phone, Crosshair } from 'lucide-react';
+import { listActivePlans, ADDONS, getAnnualPrice, MIRA_TIERS, MIRA_ELIGIBLE_PLANS, MIRA_INCLUDED_TIER_BY_PLAN, type PlanConfig } from '@zappiq/shared';
 
 const PLANS: PlanConfig[] = listActivePlans();
 
@@ -39,9 +39,15 @@ type PricingAddon = {
   fromLabel?: boolean; // "a partir de" (pacotes com faixa de preço)
   icon: LucideIcon;
   includedFor: (p: PlanConfig) => boolean;
+  unavailableFor?: (p: PlanConfig) => boolean; // add-on indisponível neste plano
+  unavailableNote?: string;
 };
 
 const PRICING_ADDONS: PricingAddon[] = [
+  { key: 'mira', name: 'Mira Prospects', price: MIRA_TIERS.MIRA_ESSENCIAL.priceMonthly, fromLabel: true, icon: Crosshair,
+    includedFor: (p) => MIRA_INCLUDED_TIER_BY_PLAN[p.id] != null,
+    unavailableFor: (p) => !MIRA_ELIGIBLE_PLANS.includes(p.id),
+    unavailableNote: 'disponível a partir do Growth' },
   { key: 'radar', name: 'Radar 360° Pro', price: ADDONS.RADAR_360.priceMonthly ?? 397, icon: Radar, includedFor: (p) => p.features.radar360 },
   { key: 'impulso', name: 'Zap Impulso', price: 197, fromLabel: true, icon: Megaphone, includedFor: () => false },
   { key: 'agenda', name: 'Agendamento pela IA', price: 49, icon: CalendarCheck, includedFor: (p) => p.id !== 'IZA_LITE' },
@@ -67,6 +73,7 @@ export function Pricing() {
   /* Valor mensal de um add-on pra um plano (0 se já incluso). Aplica o mesmo
      desconto anual do plano quando o toggle Anual está ligado. */
   const addonPriceFor = (addon: PricingAddon, plan: PlanConfig): number => {
+    if (addon.unavailableFor?.(plan)) return 0;
     if (addon.includedFor(plan)) return 0;
     return annual ? addon.price * (1 - plan.annualDiscountPercent / 100) : addon.price;
   };
@@ -161,8 +168,10 @@ export function Pricing() {
             const basePrice = computePrice(plan);
             const addonsExtra = computeAddonsExtra(plan);
             const totalPrice = basePrice !== null ? basePrice + addonsExtra : null;
-            const addedAddons = PRICING_ADDONS.filter((a) => selectedAddons[a.key] && !a.includedFor(plan));
-            const includedAddons = PRICING_ADDONS.filter((a) => selectedAddons[a.key] && a.includedFor(plan));
+            const availPlanAddons = PRICING_ADDONS.filter((a) => selectedAddons[a.key] && !a.unavailableFor?.(plan));
+            const addedAddons = availPlanAddons.filter((a) => !a.includedFor(plan));
+            const includedAddons = availPlanAddons.filter((a) => a.includedFor(plan));
+            const unavailableAddons = PRICING_ADDONS.filter((a) => selectedAddons[a.key] && a.unavailableFor?.(plan));
             const isEnterprise = plan.id === 'ENTERPRISE';
             const isHighlight = plan.highlight && !isEnterprise;
 
@@ -270,6 +279,12 @@ export function Pricing() {
                       </li>
                     );
                   })}
+                  {unavailableAddons.map((a) => (
+                    <li key={a.key} className={`flex items-start gap-2 text-[11px] italic ${isEnterprise ? 'text-white/50' : 'text-muted'}`}>
+                      <span className="flex-shrink-0 mt-0.5">·</span>
+                      <span>{a.name}: {a.unavailableNote}</span>
+                    </li>
+                  ))}
                 </ul>
 
                 <Link

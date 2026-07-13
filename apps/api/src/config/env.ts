@@ -39,6 +39,20 @@ const envSchema = z.object({
   GOOGLE_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
 
+  // Mira Prospects — busca pública (descoberta B2B + decisores por pegada
+  // pública). Provedores pluggáveis, escolhidos por chave presente. Nenhum
+  // é obrigatório: sem chave, os motores que dependem de busca respondem
+  // "fonte_indisponivel" de forma honesta (o resto do Mira funciona).
+  //   - Google Programmable Search (Custom Search JSON API): 100 buscas/dia
+  //     grátis, SEM cartão. Recomendado. Precisa da chave + do ID do
+  //     mecanismo (cx) criado em programmablesearchengine.google.com.
+  //   - Brave Search API (2.000/mês grátis) e Firecrawl (pago) como upgrades.
+  MIRA_SEARCH_PROVIDER: z.enum(['auto', 'google_cse', 'brave', 'firecrawl', 'off']).default('auto'),
+  GOOGLE_CSE_KEY: z.string().optional(),
+  GOOGLE_CSE_CX: z.string().optional(),
+  BRAVE_API_KEY: z.string().optional(),
+  FIRECRAWL_API_KEY: z.string().optional(),
+
   // WhatsApp
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().optional(),

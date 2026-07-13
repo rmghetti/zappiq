@@ -16,6 +16,8 @@ import {
   CalendarClock,
   // Cupons de desconto (SUPERADMIN)
   Ticket,
+  // Mira Prospects — inteligência de oportunidades (add-on)
+  Crosshair,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
@@ -30,6 +32,10 @@ const navItems = [
   // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA. A automação (crmAutomationService)
   // já cria Tasks quando detecta intenção de compra; aqui a PME finalmente as vê e conclui.
   { href: '/tasks', label: 'Tarefas', icon: ListChecks },
+  // Mira Prospects — add-on de inteligência e qualificação de oportunidades.
+  // Menu sempre visível (descoberta/cross-sell); a página resolve o estado
+  // via /api/mira-access (vitrine de ativação quando não contratado).
+  { href: '/mira', label: 'Mira Prospects', icon: Crosshair, highlight: true },
   { href: '/campaigns', label: 'Zap Impulso', icon: Megaphone },
   // FEATURE 5b.2 — gestão de templates de WhatsApp (aprovados pela Meta;
   // alimentam o seletor de campanha e o reengajamento fora da janela de 24h).
