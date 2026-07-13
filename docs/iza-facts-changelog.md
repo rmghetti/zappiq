@@ -87,3 +87,34 @@ Pra contornar (PRs cosméticos): adicione label `no-iza-impact` no PR.
 **Acao no /admin/iza-knowledge:** Nenhuma.
 
 **Smoke esperado:** N/A.
+
+---
+
+### 2026-07-13 · PR #259 · Reposicionamento V6 + decisoes do fundador
+
+**O que mudou:** Landing reposicionada para a categoria "Operacao Autonoma de Atendimento e Vendas" (a Iza atende, vende e faz campanha; voce aprova, ela executa). Decisoes comerciais aplicadas: (1) plano Scale virou self-serve com trial de 14 dias (era sales-led "falar com especialista"); (2) SLA contratual 99,9% removido de TODA a comunicacao publica ate reformalizar a faixa; (3) Programa Fundadores (Cohort Founders 2026, 30% vitalicio) descontinuado; (4) Meta Business Partner: designacao obtida, formalizacao documental em andamento; (5) Mira Prospects passa a ter pricing publico; (6) Pricing ganhou seletor de add-ons. Planos ativos continuam Lite R$247 / Growth R$497 / Scale R$1.497 / Enterprise sob consulta (Starter e Business seguem descontinuados).
+
+**Impacto na Iza — ela precisa passar a falar:**
+- Categoria: "operacao autonoma de atendimento e vendas", nao "chatbot" nem "IA conversacional".
+- Scale (R$ 1.497/mes): self-serve, com 14 dias gratis como os demais. PARAR de dizer que Scale e so "falar com especialista".
+- Mira Prospects: add-on de inteligencia de oportunidades. Faixas Essencial R$ 297, Pro R$ 597, Scale R$ 1.197. Elegivel a partir do Growth, incluida no Enterprise, indisponivel no Lite.
+- Add-ons do site: Radar 360 Pro R$ 397, Zap Impulso a partir de R$ 197, Agendamento pela IA R$ 49 (incluso do Growth pra cima), Voz Nativa a partir de R$ 79,90, Numero WhatsApp extra R$ 137.
+- Meta Business Partner: podemos nos apresentar como Meta Business Partner (designacao obtida; certificado/ID em formalizacao). Conexao oficial via Cloud API direto Meta.
+
+**Impacto na Iza — ela precisa PARAR de falar:**
+- SLA / uptime 99,9% contratual (removido da comunicacao publica ate reformalizar).
+- Programa Fundadores / Cohort Founders / 30% vitalicio (campanha descontinuada).
+- Qualquer plano Starter ou Business (descontinuados).
+- "BSP homologado via 360Dialog" como infra propria (usamos Cloud API direto Meta).
+
+**Acao no /admin/iza-knowledge** (apos merge):
+- [ ] UPDATE facts de pricing: Scale self-serve/trial; adicionar faixas Mira; adicionar add-ons do Pricing.
+- [ ] UPDATE fact de posicionamento: categoria "operacao autonoma de atendimento e vendas".
+- [ ] SUNSET/DELETE facts: SLA 99,9% contratual; Programa Fundadores; Starter/Business.
+- [ ] UPDATE fact de parceria Meta: "Meta Business Partner (em formalizacao)".
+
+**Smoke esperado:**
+- "O plano Scale tem trial?" -> "Sim, 14 dias gratis, self-serve." (nao mais "fale com um especialista")
+- "Voces tem Programa Fundadores?" -> Iza NAO oferece mais a campanha.
+- "Qual o SLA de voces?" -> Iza fala de infraestrutura/monitoramento, sem cravar 99,9% contratual.
+- "Quanto custa a Mira Prospects?" -> "A partir de R$ 297/mes (Essencial), disponivel do Growth pra cima."
