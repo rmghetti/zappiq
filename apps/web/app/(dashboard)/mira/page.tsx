@@ -256,6 +256,28 @@ function QuickLink({ href, icon: Icon, title, desc }: { href: string; icon: any;
 function ActivationShowcase({ accessData }: { accessData: MiraAccessData | null }) {
   const eligible = accessData?.access.eligible ?? false;
   const tiers = accessData?.catalog.tiers ?? [];
+  const [cycle, setCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [ativando, setAtivando] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('ativado=1')) setAtivando(true);
+  }, []);
+
+  const subscribe = async (tierKey: string) => {
+    setBusy(tierKey);
+    setError(null);
+    try {
+      const res = await miraApi.checkout(tierKey as any, cycle);
+      if (res.url) window.location.href = res.url;
+      else setError('Não consegui abrir o checkout agora.');
+    } catch (e: any) {
+      if (e?.status === 503) setError('O pagamento ainda não está configurado nesta instalação.');
+      else setError(e?.message || 'Não foi possível iniciar a assinatura agora.');
+      setBusy(null);
+    }
+  };
 
   const entregas = [
     'Alvos qualificados com dossiê completo: quem decide, a dor, a oportunidade do seu portfólio',
@@ -299,32 +321,75 @@ function ActivationShowcase({ accessData }: { accessData: MiraAccessData | null 
         </ul>
       </div>
 
+      {ativando && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3 mb-6 flex items-center gap-2">
+          <Loader2 className="animate-spin text-emerald-600" size={16} />
+          <p className="text-sm text-emerald-700">
+            Pagamento recebido, ativando o Mira Prospects. Em alguns segundos as telas liberam, atualize a página se demorar.
+          </p>
+        </div>
+      )}
+
+      {/* Ciclo */}
+      {eligible && (
+        <div className="flex items-center justify-center gap-2 mb-4">
+          <button
+            onClick={() => setCycle('monthly')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${cycle === 'monthly' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}
+          >
+            Mensal
+          </button>
+          <button
+            onClick={() => setCycle('annual')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${cycle === 'annual' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}
+          >
+            Anual <span className="text-[10px] opacity-80">(-20%)</span>
+          </button>
+        </div>
+      )}
+
       {/* Faixas */}
       <div className="grid md:grid-cols-3 gap-4 mb-6">
-        {tiers.map((t) => (
-          <div
-            key={t.key}
-            className={`bg-white rounded-xl p-5 border ${t.highlight ? 'border-primary-400 shadow-sm relative' : 'border-gray-200'}`}
-          >
-            {t.highlight && (
-              <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-primary-600 text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">
-                Mais escolhido
-              </span>
-            )}
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">{t.name}</p>
-            <p className="text-2xl font-bold text-gray-900">
-              {formatBRL(t.priceMonthly)}
-              <span className="text-sm font-medium text-gray-400">/mês</span>
-            </p>
-            <p className="text-sm text-gray-500 mt-1.5">
-              {t.alvosPerMonth} Alvos verificados por mês
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              No plano anual: {formatBRL(Math.round(t.priceMonthly * (1 - t.annualDiscountPercent / 100)))} /mês
-            </p>
-          </div>
-        ))}
+        {tiers.map((t) => {
+          const annualMonthly = Math.round(t.priceMonthly * (1 - t.annualDiscountPercent / 100));
+          const shown = cycle === 'annual' ? annualMonthly : t.priceMonthly;
+          return (
+            <div
+              key={t.key}
+              className={`bg-white rounded-xl p-5 border flex flex-col ${t.highlight ? 'border-primary-400 shadow-sm relative' : 'border-gray-200'}`}
+            >
+              {t.highlight && (
+                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-primary-600 text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">
+                  Mais escolhido
+                </span>
+              )}
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">{t.name}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {formatBRL(shown)}
+                <span className="text-sm font-medium text-gray-400">/mês</span>
+              </p>
+              <p className="text-sm text-gray-500 mt-1.5">{t.alvosPerMonth} Alvos verificados por mês</p>
+              <p className="text-xs text-gray-400 mt-1">
+                {cycle === 'annual' ? `Cobrado anual (${formatBRL(annualMonthly * 12)}/ano)` : `Anual: ${formatBRL(annualMonthly)}/mês`}
+              </p>
+              {eligible && (
+                <button
+                  onClick={() => subscribe(t.key)}
+                  disabled={busy !== null}
+                  className={`mt-4 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60 ${
+                    t.highlight ? 'bg-primary-600 text-white hover:bg-primary-700' : 'border border-primary-200 text-primary-700 hover:bg-primary-50'
+                  }`}
+                >
+                  {busy === t.key ? <Loader2 className="animate-spin" size={15} /> : null}
+                  {busy === t.key ? 'Abrindo checkout…' : `Assinar ${t.name}`}
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
+
+      {error && <p className="text-xs text-red-500 mb-4 text-center">{error}</p>}
 
       {/* CTA */}
       <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -333,18 +398,20 @@ function ActivationShowcase({ accessData }: { accessData: MiraAccessData | null 
             <div className="flex items-start gap-3">
               <TrendingUp className="text-primary-600 shrink-0 mt-0.5" size={20} />
               <div>
-                <p className="text-sm font-semibold text-gray-900">Disponível para o seu plano</p>
+                <p className="text-sm font-semibold text-gray-900">Escolha uma faixa acima para ativar</p>
                 <p className="text-xs text-gray-500">
-                  Ative em Plano &amp; Fatura. Zero taxa de setup, sem fidelidade além do ciclo.
+                  Checkout seguro no Stripe. Zero taxa de setup, sem fidelidade além do ciclo. Você pode trocar de faixa depois.
                 </p>
               </div>
             </div>
-            <Link
-              href="/billing"
-              className="px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 shrink-0"
+            <button
+              onClick={() => subscribe(tiers.find((t) => t.highlight)?.key ?? tiers[0]?.key ?? 'MIRA_PRO')}
+              disabled={busy !== null || tiers.length === 0}
+              className="px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 shrink-0 disabled:opacity-60 inline-flex items-center gap-1.5"
             >
+              {busy ? <Loader2 className="animate-spin" size={15} /> : null}
               Ativar o Mira Prospects
-            </Link>
+            </button>
           </>
         ) : (
           <>

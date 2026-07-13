@@ -195,6 +195,12 @@ export interface DecisoresPublicoResult {
 // ── Client ───────────────────────────────────────────────────────────
 export const miraApi = {
   access: (): Promise<{ success: boolean; data: MiraAccessData }> => api.get('/api/mira-access'),
+  // Assina uma faixa (recorrente) → devolve a URL do checkout do Stripe.
+  checkout: (tier: MiraTierKey, cycle: 'monthly' | 'annual' = 'monthly'): Promise<{ success: boolean; url: string }> =>
+    api.post('/api/mira-access/checkout', { tier, cycle }),
+  // Compra um pack avulso (one-shot) quando a cota esgota.
+  packCheckout: (pack: string): Promise<{ success: boolean; url: string }> =>
+    api.post('/api/mira-access/pack/checkout', { pack }),
   getPerfil: (): Promise<{ success: boolean; data: MiraPerfil | null }> => api.get('/api/mira/perfil'),
   savePerfil: (perfil: MiraPerfil): Promise<{ success: boolean; data: MiraPerfil }> =>
     api.put('/api/mira/perfil', perfil),

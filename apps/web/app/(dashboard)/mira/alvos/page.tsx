@@ -21,7 +21,7 @@ import {
   Import,
 } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
-import { miraApi, type MiraAlvoListItem, type MiraQuota, type MotorAResult, type MotorBResult } from '@/lib/miraApi';
+import { miraApi, formatBRL, type MiraAlvoListItem, type MiraQuota, type MotorAResult, type MotorBResult, type MiraPackInfo } from '@/lib/miraApi';
 
 const STATUS_FILTERS = [
   { key: '', label: 'Todos' },
@@ -125,6 +125,15 @@ export default function MiraAlvosPage() {
             setReloadKey((k) => k + 1);
           }}
         />
+      )}
+
+      {quota?.blocked && (
+        <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5">
+          <p className="text-sm text-red-600 font-medium">
+            Cota do mês esgotada ({quota.used}/{quota.total}). Compre um pacote avulso para continuar mapeando agora, ou aguarde a virada do mês.
+          </p>
+          <ComprarPacks />
+        </div>
       )}
 
       {/* Filtros */}
@@ -367,8 +376,9 @@ function MapearCarteiraModal({ onClose, onDone }: { onClose: () => void; onDone:
               <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2.5 mb-4">
                 <p className="text-xs text-red-600">
                   Sua cota do mês esgotou{result.naoProcessados.length > 0 ? ` (${result.naoProcessados.length} CNPJs ficaram na fila)` : ''}.
-                  Contrate um pacote avulso em <Link href="/billing" className="font-semibold underline">Plano &amp; Fatura</Link> ou aguarde a virada do mês.
+                  Compre um pacote avulso para continuar agora, ou aguarde a virada do mês.
                 </p>
+                <ComprarPacks />
               </div>
             )}
             <button
@@ -535,9 +545,9 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
             {result.blocked && (
               <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2.5 mb-4">
                 <p className="text-xs text-red-600">
-                  Sua cota do mês esgotou. Contrate um pacote avulso em{' '}
-                  <Link href="/billing" className="font-semibold underline">Plano &amp; Fatura</Link> ou aguarde a virada do mês.
+                  Sua cota do mês esgotou. Compre um pacote avulso para continuar agora, ou aguarde a virada do mês.
                 </p>
+                <ComprarPacks />
               </div>
             )}
             <button
@@ -549,6 +559,60 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* Botões de compra de pack avulso (one-shot, +20%), quando a cota do mês esgota. */
+function ComprarPacks() {
+  const [packs, setPacks] = useState<MiraPackInfo[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    miraApi
+      .access()
+      .then((r) => alive && setPacks(r.data.catalog?.packs ?? []))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const comprar = async (key: string) => {
+    setBusy(key);
+    setErr(null);
+    try {
+      const r = await miraApi.packCheckout(key);
+      if (r.url) window.location.href = r.url;
+      else setErr('Não consegui abrir o checkout agora.');
+    } catch (e: any) {
+      if (e?.status === 503) setErr('O pagamento ainda não está configurado nesta instalação.');
+      else setErr(e?.message || 'Falha ao abrir o checkout.');
+      setBusy(null);
+    }
+  };
+
+  if (packs.length === 0) return null;
+  return (
+    <div className="mt-2.5">
+      <div className="grid grid-cols-3 gap-2">
+        {packs.map((p) => (
+          <button
+            key={p.key}
+            onClick={() => comprar(p.key)}
+            disabled={busy !== null}
+            className="border border-primary-200 bg-white rounded-lg px-2 py-2 text-center hover:bg-primary-50 disabled:opacity-60"
+          >
+            <p className="text-sm font-bold text-primary-700 leading-none">
+              {busy === p.key ? '…' : `+${p.alvos}`}
+            </p>
+            <p className="text-[11px] text-gray-500 mt-1">{formatBRL(p.price)}</p>
+          </button>
+        ))}
+      </div>
+      {err && <p className="text-[11px] text-red-500 mt-1.5">{err}</p>}
     </div>
   );
 }
