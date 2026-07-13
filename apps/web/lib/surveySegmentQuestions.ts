@@ -3212,16 +3212,22 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
       questions: [
         {
           id: 'conselho_o_que_e',
-          label: 'Explique, nas palavras da empresa, o que é o Conselho Compartilhado / Board as a Service.',
+          label: 'Explique, nas palavras da empresa, o que é o Conselho Compartilhado (o que o mercado também chama de Board as a Service).',
           type: 'textarea',
-          helpText: 'Essa é a explicação-base que a IA usará sempre que alguém perguntar "o que vocês fazem?". Quanto mais clara e completa, melhor.',
+          helpText: 'É a explicação-base que a IA usa sempre que perguntarem "o que vocês fazem?". Ancore no jeito do CMJ: governança de ponta, antes restrita às grandes empresas, agora acessível à PME; o primeiro Conselho Compartilhado do mundo; a tese de que toda empresa deveria estar pronta para ser vendida (e por isso vale mais). Quanto mais clara e completa, melhor.',
+        },
+        {
+          id: 'conselho_compartilhado_mecanica',
+          label: 'Como funciona, na prática, o modelo do Conselho Compartilhado (a turma), e quando indicar o Compartilhado ou o Exclusivo?',
+          type: 'textarea',
+          helpText: 'O coração do diferencial. Explique como as empresas são reunidas em uma turma (quantas, agrupadas por porte e sem concorrentes entre si), o duplo papel em que cada líder é aconselhado e também conselheiro dos demais, e a diferença para o Conselho Exclusivo, dedicado a uma única empresa. A IA usa isso para mostrar que "compartilhado" não é expor a empresa, e sim somar experiências.',
         },
         {
           id: 'conselho_modalidades',
-          label: 'Quais modalidades de conselho a empresa oferece?',
+          label: 'Quais modalidades de conselho a empresa oferece hoje?',
           type: 'multiselect',
-          helpText: 'A IA precisa saber exatamente o que pode oferecer a cada tipo de empresa.',
-          options: ['Conselho Consultivo', 'Conselho de Administração', 'Family Board (conselho de família)', 'Conselho para startups/scaleups', 'Conselho de sucessão', 'Comitês temáticos (financeiro, gente, etc.)', 'Mentoria de board individual'],
+          helpText: 'A IA só oferece o que a empresa realmente entrega. Marque as modalidades ativas no portfólio.',
+          options: ['Conselho Compartilhado (turma de empresas)', 'Conselho Exclusivo (dedicado a uma empresa)', 'Conselho Consultivo', 'Conselho de Administração (estatutário)', 'Conselho para empresa familiar', 'Conselho de sucessão', 'Comitês temáticos (financeiro, gente, etc.)'],
         },
         {
           id: 'conselho_consultivo_vs_admin',
@@ -3239,7 +3245,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_reuniao',
           label: 'Como funciona uma reunião de conselho (frequência, duração, formato presencial/online, pauta, papel do facilitador)?',
           type: 'textarea',
-          helpText: 'Empresários querem saber o compromisso de tempo. A IA usa para responder "quanto tempo isso vai me consumir?".',
+          helpText: 'Empresários querem saber o compromisso de tempo antes de decidir. Descreva o ritmo real (por exemplo, encontros presenciais da turma a cada período, com acompanhamento individual online entre eles) para a IA responder com precisão a "quanto tempo isso vai me consumir?" e "é presencial ou online?".',
         },
         {
           id: 'conselho_entregaveis',
@@ -3251,7 +3257,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_metodologia',
           label: 'Existe metodologia ou framework proprietário? Descreva-o.',
           type: 'textarea',
-          helpText: 'Metodologia própria é diferencial competitivo. A IA pode citá-la como prova de método e profissionalismo.',
+          helpText: 'Metodologia própria é diferencial competitivo. Inclua o que for proprietário (por exemplo, os 7 Pilares do Diagnóstico de Maturidade, o Método A.M.O.R e o livro "Bora Mudar o Jogo") para a IA citar como prova de método e profissionalismo.',
         },
         {
           id: 'conselho_matching',
@@ -3276,13 +3282,13 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_resultado',
           label: 'Como a empresa mede e comprova o resultado gerado por um conselho?',
           type: 'textarea',
-          helpText: 'Prova de ROI. A IA usa para responder "vale a pena? que resultado vou ter?".',
+          helpText: 'Prova de ROI. Ancore no vocabulário do CMJ (empresa mais profissionalizada, governança que destrava crescimento e sucessão, valuation maior, empresa pronta para ser vendida) para a IA responder "vale a pena? que resultado vou ter?".',
         },
       ],
     },
     {
       id: 'conselho_motor_a',
-      title: 'Motor A — Empresas-Cliente (BaaS)',
+      title: 'Motor A: empresas-cliente (BaaS)',
       description: 'Como a IA identifica, qualifica e conduz um empresário interessado em ter um conselho.',
       icon: '🏢',
       questions: [
@@ -3321,7 +3327,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_diagnostico',
           label: 'Quais perguntas de diagnóstico a IA deve fazer a um empresário interessado?',
           type: 'textarea',
-          helpText: 'Ex.: "Qual seu maior desafio hoje?", "Já teve conselho antes?", "Como toma decisões estratégicas hoje?". A IA conduz como consultor, não como formulário.',
+          helpText: 'Ex.: "Qual seu maior desafio hoje?", "Já teve conselho antes?", "Como toma decisões estratégicas hoje?". A IA conduz como consultor, não como formulário, e pode oferecer o Diagnóstico de Maturidade dos 7 Pilares como próximo passo natural.',
         },
         {
           id: 'conselho_dores',
@@ -3332,25 +3338,31 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
         },
         {
           id: 'conselho_obj_caro',
-          label: 'Objeção "é caro / não cabe no orçamento" — como a IA deve responder?',
+          label: 'Objeção "é caro / não cabe no orçamento": como a IA deve responder?',
           type: 'textarea',
-          helpText: 'Ex.: comparar com o custo de um diretor full-time, mostrar o ROI de uma boa decisão estratégica. A IA precisa do argumento pronto.',
+          helpText: 'Munição concreta: um conselho privado próprio custaria muito mais (vários conselheiros mais governança dedicada) do que o modelo compartilhado, que entrega estrutura equivalente por uma fração do valor. Some o custo de uma decisão errada evitada. A IA precisa do argumento pronto, sem citar números que a empresa não queira divulgar.',
         },
         {
           id: 'conselho_obj_pequena',
-          label: 'Objeção "minha empresa é pequena / ainda não preciso" — como responder?',
+          label: 'Objeção "minha empresa é pequena / ainda não preciso": como responder?',
           type: 'textarea',
           helpText: 'A IA precisa reposicionar o momento certo de ter um conselho e mostrar fit mesmo para empresas em estágio inicial, quando aplicável.',
         },
         {
           id: 'conselho_obj_mentor',
-          label: 'Objeção "já tenho mentor / consultor" — como diferenciar?',
+          label: 'Objeção "já tenho mentor / consultor": como diferenciar?',
           type: 'textarea',
-          helpText: 'A IA usa a diferença estrutural entre conselho e mentoria/consultoria para mostrar complementaridade ou superioridade.',
+          helpText: 'Aqui o foco é a objeção prática de quem já paga um mentor ou consultor. A IA reconhece o valor do que a pessoa já tem e mostra o que o conselho adiciona (um colegiado recorrente, com responsabilidade sobre os resultados), como complemento e não disputa. Diferente da pergunta conceitual sobre conselho x mentoria: aqui é a resposta pronta à objeção.',
+        },
+        {
+          id: 'conselho_obj_confidencialidade',
+          label: 'Objeção "não quero dividir os números e problemas da minha empresa com outros empresários": como responder?',
+          type: 'textarea',
+          helpText: 'Objeção típica e exclusiva do modelo compartilhado. A IA precisa tranquilizar sobre sigilo (acordo de confidencialidade, turmas sem concorrentes entre si) e reposicionar: dividir a mesa com outros líderes é o que gera a inteligência coletiva, não um risco. Traga o contra-argumento e as regras de sigilo que a empresa adota.',
         },
         {
           id: 'conselho_obj_tempo',
-          label: 'Objeção "não tenho tempo para reuniões" — como responder?',
+          label: 'Objeção "não tenho tempo para reuniões": como responder?',
           type: 'textarea',
           helpText: 'A IA reforça o formato (poucas horas/mês) e o ganho de tempo que boas decisões trazem.',
         },
@@ -3358,13 +3370,13 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_cases_dor',
           label: 'Quais cases citar por tipo de dor (sucessão, M&A, crescimento, governança)?',
           type: 'textarea',
-          helpText: 'Cases específicos por dor são a prova social mais persuasiva. Detalhe empresa, dor, solução e resultado quando possível.',
+          helpText: 'Cases específicos por dor são a prova social mais persuasiva. Detalhe empresa, dor, solução e resultado (por exemplo, o M&A da Famap vendida à Viveo, a Neon Reagentes, depoimentos de clientes) sempre que puder citar publicamente.',
         },
       ],
     },
     {
       id: 'conselho_motor_b',
-      title: 'Motor B — Formação de Conselheiros',
+      title: 'Motor B: formação de conselheiros',
       description: 'Como a IA identifica, qualifica e conduz um candidato a conselheiro / aluno da formação.',
       icon: '🎓',
       questions: [
@@ -3378,7 +3390,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_formacao_conteudo',
           label: 'Qual o conteúdo programático / módulos da formação?',
           type: 'textarea',
-          helpText: 'A IA responde dúvidas sobre o que será aprendido e justifica o valor do investimento.',
+          helpText: 'Liste os módulos ou disciplinas (por exemplo, governança, finanças, ESG, compliance, liderança em conselho, gestão de conflitos, empresa familiar, preparo mental e emocional). A IA responde o que será aprendido e justifica o valor do investimento.',
         },
         {
           id: 'conselho_formacao_formato',
@@ -3390,7 +3402,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_formacao_certificacao',
           label: 'Há certificação? Qual e com que reconhecimento de mercado?',
           type: 'textarea',
-          helpText: 'Certificação reconhecida é argumento forte de conversão. A IA pode destacá-la.',
+          helpText: 'Argumento forte de conversão. Destaque o diferencial do CMJ: a única formação do Brasil com prática em conselhos reais durante o curso, e como a certificação é conquistada (por exemplo, prova, avaliação e assiduidade). A IA usa isso para diferenciar de cursos apenas teóricos.',
         },
         {
           id: 'conselho_candidato_perfil',
@@ -3421,13 +3433,13 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_formando_recebe',
           label: 'O que o aluno recebe ao se formar (matching com empresas, selo, comunidade, mentoria, saídas profissionais)?',
           type: 'textarea',
-          helpText: 'O "depois da formação" é decisivo. A IA mostra o caminho de monetização e pertencimento pós-curso.',
+          helpText: 'O "depois da formação" é decisivo. Inclua a perspectiva de remuneração por cadeira de conselheiro, o matching com empresas, o selo ou certificação e a comunidade. A IA mostra o caminho de monetização e pertencimento pós-curso.',
         },
         {
           id: 'conselho_processo_seletivo',
           label: 'Como funciona o processo seletivo / entrevista de elegibilidade?',
           type: 'textarea',
-          helpText: 'A IA orienta o candidato sobre as etapas e agenda a entrevista quando aplicável.',
+          helpText: 'A IA orienta o candidato sobre as etapas e pode usar o Teste de Perfil do Conselheiro como pré-triagem antes de encaminhar para a conversa sobre a próxima turma.',
         },
         {
           id: 'conselho_formacao_objecoes',
@@ -3459,7 +3471,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_comunidade',
           label: 'Como é a comunidade de conselheiros (encontros, eventos, network)?',
           type: 'textarea',
-          helpText: 'Pertencimento é argumento forte para o Motor B. A IA usa para vender o "fazer parte de algo".',
+          helpText: 'Pertencimento é argumento forte para o Motor B. Ancore no posicionamento (o maior ecossistema de Conselhos da América Latina, o Instituto CMJ e as ONGs parceiras). A IA usa para vender o "fazer parte de algo".',
         },
         {
           id: 'conselho_indicacao',
@@ -3469,9 +3481,9 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
         },
         {
           id: 'conselho_franquias',
-          label: 'Como funciona o modelo de franquias e em quais regiões/estados a empresa atua?',
+          label: 'Qual a abrangência geográfica e como a empresa atende cada região (unidades, franquias ou atendimento nacional e online)?',
           type: 'textarea',
-          helpText: 'A IA precisa saber a abrangência geográfica para reuniões presenciais e para responder sobre cobertura.',
+          helpText: 'A IA precisa saber onde há atendimento presencial e onde é online para responder sobre cobertura. Se houver unidades ou franquias regionais, descreva-as; se o atendimento for nacional ou remoto, deixe claro.',
         },
         {
           id: 'conselho_eventos',
@@ -3483,7 +3495,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_fundadores',
           label: 'Quem são os fundadores/sócios, quais suas credenciais e livros/obras publicadas?',
           type: 'textarea',
-          helpText: 'Autoridade dos fundadores gera confiança. A IA pode citar credenciais e obras quando pertinente.',
+          helpText: 'Autoridade dos fundadores gera confiança. Inclua credenciais e obras (por exemplo, Gustavo Succi, criador do modelo e autor do livro e do Método A.M.O.R; Luciano Garcia, cofundador; e os professores de peso da formação). A IA cita quando pertinente.',
         },
         {
           id: 'conselho_cases',
@@ -3495,7 +3507,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'conselho_metricas',
           label: 'Métricas de autoridade e mídia (nº de empresas atendidas, conselheiros formados, horas de conselho, anos de mercado, imprensa).',
           type: 'textarea',
-          helpText: 'Números de escala e aparições na mídia funcionam como prova social objetiva.',
+          helpText: 'Números de escala e mídia funcionam como prova social objetiva (por exemplo, empresas com conselho ativo, conselheiros formados, valuation somado dos clientes, anos de mercado, imprensa). Mantenha os números atualizados e verdadeiros.',
         },
         {
           id: 'conselho_conteudos',
@@ -3516,7 +3528,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           label: 'Qual o público prioritário da IA?',
           type: 'select',
           helpText: 'Define o foco padrão da IA quando o perfil ainda não está claro.',
-          options: ['Empresas (Motor A)', 'Conselheiros/candidatos (Motor B)', 'Ambos — a IA identifica o perfil no início da conversa'],
+          options: ['Empresas (Motor A)', 'Conselheiros/candidatos (Motor B)', 'Ambos (a IA identifica o perfil no início da conversa)'],
         },
         {
           id: 'conselho_identificar_perfil',
@@ -3526,15 +3538,21 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
         },
         {
           id: 'conselho_ctas',
-          label: 'Qual o CTA principal de cada motor (ex.: diagnóstico de governança gratuito p/ empresas; sessão de elegibilidade p/ candidatos)?',
+          label: 'Qual o CTA principal de cada motor (por exemplo, Diagnóstico de Maturidade e falar com o time para empresas; Teste de Perfil e conversa sobre a próxima turma para candidatos)?',
           type: 'textarea',
-          helpText: 'O CTA é o objetivo de conversão de cada fluxo. A IA conduz a conversa até ele.',
+          helpText: 'O CTA é o objetivo de conversão de cada fluxo. Ancore nos CTAs reais do CMJ para a IA conduzir a conversa até ele.',
+        },
+        {
+          id: 'conselho_experiencias_entrada',
+          label: 'Quais experiências de entrada de baixo compromisso a empresa oferece e como a IA deve usá-las como porta de entrada?',
+          type: 'textarea',
+          helpText: 'Para um lead que ainda não está pronto, a IA oferece um primeiro passo leve antes do conselho ou da formação. Liste o que existe (por exemplo, o Diagnóstico de Maturidade, o Teste de Perfil, o guia "O JOGO", o livro, o podcast, aulas ou lives, imersões) e diga por qual começar conforme o momento do lead.',
         },
         {
           id: 'conselho_nutricao',
           label: 'Como a IA deve nutrir um lead de ciclo longo que diz "vou pensar"?',
           type: 'textarea',
-          helpText: 'Em B2B de alto ticket, a maioria não fecha na primeira conversa. Defina a cadência de follow-up e os ganchos de retorno.',
+          helpText: 'Em B2B de alto ticket, a maioria não fecha na primeira conversa. Defina a cadência de follow-up e os ganchos de retorno, subindo o lead pelos degraus (material ou diagnóstico, depois evento ou aula, depois conversa com o time) sem pressão.',
         },
         {
           id: 'conselho_nunca_prometer',
