@@ -3,11 +3,15 @@ import { prisma } from '@zappiq/database';
 import {
   resolveMiraAccess,
   computeMiraQuota,
+  MIRA_TRIAL_ALVOS,
   type MiraAccess,
   type MiraQuota,
   type PlanId,
 } from '@zappiq/shared';
 import { logger } from '../utils/logger.js';
+
+/** Chave de mês reservada (nunca é um 'YYYY-MM' real) para o ledger vitalício do teste grátis. */
+const TRIAL_LEDGER_KEY = 'TRIAL';
 
 /*
  * ═════════════════════════════════════════════════════════════════
@@ -29,7 +33,11 @@ import { logger } from '../utils/logger.js';
  */
 
 export interface MiraEntitlementView {
-  access: MiraAccess & { source: 'addon' | 'included' | 'alpha' | null };
+  access: MiraAccess & {
+    source: 'addon' | 'included' | 'alpha' | 'trial' | null;
+    /** Pode ativar o teste grátis agora (nunca ativou e não tem faixa/inclusão). */
+    trialAvailable: boolean;
+  };
   quota: MiraQuota;
   monthKey: string;
 }
@@ -53,30 +61,54 @@ export async function getMiraEntitlement(orgId: string): Promise<MiraEntitlement
 
   const base = resolveMiraAccess(plan, addons);
   const alpha = settings.miraAlpha === true;
-  const entitled = base.entitled || alpha;
-  const source: 'addon' | 'included' | 'alpha' | null = base.entitled
+  const trialActive = Boolean(settings.miraTrialActivatedAt);
+  const entitled = base.entitled || alpha || trialActive;
+  const source: 'addon' | 'included' | 'alpha' | 'trial' | null = base.entitled
     ? (base.reason as 'addon' | 'included')
     : alpha
       ? 'alpha'
-      : null;
+      : trialActive
+        ? 'trial'
+        : null;
   // Alpha sem assinatura: opera na faixa de entrada para ter cota funcional.
+  // Trial não tem faixa real (tier fica null; a cota é o teto vitalício).
   const tier = base.tier ?? (alpha ? 'MIRA_ESSENCIAL' : null);
+  const trialAvailable = !base.entitled && !alpha && !trialActive;
 
   const monthKey = currentMonthKey();
-  let used = 0;
-  let packExtra = 0;
-  if (entitled) {
+  let quota: MiraQuota;
+  if (source === 'trial') {
+    // Cota vitalícia (nunca reseta): ledger com chave reservada 'TRIAL'.
     const ledger = await (prisma as any).miraUsageMonthly.findUnique({
-      where: { organizationId_monthKey: { organizationId: orgId, monthKey } },
-      select: { used: true, packExtra: true },
+      where: { organizationId_monthKey: { organizationId: orgId, monthKey: TRIAL_LEDGER_KEY } },
+      select: { used: true },
     });
-    used = ledger?.used ?? 0;
-    packExtra = ledger?.packExtra ?? 0;
+    const used = ledger?.used ?? 0;
+    quota = {
+      tierQuota: MIRA_TRIAL_ALVOS,
+      packExtra: 0,
+      total: MIRA_TRIAL_ALVOS,
+      used,
+      remaining: Math.max(0, MIRA_TRIAL_ALVOS - used),
+      blocked: used >= MIRA_TRIAL_ALVOS,
+    };
+  } else {
+    let used = 0;
+    let packExtra = 0;
+    if (entitled) {
+      const ledger = await (prisma as any).miraUsageMonthly.findUnique({
+        where: { organizationId_monthKey: { organizationId: orgId, monthKey } },
+        select: { used: true, packExtra: true },
+      });
+      used = ledger?.used ?? 0;
+      packExtra = ledger?.packExtra ?? 0;
+    }
+    quota = computeMiraQuota(tier, used, packExtra);
   }
 
   return {
-    access: { ...base, entitled, tier, source },
-    quota: computeMiraQuota(tier, used, packExtra),
+    access: { ...base, entitled, tier, source, trialAvailable },
+    quota,
     monthKey,
   };
 }
@@ -93,8 +125,28 @@ export class MiraQuotaExceededError extends Error {
 
 export async function consumeMiraQuota(orgId: string): Promise<MiraQuota> {
   const ent = await getMiraEntitlement(orgId);
-  if (!ent.access.entitled || !ent.access.tier) throw new MiraQuotaExceededError(ent.quota);
+  if (!ent.access.entitled) throw new MiraQuotaExceededError(ent.quota);
+  if (ent.access.source !== 'trial' && !ent.access.tier) throw new MiraQuotaExceededError(ent.quota);
   if (ent.quota.blocked) throw new MiraQuotaExceededError(ent.quota);
+
+  if (ent.access.source === 'trial') {
+    const updated = await (prisma as any).miraUsageMonthly.upsert({
+      where: { organizationId_monthKey: { organizationId: orgId, monthKey: TRIAL_LEDGER_KEY } },
+      create: { organizationId: orgId, monthKey: TRIAL_LEDGER_KEY, used: 1 },
+      update: { used: { increment: 1 } },
+      select: { used: true },
+    });
+    const used = updated.used as number;
+    return {
+      tierQuota: MIRA_TRIAL_ALVOS,
+      packExtra: 0,
+      total: MIRA_TRIAL_ALVOS,
+      used,
+      remaining: Math.max(0, MIRA_TRIAL_ALVOS - used),
+      blocked: used >= MIRA_TRIAL_ALVOS,
+    };
+  }
+
   const monthKey = ent.monthKey;
   const updated = await (prisma as any).miraUsageMonthly.upsert({
     where: { organizationId_monthKey: { organizationId: orgId, monthKey } },

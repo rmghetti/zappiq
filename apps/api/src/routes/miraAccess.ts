@@ -8,6 +8,7 @@ import {
   MIRA_TIER_KEYS,
   MIRA_PACK_KEYS,
   MIRA_PACKS,
+  MIRA_TRIAL_ALVOS,
   ADDONS_V4_STRIPE,
 } from '@zappiq/shared';
 import { env } from '../config/env.js';
@@ -42,9 +43,44 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
           tiers: listMiraTiers(),
           packs: listMiraPacks(),
           includedByPlan: MIRA_INCLUDED_TIER_BY_PLAN,
+          trialAlvos: MIRA_TRIAL_ALVOS,
         },
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/mira-access/trial/activate — teste grátis (SEM Stripe, SEM cartão).
+// Uma vez por org: libera uma cota VITALÍCIA de MIRA_TRIAL_ALVOS Alvos (não
+// mensal, não reseta). Mesmo padrão de flag do settings.miraAlpha — grava
+// settings.miraTrialActivatedAt e a entitlement resolve source:'trial'.
+// Guarda-corpo: só quem nunca ativou e ainda não tem faixa/inclusão.
+router.post('/trial/activate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const current = await getMiraEntitlement(orgId);
+    if (current.access.entitled) {
+      res.status(400).json({
+        error: 'already_entitled',
+        message: 'Esta conta já tem acesso ao Mira Prospects (faixa ativa, inclusa no plano, ou teste em andamento).',
+      });
+      return;
+    }
+    if (!current.access.trialAvailable) {
+      res.status(400).json({ error: 'trial_already_used', message: 'O teste grátis desta conta já foi usado.' });
+      return;
+    }
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const settings = (org?.settings as any) ?? {};
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { settings: { ...settings, miraTrialActivatedAt: new Date().toISOString() } },
+    });
+    logger.info(`[Mira] teste grátis ativado org=${orgId} (${MIRA_TRIAL_ALVOS} Alvos, sem cartão)`);
+    const ent = await getMiraEntitlement(orgId);
+    res.json({ success: true, data: ent });
   } catch (err) {
     next(err);
   }
