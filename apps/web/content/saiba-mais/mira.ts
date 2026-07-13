@@ -246,6 +246,23 @@ export const miraContent: SaibaMaisContent[] = [
       'Em vez de mandar mensagem para o e-mail geral, o vendedor mapeia os decisores, encontra a Diretora de TI atual (selo web, 2 fontes) e fala com ela sobre o gargalo de operação, com ponte do sócio-administrador (selo QSA). Duas conversas, uma reunião marcada.',
   },
   {
+    featureKey: 'mira.decisores',
+    titulo: 'Mapear decisores',
+    clientSafe: true,
+    oQueE:
+      'O botão Mapear decisores busca quem manda em cada área da conta-alvo agora: Diretor, Head, Gerente, C-level. A Mira procura no LinkedIn e em páginas públicas de liderança pelo índice de busca (sem usar login de rede social) e traz nome e cargo atual de cada responsável, priorizando as áreas compradoras que você definiu no Perfil.',
+    paraQueServe:
+      'Serve para falar com a pessoa certa de primeira. O quadro societário (QSA) mostra os donos; este botão completa o mapa com quem opera as áreas no dia a dia, que muitas vezes é quem sente a dor e patrocina a compra.',
+    comoImplementar: [
+      'Abra o dossiê do Alvo e clique em Mapear decisores.',
+      'Os encontrados entram no Comitê de compra com o selo da fonte (LinkedIn ou web) e a porcentagem de confiança.',
+      'Nome sem fonte verificável é descartado automaticamente: a Mira não inventa gente.',
+      'Sem e-mail e telefone nesta etapa: contato direto vem do seu CRM ou do relacionamento (a Mira não coleta contato pessoal sem base legal).',
+    ],
+    exemploResultado:
+      'Num Alvo industrial, o QSA trazia só os dois sócios. O Mapear decisores encontrou o Diretor de TI e a Gerente de Infraestrutura atuais, com selo LinkedIn. O roteiro de abordagem passou a falar com quem realmente decide a compra técnica.',
+  },
+  {
     featureKey: 'mira.dossie.demandas',
     titulo: 'Demandas recentes',
     clientSafe: true,

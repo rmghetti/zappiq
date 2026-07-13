@@ -446,6 +446,7 @@ function AlvoActions({
           {deepening ? 'Analisando…' : 'Aprofundar com IA'}
         </button>
       )}
+      {alvo.status !== 'ARCHIVED' && <SaibaMais featureKey="mira.aprofundar" />}
       {alvo.status !== 'ARCHIVED' && (
         <button
           onClick={mapearDecisores}
@@ -457,6 +458,7 @@ function AlvoActions({
           {mappingDec ? 'Mapeando…' : 'Mapear decisores'}
         </button>
       )}
+      {alvo.status !== 'ARCHIVED' && <SaibaMais featureKey="mira.decisores" />}
       {alvo.status === 'DELIVERED' && alvo.dealId ? (
         <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
           <CheckCircle2 size={15} /> No CRM
