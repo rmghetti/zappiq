@@ -240,6 +240,11 @@ model Organization {
   appointmentTypes        AppointmentType[] // Agendamento — tipos oferecidos pela IA
   appointments            Appointment[] // Agendamento — agenda interna (hub)
   calendarConnections     CalendarConnection[] // Agendamento — Google/Microsoft conectados
+  // Mira Prospects — inteligência de oportunidades (add-on)
+  miraPerfil              MiraPerfil?
+  miraAlvos               MiraAlvo[]
+  miraReleases            MiraRelease[]
+  miraUsageMonthly        MiraUsageMonthly[]
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
@@ -1486,4 +1491,269 @@ model DiscountCoupon {
 
   @@index([productKey])
   @@map("discount_coupons")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MIRA PROSPECTS — inteligência e qualificação de oportunidades
+// -------------------------------------------------------------------
+// Add-on pago (Growth+; incluído em Business/Enterprise). Fonte
+// comercial: packages/shared/src/miraEntitlement.ts. Todas as tabelas
+// são POR TENANT (organizationId). O Alvo é a unidade de valor: só
+// conta na cota quando passa o gate de qualidade (status READY+).
+// contactId/dealId são ids "soltos" de propósito (pouso no CRM sem
+// acoplar cascade aos modelos quentes Contact/Deal).
+// LGPD: dado de PF (MiraDecisor) carrega fonte/baseLegal/lineage.
+// ═══════════════════════════════════════════════════════════════════
+
+enum MiraAlvoStatus {
+  DISCOVERED // candidato achado (Motor A ou B), ainda cru
+  QUALIFYING // agentes trabalhando / re-mapeamento em loop
+  READY // passou o gate de qualidade — CONTA NA COTA
+  DELIVERED // entregue (pousou no CRM e/ou saiu em relatório)
+  ARCHIVED // descartado (fora do ICP, duplicado, pedido do cliente)
+}
+
+enum MiraAlvoKind {
+  B2B // pessoa jurídica (CNPJ)
+  B2C // pessoa física / negócio local
+}
+
+enum MiraMotor {
+  BASE_INSTALADA // Motor A — carteira/CRM do cliente
+  DESCOBERTA // Motor B — net-new (CNPJ/Places)
+}
+
+// Perfil de Prospecção (ICP) — 1 por org. Gerado pelo survey do módulo
+// (Motor 0), reaproveitando o contexto do Treinar IA quando existir.
+model MiraPerfil {
+  id               String       @id @default(cuid())
+  organizationId   String       @unique
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Estruturado (não texto solto): segmento, subsegmentos, catálogo,
+  // diferenciais, concorrentes, nicho-alvo, áreas compradoras, ticket.
+  segmento         String?
+  subsegmentos     String[]     @default([])
+  catalogo         Json         @default("[]") // [{nome, descricao, ticketMedio?}]
+  diferenciais     String[]     @default([])
+  concorrentes     String[]     @default([])
+  // ICP: quem compra (firmografia B2B e/ou perfil B2C)
+  icpFirmografia   Json         @default("{}") // {cnaes[], portes[], regioes[], faturamento?}
+  icpB2c           Json         @default("{}") // {perfil, regioes[], gatilhos[]}
+  areasCompradoras String[]     @default([]) // papéis-alvo do comitê (ex.: CEO, TI, CISO)
+  modo             MiraAlvoKind @default(B2B)
+  // Score de prontidão do perfil (0-100) — análogo ao aiReadinessScore.
+  prontidao        Int          @default(0)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@map("mira_perfis")
+}
+
+// O Alvo — conta qualificada com dossiê. Unidade de valor e de cota.
+model MiraAlvo {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  kind           MiraAlvoKind   @default(B2B)
+  motor          MiraMotor
+  status         MiraAlvoStatus @default(DISCOVERED)
+
+  // Identificação da conta-alvo
+  nome              String // razão social / nome do negócio
+  nomeFantasia      String?
+  cnpj              String? // B2B (dado público de PJ)
+  cnae              String?
+  porte             String? // MEI/ME/EPP/DEMAIS + regime quando conhecido
+  situacaoCadastral String?
+  municipio         String?
+  uf                String?
+  site              String?
+  placeId           String? // Google Places (negócio local)
+
+  // Dossiê (blocos 1:1 como campos/JSON; 1:N em tabelas próprias)
+  miraScore       Int? // 0-100 (null até o gate)
+  scoreBreakdown  Json? // {fatores: [{nome, peso, valor, motivo}]}
+  confianca       Int? // 0-100 — completude/verificação do dossiê
+  resumo          String? @db.Text // parágrafo executivo do Alvo
+  janelaEntrada   Json? // {gatilho, momento, urgencia, evidencia}
+  processoCompras Json? // {modo, cicloOrcamentario, cadeiaAprovacao, fontes[]}
+  whiteSpace      Json? // Motor A: {jaCompra[], oportunidades[]} (catálogo x conta)
+
+  // Pouso no CRM (ids soltos, sem cascade — ver cabeçalho da seção)
+  contactId String?
+  dealId    String?
+
+  // Cota/telemetria
+  countedInQuota Boolean @default(false) // virou READY e descontou cota
+  quotaMonth     String? // 'YYYY-MM' em que consumiu cota
+  custoCreditos  Int     @default(0) // custo de enriquecimento acumulado
+  fontes         Json    @default("[]") // [{campo, url, data, confianca}] — lineage agregado
+
+  decisores     MiraDecisor[]
+  demandas      MiraDemanda[]
+  oportunidades MiraOportunidade[]
+  incumbentes   MiraIncumbente[]
+  releases      MiraRelease[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, cnpj]) // dedup B2B por org (null permite múltiplos B2C)
+  @@index([organizationId, status])
+  @@index([organizationId, miraScore])
+  @@index([organizationId, quotaMonth])
+  @@map("mira_alvos")
+}
+
+// Comitê de compra — decisores nominais por papel (dado de PF: lineage!)
+model MiraDecisor {
+  id            String   @id @default(cuid())
+  alvoId        String
+  alvo          MiraAlvo @relation(fields: [alvoId], references: [id], onDelete: Cascade)
+  nome          String
+  papel         String // papel no ICP do cliente (ex.: 'Diretor de TI', 'CISO')
+  arquetipo     String? // CHAMPION | ECONOMIC_BUYER | TECHNICAL_BUYER | USER | LEGAL_PROCUREMENT | EXEC_SPONSOR
+  senioridade   String?
+  isChampion    Boolean  @default(false)
+  vinculoQsa    Boolean  @default(false) // veio do quadro societário (fonte oficial)
+  contato       Json? // {email?, phone?, whatsapp?} — só de fonte lícita
+  perfilPublico Json? // {temas[], estilo, ganchos[], fontes[]} — pegada pública
+  fonte         String? // origem principal (url)
+  baseLegal     String   @default("legitimo_interesse") // LGPD
+  lineage       Json     @default("[]") // [{campo, url, data}]
+  confianca     Int      @default(0) // 0-100 (2+ fontes = alta)
+  contactId     String? // pouso em Contact (id solto)
+  createdAt     DateTime @default(now())
+
+  @@index([alvoId])
+  @@map("mira_decisores")
+}
+
+// Demandas recentes da conta (nº1 e nº2, com evidência)
+model MiraDemanda {
+  id        String    @id @default(cuid())
+  alvoId    String
+  alvo      MiraAlvo  @relation(fields: [alvoId], references: [id], onDelete: Cascade)
+  rank      Int // 1 | 2
+  descricao String    @db.Text
+  evidencia String?   @db.Text
+  fonte     String? // url
+  dataFonte DateTime?
+  confianca Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@index([alvoId, rank])
+  @@map("mira_demandas")
+}
+
+// Oportunidades de portfólio (demanda x catálogo do cliente)
+model MiraOportunidade {
+  id            String   @id @default(cuid())
+  alvoId        String
+  alvo          MiraAlvo @relation(fields: [alvoId], references: [id], onDelete: Cascade)
+  rank          Int // 1 | 2
+  produto       String // item do catálogo do MiraPerfil
+  demandaRank   Int? // qual demanda ela resolve (1|2)
+  racional      String   @db.Text
+  valorEstimado Decimal?
+  roteiro       Json? // {porSponsor: [{decisorId, mensagem, canal}]} — Abordagem/SPICED
+  createdAt     DateTime @default(now())
+
+  @@index([alvoId, rank])
+  @@map("mira_oportunidades")
+}
+
+// Fornecedores incumbentes na conta
+model MiraIncumbente {
+  id              String   @id @default(cuid())
+  alvoId          String
+  alvo            MiraAlvo @relation(fields: [alvoId], references: [id], onDelete: Cascade)
+  fornecedor      String
+  categoria       String?
+  evidencia       String?  @db.Text
+  fonte           String?
+  deslocabilidade String? // ALTA | MEDIA | BAIXA + motivo curto
+  createdAt       DateTime @default(now())
+
+  @@index([alvoId])
+  @@map("mira_incumbentes")
+}
+
+// Releases dos Alvos — monitoramento semanal (cron) das contas entregues
+model MiraRelease {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  alvoId             String
+  alvo               MiraAlvo     @relation(fields: [alvoId], references: [id], onDelete: Cascade)
+  titulo             String
+  resumo             String       @db.Text
+  url                String?
+  dataPublicacao     DateTime?
+  // Por que é relevante para as ofertas DESTE cliente + gancho de abordagem
+  relevancia         String       @db.Text
+  anguloAbordagem    String?      @db.Text
+  produtoRelacionado String? // item do catálogo com sinergia
+  confianca          Int          @default(0)
+  lida               Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([alvoId])
+  @@map("mira_releases")
+}
+
+// Ledger mensal de cota (used = Alvos READY no mês; packExtra = packs one-shot)
+model MiraUsageMonthly {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  monthKey       String // 'YYYY-MM'
+  used           Int          @default(0)
+  packExtra      Int          @default(0) // alvos extras comprados NESTE mês (não acumula)
+  packPurchases  Json         @default("[]") // [{pack, alvos, priceBrl, stripeRef?, at}]
+  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, monthKey])
+  @@map("mira_usage_monthly")
+}
+
+// Índice local da base aberta de CNPJ (Receita Federal) — tabela
+// COMPARTILHADA da plataforma (não é dado de tenant, é registro público),
+// por isso SEM organizationId/RLS. Alimentada pelo job de ingestão
+// (scripts/ingest-cnpj-base.ts, rodado no servidor via .command).
+// Só guarda o mínimo pra achar candidato por CNAE/UF/situação; firmografia
+// completa, QSA e decisores continuam vindo do enriquecimento por CNPJ
+// (Receita/BrasilAPI) já existente, alvo por alvo — nunca duplicado aqui.
+model MiraCnpjIndex {
+  cnpj              String   @id // 14 dígitos
+  razaoSocial       String?
+  nomeFantasia      String?
+  cnae              String?
+  situacaoCadastral String? // ATIVA | BAIXADA | SUSPENSA | INAPTA | NULA
+  municipio         String?
+  uf                String?
+  atualizadoEm      DateTime @updatedAt
+
+  @@index([cnae, uf, situacaoCadastral])
+  @@index([uf, situacaoCadastral])
+  @@map("mira_cnpj_index")
+}
+
+// Log de enriquecimento (telemetria de match rate e custo por fonte)
+model MiraEnriquecimentoLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  alvoId         String?
+  fonte          String // 'cnpj_receita' | 'places' | provedor licenciado
+  tipo           String // 'firmografia' | 'email' | 'phone' | 'news' | ...
+  resultado      String // 'valido' | 'nao_encontrado' | 'erro'
+  custoCreditos  Int      @default(0)
+  latenciaMs     Int?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([fonte, resultado])
+  @@map("mira_enriquecimento_log")
 }

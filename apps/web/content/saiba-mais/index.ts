@@ -22,6 +22,7 @@ import { qualidadeContent } from './qualidade';
 import { settingsContent } from './settings';
 import { billingContent } from './billing';
 import { auditoriaContent } from './auditoria';
+import { miraContent } from './mira';
 
 const ALL_AREAS: SaibaMaisContent[][] = [
   dashboardContent,
@@ -38,6 +39,7 @@ const ALL_AREAS: SaibaMaisContent[][] = [
   settingsContent,
   billingContent,
   auditoriaContent,
+  miraContent,
 ];
 
 const ALL: SaibaMaisContent[] = ALL_AREAS.flat();

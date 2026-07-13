@@ -95,4 +95,29 @@ export const ADDONS_V4_STRIPE: Record<string, AddonStripeIds & { meterId?: strin
     productId: 'prod_UpxguUhshUR7wM',
     priceIds: { monthly: 'price_1TrQaNKlp5SWv74X396FZRe8', annual: 'price_1TrR8HKlp5SWv74XAH5kKpLg' },  // R$ 1.297/mes | R$ 12.451,20/ano (LIVE)
   },
+
+  // ─────────────────────────────────────────────────────────
+  // Mira Prospects (add-on de inteligência de oportunidades) —
+  // faixas recorrentes (monthly/annual) + packs one-shot (+20%).
+  // IDs PENDENTES: gerar via ~/Desktop/Mira-Stripe-Setup.command
+  // (o .command cria products/prices e preenche aqui). Enquanto
+  // vazio, o checkout do Mira fica desabilitado (fail-closed).
+  // Preços fonte: miraEntitlement.ts (MIRA_TIERS / MIRA_PACKS).
+  // ─────────────────────────────────────────────────────────
+  MIRA_ESSENCIAL: {
+    productId: 'prod_UrwBNAGANErGnN',
+    priceIds: { monthly: 'price_1TsCJLKlp5SWv74XFNich22q', annual: 'price_1TsCJMKlp5SWv74XQGIE5zY3' },  // R$ 297/mes | R$ 2.851,20/ano
+  },
+  MIRA_PRO: {
+    productId: 'prod_UrwBXrFf9KMHCd',
+    priceIds: { monthly: 'price_1TsCJNKlp5SWv74XENFhNjVt', annual: 'price_1TsCJOKlp5SWv74XKfLIRo06' },  // R$ 597/mes | R$ 5.731,20/ano
+  },
+  MIRA_SCALE: {
+    productId: 'prod_UrwBso5H4AFMUT',
+    priceIds: { monthly: 'price_1TsCJPKlp5SWv74XMsqUeMVI', annual: 'price_1TsCJPKlp5SWv74XWqVDwz9L' },  // R$ 1.197/mes | R$ 11.491,20/ano
+  },
+  MIRA_PACKS: {
+    productId: 'prod_UrwBJAG2NqJ4pq',
+    priceIds: { pack_50: 'price_1TsCJQKlp5SWv74Xs28rfNF2', pack_200: 'price_1TsCJRKlp5SWv74XZp2xb5nJ', pack_600: 'price_1TsCJRKlp5SWv74XR3CIhTLh' },  // R$ 356 | R$ 716 | R$ 1.436 one-shot
+  },
 };

@@ -10,3 +10,4 @@ export * from './planChange.js';
 export * from './addonGrants.js';
 export * from './couponCatalog.js';
 export * from './schedulingEntitlement.js';
+export * from './miraEntitlement.js';
