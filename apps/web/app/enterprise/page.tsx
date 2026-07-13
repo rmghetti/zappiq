@@ -20,7 +20,7 @@ const FEATURES_BLOCKS = [
   {
     icon: Radar,
     accent: 'from-purple-600 to-indigo-600',
-    title: 'Radar 360° incluído',
+    title: 'Radar 360° Pro incluído',
     desc: 'Observabilidade de negócio com BI, previsão de pipeline por ML e benchmarking. Valor equivalente a R$ 397/mês, incluso no plano.',
   },
   {
@@ -214,7 +214,7 @@ export default function EnterprisePage() {
           </div>
 
           <p className="text-center text-xs text-gray-500 mt-6">
-            Payback típico: 30–90 dias, considerando substituição de atendentes + redução de perda de leads + ganho de conversão via Radar 360°.
+            Payback típico: 30–90 dias, considerando substituição de atendentes + redução de perda de leads + ganho de conversão via Radar 360° Pro.
           </p>
         </div>
       </section>

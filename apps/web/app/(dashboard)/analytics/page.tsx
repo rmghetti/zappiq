@@ -273,7 +273,7 @@ export default function AnalyticsPage() {
       <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Radar 360°</h1>
             <SaibaMais featureKey="analytics.pagina" />
           </div>
           <p className="text-sm text-gray-500 mt-1">Visão geral da sua operação</p>

@@ -193,23 +193,18 @@ const FAQS: FaqItem[] = [
   // ───────────────────────────── Planos ─────────────────────────────────
   {
     group: 'Planos',
-    q: 'Qual a diferença entre Radar Insights e Radar 360°?',
-    a: `Radar Insights é o painel de métricas que já vem em todos os planos: quantos atendimentos, conversões, tempo médio, etc. Radar 360° é o BI executivo: dashboards do jeito que você precisa, alertas quando algo foge do normal, previsão de vendas por IA, comparativo anônimo com o seu setor e exportação pro Power BI/Looker. Já vem incluso no Scale e no Enterprise; nos planos menores vira add-on opcional de R$ ${RADAR_360_PRICE}/mês.`,
+    q: 'Qual a diferença entre o Radar 360° e o Radar 360° Pro?',
+    a: `O Radar 360° é o painel de métricas que já vem em todos os planos: quantos atendimentos, conversões, tempo médio, etc. O Radar 360° Pro é o BI executivo: dashboards do jeito que você precisa, alertas quando algo foge do normal, previsão de vendas por IA, comparativo anônimo com o seu setor e exportação pro Power BI/Looker. Já vem incluso no Scale e no Enterprise; nos planos menores vira add-on opcional de R$ ${RADAR_360_PRICE}/mês.`,
   },
   {
     group: 'Planos',
     q: 'O que diferencia os planos Scale e Enterprise?',
-    a: `Scale (R$ 1.497/mês) já vem com uptime 99,9% em contrato e crédito automático se cair, Radar 360° incluso, login único corporativo, contato direto com o DPO (resposta em 48h), gerente de conta dedicado, 20h por mês pra integrações customizadas e histórico de 24 meses. Enterprise (sob consulta, a partir de R$ ${ENTERPRISE_MIN.toLocaleString('pt-BR')}/mês) adiciona ambiente isolado só seu, time de monitoramento dedicado 24/7, 40h por mês pra integrações, histórico de até 5 anos e contratos sob medida.`,
+    a: `Scale (R$ 1.497/mês) já vem com Radar 360° Pro incluso, login único corporativo, contato direto com o DPO (resposta em 48h), gerente de conta dedicado, 20h por mês pra integrações customizadas e histórico de 24 meses. Enterprise (sob consulta, a partir de R$ ${ENTERPRISE_MIN.toLocaleString('pt-BR')}/mês) adiciona ambiente isolado só seu, time de monitoramento dedicado 24/7, 40h por mês pra integrações, histórico de até 5 anos e contratos sob medida.`,
   },
   {
     group: 'Planos',
     q: 'Quantas mensagens posso enviar em cada plano?',
     a: `Lite inclui 200 disparos por mês, Growth 5.000, Scale 60.000 e Enterprise ilimitado. Precisou de mais? Pacote de 10 mil disparos extras por R$ ${EXTRA_BROADCASTS_PRICE}. A tarifa que a Meta cobra pelas conversas é repassada direto da tabela oficial dela, sem remarcação.`,
-  },
-  {
-    group: 'Planos',
-    q: 'Existe garantia de uptime no contrato?',
-    a: 'Sim, a partir do plano Scale. 99,9% de uptime escrito em contrato, com crédito automático de 10%, 25% ou 50% da mensalidade se cair além do combinado. Recuperação completa em até 4 horas. Relatório mensal público em status.zappiq.com.br. Lite e Growth rodam na mesma infra, mas sem SLA contratual (alvo interno de 99,5%).',
   },
 
   // ────────────────────────────── Iza ───────────────────────────────────

@@ -54,7 +54,7 @@ const LOGO_CONFIGS: Record<string, LogoConfig> = {
     ),
   },
   radar: {
-    subtitle: 'ANALYTICS',
+    subtitle: 'RADAR 360°',
     accentColor: '#7C3AED',
     innerIcon: (
       <>

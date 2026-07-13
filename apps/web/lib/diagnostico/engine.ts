@@ -137,7 +137,7 @@ export function recomendar(a: Answers): Recommendation {
 
   if (one(a, 'agendamento') === 'critico' && plano === 'LITE') addons.push({ nome: 'Agendamento pela IA', motivo: 'Agendamento é crítico pra você e, no Lite, entra como add-on (no Growth pra cima já vem incluso).', modulo: 'Agenda', preco: 'R$ 49/mês' });
 
-  if ((compliance === 'desejavel' || objetivos.includes('medir')) && plano !== 'SCALE' && plano !== 'ENTERPRISE') addons.push({ nome: 'Radar 360', motivo: 'Você quer medir e controlar a operação, e o Radar 360 traz a observabilidade executiva (já vem incluso no Scale).', modulo: 'Analytics e Radar 360', preco: 'R$ 397/mês' });
+  if ((compliance === 'desejavel' || objetivos.includes('medir')) && plano !== 'SCALE' && plano !== 'ENTERPRISE') addons.push({ nome: 'Radar 360° Pro', motivo: 'Você quer medir e controlar a operação, e o Radar 360° Pro traz a observabilidade executiva (já vem incluso no Scale).', modulo: 'Radar 360°', preco: 'R$ 397/mês' });
 
   if (one(a, 'numeros') !== 'um' && one(a, 'numeros') && (plano === 'LITE' || plano === 'GROWTH')) addons.push({ nome: 'Número de WhatsApp extra', motivo: 'Você opera mais de um número ou unidade, e cada número extra tem fila independente.', modulo: 'Conversas', preco: 'R$ 137/mês' });
 

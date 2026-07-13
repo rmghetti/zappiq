@@ -296,7 +296,7 @@ const PRODUCTS = [
     mockup: 'campaign',
   },
   {
-    id: 'radar', icon: BarChart3, name: 'Radar Insights', tagline: 'Inteligência Analítica em Tempo Real',
+    id: 'radar', icon: BarChart3, name: 'Radar 360°', tagline: 'Inteligência Analítica em Tempo Real',
     desc: 'Dashboards executivos com todas as métricas que importam: conversão, performance de agentes, sentimento de clientes, receita gerada e tendências. Decisões baseadas em dados, não em achismo.',
     bullets: [
       'KPIs em tempo real: conversas, automação, CSAT, receita gerada via WhatsApp',

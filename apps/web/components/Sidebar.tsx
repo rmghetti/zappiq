@@ -37,7 +37,7 @@ const navItems = [
   // Maestro (GA 2026-05-22): builder de fluxos visível. Backend /api/flows pronto;
   // publicar liga maestro.enabled na org e o gate suporta FIRST_CONTACT/KEYWORD.
   { href: '/flows', label: 'Maestro', icon: GitBranch },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/analytics', label: 'Radar 360°', icon: BarChart3 },
   // PR #106 — Treinar IA destacado: principal entry point pra evolução contínua do agente.
   { href: '/ai-training', label: 'Treinar IA', icon: Sparkles, highlight: true },
   // FASE 2.2b #244 — Qualidade da IA do cliente (dashboard + auto-fix + audit).

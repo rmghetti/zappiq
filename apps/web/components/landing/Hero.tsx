@@ -464,8 +464,8 @@ export function Hero() {
               {isIG ? 'Instagram' : 'WhatsApp'}
             </div>
 
-            {/* iPhone frame */}
-            <div className="relative w-[340px] h-[680px] bg-[#1a1a1a] rounded-[44px] p-[10px] shadow-[0_50px_100px_-30px_rgba(17,17,17,0.4)]">
+            {/* iPhone frame · responsivo, mantém proporção 1:2 (270→300→340) pra nunca estourar viewports pequenos */}
+            <div className="relative w-[270px] h-[540px] sm:w-[300px] sm:h-[600px] lg:w-[340px] lg:h-[680px] bg-[#1a1a1a] rounded-[44px] p-[10px] shadow-[0_50px_100px_-30px_rgba(17,17,17,0.4)]">
               {/* Notch */}
               <div className="absolute top-[18px] left-1/2 -translate-x-1/2 w-[110px] h-[26px] bg-black rounded-full z-10" />
 

@@ -45,7 +45,7 @@ const problems = [
         'Nenhum controle sobre taxa de conversão ou tempo de resposta da equipe',
         'Leads entram e somem sem nenhum acompanhamento sistemático'
       ],
-      solution: 'O Radar Insights oferece dashboards completos com métricas de conversão, performance por agente, análise de sentimento e receita gerada, tudo em tempo real.',
+      solution: 'O Radar 360° oferece dashboards completos com métricas de conversão, performance por agente, análise de sentimento e receita gerada, tudo em tempo real.',
       metric: '3x mais conversões com dados acionáveis'
     }
   },

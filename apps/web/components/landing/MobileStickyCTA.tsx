@@ -6,8 +6,9 @@
  * No mobile o unico "Comecar 14 dias gratis" ficava dentro do hamburguer e
  * sumia no scroll: o caminho pro trial exigia 2 toques. Esta barra aparece
  * apos a primeira dobra e mantem o CTA sempre a um toque. So aparece < lg
- * (no desktop o CTA ja e persistente na navbar). z-30 pra ficar abaixo do
- * FAB do WhatsApp (z-40), com folga a direita pra nao sobrepor.
+ * (no desktop o CTA ja e persistente na navbar). z-30, abaixo do FAB e das
+ * janelas do WhatsAppButton (z-50): se o cliente abrir o chat, o chat some
+ * por cima da barra, o que e o comportamento certo (ele ja esta engajado).
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useState } from 'react';
@@ -31,8 +32,8 @@ export function MobileStickyCTA() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-hidden={!show}
     >
-      {/* pr-[84px] deixa livre o canto do FAB do WhatsApp (right-6 + 56px) */}
-      <div className="flex items-center gap-3 px-4 py-2.5 pr-[84px]">
+      {/* pr-[96px] deixa livre o canto do FAB do WhatsApp (right-6 + 56px + folga) */}
+      <div className="flex items-center gap-3 px-4 py-2.5 pr-[96px]">
         <div className="flex-1 min-w-0">
           <div className="text-[12.5px] font-semibold text-ink leading-tight">
             14 dias grátis, sem cartão

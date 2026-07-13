@@ -5,9 +5,8 @@
  * --------------------------------------------------------------------------
  * LÓGICA PRESERVADA 100%:
  *   - 4 planos ativos via listActivePlans() de @zappiq/shared (Iza Lite/Growth/Scale/Enterprise)
- *   - toggle anual (-20%) + Radar 360° add-on + Voz outbound (none/padrao/premium)
+ *   - toggle anual (-20%) + Radar 360° Pro add-on + Voz outbound (none/padrao/premium)
  *   - Enterprise: voz incluída, Radar incluso, sob consulta
- *   - Scale: SLA 99,9% destaque
  *   - Card "Com vs Sem ZappIQ" no fim
  *
  * Visual novo: tier cards card-soft, featured com shadow-tier-feat,
@@ -17,7 +16,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, Radar, Shield, Sparkles } from 'lucide-react';
+import { Check, Radar, Sparkles } from 'lucide-react';
 import { listActivePlans, ADDONS, getAnnualPrice, type PlanConfig } from '@zappiq/shared';
 
 const PLANS: PlanConfig[] = listActivePlans();
@@ -93,7 +92,7 @@ export function Pricing() {
                 className={`relative w-11 h-6 rounded-full transition-colors ${
                   addRadar ? 'bg-accent' : 'bg-line'
                 }`}
-                aria-label="Adicionar Radar 360"
+                aria-label="Adicionar Radar 360° Pro"
               >
                 <div
                   className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
@@ -102,7 +101,7 @@ export function Pricing() {
                 />
               </button>
               <span className="text-[12.5px] font-medium text-ink flex items-center gap-1.5">
-                <Radar size={13} className="text-accent" /> Radar 360°
+                <Radar size={13} className="text-accent" /> Radar 360° Pro
               </span>
             </div>
 
@@ -176,7 +175,7 @@ export function Pricing() {
                       </span>
                       {radarExtra > 0 && (
                         <div className="text-[11px] text-accent mt-1 flex items-center gap-1">
-                          <Radar size={10} /> +R${radarExtra} Radar 360°
+                          <Radar size={10} /> +R${radarExtra} Radar 360° Pro
                         </div>
                       )}
                       {/* V4 #163 (PR #75 hotfix): refs voice (extra/tier)
@@ -222,7 +221,7 @@ export function Pricing() {
                   {!plan.features.radar360 && addRadar && (
                     <li className="flex items-start gap-2 text-[11px] text-accent bg-accent/5 rounded-[8px] px-2 py-1.5 border border-accent/15">
                       <Radar size={12} className="flex-shrink-0 mt-0.5 text-accent" />
-                      <span className="font-medium">Radar 360° incluído</span>
+                      <span className="font-medium">Radar 360° Pro incluído</span>
                     </li>
                   )}
                 </ul>
@@ -256,7 +255,7 @@ export function Pricing() {
           </div>
           <div className="flex-1">
             <h4 className="text-[16px] font-medium text-ink tracking-tight mb-1">
-              Radar 360° · dashboards que viram decisão
+              Radar 360° Pro · dashboards que viram decisão
             </h4>
             <p className="text-[13.5px] text-muted mb-3 leading-relaxed">
               Dashboards executivos, alertas quando algo foge do normal, previsão de vendas por IA
@@ -267,33 +266,7 @@ export function Pricing() {
               href="/observabilidade"
               className="text-[13px] font-medium text-accent hover:underline inline-flex items-center gap-1"
             >
-              Conhecer o Radar 360° →
-            </Link>
-          </div>
-        </div>
-
-        {/* SLA destaque (dark) */}
-        <div
-          className="mt-6 max-w-4xl mx-auto rounded-[20px] p-6 flex flex-col sm:flex-row items-start gap-4 text-white"
-          style={{ background: '#0A0B12' }}
-        >
-          <div className="w-11 h-11 rounded-[12px] bg-white flex items-center justify-center flex-shrink-0">
-            <Shield size={20} className="text-ink" />
-          </div>
-          <div className="flex-1">
-            <h4 className="text-[16px] font-medium mb-1 tracking-tight">
-              Uptime 99,9% em contrato a partir do Scale.
-            </h4>
-            <p className="text-[13.5px] text-white/70 mb-3 leading-relaxed">
-              Se a plataforma cair além do combinado, você recebe crédito automático.
-              Relatório mensal público. Recuperação completa em até 4 horas.
-              Enterprise ainda tem time de monitoramento 24/7 dedicado só pra você.
-            </p>
-            <Link
-              href="/sla"
-              className="text-[13px] font-medium text-white hover:underline inline-flex items-center gap-1"
-            >
-              Ver termos do SLA →
+              Conhecer o Radar 360° Pro →
             </Link>
           </div>
         </div>

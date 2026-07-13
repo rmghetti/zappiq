@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 export const metadata = {
-  title: 'Radar 360°: Observabilidade de Negócio para WhatsApp | ZappIQ',
+  title: 'Radar 360° Pro: Observabilidade de Negócio para WhatsApp | ZappIQ',
   description: 'Transforme conversas em decisões. BI conversacional com cohort analysis, previsão de pipeline (ML), benchmarking e alertas proativos. Exporta para Power BI e Looker.',
 };
 
@@ -91,13 +91,13 @@ export default function ObservabilidadePage() {
         <div className="max-w-7xl mx-auto px-6 relative">
           <div className="inline-flex items-center gap-2 bg-purple-500/10 border border-purple-400/30 rounded-full px-4 py-1.5 mb-6">
             <Radar size={14} className="text-purple-300" />
-            <span className="text-xs font-semibold text-purple-200 uppercase tracking-wider">Radar 360°</span>
+            <span className="text-xs font-semibold text-purple-200 uppercase tracking-wider">Radar 360° Pro</span>
           </div>
           <h1 className="font-display text-4xl lg:text-6xl font-extrabold mb-6 max-w-4xl leading-tight">
             Transforme conversas em <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">decisões de negócio</span>.
           </h1>
           <p className="text-lg lg:text-xl text-gray-300 max-w-3xl mb-8 leading-relaxed">
-            Radar 360° é o produto de BI conversacional da ZappIQ. Não é dashboard bonito engavetado, é inteligência que vira margem e crescimento. Descubra onde seus leads caem, que agente converte mais, que palavra prevê cancelamento.
+            Radar 360° Pro é o produto de BI conversacional da ZappIQ. Não é dashboard bonito engavetado, é inteligência que vira margem e crescimento. Descubra onde seus leads caem, que agente converte mais, que palavra prevê cancelamento.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link href="#precos"
@@ -134,14 +134,14 @@ export default function ObservabilidadePage() {
               Sua operação de WhatsApp gera dados. A pergunta é: você está usando?
             </h2>
             <p className="text-gray-500 max-w-2xl mx-auto leading-relaxed">
-              A maioria das empresas usa WhatsApp como canal de atendimento. As que crescem tratam WhatsApp como fonte de inteligência. Radar 360° é a infraestrutura que faz essa travessia, sem precisar contratar time de BI.
+              A maioria das empresas usa WhatsApp como canal de atendimento. As que crescem tratam WhatsApp como fonte de inteligência. Radar 360° Pro é a infraestrutura que faz essa travessia, sem precisar contratar time de BI.
             </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 border border-gray-200">
               <div className="text-4xl font-extrabold text-gray-900 mb-2">R$ 8k–15k</div>
-              <p className="text-sm text-gray-600 leading-relaxed">Custo mensal de um analista sênior de BI. Radar 360° entrega 20–30h/mês de trabalho analítico equivalente por R$197–397.</p>
+              <p className="text-sm text-gray-600 leading-relaxed">Custo mensal de um analista sênior de BI. Radar 360° Pro entrega 20–30h/mês de trabalho analítico equivalente por R$197–397.</p>
             </div>
             <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl p-6 border border-purple-200">
               <div className="text-4xl font-extrabold text-purple-700 mb-2">7%–22%</div>
@@ -149,7 +149,7 @@ export default function ObservabilidadePage() {
             </div>
             <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-6 border border-amber-200">
               <div className="text-4xl font-extrabold text-amber-700 mb-2">&lt;30 dias</div>
-              <p className="text-sm text-gray-600 leading-relaxed">Payback típico do Radar 360°. Um ajuste de horário ou template pago pelo insight geralmente cobre o add-on do ano.</p>
+              <p className="text-sm text-gray-600 leading-relaxed">Payback típico do Radar 360° Pro. Um ajuste de horário ou template pago pelo insight geralmente cobre o add-on do ano.</p>
             </div>
           </div>
         </div>
@@ -191,7 +191,7 @@ export default function ObservabilidadePage() {
               Adicione ao seu plano ou vá direto de Enterprise
             </h2>
             <p className="text-gray-500 max-w-2xl mx-auto">
-              Radar 360° é add-on opcional dos planos Starter, Growth e Scale. Incluso por padrão no plano Enterprise.
+              Radar 360° Pro é add-on opcional dos planos Starter, Growth e Scale. Incluso por padrão no plano Enterprise.
             </p>
           </div>
 
@@ -199,7 +199,7 @@ export default function ObservabilidadePage() {
             <div className="grid grid-cols-12 bg-gray-50 px-6 py-4 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
               <div className="col-span-4">Plano base</div>
               <div className="col-span-3 text-right">Base</div>
-              <div className="col-span-3 text-right">+ Radar 360°</div>
+              <div className="col-span-3 text-right">+ Radar 360° Pro</div>
               <div className="col-span-2 text-right">Total</div>
             </div>
             {PRICING_TIERS.map((t) => (
@@ -238,10 +238,10 @@ export default function ObservabilidadePage() {
         <div className="max-w-4xl mx-auto px-6 text-center">
           <Sparkles size={40} className="mx-auto mb-5 text-amber-400" />
           <h2 className="font-display text-3xl lg:text-4xl font-extrabold mb-5">
-            Por que Radar 360° vem incluído no Enterprise?
+            Por que Radar 360° Pro vem incluído no Enterprise?
           </h2>
           <p className="text-gray-300 max-w-2xl mx-auto leading-relaxed mb-8">
-            Operação estratégica não pode depender de achismo. Enterprise é quem trata WhatsApp como canal crítico, e canal crítico exige BI em tempo real para suporte à decisão do board. Radar 360° é parte indissociável da proposta de valor Enterprise.
+            Operação estratégica não pode depender de achismo. Enterprise é quem trata WhatsApp como canal crítico, e canal crítico exige BI em tempo real para suporte à decisão do board. Radar 360° Pro é parte indissociável da proposta de valor Enterprise.
           </p>
           <Link href="/enterprise"
             className="bg-amber-400 text-gray-900 font-semibold px-7 py-4 rounded-xl hover:bg-amber-300 transition-colors inline-flex items-center gap-2">
@@ -257,7 +257,7 @@ export default function ObservabilidadePage() {
             Pronto pra parar de tomar decisão no achismo?
           </h2>
           <p className="text-purple-100 mb-8 max-w-2xl mx-auto">
-            Teste Radar 360° por 14 dias sem custo. Se não entregar insight acionável na primeira semana, cancele sem perguntar nada.
+            Teste Radar 360° Pro por 14 dias sem custo. Se não entregar insight acionável na primeira semana, cancele sem perguntar nada.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link href="/cadastro?addon=radar"

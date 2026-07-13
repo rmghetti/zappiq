@@ -104,7 +104,7 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
                 <CheckCircle2 size={14} /> Você treina, sem consultor
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200">
-                <CheckCircle2 size={14} /> LGPD · SLA · Observabilidade
+                <CheckCircle2 size={14} /> LGPD · Segurança · Observabilidade
               </span>
             </div>
           </div>

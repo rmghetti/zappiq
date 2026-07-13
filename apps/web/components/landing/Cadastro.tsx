@@ -42,7 +42,7 @@ interface FormData {
 const PLAN_OPTIONS: { id: PlanId; label: string; price: string; sub: string; highlight?: boolean }[] = [
   { id: 'IZA_LITE', label: 'Lite', price: 'R$ 247', sub: '14 dias gratis · entrada', highlight: true },
   { id: 'GROWTH', label: 'Growth', price: 'R$ 497', sub: 'Para crescer' },
-  { id: 'SCALE', label: 'Scale', price: 'R$ 1.497', sub: 'Operação seria com SLA' },
+  { id: 'SCALE', label: 'Scale', price: 'R$ 1.497', sub: 'Operação séria, multi-time' },
 ];
 
 // Deep-link de plano: normaliza o ?plan da URL (Pricing, ROI, diagnostico,

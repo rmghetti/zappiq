@@ -1,7 +1,7 @@
 import type { SaibaMaisContent } from './types';
 
 /**
- * Conteúdo do Saiba mais da área Analytics.
+ * Conteúdo do Saiba mais da área Radar 360°.
  */
 export const analyticsContent: SaibaMaisContent[] = [
   {
@@ -13,7 +13,7 @@ export const analyticsContent: SaibaMaisContent[] = [
     paraQueServe:
       'Serve para você bater o olho de manhã e saber, em segundos, se a operação está saudável: quantas conversas a IA resolveu sozinha, onde ela precisou de gente, e se apareceu algum problema que pode custar cliente ou venda.',
     comoImplementar: [
-      'Abra o menu Analytics e vá até o bloco Pulso, no topo da página.',
+      'Abra o menu Radar 360° e vá até o bloco Pulso, no topo da página.',
       'Leia o resumo do dia anterior, que já vem pronto assim que a página carrega.',
       'Se quiser uma leitura mais atual, clique em "Atualizar" (ou "Gerar com IA", na primeira vez) dentro do próprio bloco Pulso.',
     ],
@@ -23,10 +23,10 @@ export const analyticsContent: SaibaMaisContent[] = [
   },
   {
     featureKey: 'analytics.pagina',
-    titulo: 'Analytics',
+    titulo: 'Radar 360°',
     clientSafe: true,
     oQueE:
-      'A página de Analytics reúne em um só lugar os números da sua operação de atendimento. Ela é dividida em quatro blocos: Resultado (o que a operação entregou), Vendas atribuídas à IA (quanto disso virou venda), Operação (como está o atendimento no dia a dia) e Campanhas (o alcance dos disparos em massa).',
+      'A página do Radar 360° reúne em um só lugar os números da sua operação de atendimento. Ela é dividida em quatro blocos: Resultado (o que a operação entregou), Vendas atribuídas à IA (quanto disso virou venda), Operação (como está o atendimento no dia a dia) e Campanhas (o alcance dos disparos em massa).',
     paraQueServe:
       'Serve para você decidir rápido sem abrir conversa por conversa: onde a IA está indo bem, onde precisa de mais treino e se as campanhas estão trazendo resposta.',
     comoImplementar: [
@@ -36,7 +36,7 @@ export const analyticsContent: SaibaMaisContent[] = [
       'Clique numa barra do gráfico de Volume ou numa fatia do gráfico de Sentimento para abrir a lista de mensagens ou conversas por trás daquele número.',
     ],
     exemploResultado:
-      'Numa clínica com 300 conversas por mês, o dono abre o Analytics na segunda de manhã, vê que a IA resolveu 78% sozinha na semana anterior, que o sentimento das conversas ficou majoritariamente neutro e que a última campanha de reengajamento trouxe 40 respostas. Em menos de um minuto ele sabe se precisa agir em algo.',
+      'Numa clínica com 300 conversas por mês, o dono abre o Radar 360° na segunda de manhã, vê que a IA resolveu 78% sozinha na semana anterior, que o sentimento das conversas ficou majoritariamente neutro e que a última campanha de reengajamento trouxe 40 respostas. Em menos de um minuto ele sabe se precisa agir em algo.',
     relacionados: ['analytics.pulso', 'analytics.resultado.kpis'],
   },
   {
@@ -83,12 +83,12 @@ export const analyticsContent: SaibaMaisContent[] = [
       'Serve para você enxergar o retorno financeiro real da IA no atendimento, não só o número de conversas que ela respondeu.',
     comoImplementar: [
       'Marque as vendas como ganhas no CRM, na tela de Pipeline, quando elas fecharem normalmente.',
-      'Volte ao Analytics e veja o valor total dividido em "Fechada pela IA" e "Assistida pela IA", no resumo do topo.',
+      'Volte ao Radar 360° e veja o valor total dividido em "Fechada pela IA" e "Assistida pela IA", no resumo do topo.',
       'Clique num negócio da lista para abrir o detalhe e ver as mensagens da Iza que ajudaram a fechar aquela venda.',
       'Se aparecer um vínculo sugerido pela IA na caixa amarela no topo, confirme ou recuse: isso evita que a mesma sugestão volte a aparecer para esse negócio e mantém o valor de vendas atribuídas correto.',
     ],
     exemploResultado:
-      'Numa clínica odontológica que fechou R$ 18.000 em vendas no mês, o Analytics mostra R$ 11.000 fechados pela Iza sozinha e R$ 7.000 assistidos, onde ela conversou mas um atendente humano finalizou. O dono usa esse número para justificar manter o plano da IA.',
+      'Numa clínica odontológica que fechou R$ 18.000 em vendas no mês, o Radar 360° mostra R$ 11.000 fechados pela Iza sozinha e R$ 7.000 assistidos, onde ela conversou mas um atendente humano finalizou. O dono usa esse número para justificar manter o plano da IA.',
     relacionados: ['analytics.vendas-ia.influencia'],
   },
   {
@@ -169,7 +169,7 @@ export const analyticsContent: SaibaMaisContent[] = [
       'Serve para entender onde a campanha perde força: se o problema é no envio, na entrega, ou se as pessoas leem mas não respondem. Isso ajuda a decidir se o texto, o horário ou a lista de contatos precisam mudar.',
     comoImplementar: [
       'Envie uma campanha na tela de Campanhas, usando um template aprovado pela Meta.',
-      'Volte ao Analytics e veja o funil no bloco Campanhas: cada etapa mostra o número absoluto e o percentual em relação ao total enviado.',
+      'Volte ao Radar 360° e veja o funil no bloco Campanhas: cada etapa mostra o número absoluto e o percentual em relação ao total enviado.',
       'Se a maior queda estiver entre Entregues e Lidas, ou entre Lidas e Respondidas, ajuste o texto ou o horário do próximo disparo.',
     ],
     exemploResultado:

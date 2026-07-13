@@ -256,7 +256,7 @@ export const PLANOS: Record<PlanoId, PlanoInfo> = {
       '60.000 disparos por mês',
       'CRM com 200.000 contatos',
       'Fluxos ilimitados e 15 números',
-      'Radar 360 incluído, SLA 99,9% com créditos, SSO',
+      'Radar 360° Pro incluído, SLA 99,9% com créditos, SSO',
       'CSM dedicado e integrações ilimitadas',
     ],
   },
@@ -316,7 +316,7 @@ export const PRODUTOS: Record<string, ProdutoInfo> = {
   },
   analytics: {
     id: 'analytics',
-    nome: 'Analytics e Radar 360',
+    nome: 'Radar 360°',
     caracteristica: 'A operação medida e narrada todo dia sobre fatos, com custo de IA transparente e vendas atribuídas à Iza.',
     casoUso: 'Em {seg}, você vê o que aconteceu e o que fazer sem depender de um analista de BI.',
   },

@@ -39,10 +39,10 @@ export default function SobrePage() {
           <h2 className="font-display text-2xl font-bold text-gray-900 mt-12">O que entregamos</h2>
           <p>
             Oito módulos canônicos: ZappIQCore (engine conversacional), PulseAI (IA generativa),
-            SparkCampaigns (campanhas), RadarInsights (analytics), NexusCRM (CRM integrado), ZappIQ Maestro
+            SparkCampaigns (campanhas), Radar 360° (analytics), NexusCRM (CRM integrado), ZappIQ Maestro
             (construtor de fluxos), EchoCopilot (assistente do atendente) e ShieldCompliance (LGPD by-default),
             operando em infraestrutura brasileira com dados residentes no Brasil, SLA 99,9% contratual
-            Enterprise e observabilidade de negócio via Radar 360°.
+            Enterprise e observabilidade de negócio via Radar 360° Pro.
           </p>
 
           <h2 className="font-display text-2xl font-bold text-gray-900 mt-12">Compromissos públicos</h2>

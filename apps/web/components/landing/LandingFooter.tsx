@@ -25,7 +25,7 @@ const COLUMNS = [
       { label: 'Automações visuais', href: '/#plataforma-autonoma' },
       { label: 'Copiloto para atendentes', href: '/#plataforma-autonoma' },
       { label: 'Conformidade LGPD', href: '/#plataforma-autonoma' },
-      { label: 'Radar 360° (add-on)', href: '/observabilidade' },
+      { label: 'Radar 360° Pro (add-on)', href: '/observabilidade' },
     ],
   },
   {
@@ -37,7 +37,6 @@ const COLUMNS = [
       { label: '14 dias grátis', href: '/#precos' },
       { label: 'Voz Nativa (add-on)', href: '/voz' },
       { label: 'Migração Zenvia', href: '/migracao-zenvia' },
-      { label: 'SLA contratual', href: '/sla' },
     ],
   },
   {
@@ -83,8 +82,8 @@ const SECURITY_BADGES = [
   { icon: Shield, label: 'LGPD no núcleo do produto' },
   { icon: Lock, label: 'Dados criptografados ponta a ponta' },
   { icon: Server, label: 'Servidores 100% no Brasil' },
-  { icon: Activity, label: 'Uptime 99,9% em contrato (Scale)' },
-  { icon: Radar, label: 'Dashboards que viram decisão (Radar 360°)' },
+  { icon: Activity, label: 'Monitoramento contínuo da plataforma' },
+  { icon: Radar, label: 'Dashboards que viram decisão (Radar 360° Pro)' },
 ];
 
 export function Footer() {

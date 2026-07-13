@@ -1,7 +1,7 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * LandingPage: V4 Chatbase-style (fidelidade modelo Claude Design)
+ * LandingPage: V7 (curadoria pós-auditoria, 12/07/2026)
  * --------------------------------------------------------------------------
  * Hybrid cut (V4_DESIGN_REFERENCE.md Onda C seletiva):
  *   - REMOVIDO: LeadMagnetBanner (CTA band 202px, modelo não tem)
@@ -9,22 +9,21 @@
  *   - MANTIDO: OnboardingZero + VozNativa + IzaEstaAqui (strategic commercial blocks)
  *   - MANTIDO: SocialProof (pode ser compactado via prop `compact` depois)
  *
- * Ordem dos blocos (V5):
- *   1. Hero              → promessa canônica
- *   2. SocialProof       → logos / provas
- *   3. PorQueZappIQ      → bento razões
- *   4. ComVsSem          → antes vs depois (promovido V5)
- *   5. OnboardingZero    → diferenciador · R$ 0 setup
- *   6. VozNativa         → diferenciador · voz inbound/outbound
- *   7. HowItWorks        → fluxo produto
- *   8. ROICalculator     → payback + recomendador de tier
- *   9. TrustAndCompliance→ LGPD · segurança · SLA
- *  10. IzaEstaAqui       → dogfooding
- *  11. Pricing           → 5 tiers (sem Com vs Sem, agora standalone)
- *  12. Testimonials      → depoimentos + SLA badge
- *  13. FAQ               → Qs agrupadas
- *  14. CTAFinal          → fecho
- *  15. Footer + WAButton + Toast
+ * Curadoria V7 (auditoria PhD, achado rank 13): a home contava a tese da
+ * autonomia 3x (PlataformaAutonoma, JornadaLead, MaestroSection, HowItWorks
+ * repetiam o mesmo argumento). Cortados do render (arquivos preservados, não
+ * deletados, viram base de futuras páginas de produto):
+ *   - HowItWorks   → redundante com PlataformaAutonoma + JornadaLead
+ *   - MaestroSection → deep-dive de 1 produto só; melhor como página própria
+ * AgentQualityProactive subiu pra logo após JornadaLead: vira a PROVA em
+ * profundidade de um dos 3 pilares que PlataformaAutonoma acabou de prometer.
+ *
+ * Ordem dos blocos (5 atos, V7):
+ *   Ato 1 · Promessa   → Hero, SocialProof
+ *   Ato 2 · Operação   → PorQueZappIQ, ComVsSem, PlataformaAutonoma, JornadaLead, AgentQualityProactive
+ *   Ato 3 · Extensões  → MiraProspects, VozNativa, OnboardingZero
+ *   Ato 4 · Decisão    → ROICalculator, TrustAndCompliance, IzaEstaAqui, Pricing
+ *   Ato 5 · Fecho      → Testimonials, FAQ, CTAFinal, Footer
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { Navbar } from './Navbar';
@@ -35,11 +34,9 @@ import { PorQueZappIQ } from './PorQueZappIQ';
 import { ComVsSem } from './ComVsSem';
 import { OnboardingZero } from './OnboardingZero';
 import { VozNativa } from './VozNativa';
-import { HowItWorks } from './HowItWorks';
 import { PlataformaAutonoma } from './PlataformaAutonoma';
 import { JornadaLead } from './JornadaLead';
 import { MiraProspects } from './MiraProspects';
-import { MaestroSection } from './MaestroSection';
 import { ROICalculator } from './ROICalculator';
 import { AgentQualityProactive } from './AgentQualityProactive';
 import { TrustAndCompliance } from './TrustAndCompliance';
@@ -65,13 +62,11 @@ export function LandingPage() {
       <ComVsSem />
       <PlataformaAutonoma />
       <JornadaLead />
-      <MiraProspects />
-      <OnboardingZero />
-      <VozNativa />
-      <HowItWorks />
-      <MaestroSection />
-      <ROICalculator />
       <AgentQualityProactive />
+      <MiraProspects />
+      <VozNativa />
+      <OnboardingZero />
+      <ROICalculator />
       <TrustAndCompliance />
       <IzaEstaAqui />
       <Pricing />
