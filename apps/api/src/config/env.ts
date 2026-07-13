@@ -62,7 +62,14 @@ const envSchema = z.object({
   //   - BIGQUERY_PROJECT_ID: projeto de cobrança/consulta (ex.: zappiq-prod)
   GOOGLE_APPLICATION_CREDENTIALS_JSON: z.string().optional(),
   BIGQUERY_PROJECT_ID: z.string().optional(),
-  BIGQUERY_MAX_GB: z.coerce.number().default(8), // teto duro de GB varridos por consulta
+  BIGQUERY_MAX_GB: z.coerce.number().default(8), // teto duro de GB varridos por consulta na descoberta (tabela espelho, barata)
+  // Espelho mensal da base de CNPJ. A tabela pública da Base dos Dados exige
+  // assinatura BD Pro e cada consulta direta varre a partição inteira (~50-76 GB,
+  // por causa da row access policy do BD Pro). Por isso materializamos 1x/mês só
+  // as empresas ATIVAS numa tabela NOSSA (BIGQUERY_MIRROR_TABLE), corretamente
+  // clusterizada, e a descoberta consulta ESSA tabela (fração de centavo). Ver doc 10.
+  BIGQUERY_MIRROR_TABLE: z.string().default('mira.cnpj_ativos'),
+  BIGQUERY_MIRROR_MAX_GB: z.coerce.number().default(120), // teto do job mensal de materialização (varre a partição inteira)
 
   // WhatsApp
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
