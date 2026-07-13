@@ -1564,6 +1564,7 @@ model MiraAlvo {
   cnpj              String? // B2B (dado público de PJ)
   cnae              String?
   porte             String? // MEI/ME/EPP/DEMAIS + regime quando conhecido
+  capitalSocial     Float? // capital social declarado (R$) — porte real por empresa (registro público)
   situacaoCadastral String?
   municipio         String?
   uf                String?

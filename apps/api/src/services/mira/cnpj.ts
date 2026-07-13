@@ -28,6 +28,7 @@ export interface CnpjData {
   cnae: string | null; // código
   cnaeDescricao: string | null;
   porte: string | null;
+  capitalSocial: number | null; // capital social declarado (R$), sinal de porte real por empresa
   naturezaJuridica: string | null;
   situacaoCadastral: string | null; // ATIVA | BAIXADA | ...
   municipio: string | null;
@@ -100,6 +101,7 @@ export async function fetchCnpj(organizationId: string, cnpjRaw: string): Promis
       cnae: d.cnae_fiscal ? String(d.cnae_fiscal) : null,
       cnaeDescricao: d.cnae_fiscal_descricao ? String(d.cnae_fiscal_descricao) : null,
       porte: d.porte ? String(d.porte) : null,
+      capitalSocial: Number.isFinite(Number(d.capital_social)) ? Number(d.capital_social) : null,
       naturezaJuridica: d.natureza_juridica ? String(d.natureza_juridica) : null,
       situacaoCadastral: d.descricao_situacao_cadastral ? String(d.descricao_situacao_cadastral) : null,
       municipio: d.municipio ? String(d.municipio) : null,

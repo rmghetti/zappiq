@@ -40,6 +40,7 @@ function custo(bytes: number): string {
 async function main() {
   // Import dinâmico: só depois dos placeholders de env acima estarem no process.env.
   const { syncCnpjMirror, mirrorFqn } = await import('../src/services/mira/cnpjMirror.js');
+  const { syncCagedSetor } = await import('../src/services/mira/cagedMirror.js');
   const bq = new BigQuery({ projectId, credentials: JSON.parse(json as string) });
 
   // 1) Acesso à base BD Pro (algumas linhas). Se 0 linhas, o e-mail da service
@@ -68,6 +69,12 @@ async function main() {
   if (r.bytesScanned) {
     console.log(`    Varredura desta materialização: ${(r.bytesScanned / 1e9).toFixed(1)} GB — ${custo(r.bytesScanned)}. 1 TiB/mes e gratis.`);
   }
+
+  // 2b) Sinal setorial do CAGED (agregação por CNAE+UF do ano mais recente).
+  console.log('2b/3 Materializando o sinal setorial do CAGED (saldo de emprego por CNAE+UF)...');
+  const rc = await syncCagedSetor({ force: true });
+  if (!rc.ok) throw new Error(`Materialização do CAGED falhou: ${rc.reason}`);
+  console.log(`    OK: ${rc.rows ?? '?'} setores (CNAE x UF), ano ${rc.ano}.`);
 
   // 3) Consulta de candidatos NA TABELA ESPELHO (deve ser baratíssima).
   console.log('3/3 Testando uma consulta de candidatos na tabela espelho...');
