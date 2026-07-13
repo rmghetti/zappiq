@@ -38,6 +38,7 @@ import miraRoutes from './routes/mira.js';
 import miraAccessRoutes from './routes/miraAccess.js';
 import { requireMira } from './middleware/requireMira.js';
 import { initMiraReleasesCronJob } from './services/mira/releasesCron.js'; // Mira — Releases dos Alvos (semanal)
+import { initCnpjMirrorSyncCronJob } from './services/mira/cnpjMirrorSync.js'; // Mira — espelho mensal da base de CNPJ (BigQuery)
 import analyticsRoutes from './routes/analytics.js';
 import flowsRoutes from './routes/flows.js';
 import flowTemplatesRoutes from './routes/flowTemplates.js';
@@ -396,6 +397,11 @@ initAnalyticsPulseCronJob().catch((err) => {
 // ── Mira Prospects: Releases dos Alvos (semanal, segunda 06:00 UTC) ──
 initMiraReleasesCronJob().catch((err) => {
   logger.error('[Server] Failed to initialize mira releases cron job:', err);
+});
+
+// ── Mira Prospects: espelho mensal da base de CNPJ (dia 1, 06:00 UTC) ──
+initCnpjMirrorSyncCronJob().catch((err) => {
+  logger.error('[Server] Failed to initialize mira cnpj mirror cron job:', err);
 });
 
 // ── Área Clientes Fase 1: expiração de trial + recompute lifecycle (03:40 UTC) ──

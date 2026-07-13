@@ -1,36 +1,25 @@
 /**
- * Mira Prospects — descoberta B2B via BigQuery (Base dos Dados).
+ * Mira Prospects — descoberta B2B via BigQuery (tabela espelho de CNPJ).
  *
- * Consulta a base de CNPJ da Receita hospedada na Base dos Dados
- * (`basedosdados.br_me_cnpj.estabelecimentos`), filtrando por CNAE + UF do ICP
- * do cliente e situação ATIVA. Fonte confiável que NÃO depende do servidor de
- * download da Receita (que vive fora do ar). Devolve só uma lista de CNPJs
- * candidatos; a verificação/QSA continua vindo do enriquecimento por CNPJ
- * (BrasilAPI) no descobertaPublica, como já era.
- *
- * Custo (doc 10): consulta só 5 colunas, filtra por partição de data (poda),
- * usa cache do BigQuery e aplica `maximumBytesBilled` (teto duro): se a query
- * fosse varrer além do teto, o BigQuery a RECUSA antes de cobrar. 1 TiB/mês é
- * grátis por projeto.
+ * Consulta a NOSSA tabela espelho `zappiq-prod.mira.cnpj_ativos` (empresas
+ * ATIVAS, materializada 1x/mês a partir da base de CNPJ da Base dos Dados por
+ * cnpjMirrorSync), filtrando por CNAE + UF do ICP do cliente. Consultar a
+ * tabela espelho custa fração de centavo (a tabela pública da Base dos Dados
+ * exige BD Pro e varre ~50-76 GB por consulta; ver doc 10). Devolve só uma
+ * lista de CNPJs candidatos; a verificação/QSA continua vindo do enriquecimento
+ * por CNPJ (BrasilAPI) no descobertaPublica, como já era.
  */
-import { BigQuery } from '@google-cloud/bigquery';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
+import { bigQueryDisponivel, getBigQueryClient, gbToBytes } from './bigqueryClient.js';
 
-const TABLE = 'basedosdados.br_me_cnpj.estabelecimentos';
 const MAX_CANDIDATOS = 300;
 
-let _client: BigQuery | null = null;
+export { bigQueryDisponivel };
 
-export function bigQueryDisponivel(): boolean {
-  return Boolean(env.GOOGLE_APPLICATION_CREDENTIALS_JSON && env.BIGQUERY_PROJECT_ID);
-}
-
-function getClient(): BigQuery {
-  if (_client) return _client;
-  const credentials = JSON.parse(env.GOOGLE_APPLICATION_CREDENTIALS_JSON as string);
-  _client = new BigQuery({ projectId: env.BIGQUERY_PROJECT_ID, credentials });
-  return _client;
+/** Nome totalmente qualificado da tabela espelho (projeto.dataset.tabela). */
+function mirrorFqn(): string {
+  return `${env.BIGQUERY_PROJECT_ID}.${env.BIGQUERY_MIRROR_TABLE}`;
 }
 
 /** Extrai UFs (2 letras) do texto de região + das regiões do ICP. */
@@ -45,9 +34,10 @@ function extrairUfs(regiaoLivre: string, regioesConfig: string[]): string[] {
 }
 
 /**
- * Busca CNPJs candidatos por CNAE+UF do perfil. Retorna [] se não há BigQuery
- * configurado, se o perfil não tem CNAE, ou em erro (o chamador degrada para
- * índice local/busca). Nunca lança.
+ * Busca CNPJs candidatos por CNAE+UF do perfil na tabela espelho. Retorna [] se
+ * não há BigQuery configurado, se o perfil não tem CNAE, se a tabela espelho
+ * ainda não foi materializada, ou em erro (o chamador degrada para índice
+ * local/busca). Nunca lança.
  */
 export async function buscarCnpjsBigQuery(perfil: any, regiaoLivre: string): Promise<string[]> {
   if (!bigQueryDisponivel()) return [];
@@ -62,24 +52,22 @@ export async function buscarCnpjsBigQuery(perfil: any, regiaoLivre: string): Pro
   const cnaeConds = cnaes.slice(0, 30).map((c) => `STARTS_WITH(cnae_fiscal_principal, '${c}')`).join(' OR ');
   const ufCond = ufs.length ? `AND sigla_uf IN UNNEST(@ufs)` : '';
 
+  // A tabela espelho já contém só empresas ATIVAS e o snapshot mais recente,
+  // clusterizada por cnae_fiscal_principal + sigla_uf → varredura mínima.
   const sql = `
-    DECLARE d DATE DEFAULT (SELECT MAX(data) FROM \`${TABLE}\`);
     SELECT cnpj
-    FROM \`${TABLE}\`
-    WHERE data = d
-      AND situacao_cadastral IN ('02', '2')
-      AND (${cnaeConds})
+    FROM \`${mirrorFqn()}\`
+    WHERE (${cnaeConds})
       ${ufCond}
     LIMIT ${MAX_CANDIDATOS};
   `;
 
-  const maxBytesBilled = String(Math.round(env.BIGQUERY_MAX_GB * 1024 * 1024 * 1024));
   try {
-    const [rows] = await getClient().query({
+    const [rows] = await getBigQueryClient().query({
       query: sql,
       params: { ufs },
       types: { ufs: ['STRING'] },
-      maximumBytesBilled: maxBytesBilled,
+      maximumBytesBilled: gbToBytes(env.BIGQUERY_MAX_GB),
       useLegacySql: false,
     });
     const cnpjs = (rows as any[])
@@ -88,7 +76,7 @@ export async function buscarCnpjsBigQuery(perfil: any, regiaoLivre: string): Pro
     logger.info(`[MiraBigQuery] ${cnpjs.length} candidatos (cnaes=${cnaes.length} ufs=${ufs.join(',') || 'todas'})`);
     return cnpjs;
   } catch (err: any) {
-    // maximumBytesBilled excedido, credencial inválida, schema diferente, etc.
+    // tabela espelho ainda não materializada, credencial inválida, teto excedido, etc.
     logger.warn(`[MiraBigQuery] consulta falhou (degradando p/ outras fontes): ${err?.message ?? err}`);
     return [];
   }
