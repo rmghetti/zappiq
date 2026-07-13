@@ -39,8 +39,9 @@ import {
   packageAddonsFromSubscriptionItems,
   mergePackageAddons,
 } from './stripeWebhook.util.js';
-import { ADDONS_V4_STRIPE } from '@zappiq/shared';
+import { ADDONS_V4_STRIPE, MIRA_TIER_KEYS, MIRA_PACK_KEYS, MIRA_PACKS } from '@zappiq/shared';
 import { IMPULSO_ADDON_KEYS } from '../middleware/requireImpulso.js';
+import { creditMiraPack } from '../middleware/requireMira.js';
 
 if (!env.STRIPE_SECRET_KEY) {
   logger.warn('[Stripe] STRIPE_SECRET_KEY not set — webhook route will reject all events.');
@@ -229,6 +230,69 @@ async function removeImpulsoAddon(orgId: string, subId: string): Promise<void> {
   logger.info(`[Stripe][Impulso] add-on removido de org ${orgId} (sub ${subId} cancelada).`);
 }
 
+// ─── Mira Prospects (add-on de inteligência) — assinatura SEPARADA do plano ──
+// Mesma mecânica do Impulso: metadata.miraAddon ou price id marca a faixa;
+// liga/desliga settings.addons sem tocar em plan/stripeSubscriptionId. O id da
+// sub do Mira vive em settings.miraSubscriptionId.
+
+function miraTierFromPriceId(priceId: string | null | undefined): string | null {
+  if (!priceId) return null;
+  for (const key of MIRA_TIER_KEYS) {
+    const ids = (ADDONS_V4_STRIPE as Record<string, { priceIds?: Record<string, string> }>)[key]?.priceIds;
+    if (ids && (ids.monthly === priceId || ids.annual === priceId)) return key;
+  }
+  return null;
+}
+
+function miraTierFromSubscription(sub: Stripe.Subscription): string | null {
+  const meta = sub.metadata?.miraAddon;
+  if (meta && (MIRA_TIER_KEYS as readonly string[]).includes(meta)) return meta;
+  for (const item of sub.items?.data ?? []) {
+    const t = miraTierFromPriceId(item.price?.id);
+    if (t) return t;
+  }
+  return null;
+}
+
+async function applyMiraAddon(orgId: string, sub: Stripe.Subscription, tier: string): Promise<void> {
+  const active = sub.status === 'active' || sub.status === 'trialing';
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { settings: true, stripeCustomerId: true },
+  });
+  const settings = ((org?.settings as any) ?? {}) as Record<string, any>;
+  const addons: string[] = (Array.isArray(settings.addons) ? settings.addons : []).filter(
+    (k: string) => !(MIRA_TIER_KEYS as readonly string[]).includes(k),
+  );
+  if (active) addons.push(tier);
+  settings.addons = addons;
+  settings.miraSubscriptionId = sub.id;
+  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id ?? null;
+  await prisma.organization.update({
+    where: { id: orgId },
+    data: {
+      settings,
+      ...(!org?.stripeCustomerId && customerId ? { stripeCustomerId: customerId } : {}),
+    } as any,
+  });
+  logger.info(`[Stripe][Mira] add-on ${tier} ${active ? 'ATIVO' : 'inativo'} para org ${orgId} (sub ${sub.id}, status ${sub.status}).`);
+}
+
+async function removeMiraAddon(orgId: string, subId: string): Promise<void> {
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { settings: true },
+  });
+  const settings = ((org?.settings as any) ?? {}) as Record<string, any>;
+  if (settings.miraSubscriptionId && settings.miraSubscriptionId !== subId) return;
+  settings.addons = (Array.isArray(settings.addons) ? settings.addons : []).filter(
+    (k: string) => !(MIRA_TIER_KEYS as readonly string[]).includes(k),
+  );
+  delete settings.miraSubscriptionId;
+  await prisma.organization.update({ where: { id: orgId }, data: { settings } as any });
+  logger.info(`[Stripe][Mira] add-on removido de org ${orgId} (sub ${subId} cancelada).`);
+}
+
 /**
  * Aplica os efeitos de uma assinatura (created/updated) na org: colunas de
  * billing + plano + settings (merge). Reusado pelos dois eventos.
@@ -387,8 +451,11 @@ router.post('/', async (req: Request, res: Response) => {
           typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id,
         );
         if (orgId) {
+          const miraTier = miraTierFromSubscription(subscription);
           const impulsoTier = impulsoTierFromSubscription(subscription);
-          if (impulsoTier) {
+          if (miraTier) {
+            await applyMiraAddon(orgId, subscription, miraTier);
+          } else if (impulsoTier) {
             await applyImpulsoAddon(orgId, subscription, impulsoTier);
           } else {
             await applySubscriptionState(orgId, subscription);
@@ -407,8 +474,12 @@ router.post('/', async (req: Request, res: Response) => {
           typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id,
         );
         if (orgId) {
+          const miraTier = miraTierFromSubscription(subscription);
           const impulsoTier = impulsoTierFromSubscription(subscription);
-          if (impulsoTier) {
+          if (miraTier) {
+            // Cancelou a faixa do Mira — remove settings.addons, sem churn do plano base.
+            await removeMiraAddon(orgId, subscription.id);
+          } else if (impulsoTier) {
             // Cancelou o add-on Impulso — remove settings.addons, sem churn do plano base.
             await removeImpulsoAddon(orgId, subscription.id);
           } else {
@@ -518,6 +589,19 @@ router.post('/', async (req: Request, res: Response) => {
           // plano base). A ativação real vem no customer.subscription.created.
           if (session.metadata?.impulsoAddon) {
             logger.info(`[Stripe][Impulso] checkout completo p/ org ${orgId} (${session.metadata.impulsoAddon}) — ativacao via subscription.created`);
+            break;
+          }
+          // Checkout da FAIXA do Mira (assinatura): ativação vem no subscription.created.
+          if (session.metadata?.miraAddon) {
+            logger.info(`[Stripe][Mira] checkout de faixa completo p/ org ${orgId} (${session.metadata.miraAddon}) — ativacao via subscription.created`);
+            break;
+          }
+          // Checkout de PACK avulso do Mira (pagamento único): credita a cota extra AGORA.
+          if (session.metadata?.miraPack && (MIRA_PACK_KEYS as readonly string[]).includes(session.metadata.miraPack)) {
+            const packKey = session.metadata.miraPack;
+            const cfg = MIRA_PACKS[packKey as keyof typeof MIRA_PACKS];
+            await creditMiraPack(orgId, { key: packKey, alvos: cfg.alvos, priceBrl: cfg.price, stripeRef: session.id });
+            logger.info(`[Stripe][Mira] pack ${packKey} creditado p/ org ${orgId} (+${cfg.alvos} alvos, session ${session.id}).`);
             break;
           }
           const before = await prisma.organization.findUnique({
