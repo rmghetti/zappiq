@@ -72,16 +72,20 @@ function log(msg: string) {
 }
 
 // ─── Rede via curl (robusto contra o WAF da Receita) ───────────────────────
+// -4 força IPv4: o host da Receita costuma ter rota IPv6 quebrada, o que
+// trava a conexão com timeout (curl 28). --connect-timeout falha rápido.
+const CURL_BASE = ['-4', '--connect-timeout', '25', '-A', UA];
+
 /** GET de texto (listagem de diretório). Lança se HTTP >= 400. */
 function curlText(url: string): string {
-  return execFileSync('curl', ['-fsSL', '-A', UA, '--max-time', '60', url], {
+  return execFileSync('curl', ['-fsSL', ...CURL_BASE, '--max-time', '45', url], {
     encoding: 'utf-8',
     maxBuffer: 64 * 1024 * 1024,
   });
 }
 /** Download para arquivo, com retry. Lança em erro/HTTP >= 400. */
 function curlDownload(url: string, dest: string): void {
-  execFileSync('curl', ['-fSL', '-A', UA, '--retry', '3', '--retry-delay', '5', '-o', dest, url], {
+  execFileSync('curl', ['-fSL', ...CURL_BASE, '--retry', '4', '--retry-delay', '8', '-o', dest, url], {
     stdio: ['ignore', 'ignore', 'inherit'],
   });
 }
@@ -274,7 +278,7 @@ async function main() {
   if (LIST_ONLY) {
     log('modo --list: verificando o primeiro arquivo...');
     try {
-      const head = execFileSync('curl', ['-sI', '-A', UA, '--max-time', '30', `${prefix}/Estabelecimentos0.zip`], {
+      const head = execFileSync('curl', ['-sI', ...CURL_BASE, '--max-time', '30', `${prefix}/Estabelecimentos0.zip`], {
         encoding: 'utf-8',
       });
       console.log(head.split('\n').slice(0, 6).join('\n'));
