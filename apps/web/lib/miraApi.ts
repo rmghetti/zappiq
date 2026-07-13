@@ -192,6 +192,29 @@ export interface DecisoresPublicoResult {
   motivo?: string;
 }
 
+export interface MiraAnalyticsData {
+  period: { days: number; since: string };
+  funil: {
+    total: number;
+    criadosNoPeriodo: number;
+    byStatus: Record<string, number>;
+    byMotor: Record<string, number>;
+    byKind: Record<string, number>;
+    scoreMedioProntos: number | null;
+  };
+  cota: {
+    used: number; total: number; tierQuota: number; packExtra: number;
+    remaining: number; blocked: boolean; tier: string | null; packsComprados: number; monthKey: string;
+  };
+  fontes: Array<{
+    fonte: string; total: number; valido: number; naoEncontrado: number; erro: number;
+    matchRatePct: number; latenciaMediaMs: number | null;
+  }>;
+  decisores: { total: number; qsa: number; pegadaPublica: number };
+  releases: { totalNoPeriodo: number; naoLidos: number };
+  conversao: { prontos: number; pousaramCrm: number; taxaCrmPct: number };
+}
+
 // ── Client ───────────────────────────────────────────────────────────
 export const miraApi = {
   access: (): Promise<{ success: boolean; data: MiraAccessData }> => api.get('/api/mira-access'),
@@ -246,6 +269,8 @@ export const miraApi = {
     api.post(`/api/mira/alvos/${alvoId}/aprofundar`, {}),
   decisoresPublico: (alvoId: string): Promise<{ success: boolean; data: DecisoresPublicoResult }> =>
     api.post(`/api/mira/alvos/${alvoId}/decisores-publico`, {}),
+  analytics: (period = 30): Promise<{ success: boolean; data: MiraAnalyticsData }> =>
+    api.get(`/api/mira/analytics?period=${period}`),
 };
 
 export function formatBRL(v: number): string {

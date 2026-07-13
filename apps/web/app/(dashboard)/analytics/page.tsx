@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { api } from '../../../lib/api';
 import { SaibaMais } from '@/components/shared/SaibaMais';
+import { MiraTelemetry } from '@/components/analytics/MiraTelemetry';
 
 // Guard global: nunca renderiza "undefined"/"null" na tela (V4 fix 2026-05-27).
 function fmtNum(v: unknown, opts: { suffix?: string; fallback?: string; decimals?: number } = {}): string {
@@ -645,6 +646,9 @@ export default function AnalyticsPage() {
           </div>
         )}
       </div>
+
+      {/* Telemetria do add-on Mira Prospects (só aparece p/ quem tem o Mira ativo) */}
+      <MiraTelemetry />
 
       {drawer.open && <DrillDrawer drawer={drawer} onClose={() => setDrawer((d) => ({ ...d, open: false }))} />}
     </div>
