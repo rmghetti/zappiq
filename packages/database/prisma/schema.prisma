@@ -1719,6 +1719,28 @@ model MiraUsageMonthly {
   @@map("mira_usage_monthly")
 }
 
+// Índice local da base aberta de CNPJ (Receita Federal) — tabela
+// COMPARTILHADA da plataforma (não é dado de tenant, é registro público),
+// por isso SEM organizationId/RLS. Alimentada pelo job de ingestão
+// (scripts/ingest-cnpj-base.ts, rodado no servidor via .command).
+// Só guarda o mínimo pra achar candidato por CNAE/UF/situação; firmografia
+// completa, QSA e decisores continuam vindo do enriquecimento por CNPJ
+// (Receita/BrasilAPI) já existente, alvo por alvo — nunca duplicado aqui.
+model MiraCnpjIndex {
+  cnpj              String   @id // 14 dígitos
+  razaoSocial       String?
+  nomeFantasia      String?
+  cnae              String?
+  situacaoCadastral String? // ATIVA | BAIXADA | SUSPENSA | INAPTA | NULA
+  municipio         String?
+  uf                String?
+  atualizadoEm      DateTime @updatedAt
+
+  @@index([cnae, uf, situacaoCadastral])
+  @@index([uf, situacaoCadastral])
+  @@map("mira_cnpj_index")
+}
+
 // Log de enriquecimento (telemetria de match rate e custo por fonte)
 model MiraEnriquecimentoLog {
   id             String   @id @default(cuid())

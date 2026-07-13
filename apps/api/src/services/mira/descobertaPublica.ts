@@ -34,8 +34,48 @@ const HOSTS_NAO_EMPRESA = [
 
 const CNPJ_RE = /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g;
 
+const MAX_CANDIDATOS_INDICE_LOCAL = 300;
+
+/**
+ * Índice local (mira_cnpj_index, alimentado pela ingestão da base aberta da
+ * Receita) filtrado pelos CNAEs e UFs do ICP do cliente. Quando dá match,
+ * substitui a busca na web inteiramente: não gasta quota de busca, não
+ * precisa de nenhuma chave configurada, e ainda assim SÓ o CNPJ verificado
+ * na Receita vira Alvo (mesmo gate de sempre) — o índice é só um filtro
+ * rápido de candidatos, não a fonte de verdade.
+ */
+async function buscarCandidatosIndiceLocal(perfil: any, regiaoLivre: string): Promise<string[]> {
+  const cnaes: string[] = Array.isArray(perfil?.icpFirmografia?.cnaes)
+    ? perfil.icpFirmografia.cnaes.map((c: string) => String(c).replace(/\D/g, '')).filter((c: string) => c.length >= 2)
+    : [];
+  if (cnaes.length === 0) return [];
+
+  const ufRe = /\b([A-Z]{2})\b/;
+  const ufs = new Set<string>();
+  const regioesConfig: string[] = Array.isArray(perfil?.icpFirmografia?.regioes) ? perfil.icpFirmografia.regioes : [];
+  for (const r of [regiaoLivre, ...regioesConfig]) {
+    const m = ufRe.exec(String(r || '').toUpperCase());
+    if (m) ufs.add(m[1]);
+  }
+
+  const cnaeConds = cnaes.map((c) => `"cnae" LIKE '${c.replace(/'/g, "''")}%'`).join(' OR ');
+  const ufCond = ufs.size ? `AND "uf" = ANY(ARRAY[${Array.from(ufs).map((u) => `'${u}'`).join(',')}])` : '';
+  const sql = `
+    SELECT "cnpj" FROM "mira_cnpj_index"
+    WHERE (${cnaeConds}) AND "situacaoCadastral" = 'ATIVA' ${ufCond}
+    LIMIT ${MAX_CANDIDATOS_INDICE_LOCAL};
+  `;
+  try {
+    const rows: any[] = await (prisma as any).$queryRawUnsafe(sql);
+    return rows.map((r) => r.cnpj);
+  } catch (err: any) {
+    logger.warn(`[MiraDescobertaPublica] índice local indisponível/vazio: ${err?.message ?? err}`);
+    return [];
+  }
+}
+
 export interface DescobertaPublicaResult {
-  fonte: 'busca_publica';
+  fonte: 'indice_local' | 'busca_publica';
   buscas: number;
   encontrados: number; // resultados de busca uteis
   cnpjsVerificados: number;
@@ -78,11 +118,6 @@ export async function runDescobertaPublica(
   consulta: string,
   regiao: string | null
 ): Promise<DescobertaPublicaResult> {
-  if (!buscaPublicaDisponivel()) {
-    const err: any = new Error('fonte_indisponivel');
-    err.status = 501;
-    throw err;
-  }
   const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId } });
   if (!perfil || (perfil.prontidao ?? 0) < 60) {
     const err: any = new Error('perfil_incompleto');
@@ -91,35 +126,48 @@ export async function runDescobertaPublica(
   }
 
   const alvoRegiao = (regiao ?? '').trim();
-  const queries = [
-    alvoRegiao ? `empresas de ${consulta} em ${alvoRegiao}` : `empresas de ${consulta}`,
-    alvoRegiao ? `"${consulta}" ${alvoRegiao} CNPJ` : `"${consulta}" CNPJ`,
-    alvoRegiao ? `${consulta} ${alvoRegiao} contato site oficial` : `${consulta} contato site oficial`,
-  ].slice(0, MAX_QUERIES);
+
+  // Tenta primeiro o índice local (grátis, sem chave, sem gastar quota de
+  // busca). Só cai pra busca na web se o índice não tiver dado match.
+  const cnpjsDoIndice = await buscarCandidatosIndiceLocal(perfil, alvoRegiao);
+  const usandoIndiceLocal = cnpjsDoIndice.length > 0;
 
   const resultados: SerpResult[] = [];
   const vistosUrl = new Set<string>();
   let buscas = 0;
-  for (const q of queries) {
-    try {
-      const hits = await webSearch(organizationId, q, { limit: 8 });
-      buscas++;
-      for (const h of hits) {
-        if (vistosUrl.has(h.url)) continue;
-        vistosUrl.add(h.url);
-        resultados.push(h);
+
+  if (!usandoIndiceLocal) {
+    if (!buscaPublicaDisponivel()) {
+      const err: any = new Error('fonte_indisponivel');
+      err.status = 501;
+      throw err;
+    }
+    const queries = [
+      alvoRegiao ? `empresas de ${consulta} em ${alvoRegiao}` : `empresas de ${consulta}`,
+      alvoRegiao ? `"${consulta}" ${alvoRegiao} CNPJ` : `"${consulta}" CNPJ`,
+      alvoRegiao ? `${consulta} ${alvoRegiao} contato site oficial` : `${consulta} contato site oficial`,
+    ].slice(0, MAX_QUERIES);
+    for (const q of queries) {
+      try {
+        const hits = await webSearch(organizationId, q, { limit: 8 });
+        buscas++;
+        for (const h of hits) {
+          if (vistosUrl.has(h.url)) continue;
+          vistosUrl.add(h.url);
+          resultados.push(h);
+        }
+      } catch (err: any) {
+        if (err?.status === 501) throw err;
+        logger.warn(`[MiraDescobertaPublica] busca falhou: ${err?.message ?? err}`);
       }
-    } catch (err: any) {
-      if (err?.status === 501) throw err;
-      logger.warn(`[MiraDescobertaPublica] busca falhou: ${err?.message ?? err}`);
     }
   }
 
   const ent = await getMiraEntitlement(organizationId);
   const result: DescobertaPublicaResult = {
-    fonte: 'busca_publica',
+    fonte: usandoIndiceLocal ? 'indice_local' : 'busca_publica',
     buscas,
-    encontrados: resultados.length,
+    encontrados: usandoIndiceLocal ? cnpjsDoIndice.length : resultados.length,
     cnpjsVerificados: 0,
     criados: 0,
     prontos: 0,
@@ -128,15 +176,19 @@ export async function runDescobertaPublica(
     blocked: ent.quota.blocked,
     quota: { used: ent.quota.used, total: ent.quota.total, remaining: ent.quota.remaining },
   };
-  if (resultados.length === 0) return result;
+  if (!usandoIndiceLocal && resultados.length === 0) return result;
 
-  // -- Fase 1: colher CNPJs dos resultados e VERIFICAR na fonte oficial --
+  // -- Fase 1: colher CNPJs candidatos (índice local, ou snippets de busca) e VERIFICAR na fonte oficial --
   const cnpjsBrutos = new Set<string>();
-  for (const r of resultados) {
-    const matches = `${r.title} ${r.snippet}`.match(CNPJ_RE) ?? [];
-    for (const m of matches) {
-      const n = normalizeCnpj(m);
-      if (n) cnpjsBrutos.add(n);
+  if (usandoIndiceLocal) {
+    for (const c of cnpjsDoIndice) cnpjsBrutos.add(c);
+  } else {
+    for (const r of resultados) {
+      const matches = `${r.title} ${r.snippet}`.match(CNPJ_RE) ?? [];
+      for (const m of matches) {
+        const n = normalizeCnpj(m);
+        if (n) cnpjsBrutos.add(n);
+      }
     }
   }
 
@@ -279,7 +331,7 @@ export async function runDescobertaPublica(
   }
 
   logger.info(
-    `[MiraDescobertaPublica] org=${organizationId} q="${consulta}" buscas=${buscas} verificados=${result.cnpjsVerificados} prontos=${result.prontos} candidatos=${result.candidatos}`
+    `[MiraDescobertaPublica] org=${organizationId} q="${consulta}" fonte=${result.fonte} buscas=${buscas} verificados=${result.cnpjsVerificados} prontos=${result.prontos} candidatos=${result.candidatos}`
   );
   return result;
 }

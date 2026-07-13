@@ -392,7 +392,13 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<MotorBResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [fontes, setFontes] = useState<{ places: boolean; buscaPublica: boolean; provider: string | null } | null>(null);
+  const [fontes, setFontes] = useState<{
+    places: boolean;
+    buscaPublica: boolean;
+    provider: string | null;
+    cnpjIndexDisponivel: boolean;
+    cnpjIndexTotal: number;
+  } | null>(null);
 
   useEffect(() => {
     miraApi
@@ -401,7 +407,9 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
       .catch(() => setFontes(null));
   }, []);
 
-  const fonteOk = fontes ? (kind === 'B2C' ? fontes.places : fontes.buscaPublica) : null;
+  // B2B funciona com QUALQUER uma das duas fontes: índice local (grátis,
+  // sem chave, precisa da ingestão da base da Receita) ou busca pública.
+  const fonteOk = fontes ? (kind === 'B2C' ? fontes.places : fontes.buscaPublica || fontes.cnpjIndexDisponivel) : null;
 
   const descobrir = async () => {
     if (consulta.trim().length < 3) {
@@ -483,7 +491,7 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
             {fonteOk === false && (
               <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-3">
                 {kind === 'B2B'
-                  ? 'A busca pública ainda não está habilitada nesta instalação (falta configurar o provedor de busca, ex.: Google Programmable Search, grátis).'
+                  ? 'A descoberta B2B ainda não está habilitada nesta instalação: falta ingerir a base local de CNPJ (grátis) OU configurar um provedor de busca (ex.: Google Programmable Search, grátis).'
                   : 'A descoberta local (Google Places) ainda não está habilitada nesta instalação.'}
               </p>
             )}

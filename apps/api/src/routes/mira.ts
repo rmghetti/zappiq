@@ -68,15 +68,25 @@ const motorBSchema = z.object({
 
 // GET /api/mira/motor-b/status — quais fontes de descoberta estão ativas
 router.get('/motor-b/status', async (_req: Request, res: Response) => {
+  let cnpjIndexRows = 0;
+  try {
+    const r: any[] = await (prisma as any).$queryRawUnsafe('SELECT COUNT(*)::int AS n FROM "mira_cnpj_index"');
+    cnpjIndexRows = r[0]?.n ?? 0;
+  } catch {
+    /* tabela pode não existir ainda em ambientes antigos; trata como vazia */
+  }
   res.json({
     success: true,
     data: {
       // B2C local — Google Places (opcional, pago). Sem chave = desabilitado.
       places: placesDisponivel(),
-      // B2B — descoberta pública gratuita (busca no índice + verificação na
-      // Receita). Ativa quando há um provedor de busca configurado.
+      // B2B — duas fontes possíveis: índice local (grátis, sem chave, exige
+      // ingestão prévia da base da Receita) OU busca pública (precisa de
+      // provedor configurado). Basta uma das duas pra descoberta funcionar.
       buscaPublica: buscaPublicaDisponivel(),
       provider: buscaPublicaProvider(),
+      cnpjIndexDisponivel: cnpjIndexRows > 0,
+      cnpjIndexTotal: cnpjIndexRows,
     },
   });
 });

@@ -222,7 +222,13 @@ export const miraApi = {
   arquivarAlvo: (alvoId: string): Promise<{ success: boolean }> => api.post(`/api/mira/alvos/${alvoId}/arquivar`, {}),
   motorBStatus: (): Promise<{
     success: boolean;
-    data: { places: boolean; buscaPublica: boolean; provider: string | null };
+    data: {
+      places: boolean;
+      buscaPublica: boolean;
+      provider: string | null;
+      cnpjIndexDisponivel: boolean;
+      cnpjIndexTotal: number;
+    };
   }> => api.get('/api/mira/motor-b/status'),
   descobrir: (
     consulta: string,
