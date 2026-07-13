@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Clock, Stethoscope, ShoppingBag, Wrench, GraduationCap, Building2, MessageCircle } from 'lucide-react';
+import { ArrowRight, Stethoscope, ShoppingBag, Wrench, GraduationCap, Building2, MessageCircle } from 'lucide-react';
 import { PublicLayout } from '../../components/landing/PublicLayout';
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -114,37 +114,6 @@ export function CasesPage() {
           })}
         </div>
       </div>
-
-      {/* Founder Case: convite */}
-      <section className="py-16 bg-[#F8FAF9]">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 bg-secondary-100 text-secondary-700 text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full mb-6">
-            <Clock size={14} /> Programa Fundadores
-          </div>
-          <h2 className="font-display text-2xl lg:text-3xl font-extrabold text-gray-900 mb-4">
-            Seja um dos primeiros cases da ZappIQ
-          </h2>
-          <p className="text-gray-500 leading-relaxed mb-8">
-            Estamos selecionando os primeiros clientes para acompanhamento próximo.
-            Você ganha suporte prioritário e consultoria gratuita de implantação.
-            Em troca, documentamos os resultados reais juntos e publicamos aqui.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/cadastro"
-              className="inline-flex items-center justify-center gap-2 bg-primary-500 hover:bg-primary-600 text-white font-semibold px-7 py-3.5 rounded-xl transition-colors shadow-lg shadow-primary-500/25"
-            >
-              Começar 14 dias grátis <ArrowRight size={18} />
-            </Link>
-            <Link
-              href="/demo"
-              className="inline-flex items-center justify-center gap-2 border border-gray-300 hover:border-primary-400 text-gray-700 font-semibold px-7 py-3.5 rounded-xl transition-all bg-white hover:bg-primary-50"
-            >
-              Ver Demo ao Vivo
-            </Link>
-          </div>
-        </div>
-      </section>
 
       {/* CTA Final */}
       <section className="py-20 bg-[#1A1A2E]">

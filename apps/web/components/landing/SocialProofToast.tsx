@@ -8,7 +8,6 @@ const HIGHLIGHTS = [
   'CRM pronto, direto dentro do WhatsApp',
   'Seus dados no Brasil, servidor em São Paulo',
   'LGPD resolvida, pronta pra auditoria do jurídico',
-  'Programa Fundadores: 30% de desconto vitalício',
   'Liga em 5 minutos, sem ligar pra TI',
 ];
 

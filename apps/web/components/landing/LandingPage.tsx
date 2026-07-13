@@ -23,7 +23,11 @@
  *   Ato 2 · Operação   → PorQueZappIQ, ComVsSem, PlataformaAutonoma, JornadaLead, AgentQualityProactive
  *   Ato 3 · Extensões  → MiraProspects, VozNativa, OnboardingZero
  *   Ato 4 · Decisão    → ROICalculator, TrustAndCompliance, IzaEstaAqui, Pricing
- *   Ato 5 · Fecho      → Testimonials, FAQ, CTAFinal, Footer
+ *   Ato 5 · Fecho      → FAQ, CTAFinal, Footer
+ *
+ * Programa Fundadores removido (13/07/2026, decisão do fundador): campanha
+ * descontinuada. Bloco Testimonials (que era o convite Fundadores) fora do
+ * render; arquivo preservado. Prova de cliente real virá em material proprio.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { Navbar } from './Navbar';
@@ -42,7 +46,6 @@ import { AgentQualityProactive } from './AgentQualityProactive';
 import { TrustAndCompliance } from './TrustAndCompliance';
 import { IzaEstaAqui } from './IzaEstaAqui';
 import { Pricing } from './Pricing';
-import { Testimonials } from './Testimonials';
 import { FAQ } from './FAQ';
 import { CTAFinal } from './CTAFinal';
 import { Footer } from './LandingFooter';
@@ -70,7 +73,6 @@ export function LandingPage() {
       <TrustAndCompliance />
       <IzaEstaAqui />
       <Pricing />
-      <Testimonials />
       <FAQ />
       <CTAFinal />
       <Footer />

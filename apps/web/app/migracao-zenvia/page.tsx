@@ -85,11 +85,6 @@ const GATILHOS_COMERCIAIS = [
     body: 'Prove com fatura que paga +R$ 2.000/mês de fee pro seu BSP atual. Cobrimos sua migração Express (até 5.000 msgs/mês) sem custo, economia mensal paga nosso investimento em 1 mês.',
   },
   {
-    name: 'Founders Bonus',
-    headline: '50% off na migração',
-    body: 'Já tem ou está aplicando pro Cohort Founders 2026? Migração de qualquer tier sai pela metade do preço. Combinado com 30% off vitalício do plano, payback médio em 4 meses.',
-  },
-  {
     name: 'Plano Anual Upfront',
     headline: '30% off na migração',
     body: 'Assinou plano anual pago à vista? 30% de desconto em qualquer tier de migração. Custo do plano + migração desbloqueado de uma vez, sem surpresa pra controladoria.',
@@ -277,7 +272,7 @@ export default function MigracaoZenviaPage() {
         <p className="text-xs text-gray-500 mb-12">
           ✓ Setup fee da plataforma ZappIQ continua zero (Onboarding Zero é padrão). O pricing acima
           é exclusivamente do serviço humano de migração: export, re-templating, paralelo controlado,
-          cutover. Cliente Founders ou Business+ recebe desconto adicional (veja modelos comerciais abaixo).
+          cutover. Cliente que assina plano anual à vista recebe desconto adicional (veja modelos comerciais abaixo).
         </p>
 
         {/* Modelos comerciais (gatilhos) */}
