@@ -16,6 +16,7 @@ import { pousarNoCrm } from '../services/mira/pousarCrm.js';
 import { runMotorB, placesDisponivel } from '../services/mira/motorB.js';
 import { runDescobertaPublica } from '../services/mira/descobertaPublica.js';
 import { buscaPublicaDisponivel, buscaPublicaProvider } from '../services/mira/buscaPublica.js';
+import { bigQueryDisponivel } from '../services/mira/descobertaBigQuery.js';
 import { enriquecerDecisoresPublico } from '../services/mira/decisoresPublico.js';
 import { aprofundarAlvo } from '../services/mira/agentes.js';
 import { computeMiraAnalytics } from '../services/mira/analytics.js';
@@ -88,6 +89,8 @@ router.get('/motor-b/status', async (_req: Request, res: Response) => {
       provider: buscaPublicaProvider(),
       cnpjIndexDisponivel: cnpjIndexRows > 0,
       cnpjIndexTotal: cnpjIndexRows,
+      // BigQuery (Base dos Dados) — fonte B2B prioritária quando configurada.
+      bigquery: bigQueryDisponivel(),
     },
   });
 });

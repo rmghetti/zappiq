@@ -169,7 +169,7 @@ export const miraContent: SaibaMaisContent[] = [
     titulo: 'Descobrir novos',
     clientSafe: true,
     oQueE:
-      'A descoberta de novos é o motor que busca negócios que ainda não estão na sua carteira. Você descreve o que procurar e onde, e a Mira tem duas trilhas: para Empresas (B2B), ela usa primeiro o índice local de CNPJ (base da Receita já carregada no seu Perfil, filtra por CNAE/UF instantaneamente e de graça) e, quando não há match, cai para o índice público de busca; para Negócio local (B2C), usa a presença no Google Places. Em todos os casos, cada candidato é sempre verificado de novo na Receita antes de virar Alvo.',
+      'A descoberta de novos é o motor que busca negócios que ainda não estão na sua carteira. Você descreve o que procurar e onde, e a Mira tem duas trilhas: para Empresas (B2B), ela consulta a base de CNPJ da Receita (via BigQuery da Base dos Dados, ou índice local) filtrando por CNAE e UF do seu Perfil, e cai para o índice público de busca só se precisar; para Negócio local (B2C), usa a presença no Google Places. Em todos os casos, cada candidato é sempre verificado de novo na Receita antes de virar Alvo.',
     paraQueServe:
       'Serve para encher o topo do funil com o perfil certo, sem comprar lista fria. No B2B, só desconta cota o Alvo verificado (ativo na Receita e com decisor no quadro societário); empresas achadas sem CNPJ resolvido ficam como candidatos, para qualificar depois, e não gastam cota. No B2C, só entra negócio com contato verificável.',
     comoImplementar: [
