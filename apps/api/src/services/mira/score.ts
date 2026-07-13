@@ -33,6 +33,16 @@ interface PerfilLike {
   areasCompradoras?: string[];
 }
 
+/** Sinal setorial do CAGED (saldo de emprego do setor do Alvo, por CNAE+UF). */
+export interface SinalSetorial {
+  tendencia: 'expansao' | 'estavel' | 'retracao';
+  saldoLiquido: number; // admissões menos demissões no ano de referência
+  ano: number;
+}
+
+const fmtBRL = (v: number): string =>
+  v >= 1_000_000 ? `R$ ${(v / 1_000_000).toFixed(1).replace('.', ',')} mi` : `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
+
 const norm = (s: string) =>
   s
     .toLowerCase()
@@ -87,7 +97,12 @@ function monthsSince(iso: string | null): number | null {
   return Math.floor((Date.now() - d.getTime()) / (30 * 24 * 3600 * 1000));
 }
 
-export function computeMiraScoreV1(perfil: PerfilLike, alvo: CnpjData, decisoresCount: number): MiraScoreResult {
+export function computeMiraScoreV1(
+  perfil: PerfilLike,
+  alvo: CnpjData,
+  decisoresCount: number,
+  sinalSetorial?: SinalSetorial | null
+): MiraScoreResult {
   const fatores: ScoreFator[] = [];
 
   // 1) Fit de ICP (25)
@@ -115,20 +130,40 @@ export function computeMiraScoreV1(perfil: PerfilLike, alvo: CnpjData, decisores
     fatores.push({ nome: 'Fit de ICP', peso: 25, valor: Math.min(25, v), motivo: motivos.join('; ') });
   }
 
-  // 2) Demanda e sinais (25) — v1: sinais observáveis no registro
+  // 2) Demanda e sinais (25) — v1: sinais observáveis no registro + porte real + setor
   {
     let v = 0;
     const motivos: string[] = [];
     const meses = monthsSince(alvo.dataInicioAtividade);
     if (meses !== null && meses <= 18) {
-      v += 10;
+      v += 8;
       motivos.push(`empresa recente (${meses} meses): fase de montar operação`);
     }
     if (alvo.situacaoCadastral && alvo.situacaoCadastral.toUpperCase() === 'ATIVA') {
-      v += 5;
+      v += 4;
       motivos.push('situação ATIVA na Receita');
     }
-    motivos.push('sinais de mercado (notícias/vagas/editais) entram na próxima fase de mapeamento');
+    // Capital social (porte real por empresa, registro público)
+    if (alvo.capitalSocial != null && alvo.capitalSocial >= 1_000_000) {
+      v += 6;
+      motivos.push(`capital social ${fmtBRL(alvo.capitalSocial)}: empresa estruturada, orçamento provável`);
+    } else if (alvo.capitalSocial != null && alvo.capitalSocial >= 100_000) {
+      v += 3;
+      motivos.push(`capital social ${fmtBRL(alvo.capitalSocial)}: porte relevante`);
+    }
+    // Sinal setorial do CAGED (saldo de emprego do setor, por CNAE+UF)
+    if (sinalSetorial) {
+      if (sinalSetorial.tendencia === 'expansao') {
+        v += 5;
+        motivos.push(`setor contratando em ${sinalSetorial.ano} (saldo +${sinalSetorial.saldoLiquido.toLocaleString('pt-BR')}): demanda aquecida`);
+      } else if (sinalSetorial.tendencia === 'retracao') {
+        motivos.push(`setor em retração em ${sinalSetorial.ano} (saldo ${sinalSetorial.saldoLiquido.toLocaleString('pt-BR')})`);
+      } else {
+        v += 1;
+        motivos.push(`setor estável em emprego (${sinalSetorial.ano})`);
+      }
+    }
+    motivos.push('sinais profundos (notícias/vagas/editais) entram na próxima fase de mapeamento');
     fatores.push({ nome: 'Demanda e sinais', peso: 25, valor: Math.min(25, v), motivo: motivos.join('; ') });
   }
 

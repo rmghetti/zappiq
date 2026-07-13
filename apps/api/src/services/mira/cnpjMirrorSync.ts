@@ -13,8 +13,15 @@ import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { bigQueryDisponivel } from './bigqueryClient.js';
 import { syncCnpjMirror } from './cnpjMirror.js';
+import { syncCagedSetor } from './cagedMirror.js';
 
 export { syncCnpjMirror };
+
+/** Roda os dois espelhos mensais do Mira (CNPJ ativos + sinal setorial CAGED). */
+async function runMiraMirrors(): Promise<void> {
+  await syncCnpjMirror();
+  await syncCagedSetor();
+}
 
 const redisUrl = new URL(env.REDIS_URL);
 const isTLS = env.REDIS_URL.startsWith('rediss://');
@@ -52,7 +59,7 @@ export async function initCnpjMirrorSyncCronJob(): Promise<void> {
 
   cnpjMirrorWorker = new Worker(
     'mira-cnpj-mirror-cron',
-    async () => syncCnpjMirror(),
+    async () => runMiraMirrors(),
     { connection, concurrency: 1 },
   );
   cnpjMirrorWorker.on('failed', (job, err) => {

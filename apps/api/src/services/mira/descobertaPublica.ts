@@ -19,6 +19,7 @@ import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, type CnpjData } fr
 import { computeMiraScoreV1 } from './score.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
 import { buscarCnpjsBigQuery } from './descobertaBigQuery.js';
+import { buscarSinalSetorial } from './cagedMirror.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
 const MAX_QUERIES = 3;
@@ -222,7 +223,8 @@ export async function runDescobertaPublica(
     if (!dados || (dados.situacaoCadastral ?? '').toUpperCase() !== 'ATIVA') continue;
     result.cnpjsVerificados++;
 
-    const { score, breakdown, confianca } = computeMiraScoreV1(perfil, dados, dados.qsa.length);
+    const sinalSetorial = await buscarSinalSetorial(dados.cnae, dados.uf);
+    const { score, breakdown, confianca } = computeMiraScoreV1(perfil, dados, dados.qsa.length, sinalSetorial);
     const agora = new Date().toISOString();
     const resumo =
       `${dados.razaoSocial}${dados.nomeFantasia ? ` (${dados.nomeFantasia})` : ''}, ` +
@@ -243,6 +245,7 @@ export async function runDescobertaPublica(
           cnpj: dados.cnpj,
           cnae: dados.cnae,
           porte: dados.porte,
+          capitalSocial: dados.capitalSocial,
           situacaoCadastral: dados.situacaoCadastral,
           municipio: dados.municipio,
           uf: dados.uf,
