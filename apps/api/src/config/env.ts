@@ -53,6 +53,17 @@ const envSchema = z.object({
   BRAVE_API_KEY: z.string().optional(),
   FIRECRAWL_API_KEY: z.string().optional(),
 
+  // Mira Prospects — descoberta B2B via BigQuery (base de CNPJ da Base dos
+  // Dados: basedosdados.br_me_cnpj.estabelecimentos). Fonte confiável que não
+  // depende do servidor de download da Receita. Opcional: sem a service
+  // account, a descoberta cai para índice local/busca. Custo protegido por
+  // BIGQUERY_MAX_GB (teto de bytes por consulta; ver doc 10 do estudo).
+  //   - GOOGLE_APPLICATION_CREDENTIALS_JSON: JSON da service account (secret)
+  //   - BIGQUERY_PROJECT_ID: projeto de cobrança/consulta (ex.: zappiq-prod)
+  GOOGLE_APPLICATION_CREDENTIALS_JSON: z.string().optional(),
+  BIGQUERY_PROJECT_ID: z.string().optional(),
+  BIGQUERY_MAX_GB: z.coerce.number().default(8), // teto duro de GB varridos por consulta
+
   // WhatsApp
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().optional(),

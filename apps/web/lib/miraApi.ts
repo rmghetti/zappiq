@@ -257,6 +257,7 @@ export const miraApi = {
       provider: string | null;
       cnpjIndexDisponivel: boolean;
       cnpjIndexTotal: number;
+      bigquery?: boolean;
     };
   }> => api.get('/api/mira/motor-b/status'),
   descobrir: (

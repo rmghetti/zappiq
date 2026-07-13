@@ -18,6 +18,7 @@ import { logger } from '../../utils/logger.js';
 import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, type CnpjData } from './cnpj.js';
 import { computeMiraScoreV1 } from './score.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
+import { buscarCnpjsBigQuery } from './descobertaBigQuery.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
 const MAX_QUERIES = 3;
@@ -75,7 +76,7 @@ async function buscarCandidatosIndiceLocal(perfil: any, regiaoLivre: string): Pr
 }
 
 export interface DescobertaPublicaResult {
-  fonte: 'indice_local' | 'busca_publica';
+  fonte: 'bigquery' | 'indice_local' | 'busca_publica';
   buscas: number;
   encontrados: number; // resultados de busca uteis
   cnpjsVerificados: number;
@@ -127,16 +128,24 @@ export async function runDescobertaPublica(
 
   const alvoRegiao = (regiao ?? '').trim();
 
-  // Tenta primeiro o índice local (grátis, sem chave, sem gastar quota de
-  // busca). Só cai pra busca na web se o índice não tiver dado match.
-  const cnpjsDoIndice = await buscarCandidatosIndiceLocal(perfil, alvoRegiao);
-  const usandoIndiceLocal = cnpjsDoIndice.length > 0;
+  // Fonte de candidatos, em ordem de preferência:
+  //  1) BigQuery (Base dos Dados) — confiável, filtra por CNAE+UF do ICP;
+  //  2) índice local de CNPJ (se a base foi ingerida);
+  //  3) busca pública na web (fallback).
+  // Todas devolvem CNPJs que são SEMPRE re-verificados na Receita (BrasilAPI).
+  let cnpjsDiretos: string[] = await buscarCnpjsBigQuery(perfil, alvoRegiao);
+  let fonteDiretos: 'bigquery' | 'indice_local' | null = cnpjsDiretos.length ? 'bigquery' : null;
+  if (!fonteDiretos) {
+    cnpjsDiretos = await buscarCandidatosIndiceLocal(perfil, alvoRegiao);
+    if (cnpjsDiretos.length) fonteDiretos = 'indice_local';
+  }
+  const usandoCnpjsDiretos = fonteDiretos !== null;
 
   const resultados: SerpResult[] = [];
   const vistosUrl = new Set<string>();
   let buscas = 0;
 
-  if (!usandoIndiceLocal) {
+  if (!usandoCnpjsDiretos) {
     if (!buscaPublicaDisponivel()) {
       const err: any = new Error('fonte_indisponivel');
       err.status = 501;
@@ -165,9 +174,9 @@ export async function runDescobertaPublica(
 
   const ent = await getMiraEntitlement(organizationId);
   const result: DescobertaPublicaResult = {
-    fonte: usandoIndiceLocal ? 'indice_local' : 'busca_publica',
+    fonte: fonteDiretos ?? 'busca_publica',
     buscas,
-    encontrados: usandoIndiceLocal ? cnpjsDoIndice.length : resultados.length,
+    encontrados: usandoCnpjsDiretos ? cnpjsDiretos.length : resultados.length,
     cnpjsVerificados: 0,
     criados: 0,
     prontos: 0,
@@ -176,12 +185,12 @@ export async function runDescobertaPublica(
     blocked: ent.quota.blocked,
     quota: { used: ent.quota.used, total: ent.quota.total, remaining: ent.quota.remaining },
   };
-  if (!usandoIndiceLocal && resultados.length === 0) return result;
+  if (!usandoCnpjsDiretos && resultados.length === 0) return result;
 
-  // -- Fase 1: colher CNPJs candidatos (índice local, ou snippets de busca) e VERIFICAR na fonte oficial --
+  // -- Fase 1: colher CNPJs candidatos (BigQuery/índice local, ou snippets de busca) e VERIFICAR na fonte oficial --
   const cnpjsBrutos = new Set<string>();
-  if (usandoIndiceLocal) {
-    for (const c of cnpjsDoIndice) cnpjsBrutos.add(c);
+  if (usandoCnpjsDiretos) {
+    for (const c of cnpjsDiretos) cnpjsBrutos.add(c);
   } else {
     for (const r of resultados) {
       const matches = `${r.title} ${r.snippet}`.match(CNPJ_RE) ?? [];
