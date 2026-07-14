@@ -34,16 +34,11 @@ vi.mock('bullmq', () => ({
 }));
 
 // ── Mock channelDispatcher (import dinâmico dentro do handler) ────────────────
-// ATENÇÃO: o factory do vi.mock é exaustivo. Ele substitui o módulo inteiro, e
-// qualquer export que o handler destrutura e não estiver declarado aqui estoura
-// já no `await import(...)` da linha 123 do queueService, derrubando TODOS os
-// testes do arquivo (não só o do caminho afetado), com um erro que não parece
-// ter relação com o teste que quebrou.
-// Regra: mantenha esta lista igual ao destructure do processMessageSendJob.
-// Hoje ele puxa sendReplyText (texto livre) e sendReplyTemplate (campanha com
-// template aprovado da Meta). Os demais exports do channelDispatcher
-// (sendReplyInteractive, sendReplyMedia, markIncomingAsRead) não são
-// importados pelo queueService, então ficam fora de propósito.
+// O factory precisa expor TODO export que o handler desestrutura, mesmo os que
+// o teste não exercita: o handler faz
+//   const { sendReplyText, sendReplyTemplate } = await import('./channelDispatcher.js')
+// e o vitest lança na hora de LER um export ausente do mock, então um export
+// faltando derruba todos os testes do arquivo, não só os do caminho dele.
 const sendReplyText = vi.fn();
 const sendReplyTemplate = vi.fn();
 vi.mock('./channelDispatcher.js', () => ({
@@ -82,13 +77,6 @@ beforeEach(() => {
   messageUpdate.mockResolvedValue({});
   messageCreate.mockResolvedValue({ id: 'msg-created' });
   campaignUpdate.mockResolvedValue({});
-  // Default no contrato de SendReplyResult. Nenhum teste daqui exercita o
-  // caminho de template ainda, mas sem um retorno válido o vi.fn() devolveria
-  // undefined e quem escrever o primeiro teste de template ia bater num
-  // "Cannot read properties of undefined (reading 'externalMessageId')" lá no
-  // update da mensagem, longe da causa. sendReplyText continua sem default de
-  // propósito: o resultado do envio é o que cada teste está medindo.
-  sendReplyTemplate.mockResolvedValue({ channel: 'whatsapp', externalMessageId: 'wamid.TPL' });
 });
 
 describe('processMessageSendJob — inbox humano (messageId)', () => {
@@ -249,5 +237,77 @@ describe('processMessageSendJob — campanha (sem messageId)', () => {
       processMessageSendJob({ campaignId: 'camp-1', content: 'x' }),
     ).rejects.toThrow(/organizationId\/contactId/);
     expect(sendReplyText).not.toHaveBeenCalled();
+  });
+});
+
+// ── Caminho de template (data.template) ──────────────────────────────────────
+// Este branch entrou junto com o sendReplyTemplate e era o unico do handler sem
+// teste — foi ele que deixou o mock deste arquivo apodrecer sem ninguem ver.
+// Os dois testes usam template SEM variavel de proposito: com variavel o handler
+// busca o contato (prisma.contact), que nao esta no mock daqui. A resolucao de
+// variaveis ja e coberta em __tests__/impulsoTemplateSend.test.ts.
+describe('processMessageSendJob — campanha com template da Meta', () => {
+  const template = {
+    name: 'promo_julho',
+    language: 'pt_BR',
+    bodyText: 'Promoção de julho!',
+    variables: [],
+  };
+
+  it('envia como TEMPLATE quando o job traz template (vale fora da janela de 24h)', async () => {
+    conversationFindFirst.mockResolvedValue({ id: 'conv-t' });
+    messageCreate.mockResolvedValue({ id: 'msg-t' });
+    sendReplyTemplate.mockResolvedValue({ channel: 'whatsapp', externalMessageId: 'wamid.TPL' });
+
+    const res = await processMessageSendJob({
+      campaignId: 'camp-t',
+      contactId: 'contact-t',
+      organizationId: 'org-1',
+      content: 'Promoção de julho!',
+      template,
+    });
+
+    expect(sendReplyTemplate).toHaveBeenCalledWith({
+      organizationId: 'org-1',
+      conversationId: 'conv-t',
+      templateName: 'promo_julho',
+      languageCode: 'pt_BR',
+      components: [],
+    });
+    // Sem variavel, nao monta components — e nao envia texto livre em paralelo.
+    expect(sendReplyText).not.toHaveBeenCalled();
+    expect(res.externalMessageId).toBe('wamid.TPL');
+  });
+
+  it('cai pra texto livre quando o envio como template falha (nunca fica pior)', async () => {
+    conversationFindFirst.mockResolvedValue({ id: 'conv-f' });
+    messageCreate.mockResolvedValue({ id: 'msg-f' });
+    sendReplyTemplate.mockRejectedValue(new Error('template pausado pela Meta'));
+    sendReplyText.mockResolvedValue({ channel: 'whatsapp', externalMessageId: 'wamid.FALLBACK' });
+
+    const res = await processMessageSendJob({
+      campaignId: 'camp-f',
+      contactId: 'contact-f',
+      organizationId: 'org-1',
+      content: 'Promoção de julho!',
+      template,
+    });
+
+    // O fallback e o ponto: falha de template nao pode derrubar o disparo.
+    expect(sendReplyText).toHaveBeenCalledWith({
+      organizationId: 'org-1',
+      conversationId: 'conv-f',
+      content: 'Promoção de julho!',
+    });
+    expect(res.externalMessageId).toBe('wamid.FALLBACK');
+    expect(messageUpdate).toHaveBeenCalledWith({
+      where: { id: 'msg-f' },
+      data: { status: 'SENT', whatsappMessageId: 'wamid.FALLBACK' },
+    });
+    // Enviou de fato, entao conta como enviada — nao como falha.
+    expect(campaignUpdate).toHaveBeenCalledWith({
+      where: { id: 'camp-f' },
+      data: { sentCount: { increment: 1 } },
+    });
   });
 });

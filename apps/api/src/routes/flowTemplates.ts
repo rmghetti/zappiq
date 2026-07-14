@@ -29,9 +29,12 @@ router.post('/:id/duplicate', async (req: Request, res: Response, next: NextFunc
       res.status(404).json({ error: 'Template nao encontrado' });
       return;
     }
+    // Cópia verbatim: o template já está no vocabulário do motor/editor, travado
+    // pelo teste apps/api/src/agents/flowTemplateContract.test.ts. Se algum dia
+    // precisar traduzir aqui, o lugar certo é o template, não esta rota.
     const flow = await prisma.flow.create({
       data: {
-        name: `${template.name} (copia)`,
+        name: `${template.name} (cópia)`,
         description: template.description,
         nodes: template.nodes as any,
         edges: template.edges as any,

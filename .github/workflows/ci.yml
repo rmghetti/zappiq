@@ -62,6 +62,12 @@ jobs:
           JWT_SECRET: ci-dummy-jwt-secret-min-32-chars-0000000000
         run: pnpm --filter @zappiq/api test
 
+      # Testes do web: só logica pura (ambiente node, sem jsdom), entao nao
+      # precisa de env nenhuma. Cobre hoje o round-trip do Maestro, que e o
+      # mapeamento capaz de destruir fluxo de cliente no save.
+      - name: Test Web (Vitest)
+        run: pnpm --filter @zappiq/web test
+
   # ── Security audit ─────────────────────────────────────────────
   audit:
     name: Dependency audit
@@ -116,6 +122,38 @@ jobs:
 
       - name: Format check RAG service
         run: ruff format --check services/rag/
+
+  # ── Test Python (RAG service) ──────────────────────────────────
+  # Job separado do lint de proposito: o lint so precisa do ruff e roda em
+  # segundos, enquanto aqui vai o requirements inteiro (fastapi, pymupdf, otel)
+  # porque a suite importa main.py de verdade. Separado, a falha ja diz se foi
+  # estilo ou comportamento.
+  test-python:
+    name: Test (Python/RAG)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Python
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          # Os dois arquivos entram na chave do cache: requirements-dev.txt faz
+          # `-r requirements.txt`, entao sozinho ele nao invalidaria o cache
+          # quando uma dep de producao mudasse de versao.
+          cache-dependency-path: |
+            services/rag/requirements.txt
+            services/rag/requirements-dev.txt
+
+      - name: Install RAG dependencies (prod + dev)
+        run: pip install -r services/rag/requirements-dev.txt
+
+      # Sem env e sem service container: a suite nao sobe Postgres nem chama
+      # Voyage/OpenAI. O pool do asyncpg e fakeado e o TestClient nao dispara o
+      # lifespan (que abriria conexao e baixaria o BPE do tiktoken).
+      - name: Test RAG (pytest)
+        run: pytest services/rag -q
 
   # ── Prisma schema validation ───────────────────────────────────
   check-prisma:

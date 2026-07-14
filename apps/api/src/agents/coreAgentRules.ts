@@ -40,12 +40,22 @@
  * Versionamento:
  *   Quando atualizar, incrementar CORE_RULES_VERSION abaixo. Audit
  *   logs registram qual versão foi usada em cada turn (futuro V3).
+ *
+ * v2 (2026-07-14), limpeza de marca. As regras não mudaram; a MARCA saiu.
+ *   Este bloco é prependado ao prompt de TODO agente de cliente, então tudo
+ *   aqui é lido pela Vera (CMJ) e vira comportamento dela. Levava:
+ *     - título "CORE RULES ZAPPIQ"
+ *     - exemplo de friction-reducer com a oferta da ZappIQ (trial de 14 dias)
+ *     - exemplo de catálogo com os NOSSOS planos (Starter, Growth, Scale)
+ *     - regra de TTS citando a Iza pelo nome
+ *   Um agente que lê "os planos são Starter, Growth, Scale" como exemplo tem
+ *   chance real de repetir isso pro lead do cliente. Exemplo agora é neutro.
  * ══════════════════════════════════════════════════════════════════════ */
 
-export const CORE_RULES_VERSION = 'v1';
+export const CORE_RULES_VERSION = 'v2';
 
 export const CORE_AGENT_RULES_V1 = `# ═══════════════════════════════════════════════════════
-# CORE RULES ZAPPIQ — comportamento universal de agente
+# REGRAS BASE DO AGENTE (comportamento universal)
 # (estas regras são IMUTÁVEIS e prevalecem sobre customização)
 # ═══════════════════════════════════════════════════════
 
@@ -66,8 +76,8 @@ sem CTA prévio é resposta normal.
 
 ### O que FAZER (ordem)
 
-1. **Mande o link completo com https://** pra próxima ação (use as URLs canônicas
-   abaixo ou as URLs específicas do seu agente).
+1. **Mande o link completo com https://** pra próxima ação (use os links oficiais
+   do seu negócio, que estão na sua base de conhecimento; nunca invente URL).
 2. **Pergunte 1 dado faltante específico** se ainda precisar (email/CNPJ/nome).
    Apenas 1 dado, não checklist.
 3. **OU** ofereça atendimento 1:1 se cliente parece enterprise-grade ou quer mão
@@ -93,10 +103,11 @@ o trial?"
 >
 > 👉 https://[url-completa-com-https]
 >
-> [1 friction-reducer: sem cartão / 14 dias grátis / etc]. Me chama aqui se travar."
+> [1 friction-reducer curto do SEU negócio: o benefício imediato do próximo
+> passo]. Me chama aqui se travar."
 
 **Você (ERRADO ❌):**
-> "Os planos disponíveis são: Starter, Growth, Scale..."
+> "Os planos disponíveis são: A, B, C..."
 > *(despeja catálogo)*
 
 ## CR-2 — HANDOFF HUMANO (ACEITE NA HORA)
@@ -180,7 +191,7 @@ geração automática. Aplique sempre:
 - Evite três frases seguidas com a mesma estrutura (sujeito + verbo + objeto).
 - Mensagens no WhatsApp têm 2-4 linhas por bloco, 1 ideia por vez.
 
-### Roteiro de voz (quando a resposta vai ser lida em voz alta pela Iza ou TTS)
+### Roteiro de voz (quando a resposta vai ser lida em voz alta, TTS)
 - Zero ponto-e-vírgula. Use ponto final.
 - Sem parênteses — dissolva o conteúdo na frase principal.
 - Frases com mais de 20 palavras precisam de um ponto de respiração (vírgula ou ponto).

@@ -45,6 +45,24 @@ LICENSE
 **/*.test.ts
 **/*.spec.ts
 
+# ── Python — services/rag (Node nao cobre estes) ──
+# Este e o UNICO .dockerignore que o build do RAG le: o contexto e a raiz do
+# monorepo (`flyctl deploy --config services/rag/fly.toml` rodando daqui), e o
+# docker so le o .dockerignore da raiz do contexto — o services/rag/.dockerignore
+# NAO tem efeito nenhum neste build.
+# Sem estas linhas o `COPY services/rag/ ./` do Dockerfile leva os testes pra
+# dentro da imagem de producao. O .venv e o pior caso: sao centenas de MB de
+# binario compilado pro macOS indo parar num alpine (e o requirements-dev.txt
+# manda o dev criar o venv exatamente em services/rag/.venv).
+**/__pycache__
+**/*.py[cod]
+**/.venv
+**/.pytest_cache
+**/.ruff_cache
+**/conftest.py
+**/test_*.py
+**/requirements-dev.txt
+
 # ── Cloud / Deploy ───────────────────────────────
 .vercel
 .fly

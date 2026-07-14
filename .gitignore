@@ -69,3 +69,12 @@ apps/api/scripts/v4_gate1_*_report_*.md
 *.tmp
 .worktrees/
 .env*
+
+# ── Python (services/rag) ──
+# So passaram a aparecer quando o RAG ganhou testes: antes ninguem rodava
+# Python local, so o build do Docker.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+services/rag/.venv/
