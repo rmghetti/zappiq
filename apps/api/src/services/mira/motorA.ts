@@ -39,7 +39,11 @@ function passaGate(d: CnpjData, decisores: number): boolean {
   return Boolean(d.razaoSocial) && (d.situacaoCadastral ?? '').toUpperCase() === 'ATIVA' && decisores >= 1;
 }
 
-export async function runMotorA(organizationId: string, cnpjsRaw: string[]): Promise<MotorAResult> {
+export async function runMotorA(
+  organizationId: string,
+  cnpjsRaw: string[],
+  campanhaId?: string | null
+): Promise<MotorAResult> {
   const ent = await getMiraEntitlement(organizationId);
   const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId } });
   if (!perfil || (perfil.prontidao ?? 0) < 60) {
@@ -142,6 +146,7 @@ export async function runMotorA(organizationId: string, cnpjsRaw: string[]): Pro
       const alvo = await (prisma as any).miraAlvo.create({
         data: {
           organizationId,
+          campanhaId: campanhaId ?? null,
           kind: 'B2B',
           motor: 'BASE_INSTALADA',
           status: 'QUALIFYING',

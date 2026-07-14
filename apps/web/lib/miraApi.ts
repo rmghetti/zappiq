@@ -284,6 +284,34 @@ export interface MotorAResult {
   blocked: boolean;
   naoProcessados: string[];
   quota: { used: number; total: number; remaining: number };
+  /** Campanha de prospecção que este disparo virou. */
+  campanhaId?: string;
+  campanhaNome?: string;
+}
+
+// ── Campanhas de prospecção ─────────────────────────────────────────
+// Cada disparo dos motores vira uma campanha nomeada, com gestão no hub.
+// Não confundir com as Campanhas do Zap Impulso (disparo de mensagens).
+export type MiraCampanhaTipo = 'BASE_INSTALADA' | 'DESCOBERTA';
+
+export interface MiraCampanha {
+  id: string;
+  nome: string;
+  tipo: MiraCampanhaTipo;
+  status: 'EM_ANDAMENTO' | 'CONCLUIDA' | 'FALHOU';
+  parametros: { consulta?: string; regiao?: string | null; kind?: 'B2B' | 'B2C'; cnpjs?: number };
+  resultado: {
+    encontrados?: number;
+    criados?: number;
+    prontos?: number;
+    duplicados?: number | string[];
+    regiaoAplicada?: string | null;
+    regiaoOrigem?: 'usuario' | 'perfil' | null;
+    motivo?: string;
+  };
+  alvosCount: number;
+  prontosCount: number;
+  createdAt: string;
 }
 
 // Cobre o resultado de descoberta B2C (Places) e B2B (busca pública): campos
@@ -300,6 +328,9 @@ export interface DescobrirResult {
   /** Região que a busca de fato usou e de onde veio (usuário ou Perfil). */
   regiaoAplicada?: string | null;
   regiaoOrigem?: 'usuario' | 'perfil' | null;
+  /** Campanha de prospecção que este disparo virou. */
+  campanhaId?: string;
+  campanhaNome?: string;
   // Específicos da descoberta B2B pública:
   buscas?: number;
   cnpjsVerificados?: number;
@@ -369,7 +400,7 @@ export const miraApi = {
   // é o savePerfil, depois de o cliente revisar.
   sugerirPerfil: (): Promise<{ success: boolean; data: SugestaoPerfil }> =>
     api.post('/api/mira/perfil/sugestao', {}),
-  listAlvos: (params?: { status?: string; motor?: string; q?: string }): Promise<{
+  listAlvos: (params?: { status?: string; motor?: string; q?: string; campanhaId?: string }): Promise<{
     success: boolean;
     data: { alvos: MiraAlvoListItem[]; quota: MiraQuota; monthKey: string };
   }> => {
@@ -377,15 +408,18 @@ export const miraApi = {
     if (params?.status) qs.set('status', params.status);
     if (params?.motor) qs.set('motor', params.motor);
     if (params?.q) qs.set('q', params.q);
+    if (params?.campanhaId) qs.set('campanhaId', params.campanhaId);
     const s = qs.toString();
     return api.get(`/api/mira/alvos${s ? `?${s}` : ''}`);
   },
+  // Gestão das campanhas de prospecção (hub).
+  listCampanhas: (): Promise<{ success: boolean; data: MiraCampanha[] }> => api.get('/api/mira/campanhas'),
   getAlvo: (id: string): Promise<{ success: boolean; data: MiraAlvoDossie }> => api.get(`/api/mira/alvos/${id}`),
   listReleases: (unreadOnly = false): Promise<{ success: boolean; data: MiraReleaseItem[] }> =>
     api.get(`/api/mira/releases${unreadOnly ? '?unread=1' : ''}`),
   markReleaseLida: (id: string): Promise<{ success: boolean }> => api.post(`/api/mira/releases/${id}/lida`, {}),
-  runMotorA: (cnpjs: string[]): Promise<{ success: boolean; data: MotorAResult }> =>
-    api.post('/api/mira/motor-a/run', { cnpjs }),
+  runMotorA: (cnpjs: string[], nome?: string): Promise<{ success: boolean; data: MotorAResult }> =>
+    api.post('/api/mira/motor-a/run', { cnpjs, ...(nome?.trim() ? { nome: nome.trim() } : {}) }),
   crmCandidates: (): Promise<{ success: boolean; data: { total: number; cnpjs: string[] } }> =>
     api.get('/api/mira/motor-a/crm-candidates'),
   pousarCrm: (alvoId: string): Promise<{ success: boolean; data: { contactId: string; dealId: string; reused: boolean } }> =>
@@ -405,9 +439,15 @@ export const miraApi = {
   descobrir: (
     consulta: string,
     regiao?: string,
-    kind?: 'B2B' | 'B2C'
+    kind?: 'B2B' | 'B2C',
+    nome?: string
   ): Promise<{ success: boolean; data: MotorBResult }> =>
-    api.post('/api/mira/motor-b/descobrir', { consulta, regiao: regiao || null, ...(kind ? { kind } : {}) }),
+    api.post('/api/mira/motor-b/descobrir', {
+      consulta,
+      regiao: regiao || null,
+      ...(kind ? { kind } : {}),
+      ...(nome?.trim() ? { nome: nome.trim() } : {}),
+    }),
   aprofundarAlvo: (alvoId: string): Promise<{ success: boolean; data: AprofundarResult }> =>
     api.post(`/api/mira/alvos/${alvoId}/aprofundar`, {}),
   decisoresPublico: (alvoId: string): Promise<{ success: boolean; data: DecisoresPublicoResult }> =>

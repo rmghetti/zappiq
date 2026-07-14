@@ -247,6 +247,7 @@ model Organization {
   // Mira Prospects — inteligência de oportunidades (add-on)
   miraPerfil              MiraPerfil?
   miraAlvos               MiraAlvo[]
+  miraCampanhas           MiraCampanha[]
   miraReleases            MiraRelease[]
   miraUsageMonthly        MiraUsageMonthly[]
 
@@ -1577,6 +1578,36 @@ model MiraPerfil {
 }
 
 // O Alvo — conta qualificada com dossiê. Unidade de valor e de cota.
+enum MiraCampanhaStatus {
+  EM_ANDAMENTO
+  CONCLUIDA
+  FALHOU
+}
+
+/// Campanha de prospecção: um disparo NOMEADO dos motores. Agrupa os Alvos
+/// que ele criou e guarda parâmetros e resultado para a gestão no hub. Não
+/// confundir com as Campanhas do Zap Impulso (disparo de mensagens): aqui é
+/// mapeamento de mercado.
+model MiraCampanha {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nome           String
+  /// BASE_INSTALADA = mapear carteira (CNPJs); DESCOBERTA = descobrir novos.
+  tipo           MiraMotor
+  status         MiraCampanhaStatus @default(EM_ANDAMENTO)
+  /// O que foi pedido: {consulta?, regiao?, kind?, cnpjs? (quantidade)}
+  parametros     Json               @default("{}")
+  /// O que voltou: {encontrados?, criados?, prontos?, duplicados?, regiaoAplicada?, regiaoOrigem?, motivo?}
+  resultado      Json               @default("{}")
+  alvos          MiraAlvo[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@map("mira_campanhas")
+}
+
 model MiraAlvo {
   id             String         @id @default(cuid())
   organizationId String
@@ -1584,6 +1615,10 @@ model MiraAlvo {
   kind           MiraAlvoKind   @default(B2B)
   motor          MiraMotor
   status         MiraAlvoStatus @default(DISCOVERED)
+
+  /// Campanha que criou este Alvo (null nos antigos e nos criados fora de campanha).
+  campanhaId String?
+  campanha   MiraCampanha? @relation(fields: [campanhaId], references: [id], onDelete: SetNull)
 
   // Identificação da conta-alvo
   nome              String // razão social / nome do negócio
@@ -1630,6 +1665,7 @@ model MiraAlvo {
   @@index([organizationId, status])
   @@index([organizationId, miraScore])
   @@index([organizationId, quotaMonth])
+  @@index([campanhaId])
   @@map("mira_alvos")
 }
 

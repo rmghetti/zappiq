@@ -13,6 +13,7 @@
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Crosshair,
   Loader2,
@@ -25,13 +26,18 @@ import {
   Lock,
   Sparkles,
   TrendingUp,
+  Plus,
+  Search,
+  Radar,
 } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
+import { NovaCampanhaModal } from '@/components/mira/NovaCampanhaModal';
 import {
   miraApi,
   formatBRL,
   type MiraAccessData,
   type MiraAlvoListItem,
+  type MiraCampanha,
 } from '@/lib/miraApi';
 
 export default function MiraOverviewPage() {
@@ -119,8 +125,30 @@ function EntitledPanel({ accessData, alvos }: { accessData: MiraAccessData; alvo
   const pct = quota.total > 0 ? Math.min(100, Math.round((quota.used / quota.total) * 100)) : 0;
   const prontidao = perfil?.prontidao ?? 0;
   const perfilPronto = prontidao >= 60;
+  const router = useRouter();
   const [subBusy, setSubBusy] = useState<string | null>(null);
   const [subError, setSubError] = useState<string | null>(null);
+  const [campanhas, setCampanhas] = useState<MiraCampanha[]>([]);
+  const [campLoading, setCampLoading] = useState(true);
+  const [campReload, setCampReload] = useState(0);
+  const [wizard, setWizard] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    miraApi
+      .listCampanhas()
+      .then((r) => alive && setCampanhas(r.data))
+      .catch(() => {})
+      .finally(() => alive && setCampLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [campReload]);
+
+  // Veio do Perfil recém-salvo ("Criar primeira campanha")? Abre o assistente.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('novaCampanha')) setWizard(true);
+  }, []);
 
   const subscribe = async (tierKey: string) => {
     setSubBusy(tierKey);
@@ -217,6 +245,76 @@ function EntitledPanel({ accessData, alvos }: { accessData: MiraAccessData; alvo
         </div>
       </div>
 
+      {/* Campanhas de prospecção: o disparo dos agentes mora AQUI. */}
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base font-semibold text-gray-900 flex items-center gap-1.5">
+          Campanhas de prospecção
+          <SaibaMais featureKey="mira.campanhas" />
+        </h2>
+        <button
+          onClick={() => setWizard(true)}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+        >
+          <Plus size={15} /> Nova campanha
+        </button>
+      </div>
+      <div className="mb-8">
+        {campLoading ? (
+          <div className="flex items-center justify-center py-8 text-gray-300">
+            <Loader2 className="animate-spin" size={20} />
+          </div>
+        ) : campanhas.length === 0 ? (
+          <div className="border border-dashed border-gray-200 rounded-xl px-5 py-6 text-center">
+            <p className="text-sm text-gray-500 max-w-md mx-auto">
+              {perfilPronto
+                ? 'Nenhuma campanha ainda. Clique em Nova campanha: os agentes saem mapeando o mercado e cada disparo fica registrado aqui, com o resultado.'
+                : 'Complete o Perfil de Prospecção e crie a primeira campanha: os agentes saem mapeando e cada disparo fica registrado aqui.'}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+            {campanhas.slice(0, 5).map((c) => (
+              <div key={c.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="w-8 h-8 rounded-lg bg-primary-50 flex items-center justify-center shrink-0">
+                  {c.tipo === 'DESCOBERTA' ? (
+                    <Search size={15} className="text-primary-600" />
+                  ) : (
+                    <Radar size={15} className="text-primary-600" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">{c.nome}</p>
+                  <p className="text-xs text-gray-400">
+                    {new Date(c.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                    {' · '}
+                    {c.alvosCount} {c.alvosCount === 1 ? 'alvo' : 'alvos'} · {c.prontosCount} prontos
+                    {c.status === 'FALHOU' && <span className="text-red-500"> · falhou</span>}
+                    {c.status === 'EM_ANDAMENTO' && <span className="text-amber-600"> · em andamento</span>}
+                  </p>
+                </div>
+                <Link
+                  href={`/mira/alvos?campanha=${c.id}`}
+                  className="text-xs font-medium text-primary-600 hover:underline shrink-0"
+                >
+                  ver alvos
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {wizard && (
+        <NovaCampanhaModal
+          onClose={() => setWizard(false)}
+          onDone={(campanhaId) => {
+            setWizard(false);
+            setCampReload((k) => k + 1);
+            router.push(campanhaId ? `/mira/alvos?campanha=${campanhaId}` : '/mira/alvos');
+          }}
+        />
+      )}
+
       {/* Atalhos */}
       <div className="grid sm:grid-cols-3 gap-3 mb-8">
         <QuickLink href="/mira/alvos" icon={Target} title="Alvos" desc="Fila priorizada pelo Mira Score" />
@@ -237,10 +335,17 @@ function EntitledPanel({ accessData, alvos }: { accessData: MiraAccessData; alvo
           <p className="text-gray-500 font-medium">Nenhum Alvo ainda</p>
           <p className="text-sm text-gray-400 mt-1 max-w-md mx-auto">
             {perfilPronto
-              ? 'Os motores de mapeamento entram em operação em breve. Os primeiros Alvos aparecem aqui.'
+              ? 'Crie a primeira campanha de prospecção: os agentes saem mapeando e os Alvos aparecem aqui.'
               : 'Complete o Perfil de Prospecção para os agentes começarem a mapear.'}
           </p>
-          {!perfilPronto && (
+          {perfilPronto ? (
+            <button
+              onClick={() => setWizard(true)}
+              className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+            >
+              <Plus size={15} /> Nova campanha
+            </button>
+          ) : (
             <Link
               href="/mira/perfil"
               className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"

@@ -235,6 +235,11 @@ export default function MiraPerfilPage() {
             ) : savedAt ? (
               <span className="inline-flex items-center gap-1 text-emerald-600">
                 <CheckCircle2 size={13} /> Perfil salvo · prontidão {prontidao}%
+                {prontidao >= 60 && (
+                  <Link href="/mira?novaCampanha=1" className="ml-2 font-medium text-primary-600 hover:underline">
+                    Criar primeira campanha →
+                  </Link>
+                )}
               </span>
             ) : (
               'Os agentes usam este perfil para mapear e qualificar.'
