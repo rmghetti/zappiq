@@ -34,9 +34,21 @@ vi.mock('bullmq', () => ({
 }));
 
 // ── Mock channelDispatcher (import dinâmico dentro do handler) ────────────────
+// ATENÇÃO: o factory do vi.mock é exaustivo. Ele substitui o módulo inteiro, e
+// qualquer export que o handler destrutura e não estiver declarado aqui estoura
+// já no `await import(...)` da linha 123 do queueService, derrubando TODOS os
+// testes do arquivo (não só o do caminho afetado), com um erro que não parece
+// ter relação com o teste que quebrou.
+// Regra: mantenha esta lista igual ao destructure do processMessageSendJob.
+// Hoje ele puxa sendReplyText (texto livre) e sendReplyTemplate (campanha com
+// template aprovado da Meta). Os demais exports do channelDispatcher
+// (sendReplyInteractive, sendReplyMedia, markIncomingAsRead) não são
+// importados pelo queueService, então ficam fora de propósito.
 const sendReplyText = vi.fn();
+const sendReplyTemplate = vi.fn();
 vi.mock('./channelDispatcher.js', () => ({
   sendReplyText: (...args: any[]) => sendReplyText(...args),
+  sendReplyTemplate: (...args: any[]) => sendReplyTemplate(...args),
 }));
 
 // ── Mock @zappiq/database (import dinâmico dentro do handler) ─────────────────
@@ -70,6 +82,13 @@ beforeEach(() => {
   messageUpdate.mockResolvedValue({});
   messageCreate.mockResolvedValue({ id: 'msg-created' });
   campaignUpdate.mockResolvedValue({});
+  // Default no contrato de SendReplyResult. Nenhum teste daqui exercita o
+  // caminho de template ainda, mas sem um retorno válido o vi.fn() devolveria
+  // undefined e quem escrever o primeiro teste de template ia bater num
+  // "Cannot read properties of undefined (reading 'externalMessageId')" lá no
+  // update da mensagem, longe da causa. sendReplyText continua sem default de
+  // propósito: o resultado do envio é o que cada teste está medindo.
+  sendReplyTemplate.mockResolvedValue({ channel: 'whatsapp', externalMessageId: 'wamid.TPL' });
 });
 
 describe('processMessageSendJob — inbox humano (messageId)', () => {
