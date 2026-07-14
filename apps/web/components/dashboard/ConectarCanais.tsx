@@ -244,25 +244,30 @@ export default function ConectarCanais() {
 
     setSaving(true);
     try {
-      // settings é JSON: preserva o resto e grava channelActivation.
+      // Rota DEDICADA de canais: o PUT /api/settings é .strict() e barra tokens de
+      // canal (W1.3). Aqui mandamos só os campos de canal + a intenção; o backend
+      // mescla channelActivation no settings. (Era este o motivo do antigo erro 400.)
       const payload: Record<string, any> = {
-        settings: { ...origSettings, channelActivation: activation },
-        // App Secret é do APP Meta (cobre WA + IG do mesmo app). Salva sempre.
-        metaAppSecret: metaAppSecret.trim() || null,
+        channelActivation: activation,
       };
+      // Segredos (tokens + App Secret) só entram no payload quando o usuário digita
+      // algo. O GET redige esses campos (voltam vazios do servidor), então reenviar
+      // "" apagaria o que já está salvo. Omitir = o backend preserva o valor atual.
+      if (metaAppSecret.trim()) payload.metaAppSecret = metaAppSecret.trim();
       if (wantWa) {
         payload.whatsappPhoneNumberId = waPhone.trim() || null;
         payload.whatsappBusinessAccountId = waBiz.trim() || null;
-        payload.whatsappAccessToken = waToken.trim() || null;
+        if (waToken.trim()) payload.whatsappAccessToken = waToken.trim();
       }
       if (wantIg) {
         payload.instagramAccountId = igAccount.trim() || null;
         payload.instagramPageId = igPage.trim() || null;
-        payload.instagramAccessToken = igToken.trim() || null;
+        if (igToken.trim()) payload.instagramAccessToken = igToken.trim();
       }
-      await api.put('/api/settings', payload);
+      await api.put('/api/settings/channels', payload);
       setOrigSettings((s) => ({ ...s, channelActivation: activation }));
-      setOkMsg('Canais salvos! Seu agente já pode atender pelos canais ativados. O score será atualizado.');
+      await loadHealth();
+      setOkMsg('Credenciais salvas! Seu agente já envia pelos canais ativados e o score de treinamento vai subir. Para também RECEBER mensagens, confira o passo do webhook no tutorial.');
     } catch (e: any) {
       setError(e?.message || 'Falha ao salvar. Tente novamente.');
     } finally {

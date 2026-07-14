@@ -54,7 +54,7 @@ export function CanaisTutorialCard() {
             Tutorial interativo, tela a tela. Pelo computador, sem conhecimento técnico.
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <a
             href={TUTORIAL_PDF}
             target="_blank"
@@ -65,10 +65,17 @@ export function CanaisTutorialCard() {
           </a>
           <button
             onClick={() => setOpen(true)}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center gap-2 whitespace-nowrap"
+          >
+            <BookOpen size={14} /> Abrir tutorial
+          </button>
+          {/* CTA primário: leva direto pro campo de conexão em Configurações. */}
+          <a
+            href="/settings#canais"
             className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 flex items-center gap-2 whitespace-nowrap"
           >
-            Abrir tutorial <ArrowRight size={14} />
-          </button>
+            Conectar canais <ArrowRight size={14} />
+          </a>
         </div>
       </div>
 

@@ -291,6 +291,13 @@ export async function computeAIReadiness(organizationId: string): Promise<AIRead
     });
   }
 
+  // Conectar canais é o passo mais fundamental: sem canal, a IA não fala com
+  // ninguém. Sobe pro topo das próximas ações (destaque #1 do treinamento).
+  // Sort estável no V8: só puxa connect_whatsapp pra frente, preserva o resto.
+  nextActions.sort((a, b) =>
+    a.id === 'connect_whatsapp' ? -1 : b.id === 'connect_whatsapp' ? 1 : 0,
+  );
+
   return {
     score,
     level: levelFromScore(score),

@@ -47,6 +47,32 @@ export const impulsoIntegrationSchema = z
 
 export type ImpulsoIntegrationRequest = z.infer<typeof impulsoIntegrationSchema>;
 
+// Credenciais de canal (WhatsApp/Instagram) — rota DEDICADA PUT /api/settings/channels.
+//
+// Por que uma rota/schema próprios e não o updateSettingsSchema: o /api/settings é
+// .strict() e barra QUALQUER token de canal (W1.3, anti mass-assignment). Só que o
+// cliente PRECISA salvar essas credenciais no modelo "traga seu token" — sem isso o
+// botão "Salvar e ativar canais" respondia 400 e a conexão manual era impossível.
+// Aqui uma whitelist .strict() SÓ com os campos de canal + a intenção de ativação.
+// plan/trial/subscription/stripe/quota continuam impossíveis por request (não estão
+// na whitelist), então a proteção de W1.3 segue intacta.
+export const channelCredentialsSchema = z
+  .object({
+    channelActivation: z.enum(['whatsapp', 'instagram', 'both']).optional(),
+    // Tamanhos generosos: tokens de System User da Meta são longos; IDs são numéricos.
+    // null limpa deliberadamente o campo (usado, por ex., ao trocar de número).
+    whatsappPhoneNumberId: z.string().max(64).nullable().optional(),
+    whatsappBusinessAccountId: z.string().max(64).nullable().optional(),
+    whatsappAccessToken: z.string().max(2000).nullable().optional(),
+    instagramAccountId: z.string().max(64).nullable().optional(),
+    instagramPageId: z.string().max(64).nullable().optional(),
+    instagramAccessToken: z.string().max(2000).nullable().optional(),
+    metaAppSecret: z.string().max(256).nullable().optional(),
+  })
+  .strict();
+
+export type ChannelCredentialsInput = z.infer<typeof channelCredentialsSchema>;
+
 // Campos sensíveis (colunas de topo) nunca expostos na resposta do GET.
 export const SETTINGS_REDACTED_FIELDS = [
   'whatsappAccessToken',
