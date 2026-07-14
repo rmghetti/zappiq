@@ -19,6 +19,7 @@ import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, type CnpjData } fr
 import { computeMiraScoreV1 } from './score.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
 import { buscarCnpjsBigQuery } from './descobertaBigQuery.js';
+import { resolverRegiaoBusca } from './regiaoBusca.js';
 import { buscarSinalSetorial } from './cagedMirror.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
@@ -87,6 +88,9 @@ export interface DescobertaPublicaResult {
   duplicados: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
+  /** Região que a busca de fato usou e de onde ela veio (usuário ou Perfil). */
+  regiaoAplicada: string | null;
+  regiaoOrigem: 'usuario' | 'perfil' | null;
 }
 
 function hostDe(url: string): string {
@@ -127,7 +131,11 @@ export async function runDescobertaPublica(
     throw err;
   }
 
-  const alvoRegiao = (regiao ?? '').trim();
+  // Região do Perfil como default: o usuário vence; sem digitação, a primeira
+  // região do alvo B2B guia também as queries da busca web (o BigQuery e o
+  // índice local já usavam as UFs do Perfil via extrairUfs, a web não).
+  const regiaoBusca = resolverRegiaoBusca(regiao, perfil?.alvoB2B?.regioes);
+  const alvoRegiao = regiaoBusca.regiao ?? '';
 
   // Fonte de candidatos, em ordem de preferência:
   //  1) BigQuery (Base dos Dados) — confiável, filtra por CNAE+UF do ICP;
@@ -185,6 +193,8 @@ export async function runDescobertaPublica(
     duplicados: 0,
     blocked: ent.quota.blocked,
     quota: { used: ent.quota.used, total: ent.quota.total, remaining: ent.quota.remaining },
+    regiaoAplicada: regiaoBusca.regiao,
+    regiaoOrigem: regiaoBusca.origem,
   };
   if (!usandoCnpjsDiretos && resultados.length === 0) return result;
 

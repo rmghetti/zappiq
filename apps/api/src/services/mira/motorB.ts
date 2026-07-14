@@ -15,6 +15,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
 import { computeMiraScoreB2C } from './score.js';
+import { resolverRegiaoBusca } from './regiaoBusca.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
 const PLACES_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
@@ -39,6 +40,9 @@ export interface MotorBResult {
   duplicados: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
+  /** Região que a busca de fato usou e de onde ela veio (usuário ou Perfil). */
+  regiaoAplicada: string | null;
+  regiaoOrigem: 'usuario' | 'perfil' | null;
 }
 
 export function placesDisponivel(): boolean {
@@ -120,7 +124,12 @@ export async function runMotorB(organizationId: string, consulta: string, regiao
     throw err;
   }
 
-  const hits = await searchPlaces(organizationId, consulta, regiao);
+  // Região do Perfil como default: quem preencheu regiaoCidade no alvo B2C
+  // não precisa digitar a região de novo a cada busca (e não varre o Brasil
+  // inteiro quando esquece).
+  const regiaoBusca = resolverRegiaoBusca(regiao, perfil?.alvoB2C?.regiaoCidade);
+
+  const hits = await searchPlaces(organizationId, consulta, regiaoBusca.regiao);
   const result: MotorBResult = {
     fonte: 'google_places',
     encontrados: hits.length,
@@ -129,6 +138,8 @@ export async function runMotorB(organizationId: string, consulta: string, regiao
     duplicados: 0,
     blocked: false,
     quota: { used: 0, total: 0, remaining: 0 },
+    regiaoAplicada: regiaoBusca.regiao,
+    regiaoOrigem: regiaoBusca.origem,
   };
 
   for (const hit of hits) {
@@ -160,7 +171,7 @@ export async function runMotorB(organizationId: string, consulta: string, regiao
       `${hit.nome}${municipio ? `, ${[municipio, uf].filter(Boolean).join('/')}` : ''}. ` +
       `${hit.rating ? `Avaliação ${hit.rating} (${hit.totalAvaliacoes ?? 0} avaliações). ` : ''}` +
       `${hit.site ? 'Tem site. ' : 'Sem site público. '}` +
-      `Descoberto no Google Places pela busca "${consulta}${regiao ? ` em ${regiao}` : ''}".`;
+      `Descoberto no Google Places pela busca "${consulta}${regiaoBusca.regiao ? ` em ${regiaoBusca.regiao}` : ''}"${regiaoBusca.origem === 'perfil' ? ' (região vinda do Perfil de Prospecção)' : ''}.`;
 
     try {
       const alvo = await (prisma as any).miraAlvo.create({

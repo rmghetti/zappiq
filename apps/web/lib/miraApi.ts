@@ -297,6 +297,9 @@ export interface DescobrirResult {
   duplicados: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
+  /** Região que a busca de fato usou e de onde veio (usuário ou Perfil). */
+  regiaoAplicada?: string | null;
+  regiaoOrigem?: 'usuario' | 'perfil' | null;
   // Específicos da descoberta B2B pública:
   buscas?: number;
   cnpjsVerificados?: number;

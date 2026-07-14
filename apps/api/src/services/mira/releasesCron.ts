@@ -137,9 +137,14 @@ export async function runMiraReleasesCycle(): Promise<{
 
       const perfil = await (prisma as any).miraPerfil.findUnique({
         where: { organizationId: org.id },
-        select: { catalogo: true },
+        select: { catalogo: true, doresResolvidas: true, alvoB2B: true },
       });
       const catalogo: { nome: string }[] = Array.isArray(perfil?.catalogo) ? perfil.catalogo : [];
+      // Sinais do Perfil que calibram a relevancia (dores + sinais de intencao).
+      const sinaisPerfil = {
+        doresResolvidas: Array.isArray(perfil?.doresResolvidas) ? perfil.doresResolvidas : [],
+        sinaisIntencao: Array.isArray(perfil?.alvoB2B?.sinaisIntencao) ? perfil.alvoB2B.sinaisIntencao : [],
+      };
       let alvosBuscaFeitas = 0;
 
       const alvos = await (prisma as any).miraAlvo.findMany({
@@ -195,7 +200,7 @@ export async function runMiraReleasesCycle(): Promise<{
           ) {
             alvosBuscaFeitas++;
             try {
-              const { drafts, buscas } = await buscarReleasesPublicos(org.id, alvo, catalogo);
+              const { drafts, buscas } = await buscarReleasesPublicos(org.id, alvo, catalogo, sinaisPerfil);
               globalBuscasPublicas += buscas;
               for (const d of drafts) {
                 const dup = await (prisma as any).miraRelease.findFirst({
