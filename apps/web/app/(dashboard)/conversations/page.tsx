@@ -88,6 +88,10 @@ export default function ConversationsPage() {
   const [sending, setSending] = useState(false);
   // Feature 5a.1 — handoff humano ↔ IA.
   const currentUser = useAuthStore((s) => s.user);
+  // Nome do agente do tenant (organization.settings.agentName), mesma fonte do
+  // AgentTrainingWidget. Fallback neutro casa com o texto "IA pausada" ao lado.
+  const organization = useAuthStore((s) => s.organization);
+  const agentName: string = (organization?.settings as any)?.agentName || 'IA';
   const [actionBusy, setActionBusy] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
@@ -427,7 +431,7 @@ export default function ConversationsPage() {
                   </span>
                   <button onClick={handleResumeAi} disabled={actionBusy}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-accent-500 text-white hover:bg-accent-600 disabled:opacity-50 transition-colors">
-                    <Bot size={13} /> Retomar Iza
+                    <Bot size={13} /> Retomar {agentName}
                   </button>
                 </div>
               )}

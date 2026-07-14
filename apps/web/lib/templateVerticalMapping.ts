@@ -190,7 +190,7 @@ export const TEMPLATE_RICH_INFO: Record<string, TemplateRichInfo> = {
     ],
     complexity: 'BAIXA',
     estimatedSetupMinutes: 5,
-    bestUseCase: 'Salao com mais de 3 profissionais — Iza ajuda a distribuir agenda sem favoritismo.',
+    bestUseCase: 'Salao com mais de 3 profissionais: a IA ajuda a distribuir agenda sem favoritismo.',
   },
   'SALAO_BELEZA_AGENDAMENTO_RECUPERACAO': {
     shortPitch: 'Cliente que nao agendou em 48h ganha cupom 10% off na primeira visita.',
@@ -245,7 +245,7 @@ export const TEMPLATE_RICH_INFO: Record<string, TemplateRichInfo> = {
     ],
     complexity: 'BAIXA',
     estimatedSetupMinutes: 6,
-    bestUseCase: 'Academia com aula gratuita ja no plano comercial — Iza maximiza o uso desse beneficio.',
+    bestUseCase: 'Academia com aula gratuita ja no plano comercial: a IA maximiza o uso desse beneficio.',
   },
   'ACADEMIA_AGENDAMENTO_RECUPERACAO': {
     shortPitch: 'Membro inativo 14 dias recebe convite pra sessao gratis com personal trainer.',
@@ -307,7 +307,7 @@ export const TEMPLATE_RICH_INFO: Record<string, TemplateRichInfo> = {
     whatItDoes: [
       'Cron 30d após último banho',
       'Lembrete personalizado com nome do pet',
-      'Iza confirma e agenda',
+      'IA confirma e agenda',
       'Sincroniza com agenda do banhista preferido',
     ],
     indicatedFor: 'Petshop que tem clientes recorrentes mas perde reagendamento por simples esquecimento do tutor.',
@@ -354,7 +354,7 @@ export const TEMPLATE_RICH_INFO: Record<string, TemplateRichInfo> = {
     ],
     complexity: 'BAIXA',
     estimatedSetupMinutes: 6,
-    bestUseCase: 'E-com com Insta Ads rodando — Iza converte lead frio do anúncio em cliente.',
+    bestUseCase: 'E-com com Insta Ads rodando: a IA converte lead frio do anúncio em cliente.',
   },
   'ECOMMERCE_MODA_AGENDAMENTO_RECUPERACAO': {
     shortPitch: 'Carrinho abandonado 2h: oferta de frete gratis pra finalizar hoje.',
@@ -372,7 +372,7 @@ export const TEMPLATE_RICH_INFO: Record<string, TemplateRichInfo> = {
     ],
     complexity: 'MEDIA',
     estimatedSetupMinutes: 7,
-    bestUseCase: 'E-com com Shopify/VTEX integrado — Iza puxa dados do carrinho automaticamente.',
+    bestUseCase: 'E-com com Shopify/VTEX integrado: a IA puxa dados do carrinho automaticamente.',
   },
   'ECOMMERCE_MODA_NPS_POS_VENDA': {
     shortPitch: 'Pos-entrega: NPS + pedido de foto vestindo pra reposta no Insta.',

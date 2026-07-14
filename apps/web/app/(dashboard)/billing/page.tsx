@@ -222,7 +222,7 @@ export default function BillingPage() {
             Lite — 14 dias gratis pra validar
           </h3>
           <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
-            Sem cartao no início. Conecta WhatsApp, treina a IA, deixa a Iza atender. Após 14 dias,
+            Sem cartao no início. Conecta WhatsApp, treina a IA e deixa ela atender. Após 14 dias,
             R$ 249,90/mes (ou R$ 199,92/mes se você trava o plano anual com 20% off antes do trial expirar).
           </p>
         </div>
@@ -415,7 +415,7 @@ export default function BillingPage() {
           </h3>
           <p className="text-xs text-purple-800 mt-2 leading-relaxed">
             Você esta no beta privado de pricing por resultado. R$ 19,90 por lead qualificado
-            (score &gt;60) ou R$ 89 por oportunidade criada pela Iza. Cap mensal R$ 1.997 durante
+            (score &gt;60) ou R$ 89 por oportunidade criada pela IA. Cap mensal R$ 1.997 durante
             os primeiros 60 dias pra calibrar.
           </p>
         </div>

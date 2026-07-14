@@ -7,6 +7,7 @@ import {
   ArrowRight, ChevronDown, ChevronUp, AlertTriangle, Lightbulb,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { useAuthStore } from '../../../stores/authStore';
 import { CampaignFormModal } from '../../../components/campaigns/CampaignFormModal';
 import { IzaStrategistModal } from '../../../components/campaigns/IzaStrategistModal';
 import { ImpulsoUpsellModal, type ImpulsoEntitlement } from '../../../components/campaigns/ImpulsoUpsellModal';
@@ -50,8 +51,8 @@ const STATUS_BADGE: Record<string, { bg: string; icon: any; label: string }> = {
 const PILLARS = [
   {
     icon: Sparkles,
-    title: 'Iza Estrategista',
-    desc: 'Descreva o objetivo em uma frase e a Iza monta a campanha inteira: público, mensagem, horário e verba.',
+    title: 'IA Estrategista',
+    desc: 'Descreva o objetivo em uma frase e a IA monta a campanha inteira: público, mensagem, horário e verba.',
     status: 'ok' as const,
   },
   {
@@ -63,7 +64,7 @@ const PILLARS = [
   {
     icon: Compass,
     title: 'Copiloto & Coach',
-    desc: 'A Iza acompanha os números de cada campanha e sugere o que ajustar para bater sua meta.',
+    desc: 'A IA acompanha os números de cada campanha e sugere o que ajustar para bater sua meta.',
     status: 'ok' as const,
   },
   {
@@ -75,12 +76,17 @@ const PILLARS = [
   {
     icon: Zap,
     title: 'Auto-otimização',
-    desc: 'A Iza testa variações da campanha e concentra o volume na que mais vende, sozinha.',
+    desc: 'A IA testa variações da campanha e concentra o volume na que mais vende, sozinha.',
     status: 'soon' as const,
   },
 ];
 
 export default function CampaignsPage() {
+  // Nome do agente do tenant (mesma fonte do AgentTrainingWidget). Nunca "Iza"
+  // hardcodado: a Iza é o agente da própria ZappIQ, não o do cliente.
+  const { organization } = useAuthStore();
+  const agentName: string = (organization?.settings as any)?.agentName || 'a IA';
+
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -159,7 +165,7 @@ export default function CampaignsPage() {
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full text-white ${GRAD}`}>Campanhas</span>
           </div>
           <p className="text-sm text-gray-500 mt-1">
-            Sua central de vendas proativas. Crie campanhas com a Iza e acompanhe os resultados.
+            Sua central de vendas proativas. Crie campanhas com {agentName} e acompanhe os resultados.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -167,7 +173,7 @@ export default function CampaignsPage() {
             onClick={() => guard(() => setIzaOpen(true))}
             className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:opacity-95 shadow-sm ${GRAD}`}
           >
-            <Sparkles size={16} /> Criar com a Iza
+            <Sparkles size={16} /> Criar com {agentName}
           </button>
           <SaibaMais featureKey="campaigns.iza-estrategista" />
           <button
@@ -229,7 +235,7 @@ export default function CampaignsPage() {
             </span>
             <div>
               <h2 className="text-base font-bold text-gray-900">Como funciona o Impulso</h2>
-              <p className="text-xs text-gray-500">A Iza cuida da campanha de ponta a ponta. Veja cada parte.</p>
+              <p className="text-xs text-gray-500">Veja como {agentName} cuida da campanha de ponta a ponta, parte por parte.</p>
             </div>
           </div>
           {howOpen ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
@@ -432,6 +438,8 @@ function Stat({ value, label, color, bar, pct }: { value: number; label: string;
 }
 
 function EmptyState({ onIza, onManual }: { onIza: () => void; onManual: () => void }) {
+  const { organization } = useAuthStore();
+  const agentName: string = (organization?.settings as any)?.agentName || 'a IA';
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-8 sm:p-12 text-center">
       <span className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl text-white mb-4 ${GRAD}`}>
@@ -441,15 +449,15 @@ function EmptyState({ onIza, onManual }: { onIza: () => void; onManual: () => vo
         Sua primeira campanha em <span className={GRAD_TEXT}>uma frase</span>
       </h3>
       <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
-        Diga à Iza o que você quer, por exemplo <em>"reativar quem sumiu há 30 dias com 15% de desconto"</em>,
-        e ela monta a campanha completa: público, mensagem, horário e estimativa. Você só aprova.
+        Diga para {agentName} o que você quer, por exemplo <em>"reativar quem sumiu há 30 dias com 15% de desconto"</em>,
+        e a campanha completa vem pronta: público, mensagem, horário e estimativa. Você só aprova.
       </p>
       <div className="flex items-center justify-center gap-2 mt-6">
         <button
           onClick={onIza}
           className={`inline-flex items-center gap-2 px-5 py-2.5 text-white rounded-lg text-sm font-semibold hover:opacity-95 ${GRAD}`}
         >
-          <Sparkles size={16} /> Criar com a Iza <ArrowRight size={16} />
+          <Sparkles size={16} /> Criar com {agentName} <ArrowRight size={16} />
         </button>
         <button
           onClick={onManual}

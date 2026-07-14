@@ -43,6 +43,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { useAuthStore } from '../../../stores/authStore';
 import { AskNodeFields } from './_components/AskNodeFields';
 import { PredicateBuilder, summarizePredicates, type Predicate } from './_components/PredicateBuilder';
 import { MessageRichFields } from './_components/MessageRichFields';
@@ -466,6 +467,11 @@ function apiEdgesToCanvas(apiEdges: any[]): Edge[] {
 }
 
 function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlows: ApiFlow[]; onBack: () => void; onSaved: () => void }) {
+  // Nome do agente do tenant (organization.settings.agentName), mesma fonte do
+  // AgentTrainingWidget. Nunca "Iza" hardcodado no painel do cliente.
+  const organization = useAuthStore((s) => s.organization);
+  const agentName: string = (organization?.settings as any)?.agentName || 'a IA';
+
   const [name, setName] = useState(flow.name);
   const [priority, setPriority] = useState<number>(flow.priority ?? 0);
   const [nodes, setNodes, onNodesChange] = useNodesState(apiNodesToCanvas(flow.nodes || []));
@@ -1000,7 +1006,7 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
               {testTurns.map((t, i) => (
                 <div key={i} className="mb-1">
                   <span className="text-gray-400">você ›</span> {t.input}
-                  <div className="text-gray-600">→ {t.effects.map((e) => e.kind).join(', ') || '(nada)'} · próximo: {t.next}{t.aiPrompt ? ' (Iza assume)' : ''}</div>
+                  <div className="text-gray-600">→ {t.effects.map((e) => e.kind).join(', ') || '(nada)'} · próximo: {t.next}{t.aiPrompt ? ` (${agentName} assume)` : ''}</div>
                 </div>
               ))}
             </div>
@@ -1332,6 +1338,11 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
   type: string; data: any; otherFlows?: { id: string; name: string }[];
   onChange: (p: Record<string, any>) => void; onDelete: () => void;
 }) {
+  // Nome do agente do tenant (organization.settings.agentName), mesma fonte do
+  // AgentTrainingWidget. Nunca "Iza" hardcodado no painel do cliente.
+  const organization = useAuthStore((s) => s.organization);
+  const agentName: string = (organization?.settings as any)?.agentName || 'a IA';
+
   const meta = metaFor(type);
   const inputCls = 'w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-primary-400';
 
@@ -1391,7 +1402,7 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
 
       {type === 'ai' && (
         <>
-          <label className="block text-xs text-gray-600 mb-1">Instrução do passo (a Iza assume)</label>
+          <label className="block text-xs text-gray-600 mb-1">Instrução do passo ({agentName} assume)</label>
           <AutoGrowTextarea
             value={data?.prompt || ''}
             onChange={(v) => onChange({ prompt: v })}
@@ -1399,7 +1410,7 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
             className={`${inputCls} mb-2`}
           />
           <p className="text-[10px] text-gray-400 mt-1">
-            A Iza usa o modelo de IA automaticamente (otimizado pela ZappIQ) e reaproveita a identidade + conhecimento (RAG) que você treinou. Você não precisa escolher modelo.
+            O nó usa o modelo de IA automaticamente (otimizado pela ZappIQ): {agentName} reaproveita a identidade + conhecimento (RAG) que você treinou. Você não precisa escolher modelo.
           </p>
           <AiToolsFields
             tools={data?.tools as WebhookTool[] | undefined}

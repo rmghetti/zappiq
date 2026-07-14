@@ -418,11 +418,11 @@ export default function AnalyticsPage() {
                   <div className="min-w-0">
                     <div className="text-sm text-gray-800 truncate">{s.contactName || 'Contato'}{s.title ? ` · ${s.title}` : ''} · {fmtBRL(s.value)}</div>
                     <div className="text-[11px] text-gray-400 truncate">
-                      A Iza conversou com este contato{s.lastMessage ? ` — "${String(s.lastMessage.content).slice(0, 60)}"` : ''}{s.candidateCount > 1 ? ` (${s.candidateCount} conversas candidatas)` : ''}
+                      A IA conversou com este contato{s.lastMessage ? ` — "${String(s.lastMessage.content).slice(0, 60)}"` : ''}{s.candidateCount > 1 ? ` (${s.candidateCount} conversas candidatas)` : ''}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => confirmLink(s.dealId, s.conversationId)} className="text-[12px] px-2.5 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700" title="Atribuir esta venda à conversa da Iza">Sim, foi a Iza</button>
+                    <button onClick={() => confirmLink(s.dealId, s.conversationId)} className="text-[12px] px-2.5 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700" title="Atribuir esta venda à conversa da IA">Sim, foi a IA</button>
                     <button onClick={() => rejectLink(s.dealId)} className="text-[12px] px-2.5 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50" title="Esta venda não veio da IA — remover a sugestão">Não foi</button>
                   </div>
                 </div>
@@ -465,7 +465,7 @@ export default function AnalyticsPage() {
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         <span className={`text-[11px] px-2 py-0.5 rounded-full ${d.bucket === 'ai_closed' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {d.bucket === 'ai_closed' ? 'Fechada pela Iza' : 'Assistida'}
+                          {d.bucket === 'ai_closed' ? 'Fechada pela IA' : 'Assistida'}
                         </span>
                         <span className="text-sm font-medium text-gray-900">{fmtBRL(d.value)}</span>
                       </div>
@@ -474,12 +474,12 @@ export default function AnalyticsPage() {
                       <div className="pb-3 pl-5">
                         {typeof d.influenceScore === 'number' && (
                           <div className="text-[12px] text-gray-600 mb-2 flex items-center gap-1 flex-wrap">
-                            Influência da Iza: <span className="font-semibold text-[#1B6B3A]">{d.influenceScore}%</span>
+                            Influência da IA: <span className="font-semibold text-[#1B6B3A]">{d.influenceScore}%</span>
                             <span className="text-gray-400"> ({fmtNum(d.izaMsgs)} msgs IA · {fmtNum(d.humanMsgs)} humanas)</span>
                             <SaibaMais featureKey="analytics.vendas-ia.influencia" />
                           </div>
                         )}
-                        <div className="text-[11px] text-gray-400 mb-2">Momentos que a Iza destravou</div>
+                        <div className="text-[11px] text-gray-400 mb-2">Momentos que a IA destravou</div>
                         {moments.length > 0 ? moments.map((m: any, i: number) => (
                           <div key={i} className="border-l-2 border-emerald-300 pl-3 mb-2">
                             <p className="text-[13px] text-gray-800 break-words">{m.content}</p>
@@ -496,7 +496,7 @@ export default function AnalyticsPage() {
               })}
             </div>
             <p className="text-[11px] text-gray-400 mt-3">
-              Clique num deal para ver os momentos que a Iza destravou. Regra: última conversa da IA dentro de 7 dias do ganho (sem humano nas 24h finais = fechada pela IA). Tendência, não prova causal.
+              Clique num deal para ver os momentos que a IA destravou. Regra: última conversa da IA dentro de 7 dias do ganho (sem humano nas 24h finais = fechada pela IA). Tendência, não prova causal.
             </p>
           </div>
         ) : (
