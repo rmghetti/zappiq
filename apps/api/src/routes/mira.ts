@@ -21,7 +21,7 @@ import { enriquecerDecisoresPublico } from '../services/mira/decisoresPublico.js
 import { aprofundarAlvo } from '../services/mira/agentes.js';
 import { computeMiraAnalytics } from '../services/mira/analytics.js';
 import { sugerirPerfil } from '../services/mira/perfilSugestao.js';
-import { perfilSchema, computePerfilProntidao, type PerfilInput } from './mira.perfil.schema.js';
+import { perfilSchema, computePerfilProntidao, modoDaDescoberta, type PerfilInput } from './mira.perfil.schema.js';
 
 const router = Router();
 
@@ -102,7 +102,7 @@ router.post('/motor-b/descobrir', validate(motorBSchema), async (req: Request, r
   try {
     const { consulta, regiao, kind } = req.body as z.infer<typeof motorBSchema>;
     const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId: req.organizationId! } });
-    const modo = kind ?? (perfil?.tipoCliente === 'B2C' ? 'B2C' : 'B2B');
+    const modo = modoDaDescoberta(kind, perfil);
     const result =
       modo === 'B2C'
         ? await runMotorB(req.organizationId!, consulta, regiao ?? null)

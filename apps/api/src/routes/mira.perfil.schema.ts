@@ -104,6 +104,18 @@ export type AlvoB2C = z.infer<typeof alvoB2CSchema>;
  */
 export type AlvoAtivo = { tipoCliente: 'B2B'; alvo: AlvoB2B } | { tipoCliente: 'B2C'; alvo: AlvoB2C };
 
+/**
+ * Motor da descoberta: o kind explícito do request vence; sem ele, segue o
+ * tipoCliente do Perfil (B2C busca negócio local no Places, B2B busca CNPJ
+ * na descoberta pública). É o consumo de roteamento do discriminador.
+ */
+export function modoDaDescoberta(
+  kind: 'B2B' | 'B2C' | undefined,
+  perfil: { tipoCliente?: string | null } | null | undefined
+): 'B2B' | 'B2C' {
+  return kind ?? (perfil?.tipoCliente === 'B2C' ? 'B2C' : 'B2B');
+}
+
 export function alvoAtivo(p: PerfilInput): AlvoAtivo {
   return p.tipoCliente === 'B2B'
     ? { tipoCliente: 'B2B', alvo: p.alvoB2B }

@@ -2,7 +2,18 @@
 
 **Missão:** garantir que todo campo preenchido no Perfil de Prospecção é consumido em pelo menos um destes pontos, com teste provando a influência: mapeamento (queries de descoberta), qualificação (score/corte), dossiê/roteiro (aprofundar), decisores, releases. Limite duro: **4 sessões**. PR #277, branch `feat/mira-perfil-b2b-b2c`, worktree `~/dev/zappiq-mira`.
 
-**Estado: sessões 1, 2 e 3 CONCLUÍDAS em 14/07/2026. Próxima: sessão 4 (prova final + relatório no PR + encerrar o loop).**
+**Estado: CONCLUÍDO em 14/07/2026 (4 sessões). Veredito final: 41 de 41 campos com consumo em runtime E teste provando a influência. 0 órfãos.**
+
+## Veredito final (sessão 4)
+
+Uma auditoria adversarial independente re-verificou os 41 campos no HEAD da sessão 3: 0 órfãos, 35 com teste, 6 só com código (tipoCliente, prontidao, cnaesAlvo, portes, regioes, regiaoCidade, justamente os de score/gate/roteamento, além de um resto morto de `segmento` na interface do score). A sessão 4 fechou todos:
+
+- `score.test.ts`: cnaesAlvo/portes/regioes (B2B) e regiaoCidade + reserva das regioes B2B (B2C) mudam a nota, comparando a MESMA conta com e sem o campo.
+- `motores.gate.test.ts`: prontidão < 60 derruba motor A e motor B com 412; a regiaoCidade do Perfil entra de fato na textQuery do Places (caminho real do campo, com captura do fetch); usuário vence o Perfil.
+- `modoDaDescoberta` (extraído para mira.perfil.schema.ts e usado na rota): tipoCliente roteia B2C para o Places e B2B para a descoberta pública; kind explícito vence. Testado.
+- Resto morto de `segmento` removido do PerfilLike do score.
+
+Limitações honestas (registradas, não escondidas): a montagem das queries do BigQuery/índice local é provada por linha de código + teste do score (mesmo campo), não por execução de SQL de verdade; o gate da descobertaPublica:128 é o mesmo trio de linhas testado nos outros dois motores; faturamentoAnual/numFuncionarios não têm fonte dura de dado, o consumo legítimo deles é contexto de analista no prompt do dossiê (testado).
 
 ## Auditoria (sessão 1): o que os motores consomem hoje
 
@@ -69,3 +80,4 @@ Fiados nos decisores (decisoresPublico.ts, `montarPapeisAlvo`, mecanismo query-b
 - 14/07 sessão 1: auditoria via agente (leitura integral dos serviços). 11 de 41 campos consumidos; 27 órfãos. Achado extra: nenhuma referência funcional aos caminhos antigos sobrou (só a featureKey cosmética `mira.perfil.modo`, que fica). Plano acima definido.
 - 14/07 sessão 2: aprofundar recebe o Perfil inteiro do caminho do Alvo + critérios de corte com âncora; decisores usam o comitê completo. 15 testes novos (montarContextoPerfil campo a campo, corte ancorado x inventado, persistência do alerta no resumo, papéis compostos). tsc api/web 0; suíte completa 116 arquivos / 1148 testes verdes.
 - 14/07 sessão 3: região do Perfil vira default das queries de DESCOBERTA (resolverRegiaoBusca em regiaoBusca.ts): motorB usa alvoB2C.regiaoCidade e a descoberta pública B2B usa alvoB2B.regioes quando o usuário não digita região; a resposta devolve regiaoAplicada/regiaoOrigem para o cliente ver de onde veio. Releases: doresResolvidas + sinaisIntencao entram no prompt de relevância (montarLinhasSinais em releasesPublico.ts; cron seleciona e repassa). 7 testes novos. tsc api/web 0; suíte completa 118 arquivos / 1155 testes verdes.
+- 14/07 sessão 4: auditoria adversarial independente (0 órfãos, 6 campos sem teste) + fechamento dos 6 gaps (score.test.ts, motores.gate.test.ts, modoDaDescoberta) + limpeza do resto morto. Suíte completa 120 arquivos / 1170 testes verdes; tsc 0. Relatório comentado no PR #277. Loop encerrado.

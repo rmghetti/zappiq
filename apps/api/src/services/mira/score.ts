@@ -27,7 +27,6 @@ export interface MiraScoreResult {
 }
 
 interface PerfilLike {
-  segmento?: string | null;
   catalogo?: { nome: string; descricao?: string }[];
   /** Alvo B2B do Perfil de Prospecção. Só vale quando tipoCliente === 'B2B'. */
   alvoB2B?: { cnaesAlvo?: string[]; portes?: string[]; regioes?: string[] };

@@ -8,7 +8,7 @@
  * tela e mesmo assim fica travado, sem entender por quê.
  */
 import { describe, it, expect } from 'vitest';
-import { perfilSchema, computePerfilProntidao, alvoAtivo, type PerfilInput } from './mira.perfil.schema.js';
+import { perfilSchema, computePerfilProntidao, alvoAtivo, modoDaDescoberta, type PerfilInput } from './mira.perfil.schema.js';
 
 /** Perfil vazio, como o zod monta a partir de {}. */
 const vazio = (): PerfilInput => perfilSchema.parse({});
@@ -74,6 +74,22 @@ describe('alvoAtivo', () => {
     const b2c = alvoAtivo(perfilSchema.parse({ tipoCliente: 'B2C', alvoB2C: { faixaEtaria: '30-50' } }));
     expect(b2c.tipoCliente).toBe('B2C');
     if (b2c.tipoCliente === 'B2C') expect(b2c.alvo.faixaEtaria).toBe('30-50');
+  });
+});
+
+describe('modoDaDescoberta (consumo de roteamento do tipoCliente)', () => {
+  it('perfil B2C roteia a descoberta para o motor B (Places)', () => {
+    expect(modoDaDescoberta(undefined, { tipoCliente: 'B2C' })).toBe('B2C');
+  });
+
+  it('perfil B2B (ou ausente) roteia para a descoberta pública de CNPJ', () => {
+    expect(modoDaDescoberta(undefined, { tipoCliente: 'B2B' })).toBe('B2B');
+    expect(modoDaDescoberta(undefined, null)).toBe('B2B');
+  });
+
+  it('kind explícito do request vence o tipoCliente do perfil', () => {
+    expect(modoDaDescoberta('B2B', { tipoCliente: 'B2C' })).toBe('B2B');
+    expect(modoDaDescoberta('B2C', { tipoCliente: 'B2B' })).toBe('B2C');
   });
 });
 
