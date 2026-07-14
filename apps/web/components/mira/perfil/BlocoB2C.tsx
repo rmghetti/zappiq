@@ -22,7 +22,22 @@ const GENEROS: { value: Genero; label: string }[] = [
 export function BlocoB2C({ alvo, onChange }: { alvo: AlvoB2C; onChange: (patch: Partial<AlvoB2C>) => void }) {
   return (
     <>
+      <Card title="Que negócio local prospectar" featureKey="mira.perfil.negocioAlvo">
+        <TagInput
+          label="Tipos de negócio a procurar"
+          placeholder="Ex.: clínicas de estética, academias, pizzarias…"
+          ajuda="A descoberta B2C procura negócios locais no Google (nome, endereço, telefone, avaliações). Ela não procura pessoa física: para chegar ao consumidor, use o Zap Impulso na sua base."
+          obrigatorio
+          values={alvo.tiposNegocioAlvo}
+          onChange={(tiposNegocioAlvo) => onChange({ tiposNegocioAlvo })}
+        />
+      </Card>
+
       <Card title="Quem é o seu consumidor" featureKey="mira.perfil.icp">
+        <p className="text-xs text-gray-400 mb-3">
+          Isto não é o que a Mira procura: é quem consome no fim. Serve para qualificar o negócio encontrado e para
+          escrever a abordagem.
+        </p>
         <div className="space-y-3">
           <div className="grid sm:grid-cols-2 gap-3">
             <TextoField

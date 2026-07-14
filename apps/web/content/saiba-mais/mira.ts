@@ -78,9 +78,9 @@ export const miraContent: SaibaMaisContent[] = [
     titulo: 'B2B ou B2C',
     clientSafe: true,
     oQueE:
-      'A escolha entre vender para empresas (B2B) ou para consumidores e negócios locais (B2C) muda como o Mira mapeia. No B2B, a base é o CNPJ e o quadro societário. No B2C, a descoberta usa presença local (Google) e o perfil do público.',
+      'A escolha muda onde a Mira procura. No B2B, a base é o CNPJ da Receita e o quadro societário: o Alvo é uma empresa registrada. No B2C, a fonte é a presença no Google: o Alvo é um negócio local, com endereço, telefone e avaliações. Nos dois casos o Alvo é um negócio; a Mira não prospecta pessoa física, porque não existe fonte pública legítima para isso.',
     paraQueServe:
-      'Serve para o motor certo trabalhar para você. Os dois modos usam a mesma inteligência de qualificação, mas procuram em lugares diferentes.',
+      'Serve para o motor certo trabalhar para você. Os dois usam a mesma inteligência de qualificação e procuram em lugares diferentes. Se você vende direto ao consumidor final, escolha B2C para mapear os negócios locais que te interessam (parceria, revenda, conta corporativa) e use o perfil do consumidor para afiar a abordagem; para falar com a sua base de consumidores, quem trabalha é o Zap Impulso.',
     comoImplementar: [
       'Selecione o modo que representa a maior parte das suas vendas.',
       'Se você atende os dois públicos, comece pelo que quer prospectar primeiro; dá para mudar depois.',
@@ -211,6 +211,22 @@ export const miraContent: SaibaMaisContent[] = [
     ],
     exemploResultado:
       'Você marca "sem equipe de TI própria" como red flag. Contas que se encaixam nela deixam de consumir a sua cota de Alvos, e a fila fica só com quem tem chance real.',
+  },
+  {
+    featureKey: 'mira.perfil.negocioAlvo',
+    titulo: 'Que negócio local prospectar',
+    clientSafe: true,
+    oQueE:
+      'Os tipos de negócio local que a Mira vai procurar no Google para você: clínicas, academias, pizzarias, oficinas. É o par do campo de CNAEs do B2B: no B2B a Mira procura empresa na base da Receita pelo código de atividade; no B2C ela procura estabelecimento no Google pelo tipo.',
+    paraQueServe:
+      'Serve porque a descoberta precisa saber o que procurar. Uma coisa é o negócio que você quer alcançar, outra é o consumidor que compra dele; os dois moram neste perfil, mas fazem trabalhos diferentes. Este campo comanda a busca. O bloco do consumidor, logo abaixo, comanda a qualificação e a abordagem.',
+    comoImplementar: [
+      'Liste os tipos de negócio com o nome que aparece na placa, não o nome técnico: "academia" acha mais que "atividade física e recreativa".',
+      'Um tipo por vez. Cada um vira uma busca separada dentro da campanha.',
+      'Se você vende direto ao consumidor final e não para negócios, a descoberta não é o seu caminho: use o Zap Impulso para trabalhar a base que você já tem.',
+    ],
+    exemploResultado:
+      'Você declara "clínicas de estética" e "academias" em Moema. A campanha traz os estabelecimentos reais dos dois tipos na região, cada um com telefone, avaliações e nota, e a qualificação usa o perfil do consumidor que você descreveu para montar a conversa.',
   },
   {
     featureKey: 'mira.perfil.regiaoB2c',

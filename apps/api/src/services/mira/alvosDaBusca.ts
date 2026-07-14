@@ -39,21 +39,21 @@ const lista = (v: unknown, max = 10): string[] =>
  * B2B tem paralelo exato: "CNAEs ou atividades-alvo" é literalmente o que
  * procurar, e "regiões" é onde.
  *
- * B2C tem uma LACUNA honesta, e é melhor admiti-la do que fingir: o bloco B2C
- * do Perfil descreve o CONSUMIDOR (faixa etária, renda, interesses, momento de
- * vida), enquanto a descoberta B2C procura NEGÓCIO LOCAL no Places. Nenhum
- * campo do Perfil diz que tipo de negócio procurar. O candidato mais próximo,
- * "ocupacao", quer dizer outra coisa: o placeholder dele é "Autônomos, CLT,
- * empreendedores", que são vínculos de trabalho do público. Semear a busca com
- * isso geraria "Autônomos em Moema" e devolveria lixo com cara de resultado.
- * Então no B2C semeamos só a região (paralelo direto de regiaoCidade) e a tela
- * pede o tipo de negócio, dizendo por quê.
+ * B2C tem o par exato desde que o Perfil ganhou "tipos de negócio a
+ * prospectar": a descoberta B2C procura NEGÓCIO LOCAL no Google (o Places
+ * devolve estabelecimento, nunca pessoa), e é esse campo que diz qual. O resto
+ * do bloco B2C descreve quem consome no fim, e serve para qualificar e para o
+ * roteiro, não para a busca.
+ *
+ * Cuidado histórico: "ocupacao" NÃO serve de alvo. O placeholder dela é
+ * "Autônomos, CLT, empreendedores" (vínculo de trabalho do público), e semear
+ * a busca com isso geraria "Autônomos em Moema": lixo com cara de resultado.
  */
 export async function sementeDaBusca(organizationId: string, kind: 'B2B' | 'B2C'): Promise<SementeDaBusca> {
   const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId } });
   if (!perfil) return { alvos: [], regioes: [], origem: 'vazio' };
 
-  const alvos = kind === 'B2B' ? lista(perfil.alvoB2B?.cnaesAlvo) : [];
+  const alvos = kind === 'B2B' ? lista(perfil.alvoB2B?.cnaesAlvo) : lista(perfil.alvoB2C?.tiposNegocioAlvo);
   const regioes = kind === 'B2B' ? lista(perfil.alvoB2B?.regioes, 5) : lista(perfil.alvoB2C?.regiaoCidade, 5);
 
   return { alvos, regioes, origem: alvos.length || regioes.length ? 'perfil' : 'vazio' };

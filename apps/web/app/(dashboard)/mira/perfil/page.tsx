@@ -33,12 +33,33 @@ import { FaixaSugestao } from '@/components/mira/perfil/FaixaSugestao';
 import {
   miraApi,
   EMPTY_PERFIL,
+  EMPTY_ALVO_B2B,
+  EMPTY_ALVO_B2C,
   alvoAtivo,
   type MiraPerfil,
   type AlvoB2B,
   type AlvoB2C,
   type SugestaoPerfil,
 } from '@/lib/miraApi';
+
+/**
+ * O perfil salvo, completado com os defaults.
+ *
+ * Os alvos são JSON no banco, então uma linha gravada antes de um campo novo
+ * existir não tem esse campo. Um `{...EMPTY_PERFIL, ...data}` raso não
+ * resolve: `data.alvoB2C` SUBSTITUI o objeto inteiro do default, e o campo
+ * novo chega undefined, quebrando quem espera lista (`values.length`). Por
+ * isso cada alvo é completado por dentro. Vale para todo campo que a gente
+ * acrescentar daqui pra frente, sem precisar de migração de dado.
+ */
+function comDefaults(data: Partial<MiraPerfil>): MiraPerfil {
+  return {
+    ...EMPTY_PERFIL,
+    ...data,
+    alvoB2B: { ...EMPTY_ALVO_B2B, ...(data.alvoB2B ?? {}) },
+    alvoB2C: { ...EMPTY_ALVO_B2C, ...(data.alvoB2C ?? {}) },
+  };
+}
 
 /**
  * Junta o rascunho ao que já está na tela. Nunca sobrescreve: soma o que falta
@@ -91,7 +112,7 @@ export default function MiraPerfilPage() {
       .then((res) => {
         if (!alive) return;
         if (res.data) {
-          setPerfil({ ...EMPTY_PERFIL, ...res.data });
+          setPerfil(comDefaults(res.data));
           setProntidao(res.data.prontidao ?? 0);
         } else {
           // Perfil ainda não existe: é aqui que o auto-preenchimento paga.

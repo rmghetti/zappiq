@@ -28,7 +28,12 @@ const obrigatoriosB2C = (): PerfilInput =>
     tipoCliente: 'B2C',
     catalogo: [{ nome: 'Rodízio de massas' }],
     doresResolvidas: ['Almoço rápido perto do trabalho'],
-    alvoB2C: { faixaEtaria: '25-45 anos', regiaoCidade: ['Moema'], doresDesejos: ['Comer bem sem demora'] },
+    alvoB2C: {
+      tiposNegocioAlvo: ['restaurantes'],
+      faixaEtaria: '25-45 anos',
+      regiaoCidade: ['Moema'],
+      doresDesejos: ['Comer bem sem demora'],
+    },
   });
 
 describe('perfilSchema', () => {
@@ -37,7 +42,19 @@ describe('perfilSchema', () => {
     expect(p.tipoCliente).toBe('B2B');
     expect(p.alvoB2B.cnaesAlvo).toEqual([]);
     expect(p.alvoB2C.regiaoCidade).toEqual([]);
+    expect(p.alvoB2C.tiposNegocioAlvo).toEqual([]);
     expect(p.alvoB2B.cicloVenda).toBeNull();
+  });
+
+  it('B2C sem tipo de negócio não passa do gate: a descoberta não saberia o que procurar', () => {
+    const semAlvo = perfilSchema.parse({
+      tipoCliente: 'B2C',
+      segmento: 'Distribuição de bebidas',
+      catalogo: [{ nome: 'Chope artesanal' }],
+      doresResolvidas: ['Falta de variedade na carta'],
+      alvoB2C: { faixaEtaria: '25-45', regiaoCidade: ['Moema'], doresDesejos: ['Carta melhor'] },
+    });
+    expect(computePerfilProntidao(semAlvo)).toBeLessThan(60);
   });
 
   it('guarda os dois alvos ao mesmo tempo: alternar B2B/B2C não perde o que foi digitado', () => {
