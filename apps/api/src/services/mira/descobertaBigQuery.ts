@@ -39,13 +39,16 @@ function extrairUfs(regiaoLivre: string, regioesConfig: string[]): string[] {
  * ainda não foi materializada, ou em erro (o chamador degrada para índice
  * local/busca). Nunca lança.
  */
-export async function buscarCnpjsBigQuery(perfil: any, regiaoLivre: string): Promise<string[]> {
+/**
+ * Recebe os CÓDIGOS de CNAE da campanha (já separados do texto por
+ * separarAlvos) e as regiões dela. Antes lia o Perfil por dentro, o que
+ * fazia a busca ignorar o que o cliente escolheu na campanha.
+ */
+export async function buscarCnpjsBigQuery(codigos: string[], regioes: string[]): Promise<string[]> {
   if (!bigQueryDisponivel()) return [];
-  const cnaes: string[] = Array.isArray(perfil?.alvoB2B?.cnaesAlvo)
-    ? perfil.alvoB2B.cnaesAlvo.map((c: string) => String(c).replace(/\D/g, '')).filter((c: string) => c.length >= 2)
-    : [];
+  const cnaes: string[] = (codigos ?? []).map((c) => String(c).replace(/\D/g, '')).filter((c) => c.length >= 2);
   if (cnaes.length === 0) return [];
-  const ufs = extrairUfs(regiaoLivre, perfil?.alvoB2B?.regioes ?? []);
+  const ufs = extrairUfs('', regioes ?? []);
 
   // Filtro de CNAE por prefixo (o ICP pode ter CNAE de 2 a 7 dígitos). Só
   // dígitos, montado a partir da config do cliente (não de input livre) → seguro.

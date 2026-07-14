@@ -14,7 +14,7 @@
  * confundir com as Campanhas do Zap Impulso (disparo de mensagens).
  */
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Building2, Import, Loader2, Radar, Search, Store, X } from 'lucide-react';
+import { ArrowLeft, Building2, Import, Loader2, Plus, Radar, Search, Sparkles, Store, X } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import {
   miraApi,
@@ -24,6 +24,88 @@ import {
   type MotorAResult,
   type MotorBResult,
 } from '@/lib/miraApi';
+
+/**
+ * Lista de valores da campanha, nascida do Perfil. O cliente tira o que não
+ * quer e soma o que faltar; o que sobra na tela é o que a busca usa. Chip que
+ * veio do Perfil ganha selo, para ficar claro que a campanha considerou o que
+ * ele já declarou (era exatamente a impressão que faltava).
+ */
+function ListaDeAlvos({
+  label,
+  ajuda,
+  placeholder,
+  values,
+  doPerfil,
+  onChange,
+}: {
+  label: string;
+  ajuda?: string;
+  placeholder: string;
+  values: string[];
+  doPerfil: Set<string>;
+  onChange: (v: string[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const v = draft.trim();
+    if (!v || values.includes(v)) return setDraft('');
+    onChange([...values, v]);
+    setDraft('');
+  };
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())}
+          placeholder={placeholder}
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-200"
+        />
+        <button
+          type="button"
+          onClick={add}
+          className="px-3 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 shrink-0"
+          aria-label={`Adicionar em ${label}`}
+        >
+          <Plus size={16} />
+        </button>
+      </div>
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {values.map((v) => {
+            const veioDoPerfil = doPerfil.has(v);
+            return (
+              <span
+                key={v}
+                className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
+                  veioDoPerfil ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-100' : 'bg-gray-100 text-gray-700'
+                }`}
+              >
+                {veioDoPerfil && (
+                  <Sparkles size={11} className="text-primary-500 shrink-0" aria-label="do seu Perfil" />
+                )}
+                {v}
+                <button
+                  type="button"
+                  onClick={() => onChange(values.filter((x) => x !== v))}
+                  className={veioDoPerfil ? 'text-primary-400 hover:text-primary-600' : 'text-gray-400 hover:text-gray-600'}
+                  aria-label={`Remover ${v}`}
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {ajuda && <p className="text-[11px] text-gray-400 mt-1.5">{ajuda}</p>}
+    </div>
+  );
+}
 
 export function NovaCampanhaModal({
   tipoInicial = null,
@@ -325,8 +407,14 @@ function DescobrirModal({
   onVoltar?: () => void;
 }) {
   const [kind, setKind] = useState<'B2B' | 'B2C'>('B2B');
-  const [consulta, setConsulta] = useState('');
-  const [regiao, setRegiao] = useState('');
+  const [alvos, setAlvos] = useState<string[]>([]);
+  const [regioes, setRegioes] = useState<string[]>([]);
+  // O que veio do Perfil, para marcar os chips e explicar a origem.
+  const [doPerfil, setDoPerfil] = useState<{ alvos: Set<string>; regioes: Set<string> }>({
+    alvos: new Set(),
+    regioes: new Set(),
+  });
+  const [semente, setSemente] = useState<'perfil' | 'vazio' | null>(null);
   const [nome, setNome] = useState('');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<MotorBResult | null>(null);
@@ -347,6 +435,27 @@ function DescobrirModal({
       .catch(() => setFontes(null));
   }, []);
 
+  // A campanha nasce com o que o cliente já declarou no Perfil. Trocar de
+  // trilha (B2B/B2C) recarrega a semente, porque cada caminho tem os seus
+  // alvos e as suas regiões.
+  useEffect(() => {
+    let alive = true;
+    setSemente(null);
+    miraApi
+      .sementeCampanha(kind)
+      .then((r) => {
+        if (!alive) return;
+        setAlvos(r.data.alvos);
+        setRegioes(r.data.regioes);
+        setDoPerfil({ alvos: new Set(r.data.alvos), regioes: new Set(r.data.regioes) });
+        setSemente(r.data.origem);
+      })
+      .catch(() => alive && setSemente('vazio'));
+    return () => {
+      alive = false;
+    };
+  }, [kind]);
+
   // B2B funciona com QUALQUER uma das duas fontes: índice local (grátis,
   // sem chave, precisa da ingestão da base da Receita) ou busca pública.
   const fonteOk = fontes
@@ -356,17 +465,18 @@ function DescobrirModal({
     : null;
 
   const descobrir = async () => {
-    if (consulta.trim().length < 3) {
-      setError('Descreva o que procurar (ex.: "clínicas de estética").');
+    if (alvos.length === 0) {
+      setError('Escolha ao menos um alvo. Sem isso a busca não sabe o que procurar.');
       return;
     }
     setRunning(true);
     setError(null);
     try {
-      const res = await miraApi.descobrir(consulta.trim(), regiao.trim() || undefined, kind, nome);
+      const res = await miraApi.descobrir(alvos, regioes, kind, nome);
       setResult(res.data);
     } catch (e: any) {
-      if (e?.status === 501)
+      if (e?.status === 422) setError(e?.message || 'Nenhum dos alvos escolhidos pode ser buscado agora.');
+      else if (e?.status === 501)
         setError(
           kind === 'B2C'
             ? 'A descoberta local (Google Places) ainda não está habilitada nesta instalação.'
@@ -410,24 +520,50 @@ function DescobrirModal({
               ? 'A Mira descobre empresas com o perfil que você descrever no índice público, colhe os CNPJs e verifica cada um na Receita. Só o Alvo verificado (ativo, com decisor no quadro societário) desconta da cota; os demais ficam como candidatos.'
               : 'A Mira busca negócios locais com o perfil que você descrever (Google Places). Só Alvos com contato verificável (telefone ou site) descontam da cota.'}
           </p>
-          <label className="block text-xs font-medium text-gray-500 mb-1">O que procurar</label>
-          <input
-            type="text"
-            value={consulta}
-            onChange={(e) => setConsulta(e.target.value)}
-            placeholder={kind === 'B2B' ? 'Ex.: "distribuidoras de bebidas", "indústrias metalúrgicas"' : 'Ex.: "clínicas de estética", "academias"'}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 mb-3"
-          />
-          <label className="block text-xs font-medium text-gray-500 mb-1">Onde (opcional)</label>
-          <input
-            type="text"
-            value={regiao}
-            onChange={(e) => setRegiao(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && descobrir()}
-            placeholder="Ex.: Campinas, zona sul de SP…"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-200"
-          />
-          <p className="text-[11px] text-gray-400 mt-1">Sem região, usamos a do seu Perfil de Prospecção.</p>
+          {semente === null ? (
+            <div className="flex items-center gap-2 text-xs text-gray-400 py-6">
+              <Loader2 className="animate-spin" size={14} /> Trazendo o que você definiu no Perfil…
+            </div>
+          ) : (
+            <>
+              {semente === 'perfil' && (
+                <p className="text-xs text-primary-800 bg-primary-50/60 border border-primary-100 rounded-lg px-3 py-2 mb-3">
+                  <Sparkles size={12} className="inline-block mr-1 -mt-0.5 text-primary-500" />
+                  Trouxemos o que você definiu no Perfil de Prospecção. Tire o que não quiser nesta campanha ou
+                  acrescente outros.
+                </p>
+              )}
+              {semente === 'vazio' && (
+                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3">
+                  Seu Perfil ainda não declarou{' '}
+                  {kind === 'B2B' ? 'CNAEs ou atividades-alvo' : 'ocupação do público nem região'}, então esta
+                  campanha começa vazia. O que você escolher aqui vale só para ela.
+                </p>
+              )}
+              <div className="space-y-3">
+                <ListaDeAlvos
+                  label="O que procurar"
+                  placeholder={kind === 'B2B' ? 'Ex.: 4651-6 ou "distribuidoras de TI"' : 'Ex.: clínicas de estética, academias'}
+                  ajuda={
+                    kind === 'B2B'
+                      ? 'Código de CNAE busca na base oficial de CNPJs; atividade escrita busca no índice público.'
+                      : undefined
+                  }
+                  values={alvos}
+                  doPerfil={doPerfil.alvos}
+                  onChange={setAlvos}
+                />
+                <ListaDeAlvos
+                  label="Onde (opcional)"
+                  placeholder="Ex.: Campinas, zona sul de SP…"
+                  ajuda="Sem região, a busca não tem recorte geográfico."
+                  values={regioes}
+                  doPerfil={doPerfil.regioes}
+                  onChange={setRegioes}
+                />
+              </div>
+            </>
+          )}
           <CampoNome nome={nome} setNome={setNome} exemplo="Ex.: Clínicas de Campinas" />
           {fonteOk === false && (
             <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-3">
@@ -439,7 +575,7 @@ function DescobrirModal({
           {error && <p className="text-xs text-red-500 mt-3">{error}</p>}
           <button
             onClick={descobrir}
-            disabled={running || fonteOk === false}
+            disabled={running || fonteOk === false || alvos.length === 0}
             className="w-full mt-4 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-60"
           >
             {running ? (
@@ -465,9 +601,7 @@ function DescobrirModal({
             <ResultStat label="Restante da cota" value={result.quota.remaining} tone="primary" />
           </div>
           <ul className="text-xs text-gray-500 space-y-1 mb-4">
-            {result.regiaoOrigem === 'perfil' && result.regiaoAplicada && (
-              <li>Região aplicada do seu Perfil: {result.regiaoAplicada}.</li>
-            )}
+            {result.regiaoAplicada && <li>Região aplicada: {result.regiaoAplicada}.</li>}
             {result.duplicados > 0 && <li>{result.duplicados} já estavam mapeados (pulados).</li>}
             {result.modo !== 'B2C' && (result.candidatos ?? 0) > 0 && (
               <li>{result.candidatos} candidato(s) sem CNPJ resolvido ficaram para qualificar (não gastam cota).</li>

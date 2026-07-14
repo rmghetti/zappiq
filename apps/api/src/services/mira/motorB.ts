@@ -15,7 +15,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
 import { computeMiraScoreB2C } from './score.js';
-import { resolverRegiaoBusca } from './regiaoBusca.js';
+
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
 const PLACES_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
@@ -40,9 +40,9 @@ export interface MotorBResult {
   duplicados: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
-  /** Região que a busca de fato usou e de onde ela veio (usuário ou Perfil). */
+  /** Região que a busca de fato usou (vem da campanha, semeada do Perfil). */
   regiaoAplicada: string | null;
-  regiaoOrigem: 'usuario' | 'perfil' | null;
+  regiaoOrigem: 'campanha' | null;
 }
 
 export function placesDisponivel(): boolean {
@@ -111,10 +111,13 @@ function parseEndereco(endereco: string | null): { municipio: string | null; uf:
   return { municipio: null, uf: null };
 }
 
+/**
+ * Descoberta B2C (negócio local, Places) a partir do que a CAMPANHA pede.
+ * `busca.alvos`/`busca.regioes` nascem do Perfil e o cliente ajusta no wizard.
+ */
 export async function runMotorB(
   organizationId: string,
-  consulta: string,
-  regiao: string | null,
+  busca: { alvos: string[]; regioes: string[] },
   campanhaId?: string | null
 ): Promise<MotorBResult> {
   if (!placesDisponivel()) {
@@ -129,12 +132,17 @@ export async function runMotorB(
     throw err;
   }
 
-  // Região do Perfil como default: quem preencheu regiaoCidade no alvo B2C
-  // não precisa digitar a região de novo a cada busca (e não varre o Brasil
-  // inteiro quando esquece).
-  const regiaoBusca = resolverRegiaoBusca(regiao, perfil?.alvoB2C?.regiaoCidade);
+  const alvos = (busca.alvos ?? []).filter((a) => typeof a === 'string' && a.trim());
+  const regioes = (busca.regioes ?? []).filter((r) => typeof r === 'string' && r.trim());
+  if (alvos.length === 0) {
+    const err: any = new Error('alvos_sem_fonte');
+    err.status = 422;
+    throw err;
+  }
+  const consulta = alvos[0];
+  const regiaoAplicada = regioes[0] ?? null;
 
-  const hits = await searchPlaces(organizationId, consulta, regiaoBusca.regiao);
+  const hits = await searchPlaces(organizationId, consulta, regiaoAplicada);
   const result: MotorBResult = {
     fonte: 'google_places',
     encontrados: hits.length,
@@ -143,8 +151,8 @@ export async function runMotorB(
     duplicados: 0,
     blocked: false,
     quota: { used: 0, total: 0, remaining: 0 },
-    regiaoAplicada: regiaoBusca.regiao,
-    regiaoOrigem: regiaoBusca.origem,
+    regiaoAplicada,
+    regiaoOrigem: regiaoAplicada ? 'campanha' : null,
   };
 
   for (const hit of hits) {
@@ -176,7 +184,7 @@ export async function runMotorB(
       `${hit.nome}${municipio ? `, ${[municipio, uf].filter(Boolean).join('/')}` : ''}. ` +
       `${hit.rating ? `Avaliação ${hit.rating} (${hit.totalAvaliacoes ?? 0} avaliações). ` : ''}` +
       `${hit.site ? 'Tem site. ' : 'Sem site público. '}` +
-      `Descoberto no Google Places pela busca "${consulta}${regiaoBusca.regiao ? ` em ${regiaoBusca.regiao}` : ''}"${regiaoBusca.origem === 'perfil' ? ' (região vinda do Perfil de Prospecção)' : ''}.`;
+      `Descoberto no Google Places pela campanha ("${consulta}${regiaoAplicada ? ` em ${regiaoAplicada}` : ''}").`;
 
     try {
       const alvo = await (prisma as any).miraAlvo.create({

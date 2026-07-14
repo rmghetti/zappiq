@@ -294,6 +294,16 @@ export interface MotorAResult {
 // Não confundir com as Campanhas do Zap Impulso (disparo de mensagens).
 export type MiraCampanhaTipo = 'BASE_INSTALADA' | 'DESCOBERTA';
 
+/**
+ * O que o wizard mostra já preenchido, vindo do Perfil de Prospecção. O
+ * cliente tira ou soma antes de disparar; o que ficar na tela é o que roda.
+ */
+export interface SementeDaBusca {
+  alvos: string[];
+  regioes: string[];
+  origem: 'perfil' | 'vazio';
+}
+
 export interface MiraCampanha {
   id: string;
   nome: string;
@@ -306,7 +316,7 @@ export interface MiraCampanha {
     prontos?: number;
     duplicados?: number | string[];
     regiaoAplicada?: string | null;
-    regiaoOrigem?: 'usuario' | 'perfil' | null;
+    regiaoOrigem?: 'campanha' | null;
     motivo?: string;
   };
   alvosCount: number;
@@ -325,9 +335,9 @@ export interface DescobrirResult {
   duplicados: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
-  /** Região que a busca de fato usou e de onde veio (usuário ou Perfil). */
+  /** Região que a busca de fato usou (vem da campanha, semeada do Perfil). */
   regiaoAplicada?: string | null;
-  regiaoOrigem?: 'usuario' | 'perfil' | null;
+  regiaoOrigem?: 'campanha' | null;
   /** Campanha de prospecção que este disparo virou. */
   campanhaId?: string;
   campanhaNome?: string;
@@ -414,6 +424,9 @@ export const miraApi = {
   },
   // Gestão das campanhas de prospecção (hub).
   listCampanhas: (): Promise<{ success: boolean; data: MiraCampanha[] }> => api.get('/api/mira/campanhas'),
+  // O que o wizard mostra já preenchido: alvos e regiões vindos do Perfil.
+  sementeCampanha: (kind: 'B2B' | 'B2C'): Promise<{ success: boolean; data: SementeDaBusca }> =>
+    api.get(`/api/mira/campanhas/semente?kind=${kind}`),
   getAlvo: (id: string): Promise<{ success: boolean; data: MiraAlvoDossie }> => api.get(`/api/mira/alvos/${id}`),
   listReleases: (unreadOnly = false): Promise<{ success: boolean; data: MiraReleaseItem[] }> =>
     api.get(`/api/mira/releases${unreadOnly ? '?unread=1' : ''}`),
@@ -437,14 +450,14 @@ export const miraApi = {
     };
   }> => api.get('/api/mira/motor-b/status'),
   descobrir: (
-    consulta: string,
-    regiao?: string,
+    alvos: string[],
+    regioes: string[],
     kind?: 'B2B' | 'B2C',
     nome?: string
   ): Promise<{ success: boolean; data: MotorBResult }> =>
     api.post('/api/mira/motor-b/descobrir', {
-      consulta,
-      regiao: regiao || null,
+      alvos,
+      regioes,
       ...(kind ? { kind } : {}),
       ...(nome?.trim() ? { nome: nome.trim() } : {}),
     }),

@@ -2,7 +2,7 @@
 
 **Missão (pedido do Rodrigo, 14/07, testando o trial):** ao clicar em Nova campanha, os campos "o que procurar" e "onde" nascem em branco, mesmo com o Perfil preenchido. Precisa trazer o que está no Perfil, deixar excluir/adicionar, e **nunca ficar em branco**. E garantir que a campanha use de fato esses dados. Limite: **3 sessões**.
 
-**Estado: sessão 1 EM ANDAMENTO.**
+**Estado: sessão 1 CONCLUÍDA (14/07). Próxima: sessão 2 (código+texto convivendo, lacuna do B2C).**
 
 ## Diagnóstico (sessão 1)
 
@@ -29,3 +29,4 @@ Resultado prático para a MACHIA: a base de 28M CNPJs nunca é usada, e a campan
 ## Log
 
 - 14/07 sessão 1: diagnóstico acima (2 defeitos + 1 lacuna). Branch feat/mira-campanha-usa-perfil criada a partir da main.
+- 14/07 sessão 1 (entrega): contrato virou lista (`alvos[]`/`regioes[]`); `alvosDaBusca.ts` novo com `sementeDaBusca()` (o que o wizard mostra preenchido) e `separarAlvos()` (código de CNAE x atividade em texto); os 3 motores recebem os valores DA CAMPANHA (`buscarCnpjsBigQuery(codigos, regioes)`, `buscarCandidatosIndiceLocal(codigos, regioes)`, `runDescobertaPublica(org, busca, campanha)`, `runMotorB(org, busca, campanha)`); `regiaoBusca.ts` removido (a região deixou de ser default escondido no motor e virou valor da campanha); wizard com chips semeados do Perfil, selo de origem, remover/adicionar, e recusa de disparo sem alvo; 422 `alvos_sem_fonte` quando nenhum alvo tem fonte; nome automático lida com N alvos. 12 testes novos + 3 reescritos para o contrato novo. Suíte 142 arquivos / 1419 testes verdes; tsc api/web 0; registro Saiba mais íntegro. Prova em preview com o Perfil REAL da MACHIA: chips ["serviços","comércio varejista","industria","todos as verticais de serviços","empresas PME"] + "Brasil" chegaram sozinhos; removi "industria", adicionei "6201-5" e o servidor recebeu exatamente os 5 alvos da tela (sem "industria") + ["Brasil"].
