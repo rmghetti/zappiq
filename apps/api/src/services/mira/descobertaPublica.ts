@@ -19,6 +19,7 @@ import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, type CnpjData } fr
 import { computeMiraScoreV1 } from './score.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
 import { buscarCnpjsBigQuery } from './descobertaBigQuery.js';
+import { resolverRegiaoBusca } from './regiaoBusca.js';
 import { buscarSinalSetorial } from './cagedMirror.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
@@ -47,14 +48,14 @@ const MAX_CANDIDATOS_INDICE_LOCAL = 300;
  * rápido de candidatos, não a fonte de verdade.
  */
 async function buscarCandidatosIndiceLocal(perfil: any, regiaoLivre: string): Promise<string[]> {
-  const cnaes: string[] = Array.isArray(perfil?.icpFirmografia?.cnaes)
-    ? perfil.icpFirmografia.cnaes.map((c: string) => String(c).replace(/\D/g, '')).filter((c: string) => c.length >= 2)
+  const cnaes: string[] = Array.isArray(perfil?.alvoB2B?.cnaesAlvo)
+    ? perfil.alvoB2B.cnaesAlvo.map((c: string) => String(c).replace(/\D/g, '')).filter((c: string) => c.length >= 2)
     : [];
   if (cnaes.length === 0) return [];
 
   const ufRe = /\b([A-Z]{2})\b/;
   const ufs = new Set<string>();
-  const regioesConfig: string[] = Array.isArray(perfil?.icpFirmografia?.regioes) ? perfil.icpFirmografia.regioes : [];
+  const regioesConfig: string[] = Array.isArray(perfil?.alvoB2B?.regioes) ? perfil.alvoB2B.regioes : [];
   for (const r of [regiaoLivre, ...regioesConfig]) {
     const m = ufRe.exec(String(r || '').toUpperCase());
     if (m) ufs.add(m[1]);
@@ -87,6 +88,9 @@ export interface DescobertaPublicaResult {
   duplicados: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
+  /** Região que a busca de fato usou e de onde ela veio (usuário ou Perfil). */
+  regiaoAplicada: string | null;
+  regiaoOrigem: 'usuario' | 'perfil' | null;
 }
 
 function hostDe(url: string): string {
@@ -127,7 +131,11 @@ export async function runDescobertaPublica(
     throw err;
   }
 
-  const alvoRegiao = (regiao ?? '').trim();
+  // Região do Perfil como default: o usuário vence; sem digitação, a primeira
+  // região do alvo B2B guia também as queries da busca web (o BigQuery e o
+  // índice local já usavam as UFs do Perfil via extrairUfs, a web não).
+  const regiaoBusca = resolverRegiaoBusca(regiao, perfil?.alvoB2B?.regioes);
+  const alvoRegiao = regiaoBusca.regiao ?? '';
 
   // Fonte de candidatos, em ordem de preferência:
   //  1) BigQuery (Base dos Dados) — confiável, filtra por CNAE+UF do ICP;
@@ -185,6 +193,8 @@ export async function runDescobertaPublica(
     duplicados: 0,
     blocked: ent.quota.blocked,
     quota: { used: ent.quota.used, total: ent.quota.total, remaining: ent.quota.remaining },
+    regiaoAplicada: regiaoBusca.regiao,
+    regiaoOrigem: regiaoBusca.origem,
   };
   if (!usandoCnpjsDiretos && resultados.length === 0) return result;
 

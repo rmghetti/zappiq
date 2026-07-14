@@ -148,6 +148,86 @@ export const miraContent: SaibaMaisContent[] = [
       'Sabendo que a conta usa um concorrente com suporte lento e que seu diferencial é SLA de 4 horas, o roteiro sugere abrir a conversa por continuidade de operação, não por preço.',
   },
   {
+    featureKey: 'mira.perfil.dores',
+    titulo: 'O que você resolve',
+    clientSafe: true,
+    oQueE:
+      'As dores que o seu produto resolve, os resultados que ele entrega e as situações que levam alguém a procurar você. É a ponte entre o seu catálogo e a realidade de cada conta: o catálogo diz o que você vende, este bloco diz por que alguém compraria.',
+    paraQueServe:
+      'Serve para a Mira reconhecer uma oportunidade quando ela aparece. Sem isso, os agentes até acham empresas do perfil certo, mas não sabem ligar um sinal ("a empresa abriu duas filiais") a uma dor sua ("operação cresce e a infra não acompanha"). É essa ligação que vira a oportunidade nº 1 do dossiê.',
+    comoImplementar: [
+      'Liste as dores com as palavras do cliente, não com as suas. Ele fala "o sistema cai", não "baixa disponibilidade".',
+      'Nos resultados, prefira número: "reduz custo de infra em 30%" trabalha melhor que "reduz custo".',
+      'Nos casos de uso, pense no gatilho: o que aconteceu na empresa na semana em que ela procurou você?',
+    ],
+    exemploResultado:
+      'Você declara a dor "downtime derruba a operação" e o caso de uso "migração para nuvem". Ao encontrar uma conta que acabou de contratar um time de infra, a Mira cruza os dois e o dossiê chega dizendo por que aquela conta faz sentido agora.',
+  },
+  {
+    featureKey: 'mira.perfil.sinais',
+    titulo: 'Maturidade e timing',
+    clientSafe: true,
+    oQueE:
+      'As tecnologias que a empresa-alvo já usa e os sinais de que ela está no momento de comprar (contratando na área, abrindo filial, trocando de sistema). Junto vai o seu ciclo de venda típico.',
+    paraQueServe:
+      'Serve para ordenar a fila. Duas empresas podem ter o mesmo perfil e uma delas estar pronta para comprar hoje enquanto a outra só daqui a um ano. Sinal de intenção é o que separa as duas, e é onde o seu time deve gastar a energia primeiro.',
+    comoImplementar: [
+      'Em tecnologias, liste o que indica que a empresa tem maturidade para o seu produto (usa CRM, tem e-commerce, tem ERP).',
+      'Em sinais, pense no que você observa antes de uma boa venda acontecer.',
+      'O ciclo de venda calibra a urgência: ciclo curto pede abordagem rápida, ciclo longo pede relacionamento.',
+    ],
+    exemploResultado:
+      'Você marca "contratando na área de TI" como sinal. Uma conta com três vagas abertas de infraestrutura sobe na fila e o dossiê abre justamente por aí.',
+  },
+  {
+    featureKey: 'mira.perfil.corte',
+    titulo: 'Critérios de corte',
+    clientSafe: true,
+    oQueE:
+      'O avesso do perfil ideal: o que faz você descartar uma conta (red flags) e o que ela precisa obrigatoriamente ter para valer a pena (must-haves). Em B2B entram também os seus clientes-referência atuais.',
+    paraQueServe:
+      'Serve para a fila não encher de oportunidade ruim. Dizer quem você não quer é tão informativo quanto dizer quem você quer, e costuma ser mais fácil de responder. Os clientes-referência viram base de semelhança: a Mira procura contas parecidas com quem já compra de você e dá certo.',
+    comoImplementar: [
+      'Nas red flags, pense nas últimas negociações que morreram. O que elas tinham em comum?',
+      'Nos must-haves, liste só o que é eliminatório de verdade, não o que é desejável.',
+      'Nos clientes-referência, cite os que você gostaria de clonar, não necessariamente os maiores.',
+    ],
+    exemploResultado:
+      'Você marca "sem equipe de TI própria" como red flag. Contas que se encaixam nela deixam de consumir a sua cota de Alvos, e a fila fica só com quem tem chance real.',
+  },
+  {
+    featureKey: 'mira.perfil.regiaoB2c',
+    titulo: 'Onde o consumidor está',
+    clientSafe: true,
+    oQueE:
+      'A região que você atende, o tipo de região (capital, interior, litoral, raio de quilômetros) e os canais onde o seu público circula.',
+    paraQueServe:
+      'Serve para negócio local não desperdiçar cota. Uma pizzaria em Moema não ganha nada recebendo consumidor de Campinas. O raio de atendimento é o filtro mais importante do B2C, e o canal orienta por onde a abordagem faz sentido.',
+    comoImplementar: [
+      'Comece pela região onde você realmente entrega ou atende hoje, não pela que gostaria.',
+      'Se o seu negócio é físico, use o raio: "raio 20km" costuma ser mais honesto que o nome do bairro.',
+      'Nos canais, marque só onde você tem presença de verdade.',
+    ],
+    exemploResultado:
+      'Você define "Moema" e "raio 8km". A descoberta passa a devolver só negócios e consumidores dentro da sua área de entrega, e a cota rende.',
+  },
+  {
+    featureKey: 'mira.perfil.gatilhosB2c',
+    titulo: 'O que move a compra no B2C',
+    clientSafe: true,
+    oQueE:
+      'As dores e desejos do consumidor, o momento de vida que dispara a compra, os interesses e os hábitos de consumo dele.',
+    paraQueServe:
+      'Serve porque no B2C o momento costuma valer mais que o perfil. Duas pessoas com a mesma idade, renda e bairro se comportam de forma completamente diferente se uma delas acabou de ter um filho. Demografia diz quem é, momento de vida diz quando falar.',
+    comoImplementar: [
+      'Nos gatilhos, pense no que mudou na vida da pessoa pouco antes de ela comprar de você.',
+      'Nas dores e desejos, seja concreto: "economizar tempo" e "status" movem compras diferentes.',
+      'Nos hábitos, registre o que muda a abordagem: quem parcela responde a oferta diferente de quem paga à vista.',
+    ],
+    exemploResultado:
+      'Uma loja de móveis marca "mudou de casa" como gatilho. A fila passa a priorizar quem está nesse momento, e a conversa começa pelo problema real da pessoa, não por catálogo.',
+  },
+  {
     featureKey: 'mira.motorA',
     titulo: 'Mapear carteira',
     clientSafe: true,

@@ -27,10 +27,9 @@ export interface MiraScoreResult {
 }
 
 interface PerfilLike {
-  segmento?: string | null;
   catalogo?: { nome: string; descricao?: string }[];
-  icpFirmografia?: { cnaes?: string[]; portes?: string[]; regioes?: string[] };
-  areasCompradoras?: string[];
+  /** Alvo B2B do Perfil de Prospecção. Só vale quando tipoCliente === 'B2B'. */
+  alvoB2B?: { cnaesAlvo?: string[]; portes?: string[]; regioes?: string[] };
 }
 
 /** Sinal setorial do CAGED (saldo de emprego do setor do Alvo, por CNAE+UF). */
@@ -52,7 +51,7 @@ const norm = (s: string) =>
 function matchCnae(perfil: PerfilLike, alvo: CnpjData): { hit: boolean; parcial: boolean } {
   const alvoCnae = (alvo.cnae ?? '').replace(/\D/g, '');
   const alvoDesc = norm(alvo.cnaeDescricao ?? '');
-  const wants = perfil.icpFirmografia?.cnaes ?? [];
+  const wants = perfil.alvoB2B?.cnaesAlvo ?? [];
   if (wants.length === 0) return { hit: false, parcial: false };
   for (const w of wants) {
     const digits = w.replace(/\D/g, '');
@@ -69,7 +68,7 @@ function matchCnae(perfil: PerfilLike, alvo: CnpjData): { hit: boolean; parcial:
 }
 
 function matchRegiao(perfil: PerfilLike, alvo: CnpjData): boolean {
-  const regioes = perfil.icpFirmografia?.regioes ?? [];
+  const regioes = perfil.alvoB2B?.regioes ?? [];
   if (regioes.length === 0) return false;
   const alvoUf = norm(alvo.uf ?? '');
   const alvoMun = norm(alvo.municipio ?? '');
@@ -80,7 +79,7 @@ function matchRegiao(perfil: PerfilLike, alvo: CnpjData): boolean {
 }
 
 function matchPorte(perfil: PerfilLike, alvo: CnpjData): boolean {
-  const portes = perfil.icpFirmografia?.portes ?? [];
+  const portes = perfil.alvoB2B?.portes ?? [];
   if (portes.length === 0 || !alvo.porte) return false;
   const alvoP = norm(alvo.porte);
   return portes.some((p) => {
@@ -235,7 +234,7 @@ export interface PlaceLike {
  * (o próprio dono; sem QSA), portfólio (heurístico) e janela (fase 2).
  */
 export function computeMiraScoreB2C(
-  perfil: PerfilLike & { icpB2c?: { regioes?: string[] } },
+  perfil: PerfilLike & { alvoB2C?: { regiaoCidade?: string[] } },
   place: PlaceLike,
   local: { municipio: string | null; uf: string | null }
 ): MiraScoreResult {
@@ -245,7 +244,9 @@ export function computeMiraScoreB2C(
   {
     let v = 12; // veio da busca orientada pelo perfil
     const motivos: string[] = ['descoberto pela busca orientada ao seu perfil'];
-    const regioes = [...(perfil.icpB2c?.regioes ?? []), ...(perfil.icpFirmografia?.regioes ?? [])];
+    // Guardamos os dois alvos lado a lado, então a região do B2B serve de
+    // reserva para quem alternou de caminho e só preencheu de um lado.
+    const regioes = [...(perfil.alvoB2C?.regiaoCidade ?? []), ...(perfil.alvoB2B?.regioes ?? [])];
     const alvoLocal = norm([local.municipio, local.uf].filter(Boolean).join(' '));
     if (regioes.length && alvoLocal && regioes.some((r) => alvoLocal.includes(norm(r)) || norm(r).includes(alvoLocal))) {
       v += 13;

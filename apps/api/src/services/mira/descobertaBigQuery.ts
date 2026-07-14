@@ -41,11 +41,11 @@ function extrairUfs(regiaoLivre: string, regioesConfig: string[]): string[] {
  */
 export async function buscarCnpjsBigQuery(perfil: any, regiaoLivre: string): Promise<string[]> {
   if (!bigQueryDisponivel()) return [];
-  const cnaes: string[] = Array.isArray(perfil?.icpFirmografia?.cnaes)
-    ? perfil.icpFirmografia.cnaes.map((c: string) => String(c).replace(/\D/g, '')).filter((c: string) => c.length >= 2)
+  const cnaes: string[] = Array.isArray(perfil?.alvoB2B?.cnaesAlvo)
+    ? perfil.alvoB2B.cnaesAlvo.map((c: string) => String(c).replace(/\D/g, '')).filter((c: string) => c.length >= 2)
     : [];
   if (cnaes.length === 0) return [];
-  const ufs = extrairUfs(regiaoLivre, perfil?.icpFirmografia?.regioes ?? []);
+  const ufs = extrairUfs(regiaoLivre, perfil?.alvoB2B?.regioes ?? []);
 
   // Filtro de CNAE por prefixo (o ICP pode ter CNAE de 2 a 7 dígitos). Só
   // dígitos, montado a partir da config do cliente (não de input livre) → seguro.

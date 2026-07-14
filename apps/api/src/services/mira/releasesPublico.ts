@@ -43,6 +43,28 @@ function extractJson(text: string): any | null {
   }
 }
 
+/** Sinais do Perfil que calibram a relevancia dos releases. */
+export interface SinaisDoPerfil {
+  doresResolvidas?: string[];
+  sinaisIntencao?: string[];
+}
+
+/**
+ * Linhas do prompt que levam os sinais do Perfil ao analista: a relevancia de
+ * uma novidade nao e absoluta, e relativa ao que o cliente resolve e ao que
+ * ele declarou como sinal de timing de compra.
+ */
+export function montarLinhasSinais(sinais?: SinaisDoPerfil): string[] {
+  const lista = (v: unknown, max = 10) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).slice(0, max) : [];
+  const dores = lista(sinais?.doresResolvidas);
+  const intencao = lista(sinais?.sinaisIntencao);
+  const linhas: string[] = [];
+  if (dores.length) linhas.push(`DORES QUE O CLIENTE RESOLVE (novidade que toca nelas vale mais): ${dores.join('; ')}`);
+  if (intencao.length) linhas.push(`SINAIS DE INTENCAO QUE O CLIENTE PRIORIZA (procure-os nas novidades): ${intencao.join('; ')}`);
+  return linhas;
+}
+
 /**
  * Busca a pegada publica recente de UM Alvo e devolve os releases relevantes
  * ao catalogo do cliente. Retorna também quantas buscas consumiu (orcamento).
@@ -50,7 +72,8 @@ function extractJson(text: string): any | null {
 export async function buscarReleasesPublicos(
   organizationId: string,
   alvo: { id: string; nome: string; nomeFantasia?: string | null; municipio?: string | null; uf?: string | null },
-  catalogo: { nome: string }[]
+  catalogo: { nome: string }[],
+  sinais?: SinaisDoPerfil
 ): Promise<{ drafts: ReleaseDraft[]; buscas: number }> {
   if (!buscaPublicaDisponivel()) return { drafts: [], buscas: 0 };
   const empresa = String(alvo.nomeFantasia || alvo.nome || '').trim();
@@ -99,6 +122,7 @@ export async function buscarReleasesPublicos(
   const user = [
     `CONTA-ALVO: ${empresa}${alvo.municipio ? ` (${[alvo.municipio, alvo.uf].filter(Boolean).join('/')})` : ''}`,
     `CATALOGO DO CLIENTE: ${catalogo.map((c) => `"${c.nome}"`).join(', ') || '(nao informado)'}`,
+    ...montarLinhasSinais(sinais),
     '',
     'RESULTADOS PUBLICOS RECENTES:',
     fontesTxt,
