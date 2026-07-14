@@ -1,13 +1,16 @@
 /**
  * As duas fontes somam na mesma campanha.
  *
- * O Perfil aceita CNAE em código e atividade em texto no mesmo campo (o
- * placeholder convida os dois). Antes era ou/ou: bastando UM código render
- * candidatos, os alvos em texto do cliente não rodavam, calados. Quem
- * declarava "4651-6" e "distribuidoras de TI" perdia metade do que pediu.
+ * Regra atual, depois da campanha 1 de teste do Rodrigo ter voltado com zero:
  *
- * Estes testes travam: código aciona a base oficial, texto aciona a busca
- * pública, e os dois entram no mesmo conjunto de candidatos.
+ *  1. Código de CNAE -> base oficial de CNPJs.
+ *  2. Atividade escrita que a gente sabe traduzir -> TAMBÉM base oficial (via
+ *     cnaeMapa). É a fonte boa: 28M empresas, dado da Receita, sem depender de
+ *     provedor externo.
+ *  3. Só o que não traduz (ex.: "empresas PME", que é porte e não ramo) sobra
+ *     para a busca pública.
+ *  4. Fonte que QUEBRA não vira "0 resultados": estoura 502 e a campanha fica
+ *     FALHOU com o motivo.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -63,8 +66,8 @@ beforeEach(() => {
   fetchCnpj.mockResolvedValue(null);
 });
 
-describe('código de CNAE e atividade em texto convivem', () => {
-  it('só código: usa a base oficial e não gasta busca web', async () => {
+describe('cada alvo vai para a fonte certa', () => {
+  it('código de CNAE: base oficial, sem gastar busca web', async () => {
     buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
 
     const r = await runDescobertaPublica('org-1', { alvos: ['4651-6'], regioes: ['SP'] });
@@ -74,71 +77,86 @@ describe('código de CNAE e atividade em texto convivem', () => {
     expect(r.fonte).toBe('bigquery');
   });
 
-  it('só texto: usa a busca pública com a atividade declarada', async () => {
-    await runDescobertaPublica('org-1', { alvos: ['distribuidoras de TI'], regioes: ['Campinas'] });
-
-    expect(buscarCnpjsBigQuery).not.toHaveBeenCalled();
-    const queries = webSearch.mock.calls.map((c) => c[1]);
-    expect(queries.some((q: string) => q.includes('distribuidoras de TI') && q.includes('Campinas'))).toBe(true);
-  });
-
-  it('os dois juntos: a base oficial roda E a busca web roda (era ou/ou)', async () => {
+  it('atividade escrita que traduz vai para a base oficial, não para a web', async () => {
     buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
 
-    await runDescobertaPublica('org-1', { alvos: ['4651-6', 'distribuidoras de TI'], regioes: ['SP'] });
+    await runDescobertaPublica('org-1', { alvos: ['distribuidoras de TI'], regioes: ['SP'] });
 
-    // O código foi para a base oficial...
-    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(['46516'], ['SP']);
-    // ...e o texto NÃO foi engolido: virou busca.
-    const queries = webSearch.mock.calls.map((c) => c[1]);
-    expect(queries.some((q: string) => q.includes('distribuidoras de TI'))).toBe(true);
-  });
-
-  it('os CNPJs das duas fontes somam no mesmo conjunto de candidatos', async () => {
-    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
-    webSearch.mockResolvedValue([
-      { title: 'Alfa Distribuidora', snippet: 'CNPJ 99.888.777/0001-66', url: 'https://alfa.com.br' },
-    ]);
-
-    await runDescobertaPublica('org-1', { alvos: ['4651-6', 'distribuidoras de TI'], regioes: [] });
-
-    const verificados = fetchCnpj.mock.calls.map((c) => c[1]);
-    expect(verificados).toContain('11222333000181'); // veio da base oficial
-    expect(verificados).toContain('99888777000166'); // veio do snippet da web
-  });
-
-  it('todos os alvos em texto (o caso da MACHIA): a busca roda com cada um', async () => {
-    await runDescobertaPublica('org-1', {
-      alvos: ['serviços', 'comércio varejista'],
-      regioes: ['Brasil'],
-    });
-
-    const queries = webSearch.mock.calls.map((c) => c[1]);
-    expect(queries.some((q: string) => q.includes('serviços'))).toBe(true);
-    expect(queries.some((q: string) => q.includes('comércio varejista'))).toBe(true);
-  });
-
-  it('sem provedor de busca, o código ainda salva a campanha em vez de 501', async () => {
-    buscaPublicaDisponivel.mockReturnValue(false);
-    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
-
-    const r = await runDescobertaPublica('org-1', { alvos: ['4651-6', 'distribuidoras de TI'], regioes: [] });
-
-    expect(r.fonte).toBe('bigquery');
+    // "distribuidoras" é comércio atacadista = divisão 46.
+    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(['46'], ['SP']);
     expect(webSearch).not.toHaveBeenCalled();
   });
 
-  it('sem provedor de busca e só texto: 501 honesto (nada tem fonte)', async () => {
-    buscaPublicaDisponivel.mockReturnValue(false);
-    await expect(runDescobertaPublica('org-1', { alvos: ['serviços'], regioes: [] })).rejects.toMatchObject({
-      status: 501,
+  it('o caso real da MACHIA: 5 alvos escritos passam a acionar a base de 28M', async () => {
+    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
+
+    const r = await runDescobertaPublica('org-1', {
+      alvos: ['serviços', 'comércio varejista', 'industria', 'todos as verticais de serviços', 'empresas PME'],
+      regioes: ['Brasil'],
+    });
+
+    // Antes: codigos=[] -> BigQuery nem era chamado -> tudo dependia da web (403) -> 0 alvos.
+    const divisoes = buscarCnpjsBigQuery.mock.calls[0][0];
+    expect(divisoes).toContain('47'); // comércio varejista
+    expect(divisoes).toContain('10'); // indústria
+    expect(divisoes).toContain('62'); // serviços (TI)
+    expect(r.fonte).toBe('bigquery');
+  });
+
+  it('só o que não traduz sobra para a busca pública', async () => {
+    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
+
+    await runDescobertaPublica('org-1', { alvos: ['comércio varejista', 'xpto artesanal'], regioes: [] });
+
+    // O que traduz foi para a base oficial...
+    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(['47'], []);
+    // ...e só o intraduzível virou busca.
+    const queries = webSearch.mock.calls.map((c) => c[1]);
+    expect(queries.every((q: string) => q.includes('xpto artesanal'))).toBe(true);
+    expect(queries.some((q: string) => q.includes('varejista'))).toBe(false);
+  });
+
+  it('os CNPJs das duas fontes somam no mesmo conjunto', async () => {
+    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
+    webSearch.mockResolvedValue([
+      { title: 'Alfa Ltda', snippet: 'CNPJ 99.888.777/0001-66', url: 'https://alfa.com.br' },
+    ]);
+
+    await runDescobertaPublica('org-1', { alvos: ['comércio varejista', 'xpto artesanal'], regioes: [] });
+
+    const verificados = fetchCnpj.mock.calls.map((c) => c[1]);
+    expect(verificados).toContain('11222333000181'); // base oficial
+    expect(verificados).toContain('99888777000166'); // snippet da web
+  });
+});
+
+describe('fonte quebrada nunca vira campanha vazia', () => {
+  it('busca com erro e nada da base: 502 com o motivo, não 0 alvos calado', async () => {
+    // Exatamente a campanha 1 de teste: google_cse_403 nas 3 buscas.
+    const erro: any = new Error('google_cse_403');
+    erro.detail = 'This project does not have the access to Custom Search JSON API.';
+    webSearch.mockRejectedValue(erro);
+
+    await expect(runDescobertaPublica('org-1', { alvos: ['xpto artesanal'], regioes: [] })).rejects.toMatchObject({
+      status: 502,
+      message: 'fonte_falhou',
     });
   });
 
-  it('código que não rende candidato e nenhum texto: 422 em vez de campanha vazia sem explicação', async () => {
-    buscarCnpjsBigQuery.mockResolvedValue([]);
-    await expect(runDescobertaPublica('org-1', { alvos: ['9999-9'], regioes: [] })).rejects.toMatchObject({
-      status: 422,
+  it('busca com erro mas a base oficial trouxe: campanha segue, com aviso', async () => {
+    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
+    webSearch.mockRejectedValue(new Error('google_cse_403'));
+
+    const r = await runDescobertaPublica('org-1', { alvos: ['comércio varejista', 'xpto artesanal'], regioes: [] });
+
+    expect(r.fonte).toBe('bigquery');
+    expect(r.avisos?.[0]).toContain('busca pública falhou');
+  });
+
+  it('sem provedor de busca e só alvo intraduzível: 501 honesto', async () => {
+    buscaPublicaDisponivel.mockReturnValue(false);
+    await expect(runDescobertaPublica('org-1', { alvos: ['xpto artesanal'], regioes: [] })).rejects.toMatchObject({
+      status: 501,
     });
   });
 

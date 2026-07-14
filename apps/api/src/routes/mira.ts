@@ -145,14 +145,32 @@ router.post('/motor-b/descobrir', validate(motorBSchema), async (req: Request, r
     res.json({ success: true, data: { modo, ...result, campanhaId: campanha.id, campanhaNome: campanha.nome } });
   } catch (err: any) {
     // Gate/fonte indisponível: o disparo nem largou, não vira histórico.
+    // Já a fonte que QUEBROU (502) fica registrada como FALHOU com o motivo:
+    // é o que faltava para "0 alvos" nunca mais se passar por sucesso.
     if (campanha && (err?.status === 412 || err?.status === 501)) await descartarCampanha(campanha.id);
-    else if (campanha) await concluirCampanha(campanha.id, { motivo: err?.message ?? 'erro' }, 'FALHOU').catch(() => {});
+    else if (campanha)
+      await concluirCampanha(
+        campanha.id,
+        { motivo: err?.message ?? 'erro', ...(err?.detail ? { detalhe: String(err.detail).slice(0, 300) } : {}) },
+        'FALHOU'
+      ).catch(() => {});
     if (err?.status === 422) {
       res.status(422).json({
         success: false,
         error: 'alvos_sem_fonte',
         message:
           'Nenhum dos alvos escolhidos pode ser buscado agora. Use um código de CNAE (ex.: 4651-6) ou uma atividade escrita (ex.: distribuidoras de TI).',
+      });
+      return;
+    }
+    // Fonte quebrada não é "não achei ninguém": a campanha falha dizendo o quê.
+    if (err?.status === 502) {
+      res.status(502).json({
+        success: false,
+        error: 'fonte_falhou',
+        message:
+          'A fonte de busca respondeu com erro, então esta campanha não chegou a procurar. Nenhum Alvo foi criado e nada foi descontado da sua cota. O time já foi avisado.',
+        detalhe: err?.detail ?? null,
       });
       return;
     }

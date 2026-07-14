@@ -20,6 +20,7 @@ import { computeMiraScoreV1 } from './score.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
 import { buscarCnpjsBigQuery } from './descobertaBigQuery.js';
 import { separarAlvos } from './alvosDaBusca.js';
+import { traduzirAlvos } from './cnaeMapa.js';
 import { buscarSinalSetorial } from './cagedMirror.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
@@ -88,6 +89,8 @@ export interface DescobertaPublicaResult {
   /** Região que a busca de fato usou (vem da campanha, semeada do Perfil). */
   regiaoAplicada: string | null;
   regiaoOrigem: 'campanha' | null;
+  /** Fonte que falhou sem derrubar a campanha (a outra trouxe candidatos). */
+  avisos?: string[];
 }
 
 function hostDe(url: string): string {
@@ -137,8 +140,13 @@ export async function runDescobertaPublica(
     throw err;
   }
 
-  // Alvo é código de CNAE ou atividade em texto: cada tipo tem a sua fonte.
+  // Alvo é código de CNAE ou atividade em texto. A atividade escrita também
+  // vira código quando dá (traduzirAlvos), para chegar na base de 28M CNPJs em
+  // vez de depender só da busca na web: era isso que deixava um Perfil escrito
+  // em português passando longe da fonte boa.
   const { codigos, textos } = separarAlvos(busca.alvos ?? []);
+  const traducao = traduzirAlvos(textos);
+  const codigosDaBusca = Array.from(new Set([...codigos, ...traducao.divisoes]));
   const regioes = (busca.regioes ?? []).filter((r) => typeof r === 'string' && r.trim());
   const alvoRegiao = regioes[0] ?? '';
 
@@ -150,10 +158,10 @@ export async function runDescobertaPublica(
   // Antes era ou/ou: havendo um código, o texto do cliente não rodava. Quem
   // declarava os dois tipos no Perfil perdia metade do que pediu, calado.
   // Todo CNPJ, venha de onde vier, é re-verificado na Receita (BrasilAPI).
-  let cnpjsDiretos: string[] = codigos.length ? await buscarCnpjsBigQuery(codigos, regioes) : [];
+  let cnpjsDiretos: string[] = codigosDaBusca.length ? await buscarCnpjsBigQuery(codigosDaBusca, regioes) : [];
   let fonteDiretos: 'bigquery' | 'indice_local' | null = cnpjsDiretos.length ? 'bigquery' : null;
-  if (!fonteDiretos && codigos.length) {
-    cnpjsDiretos = await buscarCandidatosIndiceLocal(codigos, regioes);
+  if (!fonteDiretos && codigosDaBusca.length) {
+    cnpjsDiretos = await buscarCandidatosIndiceLocal(codigosDaBusca, regioes);
     if (cnpjsDiretos.length) fonteDiretos = 'indice_local';
   }
   const usandoCnpjsDiretos = fonteDiretos !== null;
@@ -161,10 +169,15 @@ export async function runDescobertaPublica(
   const resultados: SerpResult[] = [];
   const vistosUrl = new Set<string>();
   let buscas = 0;
+  // Erro de fonte não pode virar "0 resultados": guardamos o motivo para a
+  // campanha falhar dizendo o que houve, em vez de mentir "concluída".
+  const errosBusca: string[] = [];
 
-  // A web roda sempre que houver atividade em texto declarada, tenha o código
-  // rendido candidatos ou não.
-  if (textos.length > 0) {
+  // A web roda só para o que não virou código (ex.: "empresas PME", que é
+  // porte, não ramo). O que virou código já foi buscado na base oficial, que é
+  // melhor: não gasta cota de busca e o dado é da Receita.
+  const paraWeb = traducao.naoTraduzidos;
+  if (paraWeb.length > 0) {
     if (!buscaPublicaDisponivel()) {
       // Sem provedor de busca, o texto não tem fonte. Só é erro se os códigos
       // também não trouxeram nada: aí a campanha inteira ficaria sem fonte.
@@ -176,7 +189,7 @@ export async function runDescobertaPublica(
       logger.warn('[MiraDescobertaPublica] sem provedor de busca: alvos em texto ficaram de fora desta campanha');
     } else {
       const queries: string[] = [];
-      for (const alvo of textos) {
+      for (const alvo of paraWeb) {
         queries.push(alvoRegiao ? `empresas de ${alvo} em ${alvoRegiao}` : `empresas de ${alvo}`);
         queries.push(alvoRegiao ? `"${alvo}" ${alvoRegiao} CNPJ` : `"${alvo}" CNPJ`);
       }
@@ -192,15 +205,29 @@ export async function runDescobertaPublica(
           }
         } catch (err: any) {
           if (err?.status === 501 && !usandoCnpjsDiretos) throw err;
-          logger.warn(`[MiraDescobertaPublica] busca falhou: ${err?.message ?? err}`);
+          const motivo = String(err?.message ?? err);
+          errosBusca.push(err?.detail ? `${motivo}: ${err.detail}` : motivo);
+          logger.warn(`[MiraDescobertaPublica] busca falhou: ${motivo}${err?.detail ? ` | ${err.detail}` : ''}`);
         }
       }
     }
   }
 
+  // A distinção que faltava: "a fonte quebrou" NÃO é "não achei ninguém".
+  // A campanha 1 de teste do Rodrigo devolveu 0 alvos com status CONCLUIDA
+  // enquanto as 3 buscas falhavam com google_cse_403 (API não habilitada no
+  // projeto). Falha de fonte agora estoura, a campanha fica FALHOU e o cliente
+  // lê o motivo, em vez de achar que o mercado inteiro estava vazio.
+  if (!usandoCnpjsDiretos && resultados.length === 0 && errosBusca.length > 0) {
+    const err: any = new Error('fonte_falhou');
+    err.status = 502;
+    err.detail = errosBusca[0];
+    throw err;
+  }
+
   // Nenhum alvo achou fonte: nem código rendeu candidato, nem texto rendeu
   // resultado. Melhor dizer isso do que devolver campanha vazia sem explicação.
-  if (!usandoCnpjsDiretos && resultados.length === 0 && codigos.length > 0 && textos.length === 0) {
+  if (!usandoCnpjsDiretos && resultados.length === 0 && codigosDaBusca.length > 0 && paraWeb.length === 0) {
     const err: any = new Error('alvos_sem_fonte');
     err.status = 422;
     throw err;
@@ -221,6 +248,7 @@ export async function runDescobertaPublica(
     quota: { used: ent.quota.used, total: ent.quota.total, remaining: ent.quota.remaining },
     regiaoAplicada: alvoRegiao || null,
     regiaoOrigem: alvoRegiao ? 'campanha' : null,
+    ...(errosBusca.length ? { avisos: [`A busca pública falhou (${errosBusca[0]}); valeu só a base de CNPJs.`] } : {}),
   };
   if (!usandoCnpjsDiretos && resultados.length === 0) return result;
 
@@ -266,7 +294,7 @@ export async function runDescobertaPublica(
       `${dados.razaoSocial}${dados.nomeFantasia ? ` (${dados.nomeFantasia})` : ''}, ` +
       `${dados.cnaeDescricao ?? 'atividade nao informada'}, porte ${dados.porte ?? 'n/d'}, ` +
       `${[dados.municipio, dados.uf].filter(Boolean).join('/')}. ` +
-      `Descoberto pela campanha (${[...codigos, ...textos].slice(0, 3).join(', ')}${alvoRegiao ? ` em ${alvoRegiao}` : ''}) e verificado na Receita.`;
+      `Descoberto pela campanha (${(busca.alvos ?? []).slice(0, 3).join(', ')}${alvoRegiao ? ` em ${alvoRegiao}` : ''}) e verificado na Receita.`;
 
     let alvoId: string | null = null;
     try {
@@ -292,7 +320,7 @@ export async function runDescobertaPublica(
           confianca,
           resumo,
           fontes: [
-            { campo: 'descoberta_publica', url: `busca:${[...codigos, ...textos].slice(0, 3).join('|')}`, data: agora, confianca: 55 },
+            { campo: 'descoberta_publica', url: `busca:${(busca.alvos ?? []).slice(0, 3).join('|')}`, data: agora, confianca: 55 },
             { campo: 'firmografia', url: dados.fonteUrl, data: agora, confianca: 95 },
           ],
           decisores: {
