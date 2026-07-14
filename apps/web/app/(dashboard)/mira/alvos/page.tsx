@@ -408,6 +408,7 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
     provider: string | null;
     cnpjIndexDisponivel: boolean;
     cnpjIndexTotal: number;
+    bigquery?: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -419,7 +420,11 @@ function DescobrirModal({ onClose, onDone }: { onClose: () => void; onDone: () =
 
   // B2B funciona com QUALQUER uma das duas fontes: índice local (grátis,
   // sem chave, precisa da ingestão da base da Receita) ou busca pública.
-  const fonteOk = fontes ? (kind === 'B2C' ? fontes.places : fontes.buscaPublica || fontes.cnpjIndexDisponivel) : null;
+  const fonteOk = fontes
+    ? kind === 'B2C'
+      ? fontes.places
+      : fontes.bigquery || fontes.cnpjIndexDisponivel || fontes.buscaPublica
+    : null;
 
   const descobrir = async () => {
     if (consulta.trim().length < 3) {

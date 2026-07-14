@@ -169,7 +169,7 @@ export const miraContent: SaibaMaisContent[] = [
     titulo: 'Descobrir novos',
     clientSafe: true,
     oQueE:
-      'A descoberta de novos é o motor que busca negócios que ainda não estão na sua carteira. Você descreve o que procurar e onde, e a Mira tem duas trilhas: para Empresas (B2B), ela usa primeiro o índice local de CNPJ (base da Receita já carregada no seu Perfil, filtra por CNAE/UF instantaneamente e de graça) e, quando não há match, cai para o índice público de busca; para Negócio local (B2C), usa a presença no Google Places. Em todos os casos, cada candidato é sempre verificado de novo na Receita antes de virar Alvo.',
+      'A descoberta de novos é o motor que busca negócios que ainda não estão na sua carteira. Você descreve o que procurar e onde, e a Mira tem duas trilhas: para Empresas (B2B), ela consulta a base de CNPJ da Receita (via BigQuery da Base dos Dados, ou índice local) filtrando por CNAE e UF do seu Perfil, e cai para o índice público de busca só se precisar; para Negócio local (B2C), usa a presença no Google Places. Em todos os casos, cada candidato é sempre verificado de novo na Receita antes de virar Alvo.',
     paraQueServe:
       'Serve para encher o topo do funil com o perfil certo, sem comprar lista fria. No B2B, só desconta cota o Alvo verificado (ativo na Receita e com decisor no quadro societário); empresas achadas sem CNPJ resolvido ficam como candidatos, para qualificar depois, e não gastam cota. No B2C, só entra negócio com contato verificável.',
     comoImplementar: [
@@ -367,5 +367,37 @@ export const miraContent: SaibaMaisContent[] = [
     ],
     exemploResultado:
       'O gestor exporta o CSV na sexta, filtra os Alvos com score acima de 70 na planilha e distribui as metas de abordagem da semana seguinte na reunião de segunda.',
+  },
+  {
+    featureKey: 'mira.analytics',
+    titulo: 'Telemetria do Mira Prospects',
+    clientSafe: true,
+    oQueE:
+      'O painel do Mira dentro do Analytics: em um lugar você vê o funil de Alvos (quantos descobertos, em qualificação, prontos e entregues), o Mira Score médio, a cota do mês, quantos decisores foram mapeados e quantos Alvos já viraram oportunidade no CRM.',
+    paraQueServe:
+      'Serve para você enxergar a saúde da prospecção sem abrir cada tela: se os Alvos estão avançando no funil, se a cota está sendo bem usada e se a inteligência está de fato virando conversa e venda.',
+    comoImplementar: [
+      'Abra Analytics e role até o bloco Mira Prospects (só aparece se o Mira estiver ativo).',
+      'Troque o período (7, 30 ou 90 dias) para ver a evolução.',
+      'Use o funil para achar gargalos: muitos "em qualificação" parados pode pedir mais aprofundamento.',
+    ],
+    exemploResultado:
+      'O gestor vê que 40 Alvos ficaram prontos no mês, mas só 8 foram para o CRM. Ele cobra o time para trabalhar a fila e a conversão sobe na semana seguinte.',
+  },
+  {
+    featureKey: 'mira.analytics.fontes',
+    titulo: 'Qualidade das fontes',
+    clientSafe: true,
+    oQueE:
+      'A tabela que mostra, por fonte de dados (Receita, pegada pública do LinkedIn/web, Google Places), quantas consultas foram feitas, a taxa de acerto (match) e a latência média. É a prova de que a inteligência vem de dado real e verificado.',
+    paraQueServe:
+      'Serve para transparência e confiança: você acompanha de onde vem cada informação e com que qualidade. Match baixo numa fonte sinaliza que aquele tipo de dado está mais escasso para o seu perfil.',
+    comoImplementar: [
+      'Leia a taxa de match: verde (alta) é dado abundante e confiável para o seu ICP.',
+      'A latência ajuda a entender a velocidade de cada fonte.',
+      'A Mira nunca inventa: o que não tem fonte, não entra.',
+    ],
+    exemploResultado:
+      'A fonte da Receita mostra 95% de match; a pegada pública do LinkedIn, 60%. O gestor entende que os decisores por cargo dependem do que está indexado publicamente e calibra a expectativa.',
   },
 ];

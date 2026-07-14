@@ -16,8 +16,10 @@ import { pousarNoCrm } from '../services/mira/pousarCrm.js';
 import { runMotorB, placesDisponivel } from '../services/mira/motorB.js';
 import { runDescobertaPublica } from '../services/mira/descobertaPublica.js';
 import { buscaPublicaDisponivel, buscaPublicaProvider } from '../services/mira/buscaPublica.js';
+import { bigQueryDisponivel } from '../services/mira/descobertaBigQuery.js';
 import { enriquecerDecisoresPublico } from '../services/mira/decisoresPublico.js';
 import { aprofundarAlvo } from '../services/mira/agentes.js';
+import { computeMiraAnalytics } from '../services/mira/analytics.js';
 
 const router = Router();
 
@@ -87,6 +89,8 @@ router.get('/motor-b/status', async (_req: Request, res: Response) => {
       provider: buscaPublicaProvider(),
       cnpjIndexDisponivel: cnpjIndexRows > 0,
       cnpjIndexTotal: cnpjIndexRows,
+      // BigQuery (Base dos Dados) — fonte B2B prioritária quando configurada.
+      bigquery: bigQueryDisponivel(),
     },
   });
 });
@@ -208,6 +212,19 @@ router.post('/alvos/:id/arquivar', async (req: Request, res: Response, next: Nex
       return;
     }
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Telemetria (aba Mira Prospects no /analytics) ──────────────────
+
+// GET /api/mira/analytics?period=30 — funil, cota, qualidade das fontes, conversão
+router.get('/analytics', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const period = Math.min(Math.max(Number((req.query as any).period) || 30, 1), 365);
+    const data = await computeMiraAnalytics(req.organizationId!, period);
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
