@@ -118,3 +118,34 @@ Pra contornar (PRs cosméticos): adicione label `no-iza-impact` no PR.
 - "Voces tem Programa Fundadores?" -> Iza NAO oferece mais a campanha.
 - "Qual o SLA de voces?" -> Iza fala de infraestrutura/monitoramento, sem cravar 99,9% contratual.
 - "Quanto custa a Mira Prospects?" -> "A partir de R$ 297/mes (Essencial), disponivel do Growth pra cima."
+
+---
+
+### 2026-07-14 · PR #274 · Tira marca da ZappIQ do prompt do CLIENTE (não da Iza)
+
+**O que mudou:** `coreAgentRules.ts` foi de v1 para v2 e `promptEngine.ts` removeu o
+bloco `### URLs canônicas ZappIQ`. Objetivo: o prompt do agente de CADA CLIENTE (Vera do
+CMJ, Bia da Loja X etc.) parou de levar marca/link/oferta da ZappIQ, porque a Vera
+mandava lead do CMJ pro nosso cadastro. `CORE_AGENT_RULES_V1` é prependado ao prompt de
+TODA org, inclusive a da Iza, então o path sensível dispara o gate.
+
+**Impacto na Iza:** Nenhum nos FATOS que ela fala. Conferido linha a linha:
+- O que saiu de `coreAgentRules.ts` são EXEMPLOS ilustrativos dentro de templates de
+  formato de resposta — `[1 friction-reducer: sem cartão / 14 dias grátis / etc]` e
+  `"Os planos disponíveis são: Starter, Growth, Scale..."` — não fatos. Viraram genéricos
+  (`[benefício do SEU negócio]`, `"A, B, C..."`).
+- Os fatos reais que a Iza fala (trial, planos, preços, Mira, add-ons — ver entrada
+  13/07 acima) vêm da tabela `iza_facts` via `getIzaFactsBlock()`, que é um mecanismo
+  completamente separado de `coreAgentRules.ts` e não foi tocado aqui.
+- O bloco `### URLs canônicas ZappIQ` removido do `promptEngine.ts` só afeta o FALLBACK
+  (org sem `Agent` seedado). A Iza tem `Agent.systemPrompt` próprio com ~27k chars de
+  patch acumulado — nunca passa por esse fallback em produção.
+- `CORE_RULES_VERSION` (v1→v2) só alimenta label de auditoria de eval run
+  (`adminAgentEval.ts`, `agentQuality.ts`, `agentEvalCronService.ts`), não é lida em
+  nenhuma branch de comportamento.
+
+**Ação no /admin/iza-knowledge:** Nenhuma. Não há fact novo, atualizado ou removido.
+
+**Smoke esperado:** Nenhuma mudança no que a Iza responde. "Quais os planos?",
+"tem trial?" e "qual o link de cadastro?" continuam saindo do `factsBlock`, idênticos a
+antes do PR.
