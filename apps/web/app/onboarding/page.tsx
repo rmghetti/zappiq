@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Loader2, Info } from 'lucide-react';
 import { Logo } from '../../components/Logo';
 import { formatPhone } from '../../lib/masks';
 import { QuotaBehaviorStep } from '../../components/onboarding/QuotaBehaviorStep';
+import { SurveyIntroModal } from '../../components/onboarding/SurveyIntroModal';
 
 import {
   GLOBAL_SURVEY_BLOCKS as RAW_GLOBAL_BLOCKS,
@@ -298,6 +299,8 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showIntro, setShowIntro] = useState(false);
+  const introShown = useRef(false);
 
   // HOTFIX 2026-05-19: Auth provider detectado em detectAndPrefillForm.
   // 'google'      = Google OAuth: cliente NUNCA define senha (loga sempre por Google)
@@ -690,6 +693,16 @@ export default function OnboardingPage() {
     setForm((prev) => ({ ...prev, subsegments: [], subsegmentAnswers: {} }));
   }, [form.segment]);
 
+  // Popup de boas-vindas do questionário: dispara uma única vez assim que o
+  // cliente chega no Step 1 (Segmento), seja avançando do Step 0 ou pulando
+  // direto pra lá (OAuth/Magic Link já com nome+empresa detectados).
+  useEffect(() => {
+    if (mounted && step >= 1 && !introShown.current) {
+      introShown.current = true;
+      setShowIntro(true);
+    }
+  }, [mounted, step]);
+
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
@@ -705,6 +718,8 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {showIntro && <SurveyIntroModal onClose={() => setShowIntro(false)} />}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
