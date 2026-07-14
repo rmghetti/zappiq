@@ -38,14 +38,31 @@ beforeEach(() => {
 });
 
 describe('nomeAutomatico', () => {
-  it('descoberta: consulta + região + data', () => {
-    expect(nomeAutomatico('DESCOBERTA', { consulta: 'clínicas de estética', regiao: 'Campinas' }, DATA)).toBe(
+  it('descoberta: alvo + região + data', () => {
+    expect(nomeAutomatico('DESCOBERTA', { alvos: ['clínicas de estética'], regioes: ['Campinas'] }, DATA)).toBe(
       'Descoberta: clínicas de estética em Campinas (15/jul)'
     );
   });
 
   it('descoberta sem região não inventa lugar', () => {
-    expect(nomeAutomatico('DESCOBERTA', { consulta: 'academias' }, DATA)).toBe('Descoberta: academias (15/jul)');
+    expect(nomeAutomatico('DESCOBERTA', { alvos: ['academias'] }, DATA)).toBe('Descoberta: academias (15/jul)');
+  });
+
+  it('dois alvos entram os dois no nome', () => {
+    expect(nomeAutomatico('DESCOBERTA', { alvos: ['clínicas', 'academias'], regioes: ['Moema'] }, DATA)).toBe(
+      'Descoberta: clínicas e academias em Moema (15/jul)'
+    );
+  });
+
+  it('muitos alvos: cita o primeiro e conta o resto (nome legível na lista)', () => {
+    // O caso real da MACHIA: 5 alvos declarados no Perfil.
+    expect(
+      nomeAutomatico(
+        'DESCOBERTA',
+        { alvos: ['serviços', 'comércio varejista', 'industria', 'todos as verticais', 'empresas PME'], regioes: ['Brasil'] },
+        DATA
+      )
+    ).toBe('Descoberta: serviços e mais 4 em Brasil (15/jul)');
   });
 
   it('carteira: quantidade de CNPJs, com singular honesto', () => {
@@ -53,15 +70,15 @@ describe('nomeAutomatico', () => {
     expect(nomeAutomatico('BASE_INSTALADA', { cnpjs: 1 }, DATA)).toBe('Carteira: 1 CNPJ (15/jul)');
   });
 
-  it('consulta gigante é truncada no nome', () => {
-    const nome = nomeAutomatico('DESCOBERTA', { consulta: 'x'.repeat(200) }, DATA);
+  it('alvo gigante é truncado no nome', () => {
+    const nome = nomeAutomatico('DESCOBERTA', { alvos: ['x'.repeat(200)] }, DATA);
     expect(nome.length).toBeLessThan(100);
   });
 });
 
 describe('iniciarCampanha', () => {
   it('grava com o organizationId da org e o nome dado', async () => {
-    await iniciarCampanha('org-1', { nome: '  Minha busca  ', tipo: 'DESCOBERTA', parametros: { consulta: 'x' } });
+    await iniciarCampanha('org-1', { nome: '  Minha busca  ', tipo: 'DESCOBERTA', parametros: { alvos: ['x'] } });
     const args = create.mock.calls[0][0];
     expect(args.data.organizationId).toBe('org-1');
     expect(args.data.nome).toBe('Minha busca');
@@ -69,7 +86,7 @@ describe('iniciarCampanha', () => {
   });
 
   it('sem nome, cai no automático', async () => {
-    await iniciarCampanha('org-1', { tipo: 'DESCOBERTA', parametros: { consulta: 'academias', regiao: 'Moema' } });
+    await iniciarCampanha('org-1', { tipo: 'DESCOBERTA', parametros: { alvos: ['academias'], regioes: ['Moema'] } });
     const args = create.mock.calls[0][0];
     expect(args.data.nome).toContain('Descoberta: academias em Moema');
   });
@@ -108,7 +125,7 @@ describe('listarCampanhas (isolamento)', () => {
         nome: 'Descoberta: x (15/jul)',
         tipo: 'DESCOBERTA',
         status: 'CONCLUIDA',
-        parametros: { consulta: 'x' },
+        parametros: { alvos: ['x'] },
         resultado: { criados: 3 },
         _count: { alvos: 3 },
         alvos: [{ id: 'a1' }, { id: 'a2' }],

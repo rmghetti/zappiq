@@ -20,8 +20,10 @@ import { prisma } from '@zappiq/database';
 export type MiraCampanhaTipo = 'BASE_INSTALADA' | 'DESCOBERTA';
 
 export interface ParametrosCampanha {
-  consulta?: string;
-  regiao?: string | null;
+  /** O que procurar: os alvos confirmados no wizard (semeados do Perfil). */
+  alvos?: string[];
+  /** Onde procurar. Vazio = sem recorte de região. */
+  regioes?: string[];
   kind?: 'B2B' | 'B2C';
   /** Quantidade de CNPJs colados (não os CNPJs em si: dado do cliente fica no Alvo). */
   cnpjs?: number;
@@ -29,16 +31,24 @@ export interface ParametrosCampanha {
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
-/** "Descoberta: clínicas em Moema (14/jul)" / "Carteira: 12 CNPJs (14/jul)". */
+/**
+ * "Descoberta: clínicas e academias em Moema (14/jul)" / "Carteira: 12 CNPJs
+ * (14/jul)". Com muitos alvos, cita os dois primeiros e conta o resto, para o
+ * nome continuar legível na lista do hub.
+ */
 export function nomeAutomatico(tipo: MiraCampanhaTipo, params: ParametrosCampanha, agora: Date = new Date()): string {
   const data = `${agora.getDate()}/${MESES[agora.getMonth()]}`;
   if (tipo === 'BASE_INSTALADA') {
     const n = params.cnpjs ?? 0;
     return `Carteira: ${n} ${n === 1 ? 'CNPJ' : 'CNPJs'} (${data})`;
   }
-  const consulta = (params.consulta ?? '').trim().slice(0, 60) || 'novos clientes';
-  const regiao = (params.regiao ?? '').trim();
-  return `Descoberta: ${consulta}${regiao ? ` em ${regiao}` : ''} (${data})`;
+  const alvos = (params.alvos ?? []).map((a) => String(a).trim()).filter(Boolean);
+  const regiao = (params.regioes ?? []).map((r) => String(r).trim()).filter(Boolean)[0] ?? '';
+  let oQue = 'novos clientes';
+  if (alvos.length === 1) oQue = alvos[0].slice(0, 60);
+  else if (alvos.length === 2) oQue = `${alvos[0].slice(0, 30)} e ${alvos[1].slice(0, 30)}`;
+  else if (alvos.length > 2) oQue = `${alvos[0].slice(0, 30)} e mais ${alvos.length - 1}`;
+  return `Descoberta: ${oQue}${regiao ? ` em ${regiao}` : ''} (${data})`;
 }
 
 export async function iniciarCampanha(

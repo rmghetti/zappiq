@@ -27,6 +27,7 @@ import {
   descartarCampanha,
   listarCampanhas,
 } from '../services/mira/campanhas.js';
+import { sementeDaBusca } from '../services/mira/alvosDaBusca.js';
 import { perfilSchema, computePerfilProntidao, modoDaDescoberta, type PerfilInput } from './mira.perfil.schema.js';
 
 const router = Router();
@@ -82,8 +83,12 @@ router.get('/motor-a/crm-candidates', async (req: Request, res: Response, next: 
 // ── Motor B (descoberta net-new) ───────────────────────────────────
 
 const motorBSchema = z.object({
-  consulta: z.string().trim().min(3).max(160),
-  regiao: z.string().trim().max(120).optional().nullable(),
+  // O que procurar: os alvos que o cliente confirmou no wizard. Nascem do
+  // Perfil (GET /campanhas/semente) e ele pode tirar ou somar. Nunca vazio:
+  // é o que a busca vai usar de fato.
+  alvos: z.array(z.string().trim().min(2).max(160)).min(1).max(10),
+  // Onde procurar. Vazio = sem recorte de região.
+  regioes: z.array(z.string().trim().min(2).max(120)).max(5).default([]),
   // B2B = descoberta pública (busca + Receita/BrasilAPI, grátis).
   // B2C = negócio local (Google Places). Default segue o modo do perfil.
   kind: z.enum(['B2B', 'B2C']).optional(),
@@ -123,24 +128,34 @@ router.get('/motor-b/status', async (_req: Request, res: Response) => {
 router.post('/motor-b/descobrir', validate(motorBSchema), async (req: Request, res: Response, next: NextFunction) => {
   let campanha: { id: string; nome: string } | null = null;
   try {
-    const { consulta, regiao, kind, nome } = req.body as z.infer<typeof motorBSchema>;
+    const { alvos, regioes, kind, nome } = req.body as z.infer<typeof motorBSchema>;
     const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId: req.organizationId! } });
     const modo = modoDaDescoberta(kind, perfil);
     campanha = await iniciarCampanha(req.organizationId!, {
       nome,
       tipo: 'DESCOBERTA',
-      parametros: { consulta, regiao: regiao ?? null, kind: modo },
+      parametros: { alvos, regioes, kind: modo },
     });
+    const busca = { alvos, regioes };
     const result =
       modo === 'B2C'
-        ? await runMotorB(req.organizationId!, consulta, regiao ?? null, campanha.id)
-        : await runDescobertaPublica(req.organizationId!, consulta, regiao ?? null, campanha.id);
+        ? await runMotorB(req.organizationId!, busca, campanha.id)
+        : await runDescobertaPublica(req.organizationId!, busca, campanha.id);
     await concluirCampanha(campanha.id, result as any);
     res.json({ success: true, data: { modo, ...result, campanhaId: campanha.id, campanhaNome: campanha.nome } });
   } catch (err: any) {
     // Gate/fonte indisponível: o disparo nem largou, não vira histórico.
     if (campanha && (err?.status === 412 || err?.status === 501)) await descartarCampanha(campanha.id);
     else if (campanha) await concluirCampanha(campanha.id, { motivo: err?.message ?? 'erro' }, 'FALHOU').catch(() => {});
+    if (err?.status === 422) {
+      res.status(422).json({
+        success: false,
+        error: 'alvos_sem_fonte',
+        message:
+          'Nenhum dos alvos escolhidos pode ser buscado agora. Use um código de CNAE (ex.: 4651-6) ou uma atividade escrita (ex.: distribuidoras de TI).',
+      });
+      return;
+    }
     if (err?.status === 501) {
       res.status(501).json({
         success: false,
@@ -265,6 +280,19 @@ router.get('/analytics', async (req: Request, res: Response, next: NextFunction)
 });
 
 // ── Campanhas de prospecção ────────────────────────────────────────
+
+// GET /api/mira/campanhas/semente?kind=B2B — o que o wizard mostra já
+// preenchido: os alvos e as regiões que a org declarou no Perfil. O cliente
+// tira ou soma antes de disparar; o que ficar na tela é o que roda.
+router.get('/campanhas/semente', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const kind = (req.query as any).kind === 'B2C' ? 'B2C' : 'B2B';
+    const data = await sementeDaBusca(req.organizationId!, kind);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /api/mira/campanhas — gestão no hub: cada disparo dos motores com
 // nome, parâmetros, resultado e quantos Alvos criou/qualificou.

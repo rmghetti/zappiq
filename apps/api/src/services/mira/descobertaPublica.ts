@@ -19,7 +19,7 @@ import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, type CnpjData } fr
 import { computeMiraScoreV1 } from './score.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
 import { buscarCnpjsBigQuery } from './descobertaBigQuery.js';
-import { resolverRegiaoBusca } from './regiaoBusca.js';
+import { separarAlvos } from './alvosDaBusca.js';
 import { buscarSinalSetorial } from './cagedMirror.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
@@ -47,16 +47,13 @@ const MAX_CANDIDATOS_INDICE_LOCAL = 300;
  * na Receita vira Alvo (mesmo gate de sempre) — o índice é só um filtro
  * rápido de candidatos, não a fonte de verdade.
  */
-async function buscarCandidatosIndiceLocal(perfil: any, regiaoLivre: string): Promise<string[]> {
-  const cnaes: string[] = Array.isArray(perfil?.alvoB2B?.cnaesAlvo)
-    ? perfil.alvoB2B.cnaesAlvo.map((c: string) => String(c).replace(/\D/g, '')).filter((c: string) => c.length >= 2)
-    : [];
+async function buscarCandidatosIndiceLocal(codigos: string[], regioes: string[]): Promise<string[]> {
+  const cnaes: string[] = (codigos ?? []).map((c) => String(c).replace(/\D/g, '')).filter((c) => c.length >= 2);
   if (cnaes.length === 0) return [];
 
   const ufRe = /\b([A-Z]{2})\b/;
   const ufs = new Set<string>();
-  const regioesConfig: string[] = Array.isArray(perfil?.alvoB2B?.regioes) ? perfil.alvoB2B.regioes : [];
-  for (const r of [regiaoLivre, ...regioesConfig]) {
+  for (const r of regioes ?? []) {
     const m = ufRe.exec(String(r || '').toUpperCase());
     if (m) ufs.add(m[1]);
   }
@@ -88,9 +85,9 @@ export interface DescobertaPublicaResult {
   duplicados: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
-  /** Região que a busca de fato usou e de onde ela veio (usuário ou Perfil). */
+  /** Região que a busca de fato usou (vem da campanha, semeada do Perfil). */
   regiaoAplicada: string | null;
-  regiaoOrigem: 'usuario' | 'perfil' | null;
+  regiaoOrigem: 'campanha' | null;
 }
 
 function hostDe(url: string): string {
@@ -119,10 +116,18 @@ function passaGate(d: CnpjData): boolean {
   return Boolean(d.razaoSocial) && (d.situacaoCadastral ?? '').toUpperCase() === 'ATIVA' && d.qsa.length >= 1;
 }
 
+/**
+ * Descoberta B2B a partir do que a CAMPANHA pede.
+ *
+ * `busca.alvos` e `busca.regioes` nascem do Perfil (ver alvosDaBusca.ts), o
+ * cliente ajusta no wizard e o que ele vê é o que roda aqui. Antes esta
+ * função relia o Perfil por dentro para montar os candidatos e só usava o
+ * texto digitado no fallback web — dava para escolher uma coisa na tela e a
+ * busca fazer outra.
+ */
 export async function runDescobertaPublica(
   organizationId: string,
-  consulta: string,
-  regiao: string | null,
+  busca: { alvos: string[]; regioes: string[] },
   campanhaId?: string | null
 ): Promise<DescobertaPublicaResult> {
   const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId } });
@@ -132,21 +137,23 @@ export async function runDescobertaPublica(
     throw err;
   }
 
-  // Região do Perfil como default: o usuário vence; sem digitação, a primeira
-  // região do alvo B2B guia também as queries da busca web (o BigQuery e o
-  // índice local já usavam as UFs do Perfil via extrairUfs, a web não).
-  const regiaoBusca = resolverRegiaoBusca(regiao, perfil?.alvoB2B?.regioes);
-  const alvoRegiao = regiaoBusca.regiao ?? '';
+  // Alvo é código de CNAE ou atividade em texto: cada tipo tem a sua fonte.
+  const { codigos, textos } = separarAlvos(busca.alvos ?? []);
+  const regioes = (busca.regioes ?? []).filter((r) => typeof r === 'string' && r.trim());
+  const alvoRegiao = regioes[0] ?? '';
 
-  // Fonte de candidatos, em ordem de preferência:
-  //  1) BigQuery (Base dos Dados) — confiável, filtra por CNAE+UF do ICP;
-  //  2) índice local de CNPJ (se a base foi ingerida);
-  //  3) busca pública na web (fallback).
-  // Todas devolvem CNPJs que são SEMPRE re-verificados na Receita (BrasilAPI).
-  let cnpjsDiretos: string[] = await buscarCnpjsBigQuery(perfil, alvoRegiao);
+  // Cada tipo de alvo tem a sua fonte, e as duas SOMAM na mesma campanha:
+  //  - CÓDIGO de CNAE -> base oficial de CNPJs (BigQuery; índice local como
+  //    reserva). Preciso e barato.
+  //  - ATIVIDADE em texto -> busca pública. É a única que entende "serviços"
+  //    ou "distribuidoras de TI".
+  // Antes era ou/ou: havendo um código, o texto do cliente não rodava. Quem
+  // declarava os dois tipos no Perfil perdia metade do que pediu, calado.
+  // Todo CNPJ, venha de onde vier, é re-verificado na Receita (BrasilAPI).
+  let cnpjsDiretos: string[] = codigos.length ? await buscarCnpjsBigQuery(codigos, regioes) : [];
   let fonteDiretos: 'bigquery' | 'indice_local' | null = cnpjsDiretos.length ? 'bigquery' : null;
-  if (!fonteDiretos) {
-    cnpjsDiretos = await buscarCandidatosIndiceLocal(perfil, alvoRegiao);
+  if (!fonteDiretos && codigos.length) {
+    cnpjsDiretos = await buscarCandidatosIndiceLocal(codigos, regioes);
     if (cnpjsDiretos.length) fonteDiretos = 'indice_local';
   }
   const usandoCnpjsDiretos = fonteDiretos !== null;
@@ -155,38 +162,56 @@ export async function runDescobertaPublica(
   const vistosUrl = new Set<string>();
   let buscas = 0;
 
-  if (!usandoCnpjsDiretos) {
+  // A web roda sempre que houver atividade em texto declarada, tenha o código
+  // rendido candidatos ou não.
+  if (textos.length > 0) {
     if (!buscaPublicaDisponivel()) {
-      const err: any = new Error('fonte_indisponivel');
-      err.status = 501;
-      throw err;
-    }
-    const queries = [
-      alvoRegiao ? `empresas de ${consulta} em ${alvoRegiao}` : `empresas de ${consulta}`,
-      alvoRegiao ? `"${consulta}" ${alvoRegiao} CNPJ` : `"${consulta}" CNPJ`,
-      alvoRegiao ? `${consulta} ${alvoRegiao} contato site oficial` : `${consulta} contato site oficial`,
-    ].slice(0, MAX_QUERIES);
-    for (const q of queries) {
-      try {
-        const hits = await webSearch(organizationId, q, { limit: 8 });
-        buscas++;
-        for (const h of hits) {
-          if (vistosUrl.has(h.url)) continue;
-          vistosUrl.add(h.url);
-          resultados.push(h);
+      // Sem provedor de busca, o texto não tem fonte. Só é erro se os códigos
+      // também não trouxeram nada: aí a campanha inteira ficaria sem fonte.
+      if (!usandoCnpjsDiretos) {
+        const err: any = new Error('fonte_indisponivel');
+        err.status = 501;
+        throw err;
+      }
+      logger.warn('[MiraDescobertaPublica] sem provedor de busca: alvos em texto ficaram de fora desta campanha');
+    } else {
+      const queries: string[] = [];
+      for (const alvo of textos) {
+        queries.push(alvoRegiao ? `empresas de ${alvo} em ${alvoRegiao}` : `empresas de ${alvo}`);
+        queries.push(alvoRegiao ? `"${alvo}" ${alvoRegiao} CNPJ` : `"${alvo}" CNPJ`);
+      }
+      queries.splice(MAX_QUERIES);
+      for (const q of queries) {
+        try {
+          const hits = await webSearch(organizationId, q, { limit: 8 });
+          buscas++;
+          for (const h of hits) {
+            if (vistosUrl.has(h.url)) continue;
+            vistosUrl.add(h.url);
+            resultados.push(h);
+          }
+        } catch (err: any) {
+          if (err?.status === 501 && !usandoCnpjsDiretos) throw err;
+          logger.warn(`[MiraDescobertaPublica] busca falhou: ${err?.message ?? err}`);
         }
-      } catch (err: any) {
-        if (err?.status === 501) throw err;
-        logger.warn(`[MiraDescobertaPublica] busca falhou: ${err?.message ?? err}`);
       }
     }
   }
 
+  // Nenhum alvo achou fonte: nem código rendeu candidato, nem texto rendeu
+  // resultado. Melhor dizer isso do que devolver campanha vazia sem explicação.
+  if (!usandoCnpjsDiretos && resultados.length === 0 && codigos.length > 0 && textos.length === 0) {
+    const err: any = new Error('alvos_sem_fonte');
+    err.status = 422;
+    throw err;
+  }
+
   const ent = await getMiraEntitlement(organizationId);
   const result: DescobertaPublicaResult = {
+    // Fonte predominante dos candidatos (as duas podem ter somado).
     fonte: fonteDiretos ?? 'busca_publica',
     buscas,
-    encontrados: usandoCnpjsDiretos ? cnpjsDiretos.length : resultados.length,
+    encontrados: (usandoCnpjsDiretos ? cnpjsDiretos.length : 0) + resultados.length,
     cnpjsVerificados: 0,
     criados: 0,
     prontos: 0,
@@ -194,22 +219,22 @@ export async function runDescobertaPublica(
     duplicados: 0,
     blocked: ent.quota.blocked,
     quota: { used: ent.quota.used, total: ent.quota.total, remaining: ent.quota.remaining },
-    regiaoAplicada: regiaoBusca.regiao,
-    regiaoOrigem: regiaoBusca.origem,
+    regiaoAplicada: alvoRegiao || null,
+    regiaoOrigem: alvoRegiao ? 'campanha' : null,
   };
   if (!usandoCnpjsDiretos && resultados.length === 0) return result;
 
-  // -- Fase 1: colher CNPJs candidatos (BigQuery/índice local, ou snippets de busca) e VERIFICAR na fonte oficial --
+  // -- Fase 1: colher CNPJs candidatos e VERIFICAR na fonte oficial --
+  // As duas fontes somam no mesmo conjunto: os códigos trazem CNPJ direto da
+  // base oficial, o texto traz CNPJ dos snippets da busca. O Set dedupe quem
+  // aparecer nas duas.
   const cnpjsBrutos = new Set<string>();
-  if (usandoCnpjsDiretos) {
-    for (const c of cnpjsDiretos) cnpjsBrutos.add(c);
-  } else {
-    for (const r of resultados) {
-      const matches = `${r.title} ${r.snippet}`.match(CNPJ_RE) ?? [];
-      for (const m of matches) {
-        const n = normalizeCnpj(m);
-        if (n) cnpjsBrutos.add(n);
-      }
+  for (const c of cnpjsDiretos) cnpjsBrutos.add(c);
+  for (const r of resultados) {
+    const matches = `${r.title} ${r.snippet}`.match(CNPJ_RE) ?? [];
+    for (const m of matches) {
+      const n = normalizeCnpj(m);
+      if (n) cnpjsBrutos.add(n);
     }
   }
 
@@ -241,7 +266,7 @@ export async function runDescobertaPublica(
       `${dados.razaoSocial}${dados.nomeFantasia ? ` (${dados.nomeFantasia})` : ''}, ` +
       `${dados.cnaeDescricao ?? 'atividade nao informada'}, porte ${dados.porte ?? 'n/d'}, ` +
       `${[dados.municipio, dados.uf].filter(Boolean).join('/')}. ` +
-      `Descoberto no indice publico pela busca "${consulta}${alvoRegiao ? ` em ${alvoRegiao}` : ''}" e verificado na Receita.`;
+      `Descoberto pela campanha (${[...codigos, ...textos].slice(0, 3).join(', ')}${alvoRegiao ? ` em ${alvoRegiao}` : ''}) e verificado na Receita.`;
 
     let alvoId: string | null = null;
     try {
@@ -267,7 +292,7 @@ export async function runDescobertaPublica(
           confianca,
           resumo,
           fontes: [
-            { campo: 'descoberta_publica', url: `busca:${consulta}`, data: agora, confianca: 55 },
+            { campo: 'descoberta_publica', url: `busca:${[...codigos, ...textos].slice(0, 3).join('|')}`, data: agora, confianca: 55 },
             { campo: 'firmografia', url: dados.fonteUrl, data: agora, confianca: 95 },
           ],
           decisores: {
@@ -356,7 +381,7 @@ export async function runDescobertaPublica(
   }
 
   logger.info(
-    `[MiraDescobertaPublica] org=${organizationId} q="${consulta}" fonte=${result.fonte} buscas=${buscas} verificados=${result.cnpjsVerificados} prontos=${result.prontos} candidatos=${result.candidatos}`
+    `[MiraDescobertaPublica] org=${organizationId} alvos=${(busca.alvos ?? []).length} fonte=${result.fonte} buscas=${buscas} verificados=${result.cnpjsVerificados} prontos=${result.prontos} candidatos=${result.candidatos}`
   );
   return result;
 }
