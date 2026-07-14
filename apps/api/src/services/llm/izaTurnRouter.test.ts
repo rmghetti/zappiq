@@ -45,6 +45,7 @@ vi.mock('../../utils/logger.js', () => ({
 }));
 
 import { routeIzaTurn } from './izaTurnRouter.js';
+import { ZAPPIQ_ORG_ID } from '../../config/zappiqOrg.js';
 
 function llmOk(text = 'Resposta da Iza', provider = 'anthropic-sonnet', model = 'claude-sonnet-4-6') {
   return {
@@ -59,7 +60,10 @@ function llmOk(text = 'Resposta da Iza', provider = 'anthropic-sonnet', model = 
 
 const SYSTEM_PROMPT = 'Você é a Iza, consultora ZappIQ.';
 
-describe('routeIzaTurn — pre-filter HIT (vertical bloqueada)', () => {
+// A política comercial (apostas/cripto/MLM) só vale na org da ZappIQ, então
+// estes testes passam orgId=ZAPPIQ_ORG_ID. Sem org, o filtro trata como
+// tenant de cliente e não bloqueia — coberto no describe seguinte.
+describe('routeIzaTurn — pre-filter HIT (vertical bloqueada, org da ZappIQ)', () => {
   beforeEach(() => {
     mockComplete.mockReset();
     mockClassify.mockReset();
@@ -69,6 +73,7 @@ describe('routeIzaTurn — pre-filter HIT (vertical bloqueada)', () => {
     const result = await routeIzaTurn({
       systemPrompt: SYSTEM_PROMPT,
       userMessage: 'tenho casa de apostas, querem usar a IA',
+      orgId: ZAPPIQ_ORG_ID,
     });
     expect(result.kind).toBe('blocked');
     if (result.kind === 'blocked') {
@@ -84,6 +89,7 @@ describe('routeIzaTurn — pre-filter HIT (vertical bloqueada)', () => {
     const result = await routeIzaTurn({
       systemPrompt: SYSTEM_PROMPT,
       userMessage: 'fundamos uma corretora de cripto P2P',
+      orgId: ZAPPIQ_ORG_ID,
     });
     expect(result.kind).toBe('blocked');
     if (result.kind === 'blocked') {
@@ -95,8 +101,45 @@ describe('routeIzaTurn — pre-filter HIT (vertical bloqueada)', () => {
     const result = await routeIzaTurn({
       systemPrompt: SYSTEM_PROMPT,
       userMessage: 'sou consultora MLM de suplementos',
+      orgId: ZAPPIQ_ORG_ID,
     });
     expect(result.kind).toBe('blocked');
+  });
+});
+
+describe('routeIzaTurn — pre-filter na org de CLIENTE (isolamento)', () => {
+  beforeEach(() => {
+    mockComplete.mockReset();
+    mockClassify.mockReset();
+    mockComplete.mockResolvedValue(llmOk());
+    mockClassify.mockResolvedValue('normal');
+  });
+
+  it('apostas na org do cliente NÃO bloqueia: vai pro LLM normal', async () => {
+    const result = await routeIzaTurn({
+      systemPrompt: SYSTEM_PROMPT,
+      userMessage: 'tenho casa de apostas, querem usar a IA',
+      orgId: 'org-cmj-123',
+      skipClassify: true,
+    });
+    expect(result.kind).toBe('llm');
+    expect(mockComplete).toHaveBeenCalled();
+  });
+
+  it('pornografia (compliance) bloqueia no cliente, mas sem citar a ZappIQ', async () => {
+    const result = await routeIzaTurn({
+      systemPrompt: SYSTEM_PROMPT,
+      userMessage: 'sou criadora de OnlyFans',
+      orgId: 'org-cmj-123',
+      businessName: 'CMJ',
+    });
+    expect(result.kind).toBe('blocked');
+    if (result.kind === 'blocked') {
+      expect(result.response).not.toMatch(/zappiq/i);
+      expect(result.response).toContain('CMJ');
+      expect(result.llmCallsMade).toBe(0);
+    }
+    expect(mockComplete).not.toHaveBeenCalled();
   });
 });
 

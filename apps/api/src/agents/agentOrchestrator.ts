@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 // PR #V4-005.6: migrado de redis direto pra cache cloud-agnostic.
@@ -11,10 +12,11 @@ import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../s
 import { syncContactToCrm } from '../services/crmAutomationService.js'; // CRM Onda 1 — IA preenche o pipeline
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
 import { getToolsForContext } from '../services/llm/tools.js';
+import { isZappIQOrg, ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
+import { extractConversionUrls, buildTenantLinksBlock } from './tenantConversionUrls.js';
 import { llmRouter, type LLMTier, type LLMProviderId, type LLMMessage as RouterLLMMessage, type ToolDefinition } from '../services/llm/LLMRouter.js';
 import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
-import { extractConversionUrls, buildTenantLinksBlock } from './tenantConversionUrls.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 import { applyVozHumanaFilter } from './vozHumanaFilter.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
@@ -33,8 +35,11 @@ import type { Server as SocketIOServer } from 'socket.io';
  * W1.4 (vazamento de marca): os "FATOS ATUAIS" (preço, trial, links da
  * ZappIQ) só podem entrar no prompt da PRÓPRIA ZappIQ. Injetar em toda org
  * fazia o bot do CLIENTE falar da ZappIQ pro cliente final dele.
- * Mesma constante usada em adminLeadsIza.ts / webChatService.ts. */
-const IZA_ORG_ID = 'cmo1ywwfe00ko1jskexiexsm4';
+ *
+ * 14/07/2026: o ID vinha copiado aqui e em mais 3 arquivos. Cada cópia era
+ * uma chance de esquecer o gate, e foi o que aconteceu com o gabarito do eval
+ * e com o promptEngine. Agora a fonte é única: config/zappiqOrg.ts. */
+const IZA_ORG_ID = ZAPPIQ_ORG_ID;
 
 export interface ProcessMessageInput {
   organizationId: string;
@@ -517,7 +522,9 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // Agendamento: só oferece as tools de booking quando a org ativou (não
     // opt-out). Sem isso o turn segue idêntico (zero mudança pra quem não usa).
     const schedulingOn = Boolean(orgSettings?.scheduling?.enabled) && !orgSettings?.scheduling?.optOut;
-    const turnTools = schedulingOn ? getToolsForContext({ hasScheduling: true }) : undefined;
+    const turnTools = schedulingOn
+      ? getToolsForContext({ hasScheduling: true, isIzaOrg: isZappIQOrg(organizationId) })
+      : undefined;
 
     const turnResult = await routeIzaTurn({
       systemPrompt,
@@ -775,7 +782,14 @@ export async function pickTierAndOverride(orgId: string): Promise<{
 
 // ── Intent Classification ───────────────────────────────
 async function classifyIntent(text: string, ctx?: LLMContext): Promise<string> {
-  const cacheKey = `intent:${Buffer.from(text).toString('base64').slice(0, 32)}`;
+  // Isolamento de tenant (14/07/2026): a chave antiga era
+  // `intent:${base64(text).slice(0,32)}` — SEM organizationId e truncando o
+  // texto em 24 bytes. O rótulo cacheado pela org A era reusado na org B
+  // quando os primeiros 24 bytes coincidiam, contaminando o gate de handoff
+  // entre clientes. Agora a chave leva o orgId e o hash do texto COMPLETO.
+  const orgScope = ctx?.orgId || 'no-org';
+  const textHash = createHash('sha256').update(text).digest('base64url').slice(0, 32);
+  const cacheKey = `intent:${orgScope}:${textHash}`;
 
   // cache.get é fail-soft (null em erro). Sem try/catch defensivo.
   const cached = await cache.get(cacheKey);

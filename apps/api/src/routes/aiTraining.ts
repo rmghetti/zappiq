@@ -53,6 +53,7 @@ import {
 } from './scheduling.util.js';
 import { getToolsForContext } from '../services/llm/tools.js';
 import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
+import { syncAgentIdentity } from '../services/agentIdentitySync.js';
 
 // Entitlement do Agendamento: incluído no GROWTH+; no Lite exige o add-on
 // SCHEDULING_AGENT (settings.addons). Lê plano + add-ons ativos da org.
@@ -836,12 +837,23 @@ router.put('/identity', validate(identitySchema), async (req: Request, res: Resp
       data: { settings: merged },
     });
 
+    // Até 14/07/2026 o save parava aqui, e o agente que roda em produção nunca
+    // ficava sabendo: o cliente renomeava a IA e ela continuava se apresentando
+    // com o nome antigo, porque o orchestrator lê o Agent do banco, não as
+    // settings. Agora a identidade que o cliente edita chega ao agente dele.
+    const identitySync =
+      req.body?.agentName !== undefined
+        ? await syncAgentIdentity(prisma, orgId, req.body.agentName)
+        : { synced: false };
+
     await logTraining(req, 'kb.identity.update', 'agent_identity', undefined,
-      `Identidade do agente atualizada: ${Object.keys(req.body).join(', ')}`,
+      identitySync.synced
+        ? `Identidade do agente atualizada: ${Object.keys(req.body).join(', ')}. Agente renomeado de "${identitySync.nomeAntigo}" para "${req.body.agentName}" em produção.`
+        : `Identidade do agente atualizada: ${Object.keys(req.body).join(', ')}`,
       { before: current, after: merged });
 
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
-    res.json({ settings: merged, readiness });
+    res.json({ settings: merged, readiness, identitySync });
   } catch (err) {
     next(err);
   }

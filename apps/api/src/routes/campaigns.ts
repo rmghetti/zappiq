@@ -4,6 +4,7 @@ import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { campaignDispatchQueue } from '../services/queueService.js';
+import { updateCampaignSchema } from './campaigns.schema.js';
 
 const router = Router();
 
@@ -56,9 +57,16 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 // PUT /api/campaigns/:id
 router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Whitelist .strict() anti mass assignment: bloqueia organizationId (troca de
+    // tenant), contadores de métrica e qualquer coluna fora da definição editável.
+    const parsed = updateCampaignSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Payload de campanha inválido', details: parsed.error.flatten() });
+      return;
+    }
     const result = await prisma.campaign.updateMany({
       where: { id: req.params.id, organizationId: req.organizationId! },
-      data: req.body,
+      data: parsed.data,
     });
     if (result.count === 0) { res.status(404).json({ error: 'Campaign not found' }); return; }
     const updated = await prisma.campaign.findUnique({ where: { id: req.params.id } });

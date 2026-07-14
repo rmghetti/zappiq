@@ -1,15 +1,30 @@
 /* ══════════════════════════════════════════════════════════════════════
  * V4 #143 · Pre-filter de verticais bloqueadas (defense-in-depth)
  * --------------------------------------------------------------------
- * Detecta menções a segmentos que ZappIQ NÃO atende ANTES de chamar o LLM.
- * Quando match: retorna template estático de desqualificação respeitosa,
- * sem custo de LLM e sem risco de o modelo "negociar" a vertical.
+ * Detecta menções a segmentos bloqueados ANTES de chamar o LLM. Quando
+ * match: retorna template estático de desqualificação respeitosa, sem custo
+ * de LLM e sem risco de o modelo "negociar" a vertical.
  *
- * Verticais bloqueadas (decisão comercial 2026-04-30):
- *   - Apostas (cassino, esportivas, bingo online)
- *   - Cripto não-regulada (P2P sem registro CVM, ICO, NFT financeiro)
- *   - Pornografia / conteúdo adulto
- *   - MLM / marketing multinível
+ * DUAS CAMADAS (decisão do fundador, 14/07/2026). Leia antes de mexer:
+ *
+ *   1. 'compliance' → vale pra TODOS os tenants.
+ *      Hoje só `pornografia`. A mensagem NÃO cita marca nenhuma, porque ela
+ *      chega ao lead DO CLIENTE.
+ *
+ *   2. 'politica-comercial-zappiq' → decisão comercial NOSSA, não do cliente.
+ *      `apostas`, `cripto-nao-regulada`, `mlm`. Só se aplica quando a org é a
+ *      da ZappIQ (isZappIQOrg). O CMJ decide o funil dele: se ele quiser
+ *      atender casa de apostas, não somos nós que barramos o lead dele.
+ *
+ * Por que a separação (o bug que ela conserta):
+ *   Este filtro roda pra TODA org (agentOrchestrator → routeIzaTurn →
+ *   detectBlockedVertical), antes de qualquer LLM. As RESPONSES diziam
+ *   literalmente "a ZappIQ não atende o segmento de apostas". Ou seja: o lead
+ *   do CMJ mandava "tenho casa de apostas" e a Vera respondia falando da
+ *   ZappIQ, ou seja, marca de terceiro na conversa do cliente.
+ *
+ * Fail-safe: org desconhecida = CLIENTE (só compliance). O lado seguro é
+ * bloquear de menos com marca nenhuma, nunca falar da ZappIQ pra quem não é.
  *
  * Por que pre-filter?
  *   Gate 1 revelou que mesmo Sonnet 4.6 (com prompt V4 enxuto explícito)
@@ -25,15 +40,38 @@
  * pode passar — o prompt LLM (V5+) é a 2ª camada.
  * ══════════════════════════════════════════════════════════════════════ */
 
+import { isZappIQOrg } from '../../config/zappiqOrg.js';
+
 export type BlockedVertical =
   | 'apostas'
   | 'cripto-nao-regulada'
   | 'pornografia'
   | 'mlm';
 
+/**
+ * Quem a regra protege:
+ *   - 'compliance': a lei/plataforma. Vale pra todo tenant, mensagem sem marca.
+ *   - 'politica-comercial-zappiq': o nosso comercial. Só na org da ZappIQ.
+ */
+export type BlockedVerticalLayer = 'compliance' | 'politica-comercial-zappiq';
+
+/**
+ * Camada de cada vertical. Mover uma vertical pra 'compliance' significa
+ * afirmar que NENHUM cliente da plataforma pode atendê-la: decisão jurídica,
+ * não comercial. Na dúvida, deixe em 'politica-comercial-zappiq'.
+ */
+export const BLOCKED_VERTICAL_LAYERS: Record<BlockedVertical, BlockedVerticalLayer> = {
+  pornografia: 'compliance',
+  apostas: 'politica-comercial-zappiq',
+  'cripto-nao-regulada': 'politica-comercial-zappiq',
+  mlm: 'politica-comercial-zappiq',
+};
+
 export interface BlockedVerticalMatch {
   blocked: true;
   vertical: BlockedVertical;
+  /** Camada que barrou (audit: distingue "é lei" de "é política nossa"). */
+  layer: BlockedVerticalLayer;
   /** Template de resposta a enviar ao cliente (sem chamar LLM). */
   suggestedResponse: string;
   /** Trecho do input que casou com o pattern (audit). */
@@ -125,14 +163,17 @@ const PATTERNS: Array<{
 ];
 
 /**
- * Templates estáticos de desqualificação por vertical.
+ * Templates da POLÍTICA COMERCIAL da ZappIQ.
+ * Só saem quando a org é a nossa, então citar a marca aqui é correto: é a Iza
+ * falando da ZappIQ pro lead da ZappIQ. Nunca reuse isto pra org de cliente.
+ *
  * Tom: respeitoso, breve, sem moralizar, sem oferecer alternativa.
  *
  * Contraste com falha do Sonnet em Gate 1 (p15): perguntou volume e
  * detalhes em vez de desqualificar. Esses templates são determinísticos
  * — zero risco de "negociar" a vertical.
  */
-const RESPONSES: Record<BlockedVertical, string> = {
+const ZAPPIQ_POLICY_RESPONSES: Record<BlockedVertical, string> = {
   apostas:
     'Obrigada pelo contato! Infelizmente a ZappIQ não atende o segmento de apostas no momento. Desejo sucesso no seu projeto.',
   'cripto-nao-regulada':
@@ -144,21 +185,75 @@ const RESPONSES: Record<BlockedVertical, string> = {
 };
 
 /**
- * Detecta se a mensagem do cliente menciona vertical bloqueada.
+ * Templates de COMPLIANCE. Vão pro lead de qualquer tenant, então não podem
+ * ter marca nenhuma: quem recusa é o negócio do cliente, não a ZappIQ.
+ *
+ * Sem businessName, cai na 1ª pessoa do plural ("Não atendemos"), que é
+ * neutra e serve pra qualquer negócio.
+ */
+function complianceResponse(vertical: BlockedVertical, businessName?: string | null): string {
+  const nome = typeof businessName === 'string' ? businessName.trim() : '';
+  const sujeito = nome ? `${nome} não atende` : 'Não atendemos';
+
+  const motivo: Record<BlockedVertical, string> = {
+    pornografia: `${sujeito} plataformas de conteúdo adulto. Recomendo buscar provedores especializados nesse segmento.`,
+    apostas: `${sujeito} o segmento de apostas no momento. Desejo sucesso no seu projeto.`,
+    'cripto-nao-regulada': `${sujeito} plataformas cripto não-reguladas no momento. Desejo sucesso no seu projeto.`,
+    mlm: `${sujeito} operações de MLM/marketing multinível no momento. Desejo sucesso no seu projeto.`,
+  };
+
+  return `Obrigada pelo contato! ${motivo[vertical]}`;
+}
+
+export interface DetectBlockedVerticalOptions {
+  /**
+   * Org do tenant. Ausente/desconhecida = tratado como CLIENTE (fail-safe):
+   * só as verticais de compliance são checadas.
+   */
+  organizationId?: string | null;
+  /** Override explícito, pra quem já resolveu a org e evita re-checar. */
+  isZappIQ?: boolean;
+  /**
+   * Nome do negócio DO TENANT, usado na mensagem de compliance.
+   * Sem ele a mensagem fica neutra ("Não atendemos..."), que também serve.
+   */
+  businessName?: string | null;
+}
+
+/**
+ * Detecta se a mensagem do lead menciona vertical bloqueada PARA ESTE TENANT.
+ *
+ * A org decide o que é checado:
+ *   - org da ZappIQ → compliance + política comercial nossa (as 4 verticais)
+ *   - org de cliente (ou desconhecida) → só compliance, mensagem sem marca
  *
  * @param text Mensagem bruta do cliente (não-PII redacted — pra preservar
  *             keywords). Aplicar redact APÓS este filtro, não antes.
- * @returns Match com vertical + template, ou no-match.
+ * @returns Match com vertical + camada + template, ou no-match.
  */
-export function detectBlockedVertical(text: string | null | undefined): BlockedVerticalResult {
+export function detectBlockedVertical(
+  text: string | null | undefined,
+  opts: DetectBlockedVerticalOptions = {},
+): BlockedVerticalResult {
   if (!text || typeof text !== 'string') return { blocked: false };
+
+  const isZappIQ = opts.isZappIQ ?? isZappIQOrg(opts.organizationId);
+
   for (const { vertical, regex } of PATTERNS) {
+    const layer = BLOCKED_VERTICAL_LAYERS[vertical];
+
+    // Política comercial nossa não vale pro funil do cliente.
+    if (layer === 'politica-comercial-zappiq' && !isZappIQ) continue;
+
     const match = regex.exec(text);
     if (match) {
       return {
         blocked: true,
         vertical,
-        suggestedResponse: RESPONSES[vertical],
+        layer,
+        suggestedResponse: isZappIQ
+          ? ZAPPIQ_POLICY_RESPONSES[vertical]
+          : complianceResponse(vertical, opts.businessName),
         matchedSnippet: match[0],
       };
     }
@@ -168,14 +263,20 @@ export function detectBlockedVertical(text: string | null | undefined): BlockedV
 
 /**
  * Helper pra checar se um string genérico contém vertical bloqueada.
- * Útil pra usar em condicionais: `if (isBlocked(msg)) { ... }`.
+ * Útil pra usar em condicionais: `if (isBlocked(msg, { organizationId })) { ... }`.
  */
-export function isBlocked(text: string | null | undefined): boolean {
-  return detectBlockedVertical(text).blocked;
+export function isBlocked(
+  text: string | null | undefined,
+  opts: DetectBlockedVerticalOptions = {},
+): boolean {
+  return detectBlockedVertical(text, opts).blocked;
 }
 
 /**
- * Retorna a lista de verticais cobertas (pra UI/admin/healthcheck).
+ * Catálogo completo de verticais cobertas (pra UI/admin/healthcheck).
+ *
+ * É o catálogo, não o que se aplica a um tenant: use BLOCKED_VERTICAL_LAYERS
+ * pra saber quais valem pra cliente (compliance) e quais são política nossa.
  */
 export function listBlockedVerticals(): BlockedVertical[] {
   return ['apostas', 'cripto-nao-regulada', 'pornografia', 'mlm'];

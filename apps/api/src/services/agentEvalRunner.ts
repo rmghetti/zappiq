@@ -4,8 +4,20 @@
  * Extraído de apps/api/src/routes/adminAgentEval.ts (V3.2) durante FASE 2 (V5)
  * pra permitir reuso pelo agentEvalCronService sem duplicação de lógica.
  *
- * Exporta um único entry-point limpo: `executeAgentEvalRun(scenarios, agent)`.
+ * Entry-point: `executeAgentEvalRun(scenarios, agent, profile)`.
  * Tudo mais (judge, retry, throttle, score compute) é interno.
+ *
+ * V2 (14/07/2026) — isolamento de tenant:
+ *   O runner não sabia de qual org era o agente. Ele recebia só (scenarios,
+ *   agent) e mandava o gabarito da ZappIQ pro juiz sem contexto. O juiz então
+ *   reprovava a Vera (CMJ) com "não saúda especificamente a ZappIQ", e o
+ *   suggestFix propunha gravar isso no prompt do cliente.
+ *
+ *   Agora todo o caminho carrega o `profile` do tenant:
+ *     - o juiz sabe que está avaliando a Vera, de CMJ, e é proibido de
+ *       penalizá-la por não citar outra marca;
+ *     - o suggestFix é proibido de propor identidade/link/preço de terceiro;
+ *     - sugestão que ainda assim vazar marca é DESCARTADA (rede final).
  */
 
 import { llmRouter } from './llm/LLMRouter.js';
@@ -13,6 +25,7 @@ import { classifyIntent, shouldEscalateToSonnet, type IzaIntent } from './llm/in
 import { logger } from '../utils/logger.js';
 import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
 import type { EvalScenario } from '../agents/agentEvalSet.js';
+import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
 
 // ─── Tipos públicos ─────────────────────────────────────────────────
 
@@ -101,7 +114,34 @@ async function withRetry<T>(
 
 // ─── Sonnet judge ───────────────────────────────────────────────────
 
-const JUDGE_SYSTEM = `Você é um avaliador imparcial de respostas de agentes de IA conversacional.
+/**
+ * O juiz PRECISA saber quem é o agente que está julgando.
+ *
+ * Sem isso (V1), ele recebia só (expectedBehavior, response) e julgava contra
+ * um gabarito da ZappIQ sem saber que a resposta vinha da Vera, do CMJ. Foi
+ * assim que ele produziu, em produção: "A resposta não saúda especificamente
+ * a ZappIQ (saudou apenas 'Rod' e mencionou CMJ)" — e reprovou.
+ */
+function buildJudgeSystem(profile: JudgeProfile): string {
+  const contexto = profile.isZappIQ
+    ? `Você está avaliando a ${profile.agentName}, agente da ${profile.businessName}.`
+    : [
+        `Você está avaliando ${profile.agentName}, o agente de IA de ${profile.businessName}` +
+          (profile.niche ? ` (segmento: ${profile.niche})` : '') +
+          `.`,
+        ``,
+        `REGRA INEGOCIÁVEL DE ISOLAMENTO:`,
+        `${profile.agentName} representa EXCLUSIVAMENTE ${profile.businessName}.`,
+        `- NUNCA reprove ${profile.agentName} por não mencionar outra empresa, marca, produto,`,
+        `  preço, plano ou link que não seja de ${profile.businessName}.`,
+        `- Dizer que é de ${profile.businessName} é o comportamento CORRETO, nunca um erro.`,
+        `- Se o comportamento esperado parecer exigir a marca de outra empresa, isso é um`,
+        `  defeito do teste: APROVE o agente e diga isso no motivo.`,
+      ].join('\n');
+
+  return `Você é um avaliador imparcial de respostas de agentes de IA conversacional.
+
+${contexto}
 
 Sua tarefa: dado um cenário esperado (expectedBehavior) e a resposta real do agente,
 classifique a resposta como APROVADA ou REPROVADA, com confiança 0-100.
@@ -114,10 +154,20 @@ Critérios:
 
 Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
 {"passed": true|false, "confidence": 0-100, "reason": "explicação curta em pt-BR"}`;
+}
+
+/** O mínimo que o juiz e o suggestFix precisam saber do tenant. */
+export interface JudgeProfile {
+  isZappIQ: boolean;
+  agentName: string;
+  businessName: string;
+  niche?: string;
+}
 
 export async function runJudge(
   expectedBehavior: string,
   agentResponse: string,
+  profile: JudgeProfile,
 ): Promise<{ passed: boolean; confidence: number; reason: string }> {
   try {
     const userPrompt = `### Comportamento esperado
@@ -129,7 +179,7 @@ ${agentResponse}
 ### Avaliação (JSON)`;
 
     const judge = await withRetry(() => llmRouter.complete({
-      system: JUDGE_SYSTEM,
+      system: buildJudgeSystem(profile),
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 200,
       temperature: 0,
@@ -167,11 +217,34 @@ ${agentResponse}
 
 // ─── Sugestão automática (Nível 1) ─────────────────────────────────
 
-const SUGGEST_SYSTEM = `Você é um engenheiro de prompts especialista. Vai analisar
+/**
+ * O suggestFix escreve o patch que vai ser GRAVADO no systemPrompt do cliente.
+ * É o ponto mais perigoso do fluxo: em 13/07 ele propôs, para a Vera (CMJ),
+ * "patch cria regra obrigatória de saudação personalizada [em nome da ZappIQ]".
+ *
+ * Por isso ele agora recebe o perfil e tem uma regra de isolamento explícita,
+ * além do assertNoForeignBrand que roda depois, sobre a saída.
+ */
+function buildSuggestSystem(profile: JudgeProfile): string {
+  const isolamento = profile.isZappIQ
+    ? ''
+    : `
+REGRA DE ISOLAMENTO (a mais importante — viola-la invalida o patch):
+Este agente é ${profile.agentName}, de ${profile.businessName}. É PROIBIDO propor
+patch que faça o agente:
+  - adotar identidade, nome ou marca de outra empresa;
+  - mencionar, oferecer ou recomendar produto, plano, preço ou link que não
+    seja de ${profile.businessName};
+  - enviar URL de terceiro ou inventar URL.
+Se o cenário parecer exigir a marca de outra empresa, NÃO proponha patch:
+devolva {"summary": "cenário inaplicável a este agente", "patches": [], "confidence": 0}.
+`;
+
+  return `Você é um engenheiro de prompts especialista. Vai analisar
 um cenário de teste que FALHOU num agente de IA conversacional e propor 1-3
 ajustes específicos no system prompt que corrigiriam SÓ esse cenário sem
 quebrar outros.
-
+${isolamento}
 REGRAS DE FORMATO (CRÍTICO — modelos como Gemini Starter IGNORAM regras
 em formato fraco e bullets soltos):
 
@@ -198,6 +271,7 @@ em formato fraco e bullets soltos):
 
 Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
 {"summary": "1 linha executiva", "patches": [{"where": "INVIOLÁVEIS — novo item #N | REGRA INVIOLÁVEL #X — fortalecer", "diff": "+ **REGRA INVIOLÁVEL #N — TÍTULO:** ... Exemplo CORRETO: ... Exemplo INCORRETO: ..."}], "confidence": 0-100}`;
+}
 
 // FASE 2.2d (#252): exportado pra ser chamado on-demand pelo endpoint
 // generate-suggestion (usuário pede sugestão pra cenário partial que não
@@ -208,6 +282,7 @@ export async function suggestFix(
   agentResponse: string,
   judgeReason: string,
   systemPromptExcerpt: string,
+  profile: JudgeProfile,
 ): Promise<ScenarioResult['suggestedFix']> {
   try {
     const userPrompt = `### Cenário: ${scenarioId}
@@ -228,7 +303,7 @@ ${systemPromptExcerpt.slice(0, 2000)}
 
     const out = await withRetry(() =>
       llmRouter.complete({
-        system: SUGGEST_SYSTEM,
+        system: buildSuggestSystem(profile),
         messages: [{ role: 'user', content: userPrompt }],
         maxTokens: 600,
         temperature: 0.2,
@@ -252,12 +327,32 @@ ${systemPromptExcerpt.slice(0, 2000)}
     }
 
     if (parsed && Array.isArray(parsed.patches)) {
+      const patches = parsed.patches.slice(0, 3).map((p: any) => ({
+        where: String(p.where || '').slice(0, 100),
+        diff: String(p.diff || '').slice(0, 600),
+      }));
+
+      // REDE FINAL: o LLM pode inventar a marca mesmo com a regra de isolamento
+      // no system. Um patch contaminado seria gravado no prompt do cliente pelo
+      // botão Aplicar. Descarta em vez de propor.
+      const limpos = patches.filter((p: { where: string; diff: string }) => {
+        const vazamentos = findForeignBrandLeaks(`${p.where}\n${p.diff}`);
+        if (vazamentos.length > 0 && !profile.isZappIQ) {
+          logger.warn('[agentEvalRunner] sugestão descartada: vazaria marca da ZappIQ', {
+            scenarioId,
+            empresa: profile.businessName,
+            termos: vazamentos.map((v) => v.term),
+          });
+          return false;
+        }
+        return true;
+      });
+
+      if (limpos.length === 0) return undefined;
+
       return {
         summary: String(parsed.summary || '').slice(0, 200),
-        patches: parsed.patches.slice(0, 3).map((p: any) => ({
-          where: String(p.where || '').slice(0, 100),
-          diff: String(p.diff || '').slice(0, 600),
-        })),
+        patches: limpos,
         confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 50)) / 100,
       };
     }
@@ -273,6 +368,7 @@ ${systemPromptExcerpt.slice(0, 2000)}
 async function runScenario(
   scenario: EvalScenario,
   agent: { id: string; systemPrompt: string | null; name: string },
+  profile: JudgeProfile,
 ): Promise<ScenarioResult> {
   // FASE 2.1 fix (2026-05-13): mock condicional do bloco "Cliente atual".
   // Cenários cr5_nome_ausente_* testam o comportamento de PERGUNTAR nome —
@@ -352,7 +448,7 @@ async function runScenario(
   }
   const deterministicPassed = missingPatterns.length === 0 && failedPatterns.length === 0;
 
-  const judge = await runJudge(scenario.expectedBehavior, response);
+  const judge = await runJudge(scenario.expectedBehavior, response, profile);
 
   let combined: 'pass' | 'partial' | 'fail';
   if (deterministicPassed && judge.passed) combined = 'pass';
@@ -371,6 +467,7 @@ async function runScenario(
       response,
       judge.reason,
       agent.systemPrompt || '(sem prompt customizado)',
+      profile,
     );
   }
 
@@ -453,6 +550,7 @@ const THROTTLE_BETWEEN_SCENARIOS_MS = 1500;
 export async function executeAgentEvalRun(
   scenarios: EvalScenario[],
   agent: { id: string; name: string; systemPrompt: string | null },
+  profile: JudgeProfile,
 ): Promise<{ results: ScenarioResult[]; durationMs: number; summary: RunSummary }> {
   const t0 = Date.now();
   const results: ScenarioResult[] = [];
@@ -461,7 +559,7 @@ export async function executeAgentEvalRun(
     if (!isFirst) await sleep(THROTTLE_BETWEEN_SCENARIOS_MS);
     isFirst = false;
     try {
-      const r = await runScenario(s, agent);
+      const r = await runScenario(s, agent, profile);
       results.push(r);
     } catch (err: any) {
       logger.warn(`[agentEvalRunner] scenario ${s.id} falhou`, { err: err?.message });
