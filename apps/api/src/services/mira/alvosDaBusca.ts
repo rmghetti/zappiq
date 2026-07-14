@@ -36,18 +36,24 @@ const lista = (v: unknown, max = 10): string[] =>
 /**
  * A semente que o wizard usa para nascer preenchido.
  *
- * Nota honesta sobre o B2C: o bloco B2C do Perfil descreve o CONSUMIDOR
- * (faixa etária, renda, interesses), não o tipo de negócio local a procurar
- * no Places. O paralelo mais próximo de "o que procurar" é a ocupação do
- * público; "onde" tem paralelo direto em regiaoCidade. Quando não há
- * ocupação declarada, a semente de alvos vem vazia e a tela pede ao cliente,
- * em vez de inventar um alvo que ele não declarou.
+ * B2B tem paralelo exato: "CNAEs ou atividades-alvo" é literalmente o que
+ * procurar, e "regiões" é onde.
+ *
+ * B2C tem uma LACUNA honesta, e é melhor admiti-la do que fingir: o bloco B2C
+ * do Perfil descreve o CONSUMIDOR (faixa etária, renda, interesses, momento de
+ * vida), enquanto a descoberta B2C procura NEGÓCIO LOCAL no Places. Nenhum
+ * campo do Perfil diz que tipo de negócio procurar. O candidato mais próximo,
+ * "ocupacao", quer dizer outra coisa: o placeholder dele é "Autônomos, CLT,
+ * empreendedores", que são vínculos de trabalho do público. Semear a busca com
+ * isso geraria "Autônomos em Moema" e devolveria lixo com cara de resultado.
+ * Então no B2C semeamos só a região (paralelo direto de regiaoCidade) e a tela
+ * pede o tipo de negócio, dizendo por quê.
  */
 export async function sementeDaBusca(organizationId: string, kind: 'B2B' | 'B2C'): Promise<SementeDaBusca> {
   const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId } });
   if (!perfil) return { alvos: [], regioes: [], origem: 'vazio' };
 
-  const alvos = kind === 'B2B' ? lista(perfil.alvoB2B?.cnaesAlvo) : lista(perfil.alvoB2C?.ocupacao);
+  const alvos = kind === 'B2B' ? lista(perfil.alvoB2B?.cnaesAlvo) : [];
   const regioes = kind === 'B2B' ? lista(perfil.alvoB2B?.regioes, 5) : lista(perfil.alvoB2C?.regiaoCidade, 5);
 
   return { alvos, regioes, origem: alvos.length || regioes.length ? 'perfil' : 'vazio' };

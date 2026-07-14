@@ -142,12 +142,14 @@ export async function runDescobertaPublica(
   const regioes = (busca.regioes ?? []).filter((r) => typeof r === 'string' && r.trim());
   const alvoRegiao = regioes[0] ?? '';
 
-  // Fonte de candidatos, em ordem de preferência:
-  //  1) BigQuery (Base dos Dados) — confiável, filtra por CNAE+UF;
-  //  2) índice local de CNPJ (se a base foi ingerida);
-  //  3) busca pública na web.
-  // As duas primeiras só entendem CÓDIGO de CNAE; a web entende ATIVIDADE em
-  // texto. Todas devolvem CNPJs SEMPRE re-verificados na Receita (BrasilAPI).
+  // Cada tipo de alvo tem a sua fonte, e as duas SOMAM na mesma campanha:
+  //  - CÓDIGO de CNAE -> base oficial de CNPJs (BigQuery; índice local como
+  //    reserva). Preciso e barato.
+  //  - ATIVIDADE em texto -> busca pública. É a única que entende "serviços"
+  //    ou "distribuidoras de TI".
+  // Antes era ou/ou: havendo um código, o texto do cliente não rodava. Quem
+  // declarava os dois tipos no Perfil perdia metade do que pediu, calado.
+  // Todo CNPJ, venha de onde vier, é re-verificado na Receita (BrasilAPI).
   let cnpjsDiretos: string[] = codigos.length ? await buscarCnpjsBigQuery(codigos, regioes) : [];
   let fonteDiretos: 'bigquery' | 'indice_local' | null = cnpjsDiretos.length ? 'bigquery' : null;
   if (!fonteDiretos && codigos.length) {
@@ -160,46 +162,56 @@ export async function runDescobertaPublica(
   const vistosUrl = new Set<string>();
   let buscas = 0;
 
-  if (!usandoCnpjsDiretos) {
+  // A web roda sempre que houver atividade em texto declarada, tenha o código
+  // rendido candidatos ou não.
+  if (textos.length > 0) {
     if (!buscaPublicaDisponivel()) {
-      const err: any = new Error('fonte_indisponivel');
-      err.status = 501;
-      throw err;
-    }
-    // Uma dupla de queries por atividade declarada, dentro do orçamento de
-    // buscas. Sem atividade em texto não há o que perguntar à web.
-    const queries: string[] = [];
-    for (const alvo of textos) {
-      queries.push(alvoRegiao ? `empresas de ${alvo} em ${alvoRegiao}` : `empresas de ${alvo}`);
-      queries.push(alvoRegiao ? `"${alvo}" ${alvoRegiao} CNPJ` : `"${alvo}" CNPJ`);
-    }
-    if (queries.length === 0) {
-      const err: any = new Error('alvos_sem_fonte');
-      err.status = 422;
-      throw err;
-    }
-    queries.splice(MAX_QUERIES);
-    for (const q of queries) {
-      try {
-        const hits = await webSearch(organizationId, q, { limit: 8 });
-        buscas++;
-        for (const h of hits) {
-          if (vistosUrl.has(h.url)) continue;
-          vistosUrl.add(h.url);
-          resultados.push(h);
+      // Sem provedor de busca, o texto não tem fonte. Só é erro se os códigos
+      // também não trouxeram nada: aí a campanha inteira ficaria sem fonte.
+      if (!usandoCnpjsDiretos) {
+        const err: any = new Error('fonte_indisponivel');
+        err.status = 501;
+        throw err;
+      }
+      logger.warn('[MiraDescobertaPublica] sem provedor de busca: alvos em texto ficaram de fora desta campanha');
+    } else {
+      const queries: string[] = [];
+      for (const alvo of textos) {
+        queries.push(alvoRegiao ? `empresas de ${alvo} em ${alvoRegiao}` : `empresas de ${alvo}`);
+        queries.push(alvoRegiao ? `"${alvo}" ${alvoRegiao} CNPJ` : `"${alvo}" CNPJ`);
+      }
+      queries.splice(MAX_QUERIES);
+      for (const q of queries) {
+        try {
+          const hits = await webSearch(organizationId, q, { limit: 8 });
+          buscas++;
+          for (const h of hits) {
+            if (vistosUrl.has(h.url)) continue;
+            vistosUrl.add(h.url);
+            resultados.push(h);
+          }
+        } catch (err: any) {
+          if (err?.status === 501 && !usandoCnpjsDiretos) throw err;
+          logger.warn(`[MiraDescobertaPublica] busca falhou: ${err?.message ?? err}`);
         }
-      } catch (err: any) {
-        if (err?.status === 501) throw err;
-        logger.warn(`[MiraDescobertaPublica] busca falhou: ${err?.message ?? err}`);
       }
     }
   }
 
+  // Nenhum alvo achou fonte: nem código rendeu candidato, nem texto rendeu
+  // resultado. Melhor dizer isso do que devolver campanha vazia sem explicação.
+  if (!usandoCnpjsDiretos && resultados.length === 0 && codigos.length > 0 && textos.length === 0) {
+    const err: any = new Error('alvos_sem_fonte');
+    err.status = 422;
+    throw err;
+  }
+
   const ent = await getMiraEntitlement(organizationId);
   const result: DescobertaPublicaResult = {
+    // Fonte predominante dos candidatos (as duas podem ter somado).
     fonte: fonteDiretos ?? 'busca_publica',
     buscas,
-    encontrados: usandoCnpjsDiretos ? cnpjsDiretos.length : resultados.length,
+    encontrados: (usandoCnpjsDiretos ? cnpjsDiretos.length : 0) + resultados.length,
     cnpjsVerificados: 0,
     criados: 0,
     prontos: 0,
@@ -212,17 +224,17 @@ export async function runDescobertaPublica(
   };
   if (!usandoCnpjsDiretos && resultados.length === 0) return result;
 
-  // -- Fase 1: colher CNPJs candidatos (BigQuery/índice local, ou snippets de busca) e VERIFICAR na fonte oficial --
+  // -- Fase 1: colher CNPJs candidatos e VERIFICAR na fonte oficial --
+  // As duas fontes somam no mesmo conjunto: os códigos trazem CNPJ direto da
+  // base oficial, o texto traz CNPJ dos snippets da busca. O Set dedupe quem
+  // aparecer nas duas.
   const cnpjsBrutos = new Set<string>();
-  if (usandoCnpjsDiretos) {
-    for (const c of cnpjsDiretos) cnpjsBrutos.add(c);
-  } else {
-    for (const r of resultados) {
-      const matches = `${r.title} ${r.snippet}`.match(CNPJ_RE) ?? [];
-      for (const m of matches) {
-        const n = normalizeCnpj(m);
-        if (n) cnpjsBrutos.add(n);
-      }
+  for (const c of cnpjsDiretos) cnpjsBrutos.add(c);
+  for (const r of resultados) {
+    const matches = `${r.title} ${r.snippet}`.match(CNPJ_RE) ?? [];
+    for (const m of matches) {
+      const n = normalizeCnpj(m);
+      if (n) cnpjsBrutos.add(n);
     }
   }
 

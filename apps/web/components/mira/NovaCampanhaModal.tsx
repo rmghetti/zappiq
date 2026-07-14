@@ -536,8 +536,14 @@ function DescobrirModal({
               {semente === 'vazio' && (
                 <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3">
                   Seu Perfil ainda não declarou{' '}
-                  {kind === 'B2B' ? 'CNAEs ou atividades-alvo' : 'ocupação do público nem região'}, então esta
+                  {kind === 'B2B' ? 'CNAEs ou atividades-alvo nem regiões' : 'a região do seu público'}, então esta
                   campanha começa vazia. O que você escolher aqui vale só para ela.
+                </p>
+              )}
+              {kind === 'B2C' && (
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 mb-3">
+                  O tipo de negócio a procurar você define aqui: o bloco B2C do Perfil descreve o seu consumidor
+                  (idade, renda, interesses), não o tipo de negócio local. A região, essa sim, vem do Perfil.
                 </p>
               )}
               <div className="space-y-3">

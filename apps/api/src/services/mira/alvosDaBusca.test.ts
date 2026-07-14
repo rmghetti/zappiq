@@ -48,16 +48,28 @@ describe('sementeDaBusca', () => {
     expect(findUnique).toHaveBeenCalledWith({ where: { organizationId: 'org-1' } });
   });
 
-  it('B2C: região vem de regiaoCidade e alvo vem de ocupacao', async () => {
+  it('B2C: só a região é semeada; o Perfil não declara o tipo de negócio', async () => {
     findUnique.mockResolvedValue({
       alvoB2B: { cnaesAlvo: ['6201-5'], regioes: ['SP'] },
-      alvoB2C: { ocupacao: ['dentistas', 'personal trainers'], regiaoCidade: ['Moema', 'Vila Mariana'] },
+      // "ocupacao" NÃO serve de alvo: o placeholder dela é "Autônomos, CLT,
+      // empreendedores" (vínculo de trabalho do consumidor). Semear a busca do
+      // Places com isso geraria "Autônomos em Moema" e devolveria lixo.
+      alvoB2C: { ocupacao: ['Autônomos', 'CLT'], regiaoCidade: ['Moema', 'Vila Mariana'] },
     });
     const s = await sementeDaBusca('org-1', 'B2C');
-    expect(s.alvos).toEqual(['dentistas', 'personal trainers']);
+    expect(s.alvos).toEqual([]);
     expect(s.regioes).toEqual(['Moema', 'Vila Mariana']);
-    // O caminho inativo não vaza para a semente.
+    expect(s.origem).toBe('perfil');
+  });
+
+  it('B2C: o caminho B2B não vaza para a semente', async () => {
+    findUnique.mockResolvedValue({
+      alvoB2B: { cnaesAlvo: ['6201-5'], regioes: ['SP'] },
+      alvoB2C: { regiaoCidade: ['Moema'] },
+    });
+    const s = await sementeDaBusca('org-1', 'B2C');
     expect(s.alvos).not.toContain('6201-5');
+    expect(s.regioes).not.toContain('SP');
   });
 
   it('sem perfil salvo, semente vazia em vez de estourar', async () => {
