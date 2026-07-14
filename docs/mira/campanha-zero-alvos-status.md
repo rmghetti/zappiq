@@ -2,7 +2,7 @@
 
 **Missão:** a "campanha 1 de teste" do Rodrigo devolveu 0 alvos. Garantir que a campanha traga alvos de verdade. Limite: **4 sessões**.
 
-**Estado: sessão 1 CONCLUÍDA (14/07). Próxima: sessão 2 (habilitar a API no GCP + deploy).**
+**Estado: sessões 1 e 2 CONCLUÍDAS (14/07). Próxima: sessão 3 (campanha real em produção).**
 
 ## Diagnóstico (sessão 1)
 
@@ -22,7 +22,7 @@ Três defeitos empilhados, do mais grave ao mais sutil:
 
 ## Plano
 
-**Sessão 2:** habilitar a Custom Search JSON API no projeto GCP (Chrome, autorização permanente do Rodrigo), PR + merge + deploy.
+**Sessão 2 (feita):** PR #288, CI verde, merge (6492878), deploy pelo CI. **Decisão revista:** NÃO habilitei a Custom Search API. Com o cnaeMapa, a campanha da MACHIA vai para o BigQuery e não precisa da web; habilitar a API mexe no projeto GCP do Rodrigo e tem cota grátis de 100/dia com cobrança acima disso. Vira decisão dele, com evidência na mão, em vez de eu mexer por conta própria. A busca pública segue como fallback só para atividade que não traduz.
 **Sessão 3:** rodar campanha real em produção na conta da MACHIA e provar alvos > 0 com dossiê.
 **Sessão 4:** folga para o que a sessão 3 revelar; relatório e encerrar.
 
@@ -32,4 +32,5 @@ O alvo "empresas PME" é PORTE, não ramo: pertence ao campo Portes, não ao de 
 
 ## Log
 
+- 14/07 sessão 2: **espelho do BigQuery testado EM PRODUÇÃO**: `SELECT COUNT(*) FROM zappiq-prod.mira.cnpj_ativos WHERE STARTS_WITH(cnae_fiscal_principal,'47')` devolveu **5.216.016** varejistas ativos. A fonte boa responde e tem dado real; ela só estava inalcançável porque ninguém traduzia "comércio varejista" para "47". Também confirmado que `BIGQUERY_MIRROR_TABLE` vem undefined no ambiente mas o zod tem default (`mira.cnpj_ativos`), então não é problema. PR #288 mergeada e deployada.
 - 14/07 sessão 1: diagnóstico dos 3 defeitos + honestidade da falha + cnaeMapa (8 testes) + roteamento novo (10 testes reescritos para a regra nova, incluindo a reprodução da campanha 1 de teste). Suíte 144 arquivos / 1439 testes verdes; tsc api/web 0.
