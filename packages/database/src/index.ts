@@ -13,5 +13,7 @@ if (process.env.NODE_ENV !== 'production') {
 export * from '@prisma/client';
 export default prisma;
 
-// Templates Maestro V1 (single source of truth)
+// Templates Maestro (single source of truth) + regra de semeadura compartilhada
+// entre o bootstrap do API e o seed manual.
 export * from './flowTemplatesData';
+export * from './flowTemplatesUpsert';
