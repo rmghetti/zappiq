@@ -73,6 +73,17 @@ export function buildSeedSystemPrompt(settings?: Record<string, any> | null): st
     businessName: s.businessName || 'Empresa',
     tone: s.tone || 'friendly',
     businessHours: s.businessHours,
+    // Sem conversionUrls de propósito: link NÃO se congela em prompt seedado.
+    //
+    // Este seed roda no signup (onboarding.ts), quando surveyAnswers está vazio
+    // — o cliente ainda nem abriu o /treinar —, então aqui não haveria link pra
+    // gravar de qualquer forma. E gravar seria pior: PUT /ai-training/survey não
+    // re-seeda o prompt, então o link congelado no seed viveria pra sempre e
+    // ainda brigaria com o bloco fresco quando o cliente trocasse de domínio.
+    //
+    // O bloco de links é montado em RUNTIME, das settings, no
+    // agentOrchestrator.buildSystemPromptForContact — vale pra org seedada e pro
+    // fallback. Ver buildTenantLinksBlock em agents/tenantConversionUrls.ts.
   });
 }
 
