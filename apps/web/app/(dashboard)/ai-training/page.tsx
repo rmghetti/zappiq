@@ -236,6 +236,37 @@ export default function AITrainingPage() {
         </p>
       </div>
 
+      {/* Destaque #1: conectar canais é o passo mais fundamental (sem canal, a IA
+          não fala com ninguém). Some assim que houver um canal conectado. */}
+      {readiness && readiness.breakdown.channel === 0 && (
+        <button
+          type="button"
+          onClick={() => navigate('/settings#canais')}
+          data-tour="ait-conectar-canais"
+          className="w-full text-left rounded-2xl border-2 border-primary-300 bg-gradient-to-r from-primary-50 to-secondary-50 p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary-500 hover:shadow-sm transition-all group"
+        >
+          <div className="w-12 h-12 rounded-xl bg-primary-500 text-white flex items-center justify-center shrink-0">
+            <MessageSquareText size={24} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary-600">
+              Passo 1 · comece por aqui
+            </p>
+            <p className="text-base font-bold text-gray-900 mt-0.5">
+              Conecte seu WhatsApp e Instagram
+            </p>
+            <p className="text-sm text-gray-600 mt-0.5">
+              Sem um canal conectado, sua IA não fala com nenhum cliente. É o passo
+              mais importante do treinamento. Faça em Configurações › Canais, leva
+              poucos minutos.
+            </p>
+          </div>
+          <span className="px-5 py-2.5 bg-primary-500 text-white rounded-lg text-sm font-semibold group-hover:bg-primary-600 flex items-center gap-2 whitespace-nowrap shrink-0">
+            Conectar canais <ArrowRight size={16} />
+          </span>
+        </button>
+      )}
+
       {/* Readiness Card — breakdown e próximas ações são deep-links clicáveis */}
       <div data-tour="ait-readiness">
         {readiness && <ReadinessCard readiness={readiness} onNavigate={navigate} />}

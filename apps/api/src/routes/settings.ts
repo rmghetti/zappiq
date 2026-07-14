@@ -8,7 +8,7 @@ import { logAuditEvent } from '../services/auditService.js';
 import { env } from '../config/env.js';
 import { randomBytes } from 'node:crypto';
 import { checkResourceLimit, resourceLimitBody } from '../middleware/planLimits.js';
-import { updateSettingsSchema, redactOrgSecrets, impulsoIntegrationSchema } from './settings.schema.js';
+import { updateSettingsSchema, redactOrgSecrets, impulsoIntegrationSchema, channelCredentialsSchema } from './settings.schema.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { applyImpulsoIntegration, readImpulsoIntegrationStatus } from '../services/impulsoIntegrations.js';
 import {
@@ -133,6 +133,78 @@ router.put('/integrations/zap-impulso', requireRole('ADMIN', 'SUPERADMIN'), asyn
     logger.info(`[Impulso] integrações atualizadas org=${orgId}`);
     res.json({ success: true, data: readImpulsoIntegrationStatus(updated.settings) });
   } catch (err) { next(err); }
+});
+
+// ── Conexão de canal (traga seu token) ──────────────────────
+// PUT /api/settings/channels — grava as credenciais de canal (WhatsApp/Instagram)
+// + a intenção de ativação. Rota DEDICADA porque o PUT /api/settings é .strict()
+// e barra qualquer token de canal (W1.3). Sem esta rota, o "Salvar e ativar canais"
+// respondia 400 e a conexão manual era impossível. Só ADMIN. plan/trial/stripe
+// seguem impossíveis (não estão na whitelist do channelCredentialsSchema).
+router.put('/channels', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const parsed = channelCredentialsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Credenciais de canal inválidas', details: parsed.error.flatten() });
+      return;
+    }
+    const { channelActivation, ...creds } = parsed.data;
+
+    // Monta o update só com as chaves de canal presentes. undefined = não mexe;
+    // string vazia ou null = limpa (troca de número/desativação parcial).
+    const data: Record<string, any> = {};
+    for (const [k, v] of Object.entries(creds)) {
+      if (v !== undefined) data[k] = v === '' ? null : v;
+    }
+    // channelActivation vive no settings JSON (intenção), não numa coluna própria.
+    if (channelActivation) {
+      const current = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+      data.settings = { ...((current?.settings as any) || {}), channelActivation };
+    }
+    if (Object.keys(data).length === 0) {
+      res.status(400).json({ error: 'Nenhum campo de canal enviado.' });
+      return;
+    }
+
+    const org = await prisma.organization.update({ where: { id: orgId }, data: data as any });
+
+    // Trilha de auditoria: conectar/alterar credencial de canal é evento de
+    // segurança (LGPD). NUNCA logamos o token — só o fato + quais canais e a intenção.
+    await logAuditEvent(req, {
+      action: 'channel.connect',
+      resource: 'organization',
+      resourceId: orgId,
+      details: {
+        channelActivation: channelActivation ?? null,
+        whatsapp: creds.whatsappPhoneNumberId !== undefined || creds.whatsappAccessToken !== undefined,
+        instagram: creds.instagramAccountId !== undefined || creds.instagramAccessToken !== undefined,
+      },
+    }).catch(() => null);
+
+    // Canal conectado muda o AI Readiness (5 pontos de canal).
+    await refreshAIReadiness(orgId).catch(() => null);
+
+    logger.info('[settings/channels] credenciais atualizadas', { orgId, channelActivation: channelActivation ?? null });
+    // Resposta sem segredos (consistente com o GET e o disconnect).
+    res.json({ success: true, data: redactOrgSecrets(org) });
+  } catch (err: any) {
+    // P2002 = o phone_number_id / instagram_account_id já pertence a outra org
+    // (índice único de isolamento de tenant, 14/07/2026). Sem isto, o webhook do
+    // lead poderia cair na org errada. Mensagem clara em vez de 500.
+    if (err?.code === 'P2002') {
+      const alvo = Array.isArray(err?.meta?.target) ? err.meta.target.join(', ') : String(err?.meta?.target || '');
+      logger.warn('[settings/channels] tentativa de gravar identificador de canal já usado por outra org', { orgId: req.organizationId, alvo });
+      res.status(409).json({
+        error: 'canal_ja_conectado',
+        message:
+          'Este número de WhatsApp ou conta de Instagram já está conectado a outra conta na plataforma. ' +
+          'Verifique o identificador ou fale com o suporte se ele deveria ser seu.',
+      });
+      return;
+    }
+    next(err);
+  }
 });
 
 // ── Channel Health + Disconnect (FEATURE 5b.3) ──────────────

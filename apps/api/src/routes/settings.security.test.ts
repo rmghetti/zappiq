@@ -12,6 +12,7 @@ import {
   updateSettingsSchema,
   redactOrgSecrets,
   SETTINGS_REDACTED_FIELDS,
+  channelCredentialsSchema,
 } from './settings.schema.js';
 
 // ── PUT: whitelist bloqueia mass assignment ─────────────────────────────────
@@ -111,5 +112,56 @@ describe('redactOrgSecrets — não vazar segredos de canal', () => {
   it('é seguro quando os segredos já estão ausentes', () => {
     const out = redactOrgSecrets({ id: 'x', name: 'y' });
     expect(out).toEqual({ id: 'x', name: 'y' });
+  });
+});
+
+// ── PUT /channels: rota DEDICADA de credenciais de canal ────────────────────
+// O "traga seu token" precisa gravar whatsapp*/instagram*/metaAppSecret, que o
+// updateSettingsSchema (.strict) barra de propósito. Aqui a whitelist própria:
+// aceita SÓ os campos de canal + a intenção; plan/trial/stripe seguem impossíveis.
+describe('channelCredentialsSchema — save de canal (traga seu token)', () => {
+  it('aceita credenciais de WhatsApp + Instagram + intenção', () => {
+    const r = channelCredentialsSchema.safeParse({
+      channelActivation: 'both',
+      whatsappPhoneNumberId: '123456789012345',
+      whatsappBusinessAccountId: '987654321',
+      whatsappAccessToken: 'EAAG-token',
+      instagramAccountId: '17841400000000000',
+      instagramPageId: '555',
+      instagramAccessToken: 'EAAG-igtoken',
+      metaAppSecret: 'a'.repeat(32),
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('aceita salvar só um canal (campos opcionais)', () => {
+    const r = channelCredentialsSchema.safeParse({
+      channelActivation: 'whatsapp',
+      whatsappPhoneNumberId: '123',
+      whatsappAccessToken: 'tok',
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('aceita null para limpar um campo', () => {
+    const r = channelCredentialsSchema.safeParse({ whatsappAccessToken: null });
+    expect(r.success).toBe(true);
+  });
+
+  it('REJEITA mass assignment (mesma tabela organizations: plan/trial/stripe/quota)', () => {
+    for (const field of ['plan', 'trialEndsAt', 'subscriptionStatus', 'stripeCustomerId', 'aiReadinessScore']) {
+      const r = channelCredentialsSchema.safeParse({ whatsappPhoneNumberId: '123', [field]: 'x' });
+      expect(r.success, `${field} deveria ser rejeitado`).toBe(false);
+    }
+  });
+
+  it('REJEITA channelActivation inválido', () => {
+    const r = channelCredentialsSchema.safeParse({ channelActivation: 'telegram' });
+    expect(r.success).toBe(false);
+  });
+
+  it('REJEITA campo desconhecido (.strict())', () => {
+    const r = channelCredentialsSchema.safeParse({ foo: 'bar' });
+    expect(r.success).toBe(false);
   });
 });
