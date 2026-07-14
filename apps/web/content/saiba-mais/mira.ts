@@ -57,6 +57,23 @@ export const miraContent: SaibaMaisContent[] = [
       'Uma empresa de segurança de TI define CNAEs de indústria, porte médio, região Sudeste e decisores CEO, Diretor de TI e CISO. Com o perfil 85% pronto, os Alvos chegam com o comitê certo mapeado e a oportunidade apontando para o produto de SOC.',
   },
   {
+    featureKey: 'mira.campanhas',
+    titulo: 'Campanhas de prospecção',
+    clientSafe: true,
+    oQueE:
+      'Cada disparo dos agentes de mapeamento é uma campanha de prospecção: um pedido nomeado ("clínicas em Campinas", "minha carteira de dezembro") que fica registrado com os parâmetros, o resultado e os Alvos que criou. É diferente das campanhas do Zap Impulso, que disparam mensagens: aqui os agentes saem procurando mercado.',
+    paraQueServe:
+      'Serve para você disparar e GERIR a prospecção, em vez de apertar um botão e perder o rastro. Cada campanha mostra quantos Alvos encontrou e quantos ficaram prontos, e um clique abre só os Alvos daquela campanha. Assim você compara buscas, repete o que funcionou e entende para onde foi a cota.',
+    comoImplementar: [
+      'Complete o Perfil de Prospecção (mínimo 60%): é dele que os agentes partem.',
+      'Clique em Nova campanha e escolha o tipo: descobrir novos clientes ou mapear a carteira que você já tem.',
+      'Descreva o que procurar. Sem região digitada, vale a região do seu Perfil.',
+      'Dê um nome se quiser; sem nome, batizamos pela busca e pela data.',
+    ],
+    exemploResultado:
+      'A campanha "Clínicas de Campinas (15/jul)" encontrou 18 negócios, qualificou 7 como prontos e aparece na lista do hub. Uma semana depois, você repete a mesma busca em outra cidade e compara os resultados lado a lado.',
+  },
+  {
     featureKey: 'mira.perfil.modo',
     titulo: 'B2B ou B2C',
     clientSafe: true,

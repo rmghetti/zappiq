@@ -122,7 +122,8 @@ function passaGate(d: CnpjData): boolean {
 export async function runDescobertaPublica(
   organizationId: string,
   consulta: string,
-  regiao: string | null
+  regiao: string | null,
+  campanhaId?: string | null
 ): Promise<DescobertaPublicaResult> {
   const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId } });
   if (!perfil || (perfil.prontidao ?? 0) < 60) {
@@ -247,6 +248,7 @@ export async function runDescobertaPublica(
       const alvo = await (prisma as any).miraAlvo.create({
         data: {
           organizationId,
+          campanhaId: campanhaId ?? null,
           kind: 'B2B',
           motor: 'DESCOBERTA',
           status: 'QUALIFYING',
@@ -335,6 +337,7 @@ export async function runDescobertaPublica(
         await (prisma as any).miraAlvo.create({
           data: {
             organizationId,
+            campanhaId: campanhaId ?? null,
             kind: 'B2B',
             motor: 'DESCOBERTA',
             status: 'DISCOVERED', // candidato: NAO desconta cota (sem verificacao oficial ainda)

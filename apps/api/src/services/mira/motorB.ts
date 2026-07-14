@@ -111,7 +111,12 @@ function parseEndereco(endereco: string | null): { municipio: string | null; uf:
   return { municipio: null, uf: null };
 }
 
-export async function runMotorB(organizationId: string, consulta: string, regiao: string | null): Promise<MotorBResult> {
+export async function runMotorB(
+  organizationId: string,
+  consulta: string,
+  regiao: string | null,
+  campanhaId?: string | null
+): Promise<MotorBResult> {
   if (!placesDisponivel()) {
     const err: any = new Error('fonte_indisponivel');
     err.status = 501;
@@ -177,6 +182,7 @@ export async function runMotorB(organizationId: string, consulta: string, regiao
       const alvo = await (prisma as any).miraAlvo.create({
         data: {
           organizationId,
+          campanhaId: campanhaId ?? null,
           kind: 'B2C',
           motor: 'DESCOBERTA',
           status: 'QUALIFYING',

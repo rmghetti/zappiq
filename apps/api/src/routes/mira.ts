@@ -21,6 +21,12 @@ import { enriquecerDecisoresPublico } from '../services/mira/decisoresPublico.js
 import { aprofundarAlvo } from '../services/mira/agentes.js';
 import { computeMiraAnalytics } from '../services/mira/analytics.js';
 import { sugerirPerfil } from '../services/mira/perfilSugestao.js';
+import {
+  iniciarCampanha,
+  concluirCampanha,
+  descartarCampanha,
+  listarCampanhas,
+} from '../services/mira/campanhas.js';
 import { perfilSchema, computePerfilProntidao, modoDaDescoberta, type PerfilInput } from './mira.perfil.schema.js';
 
 const router = Router();
@@ -29,16 +35,28 @@ const router = Router();
 
 const motorASchema = z.object({
   cnpjs: z.array(z.string().trim().min(11).max(20)).min(1).max(50),
+  // Nome da campanha de prospecção (opcional: sem ele, nome automático).
+  nome: z.string().trim().max(120).optional(),
 });
 
-// POST /api/mira/motor-a/run — mapeia uma lista de CNPJs da carteira
+// POST /api/mira/motor-a/run — mapeia uma lista de CNPJs da carteira.
+// Cada disparo vira uma campanha de prospecção nomeada (gestão no hub).
 router.post('/motor-a/run', validate(motorASchema), async (req: Request, res: Response, next: NextFunction) => {
+  const { cnpjs, nome } = req.body as z.infer<typeof motorASchema>;
+  let campanha: { id: string; nome: string } | null = null;
   try {
-    const { cnpjs } = req.body as z.infer<typeof motorASchema>;
-    const result = await runMotorA(req.organizationId!, cnpjs);
-    res.json({ success: true, data: result });
+    campanha = await iniciarCampanha(req.organizationId!, {
+      nome,
+      tipo: 'BASE_INSTALADA',
+      parametros: { cnpjs: cnpjs.length },
+    });
+    const result = await runMotorA(req.organizationId!, cnpjs, campanha.id);
+    await concluirCampanha(campanha.id, result as any);
+    res.json({ success: true, data: { ...result, campanhaId: campanha.id, campanhaNome: campanha.nome } });
   } catch (err: any) {
     if (err?.status === 412) {
+      // Gate: o disparo nem largou, então não vira histórico de campanha.
+      if (campanha) await descartarCampanha(campanha.id);
       res.status(412).json({
         success: false,
         error: 'perfil_incompleto',
@@ -46,6 +64,7 @@ router.post('/motor-a/run', validate(motorASchema), async (req: Request, res: Re
       });
       return;
     }
+    if (campanha) await concluirCampanha(campanha.id, { motivo: 'erro_inesperado' }, 'FALHOU').catch(() => {});
     next(err);
   }
 });
@@ -68,6 +87,8 @@ const motorBSchema = z.object({
   // B2B = descoberta pública (busca + Receita/BrasilAPI, grátis).
   // B2C = negócio local (Google Places). Default segue o modo do perfil.
   kind: z.enum(['B2B', 'B2C']).optional(),
+  // Nome da campanha de prospecção (opcional: sem ele, nome automático).
+  nome: z.string().trim().max(120).optional(),
 });
 
 // GET /api/mira/motor-b/status — quais fontes de descoberta estão ativas
@@ -97,18 +118,29 @@ router.get('/motor-b/status', async (_req: Request, res: Response) => {
   });
 });
 
-// POST /api/mira/motor-b/descobrir — descoberta net-new (B2B público ou B2C Places)
+// POST /api/mira/motor-b/descobrir — descoberta net-new (B2B público ou B2C Places).
+// Cada disparo vira uma campanha de prospecção nomeada (gestão no hub).
 router.post('/motor-b/descobrir', validate(motorBSchema), async (req: Request, res: Response, next: NextFunction) => {
+  let campanha: { id: string; nome: string } | null = null;
   try {
-    const { consulta, regiao, kind } = req.body as z.infer<typeof motorBSchema>;
+    const { consulta, regiao, kind, nome } = req.body as z.infer<typeof motorBSchema>;
     const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId: req.organizationId! } });
     const modo = modoDaDescoberta(kind, perfil);
+    campanha = await iniciarCampanha(req.organizationId!, {
+      nome,
+      tipo: 'DESCOBERTA',
+      parametros: { consulta, regiao: regiao ?? null, kind: modo },
+    });
     const result =
       modo === 'B2C'
-        ? await runMotorB(req.organizationId!, consulta, regiao ?? null)
-        : await runDescobertaPublica(req.organizationId!, consulta, regiao ?? null);
-    res.json({ success: true, data: { modo, ...result } });
+        ? await runMotorB(req.organizationId!, consulta, regiao ?? null, campanha.id)
+        : await runDescobertaPublica(req.organizationId!, consulta, regiao ?? null, campanha.id);
+    await concluirCampanha(campanha.id, result as any);
+    res.json({ success: true, data: { modo, ...result, campanhaId: campanha.id, campanhaNome: campanha.nome } });
   } catch (err: any) {
+    // Gate/fonte indisponível: o disparo nem largou, não vira histórico.
+    if (campanha && (err?.status === 412 || err?.status === 501)) await descartarCampanha(campanha.id);
+    else if (campanha) await concluirCampanha(campanha.id, { motivo: err?.message ?? 'erro' }, 'FALHOU').catch(() => {});
     if (err?.status === 501) {
       res.status(501).json({
         success: false,
@@ -232,6 +264,20 @@ router.get('/analytics', async (req: Request, res: Response, next: NextFunction)
   }
 });
 
+// ── Campanhas de prospecção ────────────────────────────────────────
+
+// GET /api/mira/campanhas — gestão no hub: cada disparo dos motores com
+// nome, parâmetros, resultado e quantos Alvos criou/qualificou.
+router.get('/campanhas', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const take = Math.min(Number((req.query as any).take) || 30, 100);
+    const data = await listarCampanhas(req.organizationId!, take);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── Perfil de Prospecção (Motor 0) ─────────────────────────────────
 
 // GET /api/mira/perfil — o ICP da org (ou null antes do survey)
@@ -284,11 +330,17 @@ router.post('/perfil/sugestao', async (req: Request, res: Response, next: NextFu
 // GET /api/mira/alvos?status=&motor=&q=&take= — fila priorizada
 router.get('/alvos', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { status, motor, q } = req.query as { status?: string; motor?: string; q?: string };
+    const { status, motor, q, campanhaId } = req.query as {
+      status?: string;
+      motor?: string;
+      q?: string;
+      campanhaId?: string;
+    };
     const take = Math.min(Number((req.query as any).take) || 100, 200);
     const where: any = { organizationId: req.organizationId! };
     if (status) where.status = status;
     if (motor) where.motor = motor;
+    if (campanhaId && campanhaId.trim()) where.campanhaId = campanhaId.trim();
     if (q && q.trim()) {
       where.OR = [
         { nome: { contains: q.trim(), mode: 'insensitive' } },
