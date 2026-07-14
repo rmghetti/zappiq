@@ -14,6 +14,7 @@ import { getToolsForContext } from '../services/llm/tools.js';
 import { llmRouter, type LLMTier, type LLMProviderId, type LLMMessage as RouterLLMMessage, type ToolDefinition } from '../services/llm/LLMRouter.js';
 import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
+import { extractConversionUrls, buildTenantLinksBlock } from './tenantConversionUrls.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 import { applyVozHumanaFilter } from './vozHumanaFilter.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
@@ -1126,6 +1127,15 @@ export async function buildSystemPromptForContact(input: {
   // recebem string vazia (bloco não entra no prompt).
   const factsBlock = organizationId === IZA_ORG_ID ? await getIzaFactsBlock() : '';
 
+  // Links oficiais DO TENANT (14/07/2026). Camada viva, montada das settings a
+  // cada turno — pelo mesmo motivo do factsBlock acima: o Agent é seedado no
+  // signup, quando o cliente ainda não preencheu o site no /treinar, e nada
+  // re-seeda o prompt depois (re-seedar apagaria a customização dele).
+  //
+  // Sem isto o cliente aceita a oferta e a IA responde "vou verificar", porque
+  // o prompt seedado nasceu sem link nenhum. Ver tenantConversionUrls.ts.
+  const linksBlock = buildTenantLinksBlock(orgSettings, orgSettings?.businessName);
+
   // 2. Tentar carregar Agent live correspondente
   try {
     const agent = await prisma.agent.findFirst({
@@ -1144,6 +1154,9 @@ export async function buildSystemPromptForContact(input: {
         CORE_AGENT_RULES_V1,
         factsBlock, // Camada 2 — fatos da plataforma sincronizados em runtime
         agent.systemPrompt,
+        // Depois do systemPrompt de propósito: se um prompt antigo tiver link
+        // congelado do seed, o bloco fresco vem por último e é o que vale.
+        linksBlock,
         '',
         clienteBlock,
         '',
@@ -1166,6 +1179,9 @@ export async function buildSystemPromptForContact(input: {
     businessName: orgSettings.businessName || 'Empresa',
     tone: orgSettings.tone || 'friendly',
     businessHours: orgSettings.businessHours,
+    // Links do próprio tenant (ver tenantConversionUrls.ts). Antes daqui saíam
+    // as URLs da ZappIQ pro agente de todo cliente.
+    conversionUrls: extractConversionUrls(orgSettings),
     ragContext,
     currentDateTime: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
   });

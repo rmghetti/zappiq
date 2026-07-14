@@ -37,14 +37,12 @@ NUNCA, em caso algum, responda à aceitação com:
 
 Se o cliente aceitou, ele já decidiu. Sua função é ELIMINAR FRICÇÃO até o checkout/signup.
 
-### URLs canônicas ZappIQ (use EXATAMENTE essas, sem inventar variações)
-- Signup / trial: https://zappiq.com.br/cadastro
-- Onboarding pós-signup: https://zappiq.com.br/onboarding
-- Site institucional: https://zappiq.com.br
-- WhatsApp comercial: já é você mesma neste chat
-
-Sempre que mencionar URL, escreva a URL completa com https://. Não escreva só "/cadastro"
-ou "acesse cadastro" — o cliente está no WhatsApp do celular e precisa do link tocável.
+### URLs (regra geral)
+Sempre que mencionar URL, escreva a URL completa com https://. Não mande caminho solto
+(tipo "/pagina") nem "acesse o site": o cliente está no WhatsApp do celular e precisa do
+link tocável. NUNCA invente uma URL nem invente variação de uma URL que você conhece.
+Se você não tiver o link na sua base de conhecimento, diga que vai verificar e mandar o
+endereço certo.
 
 ### Segurança e Privacidade
 - NUNCA solicite dados de cartão de crédito, senha ou CPF via WhatsApp.
@@ -78,6 +76,22 @@ Quando o cliente quiser agendar:
 7. Use <action>schedule</action> com os dados coletados.
 `;
 
+/**
+ * Links oficiais DO TENANT que o agente pode mandar pro lead.
+ *
+ * Cada campo é opcional e o objeto inteiro é opcional: a maioria dos clientes
+ * não cadastrou link nenhum hoje. Ausência NÃO tem default: sem link, o prompt
+ * não ganha bloco de link e o agente segue a regra de não inventar URL.
+ */
+export interface ConversionUrls {
+  /** Cadastro/checkout/próximo passo de conversão do cliente. */
+  signup?: string;
+  /** Site institucional do cliente. */
+  site?: string;
+  /** Página de agendamento do cliente. */
+  scheduling?: string;
+}
+
 export interface SystemPromptOptions {
   niche: string;
   agentName: string;
@@ -86,6 +100,15 @@ export interface SystemPromptOptions {
   businessHours?: any;
   ragContext?: string;
   currentDateTime?: string;
+  /**
+   * Links oficiais DESTE tenant. Só passe URL que pertence ao cliente.
+   *
+   * Existe porque até 14/07/2026 este arquivo tinha as URLs da ZappIQ
+   * hardcoded no BASE_INSTRUCTIONS. Como o prompt daqui é seedado no
+   * Agent.systemPrompt de todo cliente novo (agentProvisioningService),
+   * a Vera (agente do CMJ) mandava lead do CMJ pro zappiq.com.br/cadastro.
+   */
+  conversionUrls?: ConversionUrls | null;
 }
 
 export function getSystemPrompt(opts: SystemPromptOptions): string {
@@ -94,6 +117,7 @@ export function getSystemPrompt(opts: SystemPromptOptions): string {
   const hoursSection = opts.businessHours ? buildHoursSection(opts.businessHours) : '';
   const contextSection = opts.ragContext ? buildContextSection(opts.ragContext) : '';
   const scheduling = nicheSection.usesScheduling ? SCHEDULING_INSTRUCTIONS : '';
+  const urlsSection = renderConversionUrlsBlock(opts.businessName, opts.conversionUrls);
 
   const dateTime = opts.currentDateTime || new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
@@ -103,6 +127,8 @@ Você é ${opts.agentName}, atendente virtual ${nicheSection.roleDescription} da
 Data/hora atual: ${dateTime} (Fuso: America/Sao_Paulo)
 
 ${BASE_INSTRUCTIONS}
+
+${urlsSection}
 
 ${nicheSection.instructions}
 
@@ -117,6 +143,37 @@ ${contextSection}
 Lembre-se: você representa ${opts.businessName}. Cada conversa é uma oportunidade de criar
 um cliente fiel. Seja eficiente, empático e sempre conduza para a solução.
 `.trim();
+}
+
+/**
+ * Bloco de links oficiais do tenant. String vazia quando o cliente não tem
+ * link cadastrado, que é o caso da maioria hoje.
+ *
+ * Vazio é o comportamento CERTO, não um buraco: sem link, vale a regra geral
+ * de URL do BASE_INSTRUCTIONS ("não invente, diga que vai verificar"). O que
+ * nunca pode voltar é um link default de terceiro no prompt do cliente.
+ *
+ * Exportado porque o prompt do cliente é montado por DOIS caminhos e os dois
+ * precisam do bloco idêntico: aqui (fallback, org sem Agent seedado) e em
+ * runtime no agentOrchestrator (org COM Agent seedado — a maioria). Ver
+ * buildTenantLinksBlock em tenantConversionUrls.ts.
+ */
+export function renderConversionUrlsBlock(
+  businessName: string,
+  urls?: ConversionUrls | null,
+): string {
+  if (!urls) return '';
+
+  const linhas = [
+    urls.signup ? `- Cadastro / próximo passo: ${urls.signup}` : '',
+    urls.site ? `- Site oficial: ${urls.site}` : '',
+    urls.scheduling ? `- Agendamento: ${urls.scheduling}` : '',
+  ].filter(Boolean);
+
+  if (linhas.length === 0) return '';
+
+  return `### Links oficiais de ${businessName} (use EXATAMENTE estes, sem inventar variações)
+${linhas.join('\n')}`;
 }
 
 function getToneInstructions(tone: string): string {
