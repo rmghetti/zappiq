@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Ticket, Copy, Check, Loader2, Plus } from 'lucide-react';
+import { Ticket, Copy, Check, Loader2, Plus, Zap } from 'lucide-react';
 import { useAuthStore } from '../../../../stores/authStore';
 import { api } from '../../../../lib/api';
 
@@ -11,6 +11,10 @@ interface CatalogItem {
   label: string;
   productId: string;
   type: 'plan' | 'addon';
+  /** Família comercial do add-on (ex.: IMPULSO). Ausente nos planos. */
+  family?: string;
+  /** Preço mensal em BRL (null = sob consulta). */
+  monthlyBrl?: number | null;
 }
 interface IssuedCoupon {
   code: string;
@@ -42,6 +46,19 @@ function durationLabel(duration: string, months: number | null): string {
   return months ? `${months} meses` : 'Recorrente';
 }
 
+/** Formata BRL: R$ 197 (inteiro) ou R$ 1.891,20 (com centavos). */
+function brl(v: number): string {
+  return `R$ ${v.toLocaleString('pt-BR', {
+    minimumFractionDigits: Number.isInteger(v) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/** Rótulo da opção no dropdown, com valor mensal quando houver. */
+function optionLabel(c: CatalogItem): string {
+  return c.monthlyBrl != null ? `${c.label} · ${brl(c.monthlyBrl)}/mês` : c.label;
+}
+
 export default function CouponsAdminPage() {
   const router = useRouter();
   const { user } = useAuthStore();
@@ -57,7 +74,7 @@ export default function CouponsAdminPage() {
   const [durationSel, setDurationSel] = useState('once');
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastCode, setLastCode] = useState<{ code: string; label: string; percent: number; dur: string } | null>(null);
+  const [lastCode, setLastCode] = useState<{ code: string; label: string; percent: number; dur: string; monthlyBrl: number | null } | null>(null);
   const [copied, setCopied] = useState(false);
   const [canceling, setCanceling] = useState<string | null>(null);
 
@@ -96,11 +113,13 @@ export default function CouponsAdminPage() {
       const res = await api.post('/api/admin/coupons', body);
       const d = res?.data;
       if (d?.code) {
+        const selected = catalog.find((c) => c.productId === productId);
         setLastCode({
           code: d.code,
           label: d.productLabel,
           percent: d.percentOff,
           dur: durationLabel(d.duration, d.durationInMonths ?? null),
+          monthlyBrl: selected?.monthlyBrl ?? null,
         });
         loadList();
       }
@@ -132,6 +151,8 @@ export default function CouponsAdminPage() {
     });
   }
 
+  const impulsoItems = catalog.filter((c) => c.family === 'IMPULSO');
+
   if (user?.role !== 'SUPERADMIN') return null;
 
   return (
@@ -161,12 +182,19 @@ export default function CouponsAdminPage() {
           >
             <optgroup label="Planos">
               {catalog.filter((c) => c.type === 'plan').map((c) => (
-                <option key={c.productId} value={c.productId}>{c.label}</option>
+                <option key={c.productId} value={c.productId}>{optionLabel(c)}</option>
               ))}
             </optgroup>
+            {impulsoItems.length > 0 && (
+              <optgroup label="Zap Impulso">
+                {impulsoItems.map((c) => (
+                  <option key={c.productId} value={c.productId}>{optionLabel(c)}</option>
+                ))}
+              </optgroup>
+            )}
             <optgroup label="Add-ons">
-              {catalog.filter((c) => c.type === 'addon').map((c) => (
-                <option key={c.productId} value={c.productId}>{c.label}</option>
+              {catalog.filter((c) => c.type === 'addon' && c.family !== 'IMPULSO').map((c) => (
+                <option key={c.productId} value={c.productId}>{optionLabel(c)}</option>
               ))}
             </optgroup>
           </select>
@@ -225,6 +253,15 @@ export default function CouponsAdminPage() {
                 {lastCode.percent}% off em <span className="font-semibold">{lastCode.label}</span> · {lastCode.dur} · uso único.
                 O cliente digita este código no campo "Cupom de desconto" do checkout desse produto.
               </p>
+              {lastCode.monthlyBrl != null && (
+                <p className="mt-2 text-xs text-gray-600">
+                  Com o cupom fica{' '}
+                  <span className="font-bold text-primary-600">
+                    {brl(lastCode.monthlyBrl * (1 - lastCode.percent / 100))}/mês
+                  </span>{' '}
+                  <span className="text-gray-400 line-through">{brl(lastCode.monthlyBrl)}/mês</span>.
+                </p>
+              )}
             </div>
           ) : (
             <p className="text-sm text-gray-400">
@@ -233,6 +270,49 @@ export default function CouponsAdminPage() {
           )}
         </div>
       </div>
+
+      {/* Zap Impulso — planos e valores */}
+      {impulsoItems.length > 0 && (
+        <div className="mt-8 rounded-2xl border border-primary-100 bg-primary-50/40 p-6">
+          <div className="mb-1 flex items-center gap-2">
+            <Zap className="text-primary-600" size={18} />
+            <h2 className="text-sm font-bold text-gray-800">Planos do Zap Impulso</h2>
+          </div>
+          <p className="mb-4 text-xs text-gray-500">
+            Clique num plano pra selecioná-lo no gerador acima e emitir um cupom exclusivo dele.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {impulsoItems.map((c) => {
+              const active = productId === c.productId;
+              return (
+                <button
+                  key={c.productId}
+                  type="button"
+                  onClick={() => setProductId(c.productId)}
+                  className={`rounded-xl border p-4 text-left transition ${
+                    active
+                      ? 'border-primary-400 bg-white ring-2 ring-primary-200'
+                      : 'border-gray-200 bg-white hover:border-primary-300'
+                  }`}
+                >
+                  <div className="text-sm font-bold text-gray-900">{c.label}</div>
+                  {c.monthlyBrl != null && (
+                    <>
+                      <div className="mt-1 text-lg font-extrabold text-primary-600">
+                        {brl(c.monthlyBrl)}
+                        <span className="ml-0.5 text-xs font-medium text-gray-400">/mês</span>
+                      </div>
+                      <div className="text-[11px] text-gray-400">
+                        ou {brl(c.monthlyBrl * 12 * 0.8)}/ano (20% off)
+                      </div>
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Emitidos */}
       <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-6">
