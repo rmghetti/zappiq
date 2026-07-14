@@ -7,6 +7,7 @@ import { Logo } from '../../components/Logo';
 import { formatPhone } from '../../lib/masks';
 import { QuotaBehaviorStep } from '../../components/onboarding/QuotaBehaviorStep';
 import { SurveyIntroModal } from '../../components/onboarding/SurveyIntroModal';
+import { examplePlaceholder } from '../../lib/surveyExamples';
 
 import {
   GLOBAL_SURVEY_BLOCKS as RAW_GLOBAL_BLOCKS,
@@ -107,8 +108,9 @@ const DAYS_OF_WEEK = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Renderiza um campo de formulário baseado no tipo */
-function FormField({ question, value, onChange }: { question: SurveyQuestion; value: any; onChange: (val: any) => void }) {
+function FormField({ question, value, onChange, niche }: { question: SurveyQuestion; value: any; onChange: (val: any) => void; niche?: string }) {
   const baseInputClass = 'w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors';
+  const placeholder = examplePlaceholder(niche, question.id, question.placeholder);
 
   return (
     <div>
@@ -128,7 +130,7 @@ function FormField({ question, value, onChange }: { question: SurveyQuestion; va
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           rows={3}
-          placeholder={question.placeholder}
+          placeholder={placeholder}
           className={`${baseInputClass} resize-none`}
         />
       )}
@@ -196,7 +198,7 @@ function FormField({ question, value, onChange }: { question: SurveyQuestion; va
           type="number"
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={question.placeholder}
+          placeholder={placeholder}
           className={baseInputClass}
         />
       )}
@@ -207,7 +209,7 @@ function FormField({ question, value, onChange }: { question: SurveyQuestion; va
           inputMode="numeric"
           value={value || ''}
           onChange={(e) => onChange(formatPhone(e.target.value))}
-          placeholder={question.placeholder || '+55 11 99999-9999'}
+          placeholder={placeholder || '+55 11 99999-9999'}
           maxLength={17}
           className={baseInputClass}
         />
@@ -218,7 +220,7 @@ function FormField({ question, value, onChange }: { question: SurveyQuestion; va
           type={question.type === 'url' ? 'url' : question.type === 'email' ? 'email' : 'text'}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={question.placeholder}
+          placeholder={placeholder}
           className={baseInputClass}
         />
       )}
@@ -233,12 +235,14 @@ function AccordionSection({
   onAnswer,
   isOpen,
   onToggle,
+  niche,
 }: {
   block: SurveyBlock;
   answers: Record<string, any>;
   onAnswer: (id: string, val: any) => void;
   isOpen: boolean;
   onToggle: () => void;
+  niche?: string;
 }) {
   const answeredCount = block.questions.filter((q) => {
     const val = answers[q.id];
@@ -280,7 +284,7 @@ function AccordionSection({
       {isOpen && (
         <div className="px-5 pb-5 pt-2 space-y-4 border-t border-gray-100 bg-gray-50/50">
           {block.questions.map((q) => (
-            <FormField key={q.id} question={q} value={answers[q.id]} onChange={(val) => onAnswer(q.id, val)} />
+            <FormField key={q.id} question={q} value={answers[q.id]} onChange={(val) => onAnswer(q.id, val)} niche={niche} />
           ))}
         </div>
       )}
@@ -1038,6 +1042,7 @@ export default function OnboardingPage() {
                     onToggle={() =>
                       setOpenBlocks((prev) => ({ ...prev, [block.key]: !prev[block.key] }))
                     }
+                    niche={form.segment}
                   />
                 ))}
               </div>
@@ -1061,6 +1066,7 @@ export default function OnboardingPage() {
                   question={q}
                   value={form.segmentAnswers[q.id]}
                   onChange={(val) => updateSegmentAnswer(q.id, val)}
+                  niche={form.segment}
                 />
               ))}
               {segmentQuestions.length === 0 && (
@@ -1117,6 +1123,7 @@ export default function OnboardingPage() {
                             question={q}
                             value={subAnswers[q.id]}
                             onChange={(val) => updateSubsegmentAnswer(subKey, q.id, val)}
+                            niche={form.segment}
                           />
                         ))}
                         {questions.length === 0 && (
