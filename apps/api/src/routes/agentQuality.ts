@@ -32,12 +32,16 @@ import { logger } from '../utils/logger.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
 import {
-  AGENT_EVAL_SET,
+  resolveEvalSet,
+  getSkippedScenarios,
   EVAL_SET_VERSION,
-  getScenariosByCategory,
-  getCriticalScenarios,
   type EvalScenario,
 } from '../agents/agentEvalSet.js';
+import {
+  resolveTenantAgentProfile,
+  type TenantAgentProfile,
+} from '../agents/tenantAgentProfile.js';
+import { assertNoForeignBrand, ForeignBrandLeakError } from '../agents/tenantIsolationGuard.js';
 import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
 import {
   notifySlackQualityIssue,
@@ -54,18 +58,21 @@ router.use(authMiddleware as any);
 // ─── Cooldown: cliente roda no máximo 1 eval / 24h por agent ────────
 const RUN_COOLDOWN_HOURS = 24;
 
-// ─── Filtro de cenários (mesma lógica do admin) ─────────────────────
-function filterScenarios(opts: {
-  scenarioIds?: string[];
-  category?: string;
-  criticalOnly?: boolean;
-}): EvalScenario[] {
+// ─── Filtro de cenários, sempre a partir do gabarito DO TENANT ──────
+// Antes, a base era a constante AGENT_EVAL_SET (a prova da ZappIQ). Agora o
+// ponto de partida é sempre resolveEvalSet(profile): o cliente só pode ser
+// filtrado dentro do que se aplica a ele.
+function filterScenarios(
+  profile: TenantAgentProfile,
+  opts: { scenarioIds?: string[]; category?: string; criticalOnly?: boolean },
+): EvalScenario[] {
+  const base = resolveEvalSet(profile);
   if (opts.scenarioIds && opts.scenarioIds.length > 0) {
-    return AGENT_EVAL_SET.filter((s) => opts.scenarioIds!.includes(s.id));
+    return base.filter((s) => opts.scenarioIds!.includes(s.id));
   }
-  if (opts.criticalOnly) return getCriticalScenarios();
-  if (opts.category) return getScenariosByCategory(opts.category as any);
-  return AGENT_EVAL_SET;
+  if (opts.criticalOnly) return base.filter((s) => s.severity === 'critical');
+  if (opts.category) return base.filter((s) => s.category === opts.category);
+  return base;
 }
 
 // ─── Helper: extrai snapshot do actor (mesma assinatura do admin) ───
@@ -129,7 +136,21 @@ router.get('/agents', async (req: Request, res: Response) => {
       select: { id: true, name: true, role: true },
       orderBy: { name: 'asc' },
     });
-    res.json({ total: agents.length, agents });
+
+    // O cliente precisa saber contra o que o agente DELE vai ser testado, e o
+    // que não roda por falta de treino. Isso troca "você tirou 48%" por
+    // "complete o Treinar IA pra ser avaliado nisso".
+    const profile = await resolveTenantAgentProfile(orgId);
+    res.json({
+      total: agents.length,
+      agents,
+      testScope: {
+        agentName: profile.agentName,
+        businessName: profile.businessName,
+        totalScenarios: resolveEvalSet(profile).length,
+        skipped: getSkippedScenarios(profile),
+      },
+    });
   } catch (err: any) {
     logger.error('[agentQuality] /agents erro:', err);
     res.status(500).json({ error: 'erro ao listar agentes', message: err?.message });
@@ -180,7 +201,8 @@ router.post('/run-async', async (req: Request, res: Response) => {
     const category = req.body?.category;
     const criticalOnly = req.body?.criticalOnly === true;
 
-    const scenarios = filterScenarios({ scenarioIds, category, criticalOnly });
+    const profile = await resolveTenantAgentProfile(orgId, { agentId });
+    const scenarios = filterScenarios(profile, { scenarioIds, category, criticalOnly });
     if (scenarios.length === 0) {
       res.status(400).json({ error: 'nenhum cenário corresponde ao filtro' });
       return;
@@ -209,7 +231,7 @@ router.post('/run-async', async (req: Request, res: Response) => {
           `[agentQuality] client run iniciado runId=${run.id} agentId=${agentId} orgId=${orgId} scenarios=${scenarios.length}`,
         );
 
-        const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent);
+        const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile);
 
         await prisma.agentEvalRun.update({
           where: { id: run.id },
@@ -313,7 +335,14 @@ router.get('/runs', async (req: Request, res: Response) => {
     const agentId = req.query.agentId ? String(req.query.agentId) : undefined;
     const limit = Math.min(Number(req.query.limit) || 20, 50);
 
-    const where: any = { agent: { organizationId: orgId } };
+    // Runs 'invalidated' são as que rodaram sob o gabarito contaminado (v1):
+    // o agente do cliente era testado contra a prova da ZappIQ e tirava ~48%.
+    // Ficam no banco pra auditoria, mas o cliente não vê um score que nunca
+    // foi sobre o negócio dele.
+    const where: any = {
+      agent: { organizationId: orgId },
+      status: { not: 'invalidated' },
+    };
     if (agentId) where.agentId = agentId;
 
     const runs = await prisma.agentEvalRun.findMany({
@@ -365,16 +394,16 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
       return;
     }
     const { results, ...rest } = run as any;
-    // FASE 2.2c follow-up: enriquece com userMessage do AGENT_EVAL_SET estático
-    // pra que runs antigas (pré-deploy 2026-05-14 13:51) também mostrem a
-    // mensagem enviada ao agente na UI.
+    // FASE 2.2c follow-up: enriquece com userMessage do gabarito pra que runs
+    // antigas (pré-deploy 2026-05-14 13:51) também mostrem a mensagem enviada
+    // ao agente na UI. V2: o gabarito vem do tenant, não de uma constante.
+    const profileRun = await resolveTenantAgentProfile(orgId, { agentId: run.agent.id });
+    const defs = resolveEvalSet(profileRun);
     const enrichedResults = includeResults && Array.isArray(results)
       ? results.map((r: any) => ({
           ...r,
           userMessage:
-            r.userMessage ||
-            AGENT_EVAL_SET.find((s) => s.id === r.scenarioId)?.userMessage ||
-            null,
+            r.userMessage || defs.find((s) => s.id === r.scenarioId)?.userMessage || null,
         }))
       : undefined;
     res.json({
@@ -418,9 +447,16 @@ router.post(
         res.json({ ok: true, suggestion: scenarioResult.suggestedFix, cached: true });
         return;
       }
-      const scenarioDef = AGENT_EVAL_SET.find((s) => s.id === scenarioId);
+      const profile = await resolveTenantAgentProfile(orgId, { agentId: run.agent.id });
+      const scenarioDef = resolveEvalSet(profile).find((s) => s.id === scenarioId);
       if (!scenarioDef) {
-        res.status(404).json({ error: 'definição do cenário não encontrada' });
+        // Cenário não existe mais no gabarito deste tenant. Acontece com runs
+        // antigas (v1), que traziam cenários da ZappIQ pro cliente.
+        res.status(404).json({
+          error: 'definição do cenário não encontrada',
+          message:
+            'Este cenário não faz parte do teste do seu agente. Execute um novo teste para ver os resultados atualizados.',
+        });
         return;
       }
       const suggestion = await suggestFix(
@@ -429,6 +465,7 @@ router.post(
         scenarioResult.response || '',
         scenarioResult.judge?.reason || 'Cenário parcial — usuário pediu sugestão de melhoria',
         run.agent.systemPrompt || '',
+        profile,
       );
       if (!suggestion) {
         res.status(500).json({ error: 'IA não conseguiu gerar sugestão' });
@@ -494,6 +531,36 @@ router.post(
       const firstPatch = suggestion.patches[0];
       const diffToApply = finalDiff || firstPatch.diff;
       const whereHint = firstPatch.where || '';
+
+      // ─── REDE FINAL DO ISOLAMENTO DE TENANT ───────────────────────
+      // Este é o único ponto do produto que reescreve o systemPrompt do
+      // cliente. Era por aqui que a "REGRA INVIOLÁVEL: se apresente como Iza
+      // da ZappIQ" seria gravada no agente do CMJ.
+      //
+      // Guardamos aqui, e não só na geração, porque `finalDiff` vem do body:
+      // o usuário pode editar a sugestão antes de aplicar.
+      const profile = await resolveTenantAgentProfile(orgId, { agentId: run.agent.id });
+      try {
+        assertNoForeignBrand(`${whereHint}\n${diffToApply}`, profile, 'correção do agente');
+      } catch (err) {
+        if (err instanceof ForeignBrandLeakError) {
+          logger.error('[agentQuality] apply-fix BLOQUEADO: vazaria marca da ZappIQ', {
+            orgId,
+            agentId: run.agentId,
+            scenarioId,
+            termos: err.leaks.map((l) => l.term),
+          });
+          res.status(422).json({
+            error: 'patch_contaminado',
+            message:
+              `Esta correção faria ${profile.agentName} falar em nome de outra empresa. ` +
+              `O agente representa apenas ${profile.businessName}. Edite a sugestão e tente de novo.`,
+            leaks: err.leaks,
+          });
+          return;
+        }
+        throw err;
+      }
 
       const currentPrompt = run.agent.systemPrompt || '';
       const result = applyPatch({
@@ -583,7 +650,8 @@ router.post(
         res.status(404).json({ error: 'execução não encontrada' });
         return;
       }
-      const scenario = AGENT_EVAL_SET.find((s) => s.id === scenarioId);
+      const profile = await resolveTenantAgentProfile(orgId, { agentId: run.agent.id });
+      const scenario = resolveEvalSet(profile).find((s) => s.id === scenarioId);
       if (!scenario) {
         res.status(404).json({ error: 'cenário não encontrado no set atual' });
         return;
@@ -595,6 +663,7 @@ router.post(
           name: run.agent.name,
           systemPrompt: run.agent.systemPrompt || '',
         },
+        profile,
       );
       const result = results[0];
       logger.info({

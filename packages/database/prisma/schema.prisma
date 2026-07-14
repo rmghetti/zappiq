@@ -149,14 +149,18 @@ model Organization {
   name                      String
   slug                      String   @unique
   plan                      PlanType @default(STARTER)
-  whatsappPhoneNumberId     String?
+  // @unique: o webhook de entrada roteia a mensagem do lead para a org dona
+  // deste phone_number_id. Sem unicidade, duas orgs podiam registrar o mesmo
+  // id e o roteamento (findFirst) mandava o lead pra org errada (14/07/2026).
+  // Postgres permite múltiplos NULL num unique, então orgs sem canal seguem ok.
+  whatsappPhoneNumberId     String?  @unique
   whatsappBusinessAccountId String?
   whatsappAccessToken       String?
   // FASE 4 (#251) — Instagram Direct Messaging via Meta Graph API.
   // instagramAccountId: ID da IG Business Account (ex: 17841...)
   // instagramPageId: Facebook Page ID linkada à conta IG (necessária pelo Meta)
   // instagramAccessToken: Page Access Token de longa duração (60 dias, renovável)
-  instagramAccountId        String?  @map("instagram_account_id")
+  instagramAccountId        String?  @unique @map("instagram_account_id")
   instagramPageId           String?  @map("instagram_page_id")
   instagramAccessToken      String?  @map("instagram_access_token") @db.Text
   // Self-serve "traga seu token": app secret do app Meta DO CLIENTE, usado pra

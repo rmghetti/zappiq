@@ -61,6 +61,23 @@ router.post('/', validate(createSchema), async (req: Request, res: Response, nex
   try {
     const orgId = req.user!.organizationId;
     const body = req.body as z.infer<typeof createSchema>;
+    // Tenant scoping: tipo e contato referenciados no body precisam ser da própria
+    // org. Sem isso, o cliente A referenciaria tipo/contato do cliente B e passaria
+    // a ver dados de outra org via o include do GET. Espelha a checagem do PATCH.
+    if (body.appointmentTypeId) {
+      const type = await (prisma as any).appointmentType.findFirst({ where: { id: body.appointmentTypeId, organizationId: orgId }, select: { id: true } });
+      if (!type) {
+        res.status(404).json({ error: 'Tipo de agendamento não encontrado' });
+        return;
+      }
+    }
+    if (body.contactId) {
+      const contact = await (prisma as any).contact.findFirst({ where: { id: body.contactId, organizationId: orgId }, select: { id: true } });
+      if (!contact) {
+        res.status(404).json({ error: 'Contato não encontrado' });
+        return;
+      }
+    }
     const appt = await (prisma as any).appointment.create({
       data: {
         organizationId: orgId,

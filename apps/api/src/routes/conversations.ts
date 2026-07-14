@@ -176,6 +176,21 @@ router.put('/:id/assign', async (req: Request, res: Response, next: NextFunction
       return;
     }
 
+    // Tenant scoping do RESPONSÁVEL: atribuir só a um usuário da MESMA org.
+    // Sem isso, o agentId do body virava assignedToId sem checagem — dava para
+    // atribuir a conversa a um usuário de outra org. Desatribuir (agentId
+    // vazio/nulo) segue permitido sem validação. 404 para não revelar existência.
+    if (agentId) {
+      const agent = await prisma.user.findFirst({
+        where: { id: agentId, organizationId: req.organizationId! },
+        select: { id: true },
+      });
+      if (!agent) {
+        res.status(404).json({ error: 'Agent not found' });
+        return;
+      }
+    }
+
     // W3.4 — atribuir a um humano PAUSA a Iza nesta conversa; desatribuir
     // (agentId vazio) devolve o atendimento à IA (aiPaused=false).
     const transition = planAssign(agentId);
@@ -450,6 +465,18 @@ router.post('/:id/notes', async (req: Request, res: Response, next: NextFunction
     const { content } = req.body;
     if (!content) {
       res.status(400).json({ error: 'content is required' });
+      return;
+    }
+
+    // Tenant scoping: só cria nota se a conversa pertence à org do usuário.
+    // Sem isso, um cliente escrevia nota interna na conversa de outra org.
+    // 404 (não 403) para não revelar a existência de conversas de outras orgs.
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: req.params.id, organizationId: req.organizationId!, deletedAt: null },
+      select: { id: true },
+    });
+    if (!conversation) {
+      res.status(404).json({ error: 'Conversation not found' });
       return;
     }
 

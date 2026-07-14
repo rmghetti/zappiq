@@ -27,9 +27,12 @@
  * conseguir consultar consumo atual do tenant quando perguntada "qual meu
  * plano?" / "quanto sobrou esse mês?". Valida o pipeline end-to-end.
  *
- * **NÃO está ativado em prod ainda.** agentOrchestrator NÃO passa tools no
- * `complete()`. Próximo PR ativa via flag (`req.tools = getToolsForContext()`
- * com check de feature flag por org).
+ * ATENÇÃO (14/07/2026): isto JÁ está ligado em prod. agentOrchestrator passa
+ * tools no turno quando a org tem agendamento ativo (agentOrchestrator.ts:519)
+ * e o playground do /treinar faz o mesmo (aiTraining.ts:169). O comentário
+ * antigo dizia que nada disso rodava. Foi essa premissa vencida que deixou o
+ * gate de `internalOnly` passar despercebido, sem nenhuma tool marcada e sem
+ * nenhum caller passando `isIzaOrg`.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * Como adicionar uma tool nova
@@ -85,6 +88,11 @@ export interface RegisteredTool {
 // ─── Tool: get_org_billing_summary ───────────────────────────────────────
 
 const getOrgBillingSummary: RegisteredTool = {
+  // Devolve plano, consumo, limite e teto em R$ da org. É dado do NOSSO
+  // contrato com o tenant, não do negócio dele: o agente do cliente (a "Vera"
+  // do CMJ) jamais deve poder responder isso pro consumidor final dele.
+  // Só a Iza, que atende os clientes da ZappIQ, tem o que fazer com essa tool.
+  internalOnly: true,
   definition: {
     name: 'get_org_billing_summary',
     description:
@@ -151,8 +159,14 @@ const TOOL_REGISTRY: Record<string, RegisteredTool> = {
  * permissão (internalOnly só pra Iza).
  *
  * Use no caller:
- *   const tools = getToolsForContext({ isIzaOrg: org.id === IZA_ORG_ID });
+ *   const tools = getToolsForContext({ isIzaOrg: isZappIQOrg(organizationId) });
  *   const resp = await llmRouter.complete({ ..., tools });
+ *
+ * CUIDADO: o filtro é fail-OPEN por construção. `isIzaOrg` ausente é
+ * `undefined`, e `!t.internalOnly || undefined` já barra a tool, mas quem
+ * ESQUECER de passar a flag entrega o gate default correto (nega). O erro
+ * caro é o inverso: passar `isIzaOrg: true` fixo, ou derivar a flag de algo
+ * que não seja isZappIQOrg(). Nunca compare o ID na mão aqui.
  */
 export function getToolsForContext(opts: { isIzaOrg?: boolean; hasScheduling?: boolean } = {}): ToolDefinition[] {
   return Object.values(TOOL_REGISTRY)

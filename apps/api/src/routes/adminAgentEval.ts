@@ -1,8 +1,16 @@
 /**
  * /api/admin/agent-eval — Eval contínuo de agentes (task #235)
  *
- * SUPERADMIN-only. Roda o golden set (apps/api/src/agents/agentEvalSet.ts)
- * contra qualquer agent ativo e retorna pass/fail por cenário.
+ * SUPERADMIN-only. Roda o gabarito do tenant (resolveEvalSet, em
+ * apps/api/src/agents/agentEvalSet.ts) contra qualquer agent ativo e retorna
+ * pass/fail por cenário.
+ *
+ * ISOLAMENTO DE TENANT (14/07/2026):
+ *   O superadmin logado é da org da ZappIQ, mas testa agente de QUALQUER org.
+ *   Por isso toda operação aqui resolve o perfil pela org DO AGENTE
+ *   (agent.organizationId), nunca pela org do usuário logado. Resolver pela org
+ *   do logado traria o gabarito da Iza de volta pra cima do agente do cliente,
+ *   que é justamente o bug que o isolamento corrigiu.
  *
  * Por cenário:
  *   1. Constrói system prompt usando o mesmo path do agentOrchestrator
@@ -22,8 +30,8 @@
  *     body: { agentId: string, scenarios?: string[], category?: EvalCategory, criticalOnly?: boolean }
  *     resp: { agentId, runId, total, passed, failed, partial, results: [...] }
  *
- *   GET /api/admin/agent-eval/scenarios
- *     resp: { total, byCategory: {...}, scenarios: [...] }
+ *   GET /api/admin/agent-eval/scenarios?agentId=X (ou ?orgId=Y)
+ *     resp: { version, scope, total, byCategory: {...}, scenarios: [...] }
  */
 
 import { Router, Request, Response } from 'express';
@@ -32,12 +40,18 @@ import { logger } from '../utils/logger.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
 import {
-  AGENT_EVAL_SET,
+  resolveEvalSet,
   EVAL_SET_VERSION,
-  getScenariosByCategory,
-  getCriticalScenarios,
   type EvalScenario,
 } from '../agents/agentEvalSet.js';
+// Isolamento de tenant: o gabarito deixou de ser constante global e passou a
+// ser resolvido pelo perfil da org do agente testado.
+import {
+  resolveTenantAgentProfile,
+  type TenantAgentProfile,
+} from '../agents/tenantAgentProfile.js';
+import { assertNoForeignBrand, ForeignBrandLeakError } from '../agents/tenantIsolationGuard.js';
+import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 // V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
 // Q1: computeReverifyVerdict exportado pra teste unitário puro.
 import { executeAgentEvalRun, computeReverifyVerdict } from '../services/agentEvalRunner.js';
@@ -57,42 +71,88 @@ const router = Router();
 
 // ─── Routes ─────────────────────────────────────────────────────────
 
+// Diagnóstico admin: "contra o que este agente é testado?".
+// Não existe mais "a lista de cenários" no singular: o gabarito é montado por
+// tenant, então listar exige saber de quem. Aceita ?agentId= (preferido, resolve
+// a org pelo próprio agente) ou ?orgId=. Sem nenhum dos dois não há tenant a
+// resolver, e o fallback é a org da própria ZappIQ, que enxerga o superset
+// (universal + ZappIQ) e serve pra conferir o gabarito completo.
 router.get(
   '/scenarios',
   authMiddleware as any,
   requireRole('SUPERADMIN') as any,
-  (_req: Request, res: Response) => {
-    const byCategory: Record<string, number> = {};
-    for (const s of AGENT_EVAL_SET) {
-      byCategory[s.category] = (byCategory[s.category] || 0) + 1;
+  async (req: Request, res: Response) => {
+    try {
+      const agentId = req.query.agentId ? String(req.query.agentId) : undefined;
+      let orgId = req.query.orgId ? String(req.query.orgId) : undefined;
+
+      if (agentId) {
+        const agent = await prisma.agent.findUnique({
+          where: { id: agentId },
+          select: { organizationId: true },
+        });
+        if (!agent) {
+          res.status(404).json({ error: `agent ${agentId} não encontrado` });
+          return;
+        }
+        // Org DO AGENTE, nunca a do superadmin logado.
+        orgId = agent.organizationId;
+      }
+
+      const profile = await resolveTenantAgentProfile(orgId || ZAPPIQ_ORG_ID, { agentId });
+      const scenarios = resolveEvalSet(profile);
+
+      const byCategory: Record<string, number> = {};
+      for (const s of scenarios) {
+        byCategory[s.category] = (byCategory[s.category] || 0) + 1;
+      }
+      res.json({
+        version: EVAL_SET_VERSION,
+        // Deixa explícito de quem é o gabarito devolvido: sem isso o admin lê
+        // uma lista de cenários sem saber a que tenant ela pertence.
+        scope: {
+          organizationId: profile.organizationId,
+          isZappIQ: profile.isZappIQ,
+          agentName: profile.agentName,
+          businessName: profile.businessName,
+          resolvedFrom: agentId ? 'agentId' : orgId ? 'orgId' : 'fallback_org_zappiq',
+        },
+        total: scenarios.length,
+        byCategory,
+        scenarios: scenarios.map((s) => ({
+          id: s.id,
+          category: s.category,
+          severity: s.severity,
+          description: s.description,
+        })),
+      });
+    } catch (err: any) {
+      logger.error('[agentEval] scenarios erro:', err);
+      res.status(500).json({ error: 'erro ao listar cenários', message: err?.message });
     }
-    res.json({
-      version: EVAL_SET_VERSION,
-      total: AGENT_EVAL_SET.length,
-      byCategory,
-      scenarios: AGENT_EVAL_SET.map((s) => ({
-        id: s.id,
-        category: s.category,
-        severity: s.severity,
-        description: s.description,
-      })),
-    });
   },
 );
 
 // ─── Filtro de cenários (helper compartilhado pelos 2 endpoints) ────
 
-function filterScenarios(opts: {
-  scenarioIds?: string[];
-  category?: string;
-  criticalOnly?: boolean;
-}): EvalScenario[] {
+// A base é sempre o gabarito do tenant do agente testado. Antes era a constante
+// AGENT_EVAL_SET (a prova da ZappIQ), que caía em cima de todo mundo: o filtro
+// só pode recortar dentro do que se aplica àquele agente.
+function filterScenarios(
+  profile: TenantAgentProfile,
+  opts: {
+    scenarioIds?: string[];
+    category?: string;
+    criticalOnly?: boolean;
+  },
+): EvalScenario[] {
+  const base = resolveEvalSet(profile);
   if (opts.scenarioIds && opts.scenarioIds.length > 0) {
-    return AGENT_EVAL_SET.filter((s) => opts.scenarioIds!.includes(s.id));
+    return base.filter((s) => opts.scenarioIds!.includes(s.id));
   }
-  if (opts.criticalOnly) return getCriticalScenarios();
-  if (opts.category) return getScenariosByCategory(opts.category as any);
-  return AGENT_EVAL_SET;
+  if (opts.criticalOnly) return base.filter((s) => s.severity === 'critical');
+  if (opts.category) return base.filter((s) => s.category === opts.category);
+  return base;
 }
 
 // ─── executeRunLoop e computeSummary agora vêm de services/agentEvalRunner ─
@@ -114,14 +174,17 @@ router.post(
     try {
       const agent = await prisma.agent.findUnique({
         where: { id: agentId },
-        select: { id: true, name: true, systemPrompt: true },
+        select: { id: true, name: true, systemPrompt: true, organizationId: true },
       });
       if (!agent) {
         res.status(404).json({ error: `agent ${agentId} não encontrado` });
         return;
       }
 
-      const scenarios = filterScenarios({
+      // Perfil da org DO AGENTE. O superadmin é da ZappIQ e o agente pode ser de
+      // qualquer cliente: usar a org do logado reintroduziria o gabarito da Iza.
+      const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId });
+      const scenarios = filterScenarios(profile, {
         scenarioIds: Array.isArray(req.body?.scenarios) ? req.body.scenarios : undefined,
         category: req.body?.category,
         criticalOnly: req.body?.criticalOnly === true,
@@ -132,7 +195,7 @@ router.post(
       }
 
       logger.info(`[agentEval] sync run iniciado agentId=${agentId} scenarios=${scenarios.length}`);
-      const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent);
+      const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile);
 
       res.json({
         version: EVAL_SET_VERSION,
@@ -167,7 +230,7 @@ router.post(
     try {
       const agent = await prisma.agent.findUnique({
         where: { id: agentId },
-        select: { id: true, name: true, systemPrompt: true },
+        select: { id: true, name: true, systemPrompt: true, organizationId: true },
       });
       if (!agent) {
         res.status(404).json({ error: `agent ${agentId} não encontrado` });
@@ -179,7 +242,9 @@ router.post(
       const criticalOnly = req.body?.criticalOnly === true;
       const triggeredBy = String(req.body?.triggeredBy || 'manual'); // 'manual' | 'cron' | 'pre_release'
 
-      const scenarios = filterScenarios({ scenarioIds, category, criticalOnly });
+      // Perfil da org DO AGENTE, não a do superadmin logado (ver cabeçalho).
+      const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId });
+      const scenarios = filterScenarios(profile, { scenarioIds, category, criticalOnly });
       if (scenarios.length === 0) {
         res.status(400).json({ error: 'nenhum scenario corresponde ao filtro' });
         return;
@@ -208,7 +273,7 @@ router.post(
           });
           logger.info(`[agentEval] async run iniciado runId=${run.id} agentId=${agentId} scenarios=${scenarios.length}`);
 
-          const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent);
+          const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile);
 
           await prisma.agentEvalRun.update({
             where: { id: run.id },
@@ -346,15 +411,18 @@ router.get(
       // Omite results por padrão (pode ser MB) — frontend pede explicitamente
       const { results, ...rest } = run as any;
       // FASE 2.2c follow-up: runs antigas (pré-deploy 2026-05-14 13:51) não têm
-      // `userMessage` no JSONB. Faz lookup no AGENT_EVAL_SET estático pra que
-      // a UI mostre a interação testada completa mesmo em runs históricas.
+      // `userMessage` no JSONB. Faz lookup no gabarito pra que a UI mostre a
+      // interação testada completa mesmo em runs históricas. V2: o gabarito vem
+      // do tenant do agente da run, não de uma constante global.
+      const profileRun = await resolveTenantAgentProfile(run.agent.organizationId, {
+        agentId: run.agent.id,
+      });
+      const defs = resolveEvalSet(profileRun);
       const enrichedResults = includeResults && Array.isArray(results)
         ? results.map((r: any) => ({
             ...r,
             userMessage:
-              r.userMessage ||
-              AGENT_EVAL_SET.find((s) => s.id === r.scenarioId)?.userMessage ||
-              null,
+              r.userMessage || defs.find((s) => s.id === r.scenarioId)?.userMessage || null,
           }))
         : undefined;
       res.json({
@@ -533,7 +601,10 @@ router.post(
     try {
       const run = await prisma.agentEvalRun.findUnique({
         where: { id: runId },
-        include: { agent: true },
+        // organizationId é obrigatório aqui: é dele que sai o perfil do tenant.
+        include: {
+          agent: { select: { id: true, name: true, systemPrompt: true, organizationId: true } },
+        },
       });
       if (!run) {
         res.status(404).json({ error: 'run não encontrada' });
@@ -555,10 +626,17 @@ router.post(
         res.json({ ok: true, suggestion: scenarioResult.suggestedFix, cached: true });
         return;
       }
-      // Carrega expectedBehavior do AGENT_EVAL_SET estático
-      const scenarioDef = AGENT_EVAL_SET.find((s) => s.id === scenarioId);
+      // Carrega expectedBehavior do gabarito DO TENANT do agente desta run.
+      // O mesmo perfil vai pro suggestFix: a sugestão tem que ser escrita pra
+      // agente e empresa do cliente, não pra Iza da ZappIQ.
+      const profile = await resolveTenantAgentProfile(run.agent.organizationId, {
+        agentId: run.agent.id,
+      });
+      const scenarioDef = resolveEvalSet(profile).find((s) => s.id === scenarioId);
       if (!scenarioDef) {
-        res.status(404).json({ error: 'scenario não encontrado no eval set' });
+        // Cenário fora do gabarito deste tenant. Acontece em runs antigas (v1),
+        // que aplicavam a prova da ZappIQ no agente do cliente.
+        res.status(404).json({ error: 'scenario não encontrado no eval set deste tenant' });
         return;
       }
       const suggestion = await suggestFix(
@@ -567,6 +645,7 @@ router.post(
         scenarioResult.response || '',
         scenarioResult.judge?.reason || 'Cenário parcial — usuário pediu sugestão de melhoria',
         run.agent.systemPrompt || '',
+        profile,
       );
       if (!suggestion) {
         res.status(500).json({ error: 'IA não conseguiu gerar sugestão' });
@@ -652,10 +731,12 @@ router.post(
     const actorUserId = (req as any).user?.userId as string | undefined;
 
     try {
-      // Carrega run + agent
+      // Carrega run + agent (organizationId é o que resolve o perfil do tenant)
       const run = await prisma.agentEvalRun.findUnique({
         where: { id: runId },
-        include: { agent: true },
+        include: {
+          agent: { select: { id: true, name: true, systemPrompt: true, organizationId: true } },
+        },
       });
       if (!run) {
         res.status(404).json({ error: 'run não encontrada' });
@@ -696,6 +777,39 @@ router.post(
       const firstPatch = suggestion.patches[0];
       const diffToApply = finalDiff || firstPatch.diff;
       const whereHint = firstPatch.where || '';
+
+      // ─── REDE FINAL DO ISOLAMENTO DE TENANT ───────────────────────
+      // Mesma trava do agentQuality.ts, e aqui ela pesa mais: o superadmin é da
+      // ZappIQ e edita o agente de qualquer cliente. Era por este caminho que a
+      // "REGRA INVIOLÁVEL: se apresente como Iza da ZappIQ" seria gravada no
+      // systemPrompt do CMJ.
+      //
+      // Guardamos no apply, e não só na geração, porque `finalDiff` vem do body:
+      // o admin pode editar a sugestão antes de aplicar.
+      const profile = await resolveTenantAgentProfile(run.agent.organizationId, {
+        agentId: run.agent.id,
+      });
+      try {
+        assertNoForeignBrand(`${whereHint}\n${diffToApply}`, profile, 'correção do agente');
+      } catch (err) {
+        if (err instanceof ForeignBrandLeakError) {
+          logger.error('[agentEval] apply-fix BLOQUEADO: vazaria marca da ZappIQ', {
+            orgId: profile.organizationId,
+            agentId: run.agentId,
+            scenarioId,
+            termos: err.leaks.map((l) => l.term),
+          });
+          res.status(422).json({
+            error: 'patch_contaminado',
+            message:
+              `Esta correção faria ${profile.agentName} falar em nome de outra empresa. ` +
+              `O agente representa apenas ${profile.businessName}. Edite a sugestão e tente de novo.`,
+            leaks: err.leaks,
+          });
+          return;
+        }
+        throw err;
+      }
 
       // Aplica patch no system_prompt
       const currentPrompt = run.agent.systemPrompt || '';
@@ -754,8 +868,8 @@ router.post(
         improved: boolean;
       } | { error: true } | null = null;
 
-      // Encontra o cenário no golden set
-      const scenarioDef = AGENT_EVAL_SET.find((s) => s.id === scenarioId);
+      // Encontra o cenário no gabarito do tenant (profile já resolvido acima)
+      const scenarioDef = resolveEvalSet(profile).find((s) => s.id === scenarioId);
       if (scenarioDef) {
         try {
           // Extrai o combined anterior da run (results JSONB)
@@ -773,6 +887,7 @@ router.post(
               name: run.agent.name,
               systemPrompt: result.promptAfter,
             },
+            profile,
           );
           const afterCombined = rerunResults[0]?.combined ?? 'fail';
           const verdict = computeReverifyVerdict(before, afterCombined);

@@ -55,10 +55,8 @@ import {
   buildDividerBlock,
 } from './slackNotifier.js';
 import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
-import {
-  AGENT_EVAL_SET,
-  EVAL_SET_VERSION,
-} from '../agents/agentEvalSet.js';
+import { resolveEvalSet, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
+import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { executeAgentEvalRun } from './agentEvalRunner.js';
 
 // ─── BullMQ connection (mesma config dos outros crons) ─────────
@@ -209,6 +207,12 @@ export async function runAgentEvalCronCycle(scope: CronScope = 'all'): Promise<{
 
   for (const agent of agents) {
     try {
+      // 0. Resolve o gabarito DESTE tenant.
+      // Antes daqui saía AGENT_EVAL_SET (a prova da ZappIQ) pra todo mundo:
+      // era esse loop que gravava score 48% no dashboard do CMJ toda segunda.
+      const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId: agent.id });
+      const scenarios = resolveEvalSet(profile);
+
       // 1. Cria row pending
       const run = await prisma.agentEvalRun.create({
         data: {
@@ -221,14 +225,15 @@ export async function runAgentEvalCronCycle(scope: CronScope = 'all'): Promise<{
             source: scope === 'iza' ? 'cron_daily_iza' : 'cron_weekly',
             all: true,
           } as any,
-          totalScenarios: AGENT_EVAL_SET.length,
+          totalScenarios: scenarios.length,
         },
       });
 
       // 2. Executa eval completo
       const { results, durationMs, summary } = await executeAgentEvalRun(
-        AGENT_EVAL_SET,
+        scenarios,
         { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' },
+        profile,
       );
 
       // 3. Persiste
@@ -276,7 +281,7 @@ export async function runAgentEvalCronCycle(scope: CronScope = 'all'): Promise<{
           partial: summary.partial,
           failed: summary.failed,
           criticalFailed: summary.criticalFailed,
-          totalScenarios: AGENT_EVAL_SET.length,
+          totalScenarios: scenarios.length, // o gabarito DESTE tenant, não um set global
           durationMs,
           topFails,
         });

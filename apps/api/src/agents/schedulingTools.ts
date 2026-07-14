@@ -15,6 +15,32 @@ import { computeSlots, isSlotFree, type BusyInterval } from './schedulingAvailab
 import { localMidnightUtcMs, localDayOfWeek, fmtLocal } from './schedulingTz.js';
 import { logger } from '../utils/logger.js';
 import * as googleCalendar from '../services/googleCalendar.js';
+import { resolveTenantAgentProfile, type TenantAgentProfile } from './tenantAgentProfile.js';
+
+/**
+ * Texto da descrição do convite no Google Calendar.
+ *
+ * Importa porque o LEAD DO CLIENTE entra como convidado do evento: o que
+ * estiver aqui chega no e-mail/calendário dele. Até 14/07/2026 ia fixo
+ * 'Agendado pela IA (ZappIQ).', ou seja, o lead do CMJ recebia convite com a
+ * marca da ZappIQ. Agora sai o nome do agente e do negócio DO TENANT.
+ *
+ * 'Assistente' e 'sua empresa' são os defaults neutros do tenantAgentProfile
+ * (org que não preencheu identidade). Não servem como nome próprio num convite,
+ * então caem no texto neutro, que é sem marca de qualquer jeito.
+ */
+export function buildInviteDescription(
+  perfil: Pick<TenantAgentProfile, 'agentName' | 'businessName'> | null,
+): string {
+  const agente = perfil?.agentName?.trim();
+  const negocio = perfil?.businessName?.trim();
+  const temAgente = Boolean(agente) && agente !== 'Assistente';
+  const temNegocio = Boolean(negocio) && negocio !== 'sua empresa';
+
+  if (temAgente && temNegocio) return `Agendado por ${agente}, IA de ${negocio}.`;
+  if (temNegocio) return `Agendado pela IA de atendimento de ${negocio}.`;
+  return 'Agendado automaticamente pela IA de atendimento.';
+}
 
 // Carrega os tipos ativos da org (com as regras).
 async function loadActiveTypes(orgId: string) {
@@ -146,9 +172,13 @@ export const createAppointmentTool: RegisteredTool = {
     // fonte da verdade; guardamos o externalEventId pra manter o par sincronizado.
     const startIso = new Date(startMs).toISOString();
     const endIso = new Date(endMs).toISOString();
+    // Identidade do tenant pro convite (o lead é convidado e lê isso).
+    // resolveTenantAgentProfile já é fail-soft, mas o convite não pode derrubar
+    // o agendamento: erro aqui vira descrição neutra, sem marca.
+    const perfil = await resolveTenantAgentProfile(ctx.organizationId).catch(() => null);
     const externalEventId = await googleCalendar.insertEvent(ctx.organizationId, {
       summary: `${t.name} — ${String(input.customer_name)}`,
-      description: `Agendado pela IA (ZappIQ).`,
+      description: buildInviteDescription(perfil),
       startIso, endIso, timezone: tz,
       attendeeEmail: (input.customer_email as string) || null,
       location: t.locationText || null,

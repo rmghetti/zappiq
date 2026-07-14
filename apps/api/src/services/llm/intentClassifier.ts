@@ -57,24 +57,42 @@ const VALID_INTENTS: ReadonlySet<IzaIntent> = new Set([
  * Prompt de classificação. Mantém curto pra minimizar tokens in.
  * Few-shot com 4 exemplos cobrindo cada categoria — calibração necessária
  * pra Haiku acertar bem (Haiku é menor que Sonnet).
+ *
+ * Isolamento (14/07/2026): este prompt roda em TODO turno de TODO tenant, sem
+ * gate por org. Os exemplos são de NEGÓCIO GENÉRICO de propósito. Não coloque
+ * aqui SKU, preço, plano ou concorrente da ZappIQ: no turno do CMJ isso ensina
+ * o classificador a enxergar a operação do cliente pela régua da ZappIQ.
  */
 const CLASSIFY_SYSTEM_PROMPT = `Você é um classificador de intent de conversas de venda em pt-BR.
 
 Classifique a ÚLTIMA mensagem do cliente em UMA das categorias:
 
 - handoff: cliente pede explicitamente falar com humano (ex: "quero falar com gente", "prefiro humano", "não quero bot", "humano por favor")
-- objection: cliente está negociando preço de forma séria, levantando dúvida técnica complexa, ou comparando concorrente específico (ex: "tá caro", "qual a diferença pra Take Blip?", "esse preço é negociável?")
+- objection: cliente está negociando preço de forma séria, levantando dúvida técnica complexa, ou comparando concorrente específico (ex: "tá caro", "qual a diferença pro concorrente?", "esse preço é negociável?")
 - enterprise: cliente menciona volume alto (>500 mensagens/dia), cargo C-level (CEO, CTO, Diretor), escala enterprise, ou pede demo customizada (ex: "sou CEO", "1500 atendimentos/dia", "preciso falar com fundador")
-- purchase_intent: cliente ACEITA uma oferta concreta que a Iza ACABOU DE FAZER (trial, demo, plano específico, link). Exemplos: "Quero", "Quero sim", "Vou começar", "OK manda", "Pode mandar", "Fechado", "Bora", "Vamos lá", "Aceito", "Sim quero". IMPORTANTE: olha o histórico — só vale purchase_intent se a Iza acabou de oferecer algo concreto. Aceitação genérica sem CTA prévio = normal.
-- price_question: cliente pergunta VALOR/PREÇO/QUANTO CUSTA de produto/plano/pacote SEM aceitar oferta e SEM objetar. Exemplos: "quanto custa?", "qual o preço?", "qual o valor do Voice 200?", "tem tabela?", "quanto é o pacote X?", "qual o preço do plano Growth?", "valores?", "tabela de preços?". Por que separado: respostas de preço exigem formato preciso (R$ X,XX) — Gemini Starter erra fraseado ("começa em 79 reais e 90 centavos"). Sonnet acerta. IMPORTANTE: se cliente está negociando ("tá caro") → objection. Se está aceitando ("manda o link") → purchase_intent.
+- purchase_intent: cliente ACEITA uma oferta concreta que o agente ACABOU DE FAZER (trial, demo, plano específico, link). Exemplos: "Quero", "Quero sim", "Vou começar", "OK manda", "Pode mandar", "Fechado", "Bora", "Vamos lá", "Aceito", "Sim quero". IMPORTANTE: olha o histórico, só vale purchase_intent se o agente acabou de oferecer algo concreto. Aceitação genérica sem CTA prévio = normal.
+- price_question: cliente pergunta VALOR/PREÇO/QUANTO CUSTA de produto/plano/pacote SEM aceitar oferta e SEM objetar. Exemplos: "quanto custa?", "qual o preço?", "qual o valor do pacote X?", "tem tabela?", "quanto é o plano intermediário?", "valores?", "tabela de preços?". Por que separado: respostas de preço exigem formato preciso (R$ X,XX) e modelo menor erra o fraseado do valor. Sonnet acerta. IMPORTANTE: se cliente está negociando ("tá caro") → objection. Se está aceitando ("manda o link") → purchase_intent.
 - normal: TUDO mais (saudação simples, dúvida sobre features, descoberta de necessidade, "sim" sem contexto de aceitação)
 
 Responda APENAS UMA PALAVRA: handoff, objection, enterprise, purchase_intent, price_question, ou normal.
 Sem pontuação, sem explicação, sem prefixo. APENAS a palavra.`;
 
+/** Rótulo neutro do agente no histórico. NUNCA "Iza": ver ClassifyContext.agentName. */
+const DEFAULT_AGENT_LABEL = 'Agente';
+
 export interface ClassifyContext {
   orgId?: string | null;
   conversationId?: string | null;
+  /**
+   * Nome do agente do tenant ("Vera" no CMJ), só pra rotular o histórico.
+   * O classificador precisa saber quem falou o quê: "Quero" só é
+   * purchase_intent se o agente acabou de ofertar algo concreto.
+   *
+   * Opcional de propósito: quem não passa cai em "Agente", que é neutro e
+   * correto pra qualquer tenant. Antes o rótulo era "Iza" fixo, então a fala
+   * da Vera chegava ao classificador assinada pela agente da ZappIQ.
+   */
+  agentName?: string | null;
 }
 
 /**
@@ -96,9 +114,10 @@ export async function classifyIntent(
 
   // Monta prompt de classify. Histórico curto (últimos 4 turns) pra contexto.
   const recentHistory = history.slice(-4);
+  const agentLabel = ctx.agentName?.trim() || DEFAULT_AGENT_LABEL;
   const historyBlock = recentHistory.length
     ? recentHistory
-        .map((m) => `${m.role === 'user' ? 'Cliente' : 'Iza'}: ${m.content}`)
+        .map((m) => `${m.role === 'user' ? 'Cliente' : agentLabel}: ${m.content}`)
         .join('\n')
     : '(sem histórico)';
 
