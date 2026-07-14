@@ -116,7 +116,7 @@ export function toAnthropicMessages(messages: LLMMessage[]): any[] {
     });
 }
 
-export type LLMOperation = 'chat' | 'classify' | 'sentiment';
+export type LLMOperation = 'chat' | 'classify' | 'sentiment' | 'extract';
 
 /** Tier do tenant — usado em V4 pra tier-based default routing. */
 export type LLMTier = 'STARTER' | 'GROWTH' | 'SCALE' | 'BUSINESS' | 'ENTERPRISE';

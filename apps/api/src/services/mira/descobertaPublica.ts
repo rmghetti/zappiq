@@ -47,14 +47,14 @@ const MAX_CANDIDATOS_INDICE_LOCAL = 300;
  * rápido de candidatos, não a fonte de verdade.
  */
 async function buscarCandidatosIndiceLocal(perfil: any, regiaoLivre: string): Promise<string[]> {
-  const cnaes: string[] = Array.isArray(perfil?.icpFirmografia?.cnaes)
-    ? perfil.icpFirmografia.cnaes.map((c: string) => String(c).replace(/\D/g, '')).filter((c: string) => c.length >= 2)
+  const cnaes: string[] = Array.isArray(perfil?.alvoB2B?.cnaesAlvo)
+    ? perfil.alvoB2B.cnaesAlvo.map((c: string) => String(c).replace(/\D/g, '')).filter((c: string) => c.length >= 2)
     : [];
   if (cnaes.length === 0) return [];
 
   const ufRe = /\b([A-Z]{2})\b/;
   const ufs = new Set<string>();
-  const regioesConfig: string[] = Array.isArray(perfil?.icpFirmografia?.regioes) ? perfil.icpFirmografia.regioes : [];
+  const regioesConfig: string[] = Array.isArray(perfil?.alvoB2B?.regioes) ? perfil.alvoB2B.regioes : [];
   for (const r of [regiaoLivre, ...regioesConfig]) {
     const m = ufRe.exec(String(r || '').toUpperCase());
     if (m) ufs.add(m[1]);

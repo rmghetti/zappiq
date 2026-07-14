@@ -53,31 +53,158 @@ export interface MiraAccessData {
   };
 }
 
+// ── Perfil de Prospecção ─────────────────────────────────────────────
+export type TipoCliente = 'B2B' | 'B2C';
+export type CicloVenda = 'CURTO' | 'MEDIO' | 'LONGO';
+export type Genero = 'TODOS' | 'MASCULINO' | 'FEMININO';
+
+export interface CatalogoItem {
+  nome: string;
+  descricao?: string;
+}
+
+/** Alvo B2B: firmografia, technographics, intenção e comitê de compra. */
+export interface AlvoB2B {
+  cnaesAlvo: string[];
+  portes: string[];
+  regioes: string[];
+  faturamentoAnual: string | null;
+  numFuncionarios: string | null;
+  technographics: string[];
+  sinaisIntencao: string[];
+  decisor: string[];
+  influenciadores: string[];
+  usuarioFinal: string[];
+  objecoes: string;
+  cicloVenda: CicloVenda | null;
+  redFlagsB2B: string[];
+  mustHavesB2B: string[];
+  clientesReferencia: string[];
+}
+
+/** Alvo B2C: demografia, momento de vida e capacidade de pagamento. */
+export interface AlvoB2C {
+  faixaEtaria: string | null;
+  genero: Genero | null;
+  faixaRenda: string | null;
+  ocupacao: string[];
+  composicaoFamiliar: string[];
+  regiaoCidade: string[];
+  tipoRegiao: string[];
+  interesses: string[];
+  canais: string[];
+  habitosConsumo: string[];
+  momentoDeVida: string[];
+  doresDesejos: string[];
+  capacidadePagamento: string | null;
+  redFlagsB2C: string[];
+  influenciadoresB2C: string[];
+}
+
+/**
+ * "tipoCliente" discrimina qual alvo vale, mas os dois ficam guardados: o
+ * cliente alterna entre B2B e B2C sem perder o que digitou. Para ler o que
+ * vale, use alvoAtivo() — assim o TypeScript impede de ler campo de B2C num
+ * perfil B2B.
+ */
 export interface MiraPerfil {
   id?: string;
+  tipoCliente: TipoCliente;
+  // Seu negócio
   segmento: string | null;
   subsegmentos: string[];
-  catalogo: { nome: string; descricao?: string; ticketMedio?: number | null }[];
+  // Comum aos dois caminhos
+  catalogo: CatalogoItem[];
+  doresResolvidas: string[];
+  resultadosEsperados: string[];
+  casosDeUso: string[];
   diferenciais: string[];
   concorrentes: string[];
-  icpFirmografia: { cnaes: string[]; portes: string[]; regioes: string[]; faturamento?: string | null };
-  icpB2c: { perfil?: string; regioes: string[]; gatilhos: string[] };
-  areasCompradoras: string[];
-  modo: 'B2B' | 'B2C';
+  ticketMedio: string | null;
+  // Alvo (condicional)
+  alvoB2B: AlvoB2B;
+  alvoB2C: AlvoB2C;
   prontidao?: number;
 }
 
+export type AlvoAtivo = { tipoCliente: 'B2B'; alvo: AlvoB2B } | { tipoCliente: 'B2C'; alvo: AlvoB2C };
+
+export function alvoAtivo(p: MiraPerfil): AlvoAtivo {
+  return p.tipoCliente === 'B2B'
+    ? { tipoCliente: 'B2B', alvo: p.alvoB2B }
+    : { tipoCliente: 'B2C', alvo: p.alvoB2C };
+}
+
+export const EMPTY_ALVO_B2B: AlvoB2B = {
+  cnaesAlvo: [],
+  portes: [],
+  regioes: [],
+  faturamentoAnual: null,
+  numFuncionarios: null,
+  technographics: [],
+  sinaisIntencao: [],
+  decisor: [],
+  influenciadores: [],
+  usuarioFinal: [],
+  objecoes: '',
+  cicloVenda: null,
+  redFlagsB2B: [],
+  mustHavesB2B: [],
+  clientesReferencia: [],
+};
+
+export const EMPTY_ALVO_B2C: AlvoB2C = {
+  faixaEtaria: null,
+  genero: null,
+  faixaRenda: null,
+  ocupacao: [],
+  composicaoFamiliar: [],
+  regiaoCidade: [],
+  tipoRegiao: [],
+  interesses: [],
+  canais: [],
+  habitosConsumo: [],
+  momentoDeVida: [],
+  doresDesejos: [],
+  capacidadePagamento: null,
+  redFlagsB2C: [],
+  influenciadoresB2C: [],
+};
+
 export const EMPTY_PERFIL: MiraPerfil = {
+  tipoCliente: 'B2B',
   segmento: null,
   subsegmentos: [],
   catalogo: [],
+  doresResolvidas: [],
+  resultadosEsperados: [],
+  casosDeUso: [],
   diferenciais: [],
   concorrentes: [],
-  icpFirmografia: { cnaes: [], portes: [], regioes: [], faturamento: null },
-  icpB2c: { perfil: '', regioes: [], gatilhos: [] },
-  areasCompradoras: [],
-  modo: 'B2B',
+  ticketMedio: null,
+  alvoB2B: EMPTY_ALVO_B2B,
+  alvoB2C: EMPTY_ALVO_B2C,
 };
+
+/**
+ * Rascunho vindo do que a org já declarou no cadastro e no Treinar IA.
+ * Cobre só o negócio e o catálogo — os campos de alvo são sempre manuais,
+ * porque "quem eu atendo hoje" não é "quem eu quero prospectar".
+ */
+export interface SugestaoPerfil {
+  segmento: string | null;
+  subsegmentos: string[];
+  catalogo: CatalogoItem[];
+  doresResolvidas: string[];
+  resultadosEsperados: string[];
+  casosDeUso: string[];
+  diferenciais: string[];
+  concorrentes: string[];
+  ticketMedio: string | null;
+  /** {campo: 'cadastro' | 'treinamento'} */
+  origem: Record<string, string>;
+  totalCampos: number;
+}
 
 export interface MiraAlvoListItem {
   id: string;
@@ -233,6 +360,10 @@ export const miraApi = {
   getPerfil: (): Promise<{ success: boolean; data: MiraPerfil | null }> => api.get('/api/mira/perfil'),
   savePerfil: (perfil: MiraPerfil): Promise<{ success: boolean; data: MiraPerfil }> =>
     api.put('/api/mira/perfil', perfil),
+  // Rascunho a partir do cadastro + Treinar IA. Não persiste nada: quem salva
+  // é o savePerfil, depois de o cliente revisar.
+  sugerirPerfil: (): Promise<{ success: boolean; data: SugestaoPerfil }> =>
+    api.post('/api/mira/perfil/sugestao', {}),
   listAlvos: (params?: { status?: string; motor?: string; q?: string }): Promise<{
     success: boolean;
     data: { alvos: MiraAlvoListItem[]; quota: MiraQuota; monthKey: string };

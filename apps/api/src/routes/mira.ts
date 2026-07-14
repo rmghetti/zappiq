@@ -20,6 +20,8 @@ import { bigQueryDisponivel } from '../services/mira/descobertaBigQuery.js';
 import { enriquecerDecisoresPublico } from '../services/mira/decisoresPublico.js';
 import { aprofundarAlvo } from '../services/mira/agentes.js';
 import { computeMiraAnalytics } from '../services/mira/analytics.js';
+import { sugerirPerfil } from '../services/mira/perfilSugestao.js';
+import { perfilSchema, computePerfilProntidao, type PerfilInput } from './mira.perfil.schema.js';
 
 const router = Router();
 
@@ -100,7 +102,7 @@ router.post('/motor-b/descobrir', validate(motorBSchema), async (req: Request, r
   try {
     const { consulta, regiao, kind } = req.body as z.infer<typeof motorBSchema>;
     const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId: req.organizationId! } });
-    const modo = kind ?? (perfil?.modo === 'B2C' ? 'B2C' : 'B2B');
+    const modo = kind ?? (perfil?.tipoCliente === 'B2C' ? 'B2C' : 'B2B');
     const result =
       modo === 'B2C'
         ? await runMotorB(req.organizationId!, consulta, regiao ?? null)
@@ -244,66 +246,10 @@ router.get('/perfil', async (req: Request, res: Response, next: NextFunction) =>
   }
 });
 
-const perfilSchema = z.object({
-  segmento: z.string().trim().max(160).optional().nullable(),
-  subsegmentos: z.array(z.string().trim().max(160)).max(20).default([]),
-  catalogo: z
-    .array(
-      z.object({
-        nome: z.string().trim().min(1).max(160),
-        descricao: z.string().trim().max(600).optional().default(''),
-        ticketMedio: z.number().nonnegative().optional().nullable(),
-      })
-    )
-    .max(50)
-    .default([]),
-  diferenciais: z.array(z.string().trim().max(300)).max(20).default([]),
-  concorrentes: z.array(z.string().trim().max(160)).max(20).default([]),
-  icpFirmografia: z
-    .object({
-      cnaes: z.array(z.string().trim().max(20)).max(30).default([]),
-      portes: z.array(z.string().trim().max(30)).max(10).default([]),
-      regioes: z.array(z.string().trim().max(80)).max(30).default([]),
-      faturamento: z.string().trim().max(120).optional().nullable(),
-    })
-    .default({ cnaes: [], portes: [], regioes: [], faturamento: null }),
-  icpB2c: z
-    .object({
-      perfil: z.string().trim().max(600).optional().default(''),
-      regioes: z.array(z.string().trim().max(80)).max(30).default([]),
-      gatilhos: z.array(z.string().trim().max(200)).max(20).default([]),
-    })
-    .default({ perfil: '', regioes: [], gatilhos: [] }),
-  areasCompradoras: z.array(z.string().trim().max(80)).max(12).default([]),
-  modo: z.enum(['B2B', 'B2C']).default('B2B'),
-});
-
-/**
- * Prontidão do perfil (0-100): quanto do que os agentes precisam já
- * foi declarado. Pesos: segmento 15, catálogo 25, ICP 30 (firmografia
- * OU B2C conforme o modo), áreas compradoras 15, diferenciais 10,
- * concorrentes 5. Espelha o espírito do aiReadinessScore.
- */
-export function computePerfilProntidao(p: z.infer<typeof perfilSchema>): number {
-  let score = 0;
-  if (p.segmento && p.segmento.length > 2) score += 15;
-  if (p.catalogo.length >= 1) score += 15;
-  if (p.catalogo.length >= 3) score += 10;
-  const icpOk =
-    p.modo === 'B2B'
-      ? p.icpFirmografia.cnaes.length + p.icpFirmografia.regioes.length + p.icpFirmografia.portes.length >= 2
-      : (p.icpB2c.perfil?.length ?? 0) > 10 || p.icpB2c.regioes.length >= 1;
-  if (icpOk) score += 30;
-  if (p.areasCompradoras.length >= 1) score += 15;
-  if (p.diferenciais.length >= 1) score += 10;
-  if (p.concorrentes.length >= 1) score += 5;
-  return Math.min(100, score);
-}
-
 // PUT /api/mira/perfil — upsert do ICP (survey salva por etapas)
 router.put('/perfil', validate(perfilSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = req.body as z.infer<typeof perfilSchema>;
+    const data = req.body as PerfilInput;
     const prontidao = computePerfilProntidao(data);
     const perfil = await (prisma as any).miraPerfil.upsert({
       where: { organizationId: req.organizationId! },
@@ -311,6 +257,23 @@ router.put('/perfil', validate(perfilSchema), async (req: Request, res: Response
       update: { ...data, prontidao },
     });
     res.json({ success: true, data: perfil });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/mira/perfil/sugestao — rascunho do perfil a partir do que a org
+ * já declarou no cadastro e no Treinar IA.
+ *
+ * NÃO persiste: devolve sugestão para a tela preencher os campos, que o
+ * cliente revisa, edita e só então salva pelo PUT. Escopado em
+ * req.organizationId como todo o resto do módulo.
+ */
+router.post('/perfil/sugestao', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await sugerirPerfil(req.organizationId!);
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }

@@ -1312,7 +1312,7 @@ model LLMCallLog {
   conversationId    String?  @map("conversation_id")
   provider          String // 'anthropic-sonnet' | 'anthropic-haiku' | 'openai-mini' | 'none'
   model             String // 'claude-sonnet-4-6' | etc
-  operation         String   @default("chat") // 'chat' | 'classify' | 'sentiment'
+  operation         String   @default("chat") // 'chat' | 'classify' | 'sentiment' | 'extract'
   inputTokens       Int?     @map("input_tokens")
   outputTokens      Int?     @map("output_tokens")
   costUsdEstimate   Decimal? @map("cost_usd_estimate") @db.Decimal(10, 6)
@@ -1525,26 +1525,49 @@ enum MiraMotor {
 
 // Perfil de Prospecção (ICP) — 1 por org. Gerado pelo survey do módulo
 // (Motor 0), reaproveitando o contexto do Treinar IA quando existir.
+/// O "Motor 0": o que a org vende e para quem quer vender. União
+/// discriminada por tipoCliente — os campos de alvo B2B e B2C não se
+/// misturam no mesmo nível, porque quase nada de um vale para o outro.
 model MiraPerfil {
-  id               String       @id @default(cuid())
-  organizationId   String       @unique
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  // Estruturado (não texto solto): segmento, subsegmentos, catálogo,
-  // diferenciais, concorrentes, nicho-alvo, áreas compradoras, ticket.
-  segmento         String?
-  subsegmentos     String[]     @default([])
-  catalogo         Json         @default("[]") // [{nome, descricao, ticketMedio?}]
-  diferenciais     String[]     @default([])
-  concorrentes     String[]     @default([])
-  // ICP: quem compra (firmografia B2B e/ou perfil B2C)
-  icpFirmografia   Json         @default("{}") // {cnaes[], portes[], regioes[], faturamento?}
-  icpB2c           Json         @default("{}") // {perfil, regioes[], gatilhos[]}
-  areasCompradoras String[]     @default([]) // papéis-alvo do comitê (ex.: CEO, TI, CISO)
-  modo             MiraAlvoKind @default(B2B)
-  // Score de prontidão do perfil (0-100) — análogo ao aiReadinessScore.
-  prontidao        Int          @default(0)
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Discriminador: decide se vale alvoB2B ou alvoB2C.
+  tipoCliente MiraAlvoKind @default(B2B)
+
+  // ── Seu negócio ─────────────────────────────────────────────────
+  // Chega pronto do cadastro (settings.segmento/subsegmentos), editável.
+  segmento     String?
+  subsegmentos String[] @default([])
+
+  // ── Comum: vale nos dois caminhos ───────────────────────────────
+  catalogo            Json     @default("[]") // [{nome, descricao}]
+  doresResolvidas     String[] @default([])
+  resultadosEsperados String[] @default([])
+  casosDeUso          String[] @default([])
+  diferenciais        String[] @default([])
+  concorrentes        String[] @default([])
+  ticketMedio         String? // faixa livre ("R$ 5k–15k/mês"), não número
+
+  // ── Alvo: condicional ───────────────────────────────────────────
+  // Só o do tipoCliente vale. Guardamos os dois para o cliente não
+  // perder o que digitou ao alternar entre B2B e B2C.
+  /// {cnaesAlvo[], portes[], regioes[], faturamentoAnual?, numFuncionarios?,
+  /// technographics[], sinaisIntencao[], decisor[], influenciadores[],
+  /// usuarioFinal[], objecoes?, cicloVenda?, redFlagsB2B[], mustHavesB2B[],
+  /// clientesReferencia[]}
+  alvoB2B Json @default("{}")
+  /// {faixaEtaria?, genero?, faixaRenda?, ocupacao[], composicaoFamiliar[],
+  /// regiaoCidade[], tipoRegiao[], interesses[], canais[], habitosConsumo[],
+  /// momentoDeVida[], doresDesejos[], capacidadePagamento?, redFlagsB2C[],
+  /// influenciadoresB2C[]}
+  alvoB2C Json @default("{}")
+
+  /// Prontidão (0-100). Abaixo de 60 os motores não largam.
+  prontidao Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("mira_perfis")
 }

@@ -101,8 +101,8 @@ export async function enriquecerDecisoresPublico(
   }
 
   // -- Camada 1: buscas dirigidas pelos papeis-alvo do ICP -------------
-  const papeisAlvo: string[] = Array.isArray(perfil?.areasCompradoras) && perfil.areasCompradoras.length
-    ? perfil.areasCompradoras.slice(0, 3)
+  const papeisAlvo: string[] = Array.isArray(perfil?.alvoB2B?.decisor) && perfil.alvoB2B.decisor.length
+    ? perfil.alvoB2B.decisor.slice(0, 3)
     : ['Diretor', 'Head de TI', 'Gerente'];
 
   const queries: string[] = [
