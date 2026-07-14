@@ -2,7 +2,7 @@
 
 **Missão:** garantir que todo campo preenchido no Perfil de Prospecção é consumido em pelo menos um destes pontos, com teste provando a influência: mapeamento (queries de descoberta), qualificação (score/corte), dossiê/roteiro (aprofundar), decisores, releases. Limite duro: **4 sessões**. PR #277, branch `feat/mira-perfil-b2b-b2c`, worktree `~/dev/zappiq-mira`.
 
-**Estado: sessão 1 (auditoria) CONCLUÍDA em 14/07/2026. Próxima: sessão 2.**
+**Estado: sessões 1 e 2 CONCLUÍDAS em 14/07/2026. Próxima: sessão 3 (descoberta + releases).**
 
 ## Auditoria (sessão 1): o que os motores consomem hoje
 
@@ -54,6 +54,17 @@ Dados disponíveis em cada ponto (fiar só no que existe):
 
 **Regras de toda sessão:** tsc (apps/api e apps/web) e vitest verdes; commit + push na branch; atualizar este arquivo (estado + log). Nunca inventar consumo que o dado não sustenta: campo sem fonte dura vira contexto de prompt documentado, não heurística falsa.
 
+## Delta da sessão 2 (o que deixou de ser órfão)
+
+Fiados no aprofundar (agentes.ts, `montarContextoPerfil` + `criteriosDeCorte`, mecanismo LLM-prompt no dossiê/roteiro): subsegmentos, doresResolvidas, resultadosEsperados, casosDeUso, ticketMedio, faturamentoAnual, numFuncionarios, technographics, sinaisIntencao, objecoes, cicloVenda, clientesReferencia; B2C inteiro: faixaEtaria, genero, faixaRenda, ocupacao, composicaoFamiliar, tipoRegiao, interesses, canais, habitosConsumo, momentoDeVida, doresDesejos, capacidadePagamento, influenciadoresB2C. O bloco entra pelo caminho do ALVO (alvo.kind), não pelo tipoCliente: um Alvo B2C cruza com o público consumidor, não com firmografia.
+
+Fiados como corte com âncora (filter): redFlagsB2B, mustHavesB2B, redFlagsB2C. O modelo só pode citar item copiado literalmente da lista declarada (validação por norm no verificador); confirmado vira `alertasCorte` no resultado e "Atenção do verificador" no resumo persistido do dossiê. Citação fora da lista cai em descartadosPeloVerificador.
+
+Fiados nos decisores (decisoresPublico.ts, `montarPapeisAlvo`, mecanismo query-building + LLM-prompt): influenciadores, usuarioFinal (ordem decisor > influenciador > usuário final, dedupe por caixa/acento, fallback só quando nada declarado).
+
+Órfãos restantes para a sessão 3: NENHUM campo sem consumo, mas duas fiações de DESCOBERTA prometidas: regiaoCidade/regioes como default de região nas queries quando o usuário não informa (motorB + descobertaPublica), e sinaisIntencao+doresResolvidas no prompt de relevância dos releases. Nota: faixaEtaria/regiaoCidade/doresDesejos são obrigatórios da prontidão E agora consumidos (prompt/score); faturamentoAnual/numFuncionarios não têm fonte dura (capital social é proxy fraco), consumo legítimo é contexto de analista no prompt, documentado.
+
 ## Log
 
 - 14/07 sessão 1: auditoria via agente (leitura integral dos serviços). 11 de 41 campos consumidos; 27 órfãos. Achado extra: nenhuma referência funcional aos caminhos antigos sobrou (só a featureKey cosmética `mira.perfil.modo`, que fica). Plano acima definido.
+- 14/07 sessão 2: aprofundar recebe o Perfil inteiro do caminho do Alvo + critérios de corte com âncora; decisores usam o comitê completo. 15 testes novos (montarContextoPerfil campo a campo, corte ancorado x inventado, persistência do alerta no resumo, papéis compostos). tsc api/web 0; suíte completa 116 arquivos / 1148 testes verdes.

@@ -309,6 +309,8 @@ export interface AprofundarResult {
   oportunidades: number;
   roteiros: number;
   descartadosPeloVerificador: string[];
+  /** Critérios de corte do Perfil que o analista confirmou nos dados. */
+  alertasCorte?: string[];
   motivo?: string;
 }
 

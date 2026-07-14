@@ -66,6 +66,40 @@ function pareceDecisor(r: SerpResult): boolean {
   return false;
 }
 
+/**
+ * Papeis-alvo do comite a partir do Perfil de Prospeccao: decisor primeiro
+ * (quem assina), depois influenciadores e usuario final. Guiam as queries e
+ * o prompt de extracao. Fallback generico so quando o cliente nao declarou
+ * papel nenhum.
+ */
+export function montarPapeisAlvo(perfil: any): {
+  decisores: string[];
+  influenciadores: string[];
+  usuariosFinais: string[];
+  /** Ordem de prioridade para as buscas (decisor > influenciador > usuario final). */
+  buscaveis: string[];
+} {
+  const lista = (v: unknown, max: number) =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim()).slice(0, max)
+      : [];
+  const decisores = lista(perfil?.alvoB2B?.decisor, 3);
+  const influenciadores = lista(perfil?.alvoB2B?.influenciadores, 3);
+  const usuariosFinais = lista(perfil?.alvoB2B?.usuarioFinal, 3);
+  const vistos = new Set<string>();
+  const buscaveis = [...decisores, ...influenciadores, ...usuariosFinais].filter((p) => {
+    const k = norm(p);
+    if (vistos.has(k)) return false;
+    vistos.add(k);
+    return true;
+  });
+  if (buscaveis.length === 0) {
+    const fallback = ['Diretor', 'Head de TI', 'Gerente'];
+    return { decisores: fallback, influenciadores: [], usuariosFinais: [], buscaveis: fallback };
+  }
+  return { decisores, influenciadores, usuariosFinais, buscaveis };
+}
+
 export interface DecisoresPublicoResult {
   ok: boolean;
   buscas: number;
@@ -101,9 +135,10 @@ export async function enriquecerDecisoresPublico(
   }
 
   // -- Camada 1: buscas dirigidas pelos papeis-alvo do ICP -------------
-  const papeisAlvo: string[] = Array.isArray(perfil?.alvoB2B?.decisor) && perfil.alvoB2B.decisor.length
-    ? perfil.alvoB2B.decisor.slice(0, 3)
-    : ['Diretor', 'Head de TI', 'Gerente'];
+  // Decisor, influenciadores e usuario final declarados no Perfil, por ordem
+  // de prioridade; as queries usam os primeiros, o prompt ve os tres grupos.
+  const papeis = montarPapeisAlvo(perfil);
+  const papeisAlvo: string[] = papeis.buscaveis.slice(0, 3);
 
   const queries: string[] = [
     `"${empresa}" (diretor OR "head" OR gerente OR CEO OR CFO OR CTO OR CIO) site:linkedin.com/in`,
@@ -159,7 +194,9 @@ export async function enriquecerDecisoresPublico(
 
   const user = [
     `EMPRESA-ALVO: ${empresa}${alvo.municipio ? ` (${[alvo.municipio, alvo.uf].filter(Boolean).join('/')})` : ''}`,
-    `PAPEIS QUE O CLIENTE QUER ALCANCAR: ${papeisAlvo.join(', ')}`,
+    `PAPEIS QUE O CLIENTE QUER ALCANCAR (quem assina): ${papeis.decisores.join(', ')}`,
+    papeis.influenciadores.length ? `INFLUENCIADORES TIPICOS (tambem valem): ${papeis.influenciadores.join(', ')}` : null,
+    papeis.usuariosFinais.length ? `USUARIO FINAL TIPICO (menor prioridade): ${papeis.usuariosFinais.join(', ')}` : null,
     '',
     'RESULTADOS DE BUSCA (fonte publica):',
     fontesTxt,
@@ -170,7 +207,9 @@ export async function enriquecerDecisoresPublico(
     '    {"nome": "Nome completo EXATO do resultado", "cargo": "cargo curto atual", "fonteIndice": 1}',
     '  ]',
     '}',
-  ].join('\n');
+  ]
+    .filter((l): l is string => l !== null)
+    .join('\n');
 
   let parsed: any = null;
   try {
