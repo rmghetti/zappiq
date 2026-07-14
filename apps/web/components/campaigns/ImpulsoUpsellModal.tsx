@@ -43,7 +43,7 @@ const PLANS = [
     price: 197,
     priceAnnual: 158,
     who: 'Venda pela sua base, sem depender de anúncio.',
-    features: ['Iza Estrategista + Studio + Coach', 'WhatsApp, e-mail e SMS', 'CRM nativo + segmentação', 'Até 5.000 contatos · 1.000 disparos/mês'],
+    features: ['IA Estrategista + Studio + Coach', 'WhatsApp, e-mail e SMS', 'CRM nativo + segmentação', 'Até 5.000 contatos · 1.000 disparos/mês'],
     highlight: false,
   },
   {
@@ -61,7 +61,7 @@ const PLANS = [
     price: 1297,
     priceAnnual: 1038,
     who: 'Operação de performance no autopiloto.',
-    features: ['Tudo do Pro', 'Iza Autopiloto com governança', 'Google Ads + conversões offline + múltiplos números', 'Conector com múltiplos CRMs', 'Contatos ilimitados · 20.000 disparos/mês'],
+    features: ['Tudo do Pro', 'Autopiloto com governança', 'Google Ads + conversões offline + múltiplos números', 'Conector com múltiplos CRMs', 'Contatos ilimitados · 20.000 disparos/mês'],
     highlight: false,
   },
 ];
@@ -119,7 +119,7 @@ export function ImpulsoUpsellModal({ open, entitlement, onClose, onActivated }: 
           </div>
           <h2 className="text-2xl font-bold mt-2">Transforme suas conversas em campanhas que vendem</h2>
           <p className="text-white/90 text-sm mt-1.5 max-w-xl">
-            A Iza cria, dispara e acompanha suas campanhas de ponta a ponta. Ative e comece a vender de forma proativa hoje.
+            A IA cria, dispara e acompanha suas campanhas de ponta a ponta. Ative e comece a vender de forma proativa hoje.
           </p>
         </div>
 

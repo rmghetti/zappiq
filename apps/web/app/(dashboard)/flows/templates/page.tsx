@@ -80,6 +80,9 @@ export default function TemplatesPage() {
   const { organization } = useAuthStore();
 
   // Detecta niche e vertical do cliente
+  // Nome do agente do tenant, mesma fonte do AgentTrainingWidget (nunca "Iza":
+  // a Iza é o agente da própria ZappIQ, não o do cliente).
+  const agentName: string = (organization?.settings as any)?.agentName || 'a IA';
   const clientNiche = (organization?.settings as any)?.niche as string | undefined;
   const clientVertical = clientNiche ? NICHE_TO_TEMPLATE_VERTICAL[clientNiche] : null;
   const clientVerticalHasTemplates = clientVertical !== null && clientVertical !== undefined;
@@ -178,7 +181,7 @@ export default function TemplatesPage() {
                     Ainda nao temos templates prontos pra {clientNicheLabel}
                   </h2>
                   <p className="text-sm text-slate-600 mt-1">
-                    A Iza pode montar uma jornada personalizada pro seu negocio agora mesmo, baseada nas respostas do seu cadastro.
+                    Dá pra montar uma jornada personalizada pro seu negócio agora mesmo com {agentName}, baseada nas respostas do seu cadastro.
                   </p>
                   <div className="flex flex-wrap gap-2 mt-3">
                     <Link
@@ -186,7 +189,7 @@ export default function TemplatesPage() {
                       className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-blue-600 text-white text-sm font-semibold rounded-lg hover:from-violet-700 hover:to-blue-700"
                     >
                       <Wand2 size={14} />
-                      Pedir pra Iza montar (3min)
+                      Pedir para {agentName} montar (3min)
                     </Link>
                     <button
                       onClick={() => setShowAllVerticals(true)}
@@ -248,7 +251,7 @@ export default function TemplatesPage() {
           <Sparkles size={40} className="text-slate-300 mx-auto mb-4" />
           <h3 className="text-base font-semibold text-slate-700 mb-2">Nenhum template pra essa seleção</h3>
           <p className="text-sm text-slate-500 mb-5 max-w-md mx-auto">
-            Tente ver todas as verticais ou peca pra Iza montar uma jornada personalizada do zero.
+            Tente ver todas as verticais ou peça para {agentName} montar uma jornada personalizada do zero.
           </p>
           <div className="flex flex-wrap gap-2 justify-center">
             <button
@@ -261,7 +264,7 @@ export default function TemplatesPage() {
               href="/flows?wizard=true"
               className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-blue-600 text-white text-sm font-semibold rounded-lg hover:from-violet-700 hover:to-blue-700"
             >
-              <Wand2 size={14} /> Pedir pra Iza montar
+              <Wand2 size={14} /> Pedir para {agentName} montar
             </Link>
           </div>
         </div>

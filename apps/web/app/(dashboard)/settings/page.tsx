@@ -856,7 +856,7 @@ export default function SettingsPage() {
             <div>
               <p className="text-sm font-semibold text-violet-900">Zap Impulso — Loop de Receita</p>
               <p className="text-xs text-violet-700 mt-0.5">
-                Conecte o Meta CAPI e o Asaas para fechar o ciclo: o anúncio traz o lead, a Iza
+                Conecte o Meta CAPI e o Asaas para fechar o ciclo: o anúncio traz o lead, a IA
                 vende no WhatsApp, o Pix confirma o pagamento e a venda volta para o Meta otimizar
                 a campanha. Os tokens são cifrados no servidor e nunca aparecem de volta na tela.
               </p>
