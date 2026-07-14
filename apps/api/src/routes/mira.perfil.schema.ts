@@ -37,11 +37,21 @@ const alvoB2BSchema = z.object({
 });
 
 /**
- * Alvo B2C: demografia, momento de vida e capacidade de pagamento. Só vale
- * quando tipoCliente === 'B2C'. No B2C o timing costuma valer mais que a
- * demografia — daí momentoDeVida ser um campo de primeira classe.
+ * Alvo B2C: que negócio local prospectar, mais a demografia e o momento de
+ * vida de quem consome. Só vale quando tipoCliente === 'B2C'. No B2C o timing
+ * costuma valer mais que a demografia — daí momentoDeVida ser de primeira
+ * classe.
+ *
+ * Sobre tiposNegocioAlvo: a descoberta B2C procura NEGÓCIO LOCAL no Google
+ * (o Places devolve estabelecimento: nome, endereço, telefone, avaliações),
+ * nunca pessoa física — não existe fonte para isso, e não deveria existir. O
+ * resto do bloco descreve quem CONSOME no fim, e é o que calibra a
+ * qualificação e o roteiro de abordagem. Sem este campo, o Perfil B2C
+ * descrevia uma pessoa e o motor procurava uma empresa: ninguém dizia qual.
  */
 const alvoB2CSchema = z.object({
+  /** O que procurar no Google (par do cnaesAlvo do B2B). */
+  tiposNegocioAlvo: tags(20, 120),
   faixaEtaria: faixa(80),
   genero: z.enum(['TODOS', 'MASCULINO', 'FEMININO']).optional().nullable().default(null),
   faixaRenda: faixa(),
@@ -152,7 +162,13 @@ export function computePerfilProntidao(p: PerfilInput): number {
     p.doresResolvidas.length >= 1,
     ...(ativo.tipoCliente === 'B2B'
       ? [ativo.alvo.cnaesAlvo.length >= 1, ativo.alvo.decisor.length >= 1]
-      : [Boolean(ativo.alvo.faixaEtaria), ativo.alvo.regiaoCidade.length >= 1, ativo.alvo.doresDesejos.length >= 1]),
+      : [
+          // Par do cnaesAlvo: sem isto a descoberta B2C não sabe o que procurar.
+          ativo.alvo.tiposNegocioAlvo.length >= 1,
+          Boolean(ativo.alvo.faixaEtaria),
+          ativo.alvo.regiaoCidade.length >= 1,
+          ativo.alvo.doresDesejos.length >= 1,
+        ]),
   ];
 
   const feitos = obrigatorios.filter(Boolean).length;

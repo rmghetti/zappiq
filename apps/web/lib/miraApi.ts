@@ -84,6 +84,8 @@ export interface AlvoB2B {
 
 /** Alvo B2C: demografia, momento de vida e capacidade de pagamento. */
 export interface AlvoB2C {
+  /** Que negócio local prospectar (par do cnaesAlvo do B2B). */
+  tiposNegocioAlvo: string[];
   faixaEtaria: string | null;
   genero: Genero | null;
   faixaRenda: string | null;
@@ -154,6 +156,7 @@ export const EMPTY_ALVO_B2B: AlvoB2B = {
 };
 
 export const EMPTY_ALVO_B2C: AlvoB2C = {
+  tiposNegocioAlvo: [],
   faixaEtaria: null,
   genero: null,
   faixaRenda: null,

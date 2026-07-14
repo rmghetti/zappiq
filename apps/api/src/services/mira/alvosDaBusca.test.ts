@@ -48,24 +48,36 @@ describe('sementeDaBusca', () => {
     expect(findUnique).toHaveBeenCalledWith({ where: { organizationId: 'org-1' } });
   });
 
-  it('B2C: só a região é semeada; o Perfil não declara o tipo de negócio', async () => {
+  it('B2C: nasce com os tipos de negócio e a região do Perfil', async () => {
     findUnique.mockResolvedValue({
       alvoB2B: { cnaesAlvo: ['6201-5'], regioes: ['SP'] },
-      // "ocupacao" NÃO serve de alvo: o placeholder dela é "Autônomos, CLT,
-      // empreendedores" (vínculo de trabalho do consumidor). Semear a busca do
-      // Places com isso geraria "Autônomos em Moema" e devolveria lixo.
-      alvoB2C: { ocupacao: ['Autônomos', 'CLT'], regiaoCidade: ['Moema', 'Vila Mariana'] },
+      alvoB2C: {
+        tiposNegocioAlvo: ['clínicas de estética', 'academias'],
+        regiaoCidade: ['Moema', 'Vila Mariana'],
+        // "ocupacao" descreve o CONSUMIDOR (vínculo de trabalho), não o alvo:
+        // semear a busca com isso geraria "Autônomos em Moema", que é lixo.
+        ocupacao: ['Autônomos', 'CLT'],
+      },
+    });
+    const s = await sementeDaBusca('org-1', 'B2C');
+    expect(s.alvos).toEqual(['clínicas de estética', 'academias']);
+    expect(s.regioes).toEqual(['Moema', 'Vila Mariana']);
+    expect(s.origem).toBe('perfil');
+  });
+
+  it('B2C: ocupação do consumidor nunca vira alvo da busca', async () => {
+    findUnique.mockResolvedValue({
+      alvoB2C: { tiposNegocioAlvo: [], ocupacao: ['Autônomos', 'CLT'], regiaoCidade: ['Moema'] },
     });
     const s = await sementeDaBusca('org-1', 'B2C');
     expect(s.alvos).toEqual([]);
-    expect(s.regioes).toEqual(['Moema', 'Vila Mariana']);
-    expect(s.origem).toBe('perfil');
+    expect(s.alvos).not.toContain('Autônomos');
   });
 
   it('B2C: o caminho B2B não vaza para a semente', async () => {
     findUnique.mockResolvedValue({
       alvoB2B: { cnaesAlvo: ['6201-5'], regioes: ['SP'] },
-      alvoB2C: { regiaoCidade: ['Moema'] },
+      alvoB2C: { tiposNegocioAlvo: ['academias'], regiaoCidade: ['Moema'] },
     });
     const s = await sementeDaBusca('org-1', 'B2C');
     expect(s.alvos).not.toContain('6201-5');
