@@ -136,6 +136,54 @@ describe('a barra alta: na dúvida, não grava', () => {
     expect(webSearch).not.toHaveBeenCalled();
   });
 
+  // ── Os dois falsos positivos que a PROVA em produção pegou ──
+  // A primeira versão usava `dominio.includes(token)` e gravou os dois.
+
+  it('FORT-LUX: recusa fortion.com.br (Fortion é outra empresa, não um prefixo)', async () => {
+    const FORTLUX = {
+      ...COFEL,
+      id: 'a3',
+      nome: 'FORT-LUX INST.E MONTAGEM DE ESTRUT METALICAS LTDA',
+      nomeFantasia: null,
+      municipio: 'Boituva',
+    };
+    (webSearch as any).mockResolvedValue([
+      { title: 'Fortion', snippet: 'Estruturas metálicas em Boituva.', url: 'https://www.fortion.com.br' },
+    ]);
+    const r = await descobrirSiteOficial('org1', FORTLUX);
+    expect(r.site).toBeNull(); // "fortion".includes("fort") era true e bastava
+  });
+
+  it('PERFILADOS ATIBAIA: token que É o município não procura nada', async () => {
+    // núcleo = ["atibaia","perfilados"] (perfilados é palavra de setor), então
+    // o token distintivo vira o nome da cidade — que não identifica empresa
+    // nenhuma. A versão anterior aceitou `atibaianovo.com.br`.
+    const PERFILADOS = { ...COFEL, id: 'a4', nome: 'PERFILADOS ATIBAIA LTDA', nomeFantasia: null, municipio: 'Atibaia' };
+    (webSearch as any).mockResolvedValue([
+      { title: 'Atibaia Novo', snippet: 'Notícias de Atibaia', url: 'https://atibaianovo.com.br' },
+    ]);
+    const r = await descobrirSiteOficial('org1', PERFILADOS);
+    expect(r.site).toBeNull();
+    expect(r.buscas).toBe(0); // nem gasta busca
+    expect(webSearch).not.toHaveBeenCalled();
+  });
+
+  it('mas aceita domínio que é o núcleo inteiro colado (cofelferroligas)', async () => {
+    (webSearch as any).mockResolvedValue([
+      { title: 'Cofel Ferro Ligas', snippet: 'Atibaia, SP', url: 'https://cofelferroligas.com.br' },
+    ]);
+    const r = await descobrirSiteOficial('org1', COFEL);
+    expect(r.site).toBe('https://cofelferroligas.com.br');
+  });
+
+  it('recusa domínio genérico do setor sem o token distintivo (ferroligas.com.br)', async () => {
+    (webSearch as any).mockResolvedValue([
+      { title: 'Ferro Ligas', snippet: 'Atibaia, SP', url: 'https://ferroligas.com.br' },
+    ]);
+    const r = await descobrirSiteOficial('org1', COFEL);
+    expect(r.site).toBeNull();
+  });
+
   it('não achar é resultado legítimo (PME sem site é a regra)', async () => {
     (webSearch as any).mockResolvedValue([]);
     const r = await descobrirSiteOficial('org1', COFEL);

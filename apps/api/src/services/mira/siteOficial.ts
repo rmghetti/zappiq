@@ -56,6 +56,39 @@ export function dominioRegistravel(url: string): string | null {
   return partes[partes.length - 2] ?? null;
 }
 
+/**
+ * O domínio é o nome da empresa, ou só começa parecido?
+ *
+ * Achado na PROVA de produção (15/07/2026), e o defeito era meu: eu usava
+ * `dominio.includes(token)`, e substring é frouxo demais. Dos 3 sites que a
+ * primeira versão descobriu, DOIS estavam errados:
+ *   FORT-LUX (token "fort")       → aceitou `fortion.com.br`     — Fortion é outra empresa
+ *   PERFILADOS ATIBAIA ("atibaia")→ aceitou `atibaianovo.com.br` — nem é empresa
+ * `"fortion".includes("fort")` é true, e um site errado gravado aqui passaria
+ * a CONFIRMAR releases da empresa errada: exatamente a amplificação que este
+ * arquivo existe para evitar.
+ *
+ * Agora o domínio precisa SER o nome, não começar com ele:
+ *   - igual ao token distintivo            → cofel.ind.br para "cofel"
+ *   - igual a uma combinação dos tokens do núcleo → cofelferroligas.com.br
+ * Nada de prefixo solto.
+ */
+function dominioBateComONome(dominio: string, token: string, nucleo: string[]): boolean {
+  if (dominio === token) return true;
+  // O domínio é feito só de tokens do núcleo, coladinhos ("cofelferroligas")?
+  let resto = dominio;
+  const usados = new Set<string>();
+  while (resto.length > 0) {
+    const t = nucleo.find((x) => !usados.has(x) && resto.startsWith(x));
+    if (!t) return false;
+    usados.add(t);
+    resto = resto.slice(t.length);
+  }
+  // Precisa ter consumido o token distintivo, senão "ferroligas.com.br"
+  // (genérico do setor) viraria o site da COFEL.
+  return usados.has(token);
+}
+
 export interface SiteOficialResult {
   site: string | null;
   /** Por que aceitamos (ou null quando não achamos). */
@@ -79,6 +112,7 @@ export interface SiteOficialResult {
 function avaliarCandidato(
   r: SerpResult,
   token: string,
+  nucleo: string[],
   sinais: { municipio?: string | null; decisores?: string[] }
 ): { aceita: boolean; motivo: string | null } {
   const host = (() => {
@@ -92,7 +126,7 @@ function avaliarCandidato(
   if (NUNCA_E_SITE_OFICIAL.some((b) => host.includes(b))) return { aceita: false, motivo: null };
 
   const dominio = dominioRegistravel(r.url);
-  if (!dominio || !dominio.includes(token)) return { aceita: false, motivo: null };
+  if (!dominio || !dominioBateComONome(dominio, token, nucleo)) return { aceita: false, motivo: null };
 
   const txt = norm(`${r.title} ${r.snippet}`);
   const mun = norm(sinais.municipio ?? '');
@@ -135,6 +169,14 @@ export async function descobrirSiteOficial(
   if (nucleo.length === 0) return { site: null, motivo: null, buscas: 0 };
   const token = nucleo[0];
 
+  // Token que É o município não identifica ninguém: "PERFILADOS ATIBAIA" em
+  // Atibaia dá token "atibaia", e aí qualquer domínio da cidade (achado real:
+  // `atibaianovo.com.br`) vira "o site da empresa". Sem token próprio, não
+  // procuramos — devolver null é melhor que gravar o site errado.
+  if (norm(token) === norm(alvo.municipio ?? '')) {
+    return { site: null, motivo: null, buscas: 0 };
+  }
+
   const local = [alvo.municipio, alvo.uf].filter(Boolean).join(' ');
   const queries = [
     ...(local ? [`"${token}" ${local}`] : []),
@@ -150,7 +192,7 @@ export async function descobrirSiteOficial(
       const hits = await webSearch(organizationId, q, { limit: 6, alvoId: alvo.id });
       buscas++;
       for (const h of hits) {
-        const { aceita, motivo } = avaliarCandidato(h, token, sinais);
+        const { aceita, motivo } = avaliarCandidato(h, token, nucleo, sinais);
         if (!aceita) continue;
         const site = (() => {
           try {
