@@ -51,7 +51,7 @@ export function placesDisponivel(): boolean {
 
 async function logLookup(organizationId: string, resultado: 'valido' | 'nao_encontrado' | 'erro', latenciaMs: number) {
   try {
-    await (prisma as any).miraEnriquecimentoLog.create({
+    await prisma.miraEnriquecimentoLog.create({
       data: { organizationId, fonte: 'google_places', tipo: 'descoberta_local', resultado, custoCreditos: 0, latenciaMs },
     });
   } catch {
@@ -187,7 +187,7 @@ export async function runMotorB(
       `Descoberto no Google Places pela campanha ("${consulta}${regiaoAplicada ? ` em ${regiaoAplicada}` : ''}").`;
 
     try {
-      const alvo = await (prisma as any).miraAlvo.create({
+      const alvo = await prisma.miraAlvo.create({
         data: {
           organizationId,
           campanhaId: campanhaId ?? null,
@@ -213,7 +213,7 @@ export async function runMotorB(
       if (gateOk) {
         try {
           const quota = await consumeMiraQuota(organizationId);
-          await (prisma as any).miraAlvo.update({
+          await prisma.miraAlvo.update({
             where: { id: alvo.id },
             data: { status: 'READY', countedInQuota: true, quotaMonth: entNow.monthKey },
           });

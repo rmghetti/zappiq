@@ -204,6 +204,8 @@ export async function runDescobertaPublica(
   const errosBusca: string[] = [];
   // Mesma regra da busca: verificação que quebra não vira "não achei ninguém".
   const errosEnriquecimento: string[] = [];
+  /** Verificou o CNPJ mas não conseguiu gravar o Alvo (ex.: drift de schema). */
+  const errosGravacao: string[] = [];
 
   // A web roda só para o que não virou código (ex.: "empresas PME", que é
   // porte, não ramo). O que virou código já foi buscado na base oficial, que é
@@ -340,7 +342,7 @@ export async function runDescobertaPublica(
 
     let alvoId: string | null = null;
     try {
-      const alvo = await (prisma as any).miraAlvo.create({
+      const alvo = await prisma.miraAlvo.create({
         data: {
           organizationId,
           campanhaId: campanhaId ?? null,
@@ -384,13 +386,14 @@ export async function runDescobertaPublica(
       result.criados++;
     } catch (err: any) {
       logger.error(`[MiraDescobertaPublica] falha ao criar alvo cnpj=${cnpj}: ${err?.message ?? err}`);
+      errosGravacao.push(String(err?.message ?? err));
       continue;
     }
 
     if (passaGate(dados) && alvoId) {
       try {
         const quota = await consumeMiraQuota(organizationId);
-        await (prisma as any).miraAlvo.update({
+        await prisma.miraAlvo.update({
           where: { id: alvoId },
           data: { status: 'READY', countedInQuota: true, quotaMonth: entNow.monthKey },
         });
@@ -429,7 +432,7 @@ export async function runDescobertaPublica(
         continue;
       }
       try {
-        await (prisma as any).miraAlvo.create({
+        await prisma.miraAlvo.create({
           data: {
             organizationId,
             campanhaId: campanhaId ?? null,
@@ -457,6 +460,17 @@ export async function runDescobertaPublica(
     const err: any = new Error('verificacao_falhou');
     err.status = 502;
     err.detail = errosEnriquecimento[0];
+    throw err;
+  }
+
+  // Verificou CNPJ e não gravou NENHUM alvo: o motor quebrou depois do trabalho
+  // caro, e calar isso é o pior dos mundos — o cliente pagou a verificação e
+  // ouviu "não achei ninguém". Foi assim que o `telefone` fora do schema passou
+  // dias derrubando todo create sem ninguém ver.
+  if (result.criados === 0 && result.cnpjsVerificados > 0 && errosGravacao.length > 0) {
+    const err: any = new Error('gravacao_falhou');
+    err.status = 502;
+    err.detail = errosGravacao[0];
     throw err;
   }
 

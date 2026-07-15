@@ -52,7 +52,7 @@ async function logLookup(
   latenciaMs: number
 ): Promise<void> {
   try {
-    await (prisma as any).miraEnriquecimentoLog.create({
+    await prisma.miraEnriquecimentoLog.create({
       data: { organizationId, alvoId, fonte: 'cnpj_brasilapi', tipo: 'firmografia', resultado, custoCreditos: 0, latenciaMs },
     });
   } catch {

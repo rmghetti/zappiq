@@ -164,12 +164,23 @@ router.post('/motor-b/descobrir', validate(motorBSchema), async (req: Request, r
       return;
     }
     // Fonte quebrada não é "não achei ninguém": a campanha falha dizendo o quê.
+    // Cada motivo conta a verdade do seu estágio — dizer "não chegou a
+    // procurar" quando ela procurou, verificou e quebrou ao gravar seria só
+    // outra mentira, mais educada.
     if (err?.status === 502) {
+      const mensagens: Record<string, string> = {
+        fonte_falhou:
+          'A fonte de busca respondeu com erro, então esta campanha não chegou a procurar. Nenhum Alvo foi criado e nada foi descontado da sua cota. O time já foi avisado.',
+        verificacao_falhou:
+          'A campanha encontrou empresas, mas a checagem dos dados na Receita falhou, então nenhuma pôde ser confirmada. Nenhum Alvo foi criado e nada foi descontado da sua cota. O time já foi avisado.',
+        gravacao_falhou:
+          'A campanha encontrou e conferiu as empresas, mas falhou ao salvar os Alvos. Nada foi descontado da sua cota. O time já foi avisado.',
+      };
+      const motivo = String(err?.message ?? '');
       res.status(502).json({
         success: false,
-        error: 'fonte_falhou',
-        message:
-          'A fonte de busca respondeu com erro, então esta campanha não chegou a procurar. Nenhum Alvo foi criado e nada foi descontado da sua cota. O time já foi avisado.',
+        error: mensagens[motivo] ? motivo : 'fonte_falhou',
+        message: mensagens[motivo] ?? mensagens.fonte_falhou,
         detalhe: err?.detail ?? null,
       });
       return;
@@ -270,7 +281,7 @@ router.post('/alvos/:id/crm', async (req: Request, res: Response, next: NextFunc
 // POST /api/mira/alvos/:id/arquivar — descarta um Alvo da fila
 router.post('/alvos/:id/arquivar', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const r = await (prisma as any).miraAlvo.updateMany({
+    const r = await prisma.miraAlvo.updateMany({
       where: { id: req.params.id, organizationId: req.organizationId! },
       data: { status: 'ARCHIVED' },
     });
@@ -343,7 +354,7 @@ router.put('/perfil', validate(perfilSchema), async (req: Request, res: Response
   try {
     const data = req.body as PerfilInput;
     const prontidao = computePerfilProntidao(data);
-    const perfil = await (prisma as any).miraPerfil.upsert({
+    const perfil = await prisma.miraPerfil.upsert({
       where: { organizationId: req.organizationId! },
       create: { organizationId: req.organizationId!, ...data, prontidao },
       update: { ...data, prontidao },
@@ -473,7 +484,7 @@ router.get('/releases', async (req: Request, res: Response, next: NextFunction) 
 // POST /api/mira/releases/:id/lida — marca como lida
 router.post('/releases/:id/lida', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const r = await (prisma as any).miraRelease.updateMany({
+    const r = await prisma.miraRelease.updateMany({
       where: { id: req.params.id, organizationId: req.organizationId! },
       data: { lida: true },
     });

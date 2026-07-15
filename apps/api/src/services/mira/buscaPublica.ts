@@ -58,7 +58,7 @@ async function logBusca(
   latenciaMs: number
 ): Promise<void> {
   try {
-    await (prisma as any).miraEnriquecimentoLog.create({
+    await prisma.miraEnriquecimentoLog.create({
       data: {
         organizationId,
         alvoId,

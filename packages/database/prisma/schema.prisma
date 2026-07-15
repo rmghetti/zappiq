@@ -1631,6 +1631,7 @@ model MiraAlvo {
   municipio         String?
   uf                String?
   site              String?
+  telefone          String? // contato público (Receita no B2B, Places no B2C) — o gate do Motor B exige telefone OU site
   placeId           String? // Google Places (negócio local)
 
   // Dossiê (blocos 1:1 como campos/JSON; 1:N em tabelas próprias)

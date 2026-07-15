@@ -274,7 +274,7 @@ export async function enriquecerDecisoresPublico(
         // Enriquecer o decisor ja mapeado (ex.: veio do QSA) com pegada publica,
         // sem rebaixar a confianca de fonte oficial.
         const lineageAntigo = Array.isArray(existente.lineage) ? existente.lineage : [];
-        await (prisma as any).miraDecisor.update({
+        await prisma.miraDecisor.update({
           where: { id: existente.id },
           data: {
             perfilPublico,
@@ -285,7 +285,7 @@ export async function enriquecerDecisoresPublico(
         });
         enriquecidos++;
       } else if (!existente) {
-        await (prisma as any).miraDecisor.create({
+        await prisma.miraDecisor.create({
           data: {
             alvoId: alvo.id,
             nome,
@@ -313,7 +313,7 @@ export async function enriquecerDecisoresPublico(
     try {
       const fontes = Array.isArray(alvo.fontes) ? alvo.fontes : [];
       fontes.push({ campo: 'decisores_pegada_publica', url: resultados[0].url, data: agora, confianca: 55 });
-      await (prisma as any).miraAlvo.update({ where: { id: alvo.id }, data: { fontes } });
+      await prisma.miraAlvo.update({ where: { id: alvo.id }, data: { fontes } });
     } catch {
       /* nao critico */
     }

@@ -16,10 +16,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const findUniquePerfil = vi.fn();
 const findFirstAlvo = vi.fn();
+const createAlvo = vi.fn();
 vi.mock('@zappiq/database', () => ({
   prisma: {
     miraPerfil: { findUnique: (...a: any[]) => findUniquePerfil(...a) },
-    miraAlvo: { findFirst: (...a: any[]) => findFirstAlvo(...a), create: vi.fn().mockResolvedValue({ id: 'a1' }), update: vi.fn() },
+    miraAlvo: { findFirst: (...a: any[]) => findFirstAlvo(...a), create: (...a: any[]) => createAlvo(...a), update: vi.fn() },
     $queryRawUnsafe: vi.fn().mockResolvedValue([]),
   },
 }));
@@ -62,6 +63,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   findUniquePerfil.mockResolvedValue({ prontidao: 90 });
   findFirstAlvo.mockResolvedValue(null);
+  createAlvo.mockResolvedValue({ id: 'a1' });
   buscarCnpjsBigQuery.mockResolvedValue([]);
   enriquecerCnpjsBigQuery.mockResolvedValue(new Map());
   webSearch.mockResolvedValue([]);
@@ -223,5 +225,24 @@ describe('verificação sem BrasilAPI (o 403 que zerava tudo)', () => {
     await expect(
       runDescobertaPublica('org-1', { alvos: ['indústrias metalúrgicas'], regioes: ['SP'] })
     ).rejects.toMatchObject({ status: 502, message: 'verificacao_falhou' });
+  });
+
+  it('verificou e não conseguiu gravar nenhum alvo: 502, não CONCLUIDA com 0', async () => {
+    // A campanha da sessão 4: 300 candidatos, 10 verificados pelo espelho e
+    // criados=0, porque todo create estourava `Unknown argument telefone`.
+    // Terminava "CONCLUIDA" — indistinguível de mercado vazio para o cliente.
+    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
+    enriquecerCnpjsBigQuery.mockResolvedValue(new Map());
+    fetchCnpj.mockResolvedValue({
+      cnpj: '11222333000181', razaoSocial: 'ACME', nomeFantasia: null, cnae: '2599301', cnaeDescricao: null,
+      porte: null, capitalSocial: null, naturezaJuridica: null, situacaoCadastral: 'ATIVA', municipio: 'São Paulo',
+      uf: 'SP', telefone: null, dataInicioAtividade: null, optanteSimples: null,
+      qsa: [{ nome: 'Maria', qualificacao: '49' }], fonteUrl: 'x',
+    });
+    createAlvo.mockRejectedValue(new Error('Unknown argument `telefone`'));
+
+    await expect(
+      runDescobertaPublica('org-1', { alvos: ['indústrias metalúrgicas'], regioes: ['SP'] })
+    ).rejects.toMatchObject({ status: 502, message: 'gravacao_falhou' });
   });
 });

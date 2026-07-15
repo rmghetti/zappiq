@@ -15,11 +15,12 @@
  * a campanha em vez de marcar FALHOU: um disparo que nem largou não é
  * histórico, é ruído.
  */
-import { prisma } from '@zappiq/database';
+import { Prisma, prisma } from '@zappiq/database';
 
 export type MiraCampanhaTipo = 'BASE_INSTALADA' | 'DESCOBERTA';
 
-export interface ParametrosCampanha {
+/** `type` e não `interface`: vai para coluna Json do Prisma. Ver ScoreFator em score.ts. */
+export type ParametrosCampanha = {
   /** O que procurar: os alvos confirmados no wizard (semeados do Perfil). */
   alvos?: string[];
   /** Onde procurar. Vazio = sem recorte de região. */
@@ -27,7 +28,7 @@ export interface ParametrosCampanha {
   kind?: 'B2B' | 'B2C';
   /** Quantidade de CNPJs colados (não os CNPJs em si: dado do cliente fica no Alvo). */
   cnpjs?: number;
-}
+};
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
@@ -56,7 +57,7 @@ export async function iniciarCampanha(
   dados: { nome?: string | null; tipo: MiraCampanhaTipo; parametros: ParametrosCampanha }
 ): Promise<{ id: string; nome: string }> {
   const nome = (dados.nome ?? '').trim().slice(0, 120) || nomeAutomatico(dados.tipo, dados.parametros);
-  const campanha = await (prisma as any).miraCampanha.create({
+  const campanha = await prisma.miraCampanha.create({
     data: {
       organizationId,
       nome,
@@ -74,16 +75,19 @@ export async function concluirCampanha(
   resultado: Record<string, unknown>,
   status: 'CONCLUIDA' | 'FALHOU' = 'CONCLUIDA'
 ): Promise<void> {
-  await (prisma as any).miraCampanha.update({
+  await prisma.miraCampanha.update({
     where: { id: campanhaId },
-    data: { status, resultado },
+    // `resultado` é Record<string, unknown> por contrato (cada motor devolve um
+    // formato); o Json do Prisma não aceita `unknown`. Só o valor Json é
+    // afrouxado, nunca o client inteiro.
+    data: { status, resultado: resultado as Prisma.InputJsonValue },
   });
 }
 
 /** Disparo que nem largou (gate 412/501) não vira histórico. */
 export async function descartarCampanha(campanhaId: string): Promise<void> {
   try {
-    await (prisma as any).miraCampanha.delete({ where: { id: campanhaId } });
+    await prisma.miraCampanha.delete({ where: { id: campanhaId } });
   } catch {
     /* já apagada ou nunca criada: nada a fazer */
   }

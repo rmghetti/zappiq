@@ -13,12 +13,21 @@
  */
 import type { CnpjData } from './cnpj.js';
 
-export interface ScoreFator {
+/**
+ * `type` e não `interface` de propósito: o breakdown é gravado numa coluna Json
+ * do Prisma, e o InputJsonValue dele exige índice implícito, que só alias de
+ * tipo tem. Com `interface`, gravar o breakdown não compila — e foi para calar
+ * esse erro que os motores nasceram chamando `(prisma as any).miraAlvo.create`,
+ * o que desligou a checagem do payload INTEIRO e escondeu por dias um campo
+ * `telefone` que o schema não declarava. Nenhum alvo era criado, em nenhum
+ * motor, e o tsc não tinha como avisar.
+ */
+export type ScoreFator = {
   nome: string;
   peso: number;
   valor: number;
   motivo: string;
-}
+};
 
 export interface MiraScoreResult {
   score: number;
