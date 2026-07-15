@@ -19,7 +19,7 @@ import { prisma } from '@zappiq/database';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { fetchCnpj } from './cnpj.js';
-import { buscarReleasesPublicos } from './releasesPublico.js';
+import { buscarReleasesPublicos, persistirReleaseDrafts } from './releasesPublico.js';
 import { buscaPublicaDisponivel } from './buscaPublica.js';
 import { getMiraEntitlement } from '../../middleware/requireMira.js';
 
@@ -126,6 +126,7 @@ export async function runMiraReleasesCycle(): Promise<{
   let releasesCreated = 0;
   let publicReleasesCreated = 0;
   let globalBuscasPublicas = 0;
+  let fontesFalharam = 0;
   let failed = 0;
 
   const orgs = await prisma.organization.findMany({ select: { id: true } });
@@ -200,30 +201,16 @@ export async function runMiraReleasesCycle(): Promise<{
           ) {
             alvosBuscaFeitas++;
             try {
-              const { drafts, buscas } = await buscarReleasesPublicos(org.id, alvo, catalogo, sinaisPerfil);
+              const { drafts, buscas, erro } = await buscarReleasesPublicos(org.id, alvo, catalogo, sinaisPerfil);
               globalBuscasPublicas += buscas;
-              for (const d of drafts) {
-                const dup = await (prisma as any).miraRelease.findFirst({
-                  where: { alvoId: alvo.id, url: d.url, createdAt: { gte: new Date(Date.now() - 45 * 86400000) } },
-                  select: { id: true },
-                });
-                if (dup) continue;
-                await prisma.miraRelease.create({
-                  data: {
-                    organizationId: org.id,
-                    alvoId: alvo.id,
-                    titulo: d.titulo,
-                    resumo: d.resumo,
-                    url: d.url,
-                    relevancia: d.relevancia,
-                    anguloAbordagem: d.anguloAbordagem,
-                    produtoRelacionado: d.produtoRelacionado,
-                    confianca: d.confianca,
-                  },
-                });
-                releasesCreated++;
-                publicReleasesCreated++;
-              }
+              // `erro` = a busca quebrou (fonte fora do ar), não que a conta
+              // não publicou nada. O cron não aborta por isso (seguem outros
+              // Alvos/orgs), mas loga separado do "0 achado de verdade" para
+              // não maquiar fonte quebrada de mercado quieto.
+              if (erro) fontesFalharam++;
+              const { criados } = await persistirReleaseDrafts(org.id, alvo.id, drafts);
+              releasesCreated += criados;
+              publicReleasesCreated += criados;
             } catch (e) {
               logger.warn(`[MiraReleases] pegada publica alvo=${alvo.id} falhou: ${String(e)}`);
             }
@@ -242,7 +229,7 @@ export async function runMiraReleasesCycle(): Promise<{
 
   const durationMs = Date.now() - startedAt;
   logger.info(
-    `[MiraReleases] ciclo: orgs=${orgsProcessed} alvos=${alvosChecked} releases=${releasesCreated} (publicos=${publicReleasesCreated}, buscas=${globalBuscasPublicas}) falhas=${failed} em ${durationMs}ms`
+    `[MiraReleases] ciclo: orgs=${orgsProcessed} alvos=${alvosChecked} releases=${releasesCreated} (publicos=${publicReleasesCreated}, buscas=${globalBuscasPublicas}, fontesFalharam=${fontesFalharam}) falhas=${failed} em ${durationMs}ms`
   );
   return { organizationsProcessed: orgsProcessed, alvosChecked, releasesCreated, failed, durationMs };
 }

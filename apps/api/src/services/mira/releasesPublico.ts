@@ -74,8 +74,8 @@ export async function buscarReleasesPublicos(
   alvo: { id: string; nome: string; nomeFantasia?: string | null; municipio?: string | null; uf?: string | null },
   catalogo: { nome: string }[],
   sinais?: SinaisDoPerfil
-): Promise<{ drafts: ReleaseDraft[]; buscas: number }> {
-  if (!buscaPublicaDisponivel()) return { drafts: [], buscas: 0 };
+): Promise<{ drafts: ReleaseDraft[]; buscas: number; erro?: string }> {
+  if (!buscaPublicaDisponivel()) return { drafts: [], buscas: 0, erro: 'fonte_indisponivel' };
   const empresa = String(alvo.nomeFantasia || alvo.nome || '').trim();
   if (empresa.length < 2) return { drafts: [], buscas: 0 };
 
@@ -87,6 +87,7 @@ export async function buscarReleasesPublicos(
 
   const resultados: SerpResult[] = [];
   const vistos = new Set<string>();
+  const falhas: string[] = [];
   let buscas = 0;
   for (const q of queries) {
     try {
@@ -98,11 +99,18 @@ export async function buscarReleasesPublicos(
         resultados.push(h);
       }
     } catch (err: any) {
-      if (err?.status === 501) return { drafts: [], buscas };
+      // Não aborta o laço (a outra trilha pode responder), mas nunca esconde
+      // que a fonte falhou: 0 resultados por busca quebrada não é a mesma
+      // coisa que 0 resultados porque a conta não publicou nada. Quem chama
+      // (cron varrendo várias contas x manual do Aprofundar) decide o que
+      // fazer com `erro` — o cron loga e segue; o botão avisa o cliente.
       logger.warn(`[MiraReleasesPublico] busca falhou alvo=${alvo.id}: ${err?.message ?? err}`);
+      falhas.push(String(err?.message ?? err));
     }
   }
-  if (resultados.length === 0) return { drafts: [], buscas };
+  if (resultados.length === 0) {
+    return { drafts: [], buscas, ...(falhas.length ? { erro: falhas[0] } : {}) };
+  }
 
   const fontesTxt = resultados
     .slice(0, 10)
@@ -176,4 +184,39 @@ export async function buscarReleasesPublicos(
   }
 
   return { drafts, buscas };
+}
+
+/**
+ * Grava os drafts como MiraRelease, com o MESMO dedup do cron (mesma URL nos
+ * últimos 45 dias não repete). Compartilhado entre o cron semanal e o botão
+ * "Aprofundar com IA" (Fase 2) para as duas trilhas gravarem exatamente igual.
+ */
+export async function persistirReleaseDrafts(
+  organizationId: string,
+  alvoId: string,
+  drafts: ReleaseDraft[]
+): Promise<{ criados: number }> {
+  let criados = 0;
+  for (const d of drafts) {
+    const dup = await (prisma as any).miraRelease.findFirst({
+      where: { alvoId, url: d.url, createdAt: { gte: new Date(Date.now() - 45 * 86400000) } },
+      select: { id: true },
+    });
+    if (dup) continue;
+    await prisma.miraRelease.create({
+      data: {
+        organizationId,
+        alvoId,
+        titulo: d.titulo,
+        resumo: d.resumo,
+        url: d.url,
+        relevancia: d.relevancia,
+        anguloAbordagem: d.anguloAbordagem,
+        produtoRelacionado: d.produtoRelacionado,
+        confianca: d.confianca,
+      },
+    });
+    criados++;
+  }
+  return { criados };
 }

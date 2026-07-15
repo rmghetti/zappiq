@@ -22,6 +22,8 @@ import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPubli
 
 const MAX_QUERIES = 4; // orcamento amigavel ao tier gratuito (100 buscas/dia)
 const MAX_DECISORES = 8;
+/** Quantos decisores JÁ MAPEADOS (tipicamente do QSA) ganham busca de contato por clique. */
+const MAX_DECISORES_CONTATO = 4;
 
 const norm = (s: string) =>
   (s || '')
@@ -67,6 +69,45 @@ function pareceDecisor(r: SerpResult): boolean {
 }
 
 /**
+ * Contato extraído de resultados que JÁ passaram pelo filtro "nome aparece
+ * literalmente no texto" — nunca da lista bruta. Determinístico (regex, sem
+ * LLM): o risco de contato ERRADO (achar o telefone do outro sócio, ou o
+ * 0800 da empresa) é pior que contato nenhum, e regex sobre texto que
+ * realmente cita a pessoa é mais seguro que pedir para um LLM "decidir".
+ */
+export interface ContatoPublico {
+  linkedinUrl: string | null;
+  instagramUrl: string | null;
+  email: string | null;
+  telefone: string | null;
+}
+
+const RE_EMAIL = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+const RE_TELEFONE = /\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}/;
+
+export function extrairContatoPublico(resultadosDoNome: SerpResult[]): ContatoPublico {
+  let linkedinUrl: string | null = null;
+  let instagramUrl: string | null = null;
+  let email: string | null = null;
+  let telefone: string | null = null;
+  for (const r of resultadosDoNome) {
+    const u = r.url.toLowerCase();
+    if (!linkedinUrl && /linkedin\.com\/(in|pub)\//.test(u)) linkedinUrl = r.url;
+    if (!instagramUrl && /instagram\.com\//.test(u)) instagramUrl = r.url;
+    const texto = `${r.title} ${r.snippet}`;
+    if (!email) {
+      const m = texto.match(RE_EMAIL);
+      if (m) email = m[0].toLowerCase();
+    }
+    if (!telefone) {
+      const m = texto.match(RE_TELEFONE);
+      if (m) telefone = m[0].replace(/\D/g, '');
+    }
+  }
+  return { linkedinUrl, instagramUrl, email, telefone };
+}
+
+/**
  * Papeis-alvo do comite a partir do Perfil de Prospeccao: decisor primeiro
  * (quem assina), depois influenciadores e usuario final. Guiam as queries e
  * o prompt de extracao. Fallback generico so quando o cliente nao declarou
@@ -108,6 +149,11 @@ export interface DecisoresPublicoResult {
   enriquecidos: number;
   descartadosPeloVerificador: string[];
   motivo?: string;
+  /** Camada 4: busca de CONTATO por nome, em decisores já mapeados. */
+  buscasContato?: number;
+  contatosEnriquecidos?: number;
+  /** Falha pontual da Camada 4 (best-effort): não derruba o resultado principal. */
+  avisos?: string[];
 }
 
 export async function enriquecerDecisoresPublico(
@@ -159,23 +205,36 @@ export async function enriquecerDecisoresPublico(
         if (pareceDecisor(h)) resultados.push(h);
       }
     } catch (err: any) {
+      // 14-15/07/2026: antes só propagava em 501 ("nenhum provedor
+      // configurado"), e um 403 do provedor configurado (webSearch agora
+      // 502 fonte_falhou, depois de esgotar a cascata) era engolido pelo
+      // logger.warn e o laço seguia calado — a tela dizia "0 decisores"
+      // quando na verdade NENHUMA busca tinha de fato acontecido. Camada 1
+      // é a promessa central deste endpoint: se a fonte quebrou, propaga.
       logger.warn(`[MiraDecisoresPublico] busca falhou: ${err?.message ?? err}`);
-      // segue com o que ja tem; se a fonte estiver indisponivel, propaga
-      if (err?.status === 501) throw err;
+      throw err;
     }
-  }
-
-  if (resultados.length === 0) {
-    return { ok: true, buscas, candidatos: 0, criados: 0, enriquecidos: 0, descartadosPeloVerificador: [] };
   }
 
   // Corpus verificavel: tudo que veio de fonte real (para o verificador).
   const corpusNorm = norm(resultados.map((r) => `${r.title} ${r.snippet}`).join(' \n '));
-  const urlsPorNome = (nome: string): string[] => {
+  const urlsPorNome = (nome: string): string[] => resultadosPorNome(nome).map((r) => r.url);
+  const resultadosPorNome = (nome: string): SerpResult[] => {
     const n = norm(nome);
-    return resultados.filter((r) => norm(`${r.title} ${r.snippet}`).includes(n)).map((r) => r.url);
+    return resultados.filter((r) => norm(`${r.title} ${r.snippet}`).includes(n));
   };
 
+  // Camada 2/3 (extração + verificador) só faz sentido com resultado da
+  // busca geral; sem hit nenhum, pula direto para a Camada 4 (contato dos
+  // já mapeados), que é independente disto e não pode ficar refém de a
+  // busca genérica ter achado gente NOVA.
+  let candidatosLen = 0;
+  let criados = 0;
+  let enriquecidos = 0;
+  const descartados: string[] = [];
+  const agora = new Date().toISOString();
+
+  if (resultados.length > 0) {
   // -- Camada 2: extracao estruturada (LLM da casa, ancorada nas fontes) -
   const system = [
     'Voce extrai decisores (pessoas) de RESULTADOS DE BUSCA publicos de uma empresa-alvo.',
@@ -228,14 +287,10 @@ export async function enriquecerDecisoresPublico(
     return { ok: false, buscas, candidatos: resultados.length, criados: 0, enriquecidos: 0, descartadosPeloVerificador: [], motivo: 'llm_indisponivel' };
   }
   const candidatos: any[] = Array.isArray(parsed?.decisores) ? parsed.decisores.slice(0, MAX_DECISORES) : [];
+  candidatosLen = candidatos.length;
 
   // -- Camada 3: VERIFICADOR programatico + persistencia ---------------
-  const descartados: string[] = [];
-  const agora = new Date().toISOString();
   const existentes = new Map<string, any>(alvo.decisores.map((d: any) => [norm(d.nome), d]));
-
-  let criados = 0;
-  let enriquecidos = 0;
 
   for (const c of candidatos) {
     const nome = String(c?.nome ?? '').trim().replace(/\s+/g, ' ');
@@ -272,12 +327,29 @@ export async function enriquecerDecisoresPublico(
     try {
       if (existente && existente.id !== 'novo') {
         // Enriquecer o decisor ja mapeado (ex.: veio do QSA) com pegada publica,
-        // sem rebaixar a confianca de fonte oficial.
+        // sem rebaixar a confianca de fonte oficial. Aproveita os MESMOS
+        // resultados (já filtrados pelo nome) para extrair contato — poupa
+        // a Camada 4 de refazer a busca por quem acabou de ser achado aqui.
         const lineageAntigo = Array.isArray(existente.lineage) ? existente.lineage : [];
+        const contatoAchado = extrairContatoPublico(resultadosPorNome(nome));
+        const perfilPublicoAntigo = (existente.perfilPublico as any) ?? {};
+        const perfilPublicoNovo = {
+          ...perfilPublico,
+          linkedinUrl: perfilPublicoAntigo.linkedinUrl ?? contatoAchado.linkedinUrl,
+          instagramUrl: perfilPublicoAntigo.instagramUrl ?? contatoAchado.instagramUrl,
+          contatoBuscadoEm: agora,
+        };
+        const contatoAntigo = (existente.contato as any) ?? {};
+        const contatoNovo = {
+          ...contatoAntigo,
+          email: contatoAntigo.email ?? contatoAchado.email,
+          phone: contatoAntigo.phone ?? contatoAchado.telefone,
+        };
         await prisma.miraDecisor.update({
           where: { id: existente.id },
           data: {
-            perfilPublico,
+            perfilPublico: perfilPublicoNovo,
+            contato: contatoNovo.email || contatoNovo.phone ? contatoNovo : existente.contato,
             lineage: [...lineageAntigo, ...lineage],
             confianca: Math.max(existente.confianca ?? 0, confianca),
             senioridade: existente.senioridade ?? cargo,
@@ -318,9 +390,99 @@ export async function enriquecerDecisoresPublico(
       /* nao critico */
     }
   }
+  } // fim do if (resultados.length > 0) — Camada 2/3
+
+  // ── Camada 4: contato dos decisores JÁ MAPEADOS (pedido do Rodrigo) ────
+  // Diferente da Camada 1 (procura o CARGO na empresa), aqui a busca é pelo
+  // NOME EXATO de quem já está no comitê — tipicamente vindo do QSA (Motor
+  // A/B), que tem só nome, sem LinkedIn/e-mail/telefone/Instagram. Sem isso
+  // o dossiê tem decisor mapeado e nenhum jeito de abordá-lo. Roda mesmo
+  // quando a Camada 1 não achou ninguém NOVO — é independente.
+  //
+  // Best-effort: falha aqui vira aviso, não derruba um resultado que já foi
+  // bem-sucedido nas camadas anteriores (ou que nem tentou nada antes, se
+  // não havia decisor novo para achar).
+  let buscasContato = 0;
+  let contatosEnriquecidos = 0;
+  const avisos: string[] = [];
+  try {
+    const decisoresAtuais = await prisma.miraDecisor.findMany({ where: { alvoId: alvo.id } });
+    const semContato = decisoresAtuais
+      .filter((d: any) => !((d.perfilPublico as any)?.contatoBuscadoEm))
+      .sort((a: any, b: any) => Number(b.vinculoQsa) - Number(a.vinculoQsa)) // QSA primeiro
+      .slice(0, MAX_DECISORES_CONTATO);
+
+    for (const d of semContato) {
+      const nomeNorm = norm(d.nome);
+      const queriesContato = [
+        `"${d.nome}" "${empresa}" site:linkedin.com/in`,
+        `"${d.nome}" "${empresa}" (instagram.com OR contato OR email OR telefone)`,
+      ];
+      const achados: SerpResult[] = [];
+      for (const q of queriesContato) {
+        try {
+          const hits = await webSearch(organizationId, q, { limit: 6, alvoId });
+          buscasContato++;
+          for (const h of hits) {
+            if (norm(`${h.title} ${h.snippet}`).includes(nomeNorm)) achados.push(h);
+          }
+        } catch (err: any) {
+          logger.warn(`[MiraDecisoresPublico] busca de contato falhou p/ "${d.nome}": ${err?.message ?? err}`);
+          avisos.push(`A busca de contato de "${d.nome}" falhou (${err?.message ?? err}); tentamos de novo no próximo clique.`);
+        }
+      }
+
+      const contatoAchado = extrairContatoPublico(achados);
+      const perfilPublicoAtual = (d.perfilPublico as any) ?? {};
+      const linkedinUrl = perfilPublicoAtual.linkedinUrl ?? contatoAchado.linkedinUrl;
+      const instagramUrl = perfilPublicoAtual.instagramUrl ?? contatoAchado.instagramUrl;
+      const contatoAtual = (d.contato as any) ?? {};
+      const email = contatoAtual.email ?? contatoAchado.email;
+      const phone = contatoAtual.phone ?? contatoAchado.telefone;
+      const teveNovidade = Boolean(
+        (!perfilPublicoAtual.linkedinUrl && contatoAchado.linkedinUrl) ||
+          (!perfilPublicoAtual.instagramUrl && contatoAchado.instagramUrl) ||
+          (!contatoAtual.email && contatoAchado.email) ||
+          (!contatoAtual.phone && contatoAchado.telefone)
+      );
+      const novasFontes = [contatoAchado.linkedinUrl, contatoAchado.instagramUrl].filter(
+        (u): u is string => Boolean(u)
+      );
+      const lineageAntigo = Array.isArray(d.lineage) ? d.lineage : [];
+
+      await prisma.miraDecisor.update({
+        where: { id: d.id },
+        data: {
+          // contatoBuscadoEm grava SEMPRE (achando ou não): sem isso, todo
+          // clique repetiria a mesma busca por quem já foi checado e nada tinha.
+          perfilPublico: { ...perfilPublicoAtual, linkedinUrl, instagramUrl, contatoBuscadoEm: agora },
+          contato: email || phone ? { ...contatoAtual, email, phone } : d.contato,
+          lineage: novasFontes.length
+            ? [...lineageAntigo, ...novasFontes.map((u) => ({ campo: 'contato_pegada_publica', url: u, data: agora }))]
+            : lineageAntigo,
+        },
+      });
+      if (teveNovidade) contatosEnriquecidos++;
+    }
+  } catch (err: any) {
+    // Erro fora do laço de busca (ex.: falha ao listar decisores): não
+    // propaga, mas registra — Camada 1-3 já produziram um resultado válido.
+    logger.error(`[MiraDecisoresPublico] Camada 4 (contato) quebrou alvo=${alvoId}: ${err?.message ?? err}`);
+    avisos.push('A busca de contato dos decisores já mapeados não pôde rodar desta vez.');
+  }
 
   logger.info(
-    `[MiraDecisoresPublico] alvo=${alvoId} buscas=${buscas} candidatos=${candidatos.length} criados=${criados} enriquecidos=${enriquecidos} descartados=${descartados.length}`
+    `[MiraDecisoresPublico] alvo=${alvoId} buscas=${buscas} candidatos=${candidatosLen} criados=${criados} enriquecidos=${enriquecidos} descartados=${descartados.length} buscasContato=${buscasContato} contatosEnriquecidos=${contatosEnriquecidos}`
   );
-  return { ok: true, buscas, candidatos: candidatos.length, criados, enriquecidos, descartadosPeloVerificador: descartados };
+  return {
+    ok: true,
+    buscas,
+    candidatos: candidatosLen,
+    criados,
+    enriquecidos,
+    descartadosPeloVerificador: descartados,
+    buscasContato,
+    contatosEnriquecidos,
+    ...(avisos.length ? { avisos } : {}),
+  };
 }
