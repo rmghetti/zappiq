@@ -127,6 +127,42 @@ publicação `supabase_realtime` está VAZIA.
 chegarem. O screenshot mostrou 4. Quase reportei que tinha quebrado produção. Em tela que
 busca dado, screenshot > texto.
 
+## Sessão 2 (15/07/2026) — fundação de dados e API
+
+Migração `20260715000005_tarefas_planner` (escrita, NÃO aplicada — vai pelo
+`migrate deploy` do Fly na sessão 4). Tudo aditivo: nenhuma linha existente muda.
+- `TaskStatus += IN_PROGRESS` (`ADD VALUE` roda em transação no PG 17 porque o
+  valor não é USADO na mesma migração).
+- `tasks.notes` (observação do humano, separada da `description` da IA).
+- FK real em `assignedToId → users(id) ON DELETE SET NULL` (a tarefa é da org, não
+  de quem saiu). Seguro: 6 tarefas, 0 com responsável, 0 órfã em produção.
+- `task_tags` (catálogo, `@@unique([organizationId, name])`) + `task_tags_on_tasks`.
+- RLS já nas tabelas novas: tabela nova nasce fechada, senão reabriria o buraco
+  que a 20260715000004 acabou de fechar.
+
+API: `POST /` (não existia — o cliente não criava tarefa), `GET /:id` (painel),
+`GET /tags` + `POST /tags` + `PUT /tags/:id` + `DELETE /tags/:id` (catálogo),
+`PUT /:id` estendido (notes, assignedToId, tagIds). Filtros novos no `GET /`:
+`tagId`, `assignedToId` (aceita `me` e `none`), `origem`.
+
+Decisões que valem registro:
+- **`validarVinculos`**: todo id vindo do cliente (assignedToId/contactId/dealId/
+  tagIds) é conferido contra a org ANTES de gravar. Nenhum é validável pelo
+  formato — cuid de outra org passa no zod. A checagem de etiqueta é por
+  CONTAGEM (2 pedidas, 1 achada → recusa o lote); "achou alguma" deixaria a
+  etiqueta alheia entrar de carona.
+- **`origem` fora do contrato**: se o cliente pudesse mandar, forjaria tarefa com
+  selo "Prospecção" da Mira.
+- **`/tags` declarado ANTES de `/:id`**: o Express casa na ordem e `/tasks/tags`
+  bateria em `/tasks/:id` com id="tags".
+- **id inválido no filtro é IGNORADO**, não vira filtro: filtrar por lixo daria
+  lista vazia e o cliente leria "não tenho tarefa" (mentira) em vez de "meu
+  filtro não valeu".
+- **`me` resolvido no servidor**: quem sabe quem está logado é ele.
+
+Verificação: `tsc` exit 0. Suíte inteira da API **162 arquivos / 1666 testes,
+zero falha** (36 novos: 24 puros + 12 de isolamento de tenant).
+
 ### Ainda aberto (não é deste loop)
 
 - `app_user` continua sem existir. As políticas de tenant seguem inertes para a API, que
