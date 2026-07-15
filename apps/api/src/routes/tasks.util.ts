@@ -36,8 +36,12 @@ export interface TaskListFilters {
   tagId?: unknown;
   /** id de User, ou a string 'me' resolvida no handler. Sem responsável: 'none'. */
   assignedToId?: unknown;
-  /** Origem: CONVERSA (quem te chamou) x MIRA (quem nem te conhece). */
+  /** Origem: CONVERSA (quem te chamou) x MIRA (quem nem te conhece) x IMPULSO. */
   origem?: unknown;
+  /** id de Contact — as tarefas do painel de um contato no CRM. */
+  contactId?: unknown;
+  /** id de Deal — as tarefas da seção "Tarefas" do DealDrawer. */
+  dealId?: unknown;
 }
 
 export interface TaskListWhere {
@@ -47,9 +51,11 @@ export interface TaskListWhere {
   tags?: { some: { tagId: string } };
   assignedToId?: string | null;
   origem?: TaskOrigemValue;
+  contactId?: string;
+  dealId?: string;
 }
 
-export const TASK_ORIGENS = ['CONVERSA', 'MIRA'] as const;
+export const TASK_ORIGENS = ['CONVERSA', 'MIRA', 'IMPULSO'] as const;
 export type TaskOrigemValue = (typeof TASK_ORIGENS)[number];
 
 export function isTaskOrigem(value: unknown): value is TaskOrigemValue {
@@ -102,6 +108,14 @@ export function buildTaskListWhere(organizationId: string, filters: TaskListFilt
 
   if (isTaskOrigem(filters.origem)) {
     where.origem = filters.origem;
+  }
+
+  if (typeof filters.contactId === 'string' && ID_RE.test(filters.contactId)) {
+    where.contactId = filters.contactId;
+  }
+
+  if (typeof filters.dealId === 'string' && ID_RE.test(filters.dealId)) {
+    where.dealId = filters.dealId;
   }
 
   return where;

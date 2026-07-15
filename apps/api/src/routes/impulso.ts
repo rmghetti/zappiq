@@ -17,6 +17,7 @@ import {
 } from '../services/asaasPix.js';
 import { sendReplyText } from '../services/channelDispatcher.js';
 import { updateImpulsoCampaignSchema } from './impulso.schema.js';
+import { precisaAprovacao, montarTarefaAprovacao } from '../services/impulsoAprovacao.js';
 
 /** Instagram só entra numa campanha se a org tiver o IG conectado (política Meta + requisito de plano). */
 async function orgHasInstagram(orgId: string): Promise<boolean> {
@@ -119,6 +120,26 @@ router.post('/', validate(createSchema), async (req: Request, res: Response, nex
         status: scheduledAt ? 'SCHEDULED' : 'DRAFT',
       },
     });
+
+    // Co-Piloto (autonomyLevel padrão 2, "a IA propõe e o humano aprova") nunca
+    // teve um lugar pra pedir essa aprovação — a campanha ficava em DRAFT/
+    // SCHEDULED só visível pra quem entrasse na tela e notasse. Isto é um
+    // LEMBRETE: concluir a tarefa NÃO publica a campanha, e não bloqueia o
+    // disparo automático de uma campanha agendada (ver impulsoAprovacao.ts).
+    if (precisaAprovacao(campaign)) {
+      const { title, description, dueDate } = montarTarefaAprovacao(campaign);
+      await prisma.task.create({
+        data: {
+          title,
+          description,
+          dueDate,
+          origem: 'IMPULSO' as any,
+          campaignId: campaign.id,
+          organizationId: req.organizationId!,
+        },
+      });
+    }
+
     res.status(201).json({ success: true, data: campaign });
   } catch (err) {
     next(err);
