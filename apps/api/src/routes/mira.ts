@@ -270,20 +270,31 @@ router.post('/alvos/:id/decisores-publico', async (req: Request, res: Response, 
 });
 
 // POST /api/mira/alvos/:id/crm — pousa o Alvo no CRM (Contact + Deal)
+// body: { forcar?: boolean } — "enviar assim mesmo" um Alvo que não passou
+// no gate. Ele entra marcado como não qualificado (ver pousarCrm.ts).
 router.post('/alvos/:id/crm', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await pousarNoCrm(req.organizationId!, req.params.id);
+    const forcar = req.body?.forcar === true;
+    const data = await pousarNoCrm(req.organizationId!, req.params.id, { forcar });
     res.json({ success: true, data });
   } catch (err: any) {
     if (err?.status === 404) {
       res.status(404).json({ success: false, error: 'alvo_not_found' });
       return;
     }
+    if (err?.message === 'alvo_arquivado') {
+      res.status(409).json({
+        success: false,
+        error: 'alvo_arquivado',
+        message: 'Este Alvo foi arquivado. Restaure-o antes de enviar ao CRM.',
+      });
+      return;
+    }
     if (err?.status === 409) {
       res.status(409).json({
         success: false,
         error: 'alvo_nao_pronto',
-        message: 'Só Alvos prontos (verificados) pousam no CRM.',
+        message: 'Este Alvo ainda não passou na verificação. Use "Enviar assim mesmo" se quiser trabalhá-lo do jeito que está.',
       });
       return;
     }

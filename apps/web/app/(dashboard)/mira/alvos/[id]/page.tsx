@@ -33,6 +33,8 @@ import {
   UserSearch,
   Globe,
   Linkedin,
+  SendHorizonal,
+  AlertTriangle,
 } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { miraApi, type MiraAlvoDossie } from '@/lib/miraApi';
@@ -378,6 +380,7 @@ function AlvoActions({
   onReload: () => void;
 }) {
   const [sending, setSending] = useState(false);
+  const [confirmarNaoQualificado, setConfirmarNaoQualificado] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [deepening, setDeepening] = useState(false);
   const [deepMsg, setDeepMsg] = useState<string | null>(null);
@@ -439,16 +442,17 @@ function AlvoActions({
     }
   };
 
-  const pousar = async () => {
+  const pousar = async (forcar = false) => {
     setSending(true);
     setError(null);
     try {
-      const res = await miraApi.pousarCrm(alvo.id);
+      const res = await miraApi.pousarCrm(alvo.id, forcar);
       onChange({ status: 'DELIVERED', contactId: res.data.contactId, dealId: res.data.dealId });
     } catch (e: any) {
       setError(e?.message || 'Não foi possível enviar para o CRM agora.');
     } finally {
       setSending(false);
+      setConfirmarNaoQualificado(false);
     }
   };
 
@@ -499,7 +503,7 @@ function AlvoActions({
         </span>
       ) : alvo.status === 'READY' ? (
         <button
-          onClick={pousar}
+          onClick={() => pousar(false)}
           disabled={sending}
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-60"
         >
@@ -509,7 +513,45 @@ function AlvoActions({
       ) : alvo.status === 'ARCHIVED' ? (
         <span className="text-sm text-gray-400 font-medium">Alvo arquivado</span>
       ) : (
-        <span className="text-xs text-gray-400 italic">Em qualificação: o Alvo pousa no CRM quando passar a verificação.</span>
+        /* Em qualificação: o caminho normal está fechado, mas a porta existe.
+           O cliente pode conhecer a conta por fora e querer trabalhá-la assim
+           mesmo; o nosso papel é avisar, não impedir. */
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-400 italic">
+            Em qualificação: {alvo.decisores.length === 0 ? 'falta um decisor para abordar.' : 'ainda não passou na verificação.'}
+          </span>
+          {!confirmarNaoQualificado ? (
+            <button
+              onClick={() => setConfirmarNaoQualificado(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-amber-300 text-amber-700 text-sm font-medium hover:bg-amber-50"
+              title="Envia este Alvo ao CRM mesmo sem ele ter passado na verificação. Ele entra marcado como não qualificado."
+            >
+              <SendHorizonal size={14} />
+              Enviar assim mesmo
+            </button>
+          ) : (
+            <span className="inline-flex flex-wrap items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+              <span className="text-xs text-amber-800">
+                Ele entra no CRM marcado como <strong>não qualificado</strong>, com o que falta anotado na timeline. Não desconta da sua cota.
+              </span>
+              <button
+                onClick={() => pousar(true)}
+                disabled={sending}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 disabled:opacity-60"
+              >
+                {sending ? <Loader2 className="animate-spin" size={13} /> : <SendHorizonal size={13} />}
+                Enviar mesmo assim
+              </button>
+              <button
+                onClick={() => setConfirmarNaoQualificado(false)}
+                className="text-xs text-amber-700 font-medium hover:underline"
+              >
+                cancelar
+              </button>
+            </span>
+          )}
+        </div>
       )}
       {alvo.status !== 'ARCHIVED' && alvo.status !== 'DELIVERED' && (
         <button
