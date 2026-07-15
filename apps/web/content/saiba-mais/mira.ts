@@ -515,16 +515,17 @@ export const miraContent: SaibaMaisContent[] = [
     titulo: 'Releases dos Alvos',
     clientSafe: true,
     oQueE:
-      'A vigilância semanal das suas contas mapeadas. Toda semana os agentes varrem os Alvos em duas camadas: o registro oficial (Receita: mudança de sócio, situação, porte) e a pegada pública da conta (posts de LinkedIn quando indexados publicamente e notícias), trazendo só o que é relevante para as suas ofertas. Cada item explica por que importa, aponta a fonte e sugere o gancho de abordagem.',
+      'A vigilância semanal das suas contas mapeadas. Toda segunda os agentes varrem os Alvos em duas camadas: o registro oficial (Receita: mudança de sócio, situação, porte) e a pegada pública da conta (matérias de imprensa, posts de LinkedIn e Instagram quando indexados publicamente). Cada novidade vem com o link da fonte, a data em que foi publicada e uma leitura do que ela significa para o SEU catálogo: quando o fato evidencia uma necessidade, ele vira uma demanda no dossiê; quando abre espaço para um produto seu, vira uma oportunidade. Novidade com gancho de abordagem também vira tarefa em Tarefas, para não depender de você lembrar de abrir esta tela.',
     paraQueServe:
-      'Serve para reabordar na hora certa sem monitorar nada manualmente. O Alvo que não respondeu no mês passado pode ter acabado de postar no LinkedIn a expansão que muda a conversa. Os itens da Receita têm confiança alta (registro oficial); os da pegada pública vêm marcados com confiança menor e o link da fonte.',
+      'Serve para reabordar na hora certa sem monitorar nada manualmente, e para o Mira Score do Alvo subir sozinho quando a conta dá sinal de vida. O Alvo que não respondeu no mês passado pode ter acabado de anunciar a expansão que muda a conversa. A confiança da informação vem sempre à vista: 90% para o registro oficial da Receita, 75% para matéria de imprensa com data confirmada, 65% sem data, e 60% para post da própria conta (é a empresa falando de si, e isso vale menos que a imprensa). Data que não aparece na fonte fica em branco em vez de ser estimada.',
     comoImplementar: [
-      'Abra Releases dos Alvos toda semana (os não lidos ficam destacados).',
-      'Use o gancho sugerido para reabrir a conversa com contexto novo.',
+      'Cadastre o catálogo no Perfil de Prospecção: é ele que define o que é relevante e para qual produto cada novidade aponta.',
+      'Deixe as tarefas do Mira chegarem: a novidade com gancho aparece em Tarefas sozinha, sem você precisar abrir esta tela.',
+      'Abra o dossiê do Alvo para ver a matéria com a demanda e a oportunidade que ela gerou.',
       'Marque como lida para manter a caixa limpa.',
     ],
     exemploResultado:
-      'Um Alvo parado há 3 semanas anuncia a compra de um concorrente. O release chega segunda com o gancho "expansão gera integração de sistemas". O vendedor reaborda e a conta finalmente responde.',
+      'Um Alvo parado há 3 semanas anuncia no Instagram a inauguração de uma unidade nova. Na segunda o release chega com o link do post, vira a demanda "equipar a linha da unidade nova" e a oportunidade do seu produto de esteira transportadora, o Mira Score sobe de 45 para 60 sozinho e uma tarefa aparece em Tarefas com o gancho pronto.',
   },
   {
     featureKey: 'mira.relatorios',

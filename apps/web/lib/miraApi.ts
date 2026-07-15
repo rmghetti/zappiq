@@ -268,6 +268,7 @@ export interface MiraReleaseItem {
   titulo: string;
   resumo: string;
   url: string | null;
+  /** Data em que o fato foi PUBLICADO (só quando a fonte a mostra). */
   dataPublicacao: string | null;
   relevancia: string;
   anguloAbordagem: string | null;
@@ -275,6 +276,9 @@ export interface MiraReleaseItem {
   confianca: number;
   lida: boolean;
   createdAt: string;
+  /** A demanda que esta matéria evidenciou (dossiê do Alvo). */
+  demandaId?: string | null;
+  demanda?: { id: string; descricao: string; rank: number } | null;
   alvo?: { id: string; nome: string; miraScore: number | null };
 }
 

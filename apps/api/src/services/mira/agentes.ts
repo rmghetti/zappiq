@@ -16,7 +16,7 @@ import { Prisma, prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
 import { llmRouter } from '../llm/LLMRouter.js';
 import { buscaPublicaDisponivel } from './buscaPublica.js';
-import { pesquisarPegadaPublica, persistirReleaseDrafts } from './releasesPublico.js';
+import { pesquisarPegadaPublica, persistirPegadaPublica } from './releasesPublico.js';
 import { reavaliarAlvo } from './reavaliar.js';
 import { registrarPlanoAcao } from './planoAcao.js';
 
@@ -352,7 +352,11 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
   // ── Camada 3: persistência com confiança honesta ───────────────────
   const agora = new Date().toISOString();
   await (prisma as any).$transaction(async (tx: any) => {
-    await tx.miraOportunidade.deleteMany({ where: { alvoId: alvo.id } });
+    // Só as presumidas (origem ANALISE) são refeitas a cada análise. A
+    // oportunidade nascida de um fato publicado (origem RELEASE) sobrevive: o
+    // fato não deixou de ter acontecido porque o analista rodou de novo, e
+    // apagá-la faria o "Aprofundar" DESTRUIR o que o cron semanal achou.
+    await tx.miraOportunidade.deleteMany({ where: { alvoId: alvo.id, origem: 'ANALISE' } });
     for (const o of oportunidadesOk) {
       await tx.miraOportunidade.create({
         data: {
@@ -523,49 +527,12 @@ async function pesquisarEPreencherPegada(
     const r = await pesquisarPegadaPublica(organizationId, alvo, catalogo, sinais);
     if (r.erro) return { ...vazio, buscas: r.buscas, erro: r.erro };
 
-    const agora = new Date().toISOString();
-    const { criados: releasesCriados } = await persistirReleaseDrafts(organizationId, alvo.id, r.releases);
-
-    // Incumbentes: substitui o que a pesquisa anterior achou (a foto atual da
-    // conta é o que vale; fornecedor que saiu não deve seguir no dossiê).
-    if (r.incumbentes.length > 0) {
-      await prisma.miraIncumbente.deleteMany({ where: { alvoId: alvo.id } });
-      for (const i of r.incumbentes) {
-        await prisma.miraIncumbente.create({
-          data: {
-            alvoId: alvo.id,
-            fornecedor: i.fornecedor,
-            categoria: i.categoria,
-            evidencia: i.evidencia,
-            fonte: i.fonte,
-            deslocabilidade: i.deslocabilidade,
-          },
-        });
-      }
-    }
-
-    // Demandas evidenciadas convivem com as presumidas da Fase 1, em rank
-    // próprio: a presumida (confiança 55) diz "provavelmente dói isto"; a
-    // evidenciada (70) diz "a conta publicou que dói isto". Guardar as duas
-    // deixa o vendedor ver a diferença.
-    for (let idx = 0; idx < r.demandas.length; idx++) {
-      const d = r.demandas[idx];
-      const id = `${alvo.id}-evidenciada-${idx + 1}`;
-      await prisma.miraDemanda.upsert({
-        where: { id },
-        create: {
-          id,
-          alvoId: alvo.id,
-          rank: idx + 1,
-          descricao: d.descricao,
-          evidencia: d.evidencia,
-          fonte: d.fonte,
-          dataFonte: new Date(),
-          confianca: d.confianca,
-        },
-        update: { descricao: d.descricao, evidencia: d.evidencia, fonte: d.fonte, confianca: d.confianca },
-      });
-    }
+    // Persistência compartilhada com o cron semanal: as duas trilhas gravam
+    // pelo MESMO caminho, senão elas divergem com o tempo (foi exatamente o
+    // que aconteceu até 15/07/2026, quando o cron jogava fora a demanda que
+    // esta função gravava).
+    const persistido = await persistirPegadaPublica(organizationId, alvo.id, r);
+    const releasesCriados = persistido.releases;
 
     // ── Reavaliação: score, confiança e status com a evidência nova ──
     // Sem isto, a Fase 2 preencheria o dossiê e a NOTA continuaria a mesma.
@@ -578,8 +545,11 @@ async function pesquisarEPreencherPegada(
       rodou: true,
       buscas: r.buscas,
       releases: releasesCriados,
-      incumbentes: r.incumbentes.length,
-      demandasEvidenciadas: r.demandas.length,
+      incumbentes: persistido.incumbentes,
+      // O que foi GRAVADO, não o que o LLM devolveu: a demanda que já veio
+      // ligada a um release é pulada, e reportar `r.demandas.length` faria a
+      // tela prometer uma demanda que não está no dossiê.
+      demandasEvidenciadas: persistido.demandasEvidenciadas + persistido.demandasDeRelease,
       janela: r.janela,
       scoreAntes: rev?.scoreAntes ?? ((alvo.miraScore as number) ?? null),
       scoreDepois: rev?.scoreDepois ?? ((alvo.miraScore as number) ?? null),

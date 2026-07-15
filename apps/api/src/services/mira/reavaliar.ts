@@ -83,7 +83,18 @@ export function alvoPassaGate(alvo: {
 export async function reavaliarAlvo(organizationId: string, alvoId: string): Promise<ReavaliarResult | null> {
   const alvo = await (prisma as any).miraAlvo.findFirst({
     where: { id: alvoId, organizationId },
-    include: { decisores: true, demandas: true, incumbentes: true, releases: true },
+    include: {
+      decisores: true,
+      demandas: true,
+      incumbentes: true,
+      // `orderBy` explícito porque o `.find()` abaixo pega o PRIMEIRO com
+      // ângulo e o chama de "o mais recente". Sem ordenar, quem manda é a
+      // ordem que o Postgres devolver, e a janela podia vir de um release
+      // velho enquanto uma matéria desta semana era ignorada.
+      // `dataPublicacao` primeiro (quando a fonte a mostra) e `createdAt` de
+      // desempate: a data do FATO vale mais que a data em que o achamos.
+      releases: { orderBy: [{ dataPublicacao: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }] },
+    },
   });
   if (!alvo) return null;
 

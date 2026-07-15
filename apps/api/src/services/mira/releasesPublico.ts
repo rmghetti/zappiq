@@ -24,6 +24,55 @@ export interface ReleaseDraft {
   anguloAbordagem: string | null;
   produtoRelacionado: string | null;
   confianca: number;
+  /** Data em que o fato foi PUBLICADO, quando a própria fonte a mostra. */
+  dataPublicacao: Date | null;
+  /** A necessidade que ESTE fato evidencia (vira MiraDemanda ligada). */
+  demandaGerada: string | null;
+  /** O espaço que ESTE fato abre no catálogo (vira MiraOportunidade ligada). */
+  oportunidade: { produto: string; racional: string } | null;
+}
+
+/**
+ * Confiança de um release pela QUALIDADE da fonte, não fixa.
+ *
+ * Antes era 60 para tudo que viesse da web. Mas "a Exame publicou que a
+ * empresa investiu R$ 40mi, em 12/06" e "a própria empresa postou no
+ * Instagram que está crescendo" não valem a mesma coisa, e o vendedor merece
+ * enxergar a diferença antes de citar o fato numa reunião.
+ *
+ * O 90 fica reservado ao registro oficial (Receita), que o cron grava.
+ */
+export function confiancaDaFonte(url: string, temDataVerificada: boolean): number {
+  const u = (url || '').toLowerCase();
+  // Post da própria conta: é a empresa falando de si. Fato real, viés óbvio.
+  if (/linkedin\.com|instagram\.com|facebook\.com|twitter\.com|x\.com/.test(u)) return 60;
+  // Matéria/site de terceiro com data que a fonte mostra: o melhor que a web dá.
+  if (temDataVerificada) return 75;
+  return 65;
+}
+
+/**
+ * Aceita a data só se a fonte realmente a sustenta.
+ *
+ * O LLM só deve devolver data que aparece no resultado, mas "deve" não é
+ * garantia: data inventada num dossiê é pior que data ausente, porque o
+ * vendedor cita "vi que vocês anunciaram em março" numa reunião e queima a
+ * conta. Então o verificador é burro de propósito: data não parseável, no
+ * futuro, ou velha demais para ser novidade não entra.
+ */
+export function verificarDataPublicacao(bruta: unknown, agora = new Date()): Date | null {
+  if (typeof bruta !== 'string') return null;
+  const txt = bruta.trim();
+  if (!txt || norm(txt) === 'null') return null;
+  // Só formato ISO (YYYY-MM-DD): é o que o prompt pede, e aceitar formato
+  // livre aqui abriria margem para "12/06" virar mês errado.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(txt)) return null;
+  const d = new Date(`${txt}T12:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  if (d.getTime() > agora.getTime()) return null; // futuro não é notícia
+  const CINCO_ANOS_MS = 5 * 365 * 86400000;
+  if (agora.getTime() - d.getTime() > CINCO_ANOS_MS) return null; // não é novidade
+  return d;
 }
 
 /** Fornecedor que a conta JÁ usa, achado na pegada pública (nunca presumido). */
@@ -57,6 +106,23 @@ export interface PegadaPublicaResult {
 
 const norm = (s: string) =>
   (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+
+/**
+ * Id estável a partir da URL da matéria, para a demanda/oportunidade nascida
+ * dela serem idempotentes: a mesma matéria reencontrada atualiza a linha em vez
+ * de empilhar uma cópia. Curto de propósito (o id do Prisma tem limite prático
+ * e o alvoId já vai junto no prefixo); colisão entre duas URLs DO MESMO Alvo é
+ * improvável e o custo dela seria uma demanda sobrescrita, não um vazamento.
+ */
+export function hashUrl(url: string): string {
+  let h = 2166136261; // FNV-1a
+  const s = (url || '').trim().toLowerCase();
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
 
 function extractJson(text: string): any | null {
   const cleaned = (text || '').replace(/```(?:json)?/gi, '').trim();
@@ -120,11 +186,20 @@ export async function pesquisarPegadaPublica(
   const empresa = String(alvo.nomeFantasia || alvo.nome || '').trim();
   if (empresa.length < 2) return vazio;
 
-  // Tres trilhas: posts do LinkedIn (o pedido do cliente), noticias/novidades
-  // e a pegada de FORNECEDOR (quem ja atende a conta hoje).
+  // Quatro trilhas. As duas primeiras sao a conta FALANDO DE SI (redes), a
+  // terceira e o que SAI SOBRE ela (imprensa), a quarta e quem ja a atende.
+  //
+  // O Instagram entrou a pedido do Rodrigo (15/07/2026): muita PME brasileira
+  // anuncia obra, expansao e contratacao la e em nenhum outro lugar. So pega o
+  // que o buscador indexou publicamente, nunca sessao logada.
+  //
+  // Custo: 4 buscas por Alvo (era 3). Com o teto do ciclo em 60 buscas, sao
+  // 15 Alvos por ciclo em vez de 20 — cabe no plano da Brave e o cron ja
+  // ordena por score, entao os 15 sao os melhores.
   const queries = [
-    `"${empresa}" site:linkedin.com/posts`,
+    `"${empresa}" (site:linkedin.com/posts OR site:instagram.com)`,
     `"${empresa}" (lancamento OR expansao OR investimento OR contratacao OR inauguracao OR parceria OR aquisicao OR novo)`,
+    `"${empresa}" (noticia OR anuncio OR "anunciou" OR "vai investir" OR "assinou" OR entrevista)`,
     `"${empresa}" (fornecedor OR parceiro OR "em parceria com" OR contratou OR implantou OR "cliente da")`,
   ];
 
@@ -168,8 +243,11 @@ export async function pesquisarPegadaPublica(
     '3. "produtoRelacionado" deve ser um nome EXATO do catalogo, ou null.',
     '4. Em "incumbentes", so cite fornecedor cujo NOME aparece literalmente no resultado. Se o texto nao nomeia quem atende a conta, devolva lista vazia. NUNCA presuma o fornecedor pelo setor.',
     '5. Em "demandas", so inclua o que o resultado EVIDENCIA (a conta disse/publicou/saiu na noticia). Presuncao sua nao entra aqui.',
-    '6. Portugues do Brasil, frases curtas, sem travessao.',
-    '7. Responda EXCLUSIVAMENTE com o JSON pedido, sem texto antes ou depois, sem cercas de codigo.',
+    '6. "dataPublicacao": SO se a data aparecer no resultado, no formato AAAA-MM-DD. Se o resultado nao mostra data, devolva null. NUNCA estime, NUNCA use a data de hoje.',
+    '7. "demandaGerada": a necessidade concreta que ESTE fato evidencia (ex.: "vai inaugurar unidade nova" evidencia demanda de montagem/equipar a unidade). Null se o fato nao evidencia necessidade nenhuma.',
+    '8. "oportunidade": o espaco que ESTE fato abre para UM produto do catalogo, com o racional ligando o fato ao produto. "produto" precisa ser nome EXATO do catalogo. Null se nenhum produto do catalogo se conecta ao fato.',
+    '9. Portugues do Brasil, frases curtas, sem travessao.',
+    '10. Responda EXCLUSIVAMENTE com o JSON pedido, sem texto antes ou depois, sem cercas de codigo.',
   ].join('\n');
 
   const user = [
@@ -183,7 +261,7 @@ export async function pesquisarPegadaPublica(
     'Devolva este JSON (listas vazias quando os resultados nao sustentarem nada):',
     '{',
     '  "releases": [',
-    '    {"fonteIndice": 1, "titulo": "titulo curto do fato", "resumo": "1-2 frases so com o que esta no resultado", "relevancia": "por que importa para ESTE cliente (1 frase)", "angulo": "gancho de abordagem (1 frase)", "produtoRelacionado": "nome EXATO do catalogo ou null"}',
+    '    {"fonteIndice": 1, "titulo": "titulo curto do fato", "resumo": "1-2 frases so com o que esta no resultado", "dataPublicacao": "AAAA-MM-DD se aparecer no resultado, senao null", "relevancia": "por que importa para ESTE cliente (1 frase)", "angulo": "gancho de abordagem (1 frase)", "produtoRelacionado": "nome EXATO do catalogo ou null", "demandaGerada": "a necessidade que este fato evidencia (1 frase) ou null", "oportunidade": {"produto": "nome EXATO do catalogo", "racional": "por que este fato abre espaco para este produto (1 frase)"}}',
     '  ],',
     '  "incumbentes": [',
     '    {"fonteIndice": 1, "fornecedor": "nome EXATO como aparece no resultado", "categoria": "o que ele fornece (curto) ou null", "evidencia": "o trecho/fato que mostra a relacao (1 frase)", "deslocabilidade": "ALTA|MEDIA|BAIXA + motivo curto"}',
@@ -225,15 +303,34 @@ export async function pesquisarPegadaPublica(
     if (titulo.length < 4 || resumo.length < 10) continue;
     const prodBruto = r?.produtoRelacionado ? norm(String(r.produtoRelacionado)) : '';
     const produtoRelacionado = prodBruto ? catalogoNorm.get(prodBruto) ?? null : null;
-    const ehLinkedin = /linkedin\.com/.test(fonte.url);
+    const dataPublicacao = verificarDataPublicacao(r?.dataPublicacao);
+
+    // Sinergia: a demanda e a oportunidade que ESTE fato sustenta. Passam pelo
+    // mesmo crivo do resto — a oportunidade so vale se o produto existe no
+    // catalogo (nome exato), senao e o LLM inventando linha de produto.
+    const demandaBruta = r?.demandaGerada ? String(r.demandaGerada).trim() : '';
+    const demandaGerada = demandaBruta.length >= 10 && norm(demandaBruta) !== 'null' ? demandaBruta.slice(0, 500) : null;
+
+    let oportunidade: { produto: string; racional: string } | null = null;
+    const oProdBruto = r?.oportunidade?.produto ? norm(String(r.oportunidade.produto)) : '';
+    const oProduto = oProdBruto ? catalogoNorm.get(oProdBruto) ?? null : null;
+    const oRacional = r?.oportunidade?.racional ? String(r.oportunidade.racional).trim() : '';
+    if (oProduto && oRacional.length >= 10) {
+      oportunidade = { produto: oProduto, racional: oRacional.slice(0, 500) };
+    }
+
+    const prefixo = /instagram\.com/.test(fonte.url) ? 'Instagram: ' : /linkedin\.com/.test(fonte.url) ? 'LinkedIn: ' : '';
     releases.push({
-      titulo: (ehLinkedin ? 'LinkedIn: ' : '') + titulo.slice(0, 180),
+      titulo: prefixo + titulo.slice(0, 180),
       resumo: resumo.slice(0, 600),
       url: fonte.url,
       relevancia: String(r?.relevancia ?? '').slice(0, 400) || 'Novidade recente da conta no radar publico.',
       anguloAbordagem: r?.angulo ? String(r.angulo).slice(0, 300) : null,
       produtoRelacionado,
-      confianca: 60, // pegada publica (web), abaixo do diff oficial da Receita (90)
+      confianca: confiancaDaFonte(fonte.url, dataPublicacao !== null),
+      dataPublicacao,
+      demandaGerada,
+      oportunidade,
     });
   }
 
@@ -284,37 +381,172 @@ export async function pesquisarPegadaPublica(
 }
 
 /**
- * Fachada para o cron semanal, que só quer os releases. Mantida para o cron
- * não precisar conhecer incumbente/demanda: ele publica novidade, não monta
- * dossiê.
+ * Grava a pegada pública INTEIRA de um Alvo: releases (com a demanda e a
+ * oportunidade que cada um gera), incumbentes e as demandas evidenciadas que
+ * não vieram de release.
+ *
+ * Existe para o cron semanal e o botão "Aprofundar com IA" gravarem
+ * exatamente igual. Antes cada um tinha o seu caminho: o botão persistia o
+ * dossiê inteiro, o cron só os releases e jogava fora demanda e incumbente que
+ * o MESMO LLM já tinha produzido na MESMA chamada. Não era decisão de custo,
+ * era divergência de código — e é a família de bug que já custou caro aqui.
+ */
+export async function persistirPegadaPublica(
+  organizationId: string,
+  alvoId: string,
+  r: PegadaPublicaResult
+): Promise<{
+  releases: number;
+  demandasDeRelease: number;
+  oportunidades: number;
+  incumbentes: number;
+  demandasEvidenciadas: number;
+}> {
+  const res = await persistirReleaseDrafts(organizationId, alvoId, r.releases);
+
+  // Incumbentes: substitui o que a pesquisa anterior achou (a foto atual da
+  // conta é o que vale; fornecedor que saiu não deve seguir no dossiê). Só
+  // apaga quando achou alguém — senão uma busca ruim zeraria o que já sabíamos.
+  if (r.incumbentes.length > 0) {
+    await prisma.miraIncumbente.deleteMany({ where: { alvoId } });
+    for (const i of r.incumbentes) {
+      await prisma.miraIncumbente.create({
+        data: {
+          alvoId,
+          fornecedor: i.fornecedor,
+          categoria: i.categoria,
+          evidencia: i.evidencia,
+          fonte: i.fonte,
+          deslocabilidade: i.deslocabilidade,
+        },
+      });
+    }
+  }
+
+  // Demandas evidenciadas convivem com as presumidas da Fase 1, em rank
+  // próprio: a presumida (confiança 55) diz "provavelmente dói isto"; a
+  // evidenciada (70) diz "a conta publicou que dói isto".
+  //
+  // Uma demanda cuja fonte JÁ virou release com demanda ligada é pulada: o
+  // mesmo LLM devolve `demandas[]` e `releases[].demandaGerada` lendo o mesmo
+  // material, então sem este filtro a mesma necessidade entraria duas vezes
+  // (uma sem FK, outra com) e `demandasEvidenciadas` contaria em dobro,
+  // inflando o score com evidência que é uma só.
+  const urlsComDemandaDeRelease = new Set(r.releases.filter((rel) => rel.demandaGerada).map((rel) => rel.url));
+  let demandasEvidenciadas = 0;
+  for (let idx = 0; idx < r.demandas.length; idx++) {
+    const d = r.demandas[idx];
+    if (urlsComDemandaDeRelease.has(d.fonte)) continue;
+    const id = `${alvoId}-evidenciada-${idx + 1}`;
+    await prisma.miraDemanda.upsert({
+      where: { id },
+      create: {
+        id,
+        alvoId,
+        rank: idx + 1,
+        descricao: d.descricao,
+        evidencia: d.evidencia,
+        fonte: d.fonte,
+        dataFonte: new Date(),
+        confianca: d.confianca,
+      },
+      update: { descricao: d.descricao, evidencia: d.evidencia, fonte: d.fonte, confianca: d.confianca },
+    });
+    demandasEvidenciadas++;
+  }
+
+  return {
+    releases: res.criados,
+    demandasDeRelease: res.demandasCriadas,
+    oportunidades: res.oportunidadesCriadas,
+    incumbentes: r.incumbentes.length,
+    demandasEvidenciadas,
+  };
+}
+
+/**
+ * Fachada para o cron semanal.
+ *
+ * Era "o cron só quer os releases, ele publica novidade e não monta dossiê".
+ * Isso jogava fora demandas e incumbentes que a MESMA busca e o MESMO LLM já
+ * tinham produzido e que já tinham sido pagos — a diferença entre o cron e o
+ * botão "Aprofundar" não era de custo, era de código. Agora devolve tudo, e
+ * quem chama decide o que persistir.
  */
 export async function buscarReleasesPublicos(
   organizationId: string,
   alvo: { id: string; nome: string; nomeFantasia?: string | null; municipio?: string | null; uf?: string | null },
   catalogo: { nome: string }[],
   sinais?: SinaisDoPerfil
-): Promise<{ drafts: ReleaseDraft[]; buscas: number; erro?: string }> {
+): Promise<PegadaPublicaResult & { drafts: ReleaseDraft[] }> {
   const r = await pesquisarPegadaPublica(organizationId, alvo, catalogo, sinais);
-  return { drafts: r.releases, buscas: r.buscas, ...(r.erro ? { erro: r.erro } : {}) };
+  return { ...r, drafts: r.releases };
 }
 
 /**
- * Grava os drafts como MiraRelease, com o MESMO dedup do cron (mesma URL nos
- * últimos 45 dias não repete). Compartilhado entre o cron semanal e o botão
- * "Aprofundar com IA" (Fase 2) para as duas trilhas gravarem exatamente igual.
+ * Grava os drafts como MiraRelease e, quando o fato sustenta, a DEMANDA e a
+ * OPORTUNIDADE que ele gera — ligadas ao release por FK.
+ *
+ * Compartilhado entre o cron semanal e o botão "Aprofundar com IA" (Fase 2)
+ * para as duas trilhas gravarem exatamente igual. Até 15/07/2026 este era o
+ * ponto onde a inteligência se perdia: o LLM já devolvia a sinergia, e aqui a
+ * gente gravava só o título e o link. O vendedor via "saiu uma matéria" e
+ * tinha que descobrir sozinho o que fazer com ela.
+ *
+ * Dedup por URL nos últimos 45 dias (mesmo critério do cron desde a
+ * unificação): a mesma matéria não vira duas linhas.
  */
 export async function persistirReleaseDrafts(
   organizationId: string,
   alvoId: string,
   drafts: ReleaseDraft[]
-): Promise<{ criados: number }> {
+): Promise<{ criados: number; demandasCriadas: number; oportunidadesCriadas: number }> {
   let criados = 0;
+  let demandasCriadas = 0;
+  let oportunidadesCriadas = 0;
+
   for (const d of drafts) {
     const dup = await (prisma as any).miraRelease.findFirst({
       where: { alvoId, url: d.url, createdAt: { gte: new Date(Date.now() - 45 * 86400000) } },
       select: { id: true },
     });
     if (dup) continue;
+
+    // A demanda nasce ANTES do release, para o release já apontar para ela.
+    // Id determinístico pela URL: se a mesma matéria voltar (fora da janela de
+    // dedup), atualiza a demanda em vez de empilhar outra igual.
+    let demandaId: string | null = null;
+    if (d.demandaGerada) {
+      const id = `${alvoId}-release-${hashUrl(d.url)}`;
+      const dem = await prisma.miraDemanda.upsert({
+        where: { id },
+        create: {
+          id,
+          alvoId,
+          // rank 3: as demandas nascidas de matéria convivem com a presumida
+          // (rank 1-2 da Fase 1) em vez de sobrescrevê-la. São coisas
+          // diferentes: uma é "achamos que dói", a outra é "saiu na imprensa".
+          rank: 3,
+          descricao: d.demandaGerada,
+          evidencia: d.resumo,
+          fonte: d.url,
+          // A data da FONTE é a da publicação, não a de hoje. `null` quando a
+          // fonte não mostrou data é honesto; `new Date()` seria mentira.
+          dataFonte: d.dataPublicacao,
+          confianca: d.confianca,
+        },
+        update: {
+          descricao: d.demandaGerada,
+          evidencia: d.resumo,
+          fonte: d.url,
+          dataFonte: d.dataPublicacao,
+          confianca: d.confianca,
+        },
+      });
+      demandaId = dem.id;
+      demandasCriadas++;
+    }
+
     await prisma.miraRelease.create({
       data: {
         organizationId,
@@ -322,13 +554,36 @@ export async function persistirReleaseDrafts(
         titulo: d.titulo,
         resumo: d.resumo,
         url: d.url,
+        dataPublicacao: d.dataPublicacao,
         relevancia: d.relevancia,
         anguloAbordagem: d.anguloAbordagem,
         produtoRelacionado: d.produtoRelacionado,
+        demandaId,
         confianca: d.confianca,
       },
     });
     criados++;
+
+    // Oportunidade com origem RELEASE: sobrevive ao próximo "Aprofundar com
+    // IA", que apaga só as de origem ANALISE (a presunção da Fase 1).
+    if (d.oportunidade) {
+      const oid = `${alvoId}-release-op-${hashUrl(d.url)}`;
+      await prisma.miraOportunidade.upsert({
+        where: { id: oid },
+        create: {
+          id: oid,
+          alvoId,
+          rank: 3,
+          produto: d.oportunidade.produto,
+          demandaRank: demandaId ? 3 : null,
+          racional: d.oportunidade.racional,
+          origem: 'RELEASE',
+          fonte: d.url,
+        },
+        update: { produto: d.oportunidade.produto, racional: d.oportunidade.racional, fonte: d.url },
+      });
+      oportunidadesCriadas++;
+    }
   }
-  return { criados };
+  return { criados, demandasCriadas, oportunidadesCriadas };
 }

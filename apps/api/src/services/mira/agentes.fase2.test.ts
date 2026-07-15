@@ -20,6 +20,9 @@ const incumbenteDeleteMany = vi.fn();
 const incumbenteCreate = vi.fn();
 const demandaUpsert = vi.fn();
 const alvoUpdate = vi.fn();
+const releaseFindFirst = vi.fn();
+const releaseCreate = vi.fn();
+const oportunidadeUpsert = vi.fn();
 
 vi.mock('@zappiq/database', () => ({
   Prisma: {},
@@ -31,6 +34,11 @@ vi.mock('@zappiq/database', () => ({
       create: (...a: any[]) => incumbenteCreate(...a),
     },
     miraDemanda: { upsert: (...a: any[]) => demandaUpsert(...a) },
+    miraRelease: {
+      findFirst: (...a: any[]) => releaseFindFirst(...a),
+      create: (...a: any[]) => releaseCreate(...a),
+    },
+    miraOportunidade: { upsert: (...a: any[]) => oportunidadeUpsert(...a) },
     $transaction: async (fn: any) =>
       fn({
         miraOportunidade: { deleteMany: vi.fn(), create: vi.fn() },
@@ -47,11 +55,14 @@ vi.mock('../llm/LLMRouter.js', () => ({ llmRouter: { complete: (...a: any[]) => 
 const buscaPublicaDisponivel = vi.fn();
 vi.mock('./buscaPublica.js', () => ({ buscaPublicaDisponivel: () => buscaPublicaDisponivel() }));
 
+// Só a PESQUISA é mockada. A persistência (`persistirPegadaPublica`) roda de
+// verdade contra o prisma mockado acima, porque é exatamente o que estes
+// testes existem para provar: que o incumbente e a demanda chegam ao banco.
+// Mockar a função de gravação faria o teste passar sem gravar nada.
 const pesquisarPegadaPublica = vi.fn();
-const persistirReleaseDrafts = vi.fn();
-vi.mock('./releasesPublico.js', () => ({
+vi.mock('./releasesPublico.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./releasesPublico.js')>()),
   pesquisarPegadaPublica: (...a: any[]) => pesquisarPegadaPublica(...a),
-  persistirReleaseDrafts: (...a: any[]) => persistirReleaseDrafts(...a),
 }));
 vi.mock('./cagedMirror.js', () => ({ buscarSinalSetorial: vi.fn().mockResolvedValue(null) }));
 
@@ -106,7 +117,8 @@ beforeEach(() => {
   findUniquePerfil.mockResolvedValue(PERFIL);
   complete.mockResolvedValue({ text: RESPOSTA_FASE1 });
   buscaPublicaDisponivel.mockReturnValue(true);
-  persistirReleaseDrafts.mockResolvedValue({ criados: 0 });
+  releaseFindFirst.mockResolvedValue(null);
+  releaseCreate.mockResolvedValue({ id: 'rel-1' });
   alvoUpdate.mockResolvedValue({});
   incumbenteDeleteMany.mockResolvedValue({});
   incumbenteCreate.mockResolvedValue({});
