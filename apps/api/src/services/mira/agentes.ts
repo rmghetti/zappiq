@@ -12,9 +12,13 @@
  * chamada por Alvo (fit de portfólio + roteiro + resumo juntos), acionada
  * por botão no dossiê (não em lote automático nesta fase).
  */
-import { prisma } from '@zappiq/database';
+import { Prisma, prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
 import { llmRouter } from '../llm/LLMRouter.js';
+import { buscaPublicaDisponivel } from './buscaPublica.js';
+import { pesquisarPegadaPublica, persistirReleaseDrafts } from './releasesPublico.js';
+import { computeMiraScoreV1, computeMiraScoreB2C } from './score.js';
+import { buscarSinalSetorial } from './cagedMirror.js';
 
 const CONFIANCA_INFERENCIA = 55;
 
@@ -130,6 +134,20 @@ export interface AprofundarResult {
   /** Critérios de corte do Perfil que o analista confirmou nos dados. */
   alertasCorte?: string[];
   motivo?: string;
+  /** Fase 2 (pesquisa na web): o que a pegada pública da conta rendeu. */
+  pesquisaWeb?: {
+    rodou: boolean;
+    buscas: number;
+    releases: number;
+    incumbentes: number;
+    demandasEvidenciadas: number;
+    janela: string | null;
+    /** Score antes → depois do recálculo com a evidência nova. */
+    scoreAntes: number | null;
+    scoreDepois: number | null;
+    /** A busca quebrou (fonte fora do ar). Não é "não achei nada". */
+    erro?: string;
+  };
 }
 
 export async function aprofundarAlvo(organizationId: string, alvoId: string): Promise<AprofundarResult> {
@@ -369,8 +387,11 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
     });
   });
 
+  // ── Fase 2: pesquisa na web (pegada pública da conta) ──────────────
+  const pesquisaWeb = await pesquisarEPreencherPegada(organizationId, alvo, catalogo, perfil);
+
   logger.info(
-    `[MiraAgentes] alvo=${alvoId} aprofundado: ${oportunidadesOk.length} oportunidades, ${roteirosOk.length} roteiros, ${alertasCorte.length} alertas de corte, ${descartados.length} descartados pelo verificador`
+    `[MiraAgentes] alvo=${alvoId} aprofundado: ${oportunidadesOk.length} oportunidades, ${roteirosOk.length} roteiros, ${alertasCorte.length} alertas de corte, ${descartados.length} descartados pelo verificador; web: rodou=${pesquisaWeb.rodou} releases=${pesquisaWeb.releases} incumbentes=${pesquisaWeb.incumbentes} demandas=${pesquisaWeb.demandasEvidenciadas} score=${pesquisaWeb.scoreAntes}→${pesquisaWeb.scoreDepois}`
   );
   return {
     ok: true,
@@ -378,5 +399,176 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
     roteiros: roteirosOk.length,
     descartadosPeloVerificador: descartados,
     alertasCorte,
+    pesquisaWeb,
   };
+}
+
+/**
+ * Fase 2 do "Aprofundar com IA": a pesquisa na web que a Fase 1 não faz.
+ *
+ * A Fase 1 é deliberadamente cega ao mundo externo: cruza o que a Receita já
+ * verificou com o catálogo do cliente, e a "demanda" que ela produz é
+ * PRESUNÇÃO honesta (confiança 55). Isto aqui é o oposto: sai e procura o que
+ * a conta publicou, quem já a atende e o que aconteceu de novo, e cada item
+ * precisa apontar para uma URL real.
+ *
+ * Por que existe (pedido do Rodrigo, 15/07/2026): os Alvos chegavam com
+ * "Demandas recentes", "Fornecedores atuais" e "Releases" vazios. Não era
+ * falta de dado no mundo, era falta de quem fosse buscar: `miraIncumbente`
+ * não tinha UM escritor no código inteiro, e releases só nasciam num cron
+ * semanal. O botão nunca pesquisou nada.
+ *
+ * Best-effort de propósito: se a web falhar, a Fase 1 já entregou valor
+ * (oportunidades + roteiros) e o cliente fica com isso + um aviso honesto,
+ * em vez de perder tudo. Mas NUNCA finge: `erro` distingue fonte quebrada de
+ * conta sem pegada pública.
+ */
+async function pesquisarEPreencherPegada(
+  organizationId: string,
+  alvo: any,
+  catalogo: { nome: string }[],
+  perfil: any
+): Promise<NonNullable<AprofundarResult['pesquisaWeb']>> {
+  const vazio = {
+    rodou: false,
+    buscas: 0,
+    releases: 0,
+    incumbentes: 0,
+    demandasEvidenciadas: 0,
+    janela: null as string | null,
+    scoreAntes: (alvo.miraScore as number) ?? null,
+    scoreDepois: (alvo.miraScore as number) ?? null,
+  };
+  if (!buscaPublicaDisponivel()) return { ...vazio, erro: 'fonte_indisponivel' };
+
+  try {
+    const sinais = {
+      doresResolvidas: Array.isArray(perfil?.doresResolvidas) ? perfil.doresResolvidas : [],
+      sinaisIntencao: Array.isArray(perfil?.alvoB2B?.sinaisIntencao) ? perfil.alvoB2B.sinaisIntencao : [],
+    };
+    const r = await pesquisarPegadaPublica(organizationId, alvo, catalogo, sinais);
+    if (r.erro) return { ...vazio, buscas: r.buscas, erro: r.erro };
+
+    const agora = new Date().toISOString();
+    const { criados: releasesCriados } = await persistirReleaseDrafts(organizationId, alvo.id, r.releases);
+
+    // Incumbentes: substitui o que a pesquisa anterior achou (a foto atual da
+    // conta é o que vale; fornecedor que saiu não deve seguir no dossiê).
+    if (r.incumbentes.length > 0) {
+      await prisma.miraIncumbente.deleteMany({ where: { alvoId: alvo.id } });
+      for (const i of r.incumbentes) {
+        await prisma.miraIncumbente.create({
+          data: {
+            alvoId: alvo.id,
+            fornecedor: i.fornecedor,
+            categoria: i.categoria,
+            evidencia: i.evidencia,
+            fonte: i.fonte,
+            deslocabilidade: i.deslocabilidade,
+          },
+        });
+      }
+    }
+
+    // Demandas evidenciadas convivem com as presumidas da Fase 1, em rank
+    // próprio: a presumida (confiança 55) diz "provavelmente dói isto"; a
+    // evidenciada (70) diz "a conta publicou que dói isto". Guardar as duas
+    // deixa o vendedor ver a diferença.
+    for (let idx = 0; idx < r.demandas.length; idx++) {
+      const d = r.demandas[idx];
+      const id = `${alvo.id}-evidenciada-${idx + 1}`;
+      await prisma.miraDemanda.upsert({
+        where: { id },
+        create: {
+          id,
+          alvoId: alvo.id,
+          rank: idx + 1,
+          descricao: d.descricao,
+          evidencia: d.evidencia,
+          fonte: d.fonte,
+          dataFonte: new Date(),
+          confianca: d.confianca,
+        },
+        update: { descricao: d.descricao, evidencia: d.evidencia, fonte: d.fonte, confianca: d.confianca },
+      });
+    }
+
+    // ── Recálculo do score com a evidência nova ──────────────────────
+    // Sem isto, a Fase 2 preencheria o dossiê e a NOTA continuaria a mesma:
+    // o fator "Janela e incumbente" (15 pontos) ficou zerado desde sempre
+    // justamente porque nada nunca o alimentava e nada nunca recalculava.
+    const evidencia = {
+      pesquisaRodou: true,
+      demandasEvidenciadas: r.demandas.length,
+      incumbentes: r.incumbentes.length,
+      janela: r.janela,
+    };
+    const scoreAntes = (alvo.miraScore as number) ?? null;
+    let scoreDepois = scoreAntes;
+    try {
+      const kind: 'B2B' | 'B2C' = alvo.kind === 'B2C' ? 'B2C' : 'B2B';
+      const decisoresCount = Array.isArray(alvo.decisores) ? alvo.decisores.length : 0;
+      const novo =
+        kind === 'B2C'
+          ? computeMiraScoreB2C(
+              perfil ?? {},
+              {
+                nome: alvo.nome,
+                telefone: alvo.telefone ?? null,
+                site: alvo.site ?? null,
+                rating: null,
+                totalAvaliacoes: null,
+              },
+              { municipio: alvo.municipio ?? null, uf: alvo.uf ?? null },
+              evidencia
+            )
+          : computeMiraScoreV1(
+              perfil ?? {},
+              {
+                cnpj: alvo.cnpj ?? '',
+                razaoSocial: alvo.nome,
+                nomeFantasia: alvo.nomeFantasia ?? null,
+                cnae: alvo.cnae ?? null,
+                cnaeDescricao: null,
+                porte: alvo.porte ?? null,
+                capitalSocial: alvo.capitalSocial ?? null,
+                naturezaJuridica: null,
+                situacaoCadastral: alvo.situacaoCadastral ?? null,
+                municipio: alvo.municipio ?? null,
+                uf: alvo.uf ?? null,
+                telefone: alvo.telefone ?? null,
+                dataInicioAtividade: null,
+                optanteSimples: null,
+                qsa: [],
+                fonteUrl: '',
+              } as any,
+              decisoresCount,
+              await buscarSinalSetorial(alvo.cnae ?? null, alvo.uf ?? null).catch(() => null),
+              evidencia
+            );
+      await prisma.miraAlvo.update({
+        where: { id: alvo.id },
+        data: { miraScore: novo.score, scoreBreakdown: novo.breakdown as unknown as Prisma.InputJsonValue },
+      });
+      scoreDepois = novo.score;
+    } catch (err: any) {
+      // O dossiê já foi preenchido; nota velha com dossiê novo é ruim, mas
+      // muito melhor que perder a pesquisa inteira por causa do recálculo.
+      logger.error(`[MiraAgentes] recálculo do score falhou alvo=${alvo.id}: ${err?.message ?? err}`);
+    }
+
+    return {
+      rodou: true,
+      buscas: r.buscas,
+      releases: releasesCriados,
+      incumbentes: r.incumbentes.length,
+      demandasEvidenciadas: r.demandas.length,
+      janela: r.janela,
+      scoreAntes,
+      scoreDepois,
+    };
+  } catch (err: any) {
+    logger.error(`[MiraAgentes] Fase 2 (web) falhou alvo=${alvo.id}: ${err?.message ?? err}`);
+    return { ...vazio, erro: String(err?.message ?? err) };
+  }
 }

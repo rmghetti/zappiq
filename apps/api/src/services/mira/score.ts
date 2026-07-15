@@ -48,6 +48,26 @@ export interface SinalSetorial {
   ano: number;
 }
 
+/**
+ * O que a pesquisa de pegada pública (Fase 2 do "Aprofundar com IA") achou.
+ *
+ * Ausente na DESCOBERTA: ali o Alvo acabou de nascer e nada foi pesquisado
+ * ainda, então os fatores que dependem de pesquisa valem 0 e o motivo diz
+ * isso. Presente no RECÁLCULO pós-Aprofundar. A diferença entre os dois é o
+ * que separa "ainda não procuramos" de "procuramos e não achamos" — os dois
+ * dão 0 pontos, mas só o segundo é uma informação sobre a conta.
+ */
+export interface EvidenciaPesquisa {
+  /** A busca web rodou de fato (distingue "não achei" de "não procurei"). */
+  pesquisaRodou: boolean;
+  /** Demandas com fonte externa (não presunção do analista). */
+  demandasEvidenciadas: number;
+  /** Fornecedores atuais identificados com evidência. */
+  incumbentes: number;
+  /** Gatilho de janela de entrada, quando o material sustenta um. */
+  janela: string | null;
+}
+
 const fmtBRL = (v: number): string =>
   v >= 1_000_000 ? `R$ ${(v / 1_000_000).toFixed(1).replace('.', ',')} mi` : `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
 
@@ -97,6 +117,44 @@ function matchPorte(perfil: PerfilLike, alvo: CnpjData): boolean {
   });
 }
 
+/**
+ * Fator 5 (Janela e incumbente, 15) — compartilhado por B2B e B2C.
+ *
+ * Os três estados são deliberadamente distintos no motivo, mesmo quando dois
+ * deles dão 0:
+ *   - nunca pesquisou       → 0, e a tela convida a clicar em Aprofundar
+ *   - pesquisou e não achou → 0, mas isso é INFORMAÇÃO (conta sem pegada
+ *                             pública, ou fornecedor que ninguém publiciza)
+ *   - achou                 → pontua e diz o quê
+ */
+function fatorJanelaIncumbente(evidencia?: EvidenciaPesquisa | null): ScoreFator {
+  const base = { nome: 'Janela e incumbente', peso: 15 };
+  if (!evidencia?.pesquisaRodou) {
+    return {
+      ...base,
+      valor: 0,
+      motivo: 'janela de entrada e fornecedor atual entram quando você clicar em Aprofundar com IA',
+    };
+  }
+  let v = 0;
+  const motivos: string[] = [];
+  if (evidencia.janela) {
+    v += 8;
+    motivos.push(`janela de entrada: ${evidencia.janela}`);
+  }
+  if (evidencia.incumbentes > 0) {
+    // Saber quem atende hoje é acionável dos dois lados: dá o argumento de
+    // deslocamento e evita a abordagem ingênua de quem acha que a conta está
+    // descoberta.
+    v += 7;
+    motivos.push(`${evidencia.incumbentes} fornecedor(es) atual(is) identificado(s) com evidência pública`);
+  }
+  if (v === 0) {
+    motivos.push('pesquisamos a pegada pública e não achamos gatilho de janela nem fornecedor atual nomeado');
+  }
+  return { ...base, valor: Math.min(15, v), motivo: motivos.join('; ') };
+}
+
 /** Meses desde uma data ISO (aprox.). */
 function monthsSince(iso: string | null): number | null {
   if (!iso) return null;
@@ -109,7 +167,8 @@ export function computeMiraScoreV1(
   perfil: PerfilLike,
   alvo: CnpjData,
   decisoresCount: number,
-  sinalSetorial?: SinalSetorial | null
+  sinalSetorial?: SinalSetorial | null,
+  evidencia?: EvidenciaPesquisa | null
 ): MiraScoreResult {
   const fatores: ScoreFator[] = [];
 
@@ -171,7 +230,18 @@ export function computeMiraScoreV1(
         motivos.push(`setor estável em emprego (${sinalSetorial.ano})`);
       }
     }
-    motivos.push('sinais profundos (notícias/vagas/editais) entram na próxima fase de mapeamento');
+    // Demanda EVIDENCIADA na web vale mais que qualquer inferência de
+    // registro: aqui a própria conta disse (ou saiu na notícia) o que precisa.
+    if (evidencia?.demandasEvidenciadas) {
+      v += 8;
+      motivos.push(
+        `${evidencia.demandasEvidenciadas} demanda(s) com evidência pública (a conta publicou ou saiu na notícia), não presunção`
+      );
+    } else if (evidencia?.pesquisaRodou) {
+      motivos.push('pesquisamos a pegada pública e não achamos demanda declarada');
+    } else {
+      motivos.push('sinais profundos (notícias/vagas/editais) entram quando você clicar em Aprofundar com IA');
+    }
     fatores.push({ nome: 'Demanda e sinais', peso: 25, valor: Math.min(25, v), motivo: motivos.join('; ') });
   }
 
@@ -201,14 +271,14 @@ export function computeMiraScoreV1(
     fatores.push({ nome: 'Encaixe de portfólio', peso: 15, valor: v, motivo });
   }
 
-  // 5) Janela e incumbente (15) — v1: ainda não mapeado (honesto)
+  // 5) Janela e incumbente (15) — alimentado pela Fase 2 do "Aprofundar com IA"
+  //
+  // Ficou fixo em 0 até 15/07/2026, com o motivo "entra na próxima fase". Era
+  // honesto (nada pesquisava), mas capava TODO Alvo em 85 e nunca destravava,
+  // porque nada nunca preenchia incumbente nem janela. Agora pontua com o que
+  // a pesquisa achou, e continua dizendo a verdade quando não achou nada.
   {
-    fatores.push({
-      nome: 'Janela e incumbente',
-      peso: 15,
-      valor: 0,
-      motivo: 'janela de entrada e fornecedor atual entram com os agentes de pesquisa (próxima fase)',
-    });
+    fatores.push(fatorJanelaIncumbente(evidencia));
   }
 
   const score = Math.max(0, Math.min(100, fatores.reduce((acc, f) => acc + f.valor, 0)));
@@ -245,7 +315,8 @@ export interface PlaceLike {
 export function computeMiraScoreB2C(
   perfil: PerfilLike & { alvoB2C?: { regiaoCidade?: string[] } },
   place: PlaceLike,
-  local: { municipio: string | null; uf: string | null }
+  local: { municipio: string | null; uf: string | null },
+  evidencia?: EvidenciaPesquisa | null
 ): MiraScoreResult {
   const fatores: ScoreFator[] = [];
 
@@ -279,7 +350,14 @@ export function computeMiraScoreB2C(
       v += 5;
       motivos.push('sem site público (oportunidade para oferta digital)');
     }
-    motivos.push('sinais profundos (notícias/atividade) entram na próxima fase');
+    if (evidencia?.demandasEvidenciadas) {
+      v += 8;
+      motivos.push(`${evidencia.demandasEvidenciadas} demanda(s) com evidência pública, não presunção`);
+    } else if (evidencia?.pesquisaRodou) {
+      motivos.push('pesquisamos a pegada pública e não achamos demanda declarada');
+    } else {
+      motivos.push('sinais profundos (notícias/atividade) entram quando você clicar em Aprofundar com IA');
+    }
     fatores.push({ nome: 'Demanda e sinais', peso: 25, valor: Math.min(25, v), motivo: motivos.join('; ') });
   }
 
@@ -309,9 +387,9 @@ export function computeMiraScoreB2C(
     });
   }
 
-  // 5) Janela e incumbente (15) — fase 2
+  // 5) Janela e incumbente (15) — alimentado pela Fase 2 do "Aprofundar com IA"
   {
-    fatores.push({ nome: 'Janela e incumbente', peso: 15, valor: 0, motivo: 'entra com os agentes de pesquisa (próxima fase)' });
+    fatores.push(fatorJanelaIncumbente(evidencia));
   }
 
   const score = Math.max(0, Math.min(100, fatores.reduce((a, f) => a + f.valor, 0)));
