@@ -22,9 +22,23 @@ export interface ClientAgentLite {
   role: string;
 }
 
+/** Cenário do gabarito que não roda pra este agente, e por quê. */
+export interface SkippedScenario {
+  reason: string;
+}
+
+/** O que o backend testa hoje pro agente da org — e o que fica de fora por falta de treino. */
+export interface TestScope {
+  agentName: string;
+  businessName: string;
+  totalScenarios: number;
+  skipped: SkippedScenario[];
+}
+
 export interface ClientAgentListResponse {
   total: number;
   agents: ClientAgentLite[];
+  testScope: TestScope;
 }
 
 export interface ClientTriggerRunResponse {
