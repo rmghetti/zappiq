@@ -80,10 +80,24 @@ export interface DescobertaPublicaResult {
   buscas: number;
   encontrados: number; // resultados de busca uteis
   cnpjsVerificados: number;
-  criados: number; // viraram Alvo (READY ou DISCOVERED)
+  criados: number; // viraram Alvo (todos READY: o que nasce, nasce pronto)
   prontos: number; // passaram o gate (READY, descontaram cota)
-  candidatos: number; // empresas sem CNPJ resolvido (DISCOVERED, sem cota)
+  candidatos: number; // sempre 0 desde 15/07/2026 (ver `descartadosSoNome`)
   duplicados: number;
+  /**
+   * Empresa verificada na Receita que NÃO subiu por não ter decisor nenhum
+   * (nem no QSA, nem como titular de Empresário Individual).
+   *
+   * Reportado porque "criados: 3" sozinho esconderia que a busca achou 14. O
+   * cliente precisa saber que filtramos, senão parece que o Mira não achou
+   * nada — que é o oposto do que aconteceu.
+   */
+  descartadosCrus: number;
+  /**
+   * Empresa achada na busca da qual só tínhamos o NOME (CNPJ não resolvido).
+   * Antes virava Alvo "candidato" com confiança 40 e enchia a base.
+   */
+  descartadosSoNome: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
   /** Região que a busca de fato usou (vem da campanha, semeada do Perfil). */
@@ -171,7 +185,18 @@ function doEspelhoParaCnpjData(e: CnpjDoEspelho): CnpjData {
   };
 }
 
-/** Passa o gate B2B v1: identidade oficial + ATIVA + ao menos 1 decisor. */
+/**
+ * Passa o gate B2B v1: identidade oficial + ATIVA + ao menos 1 decisor.
+ *
+ * Até 15/07/2026 este gate só decidia PROMOÇÃO para READY: o Alvo reprovado
+ * era criado assim mesmo, em QUALIFYING, e ficava na base do cliente. Eram 11
+ * de 20 na conta da MACHIA, todos com score 9 a 13, todos sem decisor nenhum.
+ * O Rodrigo chamou de "entrega crua" e disse que "cria uma visão negativa do
+ * cliente com relação à entrega". Ele tem razão: Alvo sem decisor não é um
+ * Alvo, é uma linha.
+ *
+ * Agora o gate decide se o Alvo NASCE. Reprovado não sobe.
+ */
 function passaGate(d: CnpjData): boolean {
   return Boolean(d.razaoSocial) && (d.situacaoCadastral ?? '').toUpperCase() === 'ATIVA' && d.qsa.length >= 1;
 }
@@ -305,6 +330,8 @@ export async function runDescobertaPublica(
     prontos: 0,
     candidatos: 0,
     duplicados: 0,
+    descartadosCrus: 0,
+    descartadosSoNome: 0,
     blocked: ent.quota.blocked,
     quota: { used: ent.quota.used, total: ent.quota.total, remaining: ent.quota.remaining },
     regiaoAplicada: alvoRegiao || null,
@@ -360,6 +387,19 @@ export async function runDescobertaPublica(
 
     const sinalSetorial = await buscarSinalSetorial(dados.cnae, dados.uf);
     const { score, breakdown, confianca } = computeMiraScoreV1(perfil, dados, dados.qsa.length, sinalSetorial);
+    // ── O gate decide se o Alvo NASCE, não só se ele é promovido ──
+    // A verificação vem DEPOIS de toda a persistência de enriquecimento (o
+    // espelho, e o titular do Empresário Individual que a lei impede de ter
+    // sócio). Ou seja: só desiste depois de ter tentado tudo que o registro
+    // oficial permite. Sem decisor mesmo assim, o Alvo não sobe.
+    if (!passaGate(dados)) {
+      result.descartadosCrus++;
+      logger.info(
+        `[MiraDescobertaPublica] cnpj=${cnpj} não sobe: decisores=${dados.qsa.length} situacao=${dados.situacaoCadastral ?? '?'} natJur=${dados.naturezaJuridica ?? '?'}`
+      );
+      continue;
+    }
+
     const agora = new Date().toISOString();
     const resumo =
       `${dados.razaoSocial}${dados.nomeFantasia ? ` (${dados.nomeFantasia})` : ''}, ` +
@@ -417,7 +457,10 @@ export async function runDescobertaPublica(
       continue;
     }
 
-    if (passaGate(dados) && alvoId) {
+    // Chegou aqui = já passou no gate acima, então é sempre promovido: o Alvo
+    // que nasce é o Alvo pronto. Não existe mais o meio-termo em QUALIFYING,
+    // que era onde os 11 Alvos crus moravam.
+    if (alvoId) {
       try {
         const quota = await consumeMiraQuota(organizationId);
         await prisma.miraAlvo.update({
@@ -458,25 +501,18 @@ export async function runDescobertaPublica(
         result.duplicados++;
         continue;
       }
-      try {
-        await prisma.miraAlvo.create({
-          data: {
-            organizationId,
-            campanhaId: campanhaId ?? null,
-            kind: 'B2B',
-            motor: 'DESCOBERTA',
-            status: 'DISCOVERED', // candidato: NAO desconta cota (sem verificacao oficial ainda)
-            nome: nomeDoResultado(r),
-            site,
-            resumo: `${r.snippet || 'Empresa encontrada no indice publico.'} (candidato: falta resolver CNPJ para virar Alvo verificado).`,
-            fontes: [{ campo: 'descoberta_publica', url: r.url, data: new Date().toISOString(), confianca: 40 }],
-          },
-        });
-        result.criados++;
-        result.candidatos++;
-      } catch (err: any) {
-        logger.warn(`[MiraDescobertaPublica] falha candidato host=${host}: ${err?.message ?? err}`);
-      }
+      // NÃO cria mais o "candidato".
+      //
+      // Este era o pior ofensor do pedido do Rodrigo ("garantir que o Alvo nem
+      // suba se já na pesquisa tiver apenas informação do nome da empresa, que
+      // é o que tem vindo em muitos casos"). O candidato nascia do TÍTULO de um
+      // resultado de busca: sem CNPJ, sem decisor, sem firmografia, confiança
+      // 40, com um resumo que era o snippet do buscador. Era literalmente só o
+      // nome, e nada nunca o promovia.
+      //
+      // Contado e reportado para o cliente saber que a busca achou empresas e
+      // que elas não passaram, em vez de sumirem caladas.
+      result.descartadosSoNome++;
     }
   }
 
