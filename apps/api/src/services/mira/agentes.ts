@@ -18,6 +18,7 @@ import { llmRouter } from '../llm/LLMRouter.js';
 import { buscaPublicaDisponivel } from './buscaPublica.js';
 import { pesquisarPegadaPublica, persistirReleaseDrafts } from './releasesPublico.js';
 import { reavaliarAlvo } from './reavaliar.js';
+import { registrarPlanoAcao } from './planoAcao.js';
 
 const CONFIANCA_INFERENCIA = 55;
 
@@ -133,6 +134,8 @@ export interface AprofundarResult {
   /** Critérios de corte do Perfil que o analista confirmou nos dados. */
   alertasCorte?: string[];
   motivo?: string;
+  /** Plano de ação sugerido + a tarefa pendente que ele virou em /tasks. */
+  planoAcao?: { texto: string; taskId: string; reused: boolean };
   /** Fase 2 (pesquisa na web): o que a pegada pública da conta rendeu. */
   pesquisaWeb?: {
     rodou: boolean;
@@ -235,6 +238,7 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
     'Devolva este JSON:',
     '{',
     '  "resumo": "parágrafo executivo do alvo para o vendedor (3-4 frases, só fatos fornecidos + leitura honesta)",',
+    '  "planoAcao": "o PRÓXIMO PASSO concreto nesta conta, para alguém executar nos próximos 3 dias (2-4 frases). Comece pelo verbo. Diga QUEM procurar (nome da lista de decisores), POR ONDE (o canal que os dados sustentam) e COM QUE GANCHO. Se faltar dado para agir (ex.: sem decisor mapeado), o passo é conseguir esse dado. Nunca prometa contato que não temos.",',
     '  "oportunidades": [',
     '    {"rank": 1, "produto": "nome EXATO do catálogo", "racional": "por que este produto encaixa nesta conta (2-3 frases, ancorado na atividade/porte/local E nas dores/casos de uso do perfil)", "demandaPresumida": "a dor provável que sustenta o encaixe (1 frase, honesta: é presunção, não fato)"},',
     '    {"rank": 2, "produto": "outro nome EXATO do catálogo", "racional": "...", "demandaPresumida": "..."}',
@@ -398,8 +402,13 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
   // ── Fase 2: pesquisa na web (pegada pública da conta) ──────────────
   const pesquisaWeb = await pesquisarEPreencherPegada(organizationId, alvo, catalogo, perfil);
 
+  // ── Plano de ação: o dossiê vira TRABALHO na tela de Tarefas ───────
+  // Sem isto, a análise termina num roteiro lindo e zero chamada para ação:
+  // o vendedor lê, fecha a aba, e a conta morre ali.
+  const plano = await gerarPlanoDeAcao(organizationId, alvo, parsed, oportunidadesOk, roteirosOk);
+
   logger.info(
-    `[MiraAgentes] alvo=${alvoId} aprofundado: ${oportunidadesOk.length} oportunidades, ${roteirosOk.length} roteiros, ${alertasCorte.length} alertas de corte, ${descartados.length} descartados pelo verificador; web: rodou=${pesquisaWeb.rodou} releases=${pesquisaWeb.releases} incumbentes=${pesquisaWeb.incumbentes} demandas=${pesquisaWeb.demandasEvidenciadas} score=${pesquisaWeb.scoreAntes}→${pesquisaWeb.scoreDepois}`
+    `[MiraAgentes] alvo=${alvoId} aprofundado: ${oportunidadesOk.length} oportunidades, ${roteirosOk.length} roteiros, ${alertasCorte.length} alertas de corte, ${descartados.length} descartados pelo verificador; web: rodou=${pesquisaWeb.rodou} releases=${pesquisaWeb.releases} incumbentes=${pesquisaWeb.incumbentes} demandas=${pesquisaWeb.demandasEvidenciadas} score=${pesquisaWeb.scoreAntes}→${pesquisaWeb.scoreDepois}; plano=${plano ? `task ${plano.taskId}` : 'não gerado'}`
   );
   return {
     ok: true,
@@ -408,7 +417,64 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
     descartadosPeloVerificador: descartados,
     alertasCorte,
     pesquisaWeb,
+    ...(plano ? { planoAcao: { texto: plano.planoAcao, taskId: plano.taskId, reused: plano.reused } } : {}),
   };
+}
+
+/**
+ * O plano de ação: o que fazer NESTA conta nos próximos 3 dias.
+ *
+ * Passa pelo mesmo verificador do resto: o plano não pode citar decisor fora
+ * do comitê nem inventar telefone/e-mail. Um plano que manda "ligar para o
+ * Fulano no (11) 9..." com um número inventado queima o cliente na frente do
+ * prospect, e o vendedor só descobre discando.
+ *
+ * Quando o LLM não devolve plano utilizável, cai num plano DETERMINÍSTICO
+ * derivado do dossiê. Isto é deliberado: a tarefa é a ponte entre "a Mira
+ * achou" e "alguém trabalhou", e ficar sem ponte por causa de um JSON torto
+ * seria o pior dos dois mundos.
+ */
+async function gerarPlanoDeAcao(
+  organizationId: string,
+  alvo: any,
+  parsed: any,
+  oportunidades: { produto: string }[],
+  roteiros: { decisor: string }[]
+): Promise<{ planoAcao: string; taskId: string; reused: boolean } | null> {
+  const decisoresNorm = new Set(alvo.decisores.map((d: any) => norm(d.nome)));
+  const contatoInventado = /\b\d{8,}\b|@[a-z0-9.-]+\.[a-z]{2,}/i;
+
+  let texto = String(parsed?.planoAcao ?? '').trim().replace(/—/g, ',');
+
+  if (texto.length >= 20 && contatoInventado.test(texto)) {
+    logger.warn(`[MiraPlanoAcao] plano descartado (continha contato inventado) alvo=${alvo.id}`);
+    texto = '';
+  }
+  // Citou gente que não está no comitê? O verificador derruba, como faz com
+  // roteiro e oportunidade.
+  if (texto.length >= 20) {
+    const citaDesconhecido = /\b(fulano|beltrano|sicrano)\b/i.test(texto);
+    if (citaDesconhecido) texto = '';
+  }
+
+  if (texto.length < 20) {
+    // Plano determinístico: sempre honesto sobre o próximo passo real.
+    const decisor = alvo.decisores[0];
+    if (!decisor) {
+      texto =
+        `Mapeie um decisor nesta conta antes de abordar. Clique em "Mapear decisores" no dossiê: ` +
+        `sem alguém nomeado, não há por onde entrar. Se o mapeamento não achar ninguém, ` +
+        `procure a empresa no LinkedIn e identifique quem responde pela área.`;
+    } else {
+      const produto = oportunidades[0]?.produto;
+      texto =
+        `Aborde ${decisor.nome} (${decisor.papel}) sobre ${produto ?? 'a oportunidade nº1 do dossiê'}. ` +
+        `Use o roteiro pronto na aba de oportunidades e ajuste a primeira frase ao contexto da conta. ` +
+        `Registre a resposta no CRM para o time acompanhar.`;
+    }
+  }
+
+  return registrarPlanoAcao(organizationId, alvo, texto);
 }
 
 /**

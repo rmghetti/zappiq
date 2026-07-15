@@ -249,6 +249,9 @@ export interface MiraDecisor {
 export interface MiraAlvoDossie extends MiraAlvoListItem {
   situacaoCadastral: string | null;
   site: string | null;
+  /** Próximo passo sugerido pela IA. Vira Task pendente em /tasks. */
+  planoAcao: string | null;
+  planoAcaoTaskId: string | null;
   scoreBreakdown: { fatores: { nome: string; peso: number; valor: number; motivo: string }[] } | null;
   processoCompras: { modo?: string; cicloOrcamentario?: string; cadeiaAprovacao?: string } | null;
   whiteSpace: { jaCompra?: string[]; oportunidades?: string[] } | null;
