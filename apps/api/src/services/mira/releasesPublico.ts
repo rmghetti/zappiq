@@ -100,6 +100,13 @@ export interface PegadaPublicaResult {
   /** Gatilho de janela de entrada, quando o material sustenta um. */
   janela: string | null;
   buscas: number;
+  /**
+   * Resultados que citavam o nome mas não puderam ser confirmados como ESTA
+   * empresa (homônimo). Reportado porque "0 releases" sem isto esconderia que
+   * a busca ACHOU coisas e nós as recusamos: são fatos que existem, de uma
+   * empresa que provavelmente não é a do dossiê.
+   */
+  descartadosPorHomonimo?: number;
   /** A busca quebrou (fonte fora do ar). Distinto de "não achou nada". */
   erro?: string;
 }
@@ -136,6 +143,101 @@ function extractJson(text: string): any | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Palavras que não identificam ninguém: toda razão social brasileira tem.
+ * Buscar por "COFEL COMERCIAL E INDUSTRIAL DE FERRO LIGAS LTDA" inteiro não
+ * acha nada (ninguém escreve isso numa matéria), e o núcleo "COFEL" é o que
+ * de fato distingue.
+ */
+const RUIDO_RAZAO_SOCIAL = new Set([
+  'ltda', 'sa', 's', 'a', 'me', 'epp', 'eireli', 'mei', 'cia', 'e', 'de', 'da', 'do', 'das', 'dos', 'em',
+  'comercio', 'comercial', 'industria', 'industrial', 'servicos', 'servico', 'empreendimentos',
+  'participacoes', 'holdings', 'holding', 'distribuidora', 'importacao', 'exportacao', 'representacoes',
+  'brasil', 'brasileira', 'nacional', 'group', 'grupo',
+]);
+
+/**
+ * O NÚCLEO identificador do nome da empresa: o que sobra depois de tirar o
+ * ruído societário. "COFEL COMERCIAL E INDUSTRIAL DE FERRO LIGAS LTDA" →
+ * ["cofel", "ferro", "ligas"]. O primeiro token é o mais distintivo.
+ */
+export function nucleoDoNome(nome: string): string[] {
+  return norm(nome)
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 2 && !RUIDO_RAZAO_SOCIAL.has(t))
+    .slice(0, 4);
+}
+
+/**
+ * O resultado FALA da conta-alvo?
+ *
+ * Achado na prova de produção (15/07/2026): buscar o COFEL trazia o Instagram
+ * da "COFEL Loja de Departamentos", da "Cofel Laminados", da "Metalúrgica
+ * Cofelma" — e com o nome curto vinha até Copel, Cofen e Ronaldinho. A Brave
+ * não honra aspas como frase exata. Sem este filtro o analista recebe uma dúzia
+ * de resultados de empresas homônimas e pode atribuir "a Cofel Laminados
+ * anunciou X" ao Alvo de ferro ligas. Atribuir fato de outra empresa à conta é
+ * pior que não achar nada: o vendedor cita numa reunião e queima a conta.
+ *
+ * O `decisoresPublico.ts` já fazia isto por nome de pessoa desde 15/07; aqui o
+ * padrão simplesmente não tinha sido aplicado.
+ *
+ * Camada 1 (necessária): o token mais distintivo do nome aparece no texto.
+ */
+function mencionaAConta(r: SerpResult, nucleo: string[]): boolean {
+  if (nucleo.length === 0) return false;
+  const txt = norm(`${r.title} ${r.snippet} ${r.url}`);
+  return txt.includes(nucleo[0]);
+}
+
+/**
+ * É a MESMA empresa, e não uma homônima? (camada 2, desambiguação)
+ *
+ * Menção não basta: "Cofel Laminados" também menciona "cofel". Exige um
+ * segundo sinal que ligue o resultado a ESTE CNPJ. Sem nenhum sinal, o
+ * resultado não entra — o produto já vive do princípio "dado sem fonte não
+ * entra no dossiê", e "fonte de outra empresa" é pior que fonte nenhuma.
+ *
+ * Sinais, do mais forte ao mais fraco:
+ *  - CNPJ no texto (irrefutável; aparece em rodapé de site institucional)
+ *  - nome de um decisor do QSA (registro oficial)
+ *  - município + UF (a Cofel de Atibaia não é a Cofel de outra cidade)
+ *  - telefone da conta
+ */
+export interface SinaisDaConta {
+  cnpj?: string | null;
+  municipio?: string | null;
+  uf?: string | null;
+  telefone?: string | null;
+  decisores?: string[];
+}
+
+export function confirmaAConta(r: SerpResult, sinais: SinaisDaConta): { confirma: boolean; por: string | null } {
+  const txt = norm(`${r.title} ${r.snippet} ${r.url}`);
+  const soDigitos = (r.title + r.snippet + r.url).replace(/\D/g, '');
+
+  const cnpj = (sinais.cnpj ?? '').replace(/\D/g, '');
+  if (cnpj.length === 14 && soDigitos.includes(cnpj)) return { confirma: true, por: 'CNPJ na fonte' };
+
+  for (const d of sinais.decisores ?? []) {
+    const nd = norm(d);
+    // Nome de sócio PJ ("OKRA HOLDINGS LTDA.") não identifica pessoa: pula.
+    if (nd.length < 6 || /ltda|s\/a|holdings?/.test(nd)) continue;
+    if (txt.includes(nd)) return { confirma: true, por: `decisor citado: ${d}` };
+  }
+
+  // Município só vale junto com a menção ao núcleo do nome, que o chamador já
+  // garantiu: "Atibaia" sozinho não diz nada, "cofel" + "Atibaia" diz muito.
+  const mun = norm(sinais.municipio ?? '');
+  if (mun.length >= 4 && txt.includes(mun)) return { confirma: true, por: `município: ${sinais.municipio}` };
+
+  const tel = (sinais.telefone ?? '').replace(/\D/g, '');
+  if (tel.length >= 10 && soDigitos.includes(tel)) return { confirma: true, por: 'telefone da conta na fonte' };
+
+  return { confirma: false, por: null };
 }
 
 /** Sinais do Perfil que calibram a relevancia dos releases. */
@@ -177,7 +279,16 @@ export function montarLinhasSinais(sinais?: SinaisDoPerfil): string[] {
  */
 export async function pesquisarPegadaPublica(
   organizationId: string,
-  alvo: { id: string; nome: string; nomeFantasia?: string | null; municipio?: string | null; uf?: string | null },
+  alvo: {
+    id: string;
+    nome: string;
+    nomeFantasia?: string | null;
+    municipio?: string | null;
+    uf?: string | null;
+    cnpj?: string | null;
+    telefone?: string | null;
+    decisores?: { nome: string }[];
+  },
   catalogo: { nome: string }[],
   sinais?: SinaisDoPerfil
 ): Promise<PegadaPublicaResult> {
@@ -185,6 +296,13 @@ export async function pesquisarPegadaPublica(
   if (!buscaPublicaDisponivel()) return { ...vazio, erro: 'fonte_indisponivel' };
   const empresa = String(alvo.nomeFantasia || alvo.nome || '').trim();
   if (empresa.length < 2) return vazio;
+
+  // O NÚCLEO é o que a busca e o verificador usam. A razão social inteira não é
+  // frase de busca: ninguém escreve "COFEL COMERCIAL E INDUSTRIAL DE FERRO
+  // LIGAS LTDA" numa matéria, e pedir isso à Brave devolve homônimos.
+  const nucleo = nucleoDoNome(empresa);
+  if (nucleo.length === 0) return vazio;
+  const termoBusca = nucleo.join(' ');
 
   // Quatro trilhas. As duas primeiras sao a conta FALANDO DE SI (redes), a
   // terceira e o que SAI SOBRE ela (imprensa), a quarta e quem ja a atende.
@@ -196,16 +314,30 @@ export async function pesquisarPegadaPublica(
   // Custo: 4 buscas por Alvo (era 3). Com o teto do ciclo em 60 buscas, sao
   // 15 Alvos por ciclo em vez de 20 — cabe no plano da Brave e o cron ja
   // ordena por score, entao os 15 sao os melhores.
+  // O município entra na query como desempate de homônimo (a Cofel de Atibaia
+  // não é a Cofel Laminados). Ficou possível em 15/07/2026, quando o município
+  // parou de nascer null: até então o campo era null em 100% dos Alvos.
+  const local = [alvo.municipio, alvo.uf].filter(Boolean).join(' ');
+  const ondeEstá = local ? ` ${local}` : '';
   const queries = [
-    `"${empresa}" (site:linkedin.com/posts OR site:instagram.com)`,
-    `"${empresa}" (lancamento OR expansao OR investimento OR contratacao OR inauguracao OR parceria OR aquisicao OR novo)`,
-    `"${empresa}" (noticia OR anuncio OR "anunciou" OR "vai investir" OR "assinou" OR entrevista)`,
-    `"${empresa}" (fornecedor OR parceiro OR "em parceria com" OR contratou OR implantou OR "cliente da")`,
+    `"${termoBusca}" (site:linkedin.com/posts OR site:instagram.com)`,
+    `"${termoBusca}"${ondeEstá} (lancamento OR expansao OR investimento OR contratacao OR inauguracao OR parceria OR aquisicao OR novo)`,
+    `"${termoBusca}"${ondeEstá} (noticia OR anuncio OR "anunciou" OR "vai investir" OR "assinou" OR entrevista)`,
+    `"${termoBusca}"${ondeEstá} (fornecedor OR parceiro OR "em parceria com" OR contratou OR implantou OR "cliente da")`,
   ];
+
+  const sinaisConta: SinaisDaConta = {
+    cnpj: alvo.cnpj ?? null,
+    municipio: alvo.municipio ?? null,
+    uf: alvo.uf ?? null,
+    telefone: alvo.telefone ?? null,
+    decisores: (alvo.decisores ?? []).map((d) => d.nome),
+  };
 
   const resultados: SerpResult[] = [];
   const vistos = new Set<string>();
   const falhas: string[] = [];
+  let descartadosPorHomonimo = 0;
   let buscas = 0;
   for (const q of queries) {
     try {
@@ -214,6 +346,16 @@ export async function pesquisarPegadaPublica(
       for (const h of hits) {
         if (vistos.has(h.url)) continue;
         vistos.add(h.url);
+        // Camada 1: fala da conta? Mata Copel/Cofen/Ronaldinho de graça.
+        if (!mencionaAConta(h, nucleo)) continue;
+        // Camada 2: é ESTA conta, e não uma homônima? Sem sinal, não entra.
+        // Esta é a diferença entre um dossiê e uma armadilha: "Cofel Laminados
+        // anunciou X" no dossiê da COFEL Ferro Ligas faz o vendedor citar o
+        // fato errado numa reunião.
+        if (!confirmaAConta(h, sinaisConta).confirma) {
+          descartadosPorHomonimo++;
+          continue;
+        }
         resultados.push(h);
       }
     } catch (err: any) {
@@ -227,7 +369,12 @@ export async function pesquisarPegadaPublica(
     }
   }
   if (resultados.length === 0) {
-    return { ...vazio, buscas, ...(falhas.length ? { erro: falhas[0] } : {}) };
+    return {
+      ...vazio,
+      buscas,
+      ...(descartadosPorHomonimo ? { descartadosPorHomonimo } : {}),
+      ...(falhas.length ? { erro: falhas[0] } : {}),
+    };
   }
 
   const fontesTxt = resultados
@@ -377,7 +524,7 @@ export async function pesquisarPegadaPublica(
   const janelaBruta = parsed?.janela ? String(parsed.janela).trim() : '';
   const janela = janelaBruta && norm(janelaBruta) !== 'null' && janelaBruta.length >= 10 ? janelaBruta.slice(0, 400) : null;
 
-  return { releases, incumbentes, demandas, janela, buscas };
+  return { releases, incumbentes, demandas, janela, buscas, ...(descartadosPorHomonimo ? { descartadosPorHomonimo } : {}) };
 }
 
 /**

@@ -137,7 +137,10 @@ describe('a matéria vira demanda e oportunidade, com a fonte junto', () => {
 
   it('oportunidade com produto FORA do catálogo é descartada (não inventa linha de produto)', async () => {
     (webSearch as any).mockResolvedValue([
-      { title: 'Metalex cresce', url: 'https://exame.com/metalex', snippet: 'A Metalex cresceu 30% no ano.' },
+      // O snippet cita Sorocaba: é o sinal que confirma ser ESTA conta e não uma
+      // homônima (ver releasesPublico.homonimo.test.ts). Sem ele o resultado
+      // nem chegaria ao analista.
+      { title: 'Metalex cresce', url: 'https://exame.com/metalex', snippet: 'A Metalex, de Sorocaba, cresceu 30% no ano.' },
     ]);
     (llmRouter.complete as any).mockResolvedValue(
       respostaLlm([
@@ -199,7 +202,7 @@ describe('a matéria vira demanda e oportunidade, com a fonte junto', () => {
       {
         title: 'Metalex no Instagram',
         url: 'https://www.instagram.com/p/abc123',
-        snippet: 'Inauguramos nosso novo galpão nesta semana!',
+        snippet: 'Inauguramos nosso novo galpão em Sorocaba nesta semana!',
       },
     ]);
     (llmRouter.complete as any).mockResolvedValue(

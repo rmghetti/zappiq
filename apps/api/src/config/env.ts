@@ -70,6 +70,11 @@ const envSchema = z.object({
   // clusterizada, e a descoberta consulta ESSA tabela (fração de centavo). Ver doc 10.
   BIGQUERY_MIRROR_TABLE: z.string().default('mira.cnpj_ativos'),
   BIGQUERY_MIRROR_MAX_GB: z.coerce.number().default(120), // teto do job mensal de materialização (varre a partição inteira)
+  // Diretório de municípios do BD (5.570 linhas): traduz o `id_municipio` (IBGE)
+  // que o espelho guarda para o NOME da cidade. Tabela pública e minúscula; o
+  // JOIN no enriquecimento custa praticamente nada e evita carregar um
+  // dicionário estático de 5.570 entradas no repositório.
+  BIGQUERY_MUNICIPIOS_TABLE: z.string().default('basedosdados.br_bd_diretorios_brasil.municipio'),
 
   // WhatsApp
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),

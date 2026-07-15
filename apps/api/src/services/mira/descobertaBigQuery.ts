@@ -107,12 +107,22 @@ export async function enriquecerCnpjsBigQuery(cnpjs: string[]): Promise<Map<stri
   if (limpos.length === 0) return vazio;
 
   // A tabela é nossa e clusterizada; filtrar por CNPJ exato varre pouco.
+  //
+  // O JOIN traduz o código IBGE em NOME do município. O espelho guarda só
+  // `id_municipio` (7 dígitos, IBGE — conferido em produção: 28M linhas, e o
+  // COFEL 3504107 = Atibaia/SP), e até 15/07/2026 o adaptador jogava o código
+  // fora porque "exigiria dicionário". O dicionário existe, é do próprio BD,
+  // tem 5.570 linhas e o JOIN aqui custa nada perto do que já varremos por
+  // CNPJ. Fazer aqui em vez de na materialização evita rematerializar 120GB.
   const sql = `
-    SELECT cnpj, razao_social, nome_fantasia, cnae_fiscal_principal, sigla_uf,
-           id_municipio, data_inicio_atividade, telefone, capital_social, porte,
-           natureza_juridica, qsa
-    FROM \`${mirrorFqn()}\`
-    WHERE cnpj IN UNNEST(@cnpjs)
+    SELECT e.cnpj, e.razao_social, e.nome_fantasia, e.cnae_fiscal_principal, e.sigla_uf,
+           e.id_municipio, m.nome AS municipio_nome,
+           e.data_inicio_atividade, e.telefone, e.capital_social, e.porte,
+           e.natureza_juridica, e.qsa
+    FROM \`${mirrorFqn()}\` e
+    LEFT JOIN \`${env.BIGQUERY_MUNICIPIOS_TABLE}\` m
+      ON CAST(m.id_municipio AS STRING) = CAST(e.id_municipio AS STRING)
+    WHERE e.cnpj IN UNNEST(@cnpjs)
   `;
   try {
     const [rows] = await getBigQueryClient().query({
@@ -133,6 +143,7 @@ export async function enriquecerCnpjsBigQuery(cnpjs: string[]): Promise<Map<stri
         cnae: r.cnae_fiscal_principal ? String(r.cnae_fiscal_principal) : null,
         uf: r.sigla_uf ? String(r.sigla_uf) : null,
         idMunicipio: r.id_municipio ? String(r.id_municipio) : null,
+        municipio: r.municipio_nome ? String(r.municipio_nome).trim() : null,
         dataInicioAtividade: r.data_inicio_atividade?.value ?? (r.data_inicio_atividade ? String(r.data_inicio_atividade) : null),
         telefone: r.telefone ? String(r.telefone).replace(/\D/g, '') || null : null,
         capitalSocial: r.capital_social != null ? Number(r.capital_social) : null,
@@ -162,7 +173,10 @@ export interface CnpjDoEspelho {
   nomeFantasia: string | null;
   cnae: string | null;
   uf: string | null;
+  /** Código IBGE cru do espelho (7 dígitos). */
   idMunicipio: string | null;
+  /** Nome do município, traduzido do código pelo diretório do BD. */
+  municipio: string | null;
   dataInicioAtividade: string | null;
   telefone: string | null;
   capitalSocial: number | null;
