@@ -84,7 +84,92 @@ Verificado: tsc limpo; suíte da API 155 arquivos / 1567 testes verdes (era
 
 **Buracos 1 a 8 da lista acima: fechados.** Falta o 9 (front) e a prova real.
 
-### Sessão 2 (próxima) — front + PR + deploy
+### Sessão 2 (15/07/2026) — CONCLUÍDA: front + PR #301 + deploy + PROVA REAL
+
+Feito: front do dossiê (data, domínio da fonte, confiança, "Gerou demanda"),
+Saiba mais reescrito, PR #301 mergeada (commit `43e7c4e`), Fly v364 no ar,
+migração `20260715000003` aplicada em produção às 14:18 (5 colunas + FK
+conferidas por `information_schema`).
+
+**A prova real derrubou a comemoração, e é por isso que ela existe.**
+
+Rodei a pegada pública contra o COFEL em produção: `buscas: 4`, `erro: nenhum`,
+**`releases achados: 0`**. O alerta funcionou (Task `cmrm64ddh0005qzjjdppj0a9h`,
+2 releases sinalizados) e a reavaliação rodou (45 → 45). Mas o caminho da
+sinergia não foi exercitado com dado real. Fui ver por quê.
+
+#### ACHADO 1 (crítico): a busca devolve lixo, o recurso está passando fome
+
+A query `"COFEL COMERCIAL E INDUSTRIAL DE FERRO LIGAS LTDA"` devolveu 6 hits,
+**nenhum da COFEL de ferro ligas**:
+- `instagram.com/cofelsaj` → "COFEL Loja de Departamentos" (outra empresa)
+- `instagram.com/cofellaminados` → "Cofel Laminados" (outra empresa)
+- `instagram.com/cofelma` → "Metalúrgica Cofelma" (outra empresa)
+- `instagram.com/cofeltudoparavoce` → "COFEL Móveis/Eletros" (outra empresa)
+
+E com o nome curto (`"COFEL"`) é pior: volta Copel, Cofen, Passos Coelho,
+Ronaldinho, "Contrato de investimento". **A Brave não honra as aspas como
+frase exata.**
+
+O LLM devolveu 0 releases — o anti-alucinação ("use SOMENTE o que aparece")
+funcionou e nos salvou. Mas 20 testes unitários verdes não pegariam isto:
+**eles provam que o código faz o que eu mandei, não que a busca traz a empresa
+certa.**
+
+**O perigo é maior que "achar pouco":** `releasesPublico.ts` NÃO filtra os
+resultados por menção à empresa antes de mandar pro LLM (o
+`decisoresPublico.ts` filtra, por nome da pessoa — o padrão existe e não foi
+aplicado aqui). Então o LLM recebe 12 resultados de empresas homônimas e pode
+montar "Cofel Laminados anunciou X" e atribuir ao Alvo COFEL FERRO LIGAS.
+Atribuir fato de outra empresa à conta é o erro que queima a reunião.
+
+**Suspeita de dado sujo JÁ em produção:** dos 2 releases do COFEL no banco
+(criados pelo código antigo), um aponta para `cofellaminados.com.br`. Pode ser
+a mesma empresa ou não — não dá para afirmar, e é exatamente esse o problema.
+
+#### ACHADO 2 (crítico, e explica o teto do score): `municipio` é null em 100% dos Alvos
+
+```
+{"total":20,"comSite":0,"comMunicipio":0,"comFantasia":8}
+```
+`site` e `municipio` estão **null em TODOS os 20 Alvos** da plataforma.
+
+Consequências, em ordem de gravidade:
+1. **Toda confiança de Alvo está capada em 90.** A fórmula é razaoSocial 20 +
+   cnae 15 + porte 10 + situacaoCadastral 10 + **municipio&uf 10** + decisores
+   25 + telefone 10 = 100. O COFEL está em 90 e falta exatamente o
+   `municipio && uf`. Não é o telefone (ele tem: 1144117333). **Todo Alvo da
+   plataforma perde 10 pontos de confiança que deveria ter**, e isso vinha
+   sendo lido como "o dado é incompleto" quando o dado existe na Receita.
+   → Isto responde de verdade o "melhorar a confiança" que o Rodrigo pediu, e
+   por um caminho honesto: preencher o campo, não mexer no peso.
+2. **Perdemos o melhor sinal de desambiguação** de homônimo (Cofel de SP vs
+   Cofel de outra cidade).
+
+Sinais que o Alvo TEM: CNPJ (01382565000143), CNAE (2412100 = metalurgia de
+ferroligas), UF (SP), telefone, e 4 decisores nominais do QSA.
+
+O Alvo nasce do espelho de CNPJ (BigQuery), que tem município. Ou o motor não
+mapeia o campo, ou o espelho não o materializou. **Investigar na sessão 3.**
+
+### Sessão 3 (próxima) — consertar a fome da busca + o município
+
+1. **Descobrir por que `municipio`/`site` não são preenchidos** (motorA/espelho
+   BigQuery) e corrigir. Ganho imediato: +10 de confiança em todo Alvo e o
+   sinal de desambiguação de volta.
+2. **Filtro de menção em `releasesPublico.ts`** (o padrão que o
+   `decisoresPublico.ts` já usa): só chega ao analista o resultado que cita o
+   NÚCLEO do nome da empresa (removendo LTDA/COMERCIAL/INDUSTRIAL/DE/E...).
+   Mata Copel/Cofen/Ronaldinho de graça.
+3. **Desambiguação de homônimo**: exigir ao menos um sinal de confirmação
+   (CNPJ no texto, nome de decisor do QSA, município, ou termo do setor via
+   CNAE + UF). Sem sinal → não entra. Release errado no dossiê é pior que
+   nenhum release, e o produto já tem esse princípio.
+4. **Query melhor**: razão social inteira não é frase de busca. Usar o núcleo +
+   município/setor.
+5. Testes + nova prova real. Só então declarar pronto.
+
+### Sessão 2 (planejada originalmente) — front + PR + deploy [FEITO ACIMA]
 1. `mira/alvos/[id]/page.tsx:345` — "Releases desta conta" mostra hoje só
    título + ícone de link. Precisa mostrar: data de publicação, a fonte
    clicável, a confiança, e o que a matéria GEROU (demanda/oportunidade
