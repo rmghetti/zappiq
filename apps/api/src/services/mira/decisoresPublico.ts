@@ -19,6 +19,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
 import { llmRouter } from '../llm/LLMRouter.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
+import { reavaliarAlvo, type ReavaliarResult } from './reavaliar.js';
 
 const MAX_QUERIES = 4; // orcamento amigavel ao tier gratuito (100 buscas/dia)
 const MAX_DECISORES = 8;
@@ -154,6 +155,8 @@ export interface DecisoresPublicoResult {
   contatosEnriquecidos?: number;
   /** Falha pontual da Camada 4 (best-effort): não derruba o resultado principal. */
   avisos?: string[];
+  /** Score/confiança/status recalculados quando o mapeamento mudou algo. */
+  reavaliacao?: ReavaliarResult;
 }
 
 export async function enriquecerDecisoresPublico(
@@ -471,8 +474,19 @@ export async function enriquecerDecisoresPublico(
     avisos.push('A busca de contato dos decisores já mapeados não pôde rodar desta vez.');
   }
 
+  // ── Reavaliação: decisor novo muda a nota E pode mudar o status ────
+  // Este é o caso que mais importa do pedido do Rodrigo: um Alvo entra "Em
+  // qualificação" justamente por NÃO ter decisor (firma individual, sem QSA).
+  // Se o mapeamento acha alguém no LinkedIn, o motivo do "em qualificação"
+  // deixou de existir e ele tem que virar Pronto na hora, sem o cliente
+  // precisar reclicar nada. Só reavalia se algo mudou de fato.
+  let reavaliacao: ReavaliarResult | null = null;
+  if (criados + enriquecidos + contatosEnriquecidos > 0) {
+    reavaliacao = await reavaliarAlvo(organizationId, alvo.id);
+  }
+
   logger.info(
-    `[MiraDecisoresPublico] alvo=${alvoId} buscas=${buscas} candidatos=${candidatosLen} criados=${criados} enriquecidos=${enriquecidos} descartados=${descartados.length} buscasContato=${buscasContato} contatosEnriquecidos=${contatosEnriquecidos}`
+    `[MiraDecisoresPublico] alvo=${alvoId} buscas=${buscas} candidatos=${candidatosLen} criados=${criados} enriquecidos=${enriquecidos} descartados=${descartados.length} buscasContato=${buscasContato} contatosEnriquecidos=${contatosEnriquecidos}${reavaliacao ? ` score=${reavaliacao.scoreAntes}→${reavaliacao.scoreDepois} status=${reavaliacao.statusAntes}→${reavaliacao.statusDepois}` : ''}`
   );
   return {
     ok: true,
@@ -484,5 +498,6 @@ export async function enriquecerDecisoresPublico(
     buscasContato,
     contatosEnriquecidos,
     ...(avisos.length ? { avisos } : {}),
+    ...(reavaliacao ? { reavaliacao } : {}),
   };
 }

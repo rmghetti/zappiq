@@ -55,6 +55,16 @@ vi.mock('./releasesPublico.js', () => ({
 }));
 vi.mock('./cagedMirror.js', () => ({ buscarSinalSetorial: vi.fn().mockResolvedValue(null) }));
 
+/**
+ * A reavaliação (score + confiança + status) saiu daqui para o `reavaliar.ts`,
+ * que lê a evidência do BANCO. Este arquivo testa a Fase 2 (a PESQUISA e o que
+ * ela grava); o cálculo da nota tem os seus próprios testes em reavaliar.test.ts.
+ * O que fica travado aqui é a FIAÇÃO: a Fase 2 tem que chamar a reavaliação e
+ * devolver o resultado dela.
+ */
+const reavaliarAlvo = vi.fn();
+vi.mock('./reavaliar.js', () => ({ reavaliarAlvo: (...a: any[]) => reavaliarAlvo(...a) }));
+
 const { aprofundarAlvo } = await import('./agentes.js');
 
 const ALVO = {
@@ -161,7 +171,7 @@ describe('Fase 2: a pesquisa na web preenche o que ficava vazio', () => {
     expect(data.fonte).toBe('https://exemplo.com/expansao');
   });
 
-  it('recalcula o score com a evidência: a nota SOBE e é gravada', async () => {
+  it('dispara a reavaliação DEPOIS de gravar, e devolve o que ela achou', async () => {
     pesquisarPegadaPublica.mockResolvedValue({
       releases: [],
       incumbentes: [{ fornecedor: 'TOTVS', categoria: 'ERP', evidencia: 'implantou ERP da TOTVS', fonte: 'https://e.com/1', deslocabilidade: null }],
@@ -169,16 +179,37 @@ describe('Fase 2: a pesquisa na web preenche o que ficava vazio', () => {
       janela: 'anunciou expansão de fábrica',
       buscas: 3,
     });
+    reavaliarAlvo.mockResolvedValue({
+      scoreAntes: 33,
+      scoreDepois: 52,
+      confiancaAntes: 80,
+      confiancaDepois: 90,
+      statusAntes: 'QUALIFYING',
+      statusDepois: 'READY',
+      promovido: true,
+      motivoStatus: 'promovido a Pronto',
+    });
 
     const r = await aprofundarAlvo('org-1', 'alvo-1');
 
+    // A ordem importa: a reavaliação lê a evidência do banco, então precisa
+    // rodar DEPOIS de gravar incumbente/demanda, senão leria o estado velho.
+    expect(incumbenteCreate).toHaveBeenCalled();
+    expect(reavaliarAlvo).toHaveBeenCalledWith('org-1', 'alvo-1');
     expect(r.pesquisaWeb?.scoreAntes).toBe(33);
-    expect(r.pesquisaWeb?.scoreDepois).toBeGreaterThan(33);
-    // A nota nova precisa PERSISTIR: sem isto, a Fase 2 preencheria o dossiê
-    // e o cliente continuaria vendo a nota velha na fila.
-    const updateScore = alvoUpdate.mock.calls.find((c: any[]) => c[0].data?.miraScore !== undefined);
-    expect(updateScore).toBeTruthy();
-    expect(updateScore![0].data.miraScore).toBe(r.pesquisaWeb?.scoreDepois);
+    expect(r.pesquisaWeb?.scoreDepois).toBe(52);
+    expect(r.pesquisaWeb?.statusDepois).toBe('READY');
+    expect(r.pesquisaWeb?.promovido).toBe(true);
+  });
+
+  it('reavaliação que falha não derruba a Fase 2 nem a Fase 1', async () => {
+    reavaliarAlvo.mockResolvedValue(null); // o serviço engole o próprio erro
+
+    const r = await aprofundarAlvo('org-1', 'alvo-1');
+
+    expect(r.ok).toBe(true);
+    expect(r.pesquisaWeb?.rodou).toBe(true);
+    expect(r.pesquisaWeb?.scoreAntes).toBe(33); // cai para a nota que o Alvo já tinha
   });
 
   it('sem incumbente achado, não apaga o que já existia', async () => {
