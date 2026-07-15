@@ -21,6 +21,15 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { llmRouter, type LLMTier, type LLMProviderId } from '../services/llm/LLMRouter.js';
 import {
+  createMaestroReporter,
+  weightedSlices,
+  EST_CONTEXT_MS,
+  EST_DRAFT_MS,
+  EST_HANDOFFS_MS,
+  EST_WIRING_MS,
+  RULER_END,
+} from './maestroProgress.js';
+import {
   pickBlueprint,
   buildGraphFromContent,
   recommendJourney,
@@ -591,8 +600,18 @@ export async function generateSmartFlows(input: {
   organizationId: string;
   objectives?: string[];
   multiAgent?: boolean;
+  /** Correlaciona os eventos de progresso com a geração deste cliente. Sem ele, roda sem barra. */
+  runId?: string;
 }): Promise<SmartFlowsResult> {
   const { organizationId } = input;
+  const report = createMaestroReporter(organizationId, input.runId);
+
+  // Primeiro marco antes de qualquer await: a barra aparece já no clique, em vez
+  // de só depois das queries de contexto.
+  report({
+    phase: 'context', percent: 0, nextPercent: 6, etaMs: EST_CONTEXT_MS,
+    label: 'Lendo o treinamento da sua IA',
+  });
   const ctx = await loadBusinessContext(organizationId);
 
   // Normaliza objetivos pros goals válidos; se vazio, recomenda pelo segmento.
@@ -608,10 +627,22 @@ export async function generateSmartFlows(input: {
   // no objetivo principal). multiAgent=true: 1 draft por objetivo.
   const toGenerate = multiAgent ? objectives : [objectives[0]];
 
+  // O plano de progresso só existe aqui: antes de carregar o contexto ainda não
+  // se sabe quantos drafts serão gerados (objetivos vazios viram recomendação).
+  const slices = weightedSlices(toGenerate.map(() => EST_DRAFT_MS), { from: 6, to: RULER_END });
+
   const drafts: FlowDraft[] = [];
-  for (const goal of toGenerate) {
+  for (let i = 0; i < toGenerate.length; i++) {
+    const goal = toGenerate[i];
+    report({
+      phase: 'draft', percent: slices[i].from, nextPercent: slices[i].to, etaMs: EST_DRAFT_MS,
+      label: `Montando o fluxo de ${BLUEPRINTS[goal].label}`,
+      step: i + 1, totalSteps: toGenerate.length,
+    });
     drafts.push(await generateDraftForObjective(ctx, BLUEPRINTS[goal], organizationId, multiAgent));
   }
+
+  report({ phase: 'done', percent: RULER_END, nextPercent: RULER_END, etaMs: 0, label: 'Finalizando' });
 
   const note = multiAgent
     ? `Montei ${drafts.length} fluxos especialistas (um por objetivo) usando o que você preencheu no treinamento. Hoje você publica um por vez; revise e edite cada um.`
@@ -912,8 +943,16 @@ async function designHandoffs(
 export async function generateJourney(input: {
   organizationId: string;
   objectives?: string[];
+  /** Correlaciona os eventos de progresso com a geração deste cliente. Sem ele, roda sem barra. */
+  runId?: string;
 }): Promise<JourneyResult> {
   const { organizationId } = input;
+  const report = createMaestroReporter(organizationId, input.runId);
+
+  report({
+    phase: 'context', percent: 0, nextPercent: 5, etaMs: EST_CONTEXT_MS,
+    label: 'Lendo o treinamento da sua IA',
+  });
   const ctx = await loadBusinessContext(organizationId);
 
   const requested = (input.objectives || [])
@@ -922,15 +961,41 @@ export async function generateJourney(input: {
   let objectives: BlueprintGoal[] = Array.from(new Set(requested));
   if (objectives.length === 0) objectives = recommendJourney(ctx.niche, ctx.segmento);
 
+  // Plano da régua: N drafts + a malha de handoffs + a fiação nos nós-IA.
+  // designHandoffs sai de graça (sem LLM) com menos de 2 objetivos, então nesse
+  // caso ele pesa zero — senão a barra reservaria 15s pra uma etapa instantânea.
+  const handoffWeight = objectives.length >= 2 ? EST_HANDOFFS_MS : 0;
+  const slices = weightedSlices(
+    [...objectives.map(() => EST_DRAFT_MS), handoffWeight, EST_WIRING_MS],
+    { from: 5, to: RULER_END },
+  );
+  const handoffSlice = slices[objectives.length];
+  const wiringSlice = slices[objectives.length + 1];
+
   // 1 fluxo especialista por objetivo (jornada multi-agente por padrão).
   const flows: JourneyFlow[] = [];
-  for (const goal of objectives) {
+  for (let i = 0; i < objectives.length; i++) {
+    const goal = objectives[i];
+    report({
+      phase: 'draft', percent: slices[i].from, nextPercent: slices[i].to, etaMs: EST_DRAFT_MS,
+      label: `Montando o fluxo de ${GOAL_LABEL[goal]}`,
+      step: i + 1, totalSteps: objectives.length,
+    });
     const draft = await generateDraftForObjective(ctx, BLUEPRINTS[goal], organizationId, true);
     flows.push({ goal, draft });
   }
 
   // O consultor desenha as interligações.
+  report({
+    phase: 'handoffs', percent: handoffSlice.from, nextPercent: handoffSlice.to, etaMs: EST_HANDOFFS_MS,
+    label: 'Ligando os fluxos entre si',
+  });
   const handoffs = await designHandoffs(ctx, objectives, organizationId);
+
+  report({
+    phase: 'wiring', percent: wiringSlice.from, nextPercent: wiringSlice.to, etaMs: EST_WIRING_MS,
+    label: 'Ensinando cada agente as transições',
+  });
 
   // Injeta consciência de handoff no Nó-IA de cada fluxo (handoff "quente").
   for (const jf of flows) {
@@ -954,6 +1019,8 @@ export async function generateJourney(input: {
   const note =
     'Esta é a sua operação inteira, pensada de ponta a ponta. Você pode abrir cada fluxo pra ver as atividades, ' +
     'editar as conexões e remover o que não usa. Ao salvar, os agentes passam a conhecer essas transições.';
+
+  report({ phase: 'done', percent: RULER_END, nextPercent: RULER_END, etaMs: 0, label: 'Finalizando' });
 
   return { flows, handoffs, objectives, summary, note };
 }

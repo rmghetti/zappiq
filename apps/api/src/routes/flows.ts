@@ -65,9 +65,13 @@ router.post('/generate', validate(generateFlowSchema), async (req: Request, res:
 // Usa TODO o ai-training (survey completo, docs, Q&A, segmento) + os objetivos
 // escolhidos pra gerar 1+ DRAFTS personalizados. multiAgent=true => 1 fluxo
 // especialista por objetivo. NÃO persiste — o cliente revisa/edita/salva.
+// runId: id opaco que o cliente gera pra receber o progresso da SUA geração via
+// Socket.io (evento maestro_progress na sala org:<id>). Opcional — sem ele a
+// geração roda idêntica, só sem barra.
 const generateSmartSchema = z.object({
   objectives: z.array(z.string()).optional(),
   multiAgent: z.boolean().optional(),
+  runId: z.string().min(8).max(64).optional(),
 });
 router.post('/generate-smart', validate(generateSmartSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -75,6 +79,7 @@ router.post('/generate-smart', validate(generateSmartSchema), async (req: Reques
       organizationId: req.organizationId!,
       objectives: req.body?.objectives,
       multiAgent: req.body?.multiAgent,
+      runId: req.body?.runId,
     });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
@@ -86,12 +91,16 @@ router.post('/generate-smart', validate(generateSmartSchema), async (req: Reques
 // intenção que dispara o salto + o racional do consultor. Cada Nó-IA já sai
 // ciente das transições (handoff "quente"). NÃO persiste — devolve a jornada
 // pro cliente revisar/editar/salvar (settings.journeyMap + cada fluxo via POST /).
-const generateJourneySchema = z.object({ objectives: z.array(z.string()).optional() });
+const generateJourneySchema = z.object({
+  objectives: z.array(z.string()).optional(),
+  runId: z.string().min(8).max(64).optional(),
+});
 router.post('/generate-journey', validate(generateJourneySchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await generateJourney({
       organizationId: req.organizationId!,
       objectives: req.body?.objectives,
+      runId: req.body?.runId,
     });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

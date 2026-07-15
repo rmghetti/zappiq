@@ -45,6 +45,7 @@ import {
 import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import { AskNodeFields } from './_components/AskNodeFields';
+import { useMaestroProgress, MaestroProgressBar, type MaestroProgressState } from './_components/MaestroProgress';
 import { PredicateBuilder, summarizePredicates, type Predicate } from './_components/PredicateBuilder';
 import { MessageRichFields } from './_components/MessageRichFields';
 import { AiToolsFields, type WebhookTool } from './_components/AiToolsFields';
@@ -1620,13 +1621,15 @@ function FlowBlockNode({ data }: NodeProps) {
   );
 }
 
-function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, architecting, journeyNote, onExpandFull }: {
+function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, architecting, architectProgress, journeyNote, onExpandFull }: {
   flows: ApiFlow[];
   onBack?: () => void;
   onEditFlow: (f: ApiFlow) => void;
   inline?: boolean;
   onArchitect?: () => void;
   architecting?: boolean;
+  /** Progresso da arquitetura em curso (marcos reais do servidor). */
+  architectProgress?: MaestroProgressState | null;
   journeyNote?: string;
   onExpandFull?: () => void;
 }) {
@@ -1723,8 +1726,14 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
           {onArchitect && (
             <button onClick={onArchitect} disabled={architecting} className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
               {architecting ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              {architecting ? 'O Maestro está desenhando…' : 'Maestro, arquitete minha operação'}
+              {architecting ? 'Desenhando…' : 'Maestro, arquitete minha operação'}
             </button>
+          )}
+          {/* O caminho mais lento do produto: 6 fluxos em série + a malha de
+              handoffs, fácil passar de um minuto. Aqui a barra é o que separa
+              "está trabalhando" de "morreu". */}
+          {architecting && architectProgress && (
+            <div className="w-full max-w-sm"><MaestroProgressBar progress={architectProgress} /></div>
           )}
           <SaibaMais featureKey="flows.mapa-operacao.arquitetar" variant="link" />
         </div>
@@ -1869,6 +1878,11 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
         </div>
       </div>
       {journeyNote && <p className="text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">{journeyNote}</p>}
+      {/* Refazer a operação com o mapa já populado: o canvas antigo continua na
+          tela, então a barra aqui em cima é a única pista de que algo roda. */}
+      {architecting && architectProgress && flows.length > 0 && (
+        <div className="mb-3"><MaestroProgressBar progress={architectProgress} /></div>
+      )}
       {canvas}
       {extras}
       <p className="text-[11px] text-gray-400 mt-2">Dica: clique numa conexão pra editar a intenção que a dispara ou excluí-la. Cada Nó-IA já sai ciente dessas transições (handoff “quente”). O roteamento automático ao vivo entre fluxos chega na próxima atualização do Maestro.</p>
@@ -1878,7 +1892,8 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
 
 function ConsolidatedMap(props: {
   flows: ApiFlow[]; onBack?: () => void; onEditFlow: (f: ApiFlow) => void;
-  inline?: boolean; onArchitect?: () => void; architecting?: boolean; journeyNote?: string; onExpandFull?: () => void;
+  inline?: boolean; onArchitect?: () => void; architecting?: boolean;
+  architectProgress?: MaestroProgressState | null; journeyNote?: string; onExpandFull?: () => void;
 }) {
   return <ReactFlowProvider><ConsolidatedMapInner {...props} /></ReactFlowProvider>;
 }
@@ -1899,6 +1914,10 @@ export default function FlowsPage() {
   // MAESTRO INTELIGENTE 2.0 — Arquiteto de Jornada: desenha a operação inteira.
   const [architecting, setArchitecting] = useState(false);
   const [journeyNote, setJourneyNote] = useState('');
+  // Barra de progresso das duas gerações (marcos reais do servidor via Socket.io).
+  // Uma instância pra cada porque as duas podem ter UI aberta ao mesmo tempo.
+  const smartProgress = useMaestroProgress();
+  const journeyProgress = useMaestroProgress();
   // Atualização inteligente (Onda 3): treino mudou → sugerir + aplicar 1 clique
   const [refreshTarget, setRefreshTarget] = useState<ApiFlow | null>(null);
   const [refreshPreview, setRefreshPreview] = useState<FlowRefresh | null>(null);
@@ -1991,14 +2010,30 @@ export default function FlowsPage() {
   // MAESTRO INTELIGENTE: gera 1+ fluxos lendo TODO o ai-training do cliente.
   async function runSmart() {
     if (objectives.length === 0) { setError('Escolha pelo menos um objetivo.'); return; }
+    const isMulti = multiAgent && objectives.length > 1;
+    // Só vale como palpite pro caso de o Socket.io estar mudo: o servidor gera 1
+    // draft por objetivo no multi-agente, e só o principal quando desmarcado.
+    const drafts = isMulti ? objectives.length : 1;
+    const runId = smartProgress.start({
+      estimatedMs: drafts * smartProgress.estDraftMs,
+      label: 'Lendo o treinamento da sua IA',
+    });
     setGenerating(true); setError(null); setSmartDrafts(null);
     try {
       const res = await api.post<{ success: boolean; data: { drafts: FlowDraft[]; note: string } }>(
         '/api/flows/generate-smart',
-        { objectives, multiAgent: multiAgent && objectives.length > 1 },
+        { objectives, multiAgent: isMulti, runId },
       );
-      if (res?.data) { setSmartDrafts(res.data.drafts || []); setSmartNote(res.data.note || ''); }
+      if (res?.data) {
+        // 100% só depois que os drafts chegaram — e a barra fica visível um
+        // instante antes de a tela virar pros resultados.
+        await smartProgress.finish();
+        setSmartDrafts(res.data.drafts || []); setSmartNote(res.data.note || '');
+      } else {
+        smartProgress.reset();
+      }
     } catch (e: any) {
+      smartProgress.reset();
       setError(e?.message || 'O Maestro não conseguiu montar agora. Tente de novo.');
     } finally { setGenerating(false); }
   }
@@ -2053,20 +2088,38 @@ export default function FlowsPage() {
       const ok = window.confirm('O Maestro vai desenhar a operação completa (Atendimento, Qualificação, Agendamento, Vendas, FAQ, Pós-venda) e criar esses fluxos interligados. Os fluxos atuais continuam na lista. Seguir?');
       if (!ok) return;
     }
+    // A jornada monta a operação inteira (6 objetivos por padrão), então o palpite
+    // de fallback conta 6 drafts + a malha de handoffs.
+    const runId = journeyProgress.start({
+      estimatedMs: 7 * journeyProgress.estDraftMs,
+      label: 'Lendo o treinamento da sua IA',
+    });
     setArchitecting(true); setError(null); setJourneyNote('');
     try {
       const res = await api.post<{ success: boolean; data: { flows: { goal: string; draft: FlowDraft }[]; handoffs: { from: string; to: string; intent: string; why: string }[]; summary: string; note: string } }>(
-        '/api/flows/generate-journey', {},
+        '/api/flows/generate-journey', { runId },
       );
       const data = res?.data;
       if (!data || !Array.isArray(data.flows) || data.flows.length === 0) {
+        journeyProgress.reset();
         setError('O Maestro não conseguiu desenhar a operação agora. Tente de novo.');
         return;
       }
       // Persiste cada fluxo e mapeia objetivo → id criado (pra ligar os handoffs).
+      // O servidor já entregou a geração e parou a barra em ~97%; daqui pro fim
+      // quem sabe do progresso é o cliente, então os marcos saem do próprio loop.
       const goalToId: Record<string, string> = {};
       let firstId: string | null = null;
-      for (const jf of data.flows) {
+      for (let i = 0; i < data.flows.length; i++) {
+        const jf = data.flows[i];
+        journeyProgress.mark({
+          percent: 97 + (i / data.flows.length) * 2,
+          nextPercent: 97 + ((i + 1) / data.flows.length) * 2,
+          etaMs: 400,
+          label: 'Salvando os fluxos',
+          step: i + 1,
+          totalSteps: data.flows.length,
+        });
         const created = await api.post<{ success: boolean; data: ApiFlow }>('/api/flows', {
           name: jf.draft.name,
           triggerType: jf.draft.triggerType,
@@ -2086,14 +2139,17 @@ export default function FlowsPage() {
         if (s && t && s !== t) mapEdges.push({ id: `${s}-${t}`, source: s, target: t, label: h.intent, data: { why: h.why }, style: { stroke: '#6366F1' } });
       }
       // Salva o mapa (posições vazias → auto-layout). Preserva o resto do settings.
+      journeyProgress.mark({ percent: 99, nextPercent: 100, etaMs: 700, label: 'Salvando o mapa da operação' });
       try {
         const st = (await api.get<{ success: boolean; data: any }>('/api/settings'))?.data?.settings || {};
         await api.put('/api/settings', { settings: { ...st, consolidatedMap: { positions: {}, edges: mapEdges } } });
       } catch { /* fail-soft: fluxos já criados, mapa cai no default */ }
+      await journeyProgress.finish();
       setJourneyNote(`${data.summary || ''} ${data.note || ''}`.trim());
       setView('consolidated');
       load();
     } catch (e: any) {
+      journeyProgress.reset();
       setError(e?.message || 'O Maestro não conseguiu desenhar a operação agora.');
     } finally { setArchitecting(false); }
   }
@@ -2155,6 +2211,7 @@ export default function FlowsPage() {
         onEditFlow={(f) => setEditing(f)}
         onArchitect={runJourney}
         architecting={architecting}
+        architectProgress={journeyProgress.progress}
         journeyNote={journeyNote}
       />
     );
@@ -2265,6 +2322,7 @@ export default function FlowsPage() {
             onEditFlow={(f) => setEditing(f)}
             onArchitect={runJourney}
             architecting={architecting}
+            architectProgress={journeyProgress.progress}
             journeyNote={journeyNote}
             onExpandFull={() => setView('consolidated')}
           />
@@ -2337,11 +2395,19 @@ export default function FlowsPage() {
                   </div>
                 )}
 
+                {/* Gerar leva de ~20s a mais de um minuto (multi-agente). A barra
+                    mostra a etapa real e o quanto falta, pra ninguém ficar na
+                    dúvida entre "travou" e "está demorando mesmo". */}
+                {generating && smartProgress.progress && (
+                  <MaestroProgressBar progress={smartProgress.progress} />
+                )}
+
                 <div className="flex justify-end gap-2 pt-1">
                   <button onClick={() => setSmartOpen(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
                   <button onClick={runSmart} disabled={generating} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
                     {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                    {generating ? 'Pensando no seu negócio…' : 'Gerar com inteligência'}
+                    {/* A etapa detalhada vive na barra; aqui só o estado do botão. */}
+                    {generating ? 'Gerando…' : 'Gerar com inteligência'}
                   </button>
                 </div>
               </div>
