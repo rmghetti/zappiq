@@ -18,7 +18,7 @@ import { runDescobertaPublica } from '../services/mira/descobertaPublica.js';
 import { buscaPublicaDisponivel, buscaPublicaProvider } from '../services/mira/buscaPublica.js';
 import { bigQueryDisponivel } from '../services/mira/descobertaBigQuery.js';
 import { enriquecerDecisoresPublico } from '../services/mira/decisoresPublico.js';
-import { aprofundarAlvo } from '../services/mira/agentes.js';
+import { aprofundarAlvo, planoBloqueadoPor } from '../services/mira/agentes.js';
 import { computeMiraAnalytics } from '../services/mira/analytics.js';
 import { sugerirPerfil } from '../services/mira/perfilSugestao.js';
 import {
@@ -488,7 +488,11 @@ router.get('/alvos/:id', async (req: Request, res: Response, next: NextFunction)
       res.status(404).json({ success: false, error: 'alvo_not_found' });
       return;
     }
-    res.json({ success: true, data: alvo });
+    // Por que este Alvo não tem plano de ação, na voz da MESMA função que
+    // decide isso no motor. Computar de novo no front duplicaria a regra, e
+    // duas cópias da mesma regra é a família de bug que mais custou neste
+    // módulo (o cron e o botão divergiram exatamente assim).
+    res.json({ success: true, data: { ...alvo, planoBloqueadoPor: planoBloqueadoPor(alvo as any) } });
   } catch (err) {
     next(err);
   }
