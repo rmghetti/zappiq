@@ -237,6 +237,15 @@ export async function enriquecerDecisoresPublico(
   const descartados: string[] = [];
   const agora = new Date().toISOString();
 
+  /**
+   * O QUE cada camada achou, para "Fontes verificadas" mostrar o quê, não só
+   * o link. Achado pelo Rodrigo (16/07/2026): "Mapear decisores" dizia "1
+   * enriquecido a partir de pegada pública" e não dava para saber o quê —
+   * a Camada 4 (contato) atualiza o decisor, mas nunca escrevia em
+   * `alvo.fontes`, então o rodapé do dossiê ficava mudo sobre ela.
+   */
+  const enriquecimentos: { decisor: string; campos: string[]; url: string; novo: boolean }[] = [];
+
   if (resultados.length > 0) {
   // -- Camada 2: extracao estruturada (LLM da casa, ancorada nas fontes) -
   const system = [
@@ -359,6 +368,23 @@ export async function enriquecerDecisoresPublico(
           },
         });
         enriquecidos++;
+        // O QUE mudou para este decisor, para "Fontes verificadas" dizer a
+        // coisa certa em vez de um rótulo genérico. Sempre tem PELO MENOS o
+        // cargo confirmado (é o que a Camada 2 sempre traz); contato entra
+        // quando a Camada 4 já rodou nesta mesma resposta (resultadosPorNome
+        // é o corpus da busca geral, então às vezes já acha contato aqui).
+        const camposAchados: string[] = [];
+        if (!perfilPublicoAntigo.linkedinUrl && contatoAchado.linkedinUrl) camposAchados.push('LinkedIn');
+        if (!perfilPublicoAntigo.instagramUrl && contatoAchado.instagramUrl) camposAchados.push('Instagram');
+        if (!contatoAntigo.email && contatoAchado.email) camposAchados.push('e-mail');
+        if (!contatoAntigo.phone && contatoAchado.telefone) camposAchados.push('telefone');
+        if (camposAchados.length === 0) camposAchados.push(`cargo confirmado (${cargo})`);
+        enriquecimentos.push({
+          decisor: nome,
+          campos: camposAchados,
+          url: contatoAchado.linkedinUrl ?? contatoAchado.instagramUrl ?? urls[0],
+          novo: false,
+        });
       } else if (!existente) {
         await prisma.miraDecisor.create({
           data: {
@@ -376,6 +402,7 @@ export async function enriquecerDecisoresPublico(
         });
         existentes.set(norm(nome), { id: 'novo', nome });
         criados++;
+        enriquecimentos.push({ decisor: nome, campos: [`novo decisor (${cargo})`], url: urls[0], novo: true });
       }
     } catch (err: any) {
       logger.error(`[MiraDecisoresPublico] falha ao gravar "${nome}": ${err?.message ?? err}`);
@@ -383,16 +410,8 @@ export async function enriquecerDecisoresPublico(
     }
   }
 
-  // Lineage agregado no Alvo
-  if (criados + enriquecidos > 0) {
-    try {
-      const fontes = Array.isArray(alvo.fontes) ? alvo.fontes : [];
-      fontes.push({ campo: 'decisores_pegada_publica', url: resultados[0].url, data: agora, confianca: 55 });
-      await prisma.miraAlvo.update({ where: { id: alvo.id }, data: { fontes } });
-    } catch {
-      /* nao critico */
-    }
-  }
+  // A escrita em alvo.fontes agora é UMA SÓ, depois da Camada 4, cobrindo as
+  // duas camadas (ver "Fontes verificadas: o que cada camada achou" abaixo).
   } // fim do if (resultados.length > 0) — Camada 2/3
 
   // ── Camada 4: contato dos decisores JÁ MAPEADOS (pedido do Rodrigo) ────
@@ -442,12 +461,17 @@ export async function enriquecerDecisoresPublico(
       const contatoAtual = (d.contato as any) ?? {};
       const email = contatoAtual.email ?? contatoAchado.email;
       const phone = contatoAtual.phone ?? contatoAchado.telefone;
-      const teveNovidade = Boolean(
-        (!perfilPublicoAtual.linkedinUrl && contatoAchado.linkedinUrl) ||
-          (!perfilPublicoAtual.instagramUrl && contatoAchado.instagramUrl) ||
-          (!contatoAtual.email && contatoAchado.email) ||
-          (!contatoAtual.phone && contatoAchado.telefone)
-      );
+      // O QUE foi achado, campo a campo (para "Fontes verificadas" dizer a
+      // coisa certa). "dado sem fonte não entra no dossiê" (Saiba mais de
+      // Fontes verificadas): por isso o e-mail/telefone também ganham uma
+      // fonte, mesmo sem LinkedIn/Instagram — o primeiro resultado que citou
+      // o nome da pessoa é onde o dado foi lido.
+      const camposAchados: string[] = [];
+      if (!perfilPublicoAtual.linkedinUrl && contatoAchado.linkedinUrl) camposAchados.push('LinkedIn');
+      if (!perfilPublicoAtual.instagramUrl && contatoAchado.instagramUrl) camposAchados.push('Instagram');
+      if (!contatoAtual.email && contatoAchado.email) camposAchados.push('e-mail');
+      if (!contatoAtual.phone && contatoAchado.telefone) camposAchados.push('telefone');
+      const teveNovidade = camposAchados.length > 0;
       const novasFontes = [contatoAchado.linkedinUrl, contatoAchado.instagramUrl].filter(
         (u): u is string => Boolean(u)
       );
@@ -465,13 +489,42 @@ export async function enriquecerDecisoresPublico(
             : lineageAntigo,
         },
       });
-      if (teveNovidade) contatosEnriquecidos++;
+      if (teveNovidade) {
+        contatosEnriquecidos++;
+        const fonteUrl = contatoAchado.linkedinUrl ?? contatoAchado.instagramUrl ?? achados[0]?.url;
+        if (fonteUrl) enriquecimentos.push({ decisor: d.nome, campos: camposAchados, url: fonteUrl, novo: false });
+      }
     }
   } catch (err: any) {
     // Erro fora do laço de busca (ex.: falha ao listar decisores): não
     // propaga, mas registra — Camada 1-3 já produziram um resultado válido.
     logger.error(`[MiraDecisoresPublico] Camada 4 (contato) quebrou alvo=${alvoId}: ${err?.message ?? err}`);
     avisos.push('A busca de contato dos decisores já mapeados não pôde rodar desta vez.');
+  }
+
+  // ── Fontes verificadas: o que cada camada achou ────────────────────
+  // Achado pelo Rodrigo (16/07/2026): o status verde do topo dizia "1
+  // enriquecido a partir de pegada pública" e não dava para saber QUAL
+  // informação chegou. Uma entrada por decisor tocado, com o campo
+  // encontrado no texto (não um rótulo genérico) e a fonte real.
+  //
+  // UMA escrita só, no fim, lendo `fontes` FRESCO do banco: as Camadas 2/3 e
+  // 4 rodam em sequência na mesma resposta, e escrever cada uma com a cópia
+  // de `alvo` carregada no início apagaria o que a outra acabou de gravar.
+  if (enriquecimentos.length > 0) {
+    try {
+      const atual = await prisma.miraAlvo.findFirst({ where: { id: alvo.id }, select: { fontes: true } });
+      const fontesAtuais = Array.isArray(atual?.fontes) ? (atual!.fontes as any[]) : [];
+      const novasEntradas = enriquecimentos.map((e) => ({
+        campo: `${e.novo ? 'Novo decisor' : 'Contato'}: ${e.decisor}, ${e.campos.join(', ')}`,
+        url: e.url,
+        data: agora,
+        confianca: e.novo ? 60 : 55,
+      }));
+      await prisma.miraAlvo.update({ where: { id: alvo.id }, data: { fontes: [...fontesAtuais, ...novasEntradas] } });
+    } catch (err: any) {
+      logger.warn(`[MiraDecisoresPublico] não consegui gravar as fontes detalhadas alvo=${alvoId}: ${err?.message ?? err}`);
+    }
   }
 
   // ── Reavaliação: decisor novo muda a nota E pode mudar o status ────

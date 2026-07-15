@@ -366,20 +366,30 @@ export default function MiraAlvoDossiePage() {
         </Bloco>
       </div>
 
-      {/* Fontes / lineage */}
+      {/* Fontes / lineage. id de âncora: o "Mapear decisores" e o "Aprofundar"
+          apontam para cá quando algo é encontrado, em vez de resumir tudo
+          numa contagem que não diz o QUÊ. */}
       {alvo.fontes?.length ? (
-        <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
+        <div id="fontes-verificadas" className="mt-4 bg-gray-50 border border-gray-200 rounded-xl p-4 scroll-mt-4">
           <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
             Fontes verificadas <SaibaMais featureKey="mira.dossie.fontes" />
           </p>
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {alvo.fontes.slice(0, 12).map((f, i) => (
-              <li key={i} className="text-[11px] text-gray-400 truncate">
-                <span className="text-gray-500 font-medium">{f.campo}:</span>{' '}
-                <a href={f.url} target="_blank" rel="noopener noreferrer" className="hover:text-primary-500">
+              // Sem truncate: "Contato: Carlos Rondello, LinkedIn" é o que
+              // responde "o que foi enriquecido", e cortar com reticências
+              // era exatamente a queixa (número sem detalhe).
+              <li key={i} className="text-[11px] text-gray-500 leading-relaxed">
+                <span className="font-medium text-gray-700">{f.campo}</span>{' '}
+                <a
+                  href={f.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-400 hover:text-primary-500 break-all"
+                >
                   {f.url}
                 </a>
-                {f.data ? ` · ${new Date(f.data).toLocaleDateString('pt-BR')}` : ''}
+                {f.data ? <span className="text-gray-400"> · {new Date(f.data).toLocaleDateString('pt-BR')}</span> : ''}
               </li>
             ))}
           </ul>
@@ -406,19 +416,35 @@ function AlvoActions({
   const [deepMsg, setDeepMsg] = useState<string | null>(null);
   const [mappingDec, setMappingDec] = useState(false);
   const [decMsg, setDecMsg] = useState<string | null>(null);
+  // true quando a busca achou/mudou algo: mostra o link para "Fontes
+  // verificadas", onde o QUÊ de cada achado está descrito (não só o número).
+  const [decEncontrouAlgo, setDecEncontrouAlgo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const mapearDecisores = async () => {
     setMappingDec(true);
     setError(null);
     setDecMsg(null);
+    setDecEncontrouAlgo(false);
     try {
       const res = await miraApi.decisoresPublico(alvo.id);
       if (res.data.ok) {
-        const total = res.data.criados + res.data.enriquecidos;
+        // contatosEnriquecidos (Camada 4: contato de quem já estava mapeado)
+        // não entrava nesta conta — a mensagem podia dizer "0 e 0" com 3
+        // contatos novos escondidos atrás dela.
+        const contatos = res.data.contatosEnriquecidos ?? 0;
+        const total = res.data.criados + res.data.enriquecidos + contatos;
+        setDecEncontrouAlgo(total > 0);
         setDecMsg(
           total > 0
-            ? `${res.data.criados} decisor(es) novo(s) e ${res.data.enriquecidos} enriquecido(s) a partir de pegada pública.` +
+            ? [
+                `${res.data.criados} decisor(es) novo(s)`,
+                `${res.data.enriquecidos} enriquecido(s)`,
+                contatos > 0 ? `${contatos} com contato novo` : null,
+              ]
+                .filter(Boolean)
+                .join(', ') +
+                ' a partir de pegada pública.' +
                 (res.data.descartadosPeloVerificador.length
                   ? ` O verificador descartou ${res.data.descartadosPeloVerificador.length} sem fonte.`
                   : '')
@@ -585,7 +611,25 @@ function AlvoActions({
       )}
       {error && <span className="text-xs text-red-500">{error}</span>}
       {deepMsg && <span className="text-xs text-emerald-600">{deepMsg}</span>}
-      {decMsg && <span className="text-xs text-emerald-600">{decMsg}</span>}
+      {decMsg && (
+        <span className="text-xs text-emerald-600">
+          {decMsg}
+          {/* O número sozinho ("1 enriquecido") não diz se foi LinkedIn,
+              telefone ou e-mail. A resposta mora em "Fontes verificadas",
+              com o nome do decisor e o campo encontrado. */}
+          {decEncontrouAlgo && (
+            <button
+              type="button"
+              onClick={() =>
+                document.getElementById('fontes-verificadas')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+              className="ml-1 font-semibold underline decoration-dotted hover:text-emerald-700"
+            >
+              Fontes verificadas, no rodapé da página ↓
+            </button>
+          )}
+        </span>
+      )}
     </div>
   );
 }

@@ -177,6 +177,92 @@ describe('Camada 4: contato de decisores já mapeados (ex.: sócios do QSA)', ()
   });
 });
 
+describe('Fontes verificadas: o que cada camada achou (não só o link)', () => {
+  // O Rodrigo testou "Mapear decisores" e viu "1 enriquecido a partir de
+  // pegada pública" sem nenhum jeito de saber O QUÊ. A Camada 4 atualizava o
+  // decisor mas nunca escrevia em alvo.fontes: o rodapé do dossiê ficava
+  // mudo justo na única fonte de detalhe que a tela tem.
+  it('contato enriquecido (Camada 4) grava uma entrada DESCRITIVA em fontes, com a fonte real', async () => {
+    findFirstAlvo.mockResolvedValue(ALVO_BASE);
+    findManyDecisor.mockResolvedValue([
+      { id: 'dec-1', nome: 'Carlos Roberto Rondello', vinculoQsa: true, perfilPublico: null, contato: null, lineage: [] },
+    ]);
+    webSearch.mockImplementation(async (_org: string, query: string) => {
+      if (query.includes('site:linkedin.com/in') && query.includes('Carlos Roberto Rondello')) {
+        return [{ title: 'Carlos Roberto Rondello - Sócio | LinkedIn', url: 'https://linkedin.com/in/carlos-rondello', snippet: 'Sócio' }];
+      }
+      return [];
+    });
+
+    await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    // A ÚNICA escrita em fontes é a consolidada, no fim; lê o valor ATUAL do
+    // banco (não a cópia de alvo carregada no início) antes de acrescentar.
+    const escritaFontes = updateAlvo.mock.calls.find((c: any[]) => c[0].data?.fontes !== undefined);
+    expect(escritaFontes, 'nenhuma escrita em alvo.fontes').toBeTruthy();
+    const entrada = escritaFontes![0].data.fontes[0];
+    expect(entrada.campo).toContain('Carlos Roberto Rondello');
+    expect(entrada.campo).toContain('LinkedIn');
+    expect(entrada.campo).not.toBe('decisores_pegada_publica'); // o rótulo genérico antigo
+    expect(entrada.url).toBe('https://linkedin.com/in/carlos-rondello');
+  });
+
+  it('telefone/e-mail achados SEM LinkedIn/Instagram ainda ganham uma fonte real (nunca ficam sem lastro)', async () => {
+    findFirstAlvo.mockResolvedValue(ALVO_BASE);
+    findManyDecisor.mockResolvedValue([
+      { id: 'dec-1', nome: 'Maria Teste', vinculoQsa: true, perfilPublico: null, contato: null, lineage: [] },
+    ]);
+    webSearch.mockImplementation(async (_org: string, query: string) => {
+      if (query.includes('Maria Teste') && !query.includes('linkedin')) {
+        return [{ title: 'Fale com Maria Teste', url: 'https://diretorio.com.br/maria', snippet: 'contato: maria@x.com.br' }];
+      }
+      return [];
+    });
+
+    await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    const escritaFontes = updateAlvo.mock.calls.find((c: any[]) => c[0].data?.fontes !== undefined);
+    expect(escritaFontes).toBeTruthy();
+    const entrada = escritaFontes![0].data.fontes[0];
+    expect(entrada.campo).toContain('e-mail');
+    expect(entrada.url).toBe('https://diretorio.com.br/maria');
+  });
+
+  it('decisor NOVO grava a URL da PRÓPRIA pessoa, não a do primeiro resultado da lista', async () => {
+    findFirstAlvo.mockResolvedValue(ALVO_BASE);
+    findUniquePerfil.mockResolvedValue({ alvoB2B: { decisor: [], influenciadores: [], usuarioFinal: [] } });
+    webSearch.mockResolvedValue([
+      { title: 'Resultado genérico da empresa', url: 'https://empresa.com/sobre', snippet: 'ACME METALURGICA LTDA' },
+      { title: 'Joana Pereira - Diretora Financeira - ACME | LinkedIn', url: 'https://linkedin.com/in/joana-pereira', snippet: 'Diretora Financeira na ACME' },
+    ]);
+    const { llmRouter } = await import('../llm/LLMRouter.js');
+    (llmRouter.complete as any).mockResolvedValue({
+      text: JSON.stringify({ decisores: [{ nome: 'Joana Pereira', cargo: 'Diretora Financeira', fonteIndice: 2 }] }),
+    });
+
+    await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    const escritaFontes = updateAlvo.mock.calls.find((c: any[]) => c[0].data?.fontes !== undefined);
+    const entrada = escritaFontes![0].data.fontes.find((f: any) => f.campo.includes('Joana Pereira'));
+    expect(entrada, 'entrada de Joana Pereira não encontrada').toBeTruthy();
+    expect(entrada.campo).toContain('novo decisor');
+    // A URL tem que ser a DELA (o resultado onde o nome dela aparece), não o
+    // primeiro resultado da lista (que fala da empresa, não de ninguém).
+    expect(entrada.url).toBe('https://linkedin.com/in/joana-pereira');
+  });
+
+  it('sem nenhum enriquecimento, não escreve em fontes à toa', async () => {
+    findFirstAlvo.mockResolvedValue(ALVO_BASE);
+    webSearch.mockResolvedValue([]);
+    findManyDecisor.mockResolvedValue([]);
+
+    await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    const escritaFontes = updateAlvo.mock.calls.find((c: any[]) => c[0].data?.fontes !== undefined);
+    expect(escritaFontes).toBeUndefined();
+  });
+});
+
 describe('extrairContatoPublico — determinístico, nunca inventa', () => {
   it('não extrai nada de uma lista vazia', () => {
     expect(extrairContatoPublico([])).toEqual({ linkedinUrl: null, instagramUrl: null, email: null, telefone: null });
