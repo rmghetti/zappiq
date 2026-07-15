@@ -66,5 +66,42 @@ Reusa `planoAcao.ts:45`, que já é idempotente, já aparece em `/tasks` e já v
 
 ## Registro de execução
 
-### Sessão 1 (15/07/2026)
-- Iniciada. Levantamento completo + desenho acima.
+### Sessão 1 (15/07/2026) — CONCLUÍDA, backend inteiro pronto
+
+Branch `feat/mira-releases-inteligencia`. Adiantou o escopo da sessão 2.
+
+Commits:
+- `f5243d5` — release traz data, fonte e vira demanda + oportunidade ligadas
+  (migração aditiva, Instagram + imprensa nas buscas, sinergia por matéria,
+  verificador de data, confiança graduada por fonte, FK `demandaId`,
+  `origem: RELEASE` sobrevivendo ao Aprofundar). 20 testes novos.
+- `47908aa` — o ciclo semanal fecha (`persistirPegadaPublica` unificada,
+  cron chama `reavaliarAlvo`, `releasesAlerta.ts` com trava de spam,
+  `orderBy` do reavaliar consertado). 17 testes novos.
+
+Verificado: tsc limpo; suíte da API 155 arquivos / 1567 testes verdes (era
+152/1530 antes do loop, +37 testes).
+
+**Buracos 1 a 8 da lista acima: fechados.** Falta o 9 (front) e a prova real.
+
+### Sessão 2 (próxima) — front + PR + deploy
+1. `mira/alvos/[id]/page.tsx:345` — "Releases desta conta" mostra hoje só
+   título + ícone de link. Precisa mostrar: data de publicação, a fonte
+   clicável, a confiança, e o que a matéria GEROU (demanda/oportunidade
+   ligadas). É o que o Rodrigo vai olhar para dizer se resolveu.
+2. Saiba mais de `mira.releases`: atualizar a copy (hoje descreve o recurso
+   antigo, sem sinergia nem alerta).
+3. PR, CI, merge, deploy do Fly com a migração.
+
+### Sessão 3 — prova em produção
+Rodar `runMiraReleasesCycle` (ou a pegada pública de um Alvo real) contra o
+COFEL/org MACHIA e provar: matéria real com link, demanda ligada, score
+movido, Task de alerta criada. Sem isso não está pronto.
+
+### Débito conhecido (não bloqueia, registrar para não esquecer)
+- A mesma notícia coberta por dois veículos (URLs diferentes) entra duas
+  vezes. O dedup por URL não pega e dedup por título não cola porque cada
+  veículo escreve um título. Só incomoda se acontecer de verdade.
+- Confiança do ALVO segue sem contar releases (decisão deliberada, ver acima).
+  Se o Rodrigo insistir, a conversa é sobre rebalancear os 7 pesos, e isso
+  muda a confiança de todo Alvo já entregue.
