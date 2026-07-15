@@ -40,6 +40,73 @@ export interface CnpjData {
   fonteUrl: string;
 }
 
+/**
+ * Naturezas jurídicas em que a empresa NÃO TEM SÓCIO por definição legal: o
+ * titular é uma pessoa física e a razão social é o nome dela.
+ *
+ * Códigos e definições conferidos no diretório oficial
+ * (`basedosdados.br_bd_diretorios_brasil.natureza_juridica`) em 15/07/2026.
+ * A definição de 2135 é explícita: "o empresário pessoa física que exerce
+ * profissionalmente atividade econômica (...) sem se constituir pessoa
+ * jurídica e SEM A PARTICIPAÇÃO DE QUALQUER SÓCIO".
+ */
+const NATUREZAS_SEM_SOCIO: Record<string, string> = {
+  '2135': 'Empresário Individual',
+  '2305': 'Titular de EIRELI',
+  '2313': 'Titular de EIRELI',
+  '4014': 'Titular de Empresa Individual Imobiliária',
+};
+
+const normNome = (s: string) =>
+  (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+
+/**
+ * O titular de um Empresário Individual, lido do próprio registro.
+ *
+ * Por que existe: em 15/07/2026, 11 dos 20 Alvos em produção estavam SEM
+ * DECISOR, e 8 deles eram Empresário Individual. O sistema esperava um quadro
+ * societário que a lei proíbe de existir, desistia, e entregava um Alvo cru
+ * com score 13. O decisor sempre esteve no campo `nome`.
+ *
+ * Isto não é heurística nem chute: é ler o registro corretamente. Na EI a
+ * pessoa É a empresa, então a razão social é o nome civil do titular.
+ *
+ * O sufixo de município é removido quando presente: é praxe na EI ("RICARDO
+ * ALEXANDRE M. CHIRIGATTI AGUAI" em Aguaí, "GISLAINE (...) BERSAN ARARAS" em
+ * Araras). Só corta quando bate exatamente com o município do registro, então
+ * na dúvida o nome fica inteiro, que é o erro barato.
+ */
+export function titularDoRegistro(dados: {
+  naturezaJuridica: string | null;
+  razaoSocial: string;
+  municipio?: string | null;
+  qsa: CnpjSocio[];
+}): CnpjSocio | null {
+  // Só quando não há sócio: se o QSA veio preenchido, ele manda.
+  if (dados.qsa.length > 0) return null;
+  const cod = String(dados.naturezaJuridica ?? '').replace(/\D/g, '');
+  const papel = NATUREZAS_SEM_SOCIO[cod];
+  if (!papel) return null;
+
+  let nome = (dados.razaoSocial || '').trim();
+  if (nome.length < 5) return null;
+
+  const mun = normNome(dados.municipio ?? '');
+  // Razão social que é SÓ o nome da cidade não é o nome de ninguém. Devolver
+  // "ARARAS" como decisor seria pior que devolver nada: o vendedor liga
+  // perguntando pelo Sr. Araras.
+  if (mun.length >= 4 && normNome(nome) === mun) return null;
+  if (mun.length >= 4) {
+    const tokens = nome.split(/\s+/);
+    const ultimos = tokens.slice(-mun.split(' ').length).join(' ');
+    if (normNome(ultimos) === mun && tokens.length > mun.split(' ').length + 1) {
+      nome = tokens.slice(0, tokens.length - mun.split(' ').length).join(' ').trim();
+    }
+  }
+  if (nome.length < 5) return null;
+  return { nome, qualificacao: papel };
+}
+
 export function normalizeCnpj(raw: string): string | null {
   const digits = (raw || '').replace(/\D/g, '');
   return digits.length === 14 ? digits : null;

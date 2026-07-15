@@ -42,7 +42,11 @@ vi.mock('./buscaPublica.js', () => ({
 }));
 
 const fetchCnpj = vi.fn();
-vi.mock('./cnpj.js', () => ({
+// `titularDoRegistro` roda de VERDADE (via importOriginal): é função pura de
+// leitura do registro, e mocká-la esconderia justamente o que ela faz com o
+// Empresário Individual que o espelho devolve sem sócio.
+vi.mock('./cnpj.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./cnpj.js')>()),
   fetchCnpj: (...a: any[]) => fetchCnpj(...a),
   normalizeCnpj: (s: string) => s.replace(/\D/g, '') || null,
   arquetipoFromQualificacao: () => null,

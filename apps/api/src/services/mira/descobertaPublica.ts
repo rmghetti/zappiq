@@ -15,7 +15,7 @@
  */
 import { prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
-import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, type CnpjData } from './cnpj.js';
+import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, titularDoRegistro, type CnpjData } from './cnpj.js';
 import { computeMiraScoreV1 } from './score.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
 import { buscarCnpjsBigQuery, enriquecerCnpjsBigQuery, type CnpjDoEspelho } from './descobertaBigQuery.js';
@@ -119,25 +119,44 @@ function nomeDoResultado(r: SerpResult): string {
  * O registro do espelho no formato que o gate e o score já falam.
  *
  * O espelho só materializa ATIVAS, então situação é ATIVA por construção.
- * Ficam de fora `cnaeDescricao` e `optanteSimples`, que exigiriam dicionários e
- * não pesam no gate; o score degrada de boa (matchCnae cai no código, que é o
- * filtro forte).
+ * Fica de fora só `optanteSimples`, que não pesa em nada hoje.
  *
- * O `municipio` ESTAVA nessa lista, e era um erro caro. A decisão original
- * olhou só o GATE (onde município não pesa) e não viu que ele pesa na
- * CONFIANÇA (`score.ts:292`: `municipio && uf` vale 10). Como o espelho é a
- * única fonte que sobrevive em produção (a BrasilAPI dá 403 fora do Brasil),
- * TODO Alvo B2B da plataforma nascia com `municipio: null` e ficava capado em
- * 90 de confiança — 20 de 20 em 15/07/2026. O dado sempre esteve lá: o espelho
- * guarda o código IBGE, e agora o enriquecimento traduz pelo diretório do BD.
+ * `cnaeDescricao` e `municipio` ESTAVAM nesta lista de descartados, com a
+ * justificativa de que "exigiriam dicionários e não pesam no gate". A frase era
+ * verdadeira sobre o gate e custou caro fora dele, duas vezes:
+ *   - `municipio` vale 10 na CONFIANÇA (`score.ts`, `municipio && uf`). Como o
+ *     espelho é a única fonte viva em produção (a BrasilAPI dá 403 fora do
+ *     Brasil), TODO Alvo nascia sem município e capado em 90. Eram 20 de 20 em
+ *     15/07/2026.
+ *   - `cnaeDescricao` faltando faz a IA ADIVINHAR o setor pelo número e errar.
+ * Os dois dicionários eram tabelas públicas do mesmo BD de onde o espelho já
+ * vem, e o JOIN sai de graça no enriquecimento.
  */
 function doEspelhoParaCnpjData(e: CnpjDoEspelho): CnpjData {
+  const qsa = e.qsa.map((s) => ({ nome: s.nome, qualificacao: s.qualificacao }));
+
+  // Empresário Individual não tem sócio POR LEI, então o QSA vem vazio e o
+  // Alvo nascia sem decisor nenhum: 8 dos 11 Alvos crus em produção eram isto.
+  // O titular está na razão social, e ler isso é registro oficial, não chute.
+  const titular = titularDoRegistro({
+    naturezaJuridica: e.naturezaJuridica,
+    razaoSocial: e.razaoSocial,
+    municipio: e.municipio,
+    qsa,
+  });
+  if (titular) qsa.push(titular);
+
   return {
     cnpj: e.cnpj,
     razaoSocial: e.razaoSocial,
     nomeFantasia: e.nomeFantasia,
     cnae: e.cnae,
-    cnaeDescricao: null,
+    // Era `null`, e o prompt mandava só o número para a IA ("Atividade (CNAE
+    // 2451200)"). Sem a descrição ela ADIVINHA o setor: escreveu o dossiê de
+    // uma fundição de ferro inteiro como "joalheria" (2451200 = Fundição de
+    // ferro e aço; joalheria é 3211601). O dicionário é o mesmo diretório do
+    // BD de onde veio o município.
+    cnaeDescricao: e.cnaeDescricao,
     porte: e.porte,
     capitalSocial: e.capitalSocial,
     naturezaJuridica: e.naturezaJuridica,
@@ -147,7 +166,7 @@ function doEspelhoParaCnpjData(e: CnpjDoEspelho): CnpjData {
     telefone: e.telefone,
     dataInicioAtividade: e.dataInicioAtividade,
     optanteSimples: null,
-    qsa: e.qsa.map((s) => ({ nome: s.nome, qualificacao: s.qualificacao })),
+    qsa,
     fonteUrl: 'bigquery:mira.cnpj_ativos (base de CNPJ da Receita via BD Pro)',
   };
 }

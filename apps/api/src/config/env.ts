@@ -75,6 +75,10 @@ const envSchema = z.object({
   // JOIN no enriquecimento custa praticamente nada e evita carregar um
   // dicionário estático de 5.570 entradas no repositório.
   BIGQUERY_MUNICIPIOS_TABLE: z.string().default('basedosdados.br_bd_diretorios_brasil.municipio'),
+  // Diretório de CNAE do BD: traduz o código da atividade para a descrição. Sem
+  // ela o prompt manda só o número e a IA adivinha o setor (e erra: escreveu o
+  // dossiê de uma fundição de ferro como "joalheria" em 15/07/2026).
+  BIGQUERY_CNAE_TABLE: z.string().default('basedosdados.br_bd_diretorios_brasil.cnae_2'),
 
   // WhatsApp
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
