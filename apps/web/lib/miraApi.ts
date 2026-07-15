@@ -438,8 +438,25 @@ export const miraApi = {
     api.post('/api/mira/motor-a/run', { cnpjs, ...(nome?.trim() ? { nome: nome.trim() } : {}) }),
   crmCandidates: (): Promise<{ success: boolean; data: { total: number; cnpjs: string[] } }> =>
     api.get('/api/mira/motor-a/crm-candidates'),
-  pousarCrm: (alvoId: string): Promise<{ success: boolean; data: { contactId: string; dealId: string; reused: boolean } }> =>
-    api.post(`/api/mira/alvos/${alvoId}/crm`, {}),
+  /**
+   * `forcar` = "enviar assim mesmo" um Alvo que não passou na verificação.
+   * Ele entra no CRM marcado como não qualificado (leadStatus UNQUALIFIED,
+   * aviso no título do Deal e uma Activity dizendo o que falta).
+   */
+  pousarCrm: (
+    alvoId: string,
+    forcar = false
+  ): Promise<{
+    success: boolean;
+    data: {
+      contactId: string;
+      dealId: string;
+      reused: boolean;
+      naoQualificado: boolean;
+      motivoNaoQualificado?: string;
+      decisoresNoCrm: number;
+    };
+  }> => api.post(`/api/mira/alvos/${alvoId}/crm`, { forcar }),
   arquivarAlvo: (alvoId: string): Promise<{ success: boolean }> => api.post(`/api/mira/alvos/${alvoId}/arquivar`, {}),
   motorBStatus: (): Promise<{
     success: boolean;
