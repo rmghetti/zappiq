@@ -18,6 +18,20 @@ import { logger } from '../utils/logger.js';
  * IMPORTANTE: RLS só é enforced para o role app_user. Se a aplicação
  * conectar como superuser/postgres, as policies são bypassed.
  * Em produção, a connection string deve usar o role app_user.
+ *
+ * ⚠️ ESTADO REAL EM PRODUÇÃO (verificado em 15/07/2026)
+ * A frase acima descreve o DESENHO, não o que está no ar. Em produção:
+ *   - o papel `app_user` NÃO EXISTE (a migração 20260417 que o criaria consta
+ *     como aplicada mas nunca executou — ver 20260715000004_rls_fecha_anon);
+ *   - a API conecta como `postgres`, que é DONO das tabelas e tem
+ *     rolbypassrls=true → as policies NUNCA são avaliadas para a API.
+ *
+ * Ou seja: este middleware seta um contexto que hoje NINGUÉM lê. O isolamento
+ * entre organizações depende 100% do filtro `organizationId` no `where` de cada
+ * query. NÃO OMITA ESSE FILTRO confiando na RLS — ela não vai te salvar.
+ *
+ * A RLS ligada hoje serve a outro propósito, real: barrar a chave `anon` do
+ * Supabase (pública, vai no bundle do front) de ler as tabelas via PostgREST.
  * ═══════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -121,8 +135,9 @@ export async function setTenantContext(
  *   );
  *
  * Notas:
- *   - Filtro `organizationId` no `where` continua sendo defesa em profundidade
- *     (recomendado, mas RLS policy faz o trabalho mesmo sem)
+ *   - Filtro `organizationId` no `where` é OBRIGATÓRIO, não "defesa em
+ *     profundidade": em produção a RLS não filtra para a API (ver o aviso no
+ *     topo deste arquivo). Sem o filtro, o withTenant NÃO isola nada.
  *   - Lança erro 400 se req.organizationId ausente (assumido após auth)
  *   - O callback recebe o TransactionClient — mesma API do prisma global
  *     mas com SET LOCAL aplicado e contexto isolado
