@@ -372,6 +372,10 @@ export interface DecisoresPublicoResult {
   enriquecidos: number;
   descartadosPeloVerificador: string[];
   motivo?: string;
+  /** Camada 4: busca de CONTATO por nome, em decisores já mapeados. */
+  buscasContato?: number;
+  contatosEnriquecidos?: number;
+  avisos?: string[];
 }
 
 export interface MiraAnalyticsData {
