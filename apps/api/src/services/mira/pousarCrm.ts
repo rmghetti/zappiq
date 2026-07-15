@@ -29,6 +29,7 @@
 import { Prisma, prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
 import { alvoPassaGate } from './reavaliar.js';
+import { ligarTarefaAoCrm } from './planoAcao.js';
 
 export interface PousarResult {
   contactId: string;
@@ -372,6 +373,11 @@ export async function pousarNoCrm(
       logger.warn(`[Mira] contact do decisor "${d.nome}" falhou: ${err?.message ?? err}`);
     }
   }
+
+  // A tarefa do plano de ação costuma nascer ANTES do pouso (o cliente
+  // aprofunda, depois decide enviar), então ela fica órfã de deal até aqui.
+  // Sem esta costura, concluir a tarefa não teria onde escrever no CRM.
+  await ligarTarefaAoCrm(organizationId, alvo.id, contactId!, dealId!);
 
   logger.info(
     `[Mira] alvo=${alvo.id} pousou no CRM (contact=${contactId} deal=${dealId} decisores=${decisoresNoCrm} atividades=${atividades.length}${naoQualificado ? ' NAO-QUALIFICADO' : ''}) org=${organizationId}`

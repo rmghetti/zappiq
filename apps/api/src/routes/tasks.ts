@@ -3,6 +3,7 @@ import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { buildTaskListWhere, TASK_LIST_ORDER_BY, resolveCompletedAt } from './tasks.util.js';
 import { updateTaskSchema } from './tasks.schema.js';
+import { registrarConclusaoNoCrm } from '../services/mira/planoAcao.js';
 
 /**
  * FEATURE 5b.5 — Tela de Tarefas / follow-ups da IA.
@@ -56,7 +57,18 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
     // IDOR: garante que a task pertence à MESMA org antes de editar.
     const existing = await prisma.task.findFirst({
       where: { id: req.params.id, organizationId: orgId },
-      select: { id: true, status: true, completedAt: true },
+      select: {
+        id: true,
+        status: true,
+        completedAt: true,
+        // Para fechar o ciclo da Mira quando a tarefa vira DONE.
+        title: true,
+        description: true,
+        origem: true,
+        miraAlvoId: true,
+        contactId: true,
+        dealId: true,
+      },
     });
     if (!existing) {
       res.status(404).json({ error: 'Task not found' });
@@ -89,6 +101,15 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
         deal: { select: DEAL_SELECT },
       },
     });
+
+    // Tarefa da Mira concluída → a oportunidade no CRM fica sabendo.
+    // A outra ponta do pedido do Rodrigo: sem isto, o vendedor executa o
+    // plano de ação e o pipeline continua achando que ninguém fez nada.
+    // Só na TRANSIÇÃO para DONE (reeditar uma tarefa já concluída não gera
+    // outra entrada na timeline).
+    if (status === 'DONE' && existing.status !== 'DONE') {
+      await registrarConclusaoNoCrm(orgId, existing);
+    }
 
     res.json({ success: true, data: updated });
   } catch (err) {

@@ -1051,6 +1051,15 @@ model Task {
   contact        Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
   dealId         String?
   deal           Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  /// De onde veio a tarefa. Até 15/07/2026 TODA Task nascia das Conversas
+  /// (crmAutomationService, quando a IA detecta intenção de compra), então a
+  /// origem era implícita. Com o Mira gerando tarefa de plano de ação, a tela
+  /// precisa dizer de onde cada uma veio: são trabalhos diferentes (responder
+  /// alguém que chamou x prospectar alguém que nem sabe que você existe).
+  origem         TaskOrigem   @default(CONVERSA)
+  /// Alvo do Mira que gerou esta tarefa (id solto, sem cascade: a tarefa é do
+  /// vendedor e não some se o Alvo for arquivado).
+  miraAlvoId     String?
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdAt      DateTime     @default(now())
@@ -1061,7 +1070,15 @@ model Task {
   @@index([dealId])
   @@index([status])
   @@index([assignedToId])
+  @@index([miraAlvoId])
   @@map("tasks")
+}
+
+/// Origem de uma tarefa. CONVERSA é o default por compatibilidade: toda Task
+/// que já existia no banco nasceu das Conversas.
+enum TaskOrigem {
+  CONVERSA
+  MIRA
 }
 
 model MessageTemplate {
@@ -1642,6 +1659,13 @@ model MiraAlvo {
   janelaEntrada   Json? // {gatilho, momento, urgencia, evidencia}
   processoCompras Json? // {modo, cicloOrcamentario, cadeiaAprovacao, fontes[]}
   whiteSpace      Json? // Motor A: {jaCompra[], oportunidades[]} (catálogo x conta)
+  /// Plano de ação imediato sugerido pela IA: o próximo passo concreto neste
+  /// Alvo. Vira Task PENDING em /tasks (ver planoAcao.ts). Texto, não Json:
+  /// é uma instrução para uma pessoa ler e executar, não um objeto.
+  planoAcao       String? @db.Text
+  /// Task gerada a partir do plano de ação (id solto, como contactId/dealId).
+  /// Evita duplicar tarefa a cada Aprofundar e liga a conclusão de volta ao Alvo.
+  planoAcaoTaskId String?
 
   // Pouso no CRM (ids soltos, sem cascade — ver cabeçalho da seção)
   contactId String?

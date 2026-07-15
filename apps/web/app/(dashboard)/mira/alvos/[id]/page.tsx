@@ -35,6 +35,7 @@ import {
   Linkedin,
   SendHorizonal,
   AlertTriangle,
+  Rocket,
 } from 'lucide-react';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { miraApi, type MiraAlvoDossie } from '@/lib/miraApi';
@@ -140,6 +141,25 @@ export default function MiraAlvoDossiePage() {
           </div>
         </div>
         {alvo.resumo && <p className="text-sm text-gray-600 mt-4 leading-relaxed">{alvo.resumo}</p>}
+
+        {/* Plano de ação: o dossiê tem que terminar em TRABALHO, não em
+            leitura. Fica logo abaixo do resumo porque é aqui que a pessoa
+            decide o que fazer, e some quando não há plano (nada de bloco
+            vazio prometendo o que não existe). */}
+        {alvo.planoAcao && (
+          <div className="mt-4 rounded-xl border border-[#2F7FB5]/25 bg-[#2F7FB5]/[0.06] px-4 py-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-[#2F7FB5]">
+              <Rocket size={13} />
+              Plano de ação
+              {alvo.planoAcaoTaskId && (
+                <Link href="/tasks" className="ml-auto text-[11px] font-medium text-[#2F7FB5] hover:underline">
+                  está em Tarefas →
+                </Link>
+              )}
+            </p>
+            <p className="mt-1.5 text-sm leading-relaxed text-gray-700">{alvo.planoAcao}</p>
+          </div>
+        )}
 
         <AlvoActions
           alvo={alvo}

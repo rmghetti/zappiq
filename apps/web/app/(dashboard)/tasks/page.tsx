@@ -13,7 +13,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { ListChecks, Check, User, Target, Clock, AlertTriangle, Loader2 } from 'lucide-react';
+import { ListChecks, Check, User, Target, Clock, AlertTriangle, Loader2, Radar } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 
@@ -27,6 +27,14 @@ interface Task {
   createdAt: string;
   contact: { id: string; name: string; phone: string; avatarUrl?: string } | null;
   deal: { id: string; title: string; stage: string } | null;
+  /**
+   * De onde veio a tarefa. Até 15/07/2026 TODA tarefa nascia das Conversas
+   * (a IA detectou intenção de compra), então a origem era implícita. Com o
+   * Mira gerando plano de ação, a tela precisa dizer: são trabalhos
+   * diferentes (responder quem chamou x prospectar quem nem te conhece).
+   */
+  origem?: 'CONVERSA' | 'MIRA';
+  miraAlvoId?: string | null;
 }
 
 type StatusFilter = 'PENDING' | 'DONE' | 'ALL';
@@ -179,8 +187,18 @@ export default function TasksPage() {
 
                 {/* Conteúdo */}
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold text-gray-900 ${done ? 'line-through' : ''}`}>
+                  <p className={`text-sm font-semibold text-gray-900 flex items-center gap-1.5 ${done ? 'line-through' : ''}`}>
                     {task.title}
+                    {/* A origem muda o QUE a pessoa vai fazer: responder alguém
+                        que chamou (Conversa) é diferente de abordar alguém que
+                        nem sabe que você existe (Mira). O selo evita o vendedor
+                        abrir a tarefa para descobrir de que trabalho se trata. */}
+                    {task.origem === 'MIRA' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#2F7FB5]/10 px-2 py-0.5 text-[10px] font-semibold text-[#2F7FB5] shrink-0">
+                        <Radar size={10} />
+                        Prospecção
+                      </span>
+                    )}
                   </p>
                   {task.description && (
                     <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{task.description}</p>
@@ -188,6 +206,15 @@ export default function TasksPage() {
 
                   {/* Metadados: contato, deal, prazo */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
+                    {task.origem === 'MIRA' && task.miraAlvoId && (
+                      <Link
+                        href={`/mira/alvos/${task.miraAlvoId}`}
+                        className="flex items-center gap-1 text-gray-500 hover:text-[#2F7FB5]"
+                      >
+                        <Radar size={13} />
+                        ver o dossiê
+                      </Link>
+                    )}
                     {task.contact && (
                       <Link
                         href="/contacts"
