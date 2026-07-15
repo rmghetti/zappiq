@@ -1720,16 +1720,18 @@ model MiraDecisor {
 
 // Demandas recentes da conta (nº1 e nº2, com evidência)
 model MiraDemanda {
-  id        String    @id @default(cuid())
+  id        String        @id @default(cuid())
   alvoId    String
-  alvo      MiraAlvo  @relation(fields: [alvoId], references: [id], onDelete: Cascade)
+  alvo      MiraAlvo      @relation(fields: [alvoId], references: [id], onDelete: Cascade)
   rank      Int // 1 | 2
-  descricao String    @db.Text
-  evidencia String?   @db.Text
+  descricao String        @db.Text
+  evidencia String?       @db.Text
   fonte     String? // url
   dataFonte DateTime?
-  confianca Int       @default(0)
-  createdAt DateTime  @default(now())
+  confianca Int           @default(0)
+  createdAt DateTime      @default(now())
+  // A matéria que evidenciou esta demanda (quando nasceu de um release)
+  releases  MiraRelease[]
 
   @@index([alvoId, rank])
   @@map("mira_demandas")
@@ -1746,6 +1748,11 @@ model MiraOportunidade {
   racional      String   @db.Text
   valorEstimado Decimal?
   roteiro       Json? // {porSponsor: [{decisorId, mensagem, canal}]} — Abordagem/SPICED
+  // ANALISE = presunção da Fase 1 (é substituída a cada "Aprofundar com IA").
+  // RELEASE = nasceu de um fato publicado com fonte; sobrevive ao re-aprofundar,
+  // senão o próximo clique apagaria a oportunidade que a matéria gerou.
+  origem        String   @default("ANALISE")
+  fonte         String? // url da matéria que originou (quando origem = RELEASE)
   createdAt     DateTime @default(now())
 
   @@index([alvoId, rank])
@@ -1778,17 +1785,26 @@ model MiraRelease {
   titulo             String
   resumo             String       @db.Text
   url                String?
+  // Data em que a matéria/post foi PUBLICADO (não a data em que achamos).
+  // Só é preenchida quando aparece na própria fonte e passa no verificador.
   dataPublicacao     DateTime?
   // Por que é relevante para as ofertas DESTE cliente + gancho de abordagem
   relevancia         String       @db.Text
   anguloAbordagem    String?      @db.Text
   produtoRelacionado String? // item do catálogo com sinergia
+  // A demanda que ESTE fato evidenciou. Sem a FK, o dossiê não consegue dizer
+  // "esta demanda nasceu desta matéria" — era só string solta antes.
+  demandaId          String?
+  demanda            MiraDemanda? @relation(fields: [demandaId], references: [id], onDelete: SetNull)
   confianca          Int          @default(0)
   lida               Boolean      @default(false)
+  // Quando o cliente foi sinalizado (Task criada). Null = ainda não avisamos.
+  alertadoEm         DateTime?
   createdAt          DateTime     @default(now())
 
   @@index([organizationId, createdAt])
   @@index([alvoId])
+  @@index([demandaId])
   @@map("mira_releases")
 }
 

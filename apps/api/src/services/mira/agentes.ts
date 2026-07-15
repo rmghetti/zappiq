@@ -352,7 +352,11 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
   // ── Camada 3: persistência com confiança honesta ───────────────────
   const agora = new Date().toISOString();
   await (prisma as any).$transaction(async (tx: any) => {
-    await tx.miraOportunidade.deleteMany({ where: { alvoId: alvo.id } });
+    // Só as presumidas (origem ANALISE) são refeitas a cada análise. A
+    // oportunidade nascida de um fato publicado (origem RELEASE) sobrevive: o
+    // fato não deixou de ter acontecido porque o analista rodou de novo, e
+    // apagá-la faria o "Aprofundar" DESTRUIR o que o cron semanal achou.
+    await tx.miraOportunidade.deleteMany({ where: { alvoId: alvo.id, origem: 'ANALISE' } });
     for (const o of oportunidadesOk) {
       await tx.miraOportunidade.create({
         data: {
@@ -548,8 +552,16 @@ async function pesquisarEPreencherPegada(
     // próprio: a presumida (confiança 55) diz "provavelmente dói isto"; a
     // evidenciada (70) diz "a conta publicou que dói isto". Guardar as duas
     // deixa o vendedor ver a diferença.
+    //
+    // Uma demanda cuja fonte JÁ virou release com demanda ligada é pulada: o
+    // mesmo LLM devolve `demandas[]` e `releases[].demandaGerada` lendo o mesmo
+    // material, então sem este filtro a mesma necessidade entraria duas vezes
+    // (uma sem FK, outra com) e `demandasEvidenciadas` contaria em dobro,
+    // inflando o score com evidência que é uma só.
+    const urlsComDemandaDeRelease = new Set(r.releases.filter((rel) => rel.demandaGerada).map((rel) => rel.url));
     for (let idx = 0; idx < r.demandas.length; idx++) {
       const d = r.demandas[idx];
+      if (urlsComDemandaDeRelease.has(d.fonte)) continue;
       const id = `${alvo.id}-evidenciada-${idx + 1}`;
       await prisma.miraDemanda.upsert({
         where: { id },
