@@ -183,9 +183,23 @@ De 11 Alvos crus para 0: 8 recuperados pelo titular do EI, 3 apagados.
 | Plano/tarefa só para qualificado | ✅ corte 25 + decisor obrigatório, provado nos 17 |
 | CNAE sem descrição | ✅ JOIN do diretório; a IA não adivinha mais o setor |
 
+### Encerramento (a pedido do Rodrigo: "siga com sua melhor recomendação")
+
+**EDUARDO RONDINA: plano MANTIDO.** Recomendação minha, e o motivo: o gate
+existe para não GERAR plano ruim daqui pra frente, não para destruir
+retroativamente um plano correto. O dele nomeia decisor real, acerta o setor, e
+tem tarefa vencendo 18/07. Se o Alvo for reaprofundado, o gate impede um plano
+novo — mas o que existe termina o ciclo. Apagar só tiraria trabalho bom.
+
+**A dívida do front foi FECHADA no mesmo turno** (commit `3613e6b`, Vercel
+produção Ready). Era grave e eu mesmo tinha criado: o gate filtrava em
+silêncio, e a campanha passaria a mostrar 3 onde antes mostrava 14 sem
+explicação — o cliente leria "o Mira parou de achar", que é a mesma visão
+negativa em roupa nova. Agora o resultado diz quantas foram recusadas e por
+quê. E duas copies que a minha mudança tinha transformado em mentira ("os
+demais ficam como candidatos") foram corrigidas.
+
 ### Dívida honesta que fica
-- **`descartadosCrus`/`descartadosSoNome` não aparecem na tela.** A API reporta,
-  o front não mostra. O cliente não vê "a busca achou 14, subiram 3".
 - **`optanteSimples`** segue `null` (terceiro campo do mesmo comentário), mas
   hoje não pesa em nada.
 - Score 20 é o teto de quem tem 1 decisor e CNAE fora do ICP. Se o Rodrigo
