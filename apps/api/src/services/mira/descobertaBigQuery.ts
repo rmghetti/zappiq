@@ -116,12 +116,14 @@ export async function enriquecerCnpjsBigQuery(cnpjs: string[]): Promise<Map<stri
   // CNPJ. Fazer aqui em vez de na materialização evita rematerializar 120GB.
   const sql = `
     SELECT e.cnpj, e.razao_social, e.nome_fantasia, e.cnae_fiscal_principal, e.sigla_uf,
-           e.id_municipio, m.nome AS municipio_nome,
+           e.id_municipio, m.nome AS municipio_nome, c.descricao_subclasse AS cnae_descricao,
            e.data_inicio_atividade, e.telefone, e.capital_social, e.porte,
            e.natureza_juridica, e.qsa
     FROM \`${mirrorFqn()}\` e
     LEFT JOIN \`${env.BIGQUERY_MUNICIPIOS_TABLE}\` m
       ON CAST(m.id_municipio AS STRING) = CAST(e.id_municipio AS STRING)
+    LEFT JOIN \`${env.BIGQUERY_CNAE_TABLE}\` c
+      ON REPLACE(REPLACE(c.subclasse, '-', ''), '/', '') = CAST(e.cnae_fiscal_principal AS STRING)
     WHERE e.cnpj IN UNNEST(@cnpjs)
   `;
   try {
@@ -144,6 +146,7 @@ export async function enriquecerCnpjsBigQuery(cnpjs: string[]): Promise<Map<stri
         uf: r.sigla_uf ? String(r.sigla_uf) : null,
         idMunicipio: r.id_municipio ? String(r.id_municipio) : null,
         municipio: r.municipio_nome ? String(r.municipio_nome).trim() : null,
+        cnaeDescricao: r.cnae_descricao ? String(r.cnae_descricao).trim() : null,
         dataInicioAtividade: r.data_inicio_atividade?.value ?? (r.data_inicio_atividade ? String(r.data_inicio_atividade) : null),
         telefone: r.telefone ? String(r.telefone).replace(/\D/g, '') || null : null,
         capitalSocial: r.capital_social != null ? Number(r.capital_social) : null,
@@ -177,6 +180,8 @@ export interface CnpjDoEspelho {
   idMunicipio: string | null;
   /** Nome do município, traduzido do código pelo diretório do BD. */
   municipio: string | null;
+  /** Descrição do CNAE, traduzida do código pelo diretório do BD. */
+  cnaeDescricao: string | null;
   dataInicioAtividade: string | null;
   telefone: string | null;
   capitalSocial: number | null;

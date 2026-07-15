@@ -409,7 +409,19 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
   // ── Plano de ação: o dossiê vira TRABALHO na tela de Tarefas ───────
   // Sem isto, a análise termina num roteiro lindo e zero chamada para ação:
   // o vendedor lê, fecha a aba, e a conta morre ali.
-  const plano = await gerarPlanoDeAcao(organizationId, alvo, parsed, oportunidadesOk, roteirosOk);
+  //
+  // O score tem que ser o de DEPOIS da Fase 2, que acabou de reavaliar: o
+  // `alvo` em memória foi carregado no início da função e tem a nota velha.
+  // Usar a cópia velha faria o gate barrar um Alvo que a pesquisa acabou de
+  // qualificar, que é o oposto do que o gate existe para fazer.
+  const scoreAtual = pesquisaWeb?.scoreDepois ?? (alvo.miraScore as number | null) ?? null;
+  const plano = await gerarPlanoDeAcao(
+    organizationId,
+    { ...alvo, miraScore: scoreAtual },
+    parsed,
+    oportunidadesOk,
+    roteirosOk
+  );
 
   logger.info(
     `[MiraAgentes] alvo=${alvoId} aprofundado: ${oportunidadesOk.length} oportunidades, ${roteirosOk.length} roteiros, ${alertasCorte.length} alertas de corte, ${descartados.length} descartados pelo verificador; web: rodou=${pesquisaWeb.rodou} releases=${pesquisaWeb.releases} incumbentes=${pesquisaWeb.incumbentes} demandas=${pesquisaWeb.demandasEvidenciadas} score=${pesquisaWeb.scoreAntes}→${pesquisaWeb.scoreDepois}; plano=${plano ? `task ${plano.taskId}` : 'não gerado'}`
@@ -438,6 +450,32 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
  * achou" e "alguém trabalhou", e ficar sem ponte por causa de um JSON torto
  * seria o pior dos dois mundos.
  */
+/**
+ * Score mínimo para o Alvo virar trabalho. Aprovado pelo Rodrigo em
+ * 15/07/2026, e o número não é arbitrário: na base real da MACHIA ele é
+ * exatamente a linha que separa os Alvos de 9/13/20 (sem decisor ou fora do
+ * ICP) dos de 27/33/45 (com comitê mapeado e encaixe de catálogo).
+ */
+export const SCORE_MINIMO_PLANO = 25;
+
+/**
+ * Por que este Alvo não pode virar plano de ação, ou null se pode.
+ *
+ * A ordem importa: o motivo mais específico primeiro, porque este texto vai
+ * para a tela dizer ao cliente O QUE FALTA. "Sem decisor" é acionável (clique
+ * em Mapear decisores); "score baixo" é diagnóstico.
+ */
+export function planoBloqueadoPor(alvo: {
+  decisores?: unknown[];
+  miraScore?: number | null;
+}): string | null {
+  const decisores = alvo.decisores?.length ?? 0;
+  if (decisores === 0) return 'nenhum decisor mapeado';
+  const score = alvo.miraScore ?? 0;
+  if (score < SCORE_MINIMO_PLANO) return `Mira Score ${score} abaixo do mínimo de ${SCORE_MINIMO_PLANO}`;
+  return null;
+}
+
 async function gerarPlanoDeAcao(
   organizationId: string,
   alvo: any,
@@ -445,6 +483,22 @@ async function gerarPlanoDeAcao(
   oportunidades: { produto: string }[],
   roteiros: { decisor: string }[]
 ): Promise<{ planoAcao: string; taskId: string; reused: boolean } | null> {
+  // ── Gate de qualidade: dossiê raso não vira trabalho ──
+  // Pedido do Rodrigo (15/07/2026): "o plano de ação só deve ser feito e gerar
+  // uma tarefa se temos informações suficientes para ter um Alvo qualificado e
+  // pronto para gerar um lead".
+  //
+  // O motivo é mais forte que "o Alvo é fraco": quando o dado é raso, a IA
+  // preenche o vazio com invenção e o texto sai com cara de certeza. O Alvo
+  // GISLAINE (score 13, zero decisor) gerou um plano mandando abordar por
+  // WhatsApp "como é comum em negócios de joalheria" — era uma fundição de
+  // ferro. Uma tarefa errada é pior que nenhuma, porque o vendedor age nela.
+  const motivoBloqueio = planoBloqueadoPor(alvo);
+  if (motivoBloqueio) {
+    logger.info(`[MiraPlanoAcao] alvo=${alvo.id} não gera plano: ${motivoBloqueio}`);
+    return null;
+  }
+
   const decisoresNorm = new Set(alvo.decisores.map((d: any) => norm(d.nome)));
   const contatoInventado = /\b\d{8,}\b|@[a-z0-9.-]+\.[a-z]{2,}/i;
 

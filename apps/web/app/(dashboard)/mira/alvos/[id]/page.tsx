@@ -156,10 +156,27 @@ export default function MiraAlvoDossiePage() {
         </div>
         {alvo.resumo && <p className="text-sm text-gray-600 mt-4 leading-relaxed">{alvo.resumo}</p>}
 
+        {/* Sem plano de ação, o dossiê diz O QUE FALTA em vez de ficar mudo.
+            O motivo vem da API, da mesma função que decide isso no motor:
+            recalcular a regra aqui criaria duas cópias dela, que é a família de
+            bug que mais custou neste módulo. */}
+        {!alvo.planoAcao && alvo.planoBloqueadoPor && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+              <AlertTriangle size={13} />
+              Sem plano de ação ainda
+            </p>
+            <p className="mt-1.5 text-sm leading-relaxed text-gray-700">
+              Este Alvo não gerou plano porque {alvo.planoBloqueadoPor}. A IA só monta a abordagem quando o dossiê
+              sustenta uma: com dado raso ela preencheria o vazio com suposição, e você agiria em cima disso.
+              {alvo.planoBloqueadoPor.includes('decisor') && ' Use "Mapear decisores" acima para destravar.'}
+            </p>
+          </div>
+        )}
+
         {/* Plano de ação: o dossiê tem que terminar em TRABALHO, não em
             leitura. Fica logo abaixo do resumo porque é aqui que a pessoa
-            decide o que fazer, e some quando não há plano (nada de bloco
-            vazio prometendo o que não existe). */}
+            decide o que fazer. */}
         {alvo.planoAcao && (
           <div className="mt-4 rounded-xl border border-[#2F7FB5]/25 bg-[#2F7FB5]/[0.06] px-4 py-3">
             <p className="flex items-center gap-1.5 text-xs font-semibold text-[#2F7FB5]">
