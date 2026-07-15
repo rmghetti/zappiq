@@ -101,17 +101,54 @@ Feito:
 
 19 testes novos, com os Alvos reais como fixture. Suíte: 160 arquivos / 1628.
 
-### Sessão 3 (próxima) — PR, deploy, backfill e prova
-1. PR + CI + merge + deploy.
-2. **Backfill dos 11 crus existentes.** Os 8 EI ganham o titular e ficam
-   legítimos (score ~20, abaixo do corte de 25 para plano, mas com decisor).
-3. **DECISÃO DO RODRIGO, não minha**: o que fazer com os 3 LTDA sem sócio
-   (KRAMEPY, A S F, FORT-LUX) que já estão na base? Apagar é irreversível e é
-   dado dele. Opções: (a) apagar, (b) arquivar, (c) deixar e só não gerar
-   trabalho. **Não vou apagar nada sem ele dizer.**
-4. Front: o dossiê precisa dizer O QUE FALTA quando não gera plano ("Este Alvo
-   não gerou plano de ação porque não tem decisor mapeado. Clique em Mapear
-   decisores."), senão o silêncio vira outro mistério.
-5. Prova em produção.
+### Sessão 3 (15/07/2026) — PR #304 mergeada, Fly v369, PROVADO em produção
 
-### Sessão 4 — relatório.
+Front feito (o dossiê diz o que falta, com o motivo vindo da API para não
+duplicar a regra). PR #304 mergeada, deploy v369.
+
+#### Backfill: 8 de 8 recuperados, exatamente como previsto na sessão 1
+
+```
+PAULO DA GLORIA GERONIMO      -> PAULO DA GLORIA GERONIMO      | score 13->20 conf 75->100
+LUIS CARLOS LOPES PINTO       -> LUIS CARLOS LOPES PINTO       | score 13->20 conf 75->100
+APARECIDO ANTONIO CABELO      -> APARECIDO ANTONIO CABELO      | score 13->20 conf 65->90
+GISLAINE ... BERSAN ARARAS    -> GISLAINE ... BERSAN           | score 13->20 conf 75->100
+J.D.FREZE-MARCENARIA          -> J.D.FREZE-MARCENARIA          | score 13->20 conf 65->90
+RICARDO ... CHIRIGATTI AGUAI  -> RICARDO ... CHIRIGATTI        | score 13->20 conf 75->100
+EDILSON RODRIGUES CORREIA     -> EDILSON RODRIGUES CORREIA     | score 13->20 conf 65->90
+ROGERIO APARECIDO FRANCISCO   -> ROGERIO APARECIDO FRANCISCO   | score 13->20 conf 75->100
+```
+Base: 20 Alvos, sem decisor caiu de **11 para 3**. Os 3 LTDA ficaram
+**intocados** (decisão do Rodrigo pendente, nada foi apagado).
+
+#### O gate provado contra a base inteira
+
+**7 de 20 Alvos geram plano de ação** (antes: todos). O corte de 25 em produção
+separa exatamente onde deveria:
+- 45/33/27 (4 a 2 decisores) → SIM
+- 20 (1 decisor) → NÃO: "Mira Score 20 abaixo do mínimo de 25"
+- 13/9 (0 decisores) → NÃO: "nenhum decisor mapeado"
+
+A GISLAINE agora tem decisor (`GISLAINE RODRIGUES DOS SANTOS BERSAN`,
+"Empresário Individual") e confiança **100**, mas segue sem plano por score 20.
+É o resultado certo: o Fit de ICP dela é 0 porque fundição de ferro está fora
+do ICP declarado. Barrada por um motivo verdadeiro, não por acidente.
+
+### PONTA SOLTA achada na prova (decisão do Rodrigo)
+
+O gate impede planos NOVOS, mas o plano ANTIGO continua gravado. São **2 casos**:
+
+| Alvo | plano velho | tarefa |
+|---|---|---|
+| GISLAINE | o da alucinação de "joalheria" | **DONE** (já concluída) |
+| EDUARDO RONDINA | "Localizar o canal de contato de Ronderley..." | **PENDING** |
+
+O da GISLAINE está ativamente errado e ainda aparece na tela. Mas apagar mexe
+em dado do cliente, e o do EDUARDO RONDINA tem **tarefa pendente** = trabalho
+em aberto dele. **Não toquei.** Opções para o Rodrigo: (a) limpar os 2, (b)
+limpar só o da GISLAINE (o errado), (c) deixar.
+
+### Sessão 4 (última) — relatório + o que o Rodrigo decidir
+Duas decisões dele, nenhuma tomada por mim:
+1. Os 3 LTDA sem sócio na base: apagar, arquivar ou deixar?
+2. Os 2 planos velhos que hoje não seriam gerados: limpar quais?
