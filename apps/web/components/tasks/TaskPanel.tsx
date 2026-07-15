@@ -170,7 +170,12 @@ export function TaskPanel({ task, mode, tags, onClose, onSaved, onTagsChanged }:
     dueDate && status !== 'DONE' && new Date(dueDate + 'T23:59:59') < new Date();
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    // z-[60] e não z-50: o FAB "Treinar <agente>" é `fixed bottom-6 right-6
+    // z-50` e, empatado no z-index, a ordem do DOM decidia — ele ficava POR
+    // CIMA de "Salvar" e "Cancelar", e a pessoa não conseguia salvar a tarefa.
+    // Modal ganha de botão flutuante. Pego só no navegador: tsc e os 56 testes
+    // passavam com o bug no ar.
+    <div className="fixed inset-0 z-[60] flex justify-end">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden />
 
       <aside
