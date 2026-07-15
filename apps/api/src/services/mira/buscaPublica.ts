@@ -137,13 +137,19 @@ async function searchBrave(query: string, limit: number, signal: AbortSignal): P
   u.searchParams.set('q', query);
   u.searchParams.set('count', String(Math.min(Math.max(limit, 1), 20)));
   u.searchParams.set('country', 'br');
-  u.searchParams.set('search_lang', 'pt');
+  // 'pt' sozinho não é aceito: a Brave só reconhece a variante regional
+  // (pt-br/pt-pt). Achado em produção (15/07/2026) — a integração nunca
+  // tinha sido exercitada de ponta a ponta antes da assinatura existir, e
+  // todo request morria com 422 "Input should be ... 'pt-br' ...".
+  u.searchParams.set('search_lang', 'pt-br');
   const res = await fetch(u, {
     signal,
     headers: { accept: 'application/json', 'X-Subscription-Token': env.BRAVE_API_KEY as string },
   });
   if (!res.ok) {
+    const body = await res.text().catch(() => '');
     const err: any = new Error(`brave_${res.status}`);
+    err.detail = body.slice(0, 200);
     throw err;
   }
   const data: any = await res.json();
@@ -163,7 +169,9 @@ async function searchFirecrawl(query: string, limit: number, signal: AbortSignal
     body: JSON.stringify({ query, limit: Math.min(Math.max(limit, 1), 20) }),
   });
   if (!res.ok) {
+    const body = await res.text().catch(() => '');
     const err: any = new Error(`firecrawl_${res.status}`);
+    err.detail = body.slice(0, 200);
     throw err;
   }
   const data: any = await res.json();
