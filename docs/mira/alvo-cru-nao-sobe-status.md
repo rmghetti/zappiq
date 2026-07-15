@@ -148,7 +148,46 @@ em dado do cliente, e o do EDUARDO RONDINA tem **tarefa pendente** = trabalho
 em aberto dele. **Não toquei.** Opções para o Rodrigo: (a) limpar os 2, (b)
 limpar só o da GISLAINE (o errado), (c) deixar.
 
-### Sessão 4 (última) — relatório + o que o Rodrigo decidir
-Duas decisões dele, nenhuma tomada por mim:
-1. Os 3 LTDA sem sócio na base: apagar, arquivar ou deixar?
-2. Os 2 planos velhos que hoje não seriam gerados: limpar quais?
+### Sessão 4 (15/07/2026) — LOOP ENCERRADO. Limpeza executada.
+
+O Rodrigo autorizou apagar os dois grupos. Inspecionei antes de executar, e a
+inspeção mudou uma das duas decisões.
+
+**Os 3 LTDA: apagados.** Confirmado antes que nenhum tinha pousado no CRM
+(`contactId`/`dealId` nulos) e nenhum tinha tarefa. O script reconferiu isso
+imediatamente antes de cada `delete` e abortaria se tivesse mudado.
+
+**Os planos: só o da GISLAINE.** A inspeção revelou que eu tinha vendido os dois
+juntos e estava errado:
+- GISLAINE: plano com a alucinação de joalheria, tarefa **DONE**. Limpo. A
+  tarefa concluída ficou: é histórico do que ele já executou, e apagar
+  histórico de trabalho é outra coisa que ele não pediu.
+- EDUARDO RONDINA: o plano **não está errado**. Nomeia um decisor real
+  (Ronderley Miguel Netto), acerta o setor (metalúrgica), propõe um caminho
+  sensato. Está só abaixo do corte novo, e tem **tarefa PENDENTE vencendo
+  18/07**. Apagar destruiria trabalho em aberto por uma regra que nasceu
+  depois dele. **Não toquei; perguntei.**
+
+**Estado final da base: 17 Alvos, ZERO sem decisor, 2 com plano** (COFEL 45 e
+EDUARDO RONDINA 20, este último aguardando decisão).
+
+De 11 Alvos crus para 0: 8 recuperados pelo titular do EI, 3 apagados.
+
+### Placar do loop
+
+| pedido | estado |
+|---|---|
+| Alvo só-nome não sobe | ✅ o caminho que criava Alvo do título de busca foi removido |
+| Só sobe com ≥1 decisor | ✅ gate na criação, depois de toda a persistência |
+| Persistir antes de desistir | ✅ titular do EI recuperou 8 de 11 |
+| Plano/tarefa só para qualificado | ✅ corte 25 + decisor obrigatório, provado nos 17 |
+| CNAE sem descrição | ✅ JOIN do diretório; a IA não adivinha mais o setor |
+
+### Dívida honesta que fica
+- **`descartadosCrus`/`descartadosSoNome` não aparecem na tela.** A API reporta,
+  o front não mostra. O cliente não vê "a busca achou 14, subiram 3".
+- **`optanteSimples`** segue `null` (terceiro campo do mesmo comentário), mas
+  hoje não pesa em nada.
+- Score 20 é o teto de quem tem 1 decisor e CNAE fora do ICP. Se o Rodrigo
+  quiser esses Alvos gerando trabalho, a conversa é sobre o ICP, não sobre o
+  corte.
