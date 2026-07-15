@@ -39,6 +39,27 @@ const MAPA: EntradaCnae[] = [
     divisoes: ['10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31','32','33'],
     sinonimos: ['industria', 'industrias', 'industria de transformacao', 'fabrica', 'fabricas', 'manufatura', 'fabricante', 'fabricantes'],
   },
+  // ── Ramos da indústria (divisões específicas) ──
+  // Sem estes, "indústrias metalúrgicas" casava só com "industria" e trazia as
+  // divisões 10 a 33 — o setor secundário inteiro. Foi o que aconteceu na
+  // primeira campanha que funcionou: pedimos metalúrgicas em SP e vieram uma
+  // fábrica de móveis e uma de máquinas agrícolas. Estreitar o alvo é o
+  // conselho que damos ao cliente; ele precisa valer.
+  { divisoes: ['24'], sinonimos: ['metalurgia', 'metalurgica', 'metalurgicas', 'industria metalurgica', 'industrias metalurgicas', 'siderurgia', 'siderurgica', 'fundicao'] },
+  { divisoes: ['25'], sinonimos: ['produtos de metal', 'metalomecanica', 'metalmecanica', 'serralheria', 'caldeiraria', 'usinagem'] },
+  { divisoes: ['10'], sinonimos: ['industria de alimentos', 'alimenticia', 'alimenticio', 'frigorifico', 'frigorificos', 'laticinio', 'laticinios'] },
+  { divisoes: ['11'], sinonimos: ['bebidas', 'cervejaria', 'cervejarias', 'destilaria'] },
+  { divisoes: ['13', '14'], sinonimos: ['textil', 'texteis', 'confeccao', 'confeccoes', 'vestuario', 'malharia'] },
+  { divisoes: ['15'], sinonimos: ['calcados', 'calcadista', 'couro', 'curtume'] },
+  { divisoes: ['16', '17'], sinonimos: ['madeira', 'madeireira', 'papel', 'celulose', 'embalagens de papel'] },
+  { divisoes: ['20', '21'], sinonimos: ['quimica', 'quimicas', 'industria quimica', 'farmaceutica', 'farmaceutico', 'cosmeticos'] },
+  { divisoes: ['22'], sinonimos: ['plastico', 'plasticos', 'borracha', 'injecao plastica'] },
+  { divisoes: ['23'], sinonimos: ['ceramica', 'cimento', 'vidro', 'minerais nao metalicos'] },
+  { divisoes: ['26', '27'], sinonimos: ['eletronica', 'eletronicos', 'eletroeletronica', 'equipamentos eletricos', 'industria eletrica'] },
+  { divisoes: ['28'], sinonimos: ['maquinas', 'maquinas e equipamentos', 'equipamentos industriais', 'bens de capital'] },
+  { divisoes: ['29', '30'], sinonimos: ['automotiva', 'autopecas industria', 'montadora', 'montadoras', 'industria automobilistica'] },
+  { divisoes: ['31'], sinonimos: ['moveis', 'moveleira', 'moveleiro', 'industria de moveis', 'marcenaria industrial'] },
+
   { divisoes: ['41', '42', '43'], sinonimos: ['construcao', 'construcao civil', 'obras', 'construtora', 'construtoras', 'empreiteira'] },
   { divisoes: ['45', '46', '47'], sinonimos: ['comercio'] },
   { divisoes: ['47'], sinonimos: ['comercio varejista', 'varejo', 'varejista', 'loja', 'lojas', 'lojista'] },
