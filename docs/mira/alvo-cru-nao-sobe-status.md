@@ -83,13 +83,35 @@ Então mesmo recuperada ela não sobe, e isso está certo: o Fit de ICP dela é 
 (fundição de ferro, CNAE fora do ICP declarado). O gate vai barrá-la por um
 motivo verdadeiro, em vez de ela subir crua.
 
-### Sessão 2 (próxima) — o gate
-1. `alvoPassaGate` hoje só decide PROMOÇÃO para READY; o Alvo cru continua
-   existindo em QUALIFYING. Mover a decisão para a CRIAÇÃO: sem decisor após
-   todas as tentativas, o Alvo não sobe.
-2. Plano de ação e tarefa só para qualificado (score ≥ 25 **e** ≥ 1 decisor).
-3. O que fazer com o Alvo barrado: descartar de vez ou guardar como candidato
-   invisível na campanha? (decidir, e o mais honesto parece ser não criar).
-4. Backfill dos 11 existentes.
+### Sessão 2 (15/07/2026) — o gate. Commit `eebd56c`.
 
-### Sessão 3 — prova em produção. ### Sessão 4 — relatório.
+Feito:
+1. **O gate decide se o Alvo NASCE** (`passaGate` movido para antes do
+   `create`, depois de toda a persistência). Some o meio-termo em QUALIFYING:
+   o Alvo que nasce, nasce pronto.
+2. **O "candidato" de só nome deixou de existir.** Era o pior ofensor e batia
+   literalmente na frase do Rodrigo: nascia do TÍTULO de um resultado de
+   busca, `status: DISCOVERED`, sem CNPJ, sem decisor, confiança 40, resumo =
+   snippet do buscador. Nada nunca o promovia.
+3. **`planoBloqueadoPor`**: zero decisor barra sempre; score < 25 barra. O
+   motivo do decisor vem primeiro de propósito (é o acionável). O score usado é
+   o de DEPOIS da Fase 2, não a cópia velha em memória.
+4. **Honestidade**: `descartadosCrus` e `descartadosSoNome` reportados, senão
+   "criados: 3" esconderia que a busca achou 14.
+
+19 testes novos, com os Alvos reais como fixture. Suíte: 160 arquivos / 1628.
+
+### Sessão 3 (próxima) — PR, deploy, backfill e prova
+1. PR + CI + merge + deploy.
+2. **Backfill dos 11 crus existentes.** Os 8 EI ganham o titular e ficam
+   legítimos (score ~20, abaixo do corte de 25 para plano, mas com decisor).
+3. **DECISÃO DO RODRIGO, não minha**: o que fazer com os 3 LTDA sem sócio
+   (KRAMEPY, A S F, FORT-LUX) que já estão na base? Apagar é irreversível e é
+   dado dele. Opções: (a) apagar, (b) arquivar, (c) deixar e só não gerar
+   trabalho. **Não vou apagar nada sem ele dizer.**
+4. Front: o dossiê precisa dizer O QUE FALTA quando não gera plano ("Este Alvo
+   não gerou plano de ação porque não tem decisor mapeado. Clique em Mapear
+   decisores."), senão o silêncio vira outro mistério.
+5. Prova em produção.
+
+### Sessão 4 — relatório.
