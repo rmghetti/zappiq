@@ -207,7 +207,79 @@ vira a confirmação de identidade mais forte que existe e destrava tudo:
 `cofellaminados.com.br`. Provavelmente é dado sujo de outra empresa, gravado
 pelo código velho sem filtro. Vale limpar.
 
-### Sessão 4 (última) — descobrir o site oficial do Alvo
+### Sessão 4 (15/07/2026) — CONCLUÍDA. Cadeia inteira PROVADA em produção
+
+PR #303 mergeada + 1 fix na main. Fly v368.
+
+#### A prova que fecha o loop (Alvo real COFEL, produção, 15:19 UTC)
+
+```
+site: https://www.cofel.ind.br | municipio: Atibaia | conf: 100
+BUSCA: buscas=4 descartadosHomonimo=3 releases=1
+PERSISTIU: {"releases":1,"demandasDeRelease":1,"oportunidades":1}
+ALERTA: {"taskId":"cmrm64ddh0005qzjjdppj0a9h","releasesAlertados":1}
+```
+No dossiê:
+- **matéria** "Cofel declara compromisso com melhoria contínua e capacitação"
+- **fonte** `https://www.cofel.ind.br/` (confirmada por ser o site oficial)
+- **demanda ligada** "Necessidade de capacitar colaboradores de forma contínua
+  e estruturada, alinhada à melhoria do sistema de gestão" (confiança 65)
+- **oportunidade** `MACHIA Academy – IA na Área`, origem RELEASE, com racional
+  ligando o fato ao produto do catálogo REAL do cliente
+- **Task de alerta** criada
+
+E 3 homônimos descartados no mesmo ciclo.
+
+#### O site oficial destravou (era a hipótese da sessão 3, e estava certa)
+
+Antes do `site`: 0 releases confirmados em 5 Alvos. Com o `site`: a matéria
+publicada no domínio próprio passa direto, porque domínio próprio é a
+confirmação de identidade mais forte que existe.
+
+**Descoberta de site: 1/20.** Cobertura baixa (PME sem site é a regra), mas
+precisão 100% depois do fix abaixo. E 1 site certo vale mais que 3 errados.
+
+#### O defeito que a prova pegou (meu)
+
+A primeira versão descobriu 3 sites e **2 estavam errados**:
+- FORT-LUX (token "fort") → `fortion.com.br` — **Fortion é outra empresa**
+- PERFILADOS ATIBAIA ("atibaia") → `atibaianovo.com.br` — nem é empresa
+
+Causa: `dominio.includes(token)`. `"fortion".includes("fort")` é true. Eu tinha
+escrito um aviso no cabeçalho do próprio arquivo sobre esse risco exato.
+**Aviso não é teste.** Consertado: o domínio precisa SER o nome (igual ao token,
+ou aos tokens do núcleo colados), e token que é o município nem busca. Os 3
+sites foram limpos e redescobertos: sobrou só o correto.
+
+#### Dado sujo removido
+
+Os 2 releases antigos do COFEL (código pré-filtro) foram apagados. Um deles
+era `cofellaminados.com.br` — **confirmada a suspeita da sessão 3: era matéria
+de uma empresa homônima no dossiê**, exatamente o erro que o filtro passou a
+impedir.
+
+## Estado final do pedido
+
+| o que o Rodrigo pediu | estado |
+|---|---|
+| matérias/anúncios da web com link da fonte | ✅ provado (fonte, data quando existe, confiança graduada) |
+| Instagram | ✅ nas queries |
+| sinergia → demanda | ✅ provado (demanda ligada por FK) |
+| sinergia → oportunidade no portfólio | ✅ provado (MACHIA Academy – IA na Área) |
+| melhorar a confiança | ✅ provado: +10 em 20/20 Alvos (média 72,3 → 82,3) |
+| melhorar o score | ⚠️ mecanismo pronto e ligado no cron, mas não movido nesta prova (a matéria não trouxe janela nem incumbente) |
+| mapeamento semanal atualiza o Alvo | ✅ cron chama `reavaliarAlvo` (antes não chamava) |
+| alertar o cliente | ✅ Task criada, com trava de spam |
+
+## Dívida honesta que fica
+
+1. **Cobertura de site: 1/20.** O que destravaria mais: aceitar o Instagram
+   oficial da conta como identidade (muita PME não tem site, mas tem perfil).
+2. **Score não se moveu** no caso provado. Ele sobe quando a matéria traz
+   janela ou incumbente; capacitação não traz nenhum dos dois. É honesto.
+3. **`descartadosPorHomonimo` não aparece na tela** — é reportado pela API mas
+   o front não mostra. O cliente não vê "achamos 3 mas não confirmamos".
+4. A mesma notícia em dois veículos (URLs diferentes) ainda entra duas vezes.
 
 1. Serviço de descoberta de site: busca dirigida pelo núcleo + CNPJ, confirma
    pelo CNPJ no rodapé (padrão universal em site brasileiro) ou pelo nome do
