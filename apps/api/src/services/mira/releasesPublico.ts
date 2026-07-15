@@ -314,16 +314,17 @@ export async function pesquisarPegadaPublica(
   // Custo: 4 buscas por Alvo (era 3). Com o teto do ciclo em 60 buscas, sao
   // 15 Alvos por ciclo em vez de 20 — cabe no plano da Brave e o cron ja
   // ordena por score, entao os 15 sao os melhores.
-  // O município entra na query como desempate de homônimo (a Cofel de Atibaia
-  // não é a Cofel Laminados). Ficou possível em 15/07/2026, quando o município
-  // parou de nascer null: até então o campo era null em 100% dos Alvos.
-  const local = [alvo.municipio, alvo.uf].filter(Boolean).join(' ');
-  const ondeEstá = local ? ` ${local}` : '';
+  // O município NÃO entra na query. Eu tentei (parecia o desempate óbvio de
+  // homônimo) e a prova em produção reprovou: a Brave faz AND dos termos, e
+  // `"cofel ferro ligas" Atibaia SP (lancamento OR ...)` devolveu ZERO hits,
+  // contra 6 sem ele. Matéria de PME quase nunca escreve a cidade junto do
+  // nome. O município segue valendo como sinal de CONFIRMAÇÃO no texto do
+  // resultado, que é onde ele de fato aparece.
   const queries = [
     `"${termoBusca}" (site:linkedin.com/posts OR site:instagram.com)`,
-    `"${termoBusca}"${ondeEstá} (lancamento OR expansao OR investimento OR contratacao OR inauguracao OR parceria OR aquisicao OR novo)`,
-    `"${termoBusca}"${ondeEstá} (noticia OR anuncio OR "anunciou" OR "vai investir" OR "assinou" OR entrevista)`,
-    `"${termoBusca}"${ondeEstá} (fornecedor OR parceiro OR "em parceria com" OR contratou OR implantou OR "cliente da")`,
+    `"${termoBusca}" (lancamento OR expansao OR investimento OR contratacao OR inauguracao OR parceria OR aquisicao OR novo)`,
+    `"${termoBusca}" (noticia OR anuncio OR "anunciou" OR "vai investir" OR "assinou" OR entrevista)`,
+    `"${termoBusca}" (fornecedor OR parceiro OR "em parceria com" OR contratou OR implantou OR "cliente da")`,
   ];
 
   const sinaisConta: SinaisDaConta = {

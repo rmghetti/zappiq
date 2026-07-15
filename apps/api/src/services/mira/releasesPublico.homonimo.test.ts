@@ -195,8 +195,9 @@ describe('o fluxo real: o lixo da Brave não chega ao analista', () => {
       expect(q).not.toContain('COMERCIAL E INDUSTRIAL'); // ninguém escreve isso numa matéria
       expect(q.toLowerCase()).toContain('cofel');
     }
-    // O município desempata o homônimo já na busca
-    expect(queries.some((q: string) => q.includes('Atibaia'))).toBe(true);
+    // O município NÃO entra na query (a prova em produção mostrou que zera os
+    // hits: a Brave faz AND). Ele vale como confirmação no texto do resultado.
+    expect(queries.every((q: string) => !q.includes('Atibaia'))).toBe(true); // município na query zerou os hits em produção
   });
 
   it('Alvo sem município (dado antigo) ainda busca, só sem o desempate', async () => {
