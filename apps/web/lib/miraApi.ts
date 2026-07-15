@@ -359,7 +359,16 @@ export interface DescobrirResult {
   // Específicos da descoberta B2B pública:
   buscas?: number;
   cnpjsVerificados?: number;
+  /** Sempre 0 desde 15/07/2026: o "candidato" de só nome deixou de existir. */
   candidatos?: number;
+  /**
+   * Verificadas na Receita que NÃO subiram por não ter decisor nenhum. Sem
+   * mostrar isto, a campanha exibiria 3 onde antes exibia 14 e pareceria que
+   * o Mira parou de achar.
+   */
+  descartadosCrus?: number;
+  /** Apareceram na busca só com o nome (CNPJ não resolvido). */
+  descartadosSoNome?: number;
 }
 export type MotorBResult = DescobrirResult;
 

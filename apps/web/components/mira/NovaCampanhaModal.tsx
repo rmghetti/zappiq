@@ -532,7 +532,7 @@ function DescobrirModal({
 
           <p className="text-sm text-gray-500 mb-3">
             {kind === 'B2B'
-              ? 'A Mira descobre empresas com o perfil que você descrever no índice público, colhe os CNPJs e verifica cada um na Receita. Só o Alvo verificado (ativo, com decisor no quadro societário) desconta da cota; os demais ficam como candidatos.'
+              ? 'A Mira descobre empresas com o perfil que você descrever, colhe os CNPJs e verifica cada um na Receita. Só vira Alvo quem está ativo e tem ao menos um decisor no registro: empresa que a busca acha mas não tem quem abordar não sobe, para a sua fila não encher de conta sem dono.'
               : 'A Mira busca negócios locais com o perfil que você descrever (Google Places). Só Alvos com contato verificável (telefone ou site) descontam da cota.'}
           </p>
           {semente === null ? (
@@ -639,8 +639,21 @@ function DescobrirModal({
           <ul className="text-xs text-gray-500 space-y-1 mb-4">
             {result.regiaoAplicada && <li>Região aplicada: {result.regiaoAplicada}.</li>}
             {result.duplicados > 0 && <li>{result.duplicados} já estavam mapeados (pulados).</li>}
-            {result.modo !== 'B2C' && (result.candidatos ?? 0) > 0 && (
-              <li>{result.candidatos} candidato(s) sem CNPJ resolvido ficaram para qualificar (não gastam cota).</li>
+            {/* O filtro precisa APARECER. Desde 15/07/2026 o Alvo sem decisor
+                não sobe, e sem esta linha a campanha mostraria 3 onde antes
+                mostrava 14, sem explicação. O cliente leria "o Mira parou de
+                achar" — exatamente a visão negativa que o filtro existe para
+                evitar, só que em roupa nova. */}
+            {(result.descartadosCrus ?? 0) > 0 && (
+              <li className="text-amber-700">
+                {result.descartadosCrus} empresa(s) verificada(s) na Receita não subiram: sem nenhum decisor no
+                registro, o dossiê nasceria vazio.
+              </li>
+            )}
+            {(result.descartadosSoNome ?? 0) > 0 && (
+              <li className="text-amber-700">
+                {result.descartadosSoNome} apareceram na busca só com o nome (sem CNPJ) e não viraram Alvo.
+              </li>
             )}
             {result.modo === 'B2C' && result.criados - result.prontos > 0 && (
               <li>{result.criados - result.prontos} sem contato verificável ficaram em qualificação (não gastam cota).</li>
