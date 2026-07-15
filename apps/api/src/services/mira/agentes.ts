@@ -469,10 +469,15 @@ export function planoBloqueadoPor(alvo: {
   decisores?: unknown[];
   miraScore?: number | null;
 }): string | null {
+  // O texto é uma ORAÇÃO, não um rótulo: ele entra depois de "porque" na tela
+  // do dossiê. "porque nenhum decisor mapeado" não é português, e só apareceu
+  // quando abri a página no navegador — nenhum teste unitário pegaria isso.
   const decisores = alvo.decisores?.length ?? 0;
-  if (decisores === 0) return 'nenhum decisor mapeado';
+  if (decisores === 0) return 'não tem nenhum decisor mapeado';
   const score = alvo.miraScore ?? 0;
-  if (score < SCORE_MINIMO_PLANO) return `Mira Score ${score} abaixo do mínimo de ${SCORE_MINIMO_PLANO}`;
+  if (score < SCORE_MINIMO_PLANO) {
+    return `o Mira Score ${score} está abaixo do mínimo de ${SCORE_MINIMO_PLANO}`;
+  }
   return null;
 }
 

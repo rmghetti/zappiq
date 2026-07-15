@@ -44,22 +44,33 @@ describe('o corte de 25 na base real', () => {
 describe('sem decisor barra SEMPRE, independente do score', () => {
   it('score alto e zero decisor não vira plano: sem nome não há quem abordar', () => {
     const b = planoBloqueadoPor({ miraScore: 99, decisores: [] });
-    expect(b).toBe('nenhum decisor mapeado');
+    expect(b).toBe('não tem nenhum decisor mapeado');
   });
 
   it('o motivo do decisor vem ANTES do motivo do score (é o acionável)', () => {
     // Com os dois problemas, a tela deve dizer "mapeie o decisor", que o
     // cliente resolve com um clique, e não "score baixo", que não dá o que fazer.
     const b = planoBloqueadoPor({ miraScore: 5, decisores: [] });
-    expect(b).toBe('nenhum decisor mapeado');
+    expect(b).toBe('não tem nenhum decisor mapeado');
   });
 
   it('decisores ausente/undefined conta como zero (não explode)', () => {
-    expect(planoBloqueadoPor({ miraScore: 90 })).toBe('nenhum decisor mapeado');
+    expect(planoBloqueadoPor({ miraScore: 90 })).toBe('não tem nenhum decisor mapeado');
   });
 });
 
 describe('o motivo é escrito para o cliente ler, não para o log', () => {
+  // O dossiê monta "Este Alvo não gerou plano porque {motivo}." Se o motivo for
+  // um rótulo solto ("nenhum decisor mapeado"), a frase sai quebrada. Só vi
+  // isso abrindo a página no navegador; teste de unidade nenhum pegaria.
+  it.each([
+    { miraScore: 5, decisores: [] },
+    { miraScore: 20, decisores: [{ nome: 'x' }] },
+  ])('o motivo encaixa depois de "porque" (score $miraScore)', (alvo) => {
+    const frase = `Este Alvo não gerou plano porque ${planoBloqueadoPor(alvo)}.`;
+    expect(frase).toMatch(/porque (não tem|o Mira Score)/);
+  });
+
   it('diz o score e o mínimo, para o cliente entender o quanto falta', () => {
     const b = planoBloqueadoPor({ miraScore: 20, decisores: [{ nome: 'x' }] });
     expect(b).toContain('20');
