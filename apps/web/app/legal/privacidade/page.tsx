@@ -222,10 +222,10 @@ export default function PrivacidadePage() {
           <li>
             <strong>Via DPO:</strong> e-mail para{' '}
             <a
-              href="mailto:rodrigo.ghetti@zappiq.com.br"
+              href="mailto:dpo@zappiq.com.br"
               className="text-blue-600 hover:text-blue-700"
             >
-              rodrigo.ghetti@zappiq.com.br
+              dpo@zappiq.com.br
             </a>{' '}
             com assunto &ldquo;Direitos LGPD: [tipo de solicitação]&rdquo;. Resposta em até 15 dias
             corridos (prazo ANPD).
@@ -249,10 +249,10 @@ export default function PrivacidadePage() {
           <br />
           <strong>E-mail:</strong>{' '}
           <a
-            href="mailto:rodrigo.ghetti@zappiq.com.br"
+            href="mailto:dpo@zappiq.com.br"
             className="text-blue-600 hover:text-blue-700"
           >
-            rodrigo.ghetti@zappiq.com.br
+            dpo@zappiq.com.br
           </a>
           <br />
           <strong>Endereço postal:</strong> ZappIQ Brasil Sistemas de IA LTDA, consulte{' '}
@@ -291,8 +291,8 @@ export default function PrivacidadePage() {
         <h2>14. Contato</h2>
         <p>
           Para dúvidas, solicitações ou reclamações sobre privacidade:{' '}
-          <a href="mailto:privacidade@zappiq.com.br" className="text-blue-600 hover:text-blue-700">
-            privacidade@zappiq.com.br
+          <a href="mailto:dpo@zappiq.com.br" className="text-blue-600 hover:text-blue-700">
+            dpo@zappiq.com.br
           </a>
           .
         </p>

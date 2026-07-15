@@ -84,7 +84,7 @@ Resultado: criamos a SOP e este arquivo.
 
 ## Owner formal
 
-- **DPO + Aprovador:** Rodrigo Ghetti (rodrigo.ghetti@zappiq.com.br)
+- **DPO + Aprovador:** Rodrigo Ghetti (dpo@zappiq.com.br)
 - **Implementador:** dev lead da plataforma web
 - **Auditor automático:** scheduled task `weekly-legal-docs-audit` (segunda 09:30)
 - **Consultor de redação:** Claude (Cowork)

@@ -295,7 +295,7 @@ export default function TermosPage() {
             Política de Privacidade
           </a>
           . O Encarregado pelo Tratamento de Dados (DPO) é Rodrigo Ghetti
-          (rodrigo.ghetti@zappiq.com.br). Solicitações de exercício de direitos
+          (dpo@zappiq.com.br). Solicitações de exercício de direitos
           previstos no Art. 18 da LGPD podem ser feitas via{' '}
           <a href="/legal/deletar-dados" className="text-blue-600 hover:text-blue-700">
             zappiq.com.br/legal/deletar-dados
@@ -315,7 +315,7 @@ export default function TermosPage() {
         <p>
           Para dúvidas sobre estes Termos: <strong>legal@zappiq.com.br</strong>.
           Para assuntos de privacidade ou LGPD:{' '}
-          <strong>privacidade@zappiq.com.br</strong>. Endereço postal e
+          <strong>dpo@zappiq.com.br</strong>. Endereço postal e
           identificação completa em{' '}
           <a href="/legal/enderecos-comerciais" className="text-blue-600 hover:text-blue-700">
             /legal/enderecos-comerciais

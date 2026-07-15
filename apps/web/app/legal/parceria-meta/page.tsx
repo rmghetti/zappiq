@@ -153,7 +153,7 @@ export default function ParceriaMetaPage() {
           <a href="mailto:compliance@zappiq.com.br">compliance@zappiq.com.br</a>
           {' · '}
           Encarregado de Dados (DPO):{' '}
-          <a href="mailto:rodrigo.ghetti@zappiq.com.br">rodrigo.ghetti@zappiq.com.br</a>.
+          <a href="mailto:dpo@zappiq.com.br">dpo@zappiq.com.br</a>.
         </p>
       </article>
     </PublicLayout>
