@@ -299,16 +299,17 @@ export const miraContent: SaibaMaisContent[] = [
     titulo: 'Aprofundar com IA',
     clientSafe: true,
     oQueE:
-      'O botão Aprofundar com IA chama os agentes de análise para um Alvo específico: eles cruzam os dados verificados da conta com o seu catálogo e escrevem as oportunidades número 1 e 2, a dor provável e o roteiro de primeira mensagem para cada decisor.',
+      'O botão Aprofundar com IA faz duas coisas num clique. Primeiro, cruza os dados verificados da conta com o seu catálogo e escreve as oportunidades número 1 e 2, a dor provável e o roteiro de primeira mensagem para cada decisor. Depois, sai e pesquisa a pegada pública da conta na internet: o que ela publicou, o que saiu de novo sobre ela e quem já a atende hoje.',
     paraQueServe:
-      'Serve para transformar dado em conversa. Em vez de olhar a firmografia crua, você recebe a pauta pronta: qual produto oferecer, por quê, e como abrir o papo com cada pessoa do comitê.',
+      'Serve para transformar dado em conversa, com contexto de verdade. A primeira parte te dá a pauta (qual produto, por quê, como abrir o papo). A segunda enche os blocos que ficavam vazios: Demandas recentes, Fornecedores atuais e Releases desta conta. E como a pesquisa traz evidência nova, a nota do Alvo é recalculada na hora: um Alvo com janela de entrada e fornecedor mapeado sobe de posição na fila.',
     comoImplementar: [
-      'Abra o dossiê do Alvo e clique em Aprofundar com IA.',
-      'A análise usa só os dados verificados: um verificador descarta qualquer item sem lastro (produto fora do catálogo, decisor desconhecido, contato inventado).',
-      'Revise o roteiro antes de usar: análise de IA tem confiança de inferência, marcada no dossiê.',
+      'Abra o dossiê do Alvo e clique em Aprofundar com IA. As duas fases rodam juntas, em poucos segundos.',
+      'Confira os blocos que a pesquisa encher: Demandas com evidência trazem o link da fonte; Fornecedores atuais dizem quem atende a conta hoje e o quanto é deslocável.',
+      'Olhe a nota antes e depois: o fator Janela e incumbente só pontua com o que a pesquisa achou.',
+      'Revise o roteiro antes de usar. O que é presunção vem marcado como presunção; o que tem fonte vem com o link.',
     ],
     exemploResultado:
-      'Num Alvo de indústria, a análise aponta a oportunidade número 1 (serviço de backup gerenciado, pela atividade e porte) e escreve o roteiro para o sócio-administrador. O vendedor ajusta uma frase e envia. Resposta em duas horas.',
+      'Num Alvo de indústria, a análise aponta o backup gerenciado como oportunidade 1 e escreve o roteiro para o sócio-administrador. A pesquisa acha um post da conta anunciando expansão da fábrica e uma notícia citando o ERP que ela usa. A nota sai de 33 para 52, o vendedor abre o papo pela expansão e já sabe contra quem está competindo.',
   },
   {
     featureKey: 'mira.alvos',
@@ -325,6 +326,65 @@ export const miraContent: SaibaMaisContent[] = [
     ],
     exemploResultado:
       'Segunda de manhã, o gestor filtra Prontos, ordena pelo score e distribui os 10 primeiros para o time. Cada vendedor já sabe com quem falar e sobre o quê antes do primeiro contato.',
+  },
+  {
+    featureKey: 'mira.alvos.classificacoes',
+    titulo: 'Prontos, Em qualificação e Entregues',
+    clientSafe: true,
+    relacionados: ['mira.quota', 'mira.alvos', 'mira.aprofundar'],
+    oQueE:
+      'São as fases da vida de um Alvo dentro da Mira. Em qualificação é a conta que foi encontrada mas ainda não passou no controle de qualidade. Pronto é a conta verificada, com dossiê completo, liberada para o seu time trabalhar. Entregue é a que já saiu daqui: pousou no seu CRM ou entrou num relatório. Existe ainda o Arquivado, para o que você descartou.',
+    paraQueServe:
+      'Serve para você confiar na fila. A separação existe para que ninguém do seu time gaste tempo (ou queime a imagem da sua empresa) abordando uma conta com dado pela metade. E para o seu bolso: só o Alvo Pronto desconta da sua cota. Conta encontrada que não passou na verificação não custa nada.',
+    comoImplementar: [
+      'Em qualificação: a conta foi achada, mas falta o que o gate exige. No B2B, o gate pede empresa ATIVA na Receita e ao menos um decisor no quadro societário. No B2C, pede contato verificável (telefone ou site). Exemplo típico: firma individual sem sócios, ou negócio sem telefone público.',
+      'Pronto: passou no gate. Tem razão social conferida na fonte oficial, decisor nominal, Mira Score e dossiê. É o que você distribui para o time. Exemplo: uma metalúrgica ativa em SP, com dois sócios-administradores mapeados e nota 52.',
+      'Entregue: você já agiu sobre ela. Pousou no CRM (virou contato e negócio) ou saiu num relatório. Sai da fila de trabalho e vira histórico, mas continua sendo monitorada pelos Releases.',
+      'Arquivado: você descartou (fora do ICP, duplicado, não quero). Some da fila sem apagar o histórico.',
+    ],
+    exemploResultado:
+      'Uma campanha de metalúrgicas em SP verifica 10 empresas e cria 10 Alvos: 6 ficam Prontos (têm sócios no quadro societário) e 4 ficam Em qualificação (são firmas individuais, sem sócio para abordar). A cota desconta 6, não 10. O gestor distribui os 6 Prontos; 2 viram negócio no CRM e passam a Entregues.',
+    mockup: `<svg viewBox="0 0 660 196" role="img" width="100%" style="max-width:660px;margin:0 auto;display:block" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .t{font:600 12px system-ui,sans-serif}
+        .s{font:10.5px system-ui,sans-serif;fill:#6B7280}
+        .c{font:600 9px system-ui,sans-serif;letter-spacing:.05em}
+      </style>
+      <rect x="8" y="30" width="150" height="76" rx="10" fill="#FFFBEB" stroke="#F59E0B" stroke-width="1.5"/>
+      <text class="c" x="22" y="50" fill="#B45309">EM QUALIFICAÇÃO</text>
+      <text class="t" x="22" y="70" fill="#111827">Achada, não conferida</text>
+      <text class="s" x="22" y="87">Falta decisor ou contato.</text>
+      <text class="s" x="22" y="100">Não gasta cota.</text>
+
+      <path d="M166 68 l22 0 m-7 -6 l7 6 l-7 6" fill="none" stroke="#9CA3AF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="s" x="170" y="58" style="font-size:9px">passou no gate</text>
+
+      <rect x="196" y="30" width="150" height="76" rx="10" fill="#F0FBF6" stroke="#2FB57A" stroke-width="1.5"/>
+      <text class="c" x="210" y="50" fill="#0F7A50">PRONTO</text>
+      <text class="t" x="210" y="70" fill="#111827">Verificada, com dossiê</text>
+      <text class="s" x="210" y="87">Decisor + nota + fontes.</text>
+      <text class="s" x="210" y="100">Desconta 1 da cota.</text>
+
+      <path d="M354 68 l22 0 m-7 -6 l7 6 l-7 6" fill="none" stroke="#9CA3AF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="s" x="356" y="58" style="font-size:9px">você agiu</text>
+
+      <rect x="384" y="30" width="150" height="76" rx="10" fill="#F5F6FF" stroke="#4A52D0" stroke-width="1.5"/>
+      <text class="c" x="398" y="50" fill="#3730A3">ENTREGUE</text>
+      <text class="t" x="398" y="70" fill="#111827">Pousou no CRM</text>
+      <text class="s" x="398" y="87">Virou contato e negócio.</text>
+      <text class="s" x="398" y="100">Segue monitorada.</text>
+
+      <rect x="552" y="30" width="100" height="76" rx="10" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text class="c" x="566" y="50" fill="#6B7280">ARQUIVADO</text>
+      <text class="t" x="566" y="70" fill="#6B7280">Descartada</text>
+      <text class="s" x="566" y="87">Fora do ICP</text>
+      <text class="s" x="566" y="100">ou duplicada.</text>
+
+      <rect x="8" y="126" width="644" height="54" rx="8" fill="#F0FBF6" stroke="#2FB57A" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text class="t" x="26" y="145" fill="#0F7A50">Só o Pronto desconta da cota</text>
+      <text class="s" x="26" y="161">Conta encontrada que não passa na verificação fica em qualificação e não custa nada.</text>
+      <text class="s" x="26" y="174">Você paga por dossiê entregue, não por tentativa.</text>
+    </svg>`,
   },
   {
     featureKey: 'mira.dossie',
@@ -512,5 +572,149 @@ export const miraContent: SaibaMaisContent[] = [
     ],
     exemploResultado:
       'A fonte da Receita mostra 95% de match; a pegada pública do LinkedIn, 60%. O gestor entende que os decisores por cargo dependem do que está indexado publicamente e calibra a expectativa.',
+  },
+
+  /* ── "Por que essa nota": os 5 fatores do Mira Score ────────────────
+   * Um Saiba mais por fator, ao lado do nome dele no dossiê. Explicam o que
+   * o fator É e o que faz ele subir; o "motivo" ao lado da barra explica o
+   * que gerou a nota DAQUELE Alvo. Os pesos (25/25/20/15/15) são os do
+   * score.ts: se mudarem lá, mudam aqui. */
+  {
+    featureKey: 'mira.score',
+    titulo: 'Mira Score (a nota do Alvo)',
+    clientSafe: true,
+    relacionados: ['mira.score.fit', 'mira.score.demanda', 'mira.score.decisores', 'mira.score.portfolio', 'mira.score.janela'],
+    oQueE:
+      'Uma nota de 0 a 100 que diz por onde começar. Ela não mede se a empresa é boa: mede o quanto ESTA conta faz sentido para VOCÊ, agora. Sai da soma de cinco fatores com peso fixo: Fit de ICP (25), Demanda e sinais (25), Cobertura de decisores (20), Encaixe de portfólio (15) e Janela e incumbente (15).',
+    paraQueServe:
+      'Serve para o seu time não gastar o dia decidindo a quem ligar. E é explicável de propósito: cada fator mostra quanto valeu e por quê. Nota sem explicação vira superstição, e ninguém confia a própria comissão a uma caixa-preta.',
+    comoImplementar: [
+      'Abra o dossiê e olhe o bloco "Por que essa nota": cada barra é um fator, com o que ele valeu do total possível.',
+      'Leia o motivo ao lado: ele diz o que aconteceu NESTE Alvo (ex.: "CNAE bate com o ICP" ou "nenhum decisor mapeado ainda").',
+      'Nota baixa quase sempre é dado faltando, não conta ruim. Complete o Perfil de Prospecção e clique em Aprofundar com IA: os dois sobem a nota de verdade.',
+      'Clique no "Saiba mais" de cada fator para entender o que o alimenta.',
+    ],
+    exemploResultado:
+      'Um Alvo aparece com 33. O gestor abre e vê: Fit 7/25 (o CNAE não estava declarado no Perfil), Janela 0/15 ("entra quando você clicar em Aprofundar"). Ele completa o Perfil e aprofunda. A mesma conta vai a 61 e sobe 12 posições na fila.',
+  },
+  {
+    featureKey: 'mira.score.fit',
+    titulo: 'Fit de ICP (25 pontos)',
+    clientSafe: true,
+    relacionados: ['mira.score', 'mira.perfil.icp'],
+    oQueE:
+      'O quanto a conta parece com o cliente ideal que VOCÊ declarou no Perfil de Prospecção. Compara três coisas objetivas do registro oficial: a atividade (CNAE), a região e o porte.',
+    paraQueServe:
+      'Serve para separar "é uma empresa" de "é uma empresa que eu atendo". É o fator que mais depende de você: sem CNAE, região e porte declarados no Perfil, não existe com o que comparar, e a nota fica baixa por falta de referência, não por culpa da conta.',
+    comoImplementar: [
+      'Sobe quando: a atividade da conta bate com um CNAE ou atividade declarada no Perfil (o maior peso), a região está no seu alvo, e o porte é compatível.',
+      'Pontua parcial quando a atividade é próxima mas não idêntica (ex.: você declarou "distribuidoras de TI" e a conta é de comércio atacadista de eletrônicos).',
+      'Fica em zero quando: você não declarou CNAE nenhum no Perfil, ou a conta é de um ramo que você não pediu.',
+      'Para melhorar: preencha CNAEs/atividades, regiões e portes no bloco "Quem é o seu cliente ideal" do Perfil.',
+    ],
+    exemploResultado:
+      'Uma distribuidora de TI declara o CNAE 4651-6, região SP e porte médio. Uma conta de mesmo CNAE em Campinas com porte médio pontua alto no fit. Uma padaria em SP, com o mesmo porte e região, pontua só a região: 7 de 25.',
+  },
+  {
+    featureKey: 'mira.score.demanda',
+    titulo: 'Demanda e sinais (25 pontos)',
+    clientSafe: true,
+    relacionados: ['mira.score', 'mira.aprofundar', 'mira.perfil.sinais'],
+    oQueE:
+      'O quanto existe indício de que a conta precisa de algo AGORA. Junta o que o registro oficial mostra (empresa recente, situação ativa, capital social), o que o mercado dela mostra (o setor está contratando ou demitindo, pelos dados do CAGED) e, principalmente, o que a própria conta publicou.',
+    paraQueServe:
+      'Serve para achar o timing. Duas contas idênticas no papel não valem o mesmo se uma acabou de anunciar expansão. Este é o fator que mais muda depois do Aprofundar com IA: demanda que a conta publicou vale mais que qualquer inferência nossa sobre o registro dela.',
+    comoImplementar: [
+      'Sobe com: empresa recente (fase de montar operação), situação ATIVA, capital social relevante, setor contratando no CAGED.',
+      'Sobe bastante com demanda evidenciada: a pesquisa da web achou a conta dizendo (ou a notícia mostrando) que ela precisa de algo. Vem com o link da fonte.',
+      'O motivo é honesto sobre o estágio: antes de aprofundar ele diz "sinais profundos entram quando você clicar em Aprofundar com IA"; depois, ou traz a evidência ou diz "pesquisamos e não achamos demanda declarada".',
+      'Para melhorar: clique em Aprofundar com IA, e declare seus Sinais de intenção no Perfil (eles ensinam a pesquisa a reconhecer o que é timing para o SEU negócio).',
+    ],
+    exemploResultado:
+      'Uma metalúrgica ativa, com capital de R$ 500 mil, num setor contratando, marca 10 de 25. Depois do Aprofundar, a pesquisa acha um post dela anunciando nova planta: vira 18 de 25, com o link do post no dossiê.',
+  },
+  {
+    featureKey: 'mira.score.decisores',
+    titulo: 'Cobertura de decisores (20 pontos)',
+    clientSafe: true,
+    relacionados: ['mira.score', 'mira.decisores', 'mira.dossie.comite'],
+    oQueE:
+      'Quantas pessoas com poder de decisão a Mira conseguiu nomear nesta conta. No B2B, a base é o quadro societário da Receita (fonte oficial), somado a quem o Mapear decisores achar na pegada pública por cargo. No B2C, o decisor é o próprio dono no balcão, então o que conta é ter contato direto.',
+    paraQueServe:
+      'Serve porque conta sem nome não é oportunidade, é endereço. Você pode ter a empresa perfeita mapeada e não ter para quem ligar. Cada decisor a mais é uma porta a mais, e o roteiro de abordagem do dossiê é escrito por pessoa.',
+    comoImplementar: [
+      'Sobe a cada decisor nominal mapeado, até o teto do fator.',
+      'Fica em zero quando a conta não tem sócio no quadro societário (típico de firma individual ou MEI) e nada foi achado na pegada pública. É também o motivo mais comum de um Alvo ficar Em qualificação em vez de Pronto.',
+      'Para melhorar: clique em Mapear decisores no dossiê. Ele procura por cargo no índice público e ainda busca contato (LinkedIn, e-mail, telefone) de quem já estava mapeado só com nome.',
+      'Declare no Perfil quem decide a compra no seu negócio (bloco do comitê): a busca procura esses cargos, não cargos genéricos.',
+    ],
+    exemploResultado:
+      'Uma metalúrgica com dois sócios-administradores no quadro societário marca 14 de 20 sem esforço nenhum. O Mapear decisores acha o Gerente Industrial no LinkedIn e a conta chega ao teto do fator, com três portas de entrada.',
+  },
+  {
+    featureKey: 'mira.score.portfolio',
+    titulo: 'Encaixe de portfólio (15 pontos)',
+    clientSafe: true,
+    relacionados: ['mira.score', 'mira.perfil.catalogo', 'mira.dossie.oportunidades'],
+    oQueE:
+      'O quanto o que VOCÊ vende encaixa no que ESTA conta faz. É o cruzamento entre o seu catálogo declarado no Perfil e a atividade da conta.',
+    paraQueServe:
+      'Serve para a nota responder "eu tenho o que vender para eles?", e não só "eles são grandes?". Sem catálogo cadastrado, a Mira não tem como saber o que você oferece, e este fator fica zerado por completo: é o campo que mais barato sobe a nota da fila inteira de uma vez.',
+    comoImplementar: [
+      'Sobe quando a atividade da conta é compatível com o seu catálogo. O cruzamento fino (qual produto, com que argumento) é o que o Aprofundar com IA escreve nas Oportunidades.',
+      'Fica em zero quando você não cadastrou catálogo no Perfil. O motivo diz isso com todas as letras: "cadastre o catálogo no Perfil para o cruzamento demanda × oferta".',
+      'Para melhorar: cadastre seus produtos e serviços no bloco Catálogo do Perfil de Prospecção, com uma descrição curta de cada.',
+    ],
+    exemploResultado:
+      'Uma consultoria de infraestrutura cadastra três serviços no Perfil. Todos os Alvos de indústria da fila sobem no fator de uma vez, porque a atividade deles passa a ter com o que ser cruzada. O Aprofundar então aponta qual dos três serviços vai em cada conta.',
+  },
+  {
+    featureKey: 'mira.score.janela',
+    titulo: 'Janela e incumbente (15 pontos)',
+    clientSafe: true,
+    relacionados: ['mira.score', 'mira.aprofundar', 'mira.dossie.incumbentes', 'mira.dossie.janela'],
+    oQueE:
+      'Duas perguntas num fator só: existe um motivo para ser AGORA (a janela), e quem já atende essa conta hoje (o incumbente). Os dois vêm da pesquisa na web que o Aprofundar com IA faz.',
+    paraQueServe:
+      'Serve para separar a conta que faz sentido da conta que faz sentido HOJE. Janela é o gatilho: mudou de dono, anunciou expansão, abriu filial, trocou a diretoria. Incumbente é quem você vai ter que deslocar, e saber disso é acionável dos dois lados: te dá o argumento certo e evita a abordagem ingênua de quem acha que a conta está descoberta.',
+    comoImplementar: [
+      'Este fator só pontua depois que você clica em Aprofundar com IA. Antes disso ele vale 0, e o motivo diz exatamente isso, em vez de fingir que a conta não tem janela.',
+      'Sobe quando a pesquisa acha um gatilho de entrada, e sobe de novo quando nomeia um fornecedor atual com evidência pública.',
+      'Se a pesquisa rodou e não achou nada, o fator fica em 0, mas o motivo passa a dizer "pesquisamos e não achamos". Isso é informação sobre a conta (pegada pública fraca), diferente de "ainda não procuramos".',
+      'Nunca inventamos o fornecedor pelo setor: só entra quem aparece nomeado numa fonte real, com o link no dossiê.',
+    ],
+    exemploResultado:
+      'Um Alvo estava com 33 e o fator zerado. Depois do Aprofundar, a pesquisa acha o anúncio de expansão da fábrica e uma notícia citando o ERP que a conta usa. O fator vai a 15, a nota sobe para 52, e o vendedor abre a conversa pela expansão sabendo contra quem compete.',
+    mockup: `<svg viewBox="0 0 640 182" role="img" width="100%" style="max-width:640px;margin:0 auto;display:block" xmlns="http://www.w3.org/2000/svg">
+      <style>
+        .rot{font:600 10px system-ui,sans-serif;letter-spacing:.05em}
+        .t{font:600 12px system-ui,sans-serif;fill:#111827}
+        .s{font:10.5px system-ui,sans-serif;fill:#6B7280}
+      </style>
+      <text class="rot" x="14" y="16" fill="#6B7280">OS TRÊS ESTADOS DO FATOR (E OS DOIS ZEROS NÃO SÃO IGUAIS)</text>
+
+      <rect x="14" y="28" width="196" height="72" rx="9" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1.5"/>
+      <text class="t" x="28" y="48">0 / 15</text>
+      <text class="s" x="28" y="66">Você ainda não aprofundou.</text>
+      <text class="s" x="28" y="80">Não sabemos, e dizemos isso.</text>
+      <text class="s" x="28" y="94" style="fill:#4A52D0;font-weight:600">→ clique em Aprofundar com IA</text>
+
+      <rect x="222" y="28" width="196" height="72" rx="9" fill="#FFFBEB" stroke="#F59E0B" stroke-width="1.5"/>
+      <text class="t" x="236" y="48">0 / 15</text>
+      <text class="s" x="236" y="66">Pesquisamos e não achamos.</text>
+      <text class="s" x="236" y="80">A conta tem pegada fraca.</text>
+      <text class="s" x="236" y="94" style="fill:#B45309;font-weight:600">isto é informação, não lacuna</text>
+
+      <rect x="430" y="28" width="196" height="72" rx="9" fill="#F0FBF6" stroke="#2FB57A" stroke-width="1.5"/>
+      <text class="t" x="444" y="48">15 / 15</text>
+      <text class="s" x="444" y="66">Janela: anunciou expansão.</text>
+      <text class="s" x="444" y="80">Incumbente: usa o ERP X.</text>
+      <text class="s" x="444" y="94" style="fill:#0F7A50;font-weight:600">com link da fonte no dossiê</text>
+
+      <rect x="14" y="114" width="612" height="56" rx="8" fill="#F5F6FF" stroke="#4A52D0" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text class="t" x="32" y="134" style="fill:#3730A3">Por que os dois zeros são diferentes</text>
+      <text class="s" x="32" y="150">O primeiro é ausência de pesquisa. O segundo é resultado de pesquisa.</text>
+      <text class="s" x="32" y="163">Só o segundo te diz algo sobre a conta, e é por isso que o motivo muda.</text>
+    </svg>`,
   },
 ];

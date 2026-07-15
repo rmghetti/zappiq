@@ -37,6 +37,20 @@ import {
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { miraApi, type MiraAlvoDossie } from '@/lib/miraApi';
 
+/**
+ * Cada fator do Mira Score tem o seu Saiba mais. A chave é o NOME do fator
+ * como o score.ts (na API) o escreve: se mudar lá, o help some daqui (falha
+ * silenciosa e segura do <SaibaMais />). O teste de contrato em
+ * content/saiba-mais/__tests__/scoreFatores.test.ts é o alarme disso.
+ */
+const SCORE_FATOR_HELP: Record<string, string> = {
+  'Fit de ICP': 'mira.score.fit',
+  'Demanda e sinais': 'mira.score.demanda',
+  'Cobertura de decisores': 'mira.score.decisores',
+  'Encaixe de portfólio': 'mira.score.portfolio',
+  'Janela e incumbente': 'mira.score.janela',
+};
+
 export default function MiraAlvoDossiePage() {
   const params = useParams<{ id: string }>();
   const [loading, setLoading] = useState(true);
@@ -134,20 +148,37 @@ export default function MiraAlvoDossiePage() {
         {/* Por que essa nota (score breakdown) */}
         {alvo.scoreBreakdown?.fatores?.length ? (
           <div className="mt-4 border-t border-gray-100 pt-3">
-            <p className="text-xs font-semibold text-gray-500 mb-2">Por que essa nota</p>
-            <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
+              Por que essa nota <SaibaMais featureKey="mira.score" />
+            </p>
+            <div className="space-y-2.5">
               {alvo.scoreBreakdown.fatores.map((f) => (
-                <div key={f.nome} className="flex items-center gap-3 text-xs">
-                  <span className="w-40 text-gray-500 shrink-0">{f.nome}</span>
-                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary-400 rounded-full"
-                      style={{ width: `${Math.min(100, Math.round((f.valor / Math.max(1, f.peso)) * 100))}%` }}
-                    />
+                <div key={f.nome}>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="w-40 text-gray-500 shrink-0 flex items-center gap-1">
+                      {f.nome}
+                      {SCORE_FATOR_HELP[f.nome] && <SaibaMais featureKey={SCORE_FATOR_HELP[f.nome]} />}
+                    </span>
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      {/* primary-500, não 400: a paleta do tailwind.config.js só
+                          define DEFAULT/500/600, então `bg-primary-400` não gera
+                          CSS nenhum e a barra ficou TRANSPARENTE desde sempre
+                          (confirmado no CSS de produção: a classe não existe).
+                          A nota aparecia; o preenchimento, nunca. */}
+                      <div
+                        className="h-full bg-primary-500 rounded-full"
+                        style={{ width: `${Math.min(100, Math.round((f.valor / Math.max(1, f.peso)) * 100))}%` }}
+                      />
+                    </div>
+                    <span className="w-12 text-right font-medium text-gray-600 shrink-0">
+                      {f.valor}/{f.peso}
+                    </span>
                   </div>
-                  <span className="w-12 text-right font-medium text-gray-600 shrink-0">
-                    {f.valor}/{f.peso}
-                  </span>
+                  {/* O motivo explica a nota DESTA conta ("CNAE bate com o ICP",
+                      "pesquisamos e não achamos"). O motor sempre calculou, mas
+                      a tela nunca mostrou: barra sem motivo é nota opaca, que é
+                      exatamente o que o Mira Score promete não ser. */}
+                  {f.motivo && <p className="text-[11px] text-gray-400 mt-1 ml-[172px] leading-snug">{f.motivo}</p>}
                 </div>
               ))}
             </div>
