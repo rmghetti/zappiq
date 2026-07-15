@@ -1,85 +1,94 @@
 'use client';
 
 /**
- * /tasks — Tarefas / follow-ups da IA (FEATURE 5b.5)
+ * /tasks — Tarefas
  *
- * A automação (crmAutomationService) já CRIA Tasks quando a IA detecta intenção
- * de compra e outros gatilhos, mas até agora não havia tela pra vê-las — o
- * gancho de ação diária da PME ficava perdido. Esta tela lista as tarefas
- * pendentes (título, contato/deal vinculado, prazo) com botão pra concluir.
+ * Era um MURAL DE RECADOS: a IA criava a tarefa por dentro (automação das
+ * Conversas, Mira) e a tela só listava e concluía. Não dava pra criar, editar,
+ * anotar, dar prazo, atribuir a alguém nem etiquetar — e `assignedToId` era
+ * coluna morta, então toda tarefa nascia sem dono.
  *
- * Backend: GET /api/tasks (filtrável por status) + PUT /api/tasks/:id.
+ * Agora: criar/editar pelo painel "Ver tarefa" (prazo, observação, responsável,
+ * etiquetas) e filtro por situação, etiqueta e responsável.
+ *
+ * Backend: GET/POST /api/tasks · GET/PUT /api/tasks/:id · /api/tasks/tags.
  */
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { ListChecks, Check, User, Target, Clock, AlertTriangle, Loader2, Radar } from 'lucide-react';
+import {
+  ListChecks, Check, User, Target, Clock, AlertTriangle, Loader2, Radar,
+  Plus, Tag as TagIcon, PanelRightOpen,
+} from 'lucide-react';
 import { api } from '../../../lib/api';
 import { SaibaMais } from '@/components/shared/SaibaMais';
+import { TaskPanel, type Task, type TaskTag } from '@/components/tasks/TaskPanel';
 
-interface Task {
-  id: string;
-  title: string;
-  description: string | null;
-  status: 'PENDING' | 'DONE' | 'CANCELLED';
-  dueDate: string | null;
-  completedAt: string | null;
-  createdAt: string;
-  contact: { id: string; name: string; phone: string; avatarUrl?: string } | null;
-  deal: { id: string; title: string; stage: string } | null;
-  /**
-   * De onde veio a tarefa. Até 15/07/2026 TODA tarefa nascia das Conversas
-   * (a IA detectou intenção de compra), então a origem era implícita. Com o
-   * Mira gerando plano de ação, a tela precisa dizer: são trabalhos
-   * diferentes (responder quem chamou x prospectar quem nem te conhece).
-   */
-  origem?: 'CONVERSA' | 'MIRA';
-  miraAlvoId?: string | null;
-}
-
-type StatusFilter = 'PENDING' | 'DONE' | 'ALL';
+type StatusFilter = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'ALL';
+type AssigneeFilter = 'ALL' | 'me' | 'none';
 
 const FILTERS: { key: StatusFilter; label: string }[] = [
-  { key: 'PENDING', label: 'Pendentes' },
+  { key: 'PENDING', label: 'A fazer' },
+  { key: 'IN_PROGRESS', label: 'Em andamento' },
   { key: 'DONE', label: 'Concluídas' },
   { key: 'ALL', label: 'Todas' },
+];
+
+const ASSIGNEES: { key: AssigneeFilter; label: string }[] = [
+  { key: 'ALL', label: 'Todo mundo' },
+  { key: 'me', label: 'Minhas' },
+  { key: 'none', label: 'Sem responsável' },
 ];
 
 // Prazo humanizado + sinal de atraso. dueDate null → sem prazo.
 function formatDue(dueDate: string | null): { label: string; overdue: boolean } {
   if (!dueDate) return { label: 'Sem prazo', overdue: false };
   const due = new Date(dueDate);
-  const now = new Date();
-  const overdue = due.getTime() < now.getTime();
+  const overdue = due.getTime() < Date.now();
   const label = due.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
   return { label, overdue };
 }
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [tags, setTags] = useState<TaskTag[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>('PENDING');
+  const [tagFilter, setTagFilter] = useState<string>('');
+  const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>('ALL');
   const [savingId, setSavingId] = useState<string | null>(null);
+
+  const [panelTask, setPanelTask] = useState<Task | null>(null);
+  const [panelMode, setPanelMode] = useState<'view' | 'create' | null>(null);
+
+  const fetchTags = useCallback(() => {
+    api.get('/api/tasks/tags')
+      .then((r) => setTags(r.data || []))
+      .catch(() => setTags([]));
+  }, []);
 
   const fetchTasks = useCallback(() => {
     setLoading(true);
-    const qs = filter === 'ALL' ? '' : `?status=${filter}`;
-    api.get(`/api/tasks${qs}`)
+    const qs = new URLSearchParams();
+    if (filter !== 'ALL') qs.set('status', filter);
+    if (tagFilter) qs.set('tagId', tagFilter);
+    if (assigneeFilter !== 'ALL') qs.set('assignedToId', assigneeFilter);
+    const q = qs.toString();
+    api.get(`/api/tasks${q ? `?${q}` : ''}`)
       .then((res) => setTasks(res.data || []))
       .catch(() => setTasks([]))
       .finally(() => setLoading(false));
-  }, [filter]);
+  }, [filter, tagFilter, assigneeFilter]);
 
-  useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+  useEffect(() => { fetchTags(); }, [fetchTags]);
 
   async function completeTask(task: Task) {
     setSavingId(task.id);
     try {
       await api.put(`/api/tasks/${task.id}`, { status: 'DONE' });
-      // Se estamos na aba Pendentes, some da lista; senão, atualiza in-place.
-      if (filter === 'PENDING') {
+      // Se a tarefa não pertence mais ao filtro aberto, some da lista.
+      if (filter !== 'ALL' && filter !== 'DONE') {
         setTasks((prev) => prev.filter((t) => t.id !== task.id));
       } else {
         setTasks((prev) =>
@@ -89,19 +98,23 @@ export default function TasksPage() {
         );
       }
     } catch {
-      // falha silenciosa — recarrega pra ficar consistente com o servidor
-      fetchTasks();
+      fetchTasks(); // falhou: recarrega pra ficar consistente com o servidor
     } finally {
       setSavingId(null);
     }
   }
 
-  const pendingCount = tasks.filter((t) => t.status === 'PENDING').length;
+  // Depois de salvar, o filtro aberto pode não valer mais pra tarefa (mudou de
+  // situação, de dono, de etiqueta). Refetch é mais honesto que remendar a
+  // lista na mão e mostrar algo que o servidor não devolveria.
+  const onSaved = useCallback(() => { fetchTasks(); fetchTags(); }, [fetchTasks, fetchTags]);
+
+  const filtrando = filter !== 'ALL' || !!tagFilter || assigneeFilter !== 'ALL';
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center">
             <ListChecks className="text-primary-600" size={22} />
@@ -112,14 +125,21 @@ export default function TasksPage() {
               <SaibaMais featureKey="tasks.overview" />
             </h1>
             <p className="text-sm text-gray-500">
-              Follow-ups e ações criadas pela IA a partir das suas conversas.
+              O que a IA levantou nas conversas e na prospecção, mais o que você anotar.
             </p>
           </div>
         </div>
+        <button
+          onClick={() => { setPanelTask(null); setPanelMode('create'); }}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700"
+        >
+          <Plus size={16} />
+          Nova tarefa
+        </button>
       </div>
 
       {/* Filtros */}
-      <div className="flex items-center gap-2 mb-5">
+      <div className="flex flex-wrap items-center gap-2 mb-5">
         {FILTERS.map(({ key, label }) => (
           <button
             key={key}
@@ -133,9 +153,37 @@ export default function TasksPage() {
             {label}
           </button>
         ))}
-        {filter === 'PENDING' && !loading && (
-          <span className="ml-2 text-sm text-gray-400">
-            {pendingCount} {pendingCount === 1 ? 'tarefa pendente' : 'tarefas pendentes'}
+
+        <span className="w-px h-5 bg-gray-200 mx-1" aria-hidden />
+
+        <select
+          aria-label="Filtrar por responsável"
+          value={assigneeFilter}
+          onChange={(e) => setAssigneeFilter(e.target.value as AssigneeFilter)}
+          className="px-3 py-1.5 rounded-full text-sm border border-gray-200 bg-white text-gray-600"
+        >
+          {ASSIGNEES.map((a) => (
+            <option key={a.key} value={a.key}>{a.label}</option>
+          ))}
+        </select>
+
+        {tags.length > 0 && (
+          <select
+            aria-label="Filtrar por etiqueta"
+            value={tagFilter}
+            onChange={(e) => setTagFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-full text-sm border border-gray-200 bg-white text-gray-600"
+          >
+            <option value="">Todas as etiquetas</option>
+            {tags.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}{t.emUso ? ` (${t.emUso})` : ''}</option>
+            ))}
+          </select>
+        )}
+
+        {!loading && (
+          <span className="ml-1 text-sm text-gray-400">
+            {tasks.length} {tasks.length === 1 ? 'tarefa' : 'tarefas'}
           </span>
         )}
       </div>
@@ -149,10 +197,15 @@ export default function TasksPage() {
         <div className="text-center py-20 border border-dashed border-gray-200 rounded-xl">
           <ListChecks className="mx-auto text-gray-300 mb-3" size={40} />
           <p className="text-gray-500 font-medium">
-            {filter === 'PENDING' ? 'Nenhuma tarefa pendente' : 'Nenhuma tarefa por aqui'}
+            {filtrando ? 'Nenhuma tarefa com esses filtros' : 'Nenhuma tarefa por aqui'}
           </p>
           <p className="text-sm text-gray-400 mt-1">
-            Conforme a IA identifica oportunidades nas conversas, os follow-ups aparecem aqui.
+            {/* Honestidade: com filtro ligado, lista vazia é do FILTRO, não da
+                conta. Sem esta distinção o cliente lê "a ferramenta não achou
+                nada" e conclui que o produto não entrega. */}
+            {filtrando
+              ? 'Tente afrouxar os filtros acima.'
+              : 'Conforme a IA identifica oportunidades, os follow-ups aparecem aqui. Você também pode criar a sua.'}
           </p>
         </div>
       ) : (
@@ -187,16 +240,20 @@ export default function TasksPage() {
 
                 {/* Conteúdo */}
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold text-gray-900 flex items-center gap-1.5 ${done ? 'line-through' : ''}`}>
+                  <p className={`text-sm font-semibold text-gray-900 flex items-center gap-1.5 flex-wrap ${done ? 'line-through' : ''}`}>
                     {task.title}
                     {/* A origem muda o QUE a pessoa vai fazer: responder alguém
                         que chamou (Conversa) é diferente de abordar alguém que
-                        nem sabe que você existe (Mira). O selo evita o vendedor
-                        abrir a tarefa para descobrir de que trabalho se trata. */}
+                        nem sabe que você existe (Mira). */}
                     {task.origem === 'MIRA' && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[#2F7FB5]/10 px-2 py-0.5 text-[10px] font-semibold text-[#2F7FB5] shrink-0">
                         <Radar size={10} />
                         Prospecção
+                      </span>
+                    )}
+                    {task.status === 'IN_PROGRESS' && (
+                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 shrink-0">
+                        Em andamento
                       </span>
                     )}
                   </p>
@@ -204,8 +261,31 @@ export default function TasksPage() {
                     <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{task.description}</p>
                   )}
 
-                  {/* Metadados: contato, deal, prazo */}
+                  {/* Etiquetas */}
+                  {task.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {task.tags.map((t) => (
+                        <span
+                          key={t.id}
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={{ backgroundColor: `${t.color}1a`, color: t.color }}
+                        >
+                          <TagIcon size={9} />
+                          {t.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Metadados */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
+                    <button
+                      onClick={() => { setPanelTask(task); setPanelMode('view'); }}
+                      className="flex items-center gap-1 font-medium text-primary-600 hover:text-primary-700"
+                    >
+                      <PanelRightOpen size={13} />
+                      Ver tarefa
+                    </button>
                     {task.origem === 'MIRA' && task.miraAlvoId && (
                       <Link
                         href={`/mira/alvos/${task.miraAlvoId}`}
@@ -214,6 +294,12 @@ export default function TasksPage() {
                         <Radar size={13} />
                         ver o dossiê
                       </Link>
+                    )}
+                    {task.assignedTo && (
+                      <span className="flex items-center gap-1 text-gray-500">
+                        <User size={13} />
+                        {task.assignedTo.name}
+                      </span>
                     )}
                     {task.contact && (
                       <Link
@@ -247,6 +333,17 @@ export default function TasksPage() {
             );
           })}
         </ul>
+      )}
+
+      {panelMode && (
+        <TaskPanel
+          task={panelTask}
+          mode={panelMode}
+          tags={tags}
+          onClose={() => setPanelMode(null)}
+          onSaved={onSaved}
+          onTagsChanged={fetchTags}
+        />
       )}
     </div>
   );
