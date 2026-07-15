@@ -381,6 +381,90 @@ export async function pesquisarPegadaPublica(
 }
 
 /**
+ * Grava a pegada pública INTEIRA de um Alvo: releases (com a demanda e a
+ * oportunidade que cada um gera), incumbentes e as demandas evidenciadas que
+ * não vieram de release.
+ *
+ * Existe para o cron semanal e o botão "Aprofundar com IA" gravarem
+ * exatamente igual. Antes cada um tinha o seu caminho: o botão persistia o
+ * dossiê inteiro, o cron só os releases e jogava fora demanda e incumbente que
+ * o MESMO LLM já tinha produzido na MESMA chamada. Não era decisão de custo,
+ * era divergência de código — e é a família de bug que já custou caro aqui.
+ */
+export async function persistirPegadaPublica(
+  organizationId: string,
+  alvoId: string,
+  r: PegadaPublicaResult
+): Promise<{
+  releases: number;
+  demandasDeRelease: number;
+  oportunidades: number;
+  incumbentes: number;
+  demandasEvidenciadas: number;
+}> {
+  const res = await persistirReleaseDrafts(organizationId, alvoId, r.releases);
+
+  // Incumbentes: substitui o que a pesquisa anterior achou (a foto atual da
+  // conta é o que vale; fornecedor que saiu não deve seguir no dossiê). Só
+  // apaga quando achou alguém — senão uma busca ruim zeraria o que já sabíamos.
+  if (r.incumbentes.length > 0) {
+    await prisma.miraIncumbente.deleteMany({ where: { alvoId } });
+    for (const i of r.incumbentes) {
+      await prisma.miraIncumbente.create({
+        data: {
+          alvoId,
+          fornecedor: i.fornecedor,
+          categoria: i.categoria,
+          evidencia: i.evidencia,
+          fonte: i.fonte,
+          deslocabilidade: i.deslocabilidade,
+        },
+      });
+    }
+  }
+
+  // Demandas evidenciadas convivem com as presumidas da Fase 1, em rank
+  // próprio: a presumida (confiança 55) diz "provavelmente dói isto"; a
+  // evidenciada (70) diz "a conta publicou que dói isto".
+  //
+  // Uma demanda cuja fonte JÁ virou release com demanda ligada é pulada: o
+  // mesmo LLM devolve `demandas[]` e `releases[].demandaGerada` lendo o mesmo
+  // material, então sem este filtro a mesma necessidade entraria duas vezes
+  // (uma sem FK, outra com) e `demandasEvidenciadas` contaria em dobro,
+  // inflando o score com evidência que é uma só.
+  const urlsComDemandaDeRelease = new Set(r.releases.filter((rel) => rel.demandaGerada).map((rel) => rel.url));
+  let demandasEvidenciadas = 0;
+  for (let idx = 0; idx < r.demandas.length; idx++) {
+    const d = r.demandas[idx];
+    if (urlsComDemandaDeRelease.has(d.fonte)) continue;
+    const id = `${alvoId}-evidenciada-${idx + 1}`;
+    await prisma.miraDemanda.upsert({
+      where: { id },
+      create: {
+        id,
+        alvoId,
+        rank: idx + 1,
+        descricao: d.descricao,
+        evidencia: d.evidencia,
+        fonte: d.fonte,
+        dataFonte: new Date(),
+        confianca: d.confianca,
+      },
+      update: { descricao: d.descricao, evidencia: d.evidencia, fonte: d.fonte, confianca: d.confianca },
+    });
+    demandasEvidenciadas++;
+  }
+
+  return {
+    releases: res.criados,
+    demandasDeRelease: res.demandasCriadas,
+    oportunidades: res.oportunidadesCriadas,
+    incumbentes: r.incumbentes.length,
+    demandasEvidenciadas,
+  };
+}
+
+/**
  * Fachada para o cron semanal.
  *
  * Era "o cron só quer os releases, ele publica novidade e não monta dossiê".
