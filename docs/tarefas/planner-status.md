@@ -174,3 +174,62 @@ zero falha** (36 novos: 24 puros + 12 de isolamento de tenant).
 
 Ver memória `zappiq-supabase-rls-desligada` (o achado é de lá; esta sessão descobriu a
 CAUSA, provou que a correção era segura e fechou).
+
+## Sessões 3 e 4 (15/07/2026) — tela, deploy e prova
+
+PR #305 (mergeada) + PR #306 (fix do z-index). Fly v373, Vercel Production Ready.
+
+### O bug que só o navegador pega (de novo)
+
+O FAB "Treinar <agente>" é `fixed bottom-6 right-6 z-50` — o MESMO z-index do
+painel. Empatados, decide a ordem do DOM, e o FAB ganhava: ficava por cima de
+**Salvar** e **Cancelar**. Na prática a pessoa abria a tarefa, preenchia tudo e
+NÃO CONSEGUIA SALVAR.
+
+`tsc` exit 0 e 56 testes de tarefas verdes com o bug no ar. Nenhum teste vê dois
+elementos empilhados. Mesma lição do loop anterior (a frase sem sentido que 16
+testes verdes não pegaram). **Feature de tela não está pronta até abrir a tela.**
+
+### Deploy: quase parei no meio sem ver
+
+O `flyctl deploy` falhou com timeout de health check (erro de rede da API do
+Fly). `release_command completed successfully` → **a migração rodou**. Mas as
+máquinas ficaram DIVIDIDAS: uma na v371 (velha, servindo) e outra na v372 (nova,
+parada). `/health` devolvia 200 — pela máquina VELHA. Se eu tivesse checado só o
+health, teria declarado deploy OK com produção pela metade.
+O que salvou: a migração ser ADITIVA (código velho roda com banco novo).
+Segundo `flyctl deploy` fechou o rolling update: ambas na v373.
+
+### Efeito da migração conferido no banco (não o registro)
+
+A lição desta sessão aplicada em si mesma: `_prisma_migrations` diz que aplicou;
+o banco diz se aplicou.
+
+| verificação | resultado |
+|---|---|
+| enum `TaskStatus` | `PENDING,IN_PROGRESS,DONE,CANCELLED` ✓ |
+| `tasks.notes` | existe ✓ |
+| FK `tasks_assignedToId_fkey` | existe ✓ |
+| `task_tags` | existe, RLS LIGADA ✓ |
+
+### E2E em produção (Chrome logado, org MACHIA)
+
+Fluxo real exercitado: abrir "Ver tarefa" → criar etiqueta "Urgente" → marcar →
+escrever observação → Salvar. Persistido e conferido por SQL:
+`notes` gravado, `Urgente (#9333ea)` vinculado, org = MACHIA (tenant certo).
+Anon nas tabelas novas: `task_tags` 0, `task_tags_on_tasks` 0, `tasks` 0.
+
+**Dado de teste limpo depois:** a observação era INVENTADA por mim para o teste
+(uma afirmação sobre uma pessoa real que ninguém apurou). Removida junto com o
+vínculo da etiqueta. A etiqueta "Urgente" ficou no catálogo (rótulo, não fato).
+Estado final: 6 tarefas, 0 observações, 0 vínculos, 1 etiqueta no catálogo.
+
+## NÃO ENTREGUE (decisão consciente, não esquecimento)
+
+- **Quadro Kanban** — o `TASK_BOARD_COLUMNS` já existe e está testado na API,
+  mas a tela do quadro não foi feita.
+- **Integrações** com CRM (aba no contato/negócio), Impulso (aprovação do
+  Co-Piloto virando tarefa) e link de volta para a conversa.
+
+Cabiam 4 sessões e uma foi inteira para a segurança. Preferi entregar provado o
+que o Rodrigo pediu explicitamente a entregar tudo pela metade.
