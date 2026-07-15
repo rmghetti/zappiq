@@ -248,7 +248,20 @@ router.post('/alvos/:id/decisores-publico', async (req: Request, res: Response, 
         success: false,
         error: 'fonte_indisponivel',
         message:
-          'O mapeamento de decisores por pegada pública precisa de um provedor de busca configurado (ex.: Google Programmable Search, grátis). O time já foi avisado.',
+          'O mapeamento de decisores por pegada pública precisa de um provedor de busca configurado (ex.: Brave Search, Google Programmable Search). O time já foi avisado.',
+      });
+      return;
+    }
+    // A busca tentou TODOS os provedores configurados e nenhum respondeu —
+    // diferente de "não achei ninguém" (mercado vazio), que devolve
+    // candidatos=0 com success:true. Ver buscaPublica.ts (14-15/07/2026).
+    if (err?.status === 502) {
+      res.status(502).json({
+        success: false,
+        error: 'fonte_falhou',
+        message:
+          'A busca pública respondeu com erro, então esta tentativa não chegou a procurar decisores. Nada foi descontado da sua cota. O time já foi avisado.',
+        detalhe: err?.detail ?? null,
       });
       return;
     }
