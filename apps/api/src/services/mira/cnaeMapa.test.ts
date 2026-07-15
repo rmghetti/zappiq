@@ -73,3 +73,25 @@ describe('traduzirAlvos (o caso real da campanha 1 de teste)', () => {
     expect(traduzirAlvos([])).toEqual({ divisoes: [], traduzidos: [], naoTraduzidos: [] });
   });
 });
+
+describe('ramo específico da indústria vence o genérico "indústria"', () => {
+  // A primeira campanha que funcionou (prod, 14/07) pediu "indústrias
+  // metalúrgicas" em SP e trouxe uma fábrica de móveis e uma de máquinas
+  // agrícolas: sem "metalurgica" no mapa, casava só "industria" e varria as
+  // divisões 10 a 33 inteiras.
+  it('"indústrias metalúrgicas" vira 24, não o setor secundário inteiro', () => {
+    const r = traduzirAlvo('indústrias metalúrgicas');
+    expect(r.divisoes).toEqual(['24']);
+  });
+
+  it('"indústria de móveis" vira 31', () => {
+    expect(traduzirAlvo('indústria de móveis').divisoes).toEqual(['31']);
+  });
+
+  it('"indústria" sozinha continua abrangendo a transformação inteira', () => {
+    const r = traduzirAlvo('indústria');
+    expect(r.divisoes).toContain('24');
+    expect(r.divisoes).toContain('31');
+    expect(r.divisoes.length).toBeGreaterThan(20);
+  });
+});
