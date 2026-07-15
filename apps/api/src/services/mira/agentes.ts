@@ -17,8 +17,7 @@ import { logger } from '../../utils/logger.js';
 import { llmRouter } from '../llm/LLMRouter.js';
 import { buscaPublicaDisponivel } from './buscaPublica.js';
 import { pesquisarPegadaPublica, persistirReleaseDrafts } from './releasesPublico.js';
-import { computeMiraScoreV1, computeMiraScoreB2C } from './score.js';
-import { buscarSinalSetorial } from './cagedMirror.js';
+import { reavaliarAlvo } from './reavaliar.js';
 
 const CONFIANCA_INFERENCIA = 55;
 
@@ -142,9 +141,18 @@ export interface AprofundarResult {
     incumbentes: number;
     demandasEvidenciadas: number;
     janela: string | null;
-    /** Score antes → depois do recálculo com a evidência nova. */
+    /** Score antes → depois da reavaliação com a evidência nova. */
     scoreAntes: number | null;
     scoreDepois: number | null;
+    confiancaAntes?: number | null;
+    confiancaDepois?: number | null;
+    /** Status antes → depois: o Alvo pode ter virado Pronto agora. */
+    statusAntes?: string;
+    statusDepois?: string;
+    promovido?: boolean;
+    /** Passou no gate mas a cota acabou: segue em qualificação. */
+    bloqueadoPorCota?: boolean;
+    motivoStatus?: string;
     /** A busca quebrou (fonte fora do ar). Não é "não achei nada". */
     erro?: string;
   };
@@ -493,69 +501,12 @@ async function pesquisarEPreencherPegada(
       });
     }
 
-    // ── Recálculo do score com a evidência nova ──────────────────────
-    // Sem isto, a Fase 2 preencheria o dossiê e a NOTA continuaria a mesma:
-    // o fator "Janela e incumbente" (15 pontos) ficou zerado desde sempre
-    // justamente porque nada nunca o alimentava e nada nunca recalculava.
-    const evidencia = {
-      pesquisaRodou: true,
-      demandasEvidenciadas: r.demandas.length,
-      incumbentes: r.incumbentes.length,
-      janela: r.janela,
-    };
-    const scoreAntes = (alvo.miraScore as number) ?? null;
-    let scoreDepois = scoreAntes;
-    try {
-      const kind: 'B2B' | 'B2C' = alvo.kind === 'B2C' ? 'B2C' : 'B2B';
-      const decisoresCount = Array.isArray(alvo.decisores) ? alvo.decisores.length : 0;
-      const novo =
-        kind === 'B2C'
-          ? computeMiraScoreB2C(
-              perfil ?? {},
-              {
-                nome: alvo.nome,
-                telefone: alvo.telefone ?? null,
-                site: alvo.site ?? null,
-                rating: null,
-                totalAvaliacoes: null,
-              },
-              { municipio: alvo.municipio ?? null, uf: alvo.uf ?? null },
-              evidencia
-            )
-          : computeMiraScoreV1(
-              perfil ?? {},
-              {
-                cnpj: alvo.cnpj ?? '',
-                razaoSocial: alvo.nome,
-                nomeFantasia: alvo.nomeFantasia ?? null,
-                cnae: alvo.cnae ?? null,
-                cnaeDescricao: null,
-                porte: alvo.porte ?? null,
-                capitalSocial: alvo.capitalSocial ?? null,
-                naturezaJuridica: null,
-                situacaoCadastral: alvo.situacaoCadastral ?? null,
-                municipio: alvo.municipio ?? null,
-                uf: alvo.uf ?? null,
-                telefone: alvo.telefone ?? null,
-                dataInicioAtividade: null,
-                optanteSimples: null,
-                qsa: [],
-                fonteUrl: '',
-              } as any,
-              decisoresCount,
-              await buscarSinalSetorial(alvo.cnae ?? null, alvo.uf ?? null).catch(() => null),
-              evidencia
-            );
-      await prisma.miraAlvo.update({
-        where: { id: alvo.id },
-        data: { miraScore: novo.score, scoreBreakdown: novo.breakdown as unknown as Prisma.InputJsonValue },
-      });
-      scoreDepois = novo.score;
-    } catch (err: any) {
-      // O dossiê já foi preenchido; nota velha com dossiê novo é ruim, mas
-      // muito melhor que perder a pesquisa inteira por causa do recálculo.
-      logger.error(`[MiraAgentes] recálculo do score falhou alvo=${alvo.id}: ${err?.message ?? err}`);
-    }
+    // ── Reavaliação: score, confiança e status com a evidência nova ──
+    // Sem isto, a Fase 2 preencheria o dossiê e a NOTA continuaria a mesma.
+    // A reavaliação lê a evidência do BANCO (não daqui): o que acabou de ser
+    // gravado acima já está lá, e assim este caminho e o do Mapear decisores
+    // chegam exatamente no mesmo resultado.
+    const rev = await reavaliarAlvo(organizationId, alvo.id);
 
     return {
       rodou: true,
@@ -564,8 +515,19 @@ async function pesquisarEPreencherPegada(
       incumbentes: r.incumbentes.length,
       demandasEvidenciadas: r.demandas.length,
       janela: r.janela,
-      scoreAntes,
-      scoreDepois,
+      scoreAntes: rev?.scoreAntes ?? ((alvo.miraScore as number) ?? null),
+      scoreDepois: rev?.scoreDepois ?? ((alvo.miraScore as number) ?? null),
+      ...(rev
+        ? {
+            confiancaAntes: rev.confiancaAntes,
+            confiancaDepois: rev.confiancaDepois,
+            statusAntes: rev.statusAntes,
+            statusDepois: rev.statusDepois,
+            promovido: rev.promovido,
+            ...(rev.bloqueadoPorCota ? { bloqueadoPorCota: true } : {}),
+            motivoStatus: rev.motivoStatus,
+          }
+        : {}),
     };
   } catch (err: any) {
     logger.error(`[MiraAgentes] Fase 2 (web) falhou alvo=${alvo.id}: ${err?.message ?? err}`);
