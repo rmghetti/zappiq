@@ -59,5 +59,37 @@ A ordem importa: **persistir primeiro, barrar depois**. Barrar sem enriquecer s�
 
 ## Registro de execução
 
-### Sessão 1 (15/07/2026)
-- Diagnóstico acima. Números e definições conferidos em produção e no diretório oficial.
+### Sessão 1 (15/07/2026) — diagnóstico + os dois itens de PERSISTÊNCIA
+
+Branch `feat/mira-alvo-nao-sobe-cru`, commit `6bde882`.
+
+Feito:
+- **Titular do EI vira decisor** (`titularDoRegistro` em `cnpj.ts`), ligado no
+  adaptador do espelho. Cobre 2135/2305/2313/4014. Corta sufixo de município só
+  quando bate exato. LTDA sem QSA não vira titular (é lacuna da fonte, não
+  ausência legal de sócio).
+- **CNAE com descrição**: JOIN do `br_bd_diretorios_brasil.cnae_2` na query de
+  enriquecimento, `cnaeDescricao` deixa de ser `null`.
+- 11 testes novos com nomes reais. Um pegou um bug meu (razão social igual ao
+  município devolvia "ARARAS" como pessoa). Suíte: 158 arquivos / 1609 verdes.
+
+**Expectativa a PROVAR na sessão 3** (não declarar antes): 8 dos 11 Alvos sem
+decisor devem passar a ter 1. Efeito no score: +7 no fator de cobertura
+(`min(20, count*7)`) e +25 na confiança. A GISLAINE deve ir de score 13 para
+~20 e confiança 75 para 100.
+
+Atenção honesta: **20 ainda é abaixo do corte de 25 que o Rodrigo aprovou.**
+Então mesmo recuperada ela não sobe, e isso está certo: o Fit de ICP dela é 0
+(fundição de ferro, CNAE fora do ICP declarado). O gate vai barrá-la por um
+motivo verdadeiro, em vez de ela subir crua.
+
+### Sessão 2 (próxima) — o gate
+1. `alvoPassaGate` hoje só decide PROMOÇÃO para READY; o Alvo cru continua
+   existindo em QUALIFYING. Mover a decisão para a CRIAÇÃO: sem decisor após
+   todas as tentativas, o Alvo não sobe.
+2. Plano de ação e tarefa só para qualificado (score ≥ 25 **e** ≥ 1 decisor).
+3. O que fazer com o Alvo barrado: descartar de vez ou guardar como candidato
+   invisível na campanha? (decidir, e o mais honesto parece ser não criar).
+4. Backfill dos 11 existentes.
+
+### Sessão 3 — prova em produção. ### Sessão 4 — relatório.
