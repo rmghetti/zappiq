@@ -178,7 +178,10 @@ export async function registrarConclusaoNoCrm(
     await prisma.activity.create({
       data: {
         type: 'TASK_COMPLETED' as any,
-        actor: 'USER' as any,
+        // HUMAN, não 'USER': o enum ActorType é HUMAN|AI|SYSTEM. Quem concluiu
+        // a tarefa foi a pessoa, então HUMAN é o valor certo E o honesto (a IA
+        // sugeriu o plano; o crédito da execução é de quem executou).
+        actor: 'HUMAN' as any,
         title: `Plano de ação da Mira concluído: ${task.title}`,
         body: task.description ? task.description.slice(0, 2000) : null,
         ...(task.contactId ? { contactId: task.contactId } : {}),
