@@ -84,3 +84,87 @@ export async function buscarCnpjsBigQuery(codigos: string[], regioes: string[]):
     return [];
   }
 }
+
+/**
+ * Enriquece CNPJs a partir do espelho, no lugar da BrasilAPI.
+ *
+ * Por que existir: a BrasilAPI responde 403 para a máquina de produção (roda
+ * em iad/EUA porque gru não tinha capacidade; a API só atende IP brasileiro).
+ * Confirmado em 14/07: 200 do Brasil, 403 de iad. Isso zerava toda campanha
+ * B2B — o espelho achava 300 candidatos e nenhum passava na verificação.
+ *
+ * O espelho é a MESMA Receita (base do BD Pro, já paga), sem bloqueio de
+ * região e numa query só em vez de N chamadas HTTP. Devolve [] se o espelho
+ * ainda não tiver as colunas novas (materialização antiga), e aí o chamador
+ * degrada para a BrasilAPI. Nunca lança.
+ */
+export async function enriquecerCnpjsBigQuery(cnpjs: string[]): Promise<Map<string, CnpjDoEspelho>> {
+  const vazio = new Map<string, CnpjDoEspelho>();
+  if (!bigQueryDisponivel()) return vazio;
+  const limpos = (cnpjs ?? []).map((c) => String(c).replace(/\D/g, '')).filter((c) => c.length === 14);
+  if (limpos.length === 0) return vazio;
+
+  // A tabela é nossa e clusterizada; filtrar por CNPJ exato varre pouco.
+  const sql = `
+    SELECT cnpj, razao_social, nome_fantasia, cnae_fiscal_principal, sigla_uf,
+           id_municipio, data_inicio_atividade, telefone, capital_social, porte,
+           natureza_juridica, qsa
+    FROM \`${mirrorFqn()}\`
+    WHERE cnpj IN UNNEST(@cnpjs)
+  `;
+  try {
+    const [rows] = await getBigQueryClient().query({
+      query: sql,
+      params: { cnpjs: limpos },
+      types: { cnpjs: ['STRING'] },
+      maximumBytesBilled: gbToBytes(env.BIGQUERY_MAX_GB),
+      useLegacySql: false,
+    });
+    const mapa = new Map<string, CnpjDoEspelho>();
+    for (const r of rows as any[]) {
+      const cnpj = String(r.cnpj ?? '').replace(/\D/g, '');
+      if (cnpj.length !== 14) continue;
+      mapa.set(cnpj, {
+        cnpj,
+        razaoSocial: String(r.razao_social ?? '').trim(),
+        nomeFantasia: r.nome_fantasia ? String(r.nome_fantasia).trim() : null,
+        cnae: r.cnae_fiscal_principal ? String(r.cnae_fiscal_principal) : null,
+        uf: r.sigla_uf ? String(r.sigla_uf) : null,
+        idMunicipio: r.id_municipio ? String(r.id_municipio) : null,
+        dataInicioAtividade: r.data_inicio_atividade?.value ?? (r.data_inicio_atividade ? String(r.data_inicio_atividade) : null),
+        telefone: r.telefone ? String(r.telefone).replace(/\D/g, '') || null : null,
+        capitalSocial: r.capital_social != null ? Number(r.capital_social) : null,
+        porte: r.porte ? String(r.porte) : null,
+        naturezaJuridica: r.natureza_juridica ? String(r.natureza_juridica) : null,
+        qsa: Array.isArray(r.qsa)
+          ? r.qsa
+              .map((s: any) => ({ nome: String(s?.nome ?? '').trim(), qualificacao: String(s?.qualificacao ?? '').trim() }))
+              .filter((s: any) => s.nome)
+          : [],
+      });
+    }
+    logger.info(`[MiraBigQuery] enriquecidos ${mapa.size}/${limpos.length} pelo espelho`);
+    return mapa;
+  } catch (err: any) {
+    // Espelho sem as colunas novas (materialização antiga) ou erro: o chamador
+    // degrada para a BrasilAPI.
+    logger.warn(`[MiraBigQuery] enriquecimento pelo espelho indisponível: ${err?.message ?? err}`);
+    return vazio;
+  }
+}
+
+/** O que o espelho sabe de um CNPJ (subconjunto do CnpjData da BrasilAPI). */
+export interface CnpjDoEspelho {
+  cnpj: string;
+  razaoSocial: string;
+  nomeFantasia: string | null;
+  cnae: string | null;
+  uf: string | null;
+  idMunicipio: string | null;
+  dataInicioAtividade: string | null;
+  telefone: string | null;
+  capitalSocial: number | null;
+  porte: string | null;
+  naturezaJuridica: string | null;
+  qsa: { nome: string; qualificacao: string }[];
+}

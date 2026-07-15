@@ -18,7 +18,7 @@ import { logger } from '../../utils/logger.js';
 import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, type CnpjData } from './cnpj.js';
 import { computeMiraScoreV1 } from './score.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
-import { buscarCnpjsBigQuery } from './descobertaBigQuery.js';
+import { buscarCnpjsBigQuery, enriquecerCnpjsBigQuery, type CnpjDoEspelho } from './descobertaBigQuery.js';
 import { separarAlvos } from './alvosDaBusca.js';
 import { traduzirAlvos } from './cnaeMapa.js';
 import { buscarSinalSetorial } from './cagedMirror.js';
@@ -114,6 +114,36 @@ function nomeDoResultado(r: SerpResult): string {
   return t.slice(0, 160);
 }
 
+
+/**
+ * O registro do espelho no formato que o gate e o score já falam.
+ *
+ * O espelho só materializa ATIVAS, então situação é ATIVA por construção.
+ * Ficam de fora `cnaeDescricao`, `municipio` (o espelho guarda o código IBGE)
+ * e `optanteSimples`, que exigiriam dicionários e não pesam no gate; o score
+ * degrada de boa (matchCnae cai no código, que é o filtro forte).
+ */
+function doEspelhoParaCnpjData(e: CnpjDoEspelho): CnpjData {
+  return {
+    cnpj: e.cnpj,
+    razaoSocial: e.razaoSocial,
+    nomeFantasia: e.nomeFantasia,
+    cnae: e.cnae,
+    cnaeDescricao: null,
+    porte: e.porte,
+    capitalSocial: e.capitalSocial,
+    naturezaJuridica: e.naturezaJuridica,
+    situacaoCadastral: 'ATIVA',
+    municipio: null,
+    uf: e.uf,
+    telefone: e.telefone,
+    dataInicioAtividade: e.dataInicioAtividade,
+    optanteSimples: null,
+    qsa: e.qsa.map((s) => ({ nome: s.nome, qualificacao: s.qualificacao })),
+    fonteUrl: 'bigquery:mira.cnpj_ativos (base de CNPJ da Receita via BD Pro)',
+  };
+}
+
 /** Passa o gate B2B v1: identidade oficial + ATIVA + ao menos 1 decisor. */
 function passaGate(d: CnpjData): boolean {
   return Boolean(d.razaoSocial) && (d.situacaoCadastral ?? '').toUpperCase() === 'ATIVA' && d.qsa.length >= 1;
@@ -172,6 +202,8 @@ export async function runDescobertaPublica(
   // Erro de fonte não pode virar "0 resultados": guardamos o motivo para a
   // campanha falhar dizendo o que houve, em vez de mentir "concluída".
   const errosBusca: string[] = [];
+  // Mesma regra da busca: verificação que quebra não vira "não achei ninguém".
+  const errosEnriquecimento: string[] = [];
 
   // A web roda só para o que não virou código (ex.: "empresas PME", que é
   // porte, não ramo). O que virou código já foi buscado na base oficial, que é
@@ -266,7 +298,13 @@ export async function runDescobertaPublica(
     }
   }
 
-  for (const cnpj of Array.from(cnpjsBrutos).slice(0, MAX_CNPJS)) {
+  // Enriquecimento em LOTE pelo espelho: uma query em vez de N chamadas HTTP,
+  // e sem depender da BrasilAPI, que responde 403 para a região onde a API
+  // roda (iad). Vazio = espelho antigo/indisponível → cai na BrasilAPI abaixo.
+  const alvosDoLote = Array.from(cnpjsBrutos).slice(0, MAX_CNPJS);
+  const doEspelho = await enriquecerCnpjsBigQuery(alvosDoLote);
+
+  for (const cnpj of alvosDoLote) {
     const entNow = await getMiraEntitlement(organizationId);
     result.quota = { used: entNow.quota.used, total: entNow.quota.total, remaining: entNow.quota.remaining };
     if (entNow.quota.blocked) {
@@ -278,11 +316,15 @@ export async function runDescobertaPublica(
       result.duplicados++;
       continue;
     }
-    let dados: CnpjData | null = null;
-    try {
-      dados = await fetchCnpj(organizationId, cnpj);
-    } catch {
-      continue; // fonte falhou, re-tentavel depois
+    let dados: CnpjData | null = doEspelho.has(cnpj) ? doEspelhoParaCnpjData(doEspelho.get(cnpj)!) : null;
+    if (!dados) {
+      // Reserva: espelho ainda sem as colunas novas, ou CNPJ que não está nele.
+      try {
+        dados = await fetchCnpj(organizationId, cnpj);
+      } catch (err: any) {
+        errosEnriquecimento.push(String(err?.message ?? err));
+        continue;
+      }
     }
     if (!dados || (dados.situacaoCadastral ?? '').toUpperCase() !== 'ATIVA') continue;
     result.cnpjsVerificados++;
@@ -406,6 +448,16 @@ export async function runDescobertaPublica(
         logger.warn(`[MiraDescobertaPublica] falha candidato host=${host}: ${err?.message ?? err}`);
       }
     }
+  }
+
+  // Achou candidato e NENHUM passou porque a verificação quebrou: é falha de
+  // fonte, não mercado vazio. Foi o que deixou a campanha do Rodrigo em 0 com
+  // 300 candidatos encontrados.
+  if (result.criados === 0 && result.candidatos === 0 && errosEnriquecimento.length > 0) {
+    const err: any = new Error('verificacao_falhou');
+    err.status = 502;
+    err.detail = errosEnriquecimento[0];
+    throw err;
   }
 
   logger.info(

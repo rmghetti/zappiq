@@ -85,21 +85,47 @@ export async function syncCnpjMirror(opts?: { force?: boolean }): Promise<CnpjMi
     const [dsExists] = await bq.dataset(dataset).exists();
     if (!dsExists) await bq.createDataset(dataset, { location: 'US' });
 
-    // materializa só ATIVAS (situacao_cadastral 02/2), poucas colunas, clusterizada.
+    // Materializa só ATIVAS (situacao_cadastral 02/2), clusterizada por
+    // CNAE+UF (o filtro da descoberta).
+    //
+    // Carrega TAMBÉM o que o gate e o score precisam: razão social e o quadro
+    // societário (empresas + socios). Antes o espelho só tinha 5 colunas e a
+    // verificação de cada CNPJ ia para a BrasilAPI, que responde 403 para a
+    // máquina de produção (roda em iad/EUA; a API só atende IP brasileiro).
+    // Era o que zerava as campanhas: o espelho achava 300 candidatos e nenhum
+    // passava. A base do BD Pro é a MESMA Receita, já é paga, e não tem
+    // bloqueio de região.
     const sql = `
       CREATE OR REPLACE TABLE \`${fqn}\`
       CLUSTER BY cnae_fiscal_principal, sigla_uf
       AS
+      WITH socios_agg AS (
+        SELECT cnpj_basico, ARRAY_AGG(STRUCT(nome AS nome, qualificacao AS qualificacao) LIMIT 10) AS qsa
+        FROM \`${SRC_DATASET}.socios\`
+        WHERE data = DATE '${alvo}'
+        GROUP BY cnpj_basico
+      )
       SELECT
-        cnpj,
-        nome_fantasia,
-        cnae_fiscal_principal,
-        sigla_uf,
-        id_municipio,
+        e.cnpj,
+        e.cnpj_basico,
+        e.nome_fantasia,
+        e.cnae_fiscal_principal,
+        e.sigla_uf,
+        e.id_municipio,
+        e.data_inicio_atividade,
+        CONCAT(IFNULL(e.ddd_1, ''), IFNULL(e.telefone_1, '')) AS telefone,
+        emp.razao_social,
+        emp.capital_social,
+        emp.porte,
+        emp.natureza_juridica,
+        IFNULL(s.qsa, []) AS qsa,
         DATE '${alvo}' AS _data_snapshot
-      FROM \`${SRC}\`
-      WHERE data = DATE '${alvo}'
-        AND situacao_cadastral IN ('02', '2')
+      FROM \`${SRC}\` e
+      JOIN \`${SRC_DATASET}.empresas\` emp
+        ON emp.cnpj_basico = e.cnpj_basico AND emp.data = DATE '${alvo}'
+      LEFT JOIN socios_agg s ON s.cnpj_basico = e.cnpj_basico
+      WHERE e.data = DATE '${alvo}'
+        AND e.situacao_cadastral IN ('02', '2')
     `;
     logger.info(`[MiraCnpjMirror] materializando ${fqn} (snapshot ${alvo})...`);
     const [job] = await bq.createQueryJob({

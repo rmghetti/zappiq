@@ -26,8 +26,10 @@ vi.mock('@zappiq/database', () => ({
 vi.mock('../../utils/logger.js', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const buscarCnpjsBigQuery = vi.fn();
+const enriquecerCnpjsBigQuery = vi.fn();
 vi.mock('./descobertaBigQuery.js', () => ({
   buscarCnpjsBigQuery: (...a: any[]) => buscarCnpjsBigQuery(...a),
+  enriquecerCnpjsBigQuery: (...a: any[]) => enriquecerCnpjsBigQuery(...a),
   bigQueryDisponivel: () => true,
 }));
 
@@ -61,6 +63,7 @@ beforeEach(() => {
   findUniquePerfil.mockResolvedValue({ prontidao: 90 });
   findFirstAlvo.mockResolvedValue(null);
   buscarCnpjsBigQuery.mockResolvedValue([]);
+  enriquecerCnpjsBigQuery.mockResolvedValue(new Map());
   webSearch.mockResolvedValue([]);
   buscaPublicaDisponivel.mockReturnValue(true);
   fetchCnpj.mockResolvedValue(null);
@@ -165,5 +168,60 @@ describe('fonte quebrada nunca vira campanha vazia', () => {
     await expect(runDescobertaPublica('org-1', { alvos: ['4651-6'], regioes: [] })).rejects.toMatchObject({
       status: 412,
     });
+  });
+});
+
+describe('verificação sem BrasilAPI (o 403 que zerava tudo)', () => {
+  const doEspelho = (cnpj: string) => ({
+    cnpj,
+    razaoSocial: 'METALURGICA ACME LTDA',
+    nomeFantasia: 'ACME',
+    cnae: '2599301',
+    uf: 'SP',
+    idMunicipio: '3550308',
+    dataInicioAtividade: '2015-03-01',
+    telefone: '1140028922',
+    capitalSocial: 500000,
+    porte: '03',
+    naturezaJuridica: '2062',
+    qsa: [{ nome: 'Maria Silva', qualificacao: '49' }],
+  });
+
+  it('o espelho enriquece e a BrasilAPI nem é chamada', async () => {
+    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
+    enriquecerCnpjsBigQuery.mockResolvedValue(new Map([['11222333000181', doEspelho('11222333000181')]]));
+
+    const r = await runDescobertaPublica('org-1', { alvos: ['indústrias metalúrgicas'], regioes: ['SP'] });
+
+    expect(fetchCnpj).not.toHaveBeenCalled(); // era aqui que o 403 matava a campanha
+    expect(r.cnpjsVerificados).toBe(1);
+    expect(r.criados).toBe(1);
+  });
+
+  it('espelho antigo (sem as colunas novas): cai na BrasilAPI como reserva', async () => {
+    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
+    enriquecerCnpjsBigQuery.mockResolvedValue(new Map()); // materialização antiga
+    fetchCnpj.mockResolvedValue({
+      cnpj: '11222333000181', razaoSocial: 'ACME', nomeFantasia: null, cnae: '2599301', cnaeDescricao: null,
+      porte: null, capitalSocial: null, naturezaJuridica: null, situacaoCadastral: 'ATIVA', municipio: 'São Paulo',
+      uf: 'SP', telefone: null, dataInicioAtividade: null, optanteSimples: null,
+      qsa: [{ nome: 'Maria', qualificacao: '49' }], fonteUrl: 'x',
+    });
+
+    const r = await runDescobertaPublica('org-1', { alvos: ['indústrias metalúrgicas'], regioes: ['SP'] });
+
+    expect(fetchCnpj).toHaveBeenCalled();
+    expect(r.cnpjsVerificados).toBe(1);
+  });
+
+  it('candidatos achados e verificação quebrada: 502, não 0 calado', async () => {
+    // Exatamente a campanha "Teste real": 300 candidatos, 0 verificados.
+    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
+    enriquecerCnpjsBigQuery.mockResolvedValue(new Map());
+    fetchCnpj.mockRejectedValue(new Error('brasilapi_status_403'));
+
+    await expect(
+      runDescobertaPublica('org-1', { alvos: ['indústrias metalúrgicas'], regioes: ['SP'] })
+    ).rejects.toMatchObject({ status: 502, message: 'verificacao_falhou' });
   });
 });
