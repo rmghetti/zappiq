@@ -152,7 +152,73 @@ ferroligas), UF (SP), telefone, e 4 decisores nominais do QSA.
 O Alvo nasce do espelho de CNPJ (BigQuery), que tem município. Ou o motor não
 mapeia o campo, ou o espelho não o materializou. **Investigar na sessão 3.**
 
-### Sessão 3 (próxima) — consertar a fome da busca + o município
+### Sessão 3 (15/07/2026) — CONCLUÍDA. Município PROVADO; releases: o filtro protege, mas o ICP não tem imprensa
+
+PR #302 mergeada, Fly v365 no ar.
+
+#### Município: PROVADO em produção (20/20)
+
+Antes de escrever qualquer tradução, verifiquei a ressalva certa (se
+`id_municipio` não fosse IBGE, o dicionário mapearia cidade errada = pior que
+null): **é IBGE de 7 dígitos** (28.012.246 linhas), o diretório
+`br_bd_diretorios_brasil.municipio` existe, o JOIN casa, COFEL 3504107 =
+Atibaia/SP com a UF do diretório batendo com a do espelho.
+
+Backfill rodado: **20 de 20 Alvos ganharam município e +10 de confiança.**
+COFEL 90 → 100. Média da plataforma 72,3 → **82,3**. `sem_municipio = 0`.
+É o "melhorar a confiança" do pedido, pelo caminho honesto.
+
+#### Releases: o filtro funciona, e o que ele revela é desconfortável
+
+O filtro de menção + confirmação está em produção e provado. Mas a busca real
+contra 5 Alvos deu **0 releases confirmados** em todos:
+
+| Alvo | descartados por homônimo | confirmados |
+|---|---|---|
+| COFEL (Atibaia) | 2 | 0 |
+| YADOYA (Bom Jesus dos Perdões) | 6 | 0 |
+| ALUMIGON BRASILEIRA (Barueri) | 1 | 0 |
+| ORNATTO MÓVEIS (Adamantina) | 2 | 0 |
+| PERFILADOS ATIBAIA | 4 | 0 |
+
+**Uma ideia minha foi reprovada pela prova:** eu tinha posto município na
+query. `"cofel ferro ligas" Atibaia SP (...)` → **0 hits**; sem o município →
+6 hits. A Brave faz AND e matéria de PME não escreve a cidade junto do nome.
+Revertido (commit na main).
+
+#### A pergunta honesta que fica: o filtro está certo ou estrito demais?
+
+Os dois lados são reais:
+- **A favor do filtro:** ele barrou "COFEL Loja de Departamentos", "Cofel
+  Laminados", "Metalúrgica Cofelma" — empresas DIFERENTES. Sem ele, o dossiê
+  do Alvo de ferro ligas receberia o anúncio de uma loja de móveis.
+- **Contra:** um snippet tem ~150 caracteres. CNPJ, telefone e município
+  raramente aparecem ali. O filtro pode estar recusando a matéria legítima
+  junto com a homônima.
+
+**Não dá para decidir isso com mais engenharia de filtro.** O que resolve é o
+dado que falta: **o site oficial do Alvo**. `site` é null em 100% dos Alvos
+B2B porque NENHUMA fonte B2B tem (Receita/espelho/BrasilAPI não guardam
+website — isto não é bug, é ausência de fonte). Com `alvo.site`, o domínio
+vira a confirmação de identidade mais forte que existe e destrava tudo:
+`cofel.ind.br` deixa de ser indistinguível de `cofellaminados.com.br`.
+
+**Suspeita a confirmar:** dos 2 releases antigos do COFEL, um aponta para
+`cofellaminados.com.br`. Provavelmente é dado sujo de outra empresa, gravado
+pelo código velho sem filtro. Vale limpar.
+
+### Sessão 4 (última) — descobrir o site oficial do Alvo
+
+1. Serviço de descoberta de site: busca dirigida pelo núcleo + CNPJ, confirma
+   pelo CNPJ no rodapé (padrão universal em site brasileiro) ou pelo nome do
+   decisor, grava em `alvo.site`. Uma vez por Alvo, não a cada ciclo.
+2. `confirmaAConta` passa a aceitar domínio == `alvo.site` como sinal forte.
+3. Nova prova real. Se ainda vier 0, a resposta honesta ao Rodrigo é que este
+   ICP (metalúrgicas PME do interior de SP) tem pouquíssima pegada de imprensa,
+   e o valor do recurso mora no diff da Receita + Instagram, não em matéria.
+4. Limpar o release suspeito de homônimo do COFEL.
+
+### Sessão 3 (planejada originalmente)
 
 1. **Descobrir por que `municipio`/`site` não são preenchidos** (motorA/espelho
    BigQuery) e corrigir. Ganho imediato: +10 de confiança em todo Alvo e o
