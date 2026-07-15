@@ -26,7 +26,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['app/**/*.test.ts', 'lib/**/*.test.ts', 'stores/**/*.test.ts'],
+    // content/** cobre os registros de Saiba mais e de "O que preencher aqui".
+    // Ficaram de fora até 15/07/2026: o registro do Saiba mais tinha teste de
+    // integridade desde sempre, mas como o include parava em stores/**, o CI
+    // nunca o chamou. Teste que não roda não protege nada.
+    include: ['app/**/*.test.ts', 'lib/**/*.test.ts', 'stores/**/*.test.ts', 'content/**/*.test.ts'],
     exclude: ['node_modules/**', '.next/**', '.turbo/**'],
     testTimeout: 10_000,
     isolate: true,

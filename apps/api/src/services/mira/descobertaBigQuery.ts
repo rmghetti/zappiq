@@ -9,6 +9,7 @@
  * lista de CNPJs candidatos; a verificação/QSA continua vindo do enriquecimento
  * por CNPJ (BrasilAPI) no descobertaPublica, como já era.
  */
+import { extrairUfs } from '@zappiq/shared';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { bigQueryDisponivel, getBigQueryClient, gbToBytes } from './bigqueryClient.js';
@@ -22,15 +23,16 @@ function mirrorFqn(): string {
   return `${env.BIGQUERY_PROJECT_ID}.${env.BIGQUERY_MIRROR_TABLE}`;
 }
 
-/** Extrai UFs (2 letras) do texto de região + das regiões do ICP. */
-function extrairUfs(regiaoLivre: string, regioesConfig: string[]): string[] {
-  const ufs = new Set<string>();
-  const re = /\b([A-Z]{2})\b/;
-  for (const r of [regiaoLivre, ...(regioesConfig ?? [])]) {
-    const m = re.exec(String(r || '').toUpperCase());
-    if (m) ufs.add(m[1]);
-  }
-  return Array.from(ufs);
+/**
+ * Extrai UFs do texto de região.
+ *
+ * A base espelho recorta por `sigla_uf`, então região que não vira UF não
+ * recorta nada. A regra mora no @zappiq/shared porque a TELA precisa concordar
+ * com o motor: o formulário avisa "isto não vira estado" antes de disparar, e
+ * duas cópias da regra seriam drift esperando para acontecer.
+ */
+function extrairUfsLocal(regiaoLivre: string, regioesConfig: string[]): string[] {
+  return extrairUfs([regiaoLivre, ...(regioesConfig ?? [])]);
 }
 
 /**
@@ -48,7 +50,7 @@ export async function buscarCnpjsBigQuery(codigos: string[], regioes: string[]):
   if (!bigQueryDisponivel()) return [];
   const cnaes: string[] = (codigos ?? []).map((c) => String(c).replace(/\D/g, '')).filter((c) => c.length >= 2);
   if (cnaes.length === 0) return [];
-  const ufs = extrairUfs('', regioes ?? []);
+  const ufs = extrairUfsLocal('', regioes ?? []);
 
   // Filtro de CNAE por prefixo (o ICP pode ter CNAE de 2 a 7 dígitos). Só
   // dígitos, montado a partir da config do cliente (não de input livre) → seguro.
