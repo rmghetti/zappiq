@@ -119,9 +119,17 @@ function nomeDoResultado(r: SerpResult): string {
  * O registro do espelho no formato que o gate e o score já falam.
  *
  * O espelho só materializa ATIVAS, então situação é ATIVA por construção.
- * Ficam de fora `cnaeDescricao`, `municipio` (o espelho guarda o código IBGE)
- * e `optanteSimples`, que exigiriam dicionários e não pesam no gate; o score
- * degrada de boa (matchCnae cai no código, que é o filtro forte).
+ * Ficam de fora `cnaeDescricao` e `optanteSimples`, que exigiriam dicionários e
+ * não pesam no gate; o score degrada de boa (matchCnae cai no código, que é o
+ * filtro forte).
+ *
+ * O `municipio` ESTAVA nessa lista, e era um erro caro. A decisão original
+ * olhou só o GATE (onde município não pesa) e não viu que ele pesa na
+ * CONFIANÇA (`score.ts:292`: `municipio && uf` vale 10). Como o espelho é a
+ * única fonte que sobrevive em produção (a BrasilAPI dá 403 fora do Brasil),
+ * TODO Alvo B2B da plataforma nascia com `municipio: null` e ficava capado em
+ * 90 de confiança — 20 de 20 em 15/07/2026. O dado sempre esteve lá: o espelho
+ * guarda o código IBGE, e agora o enriquecimento traduz pelo diretório do BD.
  */
 function doEspelhoParaCnpjData(e: CnpjDoEspelho): CnpjData {
   return {
@@ -134,7 +142,7 @@ function doEspelhoParaCnpjData(e: CnpjDoEspelho): CnpjData {
     capitalSocial: e.capitalSocial,
     naturezaJuridica: e.naturezaJuridica,
     situacaoCadastral: 'ATIVA',
-    municipio: null,
+    municipio: e.municipio,
     uf: e.uf,
     telefone: e.telefone,
     dataInicioAtividade: e.dataInicioAtividade,
