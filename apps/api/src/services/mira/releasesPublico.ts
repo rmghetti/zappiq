@@ -159,16 +159,45 @@ const RUIDO_RAZAO_SOCIAL = new Set([
 ]);
 
 /**
- * O NÚCLEO identificador do nome da empresa: o que sobra depois de tirar o
- * ruído societário. "COFEL COMERCIAL E INDUSTRIAL DE FERRO LIGAS LTDA" →
- * ["cofel", "ferro", "ligas"]. O primeiro token é o mais distintivo.
+ * Palavras de SETOR: identificam o ramo, não a empresa. Sobrevivem no núcleo
+ * (ajudam a busca: "cofel ferro ligas" acha mais que "cofel" sozinho, que
+ * trazia Copel e Cofen), mas nunca podem ser o token distintivo.
+ *
+ * Achado na sonda de produção (15/07/2026): "INDUSTRIA E COMERCIO DE MOVEIS
+ * ORNATTO LTDA" dava núcleo ["moveis", "ornatto"], e como o filtro de menção
+ * usa o PRIMEIRO token, ele passou a filtrar por "moveis" — que casa com
+ * qualquer moveleira do Brasil. O token que identifica é "ornatto", e ele
+ * estava em segundo.
+ */
+const PALAVRAS_DE_SETOR = new Set([
+  'moveis', 'metais', 'metalurgica', 'metalurgia', 'ferro', 'ligas', 'ferroligas', 'laminados',
+  'aco', 'acos', 'maquinas', 'equipamentos', 'ferramentas', 'transportes', 'transporte', 'logistica',
+  'alimentos', 'construcao', 'engenharia', 'tecnologia', 'sistemas', 'solucoes', 'produtos',
+  'materiais', 'estruturas', 'montagem', 'manutencao', 'agricolas', 'perfilados', 'fundicao',
+]);
+
+/**
+ * O NÚCLEO identificador do nome, para a BUSCA: o que sobra depois de tirar o
+ * ruído societário, com o token distintivo na frente.
+ *
+ * "COFEL COMERCIAL E INDUSTRIAL DE FERRO LIGAS LTDA" → ["cofel","ferro","ligas"]
+ * "INDUSTRIA E COMERCIO DE MOVEIS ORNATTO LTDA"      → ["ornatto","moveis"]
+ *
+ * As palavras de setor ficam (ajudam a busca a desambiguar), mas nunca à
+ * frente: `nucleo[0]` é o que o filtro de menção usa, e filtrar por "moveis"
+ * não filtra nada.
  */
 export function nucleoDoNome(nome: string): string[] {
-  return norm(nome)
+  const tokens = norm(nome)
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
-    .filter((t) => t.length >= 2 && !RUIDO_RAZAO_SOCIAL.has(t))
-    .slice(0, 4);
+    .filter((t) => t.length >= 2 && !RUIDO_RAZAO_SOCIAL.has(t));
+  const distintivos = tokens.filter((t) => !PALAVRAS_DE_SETOR.has(t));
+  const setoriais = tokens.filter((t) => PALAVRAS_DE_SETOR.has(t));
+  // Só setor no nome ("INDUSTRIA DE MOVEIS LTDA"): não há o que identificar, e
+  // buscar por "moveis" varreria o Brasil. Melhor devolver nada.
+  if (distintivos.length === 0) return [];
+  return [...distintivos, ...setoriais].slice(0, 4);
 }
 
 /**
@@ -213,11 +242,23 @@ export interface SinaisDaConta {
   uf?: string | null;
   telefone?: string | null;
   decisores?: string[];
+  /** Site oficial do Alvo, quando já descoberto (ver siteOficial.ts). */
+  site?: string | null;
 }
 
 export function confirmaAConta(r: SerpResult, sinais: SinaisDaConta): { confirma: boolean; por: string | null } {
   const txt = norm(`${r.title} ${r.snippet} ${r.url}`);
   const soDigitos = (r.title + r.snippet + r.url).replace(/\D/g, '');
+
+  // O domínio próprio é o sinal mais forte: se a matéria está no site da
+  // empresa, é a empresa. Só vale porque `alvo.site` passa por um crivo alto
+  // antes de ser gravado (siteOficial.ts) — site errado aqui confirmaria a
+  // empresa errada.
+  const hostDoAlvo = hostDe(sinais.site);
+  const hostDoResultado = hostDe(r.url);
+  if (hostDoAlvo && hostDoResultado && hostDoResultado === hostDoAlvo) {
+    return { confirma: true, por: 'publicado no site oficial da conta' };
+  }
 
   const cnpj = (sinais.cnpj ?? '').replace(/\D/g, '');
   if (cnpj.length === 14 && soDigitos.includes(cnpj)) return { confirma: true, por: 'CNPJ na fonte' };
@@ -238,6 +279,16 @@ export function confirmaAConta(r: SerpResult, sinais: SinaisDaConta): { confirma
   if (tel.length >= 10 && soDigitos.includes(tel)) return { confirma: true, por: 'telefone da conta na fonte' };
 
   return { confirma: false, por: null };
+}
+
+/** Host sem `www.`, ou null se a URL não parseia. */
+function hostDe(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return null;
+  }
 }
 
 /** Sinais do Perfil que calibram a relevancia dos releases. */
@@ -287,6 +338,7 @@ export async function pesquisarPegadaPublica(
     uf?: string | null;
     cnpj?: string | null;
     telefone?: string | null;
+    site?: string | null;
     decisores?: { nome: string }[];
   },
   catalogo: { nome: string }[],
@@ -332,6 +384,7 @@ export async function pesquisarPegadaPublica(
     municipio: alvo.municipio ?? null,
     uf: alvo.uf ?? null,
     telefone: alvo.telefone ?? null,
+    site: alvo.site ?? null,
     decisores: (alvo.decisores ?? []).map((d) => d.nome),
   };
 
