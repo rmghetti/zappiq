@@ -143,7 +143,7 @@ export async function runMotorA(
     // Cria o Alvo + decisores em transação
     let alvoId: string | null = null;
     try {
-      const alvo = await (prisma as any).miraAlvo.create({
+      const alvo = await prisma.miraAlvo.create({
         data: {
           organizationId,
           campanhaId: campanhaId ?? null,
@@ -192,7 +192,7 @@ export async function runMotorA(
     if (gateOk && alvoId) {
       try {
         const quota = await consumeMiraQuota(organizationId);
-        await (prisma as any).miraAlvo.update({
+        await prisma.miraAlvo.update({
           where: { id: alvoId },
           data: { status: 'READY', countedInQuota: true, quotaMonth: entNow.monthKey },
         });

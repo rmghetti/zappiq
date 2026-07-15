@@ -94,13 +94,13 @@ export async function pousarNoCrm(organizationId: string, alvoId: string): Promi
     dealId = deal.id;
   }
 
-  await (prisma as any).miraAlvo.update({
+  await prisma.miraAlvo.update({
     where: { id: alvo.id },
     data: { contactId, dealId, status: 'DELIVERED' },
   });
   // Liga o decisor principal ao Contact criado (referência solta)
   if (decisorPrincipal && !decisorPrincipal.contactId) {
-    await (prisma as any).miraDecisor.update({
+    await prisma.miraDecisor.update({
       where: { id: decisorPrincipal.id },
       data: { contactId },
     });

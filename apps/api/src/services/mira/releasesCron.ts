@@ -171,7 +171,7 @@ export async function runMiraReleasesCycle(): Promise<{
               select: { id: true },
             });
             if (jaExiste) continue;
-            await (prisma as any).miraRelease.create({
+            await prisma.miraRelease.create({
               data: {
                 organizationId: org.id,
                 alvoId: alvo.id,
@@ -186,7 +186,7 @@ export async function runMiraReleasesCycle(): Promise<{
             releasesCreated++;
           }
           // Atualiza o snapshot do alvo com o estado atual (próximo diff é incremental)
-          await (prisma as any).miraAlvo.update({
+          await prisma.miraAlvo.update({
             where: { id: alvo.id },
             data: { situacaoCadastral: atual.situacaoCadastral, porte: atual.porte },
           });
@@ -208,7 +208,7 @@ export async function runMiraReleasesCycle(): Promise<{
                   select: { id: true },
                 });
                 if (dup) continue;
-                await (prisma as any).miraRelease.create({
+                await prisma.miraRelease.create({
                   data: {
                     organizationId: org.id,
                     alvoId: alvo.id,
