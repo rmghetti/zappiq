@@ -137,6 +137,10 @@ export default function MiraAlvosPage() {
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2 mb-5">
+        {/* As classificações merecem explicação ao lado dos filtros: é onde o
+            cliente decide o que olhar, e "por que esta conta está em
+            qualificação e não pronta?" é a dúvida nº 1 da tela. */}
+        <SaibaMais featureKey="mira.alvos.classificacoes" className="mr-0.5" />
         {campanhaFiltro && (
           <button
             onClick={() => setCampanhaFiltro(null)}
