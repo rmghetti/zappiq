@@ -36,7 +36,21 @@ import {
   SendHorizonal,
   AlertTriangle,
   Rocket,
+  CalendarDays,
 } from 'lucide-react';
+
+/**
+ * O domínio da matéria, para o vendedor saber DE ONDE veio antes de clicar.
+ * "exame.com" e "instagram.com" dizem coisas muito diferentes sobre o mesmo
+ * fato, e um ícone de link sozinho não dizia nenhuma das duas.
+ */
+function dominioDaFonte(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'fonte';
+  }
+}
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { miraApi, type MiraAlvoDossie } from '@/lib/miraApi';
 
@@ -342,23 +356,69 @@ export default function MiraAlvoDossiePage() {
           )}
         </Bloco>
 
-        {/* Releases do alvo */}
+        {/* Releases do alvo.
+            Mostrava só título + um ícone de link, e o vendedor tinha que
+            descobrir sozinho o que fazer com a matéria: de quando era, de que
+            veículo veio, se dava para confiar, e o que ela abria. Tudo isso já
+            estava no banco — faltava mostrar. */}
         <Bloco icon={Newspaper} title="Releases desta conta" featureKey="mira.releases">
           {alvo.releases.length === 0 ? (
             <Vazio texto="Novidades relevantes desta conta chegam toda semana." />
           ) : (
-            <ul className="space-y-2.5">
+            <ul className="space-y-3">
               {alvo.releases.map((r) => (
-                <li key={r.id} className="text-sm">
-                  <p className="font-medium text-gray-800 flex items-center gap-1.5">
-                    {r.titulo}
+                <li key={r.id} className="text-sm border-b border-gray-100 last:border-0 pb-3 last:pb-0">
+                  <p className="font-medium text-gray-800">{r.titulo}</p>
+
+                  {/* Procedência: quando saiu, onde saiu e o quanto vale */}
+                  <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-1">
+                    {r.dataPublicacao && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
+                        <CalendarDays size={10} />
+                        {new Date(r.dataPublicacao).toLocaleDateString('pt-BR')}
+                      </span>
+                    )}
                     {r.url && (
-                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-primary-500">
-                        <ExternalLink size={12} />
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[10px] font-medium text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded-full hover:bg-sky-100"
+                      >
+                        {/linkedin\.com/.test(r.url) ? <Linkedin size={10} /> : <Globe size={10} />}
+                        {dominioDaFonte(r.url)}
+                        <ExternalLink size={9} />
                       </a>
                     )}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">{r.relevancia}</p>
+                    <span className="text-[10px] text-gray-400">{r.confianca}% conf.</span>
+                  </div>
+
+                  <p className="text-xs text-gray-500 mt-1.5">{r.relevancia}</p>
+
+                  {/* A sinergia: o que este fato gerou no dossiê. É a diferença
+                      entre "saiu uma matéria" e "faça isto por causa dela". */}
+                  {(r.demanda || r.produtoRelacionado) && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {/* rounded-md e não rounded-full: a descrição da demanda
+                          é uma frase, e pílula redonda com texto que quebra em
+                          duas linhas deixa o ícone flutuando no meio. */}
+                      {r.demanda && (
+                        <span className="inline-flex items-start gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-1 rounded-md">
+                          <Flame size={10} className="mt-[1px] shrink-0" />
+                          <span>Gerou demanda: {r.demanda.descricao}</span>
+                        </span>
+                      )}
+                      {r.produtoRelacionado && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-1 rounded-md shrink-0">
+                          <PackageSearch size={10} /> {r.produtoRelacionado}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {r.anguloAbordagem && (
+                    <p className="text-[11px] text-gray-500 mt-1.5">Gancho: {r.anguloAbordagem}</p>
+                  )}
                 </li>
               ))}
             </ul>

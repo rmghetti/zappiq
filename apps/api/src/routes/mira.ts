@@ -472,7 +472,16 @@ router.get('/alvos/:id', async (req: Request, res: Response, next: NextFunction)
         demandas: { orderBy: { rank: 'asc' } },
         oportunidades: { orderBy: { rank: 'asc' } },
         incumbentes: true,
-        releases: { orderBy: { createdAt: 'desc' }, take: 10 },
+        // Ordena pela data do FATO (quando a fonte a mostra), com `createdAt`
+        // de desempate: uma matéria de ontem que achamos hoje vale mais no
+        // topo que uma de 2024 que achamos ontem.
+        // Traz a demanda ligada para o dossiê poder dizer "esta matéria gerou
+        // esta demanda" em vez de deixar o vendedor cruzar na cabeça.
+        releases: {
+          orderBy: [{ dataPublicacao: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+          take: 10,
+          include: { demanda: { select: { id: true, descricao: true, rank: true } } },
+        },
       },
     });
     if (!alvo) {
