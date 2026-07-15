@@ -36,7 +36,7 @@ router.get('/', validate(listQuerySchema, 'query'), async (req: Request, res: Re
     const skip = (page - 1) * limit;
 
     const where: Prisma.AuditLogWhereInput = {
-      organizationId: req.organizationId!, // defesa em profundidade — RLS já filtra
+      organizationId: req.organizationId!, // OBRIGATÓRIO: em produção a RLS NÃO filtra (ver rlsTenant.ts)
       ...(action && { action }),
       ...(resource && { resource }),
       ...(resourceId && { resourceId }),

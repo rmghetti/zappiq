@@ -232,6 +232,7 @@ model Organization {
   pipelineStages          PipelineStage[]
   activities              Activity[]
   tasks                   Task[]
+  taskTags                TaskTag[]
   flowNodeStats           FlowNodeStat[]
   campaignVariants        CampaignVariant[] // Impulso — braços de bandit
   campaignNodeStats       CampaignNodeStat[] // Impulso — funil por nó
@@ -405,6 +406,7 @@ model User {
   organizationId        String
   organization          Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedConversations Conversation[]
+  assignedTasks         Task[]         @relation("AssignedTasks")
   deletedConversations  Conversation[] @relation("DeletedConversations")
   messages              Message[]
   auditLogs             AuditLog[]
@@ -981,8 +983,13 @@ enum ActorType {
   SYSTEM
 }
 
+/// IN_PROGRESS entrou em 15/07/2026 com o quadro de tarefas: sem ele o quadro
+/// teria duas colunas ("a fazer" e "feito") e a pessoa não teria onde dizer que
+/// pegou a tarefa. É um status INTERMEDIÁRIO — não conclui nada, então
+/// completedAt continua null (ver resolveCompletedAt).
 enum TaskStatus {
   PENDING
+  IN_PROGRESS
   DONE
   CANCELLED
 }
@@ -1045,7 +1052,16 @@ model Task {
   description    String?
   status         TaskStatus   @default(PENDING)
   dueDate        DateTime?
+  /// O que o HUMANO anota enquanto executa. Deliberadamente separado de
+  /// `description`: aquela é o texto que a IA escreveu (o plano de ação, o
+  /// alerta do release) e reescrevê-la apagaria a instrução original.
+  notes          String?
   assignedToId   String?
+  /// Relação que faltava até 15/07/2026: `assignedToId` existia como String
+  /// solta desde o começo, sem FK, sem include e sem ninguém escrevendo (só o
+  /// seed). Toda tarefa nascia sem dono, então "minhas tarefas" não existia.
+  assignedTo     User?        @relation("AssignedTasks", fields: [assignedToId], references: [id], onDelete: SetNull)
+  tags           TaskTagOnTask[]
   completedAt    DateTime?
   contactId      String?
   contact        Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -1079,6 +1095,42 @@ model Task {
 enum TaskOrigem {
   CONVERSA
   MIRA
+}
+
+/// Etiqueta de tarefa, por CATÁLOGO da org (decisão do Rodrigo em 15/07/2026:
+/// não é texto livre). Texto livre viraria "Urgente", "urgente" e "URGENTE" na
+/// mesma conta e o filtro por etiqueta — que é o motivo de existir da etiqueta —
+/// não acharia nada.
+model TaskTag {
+  id             String          @id @default(cuid())
+  name           String
+  /// Cor em hex (#RRGGBB). A etiqueta precisa ser reconhecida antes de ser
+  /// lida, senão o quadro vira uma parede de texto cinza.
+  color          String
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tasks          TaskTagOnTask[]
+  createdAt      DateTime        @default(now())
+
+  /// O catálogo é por org e o nome é a identidade da etiqueta: duas "Urgente"
+  /// na mesma conta derrotariam o propósito do catálogo.
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("task_tags")
+}
+
+/// Ligação tarefa ↔ etiqueta. Explícita (e não m2m implícita do Prisma) para o
+/// join ter tabela com nome previsível — a RLS precisa escrever política nela.
+model TaskTagOnTask {
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       TaskTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([taskId, tagId])
+  @@index([tagId])
+  @@map("task_tags_on_tasks")
 }
 
 model MessageTemplate {

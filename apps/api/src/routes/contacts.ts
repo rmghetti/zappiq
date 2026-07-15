@@ -37,7 +37,7 @@ router.get('/', validate(querySchema, 'query'), async (req: Request, res: Respon
     const skip = (page - 1) * limit;
 
     const where: Prisma.ContactWhereInput = {
-      organizationId: req.organizationId!, // defesa em profundidade — RLS já filtra
+      organizationId: req.organizationId!, // OBRIGATÓRIO: em produção a RLS NÃO filtra (ver rlsTenant.ts)
       ...(status && { leadStatus: status }),
       ...(tag && { tags: { has: tag } }),
       ...(search && {
