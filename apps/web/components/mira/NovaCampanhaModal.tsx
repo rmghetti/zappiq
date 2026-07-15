@@ -15,7 +15,9 @@
  */
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Building2, Import, Loader2, Plus, Radar, Search, Sparkles, Store, X } from 'lucide-react';
+import { regiaoViraUf } from '@zappiq/shared';
 import { SaibaMais } from '@/components/shared/SaibaMais';
+import { OQuePreencher } from '@/components/shared/OQuePreencher';
 import {
   miraApi,
   formatBRL,
@@ -35,6 +37,7 @@ function ListaDeAlvos({
   label,
   ajuda,
   placeholder,
+  campoKey,
   values,
   doPerfil,
   onChange,
@@ -42,6 +45,8 @@ function ListaDeAlvos({
   label: string;
   ajuda?: string;
   placeholder: string;
+  /** Registro do "O que preencher aqui" deste campo. */
+  campoKey: string;
   values: string[];
   doPerfil: Set<string>;
   onChange: (v: string[]) => void;
@@ -55,7 +60,10 @@ function ListaDeAlvos({
   };
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <label className="block text-xs font-medium text-gray-500">{label}</label>
+        <OQuePreencher campoKey={campoKey} />
+      </div>
       <div className="flex gap-2">
         <input
           type="text"
@@ -212,7 +220,10 @@ function ModalShell({
 function CampoNome({ nome, setNome, exemplo }: { nome: string; setNome: (v: string) => void; exemplo: string }) {
   return (
     <div className="mt-3">
-      <label className="block text-xs font-medium text-gray-500 mb-1">Nome da campanha (opcional)</label>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <label className="block text-xs font-medium text-gray-500">Nome da campanha (opcional)</label>
+        <OQuePreencher campoKey="mira.campanha.nome" />
+      </div>
       <input
         type="text"
         value={nome}
@@ -330,6 +341,10 @@ function MapearCarteiraModal({
             oficial, mapeia os decisores do quadro societário e calcula o Mira Score. Só Alvos verificados
             descontam da cota.
           </p>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <label className="block text-xs font-medium text-gray-500">CNPJs da sua carteira</label>
+            <OQuePreencher campoKey="mira.campanha.cnpjs" />
+          </div>
           <textarea
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
@@ -549,10 +564,11 @@ function DescobrirModal({
               <div className="space-y-3">
                 <ListaDeAlvos
                   label="O que procurar"
+                  campoKey={kind === 'B2B' ? 'mira.campanha.alvos.b2b' : 'mira.campanha.alvos.b2c'}
                   placeholder={kind === 'B2B' ? 'Ex.: 4651-6 ou "distribuidoras de TI"' : 'Ex.: clínicas de estética, academias'}
                   ajuda={
                     kind === 'B2B'
-                      ? 'Código de CNAE busca na base oficial de CNPJs; atividade escrita busca no índice público.'
+                      ? 'Código de CNAE busca na base oficial de CNPJs; atividade escrita vira CNAE e busca lá também.'
                       : undefined
                   }
                   values={alvos}
@@ -561,12 +577,26 @@ function DescobrirModal({
                 />
                 <ListaDeAlvos
                   label="Onde (opcional)"
-                  placeholder="Ex.: Campinas, zona sul de SP…"
-                  ajuda="Sem região, a busca não tem recorte geográfico."
+                  campoKey={kind === 'B2B' ? 'mira.campanha.regiao.b2b' : 'mira.campanha.regiao.b2c'}
+                  // O B2B recorta por UF (a base filtra sigla_uf), então sugerir
+                  // "Campinas" aqui ensinava a errar: cidade sozinha não recorta
+                  // nada e a busca ia para o Brasil inteiro calada.
+                  placeholder={kind === 'B2B' ? 'Ex.: SP, RJ, Minas Gerais…' : 'Ex.: Campinas, Moema, zona sul de SP…'}
+                  ajuda={
+                    kind === 'B2B'
+                      ? 'A busca por empresas recorta por estado. Sem estado, ela vale para o Brasil inteiro.'
+                      : 'Cidade ou bairro. Sem região, a busca não tem recorte geográfico.'
+                  }
                   values={regioes}
                   doPerfil={doPerfil.regioes}
                   onChange={setRegioes}
                 />
+                {kind === 'B2B' && regioes.length > 0 && regioes.every((r) => !regiaoViraUf(r)) && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    Nenhuma das regiões escolhidas tem um estado, então esta campanha vai procurar no Brasil
+                    inteiro. Para recortar, escreva a sigla ({regioes[0]}, SP) ou o estado por extenso.
+                  </p>
+                )}
               </div>
             </>
           )}
