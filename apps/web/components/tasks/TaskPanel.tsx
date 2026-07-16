@@ -18,7 +18,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
   X, Loader2, Trash2, Check, Calendar, User, Tag as TagIcon,
-  Radar, Sparkles, AlertTriangle,
+  Radar, Sparkles, AlertTriangle, Megaphone, MessageCircle, ExternalLink,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 
@@ -41,8 +41,10 @@ export interface Task {
   contact: { id: string; name: string; phone: string } | null;
   deal: { id: string; title: string; stage: string } | null;
   assignedTo: { id: string; name: string; email: string } | null;
+  conversation: { id: string; status: string; channel: string } | null;
+  campaign: { id: string; name: string; status: string } | null;
   tags: TaskTag[];
-  origem?: 'CONVERSA' | 'MIRA';
+  origem?: 'CONVERSA' | 'MIRA' | 'IMPULSO';
   miraAlvoId?: string | null;
 }
 
@@ -74,9 +76,16 @@ interface Props {
   /** Devolve a tarefa salva pra lista se reordenar/atualizar sem refetch. */
   onSaved: (task: Task) => void;
   onTagsChanged: () => void;
+  /** Pré-vincula ao criar a partir do perfil do contato ou do DealDrawer —
+   * o vínculo nasce junto com a tarefa, não é editável depois (mesma regra
+   * do zod: contactId/dealId só entram na criação). */
+  prefillContactId?: string;
+  prefillDealId?: string;
 }
 
-export function TaskPanel({ task, mode, tags, onClose, onSaved, onTagsChanged }: Props) {
+export function TaskPanel({
+  task, mode, tags, onClose, onSaved, onTagsChanged, prefillContactId, prefillDealId,
+}: Props) {
   const criando = mode === 'create';
 
   const [title, setTitle] = useState(task?.title ?? '');
@@ -93,9 +102,10 @@ export function TaskPanel({ task, mode, tags, onClose, onSaved, onTagsChanged }:
   const [criandoTag, setCriandoTag] = useState(false);
   const [novaTag, setNovaTag] = useState('');
 
-  // A tarefa da IA traz a instrução em `description`. Deixar editar apagaria o
-  // plano de ação; quem anota usa Observações.
-  const descricaoDaIa = !criando && task?.origem === 'MIRA';
+  // A tarefa da IA traz a instrução em `description` — seja o plano de ação da
+  // Mira ou o resumo da campanha que o Impulso pede pra aprovar. Deixar editar
+  // apagaria/desatualizaria o que a IA registrou; quem anota usa Observações.
+  const descricaoDaIa = !criando && (task?.origem === 'MIRA' || task?.origem === 'IMPULSO');
 
   useEffect(() => {
     api.get('/api/settings/team')
@@ -153,6 +163,9 @@ export function TaskPanel({ task, mode, tags, onClose, onSaved, onTagsChanged }:
       };
       // Só manda description quando o humano pode mesmo editá-la.
       if (!descricaoDaIa) corpo.description = description.trim() || null;
+      // Vínculo nasce JUNTO com a tarefa — não existe campo pra isso na edição.
+      if (criando && prefillContactId) corpo.contactId = prefillContactId;
+      if (criando && prefillDealId) corpo.dealId = prefillDealId;
 
       const r = criando
         ? await api.post('/api/tasks', corpo)
@@ -193,6 +206,12 @@ export function TaskPanel({ task, mode, tags, onClose, onSaved, onTagsChanged }:
               <span className="inline-flex items-center gap-1 mt-1 rounded-full bg-[#2F7FB5]/10 px-2 py-0.5 text-[10px] font-semibold text-[#2F7FB5]">
                 <Radar size={10} />
                 Prospecção · criada pela Mira
+              </span>
+            )}
+            {!criando && task?.origem === 'IMPULSO' && (
+              <span className="inline-flex items-center gap-1 mt-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                <Megaphone size={10} />
+                Aprovação de campanha · Zap Impulso
               </span>
             )}
           </div>
@@ -366,7 +385,7 @@ export function TaskPanel({ task, mode, tags, onClose, onSaved, onTagsChanged }:
           </div>
 
           {/* Vínculos: só leitura, definidos na criação */}
-          {!criando && (task?.contact || task?.deal || task?.miraAlvoId) && (
+          {!criando && (task?.contact || task?.deal || task?.miraAlvoId || task?.conversation || task?.campaign) && (
             <div className="pt-1 border-t border-gray-100">
               <p className="text-xs font-semibold text-gray-500 mt-3 mb-1.5">Ligada a</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
@@ -383,6 +402,17 @@ export function TaskPanel({ task, mode, tags, onClose, onSaved, onTagsChanged }:
                 {task?.deal && (
                   <Link href="/crm" className="flex items-center gap-1 text-gray-600 hover:text-primary-600">
                     {task.deal.title}
+                  </Link>
+                )}
+                {task?.conversation && (
+                  <Link href={`/conversations?id=${task.conversation.id}`} className="flex items-center gap-1 text-gray-600 hover:text-primary-600">
+                    <MessageCircle size={12} />Ver conversa
+                  </Link>
+                )}
+                {task?.campaign && (
+                  <Link href="/campaigns" className="flex items-center gap-1 text-gray-600 hover:text-amber-700">
+                    <Megaphone size={12} />{task.campaign.name}
+                    <ExternalLink size={10} />
                   </Link>
                 )}
               </div>

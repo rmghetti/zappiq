@@ -22,9 +22,11 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   X, User, Phone, MessageCircle, ExternalLink, Loader2, Check, AlertCircle, Pencil,
+  ListChecks, Plus, PanelRightOpen, Clock,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { SaibaMais } from '../shared/SaibaMais';
+import { TaskPanel, type Task, type TaskTag } from '../tasks/TaskPanel';
 
 interface DealActivity {
   id: string;
@@ -104,6 +106,15 @@ export function DealDrawer({ dealId, onClose, onSaved }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Tarefas do negócio — seção nova (16/07/2026). GET /api/tasks?dealId=...
+  // é uma busca separada da GET /api/deals/:id, mesmo padrão do resto deste
+  // componente (activities vêm no include; tasks têm rota/tela própria).
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tagsCatalog, setTagsCatalog] = useState<TaskTag[]>([]);
+  const [panelTask, setPanelTask] = useState<Task | null>(null);
+  const [panelMode, setPanelMode] = useState<'view' | 'create' | null>(null);
+
   // Edição inline de título + valor.
   const [editing, setEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -125,12 +136,39 @@ export function DealDrawer({ dealId, onClose, onSaved }: Props) {
       .finally(() => setLoading(false));
   }, []);
 
+  const loadTasks = useCallback((id: string) => {
+    setTasksLoading(true);
+    api.get(`/api/tasks?dealId=${id}`)
+      .then((res) => setTasks(res.data || []))
+      .catch(() => setTasks([]))
+      .finally(() => setTasksLoading(false));
+  }, []);
+
+  const loadTags = useCallback(() => {
+    api.get('/api/tasks/tags')
+      .then((res) => setTagsCatalog(res.data || []))
+      .catch(() => setTagsCatalog([]));
+  }, []);
+
   useEffect(() => {
-    if (!dealId) { setDeal(null); setEditing(false); return; }
+    if (!dealId) { setDeal(null); setEditing(false); setTasks([]); return; }
     load(dealId);
+    loadTasks(dealId);
+    loadTags();
     setEditing(false);
     setSaveError(null);
-  }, [dealId, load]);
+  }, [dealId, load, loadTasks, loadTags]);
+
+  async function completeTask(task: Task) {
+    try {
+      await api.put(`/api/tasks/${task.id}`, { status: 'DONE' });
+      setTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? { ...t, status: 'DONE', completedAt: new Date().toISOString() } : t)),
+      );
+    } catch {
+      if (dealId) loadTasks(dealId); // falhou: recarrega pra ficar consistente com o servidor
+    }
+  }
 
   async function handleSave() {
     if (!deal) return;
@@ -365,6 +403,64 @@ export function DealDrawer({ dealId, onClose, onSaved }: Props) {
                 </div>
               )}
 
+              {/* Tarefas do negócio */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                    <ListChecks size={14} />
+                    Tarefas
+                  </h3>
+                  <button
+                    onClick={() => { setPanelTask(null); setPanelMode('create'); }}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:underline"
+                  >
+                    <Plus size={12} />Nova tarefa
+                  </button>
+                </div>
+                {tasksLoading ? (
+                  <div className="flex justify-center py-3"><Loader2 className="animate-spin text-gray-300" size={16} /></div>
+                ) : tasks.length === 0 ? (
+                  <p className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">Nenhuma tarefa ligada a este negócio ainda.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {tasks.map((t) => {
+                      const done = t.status === 'DONE';
+                      return (
+                        <li key={t.id} className={`flex items-start gap-2 bg-gray-50 rounded-lg p-3 ${done ? 'opacity-60' : ''}`}>
+                          <button
+                            onClick={() => !done && completeTask(t)}
+                            disabled={done}
+                            aria-label={done ? 'Tarefa concluída' : 'Concluir tarefa'}
+                            className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                              done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 text-transparent hover:border-primary-500'
+                            }`}
+                          >
+                            <Check size={10} />
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-semibold text-gray-800 ${done ? 'line-through' : ''}`}>{t.title}</p>
+                            <div className="flex items-center gap-3 mt-1">
+                              <button
+                                onClick={() => { setPanelTask(t); setPanelMode('view'); }}
+                                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary-600 hover:underline"
+                              >
+                                <PanelRightOpen size={10} />Ver tarefa
+                              </button>
+                              {t.dueDate && (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
+                                  <Clock size={10} />
+                                  {new Date(t.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
               {/* Timeline de activities */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
@@ -405,6 +501,19 @@ export function DealDrawer({ dealId, onClose, onSaved }: Props) {
           )}
         </div>
       </div>
+
+      {panelMode && dealId && (
+        <TaskPanel
+          task={panelTask}
+          mode={panelMode}
+          tags={tagsCatalog}
+          prefillDealId={dealId}
+          prefillContactId={contact?.id}
+          onClose={() => setPanelMode(null)}
+          onSaved={() => loadTasks(dealId)}
+          onTagsChanged={loadTags}
+        />
+      )}
     </div>
   );
 }

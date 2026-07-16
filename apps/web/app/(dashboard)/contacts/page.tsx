@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { Users, Search, Plus, Download, Filter, ChevronLeft, ChevronRight, Mail, Phone } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { ContactFormModal, type Contact } from '../../../components/contacts/ContactFormModal';
@@ -185,7 +186,16 @@ export default function ContactsPage() {
                         {c.name?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{c.name || '—'}</p>
+                        {/* Nome abre o PERFIL (Negócios/Conversas/Tarefas); a linha
+                            continua abrindo o form de edição rápida — dois destinos,
+                            então o link precisa parar a propagação do clique. */}
+                        <Link
+                          href={`/contacts/${c.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-sm font-medium text-gray-900 hover:text-primary-600 hover:underline"
+                        >
+                          {c.name || '—'}
+                        </Link>
                         {c.email && <p className="text-xs text-gray-400">{c.email}</p>}
                       </div>
                     </div>
