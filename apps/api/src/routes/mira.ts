@@ -456,7 +456,14 @@ router.get('/alvos', async (req: Request, res: Response, next: NextFunction) => 
       },
     });
     const ent = await getMiraEntitlement(req.organizationId!);
-    res.json({ success: true, data: { alvos, quota: ent.quota, monthKey: ent.monthKey } });
+    // `source` vai junto porque a fila precisa saber se é TESTE GRÁTIS: no
+    // trial não existe faixa, e pacote avulso recarrega a cota de uma faixa
+    // (a API recusa — ver miraAccess.ts). Sem isto a tela oferecia pacote a
+    // quem não pode comprar. Inferir trial pelo formato da cota seria chute.
+    res.json({
+      success: true,
+      data: { alvos, quota: ent.quota, monthKey: ent.monthKey, source: ent.access.source },
+    });
   } catch (err) {
     next(err);
   }
