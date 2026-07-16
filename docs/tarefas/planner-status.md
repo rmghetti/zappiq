@@ -287,3 +287,24 @@ Suíte da API: 166 arquivos / 1696 testes verdes (30 novos).
 - Descrição de tarefa `origem: IMPULSO` também deveria ser somente-leitura no
   painel (mesmo tratamento hoje dado a `origem: MIRA`) — ajuste pequeno de
   front, ainda não feito.
+
+## Sessão 2 — telas (DealDrawer, perfil do Contato, quadro Kanban)
+
+- **DealDrawer.tsx**: seção "Tarefas" (padrão visual da seção "Atividades" já
+  existente). Criar já pré-vincula `contactId` + `dealId` juntos — o mesmo par
+  que `crmAutomationService` já usa pro follow-up automático.
+- **`app/(dashboard)/contacts/[id]/page.tsx` — página NOVA.** Fecha um bug real:
+  o `TaskPanel` já linkava pra `/contacts/${id}` desde a sessão 1 do loop 1, e
+  a rota dava 404 em produção (não existia página de perfil, só lista + modal
+  de edição). A lista agora linka o nome do contato pra este perfil
+  (`stopPropagation` pra não brigar com o clique-na-linha que abre o modal).
+- **TaskBoard.tsx**: quadro com 3 colunas. Mover tem arraste-e-solte (HTML5
+  nativo) **e** um seletor por card — o seletor é o caminho garantido (drag
+  sozinho excluiria touch/teclado/leitor de tela). `/tasks` ganha alternador
+  Lista/Quadro sobre o MESMO dado.
+
+`tsc` exit 0 nos dois apps. Suíte do web: 6 arquivos / 396 testes verdes.
+
+**Nada disto foi verificado no navegador ainda** — depende de deploy. Sessão 3
+fecha: PR, CI, merge, deploy (Fly + Vercel), e prova de ponta a ponta em
+produção — inclusive o arraste-e-solte, que só se prova de verdade no Chrome.
