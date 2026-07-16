@@ -81,17 +81,20 @@ interface Props {
    * do zod: contactId/dealId só entram na criação). */
   prefillContactId?: string;
   prefillDealId?: string;
+  /** Coluna do quadro onde o "+" foi clicado — cria já naquela situação. */
+  createInitialStatus?: Task['status'];
 }
 
 export function TaskPanel({
-  task, mode, tags, onClose, onSaved, onTagsChanged, prefillContactId, prefillDealId,
+  task, mode, tags, onClose, onSaved, onTagsChanged,
+  prefillContactId, prefillDealId, createInitialStatus,
 }: Props) {
   const criando = mode === 'create';
 
   const [title, setTitle] = useState(task?.title ?? '');
   const [notes, setNotes] = useState(task?.notes ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
-  const [status, setStatus] = useState<Task['status']>(task?.status ?? 'PENDING');
+  const [status, setStatus] = useState<Task['status']>(task?.status ?? createInitialStatus ?? 'PENDING');
   const [dueDate, setDueDate] = useState(toDateInput(task?.dueDate ?? null));
   const [assignedToId, setAssignedToId] = useState(task?.assignedTo?.id ?? '');
   const [tagIds, setTagIds] = useState<string[]>(task?.tags?.map((t) => t.id) ?? []);
