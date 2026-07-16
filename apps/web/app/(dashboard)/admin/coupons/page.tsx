@@ -11,10 +11,12 @@ interface CatalogItem {
   label: string;
   productId: string;
   type: 'plan' | 'addon';
-  /** Família comercial do add-on (ex.: IMPULSO). Ausente nos planos. */
+  /** Família comercial do add-on (ex.: IMPULSO, MIRA). Ausente nos planos. */
   family?: string;
   /** Preço mensal em BRL (null = sob consulta). */
   monthlyBrl?: number | null;
+  /** Assinatura x pagamento único — decide se a tela pode escrever "/mês". */
+  recurring?: boolean;
 }
 interface IssuedCoupon {
   code: string;
@@ -151,7 +153,25 @@ export default function CouponsAdminPage() {
     });
   }
 
-  const impulsoItems = catalog.filter((c) => c.family === 'IMPULSO');
+  // Grupos DERIVADOS do catálogo, não escritos à mão.
+  //
+  // Antes: um optgroup fixo por família + o balde "Add-ons" filtrando
+  // `family !== 'IMPULSO'`. Família nova exigia lembrar de DOIS lugares, e
+  // esquecer o segundo fazia o produto aparecer DUAS VEZES na lista. É a
+  // mesma classe de esquecimento que deixou o Mira inteiro fora do dropdown.
+  // Agora: quem tem rótulo ganha grupo próprio; o resto cai em "Add-ons" por
+  // subtração automática. Família nova sem rótulo aparece — no balde genérico,
+  // com o nome do catálogo — em vez de sumir ou duplicar.
+  const FAMILIA_LABEL: Record<string, string> = {
+    IMPULSO: 'Zap Impulso',
+    MIRA: 'Mira Prospects',
+  };
+  const gruposPorFamilia = Object.entries(FAMILIA_LABEL)
+    .map(([family, label]) => ({ label, itens: catalog.filter((c) => c.family === family) }))
+    .filter((g) => g.itens.length > 0);
+  const outrosAddons = catalog.filter(
+    (c) => c.type === 'addon' && !(c.family && FAMILIA_LABEL[c.family]),
+  );
 
   if (user?.role !== 'SUPERADMIN') return null;
 
@@ -185,18 +205,20 @@ export default function CouponsAdminPage() {
                 <option key={c.productId} value={c.productId}>{optionLabel(c)}</option>
               ))}
             </optgroup>
-            {impulsoItems.length > 0 && (
-              <optgroup label="Zap Impulso">
-                {impulsoItems.map((c) => (
+            {gruposPorFamilia.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.itens.map((c) => (
+                  <option key={c.productId} value={c.productId}>{optionLabel(c)}</option>
+                ))}
+              </optgroup>
+            ))}
+            {outrosAddons.length > 0 && (
+              <optgroup label="Add-ons">
+                {outrosAddons.map((c) => (
                   <option key={c.productId} value={c.productId}>{optionLabel(c)}</option>
                 ))}
               </optgroup>
             )}
-            <optgroup label="Add-ons">
-              {catalog.filter((c) => c.type === 'addon' && c.family !== 'IMPULSO').map((c) => (
-                <option key={c.productId} value={c.productId}>{optionLabel(c)}</option>
-              ))}
-            </optgroup>
           </select>
 
           <label className="mb-1 block text-xs font-medium text-gray-500">Desconto</label>
@@ -271,18 +293,20 @@ export default function CouponsAdminPage() {
         </div>
       </div>
 
-      {/* Zap Impulso — planos e valores */}
-      {impulsoItems.length > 0 && (
-        <div className="mt-8 rounded-2xl border border-primary-100 bg-primary-50/40 p-6">
+      {/* Vitrine por família — uma por família com rótulo, derivada do catálogo.
+          Antes era um painel fixo só do Impulso; agora o Mira (e o que vier
+          depois) ganha o mesmo tratamento sem editar esta tela. */}
+      {gruposPorFamilia.map((g) => (
+        <div key={g.label} className="mt-8 rounded-2xl border border-primary-100 bg-primary-50/40 p-6">
           <div className="mb-1 flex items-center gap-2">
             <Zap className="text-primary-600" size={18} />
-            <h2 className="text-sm font-bold text-gray-800">Planos do Zap Impulso</h2>
+            <h2 className="text-sm font-bold text-gray-800">Planos do {g.label}</h2>
           </div>
           <p className="mb-4 text-xs text-gray-500">
             Clique num plano pra selecioná-lo no gerador acima e emitir um cupom exclusivo dele.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
-            {impulsoItems.map((c) => {
+            {g.itens.map((c) => {
               const active = productId === c.productId;
               return (
                 <button
@@ -297,22 +321,33 @@ export default function CouponsAdminPage() {
                 >
                   <div className="text-sm font-bold text-gray-900">{c.label}</div>
                   {c.monthlyBrl != null && (
-                    <>
-                      <div className="mt-1 text-lg font-extrabold text-primary-600">
-                        {brl(c.monthlyBrl)}
-                        <span className="ml-0.5 text-xs font-medium text-gray-400">/mês</span>
-                      </div>
-                      <div className="text-[11px] text-gray-400">
-                        ou {brl(c.monthlyBrl * 12 * 0.8)}/ano (20% off)
-                      </div>
-                    </>
+                    /* Pack avulso é PAGAMENTO ÚNICO: escrever "/mês · ou X/ano
+                       (20% off)" nele seria mentira na tela. */
+                    c.recurring ? (
+                      <>
+                        <div className="mt-1 text-lg font-extrabold text-primary-600">
+                          {brl(c.monthlyBrl)}
+                          <span className="ml-0.5 text-xs font-medium text-gray-400">/mês</span>
+                        </div>
+                        <div className="text-[11px] text-gray-400">
+                          ou {brl(c.monthlyBrl * 12 * 0.8)}/ano (20% off)
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mt-1 text-lg font-extrabold text-primary-600">
+                          a partir de {brl(c.monthlyBrl)}
+                        </div>
+                        <div className="text-[11px] text-gray-400">pagamento único</div>
+                      </>
+                    )
                   )}
                 </button>
               );
             })}
           </div>
         </div>
-      )}
+      ))}
 
       {/* Emitidos */}
       <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-6">

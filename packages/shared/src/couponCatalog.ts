@@ -17,10 +17,16 @@ export interface CouponableProduct {
   /** Stripe Product ID (prod_…) — o que o applies_to.products usa. */
   productId: string;
   type: 'plan' | 'addon';
-  /** Família comercial do add-on (IMPULSO, CAPACITY, CHANNEL…). Ausente em planos. */
+  /** Família comercial do add-on (IMPULSO, MIRA, CAPACITY, CHANNEL…). Ausente em planos. */
   family?: string;
   /** Preço mensal em BRL (null = sob consulta). Exibido na página de cupons. */
   monthlyBrl?: number | null;
+  /**
+   * É assinatura (cobra todo mês) x pagamento único (pack avulso).
+   * A página de cupons PRECISA disto: ela mostra "R$ X/mês · ou R$ Y/ano
+   * (20% off)", e escrever isso num pack one-shot seria mentira na tela.
+   */
+  recurring: boolean;
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -38,6 +44,25 @@ const IMPULSO_LABELS: Record<string, string> = {
   IMPULSO_SCALE: 'Zap Impulso Scale',
 };
 
+const MIRA_LABELS: Record<string, string> = {
+  MIRA_ESSENCIAL: 'Mira Essencial',
+  MIRA_PRO: 'Mira Pro',
+  MIRA_SCALE: 'Mira Scale',
+  MIRA_PACKS: 'Mira — Pacotes avulsos',
+};
+
+/**
+ * Um add-on recebe cupom quando:
+ *   - `couponable` está explícito no catálogo (ganha de tudo), OU
+ *   - é assinatura recorrente (o caso comum: entra como line item).
+ *
+ * Overage unitário (AI_MSG) e packs SEM checkout próprio (BROADCAST) ficam de
+ * fora: não há carrinho onde um cupom escopado neles pudesse aplicar.
+ */
+function aceitaCupom(a: { pricingMode: string; couponable?: boolean }): boolean {
+  return a.couponable ?? a.pricingMode === 'recurring_monthly';
+}
+
 /** Todos os produtos elegíveis a cupom: planos V4 + addons (com productId). */
 export function listCouponableProducts(): CouponableProduct[] {
   const plans: CouponableProduct[] = Object.entries(STRIPE_V4_PRICES).map(([key, cfg]) => ({
@@ -46,29 +71,28 @@ export function listCouponableProducts(): CouponableProduct[] {
     productId: cfg.productId,
     type: 'plan' as const,
     monthlyBrl: PLAN_CONFIG[key as keyof typeof PLAN_CONFIG]?.priceMonthly ?? null,
+    recurring: true, // plano é sempre assinatura
   }));
 
-  // Só addons RECORRENTES (assinatura). Overage unitário (AI_MSG) e packs
-  // one-shot (BROADCAST) não são line items de assinatura — um cupom escopado
-  // neles nunca aplicaria num checkout de plano. Impulso é recurring → entra
-  // (os 3 planos Start/Pro/Scale, com família IMPULSO, ganham grupo próprio na UI).
+  // Quem aceita cupom: ver aceitaCupom(). Impulso e Mira são recorrentes →
+  // entram, cada família com seu grupo na UI. Os packs do Mira entram pelo
+  // `couponable: true` explícito (têm checkout próprio com campo de cupom).
   const addonByKey = new Map(ADDONS_V4_LIST.map((a) => [a.key, a]));
-  const recurringKeys = new Set(
-    ADDONS_V4_LIST.filter((a) => a.pricingMode === 'recurring_monthly').map((a) => a.key),
-  );
+  const couponableKeys = new Set(ADDONS_V4_LIST.filter(aceitaCupom).map((a) => a.key));
   const addons: CouponableProduct[] = Object.entries(
     ADDONS_V4_STRIPE as Record<string, { productId?: string }>,
   )
-    .filter(([key, cfg]) => typeof cfg.productId === 'string' && recurringKeys.has(key))
+    .filter(([key, cfg]) => typeof cfg.productId === 'string' && couponableKeys.has(key))
     .map(([key, cfg]) => {
       const meta = addonByKey.get(key);
       return {
         key,
-        label: IMPULSO_LABELS[key] ?? meta?.name ?? key,
+        label: MIRA_LABELS[key] ?? IMPULSO_LABELS[key] ?? meta?.name ?? key,
         productId: cfg.productId as string,
         type: 'addon' as const,
         family: meta?.family,
         monthlyBrl: meta?.amountBrl ?? null,
+        recurring: meta?.pricingMode === 'recurring_monthly',
       };
     });
 

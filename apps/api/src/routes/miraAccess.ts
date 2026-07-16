@@ -147,9 +147,28 @@ router.post('/pack/checkout', async (req: Request, res: Response, next: NextFunc
       return;
     }
     // Só quem tem faixa ativa compra pack (o pack recarrega uma cota existente).
+    //
+    // BUG DE COBRANÇA corrigido em 16/07/2026: este gate checava `entitled`, e
+    // quem está no TESTE GRÁTIS também é `entitled` (source:'trial') — então
+    // passava. Só que o trial é um teto vitalício lido do ledger `monthKey:
+    // 'TRIAL'` com `packExtra: 0` FIXO (ver requireMira.ts), enquanto
+    // `creditMiraPack` credita sempre em `currentMonthKey()`. Resultado: quem
+    // estava em trial pagava até R$ 1.436 e o pack caía num balde que a cota
+    // dele nunca lê — cobrança sem entrega. Era alcançável: ao esgotar os 10
+    // Alvos, /mira/alvos mostrava "Compre um pacote avulso para continuar".
+    // Ninguém chegou a ser cobrado (0 packs comprados em produção).
+    //
+    // O certo é exigir FAIXA (tier), que é o que o comentário acima sempre
+    // disse: no trial `tier` é null de propósito. Pack só faz sentido em cima
+    // de uma cota mensal existente.
     const ent = await getMiraEntitlement(req.organizationId!);
-    if (!ent.access.entitled) {
-      res.status(403).json({ error: 'no_active_tier', message: 'Assine uma faixa do Mira antes de comprar packs.' });
+    if (!ent.access.tier) {
+      res.status(403).json({
+        error: 'no_active_tier',
+        message: ent.access.source === 'trial'
+          ? 'O pacote avulso recarrega a cota de uma faixa. Assine uma faixa do Mira para continuar.'
+          : 'Assine uma faixa do Mira antes de comprar packs.',
+      });
       return;
     }
     const cfg = MIRA_PACKS[pack as keyof typeof MIRA_PACKS];
@@ -167,6 +186,10 @@ router.post('/pack/checkout', async (req: Request, res: Response, next: NextFunc
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
+      // Decisão do Rodrigo (16/07/2026): TODO produto pago tem campo de cupom,
+      // igual aos planos ZappIQ — se o cliente tiver um, usa. Era o único
+      // checkout da plataforma sem o campo, num produto de até R$ 1.436.
+      allow_promotion_codes: true,
       line_items: [{ price: priceId, quantity: 1 }],
       ...(org?.stripeCustomerId ? { customer: org.stripeCustomerId } : {}),
       metadata: {
