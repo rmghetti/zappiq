@@ -233,3 +233,78 @@ Estado final: 6 tarefas, 0 observações, 0 vínculos, 1 etiqueta no catálogo.
 
 Cabiam 4 sessões e uma foi inteira para a segurança. Preferi entregar provado o
 que o Rodrigo pediu explicitamente a entregar tudo pela metade.
+
+---
+
+# Loop 2 — Kanban + integrações (16/07/2026)
+
+Continuação pedida pelo Rodrigo depois do encerramento do Loop 1. Branch
+`feat/tarefas-kanban-integracoes`. Máx. 4 sessões, seguido de um loop de
+verificação de até 4 sessões antes de considerar tudo encerrado.
+
+## Sessão 1 — fundação de API
+
+Agente de exploração mapeou os 3 pontos de encaixe antes de qualquer código
+(ver resumo abaixo). Implementado:
+
+- **`GET /api/tasks?contactId=&dealId=`**: faltava só o código — campos e
+  índices já existiam no model. Mesmo padrão de validação/ignorar-lixo dos
+  outros filtros.
+- **`Task.conversationId`**: o `TaskPanel` já tinha o link "ver a conversa"
+  pronto na intenção; o dado nunca tinha sido persistido.
+  `crmAutomationService.ts` já recebia `conversationId` e já o usava nas
+  `Activity` vizinhas — uma linha fechou.
+- **`Task.campaignId` + Tarefa de aprovação do Impulso**: `POST /api/impulso`
+  agora cria uma Task quando a campanha nasce (DRAFT ou SCHEDULED — os dois
+  únicos status de criação). Serviço puro `impulsoAprovacao.ts` decide
+  quando e monta título/descrição, testável sem Prisma.
+
+### Decisão de segurança que vale destacar
+
+O "Co-Piloto" (autonomyLevel padrão 2, "IA propõe, humano aprova") era só um
+campo no schema — nada no código o lia. O cron (`campaignSchedulerCron.ts`)
+dispara campanha `SCHEDULED` sem checar aprovação nenhuma.
+
+**A Tarefa criada é LEMBRETE, não TRAVA.** Concluí-la não publica a campanha;
+deixá-la pendente não impede o cron de disparar. Fazer a aprovação travar o
+disparo de verdade mudaria o comportamento de envio de campanha de **cliente
+pago** em produção — isso é decisão de produto que precisa de sinal explícito
+do Rodrigo, não inferência de "melhor recomendação" dentro de um loop
+autônomo. Documentado no topo de `impulsoAprovacao.ts` para quem ler o código
+depois não presumir que a aprovação já trava algo.
+
+Migração `20260715000006_tarefas_conversa_campanha` (aditiva). `tsc` exit 0.
+Suíte da API: 166 arquivos / 1696 testes verdes (30 novos).
+
+## Pendente (próximas sessões)
+
+- Tela do quadro Kanban (`TASK_BOARD_COLUMNS` já pronto e testado na API).
+- Seção "Tarefas" no `DealDrawer.tsx` (padrão já existe: seção "Atividades").
+- Página de detalhe do Contato (`app/(dashboard)/contacts/[id]/page.tsx`) —
+  **não existe hoje**. O link `/contacts/${id}` que o `TaskPanel` já usa dá
+  404 em produção agora mesmo; construir esta página fecha um bug real, não
+  só entrega a "aba de tarefas" pedida.
+- Descrição de tarefa `origem: IMPULSO` também deveria ser somente-leitura no
+  painel (mesmo tratamento hoje dado a `origem: MIRA`) — ajuste pequeno de
+  front, ainda não feito.
+
+## Sessão 2 — telas (DealDrawer, perfil do Contato, quadro Kanban)
+
+- **DealDrawer.tsx**: seção "Tarefas" (padrão visual da seção "Atividades" já
+  existente). Criar já pré-vincula `contactId` + `dealId` juntos — o mesmo par
+  que `crmAutomationService` já usa pro follow-up automático.
+- **`app/(dashboard)/contacts/[id]/page.tsx` — página NOVA.** Fecha um bug real:
+  o `TaskPanel` já linkava pra `/contacts/${id}` desde a sessão 1 do loop 1, e
+  a rota dava 404 em produção (não existia página de perfil, só lista + modal
+  de edição). A lista agora linka o nome do contato pra este perfil
+  (`stopPropagation` pra não brigar com o clique-na-linha que abre o modal).
+- **TaskBoard.tsx**: quadro com 3 colunas. Mover tem arraste-e-solte (HTML5
+  nativo) **e** um seletor por card — o seletor é o caminho garantido (drag
+  sozinho excluiria touch/teclado/leitor de tela). `/tasks` ganha alternador
+  Lista/Quadro sobre o MESMO dado.
+
+`tsc` exit 0 nos dois apps. Suíte do web: 6 arquivos / 396 testes verdes.
+
+**Nada disto foi verificado no navegador ainda** — depende de deploy. Sessão 3
+fecha: PR, CI, merge, deploy (Fly + Vercel), e prova de ponta a ponta em
+produção — inclusive o arraste-e-solte, que só se prova de verdade no Chrome.

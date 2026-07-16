@@ -481,6 +481,7 @@ model Conversation {
   sourceDeals      Deal[]             @relation("DealSourceConversation")
   internalNotes    InternalNote[]
   activities       Activity[]
+  tasks            Task[]
   currentFlowState Json?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
@@ -567,6 +568,7 @@ model Campaign {
   nodeStats       CampaignNodeStat[]
   attributions    CampaignAttribution[]
   consents        CampaignConsent[]
+  tasks           Task[]
 
   @@index([organizationId])
   @@index([status])
@@ -1067,6 +1069,18 @@ model Task {
   contact        Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
   dealId         String?
   deal           Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  /// Conversa que gerou a tarefa (16/07/2026). O TaskPanel já tinha o link
+  /// "ver a conversa" pronto na intenção, mas o dado nunca foi persistido —
+  /// crmAutomationService já recebe `conversationId` e o usa nas Activity
+  /// vizinhas, só não estava aqui. SetNull: LGPD pode anonimizar/apagar a
+  /// conversa e a tarefa (o trabalho do vendedor) continua existindo.
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  /// Campanha do Zap Impulso que esta tarefa cobra aprovação (16/07/2026).
+  /// SetNull: apagar a campanha não deveria apagar o registro de que alguém
+  /// precisou revisar algo.
+  campaignId     String?
+  campaign       Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   /// De onde veio a tarefa. Até 15/07/2026 TODA Task nascia das Conversas
   /// (crmAutomationService, quando a IA detecta intenção de compra), então a
   /// origem era implícita. Com o Mira gerando tarefa de plano de ação, a tela
@@ -1084,6 +1098,8 @@ model Task {
   @@index([organizationId])
   @@index([contactId])
   @@index([dealId])
+  @@index([conversationId])
+  @@index([campaignId])
   @@index([status])
   @@index([assignedToId])
   @@index([miraAlvoId])
@@ -1091,10 +1107,13 @@ model Task {
 }
 
 /// Origem de uma tarefa. CONVERSA é o default por compatibilidade: toda Task
-/// que já existia no banco nasceu das Conversas.
+/// que já existia no banco nasceu das Conversas. IMPULSO entrou 16/07/2026:
+/// pedir aprovação de campanha não é "responder quem chamou" nem "prospectar" —
+/// é revisar o que a IA vai enviar em nome da conta antes de sair.
 enum TaskOrigem {
   CONVERSA
   MIRA
+  IMPULSO
 }
 
 /// Etiqueta de tarefa, por CATÁLOGO da org (decisão do Rodrigo em 15/07/2026:

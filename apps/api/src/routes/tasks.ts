@@ -13,7 +13,7 @@ import { registrarConclusaoNoCrm } from '../services/mira/planoAcao.js';
 /**
  * Tela de Tarefas.
  *
- *   GET    /api/tasks              — lista (status, dueBefore, tagId, assignedToId, origem)
+ *   GET    /api/tasks              — lista (status, dueBefore, tagId, assignedToId, origem, contactId, dealId)
  *   POST   /api/tasks              — criar tarefa à mão
  *   GET    /api/tasks/tags         — catálogo de etiquetas da org
  *   POST   /api/tasks/tags         — criar etiqueta no catálogo
@@ -34,6 +34,8 @@ const router = Router();
 const CONTACT_SELECT = { id: true, name: true, phone: true, avatarUrl: true } as const;
 const DEAL_SELECT = { id: true, title: true, stage: true } as const;
 const ASSIGNEE_SELECT = { id: true, name: true, email: true, avatar: true } as const;
+const CONVERSATION_SELECT = { id: true, status: true, channel: true } as const;
+const CAMPAIGN_SELECT = { id: true, name: true, status: true } as const;
 const TAGS_SELECT = {
   select: { tag: { select: { id: true, name: true, color: true } } },
 } as const;
@@ -42,6 +44,8 @@ const TASK_INCLUDE = {
   contact: { select: CONTACT_SELECT },
   deal: { select: DEAL_SELECT },
   assignedTo: { select: ASSIGNEE_SELECT },
+  conversation: { select: CONVERSATION_SELECT },
+  campaign: { select: CAMPAIGN_SELECT },
   tags: TAGS_SELECT,
 } as const;
 
@@ -207,6 +211,8 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       tagId: req.query.tagId,
       assignedToId,
       origem: req.query.origem,
+      contactId: req.query.contactId,
+      dealId: req.query.dealId,
     });
 
     const tasks = await prisma.task.findMany({

@@ -18,14 +18,16 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
   ListChecks, Check, User, Target, Clock, AlertTriangle, Loader2, Radar,
-  Plus, Tag as TagIcon, PanelRightOpen,
+  Plus, Tag as TagIcon, PanelRightOpen, Rows3, Columns3,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { TaskPanel, type Task, type TaskTag } from '@/components/tasks/TaskPanel';
+import { TaskBoard } from '@/components/tasks/TaskBoard';
 
 type StatusFilter = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'ALL';
 type AssigneeFilter = 'ALL' | 'me' | 'none';
+type ViewMode = 'lista' | 'quadro';
 
 const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: 'PENDING', label: 'A fazer' },
@@ -57,9 +59,15 @@ export default function TasksPage() {
   const [tagFilter, setTagFilter] = useState<string>('');
   const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>('ALL');
   const [savingId, setSavingId] = useState<string | null>(null);
+  // Quadro agrupa por status nas 3 colunas de propósito — o pill de situação
+  // da Lista não se aplica lá (ver comentário no TaskBoard sobre CANCELLED).
+  const [view, setView] = useState<ViewMode>('lista');
 
   const [panelTask, setPanelTask] = useState<Task | null>(null);
   const [panelMode, setPanelMode] = useState<'view' | 'create' | null>(null);
+  // Pré-seleciona a coluna ao criar a partir do quadro — "+" na coluna "Em
+  // andamento" deveria criar já em andamento, não voltar pra "A fazer".
+  const [createStatus, setCreateStatus] = useState<Task['status']>('PENDING');
 
   const fetchTags = useCallback(() => {
     api.get('/api/tasks/tags')
@@ -70,7 +78,10 @@ export default function TasksPage() {
   const fetchTasks = useCallback(() => {
     setLoading(true);
     const qs = new URLSearchParams();
-    if (filter !== 'ALL') qs.set('status', filter);
+    // No quadro o agrupamento por coluna JÁ é o filtro de situação — aplicar
+    // o pill da Lista por cima faria a coluna "Concluída" sumir ao entrar
+    // filtrando por "A fazer", por exemplo.
+    if (view === 'lista' && filter !== 'ALL') qs.set('status', filter);
     if (tagFilter) qs.set('tagId', tagFilter);
     if (assigneeFilter !== 'ALL') qs.set('assignedToId', assigneeFilter);
     const q = qs.toString();
@@ -78,7 +89,7 @@ export default function TasksPage() {
       .then((res) => setTasks(res.data || []))
       .catch(() => setTasks([]))
       .finally(() => setLoading(false));
-  }, [filter, tagFilter, assigneeFilter]);
+  }, [view, filter, tagFilter, assigneeFilter]);
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
   useEffect(() => { fetchTags(); }, [fetchTags]);
@@ -129,18 +140,41 @@ export default function TasksPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => { setPanelTask(null); setPanelMode('create'); }}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700"
-        >
-          <Plus size={16} />
-          Nova tarefa
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Lista/Quadro — dois jeitos de olhar o MESMO dado, não duas telas. */}
+          <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setView('lista')}
+              aria-pressed={view === 'lista'}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                view === 'lista' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+              }`}
+            >
+              <Rows3 size={14} />Lista
+            </button>
+            <button
+              onClick={() => setView('quadro')}
+              aria-pressed={view === 'quadro'}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                view === 'quadro' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+              }`}
+            >
+              <Columns3 size={14} />Quadro
+            </button>
+          </div>
+          <button
+            onClick={() => { setPanelTask(null); setCreateStatus('PENDING'); setPanelMode('create'); }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700"
+          >
+            <Plus size={16} />
+            Nova tarefa
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2 mb-5">
-        {FILTERS.map(({ key, label }) => (
+        {view === 'lista' && FILTERS.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setFilter(key)}
@@ -154,7 +188,7 @@ export default function TasksPage() {
           </button>
         ))}
 
-        <span className="w-px h-5 bg-gray-200 mx-1" aria-hidden />
+        {view === 'lista' && <span className="w-px h-5 bg-gray-200 mx-1" aria-hidden />}
 
         <select
           aria-label="Filtrar por responsável"
@@ -188,8 +222,24 @@ export default function TasksPage() {
         )}
       </div>
 
-      {/* Lista */}
-      {loading ? (
+      {view === 'quadro' ? (
+        loading ? (
+          <div className="flex items-center justify-center py-20 text-gray-400">
+            <Loader2 className="animate-spin" size={24} />
+          </div>
+        ) : (
+          <TaskBoard
+            tasks={tasks}
+            onMoved={fetchTasks}
+            onOpenTask={(t) => { setPanelTask(t); setPanelMode('view'); }}
+            onCreateInColumn={(status) => {
+              setPanelTask(null);
+              setCreateStatus(status);
+              setPanelMode('create');
+            }}
+          />
+        )
+      ) : loading ? (
         <div className="flex items-center justify-center py-20 text-gray-400">
           <Loader2 className="animate-spin" size={24} />
         </div>
@@ -340,6 +390,7 @@ export default function TasksPage() {
           task={panelTask}
           mode={panelMode}
           tags={tags}
+          createInitialStatus={createStatus}
           onClose={() => setPanelMode(null)}
           onSaved={onSaved}
           onTagsChanged={fetchTags}

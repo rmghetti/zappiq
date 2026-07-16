@@ -13,6 +13,7 @@ import {
   resolveCompletedAt,
   TASK_STATUSES,
   TASK_BOARD_COLUMNS,
+  TASK_ORIGENS,
 } from './tasks.util.js';
 import {
   createTaskSchema,
@@ -190,5 +191,50 @@ describe('createTaskTagSchema', () => {
   it('exige nome e cor', () => {
     expect(createTaskTagSchema.safeParse({ name: 'Urgente' }).success).toBe(false);
     expect(createTaskTagSchema.safeParse({ color: '#ff0000' }).success).toBe(false);
+  });
+});
+
+describe('IMPULSO — nova origem para tarefa de aprovação de campanha', () => {
+  it('entra no enum de origem sem derrubar as que já existiam', () => {
+    expect(TASK_ORIGENS).toEqual(['CONVERSA', 'MIRA', 'IMPULSO']);
+    expect(isTaskOrigem('IMPULSO')).toBe(true);
+  });
+
+  it('filtra a lista por origem IMPULSO', () => {
+    expect(buildTaskListWhere('org_1', { origem: 'IMPULSO' })).toEqual({
+      organizationId: 'org_1',
+      origem: 'IMPULSO',
+    });
+  });
+});
+
+describe('buildTaskListWhere — filtro por contato e negócio (perfil do CRM)', () => {
+  it('filtra por contactId — as tarefas da seção do perfil do contato', () => {
+    expect(buildTaskListWhere('org_1', { contactId: ID_USER })).toEqual({
+      organizationId: 'org_1',
+      contactId: ID_USER,
+    });
+  });
+
+  it('filtra por dealId — as tarefas da seção "Tarefas" do DealDrawer', () => {
+    expect(buildTaskListWhere('org_1', { dealId: ID_USER })).toEqual({
+      organizationId: 'org_1',
+      dealId: ID_USER,
+    });
+  });
+
+  it('id com cara de lixo é IGNORADO, mesma regra dos outros filtros', () => {
+    expect(buildTaskListWhere('org_1', { contactId: 'nope' })).toEqual({ organizationId: 'org_1' });
+    expect(buildTaskListWhere('org_1', { dealId: '../../etc' })).toEqual({ organizationId: 'org_1' });
+  });
+
+  it('combina contactId e dealId com os demais filtros', () => {
+    const w = buildTaskListWhere('org_1', { contactId: ID_USER, dealId: ID_TAG, status: 'DONE' });
+    expect(w).toEqual({
+      organizationId: 'org_1',
+      contactId: ID_USER,
+      dealId: ID_TAG,
+      status: 'DONE',
+    });
   });
 });
