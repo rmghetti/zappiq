@@ -33,9 +33,40 @@ import {
   UserSearch,
   Globe,
   Linkedin,
+  SendHorizonal,
+  AlertTriangle,
+  Rocket,
+  CalendarDays,
 } from 'lucide-react';
+
+/**
+ * O domínio da matéria, para o vendedor saber DE ONDE veio antes de clicar.
+ * "exame.com" e "instagram.com" dizem coisas muito diferentes sobre o mesmo
+ * fato, e um ícone de link sozinho não dizia nenhuma das duas.
+ */
+function dominioDaFonte(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'fonte';
+  }
+}
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { miraApi, type MiraAlvoDossie } from '@/lib/miraApi';
+
+/**
+ * Cada fator do Mira Score tem o seu Saiba mais. A chave é o NOME do fator
+ * como o score.ts (na API) o escreve: se mudar lá, o help some daqui (falha
+ * silenciosa e segura do <SaibaMais />). O teste de contrato em
+ * content/saiba-mais/__tests__/scoreFatores.test.ts é o alarme disso.
+ */
+const SCORE_FATOR_HELP: Record<string, string> = {
+  'Fit de ICP': 'mira.score.fit',
+  'Demanda e sinais': 'mira.score.demanda',
+  'Cobertura de decisores': 'mira.score.decisores',
+  'Encaixe de portfólio': 'mira.score.portfolio',
+  'Janela e incumbente': 'mira.score.janela',
+};
 
 export default function MiraAlvoDossiePage() {
   const params = useParams<{ id: string }>();
@@ -125,6 +156,42 @@ export default function MiraAlvoDossiePage() {
         </div>
         {alvo.resumo && <p className="text-sm text-gray-600 mt-4 leading-relaxed">{alvo.resumo}</p>}
 
+        {/* Sem plano de ação, o dossiê diz O QUE FALTA em vez de ficar mudo.
+            O motivo vem da API, da mesma função que decide isso no motor:
+            recalcular a regra aqui criaria duas cópias dela, que é a família de
+            bug que mais custou neste módulo. */}
+        {!alvo.planoAcao && alvo.planoBloqueadoPor && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+              <AlertTriangle size={13} />
+              Sem plano de ação ainda
+            </p>
+            <p className="mt-1.5 text-sm leading-relaxed text-gray-700">
+              Este Alvo não gerou plano porque {alvo.planoBloqueadoPor}. A IA só monta a abordagem quando o dossiê
+              sustenta uma: com dado raso ela preencheria o vazio com suposição, e você agiria em cima disso.
+              {alvo.planoBloqueadoPor.includes('decisor') && ' Use "Mapear decisores" acima para destravar.'}
+            </p>
+          </div>
+        )}
+
+        {/* Plano de ação: o dossiê tem que terminar em TRABALHO, não em
+            leitura. Fica logo abaixo do resumo porque é aqui que a pessoa
+            decide o que fazer. */}
+        {alvo.planoAcao && (
+          <div className="mt-4 rounded-xl border border-[#2F7FB5]/25 bg-[#2F7FB5]/[0.06] px-4 py-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-[#2F7FB5]">
+              <Rocket size={13} />
+              Plano de ação
+              {alvo.planoAcaoTaskId && (
+                <Link href="/tasks" className="ml-auto text-[11px] font-medium text-[#2F7FB5] hover:underline">
+                  está em Tarefas →
+                </Link>
+              )}
+            </p>
+            <p className="mt-1.5 text-sm leading-relaxed text-gray-700">{alvo.planoAcao}</p>
+          </div>
+        )}
+
         <AlvoActions
           alvo={alvo}
           onChange={(patch) => setAlvo((a) => (a ? { ...a, ...patch } : a))}
@@ -134,20 +201,37 @@ export default function MiraAlvoDossiePage() {
         {/* Por que essa nota (score breakdown) */}
         {alvo.scoreBreakdown?.fatores?.length ? (
           <div className="mt-4 border-t border-gray-100 pt-3">
-            <p className="text-xs font-semibold text-gray-500 mb-2">Por que essa nota</p>
-            <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
+              Por que essa nota <SaibaMais featureKey="mira.score" />
+            </p>
+            <div className="space-y-2.5">
               {alvo.scoreBreakdown.fatores.map((f) => (
-                <div key={f.nome} className="flex items-center gap-3 text-xs">
-                  <span className="w-40 text-gray-500 shrink-0">{f.nome}</span>
-                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary-400 rounded-full"
-                      style={{ width: `${Math.min(100, Math.round((f.valor / Math.max(1, f.peso)) * 100))}%` }}
-                    />
+                <div key={f.nome}>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="w-40 text-gray-500 shrink-0 flex items-center gap-1">
+                      {f.nome}
+                      {SCORE_FATOR_HELP[f.nome] && <SaibaMais featureKey={SCORE_FATOR_HELP[f.nome]} />}
+                    </span>
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      {/* primary-500, não 400: a paleta do tailwind.config.js só
+                          define DEFAULT/500/600, então `bg-primary-400` não gera
+                          CSS nenhum e a barra ficou TRANSPARENTE desde sempre
+                          (confirmado no CSS de produção: a classe não existe).
+                          A nota aparecia; o preenchimento, nunca. */}
+                      <div
+                        className="h-full bg-primary-500 rounded-full"
+                        style={{ width: `${Math.min(100, Math.round((f.valor / Math.max(1, f.peso)) * 100))}%` }}
+                      />
+                    </div>
+                    <span className="w-12 text-right font-medium text-gray-600 shrink-0">
+                      {f.valor}/{f.peso}
+                    </span>
                   </div>
-                  <span className="w-12 text-right font-medium text-gray-600 shrink-0">
-                    {f.valor}/{f.peso}
-                  </span>
+                  {/* O motivo explica a nota DESTA conta ("CNAE bate com o ICP",
+                      "pesquisamos e não achamos"). O motor sempre calculou, mas
+                      a tela nunca mostrou: barra sem motivo é nota opaca, que é
+                      exatamente o que o Mira Score promete não ser. */}
+                  {f.motivo && <p className="text-[11px] text-gray-400 mt-1 ml-[172px] leading-snug">{f.motivo}</p>}
                 </div>
               ))}
             </div>
@@ -289,23 +373,69 @@ export default function MiraAlvoDossiePage() {
           )}
         </Bloco>
 
-        {/* Releases do alvo */}
+        {/* Releases do alvo.
+            Mostrava só título + um ícone de link, e o vendedor tinha que
+            descobrir sozinho o que fazer com a matéria: de quando era, de que
+            veículo veio, se dava para confiar, e o que ela abria. Tudo isso já
+            estava no banco — faltava mostrar. */}
         <Bloco icon={Newspaper} title="Releases desta conta" featureKey="mira.releases">
           {alvo.releases.length === 0 ? (
             <Vazio texto="Novidades relevantes desta conta chegam toda semana." />
           ) : (
-            <ul className="space-y-2.5">
+            <ul className="space-y-3">
               {alvo.releases.map((r) => (
-                <li key={r.id} className="text-sm">
-                  <p className="font-medium text-gray-800 flex items-center gap-1.5">
-                    {r.titulo}
+                <li key={r.id} className="text-sm border-b border-gray-100 last:border-0 pb-3 last:pb-0">
+                  <p className="font-medium text-gray-800">{r.titulo}</p>
+
+                  {/* Procedência: quando saiu, onde saiu e o quanto vale */}
+                  <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-1">
+                    {r.dataPublicacao && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
+                        <CalendarDays size={10} />
+                        {new Date(r.dataPublicacao).toLocaleDateString('pt-BR')}
+                      </span>
+                    )}
                     {r.url && (
-                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-primary-500">
-                        <ExternalLink size={12} />
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[10px] font-medium text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded-full hover:bg-sky-100"
+                      >
+                        {/linkedin\.com/.test(r.url) ? <Linkedin size={10} /> : <Globe size={10} />}
+                        {dominioDaFonte(r.url)}
+                        <ExternalLink size={9} />
                       </a>
                     )}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">{r.relevancia}</p>
+                    <span className="text-[10px] text-gray-400">{r.confianca}% conf.</span>
+                  </div>
+
+                  <p className="text-xs text-gray-500 mt-1.5">{r.relevancia}</p>
+
+                  {/* A sinergia: o que este fato gerou no dossiê. É a diferença
+                      entre "saiu uma matéria" e "faça isto por causa dela". */}
+                  {(r.demanda || r.produtoRelacionado) && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {/* rounded-md e não rounded-full: a descrição da demanda
+                          é uma frase, e pílula redonda com texto que quebra em
+                          duas linhas deixa o ícone flutuando no meio. */}
+                      {r.demanda && (
+                        <span className="inline-flex items-start gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-1 rounded-md">
+                          <Flame size={10} className="mt-[1px] shrink-0" />
+                          <span>Gerou demanda: {r.demanda.descricao}</span>
+                        </span>
+                      )}
+                      {r.produtoRelacionado && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-1 rounded-md shrink-0">
+                          <PackageSearch size={10} /> {r.produtoRelacionado}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {r.anguloAbordagem && (
+                    <p className="text-[11px] text-gray-500 mt-1.5">Gancho: {r.anguloAbordagem}</p>
+                  )}
                 </li>
               ))}
             </ul>
@@ -313,20 +443,30 @@ export default function MiraAlvoDossiePage() {
         </Bloco>
       </div>
 
-      {/* Fontes / lineage */}
+      {/* Fontes / lineage. id de âncora: o "Mapear decisores" e o "Aprofundar"
+          apontam para cá quando algo é encontrado, em vez de resumir tudo
+          numa contagem que não diz o QUÊ. */}
       {alvo.fontes?.length ? (
-        <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
+        <div id="fontes-verificadas" className="mt-4 bg-gray-50 border border-gray-200 rounded-xl p-4 scroll-mt-4">
           <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
             Fontes verificadas <SaibaMais featureKey="mira.dossie.fontes" />
           </p>
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {alvo.fontes.slice(0, 12).map((f, i) => (
-              <li key={i} className="text-[11px] text-gray-400 truncate">
-                <span className="text-gray-500 font-medium">{f.campo}:</span>{' '}
-                <a href={f.url} target="_blank" rel="noopener noreferrer" className="hover:text-primary-500">
+              // Sem truncate: "Contato: Carlos Rondello, LinkedIn" é o que
+              // responde "o que foi enriquecido", e cortar com reticências
+              // era exatamente a queixa (número sem detalhe).
+              <li key={i} className="text-[11px] text-gray-500 leading-relaxed">
+                <span className="font-medium text-gray-700">{f.campo}</span>{' '}
+                <a
+                  href={f.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-400 hover:text-primary-500 break-all"
+                >
                   {f.url}
                 </a>
-                {f.data ? ` · ${new Date(f.data).toLocaleDateString('pt-BR')}` : ''}
+                {f.data ? <span className="text-gray-400"> · {new Date(f.data).toLocaleDateString('pt-BR')}</span> : ''}
               </li>
             ))}
           </ul>
@@ -347,24 +487,41 @@ function AlvoActions({
   onReload: () => void;
 }) {
   const [sending, setSending] = useState(false);
+  const [confirmarNaoQualificado, setConfirmarNaoQualificado] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [deepening, setDeepening] = useState(false);
   const [deepMsg, setDeepMsg] = useState<string | null>(null);
   const [mappingDec, setMappingDec] = useState(false);
   const [decMsg, setDecMsg] = useState<string | null>(null);
+  // true quando a busca achou/mudou algo: mostra o link para "Fontes
+  // verificadas", onde o QUÊ de cada achado está descrito (não só o número).
+  const [decEncontrouAlgo, setDecEncontrouAlgo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const mapearDecisores = async () => {
     setMappingDec(true);
     setError(null);
     setDecMsg(null);
+    setDecEncontrouAlgo(false);
     try {
       const res = await miraApi.decisoresPublico(alvo.id);
       if (res.data.ok) {
-        const total = res.data.criados + res.data.enriquecidos;
+        // contatosEnriquecidos (Camada 4: contato de quem já estava mapeado)
+        // não entrava nesta conta — a mensagem podia dizer "0 e 0" com 3
+        // contatos novos escondidos atrás dela.
+        const contatos = res.data.contatosEnriquecidos ?? 0;
+        const total = res.data.criados + res.data.enriquecidos + contatos;
+        setDecEncontrouAlgo(total > 0);
         setDecMsg(
           total > 0
-            ? `${res.data.criados} decisor(es) novo(s) e ${res.data.enriquecidos} enriquecido(s) a partir de pegada pública.` +
+            ? [
+                `${res.data.criados} decisor(es) novo(s)`,
+                `${res.data.enriquecidos} enriquecido(s)`,
+                contatos > 0 ? `${contatos} com contato novo` : null,
+              ]
+                .filter(Boolean)
+                .join(', ') +
+                ' a partir de pegada pública.' +
                 (res.data.descartadosPeloVerificador.length
                   ? ` O verificador descartou ${res.data.descartadosPeloVerificador.length} sem fonte.`
                   : '')
@@ -408,16 +565,17 @@ function AlvoActions({
     }
   };
 
-  const pousar = async () => {
+  const pousar = async (forcar = false) => {
     setSending(true);
     setError(null);
     try {
-      const res = await miraApi.pousarCrm(alvo.id);
+      const res = await miraApi.pousarCrm(alvo.id, forcar);
       onChange({ status: 'DELIVERED', contactId: res.data.contactId, dealId: res.data.dealId });
     } catch (e: any) {
       setError(e?.message || 'Não foi possível enviar para o CRM agora.');
     } finally {
       setSending(false);
+      setConfirmarNaoQualificado(false);
     }
   };
 
@@ -468,7 +626,7 @@ function AlvoActions({
         </span>
       ) : alvo.status === 'READY' ? (
         <button
-          onClick={pousar}
+          onClick={() => pousar(false)}
           disabled={sending}
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-60"
         >
@@ -478,7 +636,45 @@ function AlvoActions({
       ) : alvo.status === 'ARCHIVED' ? (
         <span className="text-sm text-gray-400 font-medium">Alvo arquivado</span>
       ) : (
-        <span className="text-xs text-gray-400 italic">Em qualificação: o Alvo pousa no CRM quando passar a verificação.</span>
+        /* Em qualificação: o caminho normal está fechado, mas a porta existe.
+           O cliente pode conhecer a conta por fora e querer trabalhá-la assim
+           mesmo; o nosso papel é avisar, não impedir. */
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-400 italic">
+            Em qualificação: {alvo.decisores.length === 0 ? 'falta um decisor para abordar.' : 'ainda não passou na verificação.'}
+          </span>
+          {!confirmarNaoQualificado ? (
+            <button
+              onClick={() => setConfirmarNaoQualificado(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-amber-300 text-amber-700 text-sm font-medium hover:bg-amber-50"
+              title="Envia este Alvo ao CRM mesmo sem ele ter passado na verificação. Ele entra marcado como não qualificado."
+            >
+              <SendHorizonal size={14} />
+              Enviar assim mesmo
+            </button>
+          ) : (
+            <span className="inline-flex flex-wrap items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+              <span className="text-xs text-amber-800">
+                Ele entra no CRM marcado como <strong>não qualificado</strong>, com o que falta anotado na timeline. Não desconta da sua cota.
+              </span>
+              <button
+                onClick={() => pousar(true)}
+                disabled={sending}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 disabled:opacity-60"
+              >
+                {sending ? <Loader2 className="animate-spin" size={13} /> : <SendHorizonal size={13} />}
+                Enviar mesmo assim
+              </button>
+              <button
+                onClick={() => setConfirmarNaoQualificado(false)}
+                className="text-xs text-amber-700 font-medium hover:underline"
+              >
+                cancelar
+              </button>
+            </span>
+          )}
+        </div>
       )}
       {alvo.status !== 'ARCHIVED' && alvo.status !== 'DELIVERED' && (
         <button
@@ -492,7 +688,25 @@ function AlvoActions({
       )}
       {error && <span className="text-xs text-red-500">{error}</span>}
       {deepMsg && <span className="text-xs text-emerald-600">{deepMsg}</span>}
-      {decMsg && <span className="text-xs text-emerald-600">{decMsg}</span>}
+      {decMsg && (
+        <span className="text-xs text-emerald-600">
+          {decMsg}
+          {/* O número sozinho ("1 enriquecido") não diz se foi LinkedIn,
+              telefone ou e-mail. A resposta mora em "Fontes verificadas",
+              com o nome do decisor e o campo encontrado. */}
+          {decEncontrouAlgo && (
+            <button
+              type="button"
+              onClick={() =>
+                document.getElementById('fontes-verificadas')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+              className="ml-1 font-semibold underline decoration-dotted hover:text-emerald-700"
+            >
+              Fontes verificadas, no rodapé da página ↓
+            </button>
+          )}
+        </span>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
 import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, type CnpjData } from './cnpj.js';
 import { computeMiraScoreV1 } from './score.js';
+import { buscarSinalSetorial } from './cagedMirror.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
 export interface MotorAResult {
@@ -38,7 +39,11 @@ function passaGate(d: CnpjData, decisores: number): boolean {
   return Boolean(d.razaoSocial) && (d.situacaoCadastral ?? '').toUpperCase() === 'ATIVA' && decisores >= 1;
 }
 
-export async function runMotorA(organizationId: string, cnpjsRaw: string[]): Promise<MotorAResult> {
+export async function runMotorA(
+  organizationId: string,
+  cnpjsRaw: string[],
+  campanhaId?: string | null
+): Promise<MotorAResult> {
   const ent = await getMiraEntitlement(organizationId);
   const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId } });
   if (!perfil || (perfil.prontidao ?? 0) < 60) {
@@ -118,7 +123,8 @@ export async function runMotorA(organizationId: string, cnpjsRaw: string[]): Pro
       continue; // não vira Alvo, não gasta cota
     }
 
-    const { score, breakdown, confianca } = computeMiraScoreV1(perfil, dados, dados.qsa.length);
+    const sinalSetorial = await buscarSinalSetorial(dados.cnae, dados.uf);
+    const { score, breakdown, confianca } = computeMiraScoreV1(perfil, dados, dados.qsa.length, sinalSetorial);
     const agora = new Date().toISOString();
     const lineageFontes = [
       { campo: 'firmografia', url: dados.fonteUrl, data: agora, confianca: 95 },
@@ -137,9 +143,10 @@ export async function runMotorA(organizationId: string, cnpjsRaw: string[]): Pro
     // Cria o Alvo + decisores em transação
     let alvoId: string | null = null;
     try {
-      const alvo = await (prisma as any).miraAlvo.create({
+      const alvo = await prisma.miraAlvo.create({
         data: {
           organizationId,
+          campanhaId: campanhaId ?? null,
           kind: 'B2B',
           motor: 'BASE_INSTALADA',
           status: 'QUALIFYING',
@@ -148,6 +155,7 @@ export async function runMotorA(organizationId: string, cnpjsRaw: string[]): Pro
           cnpj: dados.cnpj,
           cnae: dados.cnae,
           porte: dados.porte,
+          capitalSocial: dados.capitalSocial,
           situacaoCadastral: dados.situacaoCadastral,
           municipio: dados.municipio,
           uf: dados.uf,
@@ -184,7 +192,7 @@ export async function runMotorA(organizationId: string, cnpjsRaw: string[]): Pro
     if (gateOk && alvoId) {
       try {
         const quota = await consumeMiraQuota(organizationId);
-        await (prisma as any).miraAlvo.update({
+        await prisma.miraAlvo.update({
           where: { id: alvoId },
           data: { status: 'READY', countedInQuota: true, quotaMonth: entNow.monthKey },
         });

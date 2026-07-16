@@ -15,6 +15,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
 import { computeMiraScoreB2C } from './score.js';
+
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
 const PLACES_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
@@ -39,6 +40,9 @@ export interface MotorBResult {
   duplicados: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
+  /** Região que a busca de fato usou (vem da campanha, semeada do Perfil). */
+  regiaoAplicada: string | null;
+  regiaoOrigem: 'campanha' | null;
 }
 
 export function placesDisponivel(): boolean {
@@ -47,7 +51,7 @@ export function placesDisponivel(): boolean {
 
 async function logLookup(organizationId: string, resultado: 'valido' | 'nao_encontrado' | 'erro', latenciaMs: number) {
   try {
-    await (prisma as any).miraEnriquecimentoLog.create({
+    await prisma.miraEnriquecimentoLog.create({
       data: { organizationId, fonte: 'google_places', tipo: 'descoberta_local', resultado, custoCreditos: 0, latenciaMs },
     });
   } catch {
@@ -107,7 +111,15 @@ function parseEndereco(endereco: string | null): { municipio: string | null; uf:
   return { municipio: null, uf: null };
 }
 
-export async function runMotorB(organizationId: string, consulta: string, regiao: string | null): Promise<MotorBResult> {
+/**
+ * Descoberta B2C (negócio local, Places) a partir do que a CAMPANHA pede.
+ * `busca.alvos`/`busca.regioes` nascem do Perfil e o cliente ajusta no wizard.
+ */
+export async function runMotorB(
+  organizationId: string,
+  busca: { alvos: string[]; regioes: string[] },
+  campanhaId?: string | null
+): Promise<MotorBResult> {
   if (!placesDisponivel()) {
     const err: any = new Error('fonte_indisponivel');
     err.status = 501;
@@ -120,7 +132,17 @@ export async function runMotorB(organizationId: string, consulta: string, regiao
     throw err;
   }
 
-  const hits = await searchPlaces(organizationId, consulta, regiao);
+  const alvos = (busca.alvos ?? []).filter((a) => typeof a === 'string' && a.trim());
+  const regioes = (busca.regioes ?? []).filter((r) => typeof r === 'string' && r.trim());
+  if (alvos.length === 0) {
+    const err: any = new Error('alvos_sem_fonte');
+    err.status = 422;
+    throw err;
+  }
+  const consulta = alvos[0];
+  const regiaoAplicada = regioes[0] ?? null;
+
+  const hits = await searchPlaces(organizationId, consulta, regiaoAplicada);
   const result: MotorBResult = {
     fonte: 'google_places',
     encontrados: hits.length,
@@ -129,6 +151,8 @@ export async function runMotorB(organizationId: string, consulta: string, regiao
     duplicados: 0,
     blocked: false,
     quota: { used: 0, total: 0, remaining: 0 },
+    regiaoAplicada,
+    regiaoOrigem: regiaoAplicada ? 'campanha' : null,
   };
 
   for (const hit of hits) {
@@ -160,12 +184,13 @@ export async function runMotorB(organizationId: string, consulta: string, regiao
       `${hit.nome}${municipio ? `, ${[municipio, uf].filter(Boolean).join('/')}` : ''}. ` +
       `${hit.rating ? `Avaliação ${hit.rating} (${hit.totalAvaliacoes ?? 0} avaliações). ` : ''}` +
       `${hit.site ? 'Tem site. ' : 'Sem site público. '}` +
-      `Descoberto no Google Places pela busca "${consulta}${regiao ? ` em ${regiao}` : ''}".`;
+      `Descoberto no Google Places pela campanha ("${consulta}${regiaoAplicada ? ` em ${regiaoAplicada}` : ''}").`;
 
     try {
-      const alvo = await (prisma as any).miraAlvo.create({
+      const alvo = await prisma.miraAlvo.create({
         data: {
           organizationId,
+          campanhaId: campanhaId ?? null,
           kind: 'B2C',
           motor: 'DESCOBERTA',
           status: 'QUALIFYING',
@@ -188,7 +213,7 @@ export async function runMotorB(organizationId: string, consulta: string, regiao
       if (gateOk) {
         try {
           const quota = await consumeMiraQuota(organizationId);
-          await (prisma as any).miraAlvo.update({
+          await prisma.miraAlvo.update({
             where: { id: alvo.id },
             data: { status: 'READY', countedInQuota: true, quotaMonth: entNow.monthKey },
           });

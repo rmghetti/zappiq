@@ -44,6 +44,8 @@ import { SurveyPanel } from '../../../components/ai-training/SurveyPanel';
 import { SchedulingPanel } from '../../../components/ai-training/SchedulingPanel';
 import { FeatureGuide, GUIDES } from '../../../components/ai-training/FeatureGuide';
 import { NotIndexedAlert, type NotIndexedItem } from '../../../components/ai-training/NotIndexedAlert';
+import { QADetailModal } from '../../../components/ai-training/QADetailModal';
+import { DocumentDetailModal } from '../../../components/ai-training/DocumentDetailModal';
 import { ClipboardPaste, CalendarClock } from 'lucide-react';
 import { SaibaMais } from '../../../components/shared/SaibaMais';
 import { TourLauncher } from '../../../components/shared/GuidedTour';
@@ -233,6 +235,37 @@ export default function AITrainingPage() {
           ação abaixo sobe o Readiness da sua IA em tempo real.
         </p>
       </div>
+
+      {/* Destaque #1: conectar canais é o passo mais fundamental (sem canal, a IA
+          não fala com ninguém). Some assim que houver um canal conectado. */}
+      {readiness && readiness.breakdown.channel === 0 && (
+        <button
+          type="button"
+          onClick={() => navigate('/settings#canais')}
+          data-tour="ait-conectar-canais"
+          className="w-full text-left rounded-2xl border-2 border-primary-300 bg-gradient-to-r from-primary-50 to-secondary-50 p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary-500 hover:shadow-sm transition-all group"
+        >
+          <div className="w-12 h-12 rounded-xl bg-primary-500 text-white flex items-center justify-center shrink-0">
+            <MessageSquareText size={24} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary-600">
+              Passo 1 · comece por aqui
+            </p>
+            <p className="text-base font-bold text-gray-900 mt-0.5">
+              Conecte seu WhatsApp e Instagram
+            </p>
+            <p className="text-sm text-gray-600 mt-0.5">
+              Sem um canal conectado, sua IA não fala com nenhum cliente. É o passo
+              mais importante do treinamento. Faça em Configurações › Canais, leva
+              poucos minutos.
+            </p>
+          </div>
+          <span className="px-5 py-2.5 bg-primary-500 text-white rounded-lg text-sm font-semibold group-hover:bg-primary-600 flex items-center gap-2 whitespace-nowrap shrink-0">
+            Conectar canais <ArrowRight size={16} />
+          </span>
+        </button>
+      )}
 
       {/* Readiness Card — breakdown e próximas ações são deep-links clicáveis */}
       <div data-tour="ait-readiness">
@@ -471,6 +504,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
   const [textTitle, setTextTitle] = useState('');
   const [textBody, setTextBody] = useState('');
   const [textLoading, setTextLoading] = useState(false);
+  const [openDocId, setOpenDocId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadDocs = useCallback(async () => {
@@ -698,16 +732,27 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
         ) : (
           <ul className="divide-y divide-gray-100">
             {docs.map((d) => (
-              <li key={d.id} className="px-4 py-3 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center flex-shrink-0">
-                  {d.sourceType === 'url' ? <Globe size={16} /> : d.sourceType === 'text' ? <ClipboardPaste size={16} /> : <FileText size={16} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{d.title}</p>
-                  <p className="text-xs text-gray-500">
-                    {d.sourceType === 'url' ? 'URL' : d.sourceType === 'text' ? 'Texto' : d.sourceType} · {new Date(d.createdAt).toLocaleDateString('pt-BR')}
-                  </p>
-                </div>
+              <li key={d.id} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+                {/* Clicar abre o item na íntegra. Texto colado abre editável;
+                    arquivo e URL abrem só leitura (conteúdo vem da fonte). */}
+                <button
+                  type="button"
+                  onClick={() => setOpenDocId(d.id)}
+                  className="flex items-center gap-3 flex-1 min-w-0 text-left group"
+                  aria-label={`Ver detalhes: ${d.title}`}
+                >
+                  <div className="w-9 h-9 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center flex-shrink-0">
+                    {d.sourceType === 'url' ? <Globe size={16} /> : d.sourceType === 'text' ? <ClipboardPaste size={16} /> : <FileText size={16} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate group-hover:text-primary-600 transition-colors">
+                      {d.title}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {d.sourceType === 'url' ? 'URL' : d.sourceType === 'text' ? 'Texto' : d.sourceType} · {new Date(d.createdAt).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                </button>
                 <IndexedBadge chunks={d.ragChunks} />
                 <button
                   onClick={() => handleDelete(d.id)}
@@ -721,6 +766,15 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
           </ul>
         )}
       </div>
+
+      <DocumentDetailModal
+        documentId={openDocId}
+        onClose={() => setOpenDocId(null)}
+        onSaved={async () => {
+          await loadDocs();
+          onChange();
+        }}
+      />
 
       {/* Histórico de treinamento — log inalterável (audit) de tudo que treina a IA */}
       <TrainingHistory />
@@ -736,6 +790,7 @@ const ACTION_LABEL: Record<string, string> = {
   'kb.document.delete': 'Documento removido',
   'kb.url.create': 'URL ingerida',
   'kb.text.create': 'Texto colado',
+  'kb.text.update': 'Texto editado',
   'kb.qa.create': 'Q&A criada',
   'kb.qa.update': 'Q&A atualizada',
   'kb.qa.delete': 'Q&A removida',
@@ -824,6 +879,7 @@ function QAPanel({ onChange }: { onChange: () => void }) {
   const [answer, setAnswer] = useState('');
   const [category, setCategory] = useState('');
   const [saving, setSaving] = useState(false);
+  const [openPair, setOpenPair] = useState<QAPair | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -942,9 +998,15 @@ function QAPanel({ onChange }: { onChange: () => void }) {
         ) : (
           <ul className="divide-y divide-gray-100">
             {pairs.map((p) => (
-              <li key={p.id} className="px-4 py-4">
+              <li key={p.id} className="px-4 py-4 hover:bg-gray-50 transition-colors">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
+                  {/* Clicar abre o Q&A na íntegra, com edição e exclusão. */}
+                  <button
+                    type="button"
+                    onClick={() => setOpenPair(p)}
+                    className="flex-1 min-w-0 text-left group"
+                    aria-label={`Ver e editar: ${p.question}`}
+                  >
                     <div className="flex items-center gap-2 mb-1">
                       {p.category && (
                         <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-medium">
@@ -958,9 +1020,11 @@ function QAPanel({ onChange }: { onChange: () => void }) {
                       )}
                       {p.isActive && <IndexedBadge chunks={p.ragChunks} />}
                     </div>
-                    <p className="text-sm font-semibold text-gray-900 mb-1">{p.question}</p>
-                    <p className="text-sm text-gray-600 leading-relaxed">{p.answer}</p>
-                  </div>
+                    <p className="text-sm font-semibold text-gray-900 mb-1 group-hover:text-primary-600 transition-colors">
+                      {p.question}
+                    </p>
+                    <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">{p.answer}</p>
+                  </button>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button
                       onClick={() => handleToggle(p)}
@@ -982,6 +1046,15 @@ function QAPanel({ onChange }: { onChange: () => void }) {
           </ul>
         )}
       </div>
+
+      <QADetailModal
+        pair={openPair}
+        onClose={() => setOpenPair(null)}
+        onSaved={async () => {
+          await load();
+          onChange();
+        }}
+      />
     </div>
   );
 }

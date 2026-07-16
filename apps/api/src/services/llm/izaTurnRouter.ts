@@ -63,8 +63,18 @@ export interface IzaTurnRequest {
   forceProvider?: LLMProviderId;
   /** Pula classify (otimização — quando se sabe que é caso normal). */
   skipClassify?: boolean;
-  /** Org ID pra audit. */
+  /**
+   * Org ID pra audit E pro pre-filter saber de quem é o funil.
+   * Ausente = tratado como org de cliente (fail-safe): o pre-filter só aplica
+   * as verticais de compliance, nunca a política comercial da ZappIQ.
+   */
   orgId?: string | null;
+  /**
+   * Nome do negócio do tenant. Só usado na mensagem de compliance do
+   * pre-filter ("{negócio} não atende..."). Ausente = mensagem neutra
+   * ("Não atendemos..."), que serve pra qualquer negócio.
+   */
+  businessName?: string | null;
   /** Conversation ID pra audit. */
   conversationId?: string | null;
   /** Tokens máx da resposta principal (default 1024). */
@@ -132,10 +142,16 @@ function pickProvider(
  */
 export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> {
   // ── 1. Pre-filter (regex local, zero custo) ──────────────────
-  const blockedCheck = detectBlockedVertical(req.userMessage);
+  // A org decide o que é checado: na org da ZappIQ vale nossa política
+  // comercial (apostas/cripto/MLM); na org de cliente só compliance, com
+  // mensagem sem marca. Sem orgId → cliente (fail-safe).
+  const blockedCheck = detectBlockedVertical(req.userMessage, {
+    organizationId: req.orgId,
+    businessName: req.businessName,
+  });
   if (blockedCheck.blocked) {
     logger.info(
-      `[izaTurnRouter] Pre-filter blocked: vertical=${blockedCheck.vertical}, snippet="${blockedCheck.matchedSnippet}"`,
+      `[izaTurnRouter] Pre-filter blocked: vertical=${blockedCheck.vertical}, layer=${blockedCheck.layer}, snippet="${blockedCheck.matchedSnippet}"`,
       { orgId: req.orgId, conversationId: req.conversationId },
     );
     return {

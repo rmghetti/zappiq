@@ -15,9 +15,13 @@
  */
 import { prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
-import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, type CnpjData } from './cnpj.js';
+import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, titularDoRegistro, type CnpjData } from './cnpj.js';
 import { computeMiraScoreV1 } from './score.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
+import { buscarCnpjsBigQuery, enriquecerCnpjsBigQuery, type CnpjDoEspelho } from './descobertaBigQuery.js';
+import { separarAlvos } from './alvosDaBusca.js';
+import { traduzirAlvos } from './cnaeMapa.js';
+import { buscarSinalSetorial } from './cagedMirror.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
 
 const MAX_QUERIES = 3;
@@ -44,16 +48,13 @@ const MAX_CANDIDATOS_INDICE_LOCAL = 300;
  * na Receita vira Alvo (mesmo gate de sempre) — o índice é só um filtro
  * rápido de candidatos, não a fonte de verdade.
  */
-async function buscarCandidatosIndiceLocal(perfil: any, regiaoLivre: string): Promise<string[]> {
-  const cnaes: string[] = Array.isArray(perfil?.icpFirmografia?.cnaes)
-    ? perfil.icpFirmografia.cnaes.map((c: string) => String(c).replace(/\D/g, '')).filter((c: string) => c.length >= 2)
-    : [];
+async function buscarCandidatosIndiceLocal(codigos: string[], regioes: string[]): Promise<string[]> {
+  const cnaes: string[] = (codigos ?? []).map((c) => String(c).replace(/\D/g, '')).filter((c) => c.length >= 2);
   if (cnaes.length === 0) return [];
 
   const ufRe = /\b([A-Z]{2})\b/;
   const ufs = new Set<string>();
-  const regioesConfig: string[] = Array.isArray(perfil?.icpFirmografia?.regioes) ? perfil.icpFirmografia.regioes : [];
-  for (const r of [regiaoLivre, ...regioesConfig]) {
+  for (const r of regioes ?? []) {
     const m = ufRe.exec(String(r || '').toUpperCase());
     if (m) ufs.add(m[1]);
   }
@@ -75,16 +76,35 @@ async function buscarCandidatosIndiceLocal(perfil: any, regiaoLivre: string): Pr
 }
 
 export interface DescobertaPublicaResult {
-  fonte: 'indice_local' | 'busca_publica';
+  fonte: 'bigquery' | 'indice_local' | 'busca_publica';
   buscas: number;
   encontrados: number; // resultados de busca uteis
   cnpjsVerificados: number;
-  criados: number; // viraram Alvo (READY ou DISCOVERED)
+  criados: number; // viraram Alvo (todos READY: o que nasce, nasce pronto)
   prontos: number; // passaram o gate (READY, descontaram cota)
-  candidatos: number; // empresas sem CNPJ resolvido (DISCOVERED, sem cota)
+  candidatos: number; // sempre 0 desde 15/07/2026 (ver `descartadosSoNome`)
   duplicados: number;
+  /**
+   * Empresa verificada na Receita que NÃO subiu por não ter decisor nenhum
+   * (nem no QSA, nem como titular de Empresário Individual).
+   *
+   * Reportado porque "criados: 3" sozinho esconderia que a busca achou 14. O
+   * cliente precisa saber que filtramos, senão parece que o Mira não achou
+   * nada — que é o oposto do que aconteceu.
+   */
+  descartadosCrus: number;
+  /**
+   * Empresa achada na busca da qual só tínhamos o NOME (CNPJ não resolvido).
+   * Antes virava Alvo "candidato" com confiança 40 e enchia a base.
+   */
+  descartadosSoNome: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
+  /** Região que a busca de fato usou (vem da campanha, semeada do Perfil). */
+  regiaoAplicada: string | null;
+  regiaoOrigem: 'campanha' | null;
+  /** Fonte que falhou sem derrubar a campanha (a outra trouxe candidatos). */
+  avisos?: string[];
 }
 
 function hostDe(url: string): string {
@@ -108,15 +128,92 @@ function nomeDoResultado(r: SerpResult): string {
   return t.slice(0, 160);
 }
 
-/** Passa o gate B2B v1: identidade oficial + ATIVA + ao menos 1 decisor. */
+
+/**
+ * O registro do espelho no formato que o gate e o score já falam.
+ *
+ * O espelho só materializa ATIVAS, então situação é ATIVA por construção.
+ * Fica de fora só `optanteSimples`, que não pesa em nada hoje.
+ *
+ * `cnaeDescricao` e `municipio` ESTAVAM nesta lista de descartados, com a
+ * justificativa de que "exigiriam dicionários e não pesam no gate". A frase era
+ * verdadeira sobre o gate e custou caro fora dele, duas vezes:
+ *   - `municipio` vale 10 na CONFIANÇA (`score.ts`, `municipio && uf`). Como o
+ *     espelho é a única fonte viva em produção (a BrasilAPI dá 403 fora do
+ *     Brasil), TODO Alvo nascia sem município e capado em 90. Eram 20 de 20 em
+ *     15/07/2026.
+ *   - `cnaeDescricao` faltando faz a IA ADIVINHAR o setor pelo número e errar.
+ * Os dois dicionários eram tabelas públicas do mesmo BD de onde o espelho já
+ * vem, e o JOIN sai de graça no enriquecimento.
+ */
+function doEspelhoParaCnpjData(e: CnpjDoEspelho): CnpjData {
+  const qsa = e.qsa.map((s) => ({ nome: s.nome, qualificacao: s.qualificacao }));
+
+  // Empresário Individual não tem sócio POR LEI, então o QSA vem vazio e o
+  // Alvo nascia sem decisor nenhum: 8 dos 11 Alvos crus em produção eram isto.
+  // O titular está na razão social, e ler isso é registro oficial, não chute.
+  const titular = titularDoRegistro({
+    naturezaJuridica: e.naturezaJuridica,
+    razaoSocial: e.razaoSocial,
+    municipio: e.municipio,
+    qsa,
+  });
+  if (titular) qsa.push(titular);
+
+  return {
+    cnpj: e.cnpj,
+    razaoSocial: e.razaoSocial,
+    nomeFantasia: e.nomeFantasia,
+    cnae: e.cnae,
+    // Era `null`, e o prompt mandava só o número para a IA ("Atividade (CNAE
+    // 2451200)"). Sem a descrição ela ADIVINHA o setor: escreveu o dossiê de
+    // uma fundição de ferro inteiro como "joalheria" (2451200 = Fundição de
+    // ferro e aço; joalheria é 3211601). O dicionário é o mesmo diretório do
+    // BD de onde veio o município.
+    cnaeDescricao: e.cnaeDescricao,
+    porte: e.porte,
+    capitalSocial: e.capitalSocial,
+    naturezaJuridica: e.naturezaJuridica,
+    situacaoCadastral: 'ATIVA',
+    municipio: e.municipio,
+    uf: e.uf,
+    telefone: e.telefone,
+    dataInicioAtividade: e.dataInicioAtividade,
+    optanteSimples: null,
+    qsa,
+    fonteUrl: 'bigquery:mira.cnpj_ativos (base de CNPJ da Receita via BD Pro)',
+  };
+}
+
+/**
+ * Passa o gate B2B v1: identidade oficial + ATIVA + ao menos 1 decisor.
+ *
+ * Até 15/07/2026 este gate só decidia PROMOÇÃO para READY: o Alvo reprovado
+ * era criado assim mesmo, em QUALIFYING, e ficava na base do cliente. Eram 11
+ * de 20 na conta da MACHIA, todos com score 9 a 13, todos sem decisor nenhum.
+ * O Rodrigo chamou de "entrega crua" e disse que "cria uma visão negativa do
+ * cliente com relação à entrega". Ele tem razão: Alvo sem decisor não é um
+ * Alvo, é uma linha.
+ *
+ * Agora o gate decide se o Alvo NASCE. Reprovado não sobe.
+ */
 function passaGate(d: CnpjData): boolean {
   return Boolean(d.razaoSocial) && (d.situacaoCadastral ?? '').toUpperCase() === 'ATIVA' && d.qsa.length >= 1;
 }
 
+/**
+ * Descoberta B2B a partir do que a CAMPANHA pede.
+ *
+ * `busca.alvos` e `busca.regioes` nascem do Perfil (ver alvosDaBusca.ts), o
+ * cliente ajusta no wizard e o que ele vê é o que roda aqui. Antes esta
+ * função relia o Perfil por dentro para montar os candidatos e só usava o
+ * texto digitado no fallback web — dava para escolher uma coisa na tela e a
+ * busca fazer outra.
+ */
 export async function runDescobertaPublica(
   organizationId: string,
-  consulta: string,
-  regiao: string | null
+  busca: { alvos: string[]; regioes: string[] },
+  campanhaId?: string | null
 ): Promise<DescobertaPublicaResult> {
   const perfil = await (prisma as any).miraPerfil.findUnique({ where: { organizationId } });
   if (!perfil || (perfil.prontidao ?? 0) < 60) {
@@ -125,74 +222,145 @@ export async function runDescobertaPublica(
     throw err;
   }
 
-  const alvoRegiao = (regiao ?? '').trim();
+  // Alvo é código de CNAE ou atividade em texto. A atividade escrita também
+  // vira código quando dá (traduzirAlvos), para chegar na base de 28M CNPJs em
+  // vez de depender só da busca na web: era isso que deixava um Perfil escrito
+  // em português passando longe da fonte boa.
+  const { codigos, textos } = separarAlvos(busca.alvos ?? []);
+  const traducao = traduzirAlvos(textos);
+  const codigosDaBusca = Array.from(new Set([...codigos, ...traducao.divisoes]));
+  const regioes = (busca.regioes ?? []).filter((r) => typeof r === 'string' && r.trim());
+  const alvoRegiao = regioes[0] ?? '';
 
-  // Tenta primeiro o índice local (grátis, sem chave, sem gastar quota de
-  // busca). Só cai pra busca na web se o índice não tiver dado match.
-  const cnpjsDoIndice = await buscarCandidatosIndiceLocal(perfil, alvoRegiao);
-  const usandoIndiceLocal = cnpjsDoIndice.length > 0;
+  // Cada tipo de alvo tem a sua fonte, e as duas SOMAM na mesma campanha:
+  //  - CÓDIGO de CNAE -> base oficial de CNPJs (BigQuery; índice local como
+  //    reserva). Preciso e barato.
+  //  - ATIVIDADE em texto -> busca pública. É a única que entende "serviços"
+  //    ou "distribuidoras de TI".
+  // Antes era ou/ou: havendo um código, o texto do cliente não rodava. Quem
+  // declarava os dois tipos no Perfil perdia metade do que pediu, calado.
+  // Todo CNPJ, venha de onde vier, é re-verificado na Receita (BrasilAPI).
+  let cnpjsDiretos: string[] = codigosDaBusca.length ? await buscarCnpjsBigQuery(codigosDaBusca, regioes) : [];
+  let fonteDiretos: 'bigquery' | 'indice_local' | null = cnpjsDiretos.length ? 'bigquery' : null;
+  if (!fonteDiretos && codigosDaBusca.length) {
+    cnpjsDiretos = await buscarCandidatosIndiceLocal(codigosDaBusca, regioes);
+    if (cnpjsDiretos.length) fonteDiretos = 'indice_local';
+  }
+  const usandoCnpjsDiretos = fonteDiretos !== null;
 
   const resultados: SerpResult[] = [];
   const vistosUrl = new Set<string>();
   let buscas = 0;
+  // Erro de fonte não pode virar "0 resultados": guardamos o motivo para a
+  // campanha falhar dizendo o que houve, em vez de mentir "concluída".
+  const errosBusca: string[] = [];
+  // Mesma regra da busca: verificação que quebra não vira "não achei ninguém".
+  const errosEnriquecimento: string[] = [];
+  /** Verificou o CNPJ mas não conseguiu gravar o Alvo (ex.: drift de schema). */
+  const errosGravacao: string[] = [];
 
-  if (!usandoIndiceLocal) {
+  // A web roda só para o que não virou código (ex.: "empresas PME", que é
+  // porte, não ramo). O que virou código já foi buscado na base oficial, que é
+  // melhor: não gasta cota de busca e o dado é da Receita.
+  const paraWeb = traducao.naoTraduzidos;
+  if (paraWeb.length > 0) {
     if (!buscaPublicaDisponivel()) {
-      const err: any = new Error('fonte_indisponivel');
-      err.status = 501;
-      throw err;
-    }
-    const queries = [
-      alvoRegiao ? `empresas de ${consulta} em ${alvoRegiao}` : `empresas de ${consulta}`,
-      alvoRegiao ? `"${consulta}" ${alvoRegiao} CNPJ` : `"${consulta}" CNPJ`,
-      alvoRegiao ? `${consulta} ${alvoRegiao} contato site oficial` : `${consulta} contato site oficial`,
-    ].slice(0, MAX_QUERIES);
-    for (const q of queries) {
-      try {
-        const hits = await webSearch(organizationId, q, { limit: 8 });
-        buscas++;
-        for (const h of hits) {
-          if (vistosUrl.has(h.url)) continue;
-          vistosUrl.add(h.url);
-          resultados.push(h);
+      // Sem provedor de busca, o texto não tem fonte. Só é erro se os códigos
+      // também não trouxeram nada: aí a campanha inteira ficaria sem fonte.
+      if (!usandoCnpjsDiretos) {
+        const err: any = new Error('fonte_indisponivel');
+        err.status = 501;
+        throw err;
+      }
+      logger.warn('[MiraDescobertaPublica] sem provedor de busca: alvos em texto ficaram de fora desta campanha');
+    } else {
+      const queries: string[] = [];
+      for (const alvo of paraWeb) {
+        queries.push(alvoRegiao ? `empresas de ${alvo} em ${alvoRegiao}` : `empresas de ${alvo}`);
+        queries.push(alvoRegiao ? `"${alvo}" ${alvoRegiao} CNPJ` : `"${alvo}" CNPJ`);
+      }
+      queries.splice(MAX_QUERIES);
+      for (const q of queries) {
+        try {
+          const hits = await webSearch(organizationId, q, { limit: 8 });
+          buscas++;
+          for (const h of hits) {
+            if (vistosUrl.has(h.url)) continue;
+            vistosUrl.add(h.url);
+            resultados.push(h);
+          }
+        } catch (err: any) {
+          if (err?.status === 501 && !usandoCnpjsDiretos) throw err;
+          const motivo = String(err?.message ?? err);
+          errosBusca.push(err?.detail ? `${motivo}: ${err.detail}` : motivo);
+          logger.warn(`[MiraDescobertaPublica] busca falhou: ${motivo}${err?.detail ? ` | ${err.detail}` : ''}`);
         }
-      } catch (err: any) {
-        if (err?.status === 501) throw err;
-        logger.warn(`[MiraDescobertaPublica] busca falhou: ${err?.message ?? err}`);
       }
     }
   }
 
+  // A distinção que faltava: "a fonte quebrou" NÃO é "não achei ninguém".
+  // A campanha 1 de teste do Rodrigo devolveu 0 alvos com status CONCLUIDA
+  // enquanto as 3 buscas falhavam com google_cse_403 (API não habilitada no
+  // projeto). Falha de fonte agora estoura, a campanha fica FALHOU e o cliente
+  // lê o motivo, em vez de achar que o mercado inteiro estava vazio.
+  if (!usandoCnpjsDiretos && resultados.length === 0 && errosBusca.length > 0) {
+    const err: any = new Error('fonte_falhou');
+    err.status = 502;
+    err.detail = errosBusca[0];
+    throw err;
+  }
+
+  // Nenhum alvo achou fonte: nem código rendeu candidato, nem texto rendeu
+  // resultado. Melhor dizer isso do que devolver campanha vazia sem explicação.
+  if (!usandoCnpjsDiretos && resultados.length === 0 && codigosDaBusca.length > 0 && paraWeb.length === 0) {
+    const err: any = new Error('alvos_sem_fonte');
+    err.status = 422;
+    throw err;
+  }
+
   const ent = await getMiraEntitlement(organizationId);
   const result: DescobertaPublicaResult = {
-    fonte: usandoIndiceLocal ? 'indice_local' : 'busca_publica',
+    // Fonte predominante dos candidatos (as duas podem ter somado).
+    fonte: fonteDiretos ?? 'busca_publica',
     buscas,
-    encontrados: usandoIndiceLocal ? cnpjsDoIndice.length : resultados.length,
+    encontrados: (usandoCnpjsDiretos ? cnpjsDiretos.length : 0) + resultados.length,
     cnpjsVerificados: 0,
     criados: 0,
     prontos: 0,
     candidatos: 0,
     duplicados: 0,
+    descartadosCrus: 0,
+    descartadosSoNome: 0,
     blocked: ent.quota.blocked,
     quota: { used: ent.quota.used, total: ent.quota.total, remaining: ent.quota.remaining },
+    regiaoAplicada: alvoRegiao || null,
+    regiaoOrigem: alvoRegiao ? 'campanha' : null,
+    ...(errosBusca.length ? { avisos: [`A busca pública falhou (${errosBusca[0]}); valeu só a base de CNPJs.`] } : {}),
   };
-  if (!usandoIndiceLocal && resultados.length === 0) return result;
+  if (!usandoCnpjsDiretos && resultados.length === 0) return result;
 
-  // -- Fase 1: colher CNPJs candidatos (índice local, ou snippets de busca) e VERIFICAR na fonte oficial --
+  // -- Fase 1: colher CNPJs candidatos e VERIFICAR na fonte oficial --
+  // As duas fontes somam no mesmo conjunto: os códigos trazem CNPJ direto da
+  // base oficial, o texto traz CNPJ dos snippets da busca. O Set dedupe quem
+  // aparecer nas duas.
   const cnpjsBrutos = new Set<string>();
-  if (usandoIndiceLocal) {
-    for (const c of cnpjsDoIndice) cnpjsBrutos.add(c);
-  } else {
-    for (const r of resultados) {
-      const matches = `${r.title} ${r.snippet}`.match(CNPJ_RE) ?? [];
-      for (const m of matches) {
-        const n = normalizeCnpj(m);
-        if (n) cnpjsBrutos.add(n);
-      }
+  for (const c of cnpjsDiretos) cnpjsBrutos.add(c);
+  for (const r of resultados) {
+    const matches = `${r.title} ${r.snippet}`.match(CNPJ_RE) ?? [];
+    for (const m of matches) {
+      const n = normalizeCnpj(m);
+      if (n) cnpjsBrutos.add(n);
     }
   }
 
-  for (const cnpj of Array.from(cnpjsBrutos).slice(0, MAX_CNPJS)) {
+  // Enriquecimento em LOTE pelo espelho: uma query em vez de N chamadas HTTP,
+  // e sem depender da BrasilAPI, que responde 403 para a região onde a API
+  // roda (iad). Vazio = espelho antigo/indisponível → cai na BrasilAPI abaixo.
+  const alvosDoLote = Array.from(cnpjsBrutos).slice(0, MAX_CNPJS);
+  const doEspelho = await enriquecerCnpjsBigQuery(alvosDoLote);
+
+  for (const cnpj of alvosDoLote) {
     const entNow = await getMiraEntitlement(organizationId);
     result.quota = { used: entNow.quota.used, total: entNow.quota.total, remaining: entNow.quota.remaining };
     if (entNow.quota.blocked) {
@@ -204,28 +372,47 @@ export async function runDescobertaPublica(
       result.duplicados++;
       continue;
     }
-    let dados: CnpjData | null = null;
-    try {
-      dados = await fetchCnpj(organizationId, cnpj);
-    } catch {
-      continue; // fonte falhou, re-tentavel depois
+    let dados: CnpjData | null = doEspelho.has(cnpj) ? doEspelhoParaCnpjData(doEspelho.get(cnpj)!) : null;
+    if (!dados) {
+      // Reserva: espelho ainda sem as colunas novas, ou CNPJ que não está nele.
+      try {
+        dados = await fetchCnpj(organizationId, cnpj);
+      } catch (err: any) {
+        errosEnriquecimento.push(String(err?.message ?? err));
+        continue;
+      }
     }
     if (!dados || (dados.situacaoCadastral ?? '').toUpperCase() !== 'ATIVA') continue;
     result.cnpjsVerificados++;
 
-    const { score, breakdown, confianca } = computeMiraScoreV1(perfil, dados, dados.qsa.length);
+    const sinalSetorial = await buscarSinalSetorial(dados.cnae, dados.uf);
+    const { score, breakdown, confianca } = computeMiraScoreV1(perfil, dados, dados.qsa.length, sinalSetorial);
+    // ── O gate decide se o Alvo NASCE, não só se ele é promovido ──
+    // A verificação vem DEPOIS de toda a persistência de enriquecimento (o
+    // espelho, e o titular do Empresário Individual que a lei impede de ter
+    // sócio). Ou seja: só desiste depois de ter tentado tudo que o registro
+    // oficial permite. Sem decisor mesmo assim, o Alvo não sobe.
+    if (!passaGate(dados)) {
+      result.descartadosCrus++;
+      logger.info(
+        `[MiraDescobertaPublica] cnpj=${cnpj} não sobe: decisores=${dados.qsa.length} situacao=${dados.situacaoCadastral ?? '?'} natJur=${dados.naturezaJuridica ?? '?'}`
+      );
+      continue;
+    }
+
     const agora = new Date().toISOString();
     const resumo =
       `${dados.razaoSocial}${dados.nomeFantasia ? ` (${dados.nomeFantasia})` : ''}, ` +
       `${dados.cnaeDescricao ?? 'atividade nao informada'}, porte ${dados.porte ?? 'n/d'}, ` +
       `${[dados.municipio, dados.uf].filter(Boolean).join('/')}. ` +
-      `Descoberto no indice publico pela busca "${consulta}${alvoRegiao ? ` em ${alvoRegiao}` : ''}" e verificado na Receita.`;
+      `Descoberto pela campanha (${(busca.alvos ?? []).slice(0, 3).join(', ')}${alvoRegiao ? ` em ${alvoRegiao}` : ''}) e verificado na Receita.`;
 
     let alvoId: string | null = null;
     try {
-      const alvo = await (prisma as any).miraAlvo.create({
+      const alvo = await prisma.miraAlvo.create({
         data: {
           organizationId,
+          campanhaId: campanhaId ?? null,
           kind: 'B2B',
           motor: 'DESCOBERTA',
           status: 'QUALIFYING',
@@ -234,6 +421,7 @@ export async function runDescobertaPublica(
           cnpj: dados.cnpj,
           cnae: dados.cnae,
           porte: dados.porte,
+          capitalSocial: dados.capitalSocial,
           situacaoCadastral: dados.situacaoCadastral,
           municipio: dados.municipio,
           uf: dados.uf,
@@ -243,7 +431,7 @@ export async function runDescobertaPublica(
           confianca,
           resumo,
           fontes: [
-            { campo: 'descoberta_publica', url: `busca:${consulta}`, data: agora, confianca: 55 },
+            { campo: 'descoberta_publica', url: `busca:${(busca.alvos ?? []).slice(0, 3).join('|')}`, data: agora, confianca: 55 },
             { campo: 'firmografia', url: dados.fonteUrl, data: agora, confianca: 95 },
           ],
           decisores: {
@@ -265,13 +453,17 @@ export async function runDescobertaPublica(
       result.criados++;
     } catch (err: any) {
       logger.error(`[MiraDescobertaPublica] falha ao criar alvo cnpj=${cnpj}: ${err?.message ?? err}`);
+      errosGravacao.push(String(err?.message ?? err));
       continue;
     }
 
-    if (passaGate(dados) && alvoId) {
+    // Chegou aqui = já passou no gate acima, então é sempre promovido: o Alvo
+    // que nasce é o Alvo pronto. Não existe mais o meio-termo em QUALIFYING,
+    // que era onde os 11 Alvos crus moravam.
+    if (alvoId) {
       try {
         const quota = await consumeMiraQuota(organizationId);
-        await (prisma as any).miraAlvo.update({
+        await prisma.miraAlvo.update({
           where: { id: alvoId },
           data: { status: 'READY', countedInQuota: true, quotaMonth: entNow.monthKey },
         });
@@ -309,29 +501,44 @@ export async function runDescobertaPublica(
         result.duplicados++;
         continue;
       }
-      try {
-        await (prisma as any).miraAlvo.create({
-          data: {
-            organizationId,
-            kind: 'B2B',
-            motor: 'DESCOBERTA',
-            status: 'DISCOVERED', // candidato: NAO desconta cota (sem verificacao oficial ainda)
-            nome: nomeDoResultado(r),
-            site,
-            resumo: `${r.snippet || 'Empresa encontrada no indice publico.'} (candidato: falta resolver CNPJ para virar Alvo verificado).`,
-            fontes: [{ campo: 'descoberta_publica', url: r.url, data: new Date().toISOString(), confianca: 40 }],
-          },
-        });
-        result.criados++;
-        result.candidatos++;
-      } catch (err: any) {
-        logger.warn(`[MiraDescobertaPublica] falha candidato host=${host}: ${err?.message ?? err}`);
-      }
+      // NÃO cria mais o "candidato".
+      //
+      // Este era o pior ofensor do pedido do Rodrigo ("garantir que o Alvo nem
+      // suba se já na pesquisa tiver apenas informação do nome da empresa, que
+      // é o que tem vindo em muitos casos"). O candidato nascia do TÍTULO de um
+      // resultado de busca: sem CNPJ, sem decisor, sem firmografia, confiança
+      // 40, com um resumo que era o snippet do buscador. Era literalmente só o
+      // nome, e nada nunca o promovia.
+      //
+      // Contado e reportado para o cliente saber que a busca achou empresas e
+      // que elas não passaram, em vez de sumirem caladas.
+      result.descartadosSoNome++;
     }
   }
 
+  // Achou candidato e NENHUM passou porque a verificação quebrou: é falha de
+  // fonte, não mercado vazio. Foi o que deixou a campanha do Rodrigo em 0 com
+  // 300 candidatos encontrados.
+  if (result.criados === 0 && result.candidatos === 0 && errosEnriquecimento.length > 0) {
+    const err: any = new Error('verificacao_falhou');
+    err.status = 502;
+    err.detail = errosEnriquecimento[0];
+    throw err;
+  }
+
+  // Verificou CNPJ e não gravou NENHUM alvo: o motor quebrou depois do trabalho
+  // caro, e calar isso é o pior dos mundos — o cliente pagou a verificação e
+  // ouviu "não achei ninguém". Foi assim que o `telefone` fora do schema passou
+  // dias derrubando todo create sem ninguém ver.
+  if (result.criados === 0 && result.cnpjsVerificados > 0 && errosGravacao.length > 0) {
+    const err: any = new Error('gravacao_falhou');
+    err.status = 502;
+    err.detail = errosGravacao[0];
+    throw err;
+  }
+
   logger.info(
-    `[MiraDescobertaPublica] org=${organizationId} q="${consulta}" fonte=${result.fonte} buscas=${buscas} verificados=${result.cnpjsVerificados} prontos=${result.prontos} candidatos=${result.candidatos}`
+    `[MiraDescobertaPublica] org=${organizationId} alvos=${(busca.alvos ?? []).length} fonte=${result.fonte} buscas=${buscas} verificados=${result.cnpjsVerificados} prontos=${result.prontos} candidatos=${result.candidatos}`
   );
   return result;
 }

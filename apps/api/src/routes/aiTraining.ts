@@ -8,9 +8,12 @@
  *
  * Rotas:
  *   GET    /status              — score + breakdown + próximas ações
- *   GET    /documents           — lista documentos ingeridos
+ *   GET    /documents           — lista documentos ingeridos (só metadata)
+ *   GET    /documents/:id       — detalhe com o conteúdo (para ver/editar)
  *   POST   /documents           — upload (multipart/form-data: file)
  *   POST   /documents/url       — ingesta URL pública (site do cliente)
+ *   POST   /documents/text      — texto colado direto
+ *   PUT    /documents/:id       — edita texto colado (re-sincroniza o RAG)
  *   DELETE /documents/:id       — remove documento + chunks
  *   GET    /qa                  — lista pares Q&A
  *   POST   /qa                  — cria Q&A (propaga pro vector store)
@@ -36,7 +39,12 @@ import { logAuditEvent } from '../services/auditService.js';
 import { buildSystemPromptForContact, pickTierAndOverride } from '../agents/agentOrchestrator.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
 import { testMessageSchema, buildPlaygroundResult } from './aiTraining.playground.js';
-import { textDocSchema } from './aiTraining.text.util.js';
+import {
+  textDocSchema,
+  isEditableDocument,
+  planTextDocRagSync,
+  normalizeQaUpdate,
+} from './aiTraining.text.util.js';
 import {
   appointmentTypeSchema,
   schedulingConfigSchema,
@@ -45,6 +53,7 @@ import {
 } from './scheduling.util.js';
 import { getToolsForContext } from '../services/llm/tools.js';
 import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
+import { syncAgentIdentity } from '../services/agentIdentitySync.js';
 
 // Entitlement do Agendamento: incluído no GROWTH+; no Lite exige o add-on
 // SCHEDULING_AGENT (settings.addons). Lê plano + add-ons ativos da org.
@@ -375,6 +384,104 @@ router.post(
   },
 );
 
+// GET /api/ai-training/documents/:id
+// Detalhe com o CONTEÚDO. A listagem (GET /documents) devolve só metadata —
+// carregar o texto de todos os documentos de uma vez seria caro e inútil.
+router.get('/documents/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { id } = req.params;
+
+    const doc = await prisma.kBDocument.findFirst({
+      where: { id, knowledgeBase: { organizationId: orgId } },
+      select: {
+        id: true,
+        title: true,
+        sourceType: true,
+        sourceUrl: true,
+        content: true,
+        createdAt: true,
+      },
+    });
+    if (!doc) {
+      res.status(404).json({ error: 'Documento não encontrado' });
+      return;
+    }
+
+    // Só o texto colado guarda o canônico no Postgres; arquivo e URL têm
+    // content vazio (o texto vive no vector store). editable diz à UI se o
+    // modal abre em modo edição ou só leitura.
+    res.json({ document: { ...doc, editable: isEditableDocument(doc.sourceType) } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/ai-training/documents/:id
+// Edita texto colado (título + conteúdo) e re-sincroniza o RAG. Sem isso o
+// cliente só conseguia apagar e recolar o texto para corrigir uma informação.
+router.put(
+  '/documents/:id',
+  validate(textDocSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.user!.organizationId;
+      const { id } = req.params;
+      const { title, content } = req.body as { title: string; content: string };
+
+      const existing = await prisma.kBDocument.findFirst({
+        where: { id, knowledgeBase: { organizationId: orgId } },
+        select: { id: true, title: true, sourceType: true, content: true },
+      });
+      if (!existing) {
+        res.status(404).json({ error: 'Documento não encontrado' });
+        return;
+      }
+      if (!isEditableDocument(existing.sourceType)) {
+        res.status(400).json({
+          error: 'Só textos colados podem ser editados. Para arquivo ou URL, remova e envie de novo.',
+        });
+        return;
+      }
+
+      const doc = await prisma.kBDocument.update({
+        where: { id },
+        data: { title, content },
+        select: { id: true, title: true, sourceType: true, createdAt: true },
+      });
+
+      // Sincroniza o vector store com o estado final (best-effort, igual ao Q&A).
+      const sync = planTextDocRagSync(existing.title, title);
+      if (sync.deleteSource) {
+        await ragService
+          .deleteDocument(orgId, sync.deleteSource)
+          .catch((err: any) =>
+            logger.warn(`[AITraining] RAG remove texto (título antigo) falhou: ${err.message}`),
+          );
+      }
+      await ragService
+        .ingestDocument(orgId, {
+          filename: sync.ingestSource,
+          content: Buffer.from(content, 'utf-8'),
+          mimeType: 'text/plain',
+        })
+        .catch((err: any) =>
+          logger.warn(`[AITraining] RAG re-sync texto (update) falhou: ${err.message}`),
+        );
+
+      await logTraining(req, 'kb.text.update', 'kb_document', doc.id,
+        `Texto editado: "${title}"`,
+        { before: { title: existing.title, content: existing.content }, after: { title, content } });
+
+      const readiness = await refreshAIReadiness(orgId).catch(() => null);
+      res.json({ document: doc, readiness });
+    } catch (err: any) {
+      logger.warn(`[AITraining] Edição de texto falhou: ${err.message}`);
+      next(err);
+    }
+  },
+);
+
 // DELETE /api/ai-training/documents/:id
 router.delete('/documents/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -489,7 +596,7 @@ router.put('/qa/:id', validate(qaSchema.partial()), async (req: Request, res: Re
 
     const pair = await (prisma as any).QAPair.update({
       where: { id },
-      data: req.body,
+      data: normalizeQaUpdate(req.body),
     });
 
     // Sincroniza o vector store com o ESTADO FINAL do par:
@@ -730,12 +837,23 @@ router.put('/identity', validate(identitySchema), async (req: Request, res: Resp
       data: { settings: merged },
     });
 
+    // Até 14/07/2026 o save parava aqui, e o agente que roda em produção nunca
+    // ficava sabendo: o cliente renomeava a IA e ela continuava se apresentando
+    // com o nome antigo, porque o orchestrator lê o Agent do banco, não as
+    // settings. Agora a identidade que o cliente edita chega ao agente dele.
+    const identitySync =
+      req.body?.agentName !== undefined
+        ? await syncAgentIdentity(prisma, orgId, req.body.agentName)
+        : { synced: false };
+
     await logTraining(req, 'kb.identity.update', 'agent_identity', undefined,
-      `Identidade do agente atualizada: ${Object.keys(req.body).join(', ')}`,
+      identitySync.synced
+        ? `Identidade do agente atualizada: ${Object.keys(req.body).join(', ')}. Agente renomeado de "${identitySync.nomeAntigo}" para "${req.body.agentName}" em produção.`
+        : `Identidade do agente atualizada: ${Object.keys(req.body).join(', ')}`,
       { before: current, after: merged });
 
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
-    res.json({ settings: merged, readiness });
+    res.json({ settings: merged, readiness, identitySync });
   } catch (err) {
     next(err);
   }

@@ -13,12 +13,21 @@
  */
 import type { CnpjData } from './cnpj.js';
 
-export interface ScoreFator {
+/**
+ * `type` e não `interface` de propósito: o breakdown é gravado numa coluna Json
+ * do Prisma, e o InputJsonValue dele exige índice implícito, que só alias de
+ * tipo tem. Com `interface`, gravar o breakdown não compila — e foi para calar
+ * esse erro que os motores nasceram chamando `(prisma as any).miraAlvo.create`,
+ * o que desligou a checagem do payload INTEIRO e escondeu por dias um campo
+ * `telefone` que o schema não declarava. Nenhum alvo era criado, em nenhum
+ * motor, e o tsc não tinha como avisar.
+ */
+export type ScoreFator = {
   nome: string;
   peso: number;
   valor: number;
   motivo: string;
-}
+};
 
 export interface MiraScoreResult {
   score: number;
@@ -27,11 +36,40 @@ export interface MiraScoreResult {
 }
 
 interface PerfilLike {
-  segmento?: string | null;
   catalogo?: { nome: string; descricao?: string }[];
-  icpFirmografia?: { cnaes?: string[]; portes?: string[]; regioes?: string[] };
-  areasCompradoras?: string[];
+  /** Alvo B2B do Perfil de Prospecção. Só vale quando tipoCliente === 'B2B'. */
+  alvoB2B?: { cnaesAlvo?: string[]; portes?: string[]; regioes?: string[] };
 }
+
+/** Sinal setorial do CAGED (saldo de emprego do setor do Alvo, por CNAE+UF). */
+export interface SinalSetorial {
+  tendencia: 'expansao' | 'estavel' | 'retracao';
+  saldoLiquido: number; // admissões menos demissões no ano de referência
+  ano: number;
+}
+
+/**
+ * O que a pesquisa de pegada pública (Fase 2 do "Aprofundar com IA") achou.
+ *
+ * Ausente na DESCOBERTA: ali o Alvo acabou de nascer e nada foi pesquisado
+ * ainda, então os fatores que dependem de pesquisa valem 0 e o motivo diz
+ * isso. Presente no RECÁLCULO pós-Aprofundar. A diferença entre os dois é o
+ * que separa "ainda não procuramos" de "procuramos e não achamos" — os dois
+ * dão 0 pontos, mas só o segundo é uma informação sobre a conta.
+ */
+export interface EvidenciaPesquisa {
+  /** A busca web rodou de fato (distingue "não achei" de "não procurei"). */
+  pesquisaRodou: boolean;
+  /** Demandas com fonte externa (não presunção do analista). */
+  demandasEvidenciadas: number;
+  /** Fornecedores atuais identificados com evidência. */
+  incumbentes: number;
+  /** Gatilho de janela de entrada, quando o material sustenta um. */
+  janela: string | null;
+}
+
+const fmtBRL = (v: number): string =>
+  v >= 1_000_000 ? `R$ ${(v / 1_000_000).toFixed(1).replace('.', ',')} mi` : `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
 
 const norm = (s: string) =>
   s
@@ -42,7 +80,7 @@ const norm = (s: string) =>
 function matchCnae(perfil: PerfilLike, alvo: CnpjData): { hit: boolean; parcial: boolean } {
   const alvoCnae = (alvo.cnae ?? '').replace(/\D/g, '');
   const alvoDesc = norm(alvo.cnaeDescricao ?? '');
-  const wants = perfil.icpFirmografia?.cnaes ?? [];
+  const wants = perfil.alvoB2B?.cnaesAlvo ?? [];
   if (wants.length === 0) return { hit: false, parcial: false };
   for (const w of wants) {
     const digits = w.replace(/\D/g, '');
@@ -59,7 +97,7 @@ function matchCnae(perfil: PerfilLike, alvo: CnpjData): { hit: boolean; parcial:
 }
 
 function matchRegiao(perfil: PerfilLike, alvo: CnpjData): boolean {
-  const regioes = perfil.icpFirmografia?.regioes ?? [];
+  const regioes = perfil.alvoB2B?.regioes ?? [];
   if (regioes.length === 0) return false;
   const alvoUf = norm(alvo.uf ?? '');
   const alvoMun = norm(alvo.municipio ?? '');
@@ -70,13 +108,51 @@ function matchRegiao(perfil: PerfilLike, alvo: CnpjData): boolean {
 }
 
 function matchPorte(perfil: PerfilLike, alvo: CnpjData): boolean {
-  const portes = perfil.icpFirmografia?.portes ?? [];
+  const portes = perfil.alvoB2B?.portes ?? [];
   if (portes.length === 0 || !alvo.porte) return false;
   const alvoP = norm(alvo.porte);
   return portes.some((p) => {
     const n = norm(p);
     return alvoP.includes(n) || n.includes(alvoP) || (n === 'me' && alvoP.includes('micro')) || (n === 'epp' && alvoP.includes('pequeno'));
   });
+}
+
+/**
+ * Fator 5 (Janela e incumbente, 15) — compartilhado por B2B e B2C.
+ *
+ * Os três estados são deliberadamente distintos no motivo, mesmo quando dois
+ * deles dão 0:
+ *   - nunca pesquisou       → 0, e a tela convida a clicar em Aprofundar
+ *   - pesquisou e não achou → 0, mas isso é INFORMAÇÃO (conta sem pegada
+ *                             pública, ou fornecedor que ninguém publiciza)
+ *   - achou                 → pontua e diz o quê
+ */
+function fatorJanelaIncumbente(evidencia?: EvidenciaPesquisa | null): ScoreFator {
+  const base = { nome: 'Janela e incumbente', peso: 15 };
+  if (!evidencia?.pesquisaRodou) {
+    return {
+      ...base,
+      valor: 0,
+      motivo: 'janela de entrada e fornecedor atual entram quando você clicar em Aprofundar com IA',
+    };
+  }
+  let v = 0;
+  const motivos: string[] = [];
+  if (evidencia.janela) {
+    v += 8;
+    motivos.push(`janela de entrada: ${evidencia.janela}`);
+  }
+  if (evidencia.incumbentes > 0) {
+    // Saber quem atende hoje é acionável dos dois lados: dá o argumento de
+    // deslocamento e evita a abordagem ingênua de quem acha que a conta está
+    // descoberta.
+    v += 7;
+    motivos.push(`${evidencia.incumbentes} fornecedor(es) atual(is) identificado(s) com evidência pública`);
+  }
+  if (v === 0) {
+    motivos.push('pesquisamos a pegada pública e não achamos gatilho de janela nem fornecedor atual nomeado');
+  }
+  return { ...base, valor: Math.min(15, v), motivo: motivos.join('; ') };
 }
 
 /** Meses desde uma data ISO (aprox.). */
@@ -87,7 +163,13 @@ function monthsSince(iso: string | null): number | null {
   return Math.floor((Date.now() - d.getTime()) / (30 * 24 * 3600 * 1000));
 }
 
-export function computeMiraScoreV1(perfil: PerfilLike, alvo: CnpjData, decisoresCount: number): MiraScoreResult {
+export function computeMiraScoreV1(
+  perfil: PerfilLike,
+  alvo: CnpjData,
+  decisoresCount: number,
+  sinalSetorial?: SinalSetorial | null,
+  evidencia?: EvidenciaPesquisa | null
+): MiraScoreResult {
   const fatores: ScoreFator[] = [];
 
   // 1) Fit de ICP (25)
@@ -115,20 +197,51 @@ export function computeMiraScoreV1(perfil: PerfilLike, alvo: CnpjData, decisores
     fatores.push({ nome: 'Fit de ICP', peso: 25, valor: Math.min(25, v), motivo: motivos.join('; ') });
   }
 
-  // 2) Demanda e sinais (25) — v1: sinais observáveis no registro
+  // 2) Demanda e sinais (25) — v1: sinais observáveis no registro + porte real + setor
   {
     let v = 0;
     const motivos: string[] = [];
     const meses = monthsSince(alvo.dataInicioAtividade);
     if (meses !== null && meses <= 18) {
-      v += 10;
+      v += 8;
       motivos.push(`empresa recente (${meses} meses): fase de montar operação`);
     }
     if (alvo.situacaoCadastral && alvo.situacaoCadastral.toUpperCase() === 'ATIVA') {
-      v += 5;
+      v += 4;
       motivos.push('situação ATIVA na Receita');
     }
-    motivos.push('sinais de mercado (notícias/vagas/editais) entram na próxima fase de mapeamento');
+    // Capital social (porte real por empresa, registro público)
+    if (alvo.capitalSocial != null && alvo.capitalSocial >= 1_000_000) {
+      v += 6;
+      motivos.push(`capital social ${fmtBRL(alvo.capitalSocial)}: empresa estruturada, orçamento provável`);
+    } else if (alvo.capitalSocial != null && alvo.capitalSocial >= 100_000) {
+      v += 3;
+      motivos.push(`capital social ${fmtBRL(alvo.capitalSocial)}: porte relevante`);
+    }
+    // Sinal setorial do CAGED (saldo de emprego do setor, por CNAE+UF)
+    if (sinalSetorial) {
+      if (sinalSetorial.tendencia === 'expansao') {
+        v += 5;
+        motivos.push(`setor contratando em ${sinalSetorial.ano} (saldo +${sinalSetorial.saldoLiquido.toLocaleString('pt-BR')}): demanda aquecida`);
+      } else if (sinalSetorial.tendencia === 'retracao') {
+        motivos.push(`setor em retração em ${sinalSetorial.ano} (saldo ${sinalSetorial.saldoLiquido.toLocaleString('pt-BR')})`);
+      } else {
+        v += 1;
+        motivos.push(`setor estável em emprego (${sinalSetorial.ano})`);
+      }
+    }
+    // Demanda EVIDENCIADA na web vale mais que qualquer inferência de
+    // registro: aqui a própria conta disse (ou saiu na notícia) o que precisa.
+    if (evidencia?.demandasEvidenciadas) {
+      v += 8;
+      motivos.push(
+        `${evidencia.demandasEvidenciadas} demanda(s) com evidência pública (a conta publicou ou saiu na notícia), não presunção`
+      );
+    } else if (evidencia?.pesquisaRodou) {
+      motivos.push('pesquisamos a pegada pública e não achamos demanda declarada');
+    } else {
+      motivos.push('sinais profundos (notícias/vagas/editais) entram quando você clicar em Aprofundar com IA');
+    }
     fatores.push({ nome: 'Demanda e sinais', peso: 25, valor: Math.min(25, v), motivo: motivos.join('; ') });
   }
 
@@ -158,14 +271,14 @@ export function computeMiraScoreV1(perfil: PerfilLike, alvo: CnpjData, decisores
     fatores.push({ nome: 'Encaixe de portfólio', peso: 15, valor: v, motivo });
   }
 
-  // 5) Janela e incumbente (15) — v1: ainda não mapeado (honesto)
+  // 5) Janela e incumbente (15) — alimentado pela Fase 2 do "Aprofundar com IA"
+  //
+  // Ficou fixo em 0 até 15/07/2026, com o motivo "entra na próxima fase". Era
+  // honesto (nada pesquisava), mas capava TODO Alvo em 85 e nunca destravava,
+  // porque nada nunca preenchia incumbente nem janela. Agora pontua com o que
+  // a pesquisa achou, e continua dizendo a verdade quando não achou nada.
   {
-    fatores.push({
-      nome: 'Janela e incumbente',
-      peso: 15,
-      valor: 0,
-      motivo: 'janela de entrada e fornecedor atual entram com os agentes de pesquisa (próxima fase)',
-    });
+    fatores.push(fatorJanelaIncumbente(evidencia));
   }
 
   const score = Math.max(0, Math.min(100, fatores.reduce((acc, f) => acc + f.valor, 0)));
@@ -200,9 +313,10 @@ export interface PlaceLike {
  * (o próprio dono; sem QSA), portfólio (heurístico) e janela (fase 2).
  */
 export function computeMiraScoreB2C(
-  perfil: PerfilLike & { icpB2c?: { regioes?: string[] } },
+  perfil: PerfilLike & { alvoB2C?: { regiaoCidade?: string[] } },
   place: PlaceLike,
-  local: { municipio: string | null; uf: string | null }
+  local: { municipio: string | null; uf: string | null },
+  evidencia?: EvidenciaPesquisa | null
 ): MiraScoreResult {
   const fatores: ScoreFator[] = [];
 
@@ -210,7 +324,9 @@ export function computeMiraScoreB2C(
   {
     let v = 12; // veio da busca orientada pelo perfil
     const motivos: string[] = ['descoberto pela busca orientada ao seu perfil'];
-    const regioes = [...(perfil.icpB2c?.regioes ?? []), ...(perfil.icpFirmografia?.regioes ?? [])];
+    // Guardamos os dois alvos lado a lado, então a região do B2B serve de
+    // reserva para quem alternou de caminho e só preencheu de um lado.
+    const regioes = [...(perfil.alvoB2C?.regiaoCidade ?? []), ...(perfil.alvoB2B?.regioes ?? [])];
     const alvoLocal = norm([local.municipio, local.uf].filter(Boolean).join(' '));
     if (regioes.length && alvoLocal && regioes.some((r) => alvoLocal.includes(norm(r)) || norm(r).includes(alvoLocal))) {
       v += 13;
@@ -234,7 +350,14 @@ export function computeMiraScoreB2C(
       v += 5;
       motivos.push('sem site público (oportunidade para oferta digital)');
     }
-    motivos.push('sinais profundos (notícias/atividade) entram na próxima fase');
+    if (evidencia?.demandasEvidenciadas) {
+      v += 8;
+      motivos.push(`${evidencia.demandasEvidenciadas} demanda(s) com evidência pública, não presunção`);
+    } else if (evidencia?.pesquisaRodou) {
+      motivos.push('pesquisamos a pegada pública e não achamos demanda declarada');
+    } else {
+      motivos.push('sinais profundos (notícias/atividade) entram quando você clicar em Aprofundar com IA');
+    }
     fatores.push({ nome: 'Demanda e sinais', peso: 25, valor: Math.min(25, v), motivo: motivos.join('; ') });
   }
 
@@ -264,9 +387,9 @@ export function computeMiraScoreB2C(
     });
   }
 
-  // 5) Janela e incumbente (15) — fase 2
+  // 5) Janela e incumbente (15) — alimentado pela Fase 2 do "Aprofundar com IA"
   {
-    fatores.push({ nome: 'Janela e incumbente', peso: 15, valor: 0, motivo: 'entra com os agentes de pesquisa (próxima fase)' });
+    fatores.push(fatorJanelaIncumbente(evidencia));
   }
 
   const score = Math.max(0, Math.min(100, fatores.reduce((a, f) => a + f.valor, 0)));

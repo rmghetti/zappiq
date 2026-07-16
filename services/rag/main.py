@@ -771,7 +771,13 @@ async def ingest(
     )
 
 
-@app.delete("/ingest/{namespace}/{source}", tags=["ingestion"])
+# {source:path} e nao {source}: o source de um documento de texto e o TITULO que
+# o cliente escreveu, e titulo com barra e comum ("Contrato 14/07", "Politica
+# de troca s/ nota"). O caller percent-encoda, mas o uvicorn decodifica %2F de
+# volta para "/" antes do roteamento, entao {source} (que casa so com [^/]+)
+# nao batia e a rota devolvia 404 — o delete falhava em silencio e os chunks
+# ficavam orfaos no vector store. Com :path o source e capturado inteiro.
+@app.delete("/ingest/{namespace}/{source:path}", tags=["ingestion"])
 async def delete_source(namespace: str, source: str):
     """Remove todos os chunks de um source em um namespace (LGPD Art. 18 DSR)."""
     if not state.pool:

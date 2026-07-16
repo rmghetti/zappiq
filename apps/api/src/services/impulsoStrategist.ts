@@ -1,9 +1,12 @@
 import { llmRouter } from './llm/LLMRouter.js';
 import { logger } from '../utils/logger.js';
+import { resolveTenantAgentProfile, type TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 
 /*
  * ═════════════════════════════════════════════════════════════════
- * Impulso — Iza Estrategista (pilar 1, autônomo).
+ * Impulso · Estrategista de campanhas (pilar 1, autônomo).
+ * A persona é sempre a do TENANT (ver buildSystem). Só na org da ZappIQ
+ * ela é a Iza.
  * Objetivo em linguagem natural do dono do negócio -> campanha
  * completa pronta pra aprovar (segmento, canais, copy na voz de
  * marca, horário, plano de verba e estimativa de custo/resultado).
@@ -43,10 +46,31 @@ export interface ImpulsoDraft {
   rationale: string; // o que e o quanto operar (Coach)
 }
 
-const SYSTEM = `Voce e a Iza, gerente de campanhas de vendas da ZappIQ (plataforma conversacional brasileira, WhatsApp-centrica).
+/*
+ * Persona do estrategista: é do TENANT, nunca da ZappIQ (14/07/2026).
+ *
+ * Isto roda com o orgId do CLIENTE (routes/impulso.ts) e a copy que sai daqui
+ * é disparada na base DELE. Com a persona fixa "Iza da ZappIQ", a campanha do
+ * CMJ saía escrita por uma gerente de vendas de outra empresa: no melhor caso
+ * tom errado, no pior a copy citando a ZappIQ pro cliente final do CMJ.
+ *
+ * A org da ZappIQ é a única que mantém a Iza, porque lá ela é a identidade
+ * legítima (é a ZappIQ fazendo campanha da ZappIQ).
+ */
+function buildSystem(profile: TenantAgentProfile): string {
+  // niche cai em 'generic' quando o cliente não cadastrou: não vira texto.
+  const nicho = profile.niche && profile.niche !== 'generic' ? ` no ramo de ${profile.niche}` : '';
+
+  const persona = profile.isZappIQ
+    ? 'Voce e a Iza, gerente de campanhas de vendas da ZappIQ (plataforma conversacional brasileira, WhatsApp-centrica).'
+    : `Voce e ${profile.agentName}, estrategista de campanhas de vendas de ${profile.businessName}${nicho}. ` +
+      `A campanha e de ${profile.businessName} e fala com a base de clientes de ${profile.businessName}: ` +
+      `escreva na voz desse negocio e nao cite nenhuma outra marca, plataforma ou fornecedor.`;
+
+  return `${persona}
 A partir de um objetivo em linguagem natural do dono do negocio, monte uma CAMPANHA completa e pronta para aprovar.
 
-Regras de copy (voz humana MACHIA): pt-BR natural, direto, SEM travessao (—), sem soar robotico, foco em vender com respeito ao cliente e em respeitar o opt-in.
+Regras de copy (voz humana): pt-BR natural, direto, SEM travessao (—), sem soar robotico, foco em vender com respeito ao cliente e em respeitar o opt-in.
 
 Responda SOMENTE com um JSON valido (sem markdown, sem cercas de codigo) neste formato exato:
 {
@@ -62,8 +86,12 @@ Responda SOMENTE com um JSON valido (sem markdown, sem cercas de codigo) neste f
 }
 
 Inclua sempre pelo menos o canal "whatsapp". As estimativas devem ser plausiveis, nao invente precisao falsa. O custo de disparo de marketing no WhatsApp e ~R$ 0,34/mensagem.`;
+}
 
 export async function draftCampaignFromObjective(input: ImpulsoDraftInput): Promise<ImpulsoDraft> {
+  // Fail-soft: se o lookup cair, volta perfil neutro de CLIENTE (nunca ZappIQ).
+  const profile = await resolveTenantAgentProfile(input.orgId);
+
   const userContent = [
     `Objetivo: ${input.objective}`,
     input.brandVoice ? `Tom de marca: ${input.brandVoice}` : '',
@@ -73,7 +101,7 @@ export async function draftCampaignFromObjective(input: ImpulsoDraftInput): Prom
     .join('\n');
 
   const resp = await llmRouter.complete({
-    system: SYSTEM,
+    system: buildSystem(profile),
     messages: [{ role: 'user', content: userContent }],
     orgId: input.orgId,
     operation: 'chat',

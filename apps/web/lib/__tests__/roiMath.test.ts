@@ -1,17 +1,17 @@
 /**
  * Testes da lógica de ROI — V2-003.
  *
- * Uso rápido (sem framework):
- *   npx tsx apps/web/lib/__tests__/roiMath.test.ts
+ * Rodam no vitest do apps/web (era a tarefa P0-13, feita):
+ *   pnpm --filter @zappiq/web test
  *
- * No CI (GitHub Actions) roda via vitest quando configurado (ver tarefa P0-13).
+ * O runner caseiro que existia aqui foi removido quando o vitest entrou. Os
+ * casos são os mesmos; só a plumbing mudou. `assert` continua porque lançar
+ * exceção já é reprovar no vitest.
  */
 
+import { test } from 'vitest';
 import { computeRoi, ROI_MONTHLY_CAP_PERCENT, PAYBACK_MIN_DAYS } from '../roiMath';
 
-type TestFn = () => void;
-const tests: Array<{ name: string; fn: TestFn }> = [];
-function test(name: string, fn: TestFn) { tests.push({ name, fn }); }
 function assert(cond: boolean, msg: string) {
   if (!cond) throw new Error('Assertion failed: ' + msg);
 }
@@ -75,12 +75,3 @@ test('entradas nulas não quebram cálculo', () => {
   assert(!Number.isNaN(r.roiPercent), 'roiPercent não pode ser NaN');
   assert(!Number.isNaN(r.paybackDays), 'paybackDays não pode ser NaN');
 });
-
-// Runner
-let passed = 0, failed = 0;
-for (const t of tests) {
-  try { t.fn(); console.log(`✓ ${t.name}`); passed++; }
-  catch (e) { console.error(`✗ ${t.name}\n  ${(e as Error).message}`); failed++; }
-}
-console.log(`\n${passed} passed · ${failed} failed`);
-if (failed > 0) process.exit(1);

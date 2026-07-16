@@ -28,6 +28,8 @@ vi.mock('../../utils/logger.js', () => ({
 }));
 
 import { classifyIntent, shouldEscalateToSonnet } from './intentClassifier.js';
+// Guard real (módulo puro, sem I/O) rodando contra o prompt real.
+import { findForeignBrandLeaks } from '../../agents/tenantIsolationGuard.js';
 
 describe('classifyIntent — happy path', () => {
   beforeEach(() => {
@@ -214,6 +216,78 @@ describe('classifyIntent — força Haiku como provider', () => {
     expect(userMsg).toContain('msg 9');
     expect(userMsg).not.toContain('msg 0');
     expect(userMsg).not.toContain('msg 1');
+  });
+});
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Isolamento do tenant (14/07/2026)
+ * O classifier roda em TODO turno de TODO tenant, sem gate por org. Então
+ * nada aqui pode assumir a Iza: nem o rótulo do histórico, nem os exemplos
+ * do prompt. Estes testes olham o que SAI pro LLM, não o código-fonte.
+ * ────────────────────────────────────────────────────────────────────── */
+describe('classifyIntent: isolamento do tenant', () => {
+  beforeEach(() => mockComplete.mockReset());
+
+  const respondeNormal = () =>
+    mockComplete.mockResolvedValueOnce({
+      text: 'normal',
+      provider: 'anthropic-haiku',
+      model: 'claude-haiku-4-5-20251001',
+      latencyMs: 400,
+      attempt: 1,
+    });
+
+  const historico: Array<{ role: 'user' | 'assistant'; content: string }> = [
+    { role: 'user', content: 'quanto custa o implante?' },
+    { role: 'assistant', content: 'Fica R$ 2.500 à vista. Quer agendar avaliação?' },
+  ];
+
+  const promptEnviado = () => mockComplete.mock.calls[0][0].messages[0].content as string;
+  const systemEnviado = () => mockComplete.mock.calls[0][0].system as string;
+
+  it('NÃO assina a fala do agente do cliente como "Iza"', async () => {
+    respondeNormal();
+    await classifyIntent('quero sim', historico, { orgId: 'org-cmj' });
+    expect(promptEnviado()).not.toMatch(/\bIza\b/i);
+  });
+
+  it('usa o nome do agente do tenant quando o caller informa', async () => {
+    respondeNormal();
+    await classifyIntent('quero sim', historico, { orgId: 'org-cmj', agentName: 'Vera' });
+    expect(promptEnviado()).toContain('Vera: Fica R$ 2.500');
+  });
+
+  it('cai no rótulo neutro "Agente" quando não informam o nome', async () => {
+    respondeNormal();
+    await classifyIntent('quero sim', historico);
+    expect(promptEnviado()).toContain('Agente: Fica R$ 2.500');
+  });
+
+  it('agentName vazio/branco não vira rótulo vazio', async () => {
+    respondeNormal();
+    await classifyIntent('quero sim', historico, { agentName: '   ' });
+    expect(promptEnviado()).toContain('Agente: Fica R$ 2.500');
+  });
+
+  it('continua rotulando a ponta do cliente como "Cliente"', async () => {
+    respondeNormal();
+    await classifyIntent('quero sim', historico, { agentName: 'Vera' });
+    expect(promptEnviado()).toContain('Cliente: quanto custa o implante?');
+  });
+
+  it('o system prompt não leva marca nem comercial da ZappIQ pro tenant', async () => {
+    respondeNormal();
+    await classifyIntent('oi', historico, { orgId: 'org-cmj' });
+    // strict: pega também SKU/preço/trial/concorrente citados no prompt da Iza.
+    const leaks = findForeignBrandLeaks(systemEnviado(), { strict: true });
+    expect(leaks).toEqual([]);
+  });
+
+  it('o prompt inteiro (system + user) sai limpo pro tenant', async () => {
+    respondeNormal();
+    await classifyIntent('qual o valor?', historico, { orgId: 'org-cmj', agentName: 'Vera' });
+    const leaks = findForeignBrandLeaks(`${systemEnviado()}\n${promptEnviado()}`, { strict: true });
+    expect(leaks).toEqual([]);
   });
 });
 

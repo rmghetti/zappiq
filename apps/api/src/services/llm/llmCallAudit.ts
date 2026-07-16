@@ -28,7 +28,7 @@ export interface LLMCallAuditInput {
   /** Modelo usado (string da API: claude-sonnet-4-6, gpt-4o-mini, etc). */
   model: string;
   /** Operação: chat (default), classify (intent), sentiment. */
-  operation?: 'chat' | 'classify' | 'sentiment';
+  operation?: 'chat' | 'classify' | 'sentiment' | 'extract';
   /** Tokens de input retornados pelo provider. */
   inputTokens?: number | null;
   /** Tokens de output retornados pelo provider. */

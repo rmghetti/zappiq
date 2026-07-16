@@ -40,14 +40,22 @@ import {
   Plus, ArrowLeft, Save, Play, Upload, Trash2, Loader2,
   MessageSquare, GitBranch, Sparkles, Tag, BarChart2, BarChart3, Headset, Clock, CalendarClock, PlayCircle, Info,
   BookOpen, Download, ArrowRight, X, Zap, ChevronDown, Maximize2, Workflow, History, HelpCircle, TrendingUp, Users, FlaskConical,
+  AlertTriangle,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { useAuthStore } from '../../../stores/authStore';
 import { AskNodeFields } from './_components/AskNodeFields';
+import { useMaestroProgress, MaestroProgressBar, type MaestroProgressState } from './_components/MaestroProgress';
 import { PredicateBuilder, summarizePredicates, type Predicate } from './_components/PredicateBuilder';
 import { MessageRichFields } from './_components/MessageRichFields';
 import { AiToolsFields, type WebhookTool } from './_components/AiToolsFields';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { TourLauncher } from '@/components/shared/GuidedTour';
+import {
+  apiNodesToCanvasNodes,
+  canvasNodesToApiNodes,
+  unsupportedNodeTypes,
+} from './_lib/graphMapping';
 
 // Tutorial interativo "Reja sua IA" (HTML self-contained do Claude Design) + PDF
 // baixável. Servidos estaticamente de apps/web/public/tutoriais/. Mesmo padrão do
@@ -100,8 +108,19 @@ const KIND_ACCENT: Record<NodeKind, string> = {
 const CANVAS_BG = 'linear-gradient(135deg,#EEF2FF 0%,#F5F3FF 45%,#ECFEFF 100%)';
 const EDGE_BASE = { type: 'smoothstep' as const, markerEnd: { type: MarkerType.ArrowClosed, color: '#94A3B8', width: 16, height: 16 }, style: { stroke: '#94A3B8', strokeWidth: 2 } };
 
+// Um tipo é "suportado" quando esta tela sabe desenhá-lo e editá-lo. Tipo fora
+// do NODE_META veio de uma versão do motor mais nova que a desta tela (ou de um
+// fluxo escrito à mão): o editor o mostra como somente-leitura e o deixa
+// atravessar o save intacto, em vez de reescrevê-lo como 'message'.
+function isSupportedNodeType(type: string): boolean {
+  return Boolean(NODE_META[type]);
+}
+
 function metaFor(type: string) {
-  return NODE_META[type] || { kind: 'fixed' as NodeKind, label: type, icon: MessageSquare, palette: true };
+  // Fallback do tipo não suportado: rótulo = o próprio tipo (honesto — mostra ao
+  // cliente o que o nó é de verdade) e fora da paleta (não dá para criar um nó
+  // cujos campos o editor não conhece).
+  return NODE_META[type] || { kind: 'fixed' as NodeKind, label: type, icon: AlertTriangle, palette: false };
 }
 
 function nodeSummary(type: string, data: any): string {
@@ -307,14 +326,20 @@ const HANDLE_STYLE = { width: 9, height: 9, background: '#fff', border: '2px sol
 function MaestroNode({ id, type, data, selected }: NodeProps) {
   const meta = metaFor(type);
   const Icon = meta.icon;
-  const summary = nodeSummary(type, data);
-  const accent = KIND_ACCENT[meta.kind];
+  // Tipo não suportado: não tentamos adivinhar um resumo (nodeSummary não
+  // conhece os campos dele) nem fingir que é um nó comum. Borda tracejada +
+  // âmbar sinalizam "o editor não desenha isto", e o tipo cru fica à vista.
+  const supported = isSupportedNodeType(type);
+  const summary = supported ? nodeSummary(type, data) : 'Não suportado nesta versão do editor';
+  const accent = supported ? KIND_ACCENT[meta.kind] : '#B45309';
   const { deleteElements } = useReactFlow();
   return (
     <div
       className="group relative w-[212px] rounded-2xl bg-white transition-all"
       style={{
-        border: `1px solid ${selected ? accent : '#E8EDF4'}`,
+        border: supported
+          ? `1px solid ${selected ? accent : '#E8EDF4'}`
+          : `1px dashed ${selected ? accent : '#FCD34D'}`,
         boxShadow: selected
           ? `0 0 0 3px ${accent}22, 0 10px 24px -8px ${accent}55`
           : '0 6px 18px -10px rgba(15,23,42,0.25), 0 1px 2px rgba(15,23,42,0.04)',
@@ -337,12 +362,15 @@ function MaestroNode({ id, type, data, selected }: NodeProps) {
         </div>
       )}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm" style={{ background: KIND_BADGE[meta.kind] }}>
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
+          style={{ background: supported ? KIND_BADGE[meta.kind] : 'linear-gradient(135deg,#FBBF24,#B45309)' }}
+        >
           <Icon size={17} color="#fff" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-slate-800 truncate leading-tight">{data?.label || meta.label}</p>
-          <p className="text-[11px] text-slate-400 truncate mt-0.5">{summary || meta.label}</p>
+          <p className={`text-[11px] truncate mt-0.5 ${supported ? 'text-slate-400' : 'text-amber-700'}`}>{summary || meta.label}</p>
         </div>
       </div>
       <Handle type="source" position={Position.Bottom} style={{ ...HANDLE_STYLE, borderColor: accent }} />
@@ -409,13 +437,14 @@ function genId(prefix: string) {
 
 // ─── Editor (canvas) ─────────────────────────────────────────────────────────
 // API → React Flow (mesmo mapeamento do estado inicial; reusado pelo restore).
+// O mapeamento em si vive em _lib/graphMapping.ts (puro e testado): é a parte
+// capaz de destruir dado do cliente. Aqui só injetamos o que depende de React
+// (rótulo vindo do NODE_META) e o gerador de id.
 function apiNodesToCanvas(apiNodes: any[]): Node[] {
-  return (apiNodes || []).map((n: any, i: number): Node => ({
-    id: n.id || genId('n'),
-    type: NODE_META[n.type] ? n.type : 'message',
-    position: n.position && typeof n.position.x === 'number' ? n.position : { x: 120, y: 60 + i * 110 },
-    data: { ...(n.data || {}), label: n.data?.label || n.label || metaFor(n.type).label },
-  }));
+  return apiNodesToCanvasNodes(apiNodes, {
+    labelFor: (t) => metaFor(t).label,
+    genId: () => genId('n'),
+  }) as Node[];
 }
 function apiEdgesToCanvas(apiEdges: any[]): Edge[] {
   return (apiEdges || []).map((e: any): Edge => ({
@@ -439,6 +468,11 @@ function apiEdgesToCanvas(apiEdges: any[]): Edge[] {
 }
 
 function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlows: ApiFlow[]; onBack: () => void; onSaved: () => void }) {
+  // Nome do agente do tenant (organization.settings.agentName), mesma fonte do
+  // AgentTrainingWidget. Nunca "Iza" hardcodado no painel do cliente.
+  const organization = useAuthStore((s) => s.organization);
+  const agentName: string = (organization?.settings as any)?.agentName || 'a IA';
+
   const [name, setName] = useState(flow.name);
   const [priority, setPriority] = useState<number>(flow.priority ?? 0);
   const [nodes, setNodes, onNodesChange] = useNodesState(apiNodesToCanvas(flow.nodes || []));
@@ -513,9 +547,23 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
   const [showMetrics, setShowMetrics] = useState(false);
   const [metrics, setMetrics] = useState<{ total: number; byNode: Record<string, { entries: number; ends: number }> } | null>(null);
 
+  // Tipos do grafo que esta versão da tela não conhece. Sem um renderer
+  // registrado, o React Flow cairia no nó 'default' e logaria erro — era isso
+  // que a antiga coerção para 'message' escondia (ao custo de destruir o tipo
+  // no save). Registramos MaestroNode para eles: ele já degrada via metaFor().
+  const unsupportedTypes = useMemo(
+    () => unsupportedNodeTypes(nodes as { type?: string }[], isSupportedNodeType),
+    [nodes],
+  );
+  // Memo sobre a CHAVE (string), não sobre o array: `nodes` muda a cada arrastar
+  // e recriar nodeTypes remontaria todo nó do canvas.
+  const unsupportedKey = unsupportedTypes.join('|');
   const nodeTypes = useMemo(
-    () => Object.fromEntries(Object.keys(NODE_META).map((t) => [t, MaestroNode])),
-    [],
+    () => Object.fromEntries(
+      [...Object.keys(NODE_META), ...(unsupportedKey ? unsupportedKey.split('|') : [])]
+        .map((t) => [t, MaestroNode]),
+    ),
+    [unsupportedKey],
   );
 
   // 1B-analytics — busca métricas quando o toggle liga
@@ -602,7 +650,9 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
   // React Flow → shape da API (engine lê node.data.* e edge.data.when)
   function toApiGraph() {
     return {
-      nodes: nodes.map((n) => ({ id: n.id, type: n.type, label: n.data?.label, data: n.data, position: n.position })),
+      // n.type é o tipo original: apiNodesToCanvas() não coage mais. Nó que o
+      // editor não sabe desenhar atravessa o save intacto.
+      nodes: canvasNodesToApiNodes(nodes as any),
       edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, data: e.data || {} })),
     };
   }
@@ -662,6 +712,17 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
       for (const p of preds) {
         if (p.kind === 'contact_attr' && p.field === 'customFields.') errors.push('Uma condição de campo custom está sem o nome do campo.');
       }
+    }
+    // Quadro que esta versão do editor não sabe abrir: aviso, nunca erro. Bloquear
+    // a publicação deixaria o cliente preso num fluxo que ele não tem como
+    // consertar, por um desencontro de versão que é nosso. Ele é preservado no
+    // save, então publicar é seguro.
+    const naoSuportados = unsupportedNodeTypes(ns as { type?: string }[], isSupportedNodeType);
+    if (naoSuportados.length > 0) {
+      warnings.push(
+        `Este fluxo tem quadro que esta versão do editor não sabe abrir (${naoSuportados.join(', ')}). ` +
+        'Ele é salvo e publicado exatamente como está, sem alteração.',
+      );
     }
     return { errors, warnings };
   }
@@ -946,7 +1007,7 @@ function FlowEditor({ flow, allFlows, onBack, onSaved }: { flow: ApiFlow; allFlo
               {testTurns.map((t, i) => (
                 <div key={i} className="mb-1">
                   <span className="text-gray-400">você ›</span> {t.input}
-                  <div className="text-gray-600">→ {t.effects.map((e) => e.kind).join(', ') || '(nada)'} · próximo: {t.next}{t.aiPrompt ? ' (Iza assume)' : ''}</div>
+                  <div className="text-gray-600">→ {t.effects.map((e) => e.kind).join(', ') || '(nada)'} · próximo: {t.next}{t.aiPrompt ? ` (${agentName} assume)` : ''}</div>
                 </div>
               ))}
             </div>
@@ -1278,8 +1339,48 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
   type: string; data: any; otherFlows?: { id: string; name: string }[];
   onChange: (p: Record<string, any>) => void; onDelete: () => void;
 }) {
+  // Nome do agente do tenant (organization.settings.agentName), mesma fonte do
+  // AgentTrainingWidget. Nunca "Iza" hardcodado no painel do cliente.
+  const organization = useAuthStore((s) => s.organization);
+  const agentName: string = (organization?.settings as any)?.agentName || 'a IA';
+
   const meta = metaFor(type);
   const inputCls = 'w-full px-2 py-1.5 border border-gray-200 rounded text-xs outline-none focus:ring-2 focus:ring-primary-400';
+
+  // Tipo não suportado: somente-leitura. Todo campo deste painel é específico de
+  // um tipo, e este a tela não conhece; abrir os campos de 'message' aqui
+  // gravaria dado de mensagem num nó que não é mensagem. Só excluir continua
+  // disponível, porque é uma ação explícita e visível do usuário (ao contrário
+  // da coerção silenciosa que este painel fazia antes).
+  if (!isSupportedNodeType(type)) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[11px] px-2 py-0.5 rounded-md border bg-amber-50 border-amber-300 text-amber-800">
+            Nó não suportado
+          </span>
+          <button onClick={onDelete} className="p-1 text-gray-400 hover:text-red-500" title="Excluir nó"><Trash2 size={14} /></button>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 mb-3">
+          <p className="text-[11px] text-amber-800 leading-relaxed">
+            Este quadro é do tipo <code className="px-1 rounded bg-amber-100 font-mono">{type}</code>, que esta versão do
+            editor ainda não sabe abrir.
+          </p>
+          <p className="text-[11px] text-amber-800 leading-relaxed mt-1.5">
+            Salvar não altera este quadro: ele é gravado exatamente como está. Você pode mover ele e ligar caminhos nele.
+            Para editar o conteúdo, atualize a página. Se o aviso continuar, fale com o suporte.
+          </p>
+        </div>
+        <label className="block text-xs text-gray-600 mb-1">Rótulo</label>
+        <input
+          value={data?.label || ''}
+          disabled
+          className={`${inputCls} mb-3 bg-gray-50 text-gray-400 cursor-not-allowed`}
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -1302,7 +1403,7 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
 
       {type === 'ai' && (
         <>
-          <label className="block text-xs text-gray-600 mb-1">Instrução do passo (a Iza assume)</label>
+          <label className="block text-xs text-gray-600 mb-1">Instrução do passo ({agentName} assume)</label>
           <AutoGrowTextarea
             value={data?.prompt || ''}
             onChange={(v) => onChange({ prompt: v })}
@@ -1310,7 +1411,7 @@ function NodeProperties({ type, data, otherFlows, onChange, onDelete }: {
             className={`${inputCls} mb-2`}
           />
           <p className="text-[10px] text-gray-400 mt-1">
-            A Iza usa o modelo de IA automaticamente (otimizado pela ZappIQ) e reaproveita a identidade + conhecimento (RAG) que você treinou. Você não precisa escolher modelo.
+            O nó usa o modelo de IA automaticamente (otimizado pela ZappIQ): {agentName} reaproveita a identidade + conhecimento (RAG) que você treinou. Você não precisa escolher modelo.
           </p>
           <AiToolsFields
             tools={data?.tools as WebhookTool[] | undefined}
@@ -1520,13 +1621,15 @@ function FlowBlockNode({ data }: NodeProps) {
   );
 }
 
-function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, architecting, journeyNote, onExpandFull }: {
+function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, architecting, architectProgress, journeyNote, onExpandFull }: {
   flows: ApiFlow[];
   onBack?: () => void;
   onEditFlow: (f: ApiFlow) => void;
   inline?: boolean;
   onArchitect?: () => void;
   architecting?: boolean;
+  /** Progresso da arquitetura em curso (marcos reais do servidor). */
+  architectProgress?: MaestroProgressState | null;
   journeyNote?: string;
   onExpandFull?: () => void;
 }) {
@@ -1623,8 +1726,14 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
           {onArchitect && (
             <button onClick={onArchitect} disabled={architecting} className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
               {architecting ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              {architecting ? 'O Maestro está desenhando…' : 'Maestro, arquitete minha operação'}
+              {architecting ? 'Desenhando…' : 'Maestro, arquitete minha operação'}
             </button>
+          )}
+          {/* O caminho mais lento do produto: 6 fluxos em série + a malha de
+              handoffs, fácil passar de um minuto. Aqui a barra é o que separa
+              "está trabalhando" de "morreu". */}
+          {architecting && architectProgress && (
+            <div className="w-full max-w-sm"><MaestroProgressBar progress={architectProgress} /></div>
           )}
           <SaibaMais featureKey="flows.mapa-operacao.arquitetar" variant="link" />
         </div>
@@ -1769,6 +1878,11 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
         </div>
       </div>
       {journeyNote && <p className="text-sm text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">{journeyNote}</p>}
+      {/* Refazer a operação com o mapa já populado: o canvas antigo continua na
+          tela, então a barra aqui em cima é a única pista de que algo roda. */}
+      {architecting && architectProgress && flows.length > 0 && (
+        <div className="mb-3"><MaestroProgressBar progress={architectProgress} /></div>
+      )}
       {canvas}
       {extras}
       <p className="text-[11px] text-gray-400 mt-2">Dica: clique numa conexão pra editar a intenção que a dispara ou excluí-la. Cada Nó-IA já sai ciente dessas transições (handoff “quente”). O roteamento automático ao vivo entre fluxos chega na próxima atualização do Maestro.</p>
@@ -1778,7 +1892,8 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
 
 function ConsolidatedMap(props: {
   flows: ApiFlow[]; onBack?: () => void; onEditFlow: (f: ApiFlow) => void;
-  inline?: boolean; onArchitect?: () => void; architecting?: boolean; journeyNote?: string; onExpandFull?: () => void;
+  inline?: boolean; onArchitect?: () => void; architecting?: boolean;
+  architectProgress?: MaestroProgressState | null; journeyNote?: string; onExpandFull?: () => void;
 }) {
   return <ReactFlowProvider><ConsolidatedMapInner {...props} /></ReactFlowProvider>;
 }
@@ -1799,6 +1914,10 @@ export default function FlowsPage() {
   // MAESTRO INTELIGENTE 2.0 — Arquiteto de Jornada: desenha a operação inteira.
   const [architecting, setArchitecting] = useState(false);
   const [journeyNote, setJourneyNote] = useState('');
+  // Barra de progresso das duas gerações (marcos reais do servidor via Socket.io).
+  // Uma instância pra cada porque as duas podem ter UI aberta ao mesmo tempo.
+  const smartProgress = useMaestroProgress();
+  const journeyProgress = useMaestroProgress();
   // Atualização inteligente (Onda 3): treino mudou → sugerir + aplicar 1 clique
   const [refreshTarget, setRefreshTarget] = useState<ApiFlow | null>(null);
   const [refreshPreview, setRefreshPreview] = useState<FlowRefresh | null>(null);
@@ -1891,14 +2010,30 @@ export default function FlowsPage() {
   // MAESTRO INTELIGENTE: gera 1+ fluxos lendo TODO o ai-training do cliente.
   async function runSmart() {
     if (objectives.length === 0) { setError('Escolha pelo menos um objetivo.'); return; }
+    const isMulti = multiAgent && objectives.length > 1;
+    // Só vale como palpite pro caso de o Socket.io estar mudo: o servidor gera 1
+    // draft por objetivo no multi-agente, e só o principal quando desmarcado.
+    const drafts = isMulti ? objectives.length : 1;
+    const runId = smartProgress.start({
+      estimatedMs: drafts * smartProgress.estDraftMs,
+      label: 'Lendo o treinamento da sua IA',
+    });
     setGenerating(true); setError(null); setSmartDrafts(null);
     try {
       const res = await api.post<{ success: boolean; data: { drafts: FlowDraft[]; note: string } }>(
         '/api/flows/generate-smart',
-        { objectives, multiAgent: multiAgent && objectives.length > 1 },
+        { objectives, multiAgent: isMulti, runId },
       );
-      if (res?.data) { setSmartDrafts(res.data.drafts || []); setSmartNote(res.data.note || ''); }
+      if (res?.data) {
+        // 100% só depois que os drafts chegaram — e a barra fica visível um
+        // instante antes de a tela virar pros resultados.
+        await smartProgress.finish();
+        setSmartDrafts(res.data.drafts || []); setSmartNote(res.data.note || '');
+      } else {
+        smartProgress.reset();
+      }
     } catch (e: any) {
+      smartProgress.reset();
       setError(e?.message || 'O Maestro não conseguiu montar agora. Tente de novo.');
     } finally { setGenerating(false); }
   }
@@ -1953,20 +2088,38 @@ export default function FlowsPage() {
       const ok = window.confirm('O Maestro vai desenhar a operação completa (Atendimento, Qualificação, Agendamento, Vendas, FAQ, Pós-venda) e criar esses fluxos interligados. Os fluxos atuais continuam na lista. Seguir?');
       if (!ok) return;
     }
+    // A jornada monta a operação inteira (6 objetivos por padrão), então o palpite
+    // de fallback conta 6 drafts + a malha de handoffs.
+    const runId = journeyProgress.start({
+      estimatedMs: 7 * journeyProgress.estDraftMs,
+      label: 'Lendo o treinamento da sua IA',
+    });
     setArchitecting(true); setError(null); setJourneyNote('');
     try {
       const res = await api.post<{ success: boolean; data: { flows: { goal: string; draft: FlowDraft }[]; handoffs: { from: string; to: string; intent: string; why: string }[]; summary: string; note: string } }>(
-        '/api/flows/generate-journey', {},
+        '/api/flows/generate-journey', { runId },
       );
       const data = res?.data;
       if (!data || !Array.isArray(data.flows) || data.flows.length === 0) {
+        journeyProgress.reset();
         setError('O Maestro não conseguiu desenhar a operação agora. Tente de novo.');
         return;
       }
       // Persiste cada fluxo e mapeia objetivo → id criado (pra ligar os handoffs).
+      // O servidor já entregou a geração e parou a barra em ~97%; daqui pro fim
+      // quem sabe do progresso é o cliente, então os marcos saem do próprio loop.
       const goalToId: Record<string, string> = {};
       let firstId: string | null = null;
-      for (const jf of data.flows) {
+      for (let i = 0; i < data.flows.length; i++) {
+        const jf = data.flows[i];
+        journeyProgress.mark({
+          percent: 97 + (i / data.flows.length) * 2,
+          nextPercent: 97 + ((i + 1) / data.flows.length) * 2,
+          etaMs: 400,
+          label: 'Salvando os fluxos',
+          step: i + 1,
+          totalSteps: data.flows.length,
+        });
         const created = await api.post<{ success: boolean; data: ApiFlow }>('/api/flows', {
           name: jf.draft.name,
           triggerType: jf.draft.triggerType,
@@ -1986,14 +2139,17 @@ export default function FlowsPage() {
         if (s && t && s !== t) mapEdges.push({ id: `${s}-${t}`, source: s, target: t, label: h.intent, data: { why: h.why }, style: { stroke: '#6366F1' } });
       }
       // Salva o mapa (posições vazias → auto-layout). Preserva o resto do settings.
+      journeyProgress.mark({ percent: 99, nextPercent: 100, etaMs: 700, label: 'Salvando o mapa da operação' });
       try {
         const st = (await api.get<{ success: boolean; data: any }>('/api/settings'))?.data?.settings || {};
         await api.put('/api/settings', { settings: { ...st, consolidatedMap: { positions: {}, edges: mapEdges } } });
       } catch { /* fail-soft: fluxos já criados, mapa cai no default */ }
+      await journeyProgress.finish();
       setJourneyNote(`${data.summary || ''} ${data.note || ''}`.trim());
       setView('consolidated');
       load();
     } catch (e: any) {
+      journeyProgress.reset();
       setError(e?.message || 'O Maestro não conseguiu desenhar a operação agora.');
     } finally { setArchitecting(false); }
   }
@@ -2055,6 +2211,7 @@ export default function FlowsPage() {
         onEditFlow={(f) => setEditing(f)}
         onArchitect={runJourney}
         architecting={architecting}
+        architectProgress={journeyProgress.progress}
         journeyNote={journeyNote}
       />
     );
@@ -2165,6 +2322,7 @@ export default function FlowsPage() {
             onEditFlow={(f) => setEditing(f)}
             onArchitect={runJourney}
             architecting={architecting}
+            architectProgress={journeyProgress.progress}
             journeyNote={journeyNote}
             onExpandFull={() => setView('consolidated')}
           />
@@ -2237,11 +2395,19 @@ export default function FlowsPage() {
                   </div>
                 )}
 
+                {/* Gerar leva de ~20s a mais de um minuto (multi-agente). A barra
+                    mostra a etapa real e o quanto falta, pra ninguém ficar na
+                    dúvida entre "travou" e "está demorando mesmo". */}
+                {generating && smartProgress.progress && (
+                  <MaestroProgressBar progress={smartProgress.progress} />
+                )}
+
                 <div className="flex justify-end gap-2 pt-1">
                   <button onClick={() => setSmartOpen(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
                   <button onClick={runSmart} disabled={generating} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
                     {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                    {generating ? 'Pensando no seu negócio…' : 'Gerar com inteligência'}
+                    {/* A etapa detalhada vive na barra; aqui só o estado do botão. */}
+                    {generating ? 'Gerando…' : 'Gerar com inteligência'}
                   </button>
                 </div>
               </div>

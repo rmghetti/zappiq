@@ -12,6 +12,7 @@ import { resolveFlowStep, type FlowGraph, type FlowState, type EvalContext, type
 import { loadBusinessContext, extractJson } from './flowGenerator.js';
 import { llmRouter } from '../services/llm/LLMRouter.js';
 import { runJudge } from '../services/agentEvalRunner.js';
+import { resolveTenantAgentProfile } from './tenantAgentProfile.js';
 import { logger } from '../utils/logger.js';
 
 export interface Persona {
@@ -230,6 +231,10 @@ export async function executeFlowSimulation(input: {
   const ctx = await loadBusinessContext(organizationId).catch(() => ({ brief: '' } as any));
   const personas = await generateSyntheticPersonas(ctx.brief || '', input.personaCount ?? 3, organizationId);
 
+  // O juiz precisa saber de quem é o agente que ele está julgando. Sem isso ele
+  // avalia o fluxo do cliente com o contexto comercial errado.
+  const profile = await resolveTenantAgentProfile(organizationId);
+
   const results: ConversationResult[] = [];
   for (const persona of personas) {
     try {
@@ -240,6 +245,7 @@ export async function executeFlowSimulation(input: {
           runJudge(
             `Atender bem um cliente cujo objetivo é: ${p.intent} (dor: ${p.painPoint}). O bot deve ser útil, claro e conduzir a conversa.`,
             lastBot(history),
+            profile,
           ),
         buildCtx: () => DEFAULT_CTX,
         maxTurns: 6,

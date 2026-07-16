@@ -5,7 +5,13 @@ primary_region = "gru"
 # Dockerfile usa COPY services/rag/ — precisa de contexto na raiz do monorepo.
 # flyctl deploy --remote-only roda o build no Fly Builders com contexto cwd.
 # Rodar: cd <raiz-monorepo> && flyctl deploy --config services/rag/fly.toml
-dockerfile = "services/rag/Dockerfile"
+#
+# O valor e "Dockerfile", nao "services/rag/Dockerfile": o flyctl resolve este
+# caminho a partir da PASTA DESTE fly.toml, entao "services/rag/Dockerfile"
+# virava services/rag/services/rag/Dockerfile e o deploy morria com
+# "dockerfile not found" (medido no flyctl v0.4.69). O contexto do build
+# continua sendo o cwd (a raiz do monorepo), que e o que o COPY acima precisa.
+dockerfile = "Dockerfile"
 
 [checks.health]
 grace_period = "30s"

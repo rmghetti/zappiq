@@ -53,6 +53,33 @@ const envSchema = z.object({
   BRAVE_API_KEY: z.string().optional(),
   FIRECRAWL_API_KEY: z.string().optional(),
 
+  // Mira Prospects — descoberta B2B via BigQuery (base de CNPJ da Base dos
+  // Dados: basedosdados.br_me_cnpj.estabelecimentos). Fonte confiável que não
+  // depende do servidor de download da Receita. Opcional: sem a service
+  // account, a descoberta cai para índice local/busca. Custo protegido por
+  // BIGQUERY_MAX_GB (teto de bytes por consulta; ver doc 10 do estudo).
+  //   - GOOGLE_APPLICATION_CREDENTIALS_JSON: JSON da service account (secret)
+  //   - BIGQUERY_PROJECT_ID: projeto de cobrança/consulta (ex.: zappiq-prod)
+  GOOGLE_APPLICATION_CREDENTIALS_JSON: z.string().optional(),
+  BIGQUERY_PROJECT_ID: z.string().optional(),
+  BIGQUERY_MAX_GB: z.coerce.number().default(8), // teto duro de GB varridos por consulta na descoberta (tabela espelho, barata)
+  // Espelho mensal da base de CNPJ. A tabela pública da Base dos Dados exige
+  // assinatura BD Pro e cada consulta direta varre a partição inteira (~50-76 GB,
+  // por causa da row access policy do BD Pro). Por isso materializamos 1x/mês só
+  // as empresas ATIVAS numa tabela NOSSA (BIGQUERY_MIRROR_TABLE), corretamente
+  // clusterizada, e a descoberta consulta ESSA tabela (fração de centavo). Ver doc 10.
+  BIGQUERY_MIRROR_TABLE: z.string().default('mira.cnpj_ativos'),
+  BIGQUERY_MIRROR_MAX_GB: z.coerce.number().default(120), // teto do job mensal de materialização (varre a partição inteira)
+  // Diretório de municípios do BD (5.570 linhas): traduz o `id_municipio` (IBGE)
+  // que o espelho guarda para o NOME da cidade. Tabela pública e minúscula; o
+  // JOIN no enriquecimento custa praticamente nada e evita carregar um
+  // dicionário estático de 5.570 entradas no repositório.
+  BIGQUERY_MUNICIPIOS_TABLE: z.string().default('basedosdados.br_bd_diretorios_brasil.municipio'),
+  // Diretório de CNAE do BD: traduz o código da atividade para a descrição. Sem
+  // ela o prompt manda só o número e a IA adivinha o setor (e erra: escreveu o
+  // dossiê de uma fundição de ferro como "joalheria" em 15/07/2026).
+  BIGQUERY_CNAE_TABLE: z.string().default('basedosdados.br_bd_diretorios_brasil.cnae_2'),
+
   // WhatsApp
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().optional(),

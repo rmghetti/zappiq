@@ -59,6 +59,15 @@ router.post('/:id/documents', async (req: Request, res: Response, next: NextFunc
     const { title, sourceType, sourceUrl, content } = req.body;
     if (!title || !content) { res.status(400).json({ error: 'title and content required' }); return; }
 
+    // Tenant scoping: só cria documento se a base (req.params.id) pertence à
+    // org do usuário. Sem isso, um cliente escrevia na base RAG de outra org.
+    // 404 (não 403) para não revelar a existência de bases de outras orgs.
+    const kb = await prisma.knowledgeBase.findFirst({
+      where: { id: req.params.id, organizationId: req.organizationId! },
+      select: { id: true },
+    });
+    if (!kb) { res.status(404).json({ error: 'Knowledge base not found' }); return; }
+
     // Camada 2 — limite de docs na base RAG (plano + addons). audit_only default.
     const docCount = await prisma.kBDocument.count({
       where: { knowledgeBase: { organizationId: req.organizationId! } },
@@ -93,6 +102,15 @@ router.post('/:id/documents', async (req: Request, res: Response, next: NextFunc
 // DELETE /api/kb/:id/documents/:docId
 router.delete('/:id/documents/:docId', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Tenant scoping: só apaga se o documento pertence a uma base RAG da org
+    // do usuário. Sem isso, um cliente apagava documento de QUALQUER org.
+    // 404 (não 403) para não revelar a existência de recursos de outras orgs.
+    const doc = await prisma.kBDocument.findFirst({
+      where: { id: req.params.docId, knowledgeBase: { organizationId: req.organizationId! } },
+      select: { id: true },
+    });
+    if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
+
     await prisma.kBDocument.delete({ where: { id: req.params.docId } });
     ragService.deleteDocument(req.organizationId!, req.params.docId).catch(() => {});
     res.json({ success: true, message: 'Document deleted' });

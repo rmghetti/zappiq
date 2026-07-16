@@ -6,7 +6,21 @@ import type { TemplateRichInfo } from '../../lib/templateVerticalMapping';
 interface FlowNode {
   id: string;
   type: string;
-  data: { label: string; message?: string; intent?: string; action?: string; [k: string]: any };
+  data: {
+    label: string;
+    /** Campos do vocabulário do motor (flowEngine.ts). */
+    text?: string;
+    question?: string;
+    prompt?: string;
+    tag?: string;
+    field?: string;
+    interactive?: { type: 'button' | 'list'; options: { id: string; title: string }[] };
+    /** Vocabulário antigo — só aparece em linha ainda não regravada pelo bootstrap. */
+    message?: string;
+    intent?: string;
+    action?: string;
+    [k: string]: any;
+  };
 }
 
 interface Template {
@@ -29,14 +43,48 @@ interface FlowTemplatePreviewModalProps {
   onUse: () => void;
 }
 
+// Mesmo vocabulário do editor (flows/page.tsx NODE_META) e do motor
+// (flowEngine.ts). O preview mostra exatamente o que o cliente vai receber ao
+// duplicar — se divergir daqui, volta o bug de "preview bonito, fluxo vazio".
 const NODE_TYPE_META: Record<string, { color: string; icon: string; label: string }> = {
-  input:          { color: 'bg-slate-100 text-slate-700 border-slate-300', icon: '*', label: 'Gatilho' },
-  message:        { color: 'bg-blue-50 text-blue-700 border-blue-200', icon: '>', label: 'Mensagem' },
-  ai_node:        { color: 'bg-violet-50 text-violet-700 border-violet-200', icon: '~', label: 'Iza responde (IA)' },
-  condition:      { color: 'bg-amber-50 text-amber-700 border-amber-200', icon: '?', label: 'Condicao' },
-  action:         { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: '+', label: 'Ação' },
-  human_handoff:  { color: 'bg-orange-50 text-orange-700 border-orange-200', icon: '@', label: 'Humano assume' },
+  start:       { color: 'bg-slate-100 text-slate-700 border-slate-300', icon: '*', label: 'Início' },
+  message:     { color: 'bg-blue-50 text-blue-700 border-blue-200', icon: '>', label: 'Mensagem' },
+  condition:   { color: 'bg-amber-50 text-amber-700 border-amber-200', icon: '?', label: 'Condição' },
+  ask:         { color: 'bg-sky-50 text-sky-700 border-sky-200', icon: '?', label: 'Perguntar e capturar' },
+  ai:          { color: 'bg-violet-50 text-violet-700 border-violet-200', icon: '~', label: 'Nó-IA' },
+  tag:         { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: '+', label: 'Marcar tag' },
+  update_lead: { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: '+', label: 'Atualizar lead' },
+  transfer:    { color: 'bg-orange-50 text-orange-700 border-orange-200', icon: '@', label: 'Humano assume' },
+  wait:        { color: 'bg-slate-50 text-slate-700 border-slate-200', icon: '.', label: 'Aguardar' },
+  schedule:    { color: 'bg-slate-50 text-slate-700 border-slate-200', icon: '.', label: 'Agendar retomada' },
+  goto_flow:   { color: 'bg-orange-50 text-orange-700 border-orange-200', icon: '>', label: 'Enviar para outro fluxo' },
+  // Vocabulário antigo — some quando o upsert do bootstrap regravar as linhas
+  // legadas (apps/api/src/bootstrap/seedFlowTemplates.ts). Mantido pra que uma
+  // linha antiga apareça pelo que ela é, não como "Mensagem".
+  input:         { color: 'bg-slate-100 text-slate-700 border-slate-300', icon: '*', label: 'Gatilho (formato antigo)' },
+  ai_node:       { color: 'bg-violet-50 text-violet-700 border-violet-200', icon: '~', label: 'IA responde (formato antigo)' },
+  action:        { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: '+', label: 'Ação (formato antigo)' },
+  human_handoff: { color: 'bg-orange-50 text-orange-700 border-orange-200', icon: '@', label: 'Humano assume (formato antigo)' },
 };
+
+/** Fallback honesto: mostra o tipo cru em vez de fingir que é "Mensagem". */
+function metaFor(type: string) {
+  return NODE_TYPE_META[type] ?? { color: 'bg-slate-50 text-slate-500 border-slate-200', icon: '?', label: type };
+}
+
+// Mesma sintaxe do renderTemplate do motor (apps/api/src/agents/flowInterpolate.ts).
+const TOKEN = /\{\{\s*([a-zA-Z0-9_$.]+)\s*(?:\|\s*"([^"]*)"\s*)?\}\}/g;
+
+/**
+ * Deixa o texto legível no preview: o cliente é dono de clínica, não programador,
+ * e não deveria ver {{system.businessName | "clínica"}} na vitrine. Mostra o
+ * fallback (o mesmo que o motor usaria sem o dado) ou o nome da variável.
+ */
+function textoLegivel(texto: string): string {
+  return texto.replace(TOKEN, (_m, caminho: string, fallback?: string) =>
+    fallback ?? caminho.split('.').pop() ?? '',
+  );
+}
 
 export function FlowTemplatePreviewModal({
   template, richInfo, verticalLabel, categoryLabel, duplicating, onClose, onUse,
@@ -145,10 +193,15 @@ export function FlowTemplatePreviewModal({
 
           {/* Estrutura do fluxo */}
           <div>
-            <h3 className="text-sm font-bold text-slate-900 mb-3">Estrutura do fluxo ({template.nodes.length} nos)</h3>
+            <h3 className="text-sm font-bold text-slate-900 mb-3">Estrutura do fluxo ({template.nodes.length} nós)</h3>
             <div className="space-y-2">
               {template.nodes.map((node, i) => {
-                const meta = NODE_TYPE_META[node.type] || NODE_TYPE_META.message;
+                const meta = metaFor(node.type);
+                // data.text é o campo que o motor lê; data.message é o formato
+                // antigo, ainda possível numa linha não regravada.
+                const texto = node.data?.text ?? node.data?.message;
+                const instrucao = node.data?.prompt ?? node.data?.intent;
+                const botoes = node.data?.interactive?.options ?? [];
                 return (
                   <div key={node.id} className={`flex items-start gap-3 p-3 rounded-lg border ${meta.color}`}>
                     <div className="w-7 h-7 rounded-full bg-white border border-current/30 flex items-center justify-center text-xs font-bold shrink-0">
@@ -159,14 +212,25 @@ export function FlowTemplatePreviewModal({
                         <span className="text-xs font-semibold">{meta.label}</span>
                         <span className="text-sm font-medium text-slate-900">{node.data.label}</span>
                       </div>
-                      {node.data.message && (
-                        <p className="text-xs text-slate-600 italic">&ldquo;{node.data.message}&rdquo;</p>
+                      {texto && (
+                        <p className="text-xs text-slate-600 italic">&ldquo;{textoLegivel(texto)}&rdquo;</p>
                       )}
-                      {node.data.intent && (
-                        <p className="text-xs text-slate-600">Intent: {node.data.intent}</p>
+                      {node.data?.question && (
+                        <p className="text-xs text-slate-600 italic">&ldquo;{textoLegivel(node.data.question)}&rdquo;</p>
                       )}
-                      {node.data.action && (
-                        <p className="text-xs text-slate-600">Ação: <code className="bg-white/60 px-1 rounded">{node.data.action}</code></p>
+                      {instrucao && (
+                        <p className="text-xs text-slate-600">Instrução: {instrucao}</p>
+                      )}
+                      {node.data?.tag && (
+                        <p className="text-xs text-slate-600">Tag: <code className="bg-white/60 px-1 rounded">{node.data.tag}</code></p>
+                      )}
+                      {node.data?.field && (
+                        <p className="text-xs text-slate-600">Grava no CRM: <code className="bg-white/60 px-1 rounded">{node.data.field}</code></p>
+                      )}
+                      {botoes.length > 0 && (
+                        <p className="text-xs text-slate-600">
+                          Botões: {botoes.map((o) => o.title).join(' · ')}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -179,7 +243,7 @@ export function FlowTemplatePreviewModal({
         {/* Footer com CTA */}
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
           <p className="text-xs text-slate-500">
-            Ao usar, o template e copiado pro seu Maestro como rascunho. Você pode editar antes de publicar.
+            Ao usar, o template é copiado pro seu Maestro como rascunho. Você pode editar antes de publicar.
           </p>
           <div className="flex gap-2">
             <button onClick={onClose}

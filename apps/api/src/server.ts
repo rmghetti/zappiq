@@ -38,6 +38,7 @@ import miraRoutes from './routes/mira.js';
 import miraAccessRoutes from './routes/miraAccess.js';
 import { requireMira } from './middleware/requireMira.js';
 import { initMiraReleasesCronJob } from './services/mira/releasesCron.js'; // Mira — Releases dos Alvos (semanal)
+import { initCnpjMirrorSyncCronJob } from './services/mira/cnpjMirrorSync.js'; // Mira — espelho mensal da base de CNPJ (BigQuery)
 import analyticsRoutes from './routes/analytics.js';
 import flowsRoutes from './routes/flows.js';
 import flowTemplatesRoutes from './routes/flowTemplates.js';
@@ -71,7 +72,7 @@ import adminClientesRoutes from './routes/adminClientes.js'; // Área Clientes F
 import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-page site usa Iza real
 import adminIzaFactsRoutes from './routes/adminIzaFacts.js'; // FASE 4 P7+ Admin Camada 2 CRUD
 import { initRetentionJob } from './services/retentionService.js';
-import { bootstrapFlowTemplatesIfEmpty } from './bootstrap/seedFlowTemplates';
+import { bootstrapFlowTemplates } from './bootstrap/seedFlowTemplates';
 
 import { initTenantUsageJob } from './services/tenantUsageService.js'; // PR #149 — H10 unit economics
 import { initUsageReconciliationJob } from './services/usageReconciliationService.js'; // PR #149 — Quota Mgmt #6 audit-only
@@ -398,6 +399,11 @@ initMiraReleasesCronJob().catch((err) => {
   logger.error('[Server] Failed to initialize mira releases cron job:', err);
 });
 
+// ── Mira Prospects: espelho mensal da base de CNPJ (dia 1, 06:00 UTC) ──
+initCnpjMirrorSyncCronJob().catch((err) => {
+  logger.error('[Server] Failed to initialize mira cnpj mirror cron job:', err);
+});
+
 // ── Área Clientes Fase 1: expiração de trial + recompute lifecycle (03:40 UTC) ──
 initTrialExpirationCronJob().catch((err) => {
   logger.error('[Server] Failed to initialize trial expiration cron job:', err);
@@ -418,7 +424,7 @@ app.use(errorHandler);
 
 // ── Start Server ────────────────────────────────
 // Auto-seed flow_templates se vazia (bootstrap idempotente)
-bootstrapFlowTemplatesIfEmpty().catch((err) => console.error('[bootstrap] error:', err));
+bootstrapFlowTemplates().catch((err) => console.error('[bootstrap] error:', err));
 
 httpServer.listen(env.PORT, () => {
   logger.info(`[Server] ZappIQ API v2 running on port ${env.PORT}`);

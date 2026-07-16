@@ -16,6 +16,8 @@ import {
   pixAllowedForTier,
 } from '../services/asaasPix.js';
 import { sendReplyText } from '../services/channelDispatcher.js';
+import { updateImpulsoCampaignSchema } from './impulso.schema.js';
+import { precisaAprovacao, montarTarefaAprovacao } from '../services/impulsoAprovacao.js';
 
 /** Instagram só entra numa campanha se a org tiver o IG conectado (política Meta + requisito de plano). */
 async function orgHasInstagram(orgId: string): Promise<boolean> {
@@ -118,6 +120,26 @@ router.post('/', validate(createSchema), async (req: Request, res: Response, nex
         status: scheduledAt ? 'SCHEDULED' : 'DRAFT',
       },
     });
+
+    // Co-Piloto (autonomyLevel padrão 2, "a IA propõe e o humano aprova") nunca
+    // teve um lugar pra pedir essa aprovação — a campanha ficava em DRAFT/
+    // SCHEDULED só visível pra quem entrasse na tela e notasse. Isto é um
+    // LEMBRETE: concluir a tarefa NÃO publica a campanha, e não bloqueia o
+    // disparo automático de uma campanha agendada (ver impulsoAprovacao.ts).
+    if (precisaAprovacao(campaign)) {
+      const { title, description, dueDate } = montarTarefaAprovacao(campaign);
+      await prisma.task.create({
+        data: {
+          title,
+          description,
+          dueDate,
+          origem: 'IMPULSO' as any,
+          campaignId: campaign.id,
+          organizationId: req.organizationId!,
+        },
+      });
+    }
+
     res.status(201).json({ success: true, data: campaign });
   } catch (err) {
     next(err);
@@ -144,7 +166,15 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 // PUT /api/impulso/:id
 router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = { ...req.body };
+    // Whitelist .strict() anti mass assignment: bloqueia organizationId (troca de
+    // tenant), isImpulso (flag do módulo), contadores de métrica e a copy (message)
+    // de campanhas alheias. Só os campos editáveis do Impulso passam.
+    const parsed = updateImpulsoCampaignSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Payload de campanha inválido', details: parsed.error.flatten() });
+      return;
+    }
+    const data: Record<string, any> = { ...parsed.data };
     // Mesmo gate de Instagram na edição: nunca deixa uma campanha passar a
     // mirar o IG sem a org ter o Instagram conectado.
     if (data.channels !== undefined) {

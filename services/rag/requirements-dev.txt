@@ -1,0 +1,17 @@
+# Dependencias so de teste. NAO entram na imagem de producao — o Dockerfile
+# instala apenas requirements.txt, e pytest no runtime do Fly seria peso morto.
+#
+# Uso local:
+#   cd services/rag
+#   python3.12 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements-dev.txt
+#   pytest
+#
+# Python 3.12 nao e opcional: main.py usa sintaxe `X | None` em annotation
+# avaliada em runtime, que quebra no 3.9 do macOS. Mesma versao do Dockerfile
+# (ARG PYTHON_VERSION=3.12) e do CI.
+-r requirements.txt
+
+pytest==8.3.3
+# httpx (fastapi.testclient.TestClient) ja vem de requirements.txt — mesma
+# versao que o servico usa pra falar com Voyage/OpenAI.

@@ -19,9 +19,11 @@ import { prisma } from '@zappiq/database';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { fetchCnpj } from './cnpj.js';
-import { buscarReleasesPublicos } from './releasesPublico.js';
+import { buscarReleasesPublicos, persistirPegadaPublica } from './releasesPublico.js';
 import { buscaPublicaDisponivel } from './buscaPublica.js';
 import { getMiraEntitlement } from '../../middleware/requireMira.js';
+import { reavaliarAlvo } from './reavaliar.js';
+import { alertarReleasesDoAlvo } from './releasesAlerta.js';
 
 const redisUrl = new URL(env.REDIS_URL);
 const isTLS = env.REDIS_URL.startsWith('rediss://');
@@ -117,6 +119,10 @@ export async function runMiraReleasesCycle(): Promise<{
   organizationsProcessed: number;
   alvosChecked: number;
   releasesCreated: number;
+  demandasCreated: number;
+  oportunidadesCreated: number;
+  scoresMovidos: number;
+  alertasCriados: number;
   failed: number;
   durationMs: number;
 }> {
@@ -125,7 +131,12 @@ export async function runMiraReleasesCycle(): Promise<{
   let alvosChecked = 0;
   let releasesCreated = 0;
   let publicReleasesCreated = 0;
+  let demandasCreated = 0;
+  let oportunidadesCreated = 0;
+  let scoresMovidos = 0;
+  let alertasCriados = 0;
   let globalBuscasPublicas = 0;
+  let fontesFalharam = 0;
   let failed = 0;
 
   const orgs = await prisma.organization.findMany({ select: { id: true } });
@@ -137,9 +148,14 @@ export async function runMiraReleasesCycle(): Promise<{
 
       const perfil = await (prisma as any).miraPerfil.findUnique({
         where: { organizationId: org.id },
-        select: { catalogo: true },
+        select: { catalogo: true, doresResolvidas: true, alvoB2B: true },
       });
       const catalogo: { nome: string }[] = Array.isArray(perfil?.catalogo) ? perfil.catalogo : [];
+      // Sinais do Perfil que calibram a relevancia (dores + sinais de intencao).
+      const sinaisPerfil = {
+        doresResolvidas: Array.isArray(perfil?.doresResolvidas) ? perfil.doresResolvidas : [],
+        sinaisIntencao: Array.isArray(perfil?.alvoB2B?.sinaisIntencao) ? perfil.alvoB2B.sinaisIntencao : [],
+      };
       let alvosBuscaFeitas = 0;
 
       const alvos = await (prisma as any).miraAlvo.findMany({
@@ -166,7 +182,7 @@ export async function runMiraReleasesCycle(): Promise<{
               select: { id: true },
             });
             if (jaExiste) continue;
-            await (prisma as any).miraRelease.create({
+            await prisma.miraRelease.create({
               data: {
                 organizationId: org.id,
                 alvoId: alvo.id,
@@ -181,7 +197,7 @@ export async function runMiraReleasesCycle(): Promise<{
             releasesCreated++;
           }
           // Atualiza o snapshot do alvo com o estado atual (próximo diff é incremental)
-          await (prisma as any).miraAlvo.update({
+          await prisma.miraAlvo.update({
             where: { id: alvo.id },
             data: { situacaoCadastral: atual.situacaoCadastral, porte: atual.porte },
           });
@@ -195,34 +211,42 @@ export async function runMiraReleasesCycle(): Promise<{
           ) {
             alvosBuscaFeitas++;
             try {
-              const { drafts, buscas } = await buscarReleasesPublicos(org.id, alvo, catalogo);
-              globalBuscasPublicas += buscas;
-              for (const d of drafts) {
-                const dup = await (prisma as any).miraRelease.findFirst({
-                  where: { alvoId: alvo.id, url: d.url, createdAt: { gte: new Date(Date.now() - 45 * 86400000) } },
-                  select: { id: true },
-                });
-                if (dup) continue;
-                await (prisma as any).miraRelease.create({
-                  data: {
-                    organizationId: org.id,
-                    alvoId: alvo.id,
-                    titulo: d.titulo,
-                    resumo: d.resumo,
-                    url: d.url,
-                    relevancia: d.relevancia,
-                    anguloAbordagem: d.anguloAbordagem,
-                    produtoRelacionado: d.produtoRelacionado,
-                    confianca: d.confianca,
-                  },
-                });
-                releasesCreated++;
-                publicReleasesCreated++;
-              }
+              const pegada = await buscarReleasesPublicos(org.id, alvo, catalogo, sinaisPerfil);
+              globalBuscasPublicas += pegada.buscas;
+              // `erro` = a busca quebrou (fonte fora do ar), não que a conta
+              // não publicou nada. O cron não aborta por isso (seguem outros
+              // Alvos/orgs), mas loga separado do "0 achado de verdade" para
+              // não maquiar fonte quebrada de mercado quieto.
+              if (pegada.erro) fontesFalharam++;
+              // Grava o dossiê INTEIRO, pelo mesmo caminho do "Aprofundar com
+              // IA". Antes o cron só gravava os releases e descartava a demanda
+              // e o incumbente que a MESMA chamada de LLM já tinha produzido.
+              const p = await persistirPegadaPublica(org.id, alvo.id, pegada);
+              releasesCreated += p.releases;
+              publicReleasesCreated += p.releases;
+              demandasCreated += p.demandasDeRelease + p.demandasEvidenciadas;
+              oportunidadesCreated += p.oportunidades;
             } catch (e) {
               logger.warn(`[MiraReleases] pegada publica alvo=${alvo.id} falhou: ${String(e)}`);
             }
           }
+
+          // ── O ciclo semanal fecha aqui, e até 15/07/2026 não fechava ──
+          // O cron gravava a linha e ia embora: o score do Alvo só se movia se
+          // alguém clicasse em "Aprofundar com IA" à mão. Ou seja, o
+          // monitoramento automático achava a novidade e a NOTA não mudava.
+          //
+          // A reavaliação lê a evidência do BANCO (não daqui), então o que
+          // acabou de ser gravado acima já conta, e este caminho chega no mesmo
+          // resultado do botão. Nunca lança (devolve null se falhar).
+          const rev = await reavaliarAlvo(org.id, alvo.id);
+          if (rev && rev.scoreDepois !== rev.scoreAntes) scoresMovidos++;
+
+          // Sinaliza o cliente. Só o release acionável vira tarefa (a regra de
+          // spam mora no serviço), e `alertadoEm` garante que a mesma matéria
+          // nunca é avisada duas vezes.
+          const alerta = await alertarReleasesDoAlvo(org.id, alvo);
+          if (alerta.taskId) alertasCriados++;
           await sleep(PAUSA_ENTRE_LOOKUPS_MS);
         } catch (e) {
           failed++;
@@ -237,9 +261,22 @@ export async function runMiraReleasesCycle(): Promise<{
 
   const durationMs = Date.now() - startedAt;
   logger.info(
-    `[MiraReleases] ciclo: orgs=${orgsProcessed} alvos=${alvosChecked} releases=${releasesCreated} (publicos=${publicReleasesCreated}, buscas=${globalBuscasPublicas}) falhas=${failed} em ${durationMs}ms`
+    `[MiraReleases] ciclo: orgs=${orgsProcessed} alvos=${alvosChecked} releases=${releasesCreated} ` +
+      `(publicos=${publicReleasesCreated}, buscas=${globalBuscasPublicas}, fontesFalharam=${fontesFalharam}) ` +
+      `demandas=${demandasCreated} oportunidades=${oportunidadesCreated} scoresMovidos=${scoresMovidos} ` +
+      `alertas=${alertasCriados} falhas=${failed} em ${durationMs}ms`
   );
-  return { organizationsProcessed: orgsProcessed, alvosChecked, releasesCreated, failed, durationMs };
+  return {
+    organizationsProcessed: orgsProcessed,
+    alvosChecked,
+    releasesCreated,
+    demandasCreated,
+    oportunidadesCreated,
+    scoresMovidos,
+    alertasCriados,
+    failed,
+    durationMs,
+  };
 }
 
 export async function initMiraReleasesCronJob(): Promise<void> {

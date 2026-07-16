@@ -149,14 +149,18 @@ model Organization {
   name                      String
   slug                      String   @unique
   plan                      PlanType @default(STARTER)
-  whatsappPhoneNumberId     String?
+  // @unique: o webhook de entrada roteia a mensagem do lead para a org dona
+  // deste phone_number_id. Sem unicidade, duas orgs podiam registrar o mesmo
+  // id e o roteamento (findFirst) mandava o lead pra org errada (14/07/2026).
+  // Postgres permite múltiplos NULL num unique, então orgs sem canal seguem ok.
+  whatsappPhoneNumberId     String?  @unique
   whatsappBusinessAccountId String?
   whatsappAccessToken       String?
   // FASE 4 (#251) — Instagram Direct Messaging via Meta Graph API.
   // instagramAccountId: ID da IG Business Account (ex: 17841...)
   // instagramPageId: Facebook Page ID linkada à conta IG (necessária pelo Meta)
   // instagramAccessToken: Page Access Token de longa duração (60 dias, renovável)
-  instagramAccountId        String?  @map("instagram_account_id")
+  instagramAccountId        String?  @unique @map("instagram_account_id")
   instagramPageId           String?  @map("instagram_page_id")
   instagramAccessToken      String?  @map("instagram_access_token") @db.Text
   // Self-serve "traga seu token": app secret do app Meta DO CLIENTE, usado pra
@@ -228,6 +232,7 @@ model Organization {
   pipelineStages          PipelineStage[]
   activities              Activity[]
   tasks                   Task[]
+  taskTags                TaskTag[]
   flowNodeStats           FlowNodeStat[]
   campaignVariants        CampaignVariant[] // Impulso — braços de bandit
   campaignNodeStats       CampaignNodeStat[] // Impulso — funil por nó
@@ -243,6 +248,7 @@ model Organization {
   // Mira Prospects — inteligência de oportunidades (add-on)
   miraPerfil              MiraPerfil?
   miraAlvos               MiraAlvo[]
+  miraCampanhas           MiraCampanha[]
   miraReleases            MiraRelease[]
   miraUsageMonthly        MiraUsageMonthly[]
 
@@ -400,6 +406,7 @@ model User {
   organizationId        String
   organization          Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedConversations Conversation[]
+  assignedTasks         Task[]         @relation("AssignedTasks")
   deletedConversations  Conversation[] @relation("DeletedConversations")
   messages              Message[]
   auditLogs             AuditLog[]
@@ -474,6 +481,7 @@ model Conversation {
   sourceDeals      Deal[]             @relation("DealSourceConversation")
   internalNotes    InternalNote[]
   activities       Activity[]
+  tasks            Task[]
   currentFlowState Json?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
@@ -560,6 +568,7 @@ model Campaign {
   nodeStats       CampaignNodeStat[]
   attributions    CampaignAttribution[]
   consents        CampaignConsent[]
+  tasks           Task[]
 
   @@index([organizationId])
   @@index([status])
@@ -976,8 +985,13 @@ enum ActorType {
   SYSTEM
 }
 
+/// IN_PROGRESS entrou em 15/07/2026 com o quadro de tarefas: sem ele o quadro
+/// teria duas colunas ("a fazer" e "feito") e a pessoa não teria onde dizer que
+/// pegou a tarefa. É um status INTERMEDIÁRIO — não conclui nada, então
+/// completedAt continua null (ver resolveCompletedAt).
 enum TaskStatus {
   PENDING
+  IN_PROGRESS
   DONE
   CANCELLED
 }
@@ -1040,12 +1054,42 @@ model Task {
   description    String?
   status         TaskStatus   @default(PENDING)
   dueDate        DateTime?
+  /// O que o HUMANO anota enquanto executa. Deliberadamente separado de
+  /// `description`: aquela é o texto que a IA escreveu (o plano de ação, o
+  /// alerta do release) e reescrevê-la apagaria a instrução original.
+  notes          String?
   assignedToId   String?
+  /// Relação que faltava até 15/07/2026: `assignedToId` existia como String
+  /// solta desde o começo, sem FK, sem include e sem ninguém escrevendo (só o
+  /// seed). Toda tarefa nascia sem dono, então "minhas tarefas" não existia.
+  assignedTo     User?        @relation("AssignedTasks", fields: [assignedToId], references: [id], onDelete: SetNull)
+  tags           TaskTagOnTask[]
   completedAt    DateTime?
   contactId      String?
   contact        Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
   dealId         String?
   deal           Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  /// Conversa que gerou a tarefa (16/07/2026). O TaskPanel já tinha o link
+  /// "ver a conversa" pronto na intenção, mas o dado nunca foi persistido —
+  /// crmAutomationService já recebe `conversationId` e o usa nas Activity
+  /// vizinhas, só não estava aqui. SetNull: LGPD pode anonimizar/apagar a
+  /// conversa e a tarefa (o trabalho do vendedor) continua existindo.
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  /// Campanha do Zap Impulso que esta tarefa cobra aprovação (16/07/2026).
+  /// SetNull: apagar a campanha não deveria apagar o registro de que alguém
+  /// precisou revisar algo.
+  campaignId     String?
+  campaign       Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  /// De onde veio a tarefa. Até 15/07/2026 TODA Task nascia das Conversas
+  /// (crmAutomationService, quando a IA detecta intenção de compra), então a
+  /// origem era implícita. Com o Mira gerando tarefa de plano de ação, a tela
+  /// precisa dizer de onde cada uma veio: são trabalhos diferentes (responder
+  /// alguém que chamou x prospectar alguém que nem sabe que você existe).
+  origem         TaskOrigem   @default(CONVERSA)
+  /// Alvo do Mira que gerou esta tarefa (id solto, sem cascade: a tarefa é do
+  /// vendedor e não some se o Alvo for arquivado).
+  miraAlvoId     String?
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdAt      DateTime     @default(now())
@@ -1054,9 +1098,58 @@ model Task {
   @@index([organizationId])
   @@index([contactId])
   @@index([dealId])
+  @@index([conversationId])
+  @@index([campaignId])
   @@index([status])
   @@index([assignedToId])
+  @@index([miraAlvoId])
   @@map("tasks")
+}
+
+/// Origem de uma tarefa. CONVERSA é o default por compatibilidade: toda Task
+/// que já existia no banco nasceu das Conversas. IMPULSO entrou 16/07/2026:
+/// pedir aprovação de campanha não é "responder quem chamou" nem "prospectar" —
+/// é revisar o que a IA vai enviar em nome da conta antes de sair.
+enum TaskOrigem {
+  CONVERSA
+  MIRA
+  IMPULSO
+}
+
+/// Etiqueta de tarefa, por CATÁLOGO da org (decisão do Rodrigo em 15/07/2026:
+/// não é texto livre). Texto livre viraria "Urgente", "urgente" e "URGENTE" na
+/// mesma conta e o filtro por etiqueta — que é o motivo de existir da etiqueta —
+/// não acharia nada.
+model TaskTag {
+  id             String          @id @default(cuid())
+  name           String
+  /// Cor em hex (#RRGGBB). A etiqueta precisa ser reconhecida antes de ser
+  /// lida, senão o quadro vira uma parede de texto cinza.
+  color          String
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tasks          TaskTagOnTask[]
+  createdAt      DateTime        @default(now())
+
+  /// O catálogo é por org e o nome é a identidade da etiqueta: duas "Urgente"
+  /// na mesma conta derrotariam o propósito do catálogo.
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("task_tags")
+}
+
+/// Ligação tarefa ↔ etiqueta. Explícita (e não m2m implícita do Prisma) para o
+/// join ter tabela com nome previsível — a RLS precisa escrever política nela.
+model TaskTagOnTask {
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       TaskTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([taskId, tagId])
+  @@index([tagId])
+  @@map("task_tags_on_tasks")
 }
 
 model MessageTemplate {
@@ -1312,7 +1405,7 @@ model LLMCallLog {
   conversationId    String?  @map("conversation_id")
   provider          String // 'anthropic-sonnet' | 'anthropic-haiku' | 'openai-mini' | 'none'
   model             String // 'claude-sonnet-4-6' | etc
-  operation         String   @default("chat") // 'chat' | 'classify' | 'sentiment'
+  operation         String   @default("chat") // 'chat' | 'classify' | 'sentiment' | 'extract'
   inputTokens       Int?     @map("input_tokens")
   outputTokens      Int?     @map("output_tokens")
   costUsdEstimate   Decimal? @map("cost_usd_estimate") @db.Decimal(10, 6)
@@ -1525,31 +1618,84 @@ enum MiraMotor {
 
 // Perfil de Prospecção (ICP) — 1 por org. Gerado pelo survey do módulo
 // (Motor 0), reaproveitando o contexto do Treinar IA quando existir.
+/// O "Motor 0": o que a org vende e para quem quer vender. União
+/// discriminada por tipoCliente — os campos de alvo B2B e B2C não se
+/// misturam no mesmo nível, porque quase nada de um vale para o outro.
 model MiraPerfil {
-  id               String       @id @default(cuid())
-  organizationId   String       @unique
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  // Estruturado (não texto solto): segmento, subsegmentos, catálogo,
-  // diferenciais, concorrentes, nicho-alvo, áreas compradoras, ticket.
-  segmento         String?
-  subsegmentos     String[]     @default([])
-  catalogo         Json         @default("[]") // [{nome, descricao, ticketMedio?}]
-  diferenciais     String[]     @default([])
-  concorrentes     String[]     @default([])
-  // ICP: quem compra (firmografia B2B e/ou perfil B2C)
-  icpFirmografia   Json         @default("{}") // {cnaes[], portes[], regioes[], faturamento?}
-  icpB2c           Json         @default("{}") // {perfil, regioes[], gatilhos[]}
-  areasCompradoras String[]     @default([]) // papéis-alvo do comitê (ex.: CEO, TI, CISO)
-  modo             MiraAlvoKind @default(B2B)
-  // Score de prontidão do perfil (0-100) — análogo ao aiReadinessScore.
-  prontidao        Int          @default(0)
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Discriminador: decide se vale alvoB2B ou alvoB2C.
+  tipoCliente MiraAlvoKind @default(B2B)
+
+  // ── Seu negócio ─────────────────────────────────────────────────
+  // Chega pronto do cadastro (settings.segmento/subsegmentos), editável.
+  segmento     String?
+  subsegmentos String[] @default([])
+
+  // ── Comum: vale nos dois caminhos ───────────────────────────────
+  catalogo            Json     @default("[]") // [{nome, descricao}]
+  doresResolvidas     String[] @default([])
+  resultadosEsperados String[] @default([])
+  casosDeUso          String[] @default([])
+  diferenciais        String[] @default([])
+  concorrentes        String[] @default([])
+  ticketMedio         String? // faixa livre ("R$ 5k–15k/mês"), não número
+
+  // ── Alvo: condicional ───────────────────────────────────────────
+  // Só o do tipoCliente vale. Guardamos os dois para o cliente não
+  // perder o que digitou ao alternar entre B2B e B2C.
+  /// {cnaesAlvo[], portes[], regioes[], faturamentoAnual?, numFuncionarios?,
+  /// technographics[], sinaisIntencao[], decisor[], influenciadores[],
+  /// usuarioFinal[], objecoes?, cicloVenda?, redFlagsB2B[], mustHavesB2B[],
+  /// clientesReferencia[]}
+  alvoB2B Json @default("{}")
+  /// {faixaEtaria?, genero?, faixaRenda?, ocupacao[], composicaoFamiliar[],
+  /// regiaoCidade[], tipoRegiao[], interesses[], canais[], habitosConsumo[],
+  /// momentoDeVida[], doresDesejos[], capacidadePagamento?, redFlagsB2C[],
+  /// influenciadoresB2C[]}
+  alvoB2C Json @default("{}")
+
+  /// Prontidão (0-100). Abaixo de 60 os motores não largam.
+  prontidao Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("mira_perfis")
 }
 
 // O Alvo — conta qualificada com dossiê. Unidade de valor e de cota.
+enum MiraCampanhaStatus {
+  EM_ANDAMENTO
+  CONCLUIDA
+  FALHOU
+}
+
+/// Campanha de prospecção: um disparo NOMEADO dos motores. Agrupa os Alvos
+/// que ele criou e guarda parâmetros e resultado para a gestão no hub. Não
+/// confundir com as Campanhas do Zap Impulso (disparo de mensagens): aqui é
+/// mapeamento de mercado.
+model MiraCampanha {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nome           String
+  /// BASE_INSTALADA = mapear carteira (CNPJs); DESCOBERTA = descobrir novos.
+  tipo           MiraMotor
+  status         MiraCampanhaStatus @default(EM_ANDAMENTO)
+  /// O que foi pedido: {consulta?, regiao?, kind?, cnpjs? (quantidade)}
+  parametros     Json               @default("{}")
+  /// O que voltou: {encontrados?, criados?, prontos?, duplicados?, regiaoAplicada?, regiaoOrigem?, motivo?}
+  resultado      Json               @default("{}")
+  alvos          MiraAlvo[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@map("mira_campanhas")
+}
+
 model MiraAlvo {
   id             String         @id @default(cuid())
   organizationId String
@@ -1558,16 +1704,22 @@ model MiraAlvo {
   motor          MiraMotor
   status         MiraAlvoStatus @default(DISCOVERED)
 
+  /// Campanha que criou este Alvo (null nos antigos e nos criados fora de campanha).
+  campanhaId String?
+  campanha   MiraCampanha? @relation(fields: [campanhaId], references: [id], onDelete: SetNull)
+
   // Identificação da conta-alvo
   nome              String // razão social / nome do negócio
   nomeFantasia      String?
   cnpj              String? // B2B (dado público de PJ)
   cnae              String?
   porte             String? // MEI/ME/EPP/DEMAIS + regime quando conhecido
+  capitalSocial     Float? // capital social declarado (R$) — porte real por empresa (registro público)
   situacaoCadastral String?
   municipio         String?
   uf                String?
   site              String?
+  telefone          String? // contato público (Receita no B2B, Places no B2C) — o gate do Motor B exige telefone OU site
   placeId           String? // Google Places (negócio local)
 
   // Dossiê (blocos 1:1 como campos/JSON; 1:N em tabelas próprias)
@@ -1578,6 +1730,13 @@ model MiraAlvo {
   janelaEntrada   Json? // {gatilho, momento, urgencia, evidencia}
   processoCompras Json? // {modo, cicloOrcamentario, cadeiaAprovacao, fontes[]}
   whiteSpace      Json? // Motor A: {jaCompra[], oportunidades[]} (catálogo x conta)
+  /// Plano de ação imediato sugerido pela IA: o próximo passo concreto neste
+  /// Alvo. Vira Task PENDING em /tasks (ver planoAcao.ts). Texto, não Json:
+  /// é uma instrução para uma pessoa ler e executar, não um objeto.
+  planoAcao       String? @db.Text
+  /// Task gerada a partir do plano de ação (id solto, como contactId/dealId).
+  /// Evita duplicar tarefa a cada Aprofundar e liga a conclusão de volta ao Alvo.
+  planoAcaoTaskId String?
 
   // Pouso no CRM (ids soltos, sem cascade — ver cabeçalho da seção)
   contactId String?
@@ -1602,6 +1761,7 @@ model MiraAlvo {
   @@index([organizationId, status])
   @@index([organizationId, miraScore])
   @@index([organizationId, quotaMonth])
+  @@index([campanhaId])
   @@map("mira_alvos")
 }
 
@@ -1631,16 +1791,18 @@ model MiraDecisor {
 
 // Demandas recentes da conta (nº1 e nº2, com evidência)
 model MiraDemanda {
-  id        String    @id @default(cuid())
+  id        String        @id @default(cuid())
   alvoId    String
-  alvo      MiraAlvo  @relation(fields: [alvoId], references: [id], onDelete: Cascade)
+  alvo      MiraAlvo      @relation(fields: [alvoId], references: [id], onDelete: Cascade)
   rank      Int // 1 | 2
-  descricao String    @db.Text
-  evidencia String?   @db.Text
+  descricao String        @db.Text
+  evidencia String?       @db.Text
   fonte     String? // url
   dataFonte DateTime?
-  confianca Int       @default(0)
-  createdAt DateTime  @default(now())
+  confianca Int           @default(0)
+  createdAt DateTime      @default(now())
+  // A matéria que evidenciou esta demanda (quando nasceu de um release)
+  releases  MiraRelease[]
 
   @@index([alvoId, rank])
   @@map("mira_demandas")
@@ -1657,6 +1819,11 @@ model MiraOportunidade {
   racional      String   @db.Text
   valorEstimado Decimal?
   roteiro       Json? // {porSponsor: [{decisorId, mensagem, canal}]} — Abordagem/SPICED
+  // ANALISE = presunção da Fase 1 (é substituída a cada "Aprofundar com IA").
+  // RELEASE = nasceu de um fato publicado com fonte; sobrevive ao re-aprofundar,
+  // senão o próximo clique apagaria a oportunidade que a matéria gerou.
+  origem        String   @default("ANALISE")
+  fonte         String? // url da matéria que originou (quando origem = RELEASE)
   createdAt     DateTime @default(now())
 
   @@index([alvoId, rank])
@@ -1689,17 +1856,26 @@ model MiraRelease {
   titulo             String
   resumo             String       @db.Text
   url                String?
+  // Data em que a matéria/post foi PUBLICADO (não a data em que achamos).
+  // Só é preenchida quando aparece na própria fonte e passa no verificador.
   dataPublicacao     DateTime?
   // Por que é relevante para as ofertas DESTE cliente + gancho de abordagem
   relevancia         String       @db.Text
   anguloAbordagem    String?      @db.Text
   produtoRelacionado String? // item do catálogo com sinergia
+  // A demanda que ESTE fato evidenciou. Sem a FK, o dossiê não consegue dizer
+  // "esta demanda nasceu desta matéria" — era só string solta antes.
+  demandaId          String?
+  demanda            MiraDemanda? @relation(fields: [demandaId], references: [id], onDelete: SetNull)
   confianca          Int          @default(0)
   lida               Boolean      @default(false)
+  // Quando o cliente foi sinalizado (Task criada). Null = ainda não avisamos.
+  alertadoEm         DateTime?
   createdAt          DateTime     @default(now())
 
   @@index([organizationId, createdAt])
   @@index([alvoId])
+  @@index([demandaId])
   @@map("mira_releases")
 }
 

@@ -93,6 +93,12 @@ export function listMiraPacks(): MiraPackConfig[] {
   return MIRA_PACK_KEYS.map((k) => MIRA_PACKS[k]);
 }
 
+// ── Teste grátis (sem cartão, sem dias — cota vitalícia de N Alvos) ────
+// Decisão do fundador (2026-07-13): em vez de dias grátis, um teto fixo de
+// Alvos, uma vez por org, sem passar pelo Stripe (mesmo padrão do flag
+// `miraAlpha`). Some ao virar uma faixa paga (o webhook cuida disso).
+export const MIRA_TRIAL_ALVOS = 10;
+
 // ── Elegibilidade e inclusão por plano ─────────────────────────────────
 /** Planos onde o add-on pode ser CONTRATADO (pago). */
 export const MIRA_ELIGIBLE_PLANS: PlanId[] = ['GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];

@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { Sparkles, Loader2, X, Check, RefreshCw, AlertCircle, MessageCircle, Clock, Target, TrendingUp, Pencil, Instagram, Lock } from 'lucide-react';
 import { api } from '../../lib/api';
+import { useAuthStore } from '../../stores/authStore';
 
 interface ImpulsoDraft {
   name: string;
@@ -44,6 +45,11 @@ const EXAMPLES = [
 ];
 
 export function IzaStrategistModal({ open, onClose, onCreated, hasInstagram }: Props) {
+  // Nome do agente do tenant (organization.settings.agentName), mesma fonte do
+  // AgentTrainingWidget. Hook antes do early-return pra respeitar rules of hooks.
+  const { organization } = useAuthStore();
+  const agentName: string = (organization?.settings as any)?.agentName || 'a IA';
+
   const [objective, setObjective] = useState('');
   const [draft, setDraft] = useState<ImpulsoDraft | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -98,7 +104,7 @@ export function IzaStrategistModal({ open, onClose, onCreated, hasInstagram }: P
     } catch (err: any) {
       const msg = String(err?.message || '');
       if (msg.includes('403') || msg.toLowerCase().includes('addon')) {
-        setError('O módulo Impulso não está ativo nesta conta. Ative o add-on para usar a Iza Estrategista.');
+        setError('O módulo Impulso não está ativo nesta conta. Ative o add-on para usar a IA Estrategista.');
       } else {
         setError(err?.message || 'Não foi possível gerar a campanha agora. Tente de novo.');
       }
@@ -153,9 +159,9 @@ export function IzaStrategistModal({ open, onClose, onCreated, hasInstagram }: P
               <Sparkles size={18} />
             </span>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Criar com a Iza</h2>
+              <h2 className="text-lg font-bold text-gray-900">Criar com {agentName}</h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Descreva o objetivo. A Iza monta a campanha pronta pra você aprovar.
+                Descreva o objetivo e {agentName} monta a campanha pronta pra você aprovar.
               </p>
             </div>
           </div>
@@ -195,7 +201,7 @@ export function IzaStrategistModal({ open, onClose, onCreated, hasInstagram }: P
           {generating && (
             <div className="flex items-center gap-3 p-4 rounded-lg bg-gray-50 border border-gray-100">
               <Loader2 size={18} className="animate-spin text-[#4A52D0]" />
-              <span className="text-sm text-gray-600">A Iza está montando a campanha…</span>
+              <span className="text-sm text-gray-600">Aguarde, {agentName} está montando a campanha…</span>
             </div>
           )}
 

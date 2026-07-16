@@ -216,6 +216,10 @@ async function ensureDealAndFollowUp(args: {
         dueDate: new Date(Date.now() + DAY_MS),
         contactId,
         dealId: deal.id,
+        // A conversa que motivou o follow-up: o TaskPanel já tinha o link "ver
+        // a conversa" pronto na intenção, o dado só nunca foi persistido aqui
+        // (as Activity vizinhas já usam este mesmo conversationId).
+        conversationId: conversationId ?? null,
         organizationId,
       },
     });

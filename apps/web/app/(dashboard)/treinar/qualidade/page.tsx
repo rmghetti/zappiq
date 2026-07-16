@@ -25,6 +25,7 @@ import {
   QUALITY_LABELS,
   friendlyScenarioLabel,
   type ClientAgentLite,
+  type TestScope,
 } from '@/lib/clientAgentQualityApi';
 import type {
   AgentEvalRunRow,
@@ -50,6 +51,7 @@ export default function QualidadeIAClientePage() {
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState<{ message: string; nextAvailableAt: string } | null>(null);
+  const [testScope, setTestScope] = useState<TestScope | null>(null);
 
   // ── Carrega agents da org ────────────────────────────────────────
   useEffect(() => {
@@ -57,6 +59,7 @@ export default function QualidadeIAClientePage() {
       try {
         const resp = await clientAgentQualityApi.getAgents();
         setAgents(resp.agents);
+        setTestScope(resp.testScope);
         if (resp.agents.length === 1) setSelectedAgent(resp.agents[0].id);
         else if (resp.agents.length > 0) setSelectedAgent(resp.agents[0].id);
       } catch (e: any) {
@@ -212,6 +215,23 @@ export default function QualidadeIAClientePage() {
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-900">
           ❌ {error}
+        </div>
+      )}
+
+      {/* Cenários que não rodam por falta de treino — troca "você tirou X%" por
+          "complete isto pra ser avaliado nisso também" (Onda 2 item 10, isolamento de tenant). */}
+      {testScope && testScope.skipped.length > 0 && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900">
+          <div className="font-medium mb-1">
+            {testScope.skipped.length === 1
+              ? '1 parte da auditoria não rodou ainda'
+              : `${testScope.skipped.length} partes da auditoria não rodaram ainda`}
+          </div>
+          <ul className="list-disc list-inside space-y-0.5 text-amber-800">
+            {testScope.skipped.map((s, i) => (
+              <li key={i}>{s.reason}</li>
+            ))}
+          </ul>
         </div>
       )}
 
