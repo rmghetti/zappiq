@@ -167,4 +167,29 @@ describe('POST /api/impulso — Tarefa de aprovação', () => {
     expect(res.statusCode).toBe(201);
     expect(res.body.data.id).toBe('camp_4');
   });
+
+  it('FAIL-SOFT: a campanha sobrevive se a tarefa de aprovação falhar (regressão da auditoria)', async () => {
+    // A tarefa é lembrete SECUNDÁRIO. Se este create ficasse fora de try/catch,
+    // a falha dele derrubaria a resposta (500) com a campanha JÁ gravada, e o
+    // cliente repetiria o POST criando campanha DUPLICADA. A campanha, que é a
+    // operação principal, não pode depender do lembrete.
+    (prisma.campaign.create as any).mockResolvedValue({
+      id: 'camp_5',
+      name: 'Reativação',
+      status: 'DRAFT',
+      channels: [],
+      audienceSegment: null,
+      scheduledAt: null,
+    });
+    (prisma.task.create as any).mockRejectedValue(new Error('timeout do banco'));
+
+    const res = makeRes();
+    await handler({ organizationId: 'orgA', body: { name: 'Reativação' } }, res, next);
+
+    // A resposta É 201 com a campanha — a falha da tarefa NÃO virou erro 500.
+    expect(res.statusCode).toBe(201);
+    expect(res.body.data.id).toBe('camp_5');
+    // E o erro NÃO foi propagado pro next (que viraria 500 no cliente).
+    expect(next).not.toHaveBeenCalled();
+  });
 });
