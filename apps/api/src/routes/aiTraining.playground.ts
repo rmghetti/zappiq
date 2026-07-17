@@ -14,9 +14,25 @@ import type { RagSource } from '../services/ragService.js';
 import { stripStructuredTags, stripLeakedPrefixes } from '../agents/agentOrchestrator.js';
 import { applyVozHumanaFilter } from '../agents/vozHumanaFilter.js';
 
-/** Contrato de entrada: só a mensagem do dono do negócio. */
+/**
+ * Contrato de entrada: a mensagem do dono do negócio + o histórico da conversa
+ * de teste até aqui, pra IA ter memória entre turnos (mesma sessão do playground).
+ *
+ * `history` é opcional (turno inicial não tem) e propositalmente restrito:
+ *   - só roles `user`/`assistant` (nada de `system` vindo do cliente);
+ *   - conteúdo string, cada mensagem capada em 2000 chars (igual a `message`);
+ *   - no máximo 20 turnos — os mais antigos são cortados no frontend; o cap aqui
+ *     é o teto de segurança contra payload inflado (a rota é stateless e o
+ *     histórico vem do cliente, então precisa de limite duro).
+ */
+export const playgroundHistoryTurnSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().min(1).max(2000),
+});
+
 export const testMessageSchema = z.object({
   message: z.string().min(1).max(2000),
+  history: z.array(playgroundHistoryTurnSchema).max(20).optional(),
 });
 
 export interface PlaygroundReply {

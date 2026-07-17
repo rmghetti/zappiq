@@ -146,7 +146,10 @@ router.get('/status', async (req: Request, res: Response, next: NextFunction) =>
 router.post('/test', validate(testMessageSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
-    const { message } = req.body as { message: string };
+    const { message, history } = req.body as {
+      message: string;
+      history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    };
 
     // Settings da org (niche/agentName/tone) pro fallback do promptEngine
     // quando a org ainda não tem Agent seedado.
@@ -178,12 +181,15 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
       ? getToolsForContext({ hasScheduling: true }).filter((t) => t.name === 'check_availability')
       : undefined;
 
-    // 4. Mesmo turno da Iza (pre-filter + classify + cascade). history vazio:
-    // é um teste isolado, sem conversa prévia. conversationId null (sem persistência).
+    // 4. Mesmo turno da Iza (pre-filter + classify + cascade). O histórico da
+    // sessão de teste dá memória entre turnos (o cliente pergunta o nome, o dono
+    // responde, a IA não repergunta). conversationId null: nada é persistido — o
+    // histórico vem do frontend, não do banco. Cap de 20 turnos garantido pelo
+    // schema (testMessageSchema).
     const turn = await routeIzaTurn({
       systemPrompt,
       userMessage: message,
-      history: [],
+      history: history ?? [],
       tier,
       forceProvider,
       orgId,
