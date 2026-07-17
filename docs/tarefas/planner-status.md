@@ -308,3 +308,36 @@ Suíte da API: 166 arquivos / 1696 testes verdes (30 novos).
 **Nada disto foi verificado no navegador ainda** — depende de deploy. Sessão 3
 fecha: PR, CI, merge, deploy (Fly + Vercel), e prova de ponta a ponta em
 produção — inclusive o arraste-e-solte, que só se prova de verdade no Chrome.
+
+## Loop 2 — encerramento (17/07/2026)
+
+Tudo mergeado e PROVADO em produção.
+
+### PRs
+- #307 (Kanban + integrações CRM/Impulso/Conversas) — merge, Fly v376.
+- #308 (cobrança do pack no trial + Mira no catálogo de cupons + trava
+  anti-esquecimento + Mira trial UX) — merge, Fly v378. O gate anti-drift da
+  Iza pegou a mudança de preços/produtos (correto) e foi resolvido com entrada
+  no iza-facts-changelog.
+
+### Provas no navegador (produção, Chrome logado na MACHIA)
+- **Quadro Kanban**: 3 colunas, seletor "Mover para..." por card (caminho
+  acessível garantido, além do drag). Movi METALURGICA de "A fazer" →
+  "Em andamento" (contagens 3→2 e 0→1, persistiu) e restaurei. Dado de teste
+  limpo.
+- **Mira trial esgotado (/mira)**: badge "Teste esgotado", "Assine uma faixa
+  para continuar" + 3 faixas com preço. Sem pacote avulso.
+- **Mira trial esgotado (/mira/alvos)**: badge "10/10 do teste grátis" (não
+  "no mês"), faixa vermelha oferece "Ver faixas do Mira", sem pacote.
+- **Catálogo de cupons**: provado por `listCouponableProducts()` (16→20, Mira
+  incluso) + teste-trava no CI. A UI /admin/coupons exige SUPERADMIN (a MACHIA
+  não é), então não foi aberta — mas a derivação do dropdown é do mesmo dado.
+
+### Pendência do Rodrigo (pós-merge, manual)
+Abrir /admin/iza-knowledge e aplicar os 2 fatos novos do Mira (faixas+preço+
+cupom; teste grátis de 10 Alvos vitalícios). É o passo que fecha o ciclo do
+gate anti-drift — descrito em docs/iza-facts-changelog.md, entrada de 16/07.
+
+### NÃO verificado (aceito)
+- Compra real de faixa/pack via Stripe (exigiria cartão — fora de teste).
+- Painel /admin/coupons na tela (bloqueio de role; provado pela camada de dados).
