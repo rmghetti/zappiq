@@ -774,7 +774,7 @@ export function planAnnualTotal(plan: PlanConfig): number | null {
 
 export interface AddonV4 {
   key: string;
-  family: 'AI_MSG' | 'BROADCAST' | 'CHANNEL' | 'CAPACITY' | 'VOICE' | 'IMPULSO' | 'FEATURE';
+  family: 'AI_MSG' | 'BROADCAST' | 'CHANNEL' | 'CAPACITY' | 'VOICE' | 'IMPULSO' | 'MIRA' | 'FEATURE';
   name: string;
   description: string;
   pricingMode: 'overage_unit' | 'one_time_pack' | 'recurring_monthly';
@@ -784,6 +784,21 @@ export interface AddonV4 {
   marginPct: number;        // margem alvo (>70%)
   availableFor: PlanId[];   // tiers que podem comprar
   stripePriceKey: string;   // chave no ADDONS_V4_STRIPE[family].priceIds[X]
+  /**
+   * Pode receber cupom de desconto (16/07/2026, decisão do Rodrigo: TODO
+   * produto pago tem campo de cupom no checkout, igual aos planos ZappIQ).
+   *
+   * EXPLÍCITO de propósito. Antes o catálogo de cupons INFERIA isto de
+   * `pricingMode === 'recurring_monthly'`, com a justificativa (então correta)
+   * de que pack one-shot não é line item de assinatura e o cupom nunca
+   * aplicaria num checkout de plano. Só que produto com CHECKOUT PRÓPRIO
+   * (Mira packs) quebra essa inferência: ele aplica cupom sim, no checkout
+   * dele. Inferir de novo seria repetir o erro que deixou o Mira inteiro fora
+   * do dropdown de cupons sem ninguém perceber.
+   *
+   * Default (ausente) = segue o pricingMode: recorrente recebe, o resto não.
+   */
+  couponable?: boolean;
 }
 
 export const ADDONS_V4_LIST: AddonV4[] = [
@@ -901,6 +916,39 @@ export const ADDONS_V4_LIST: AddonV4[] = [
     pricingMode: 'recurring_monthly', amountBrl: 1297, unit: 'mes',
     cmgBrl: 180, marginPct: 86,
     availableFor: ['SCALE'], stripePriceKey: 'scale_monthly' },
+
+  // ── Mira Prospects (add-on de inteligência de oportunidades) ──────────
+  // REGISTRADO AQUI EM 16/07/2026. As faixas já tinham Product/Price LIVE no
+  // Stripe (addonStripeIds.ts) e checkout próprio funcionando, mas nunca
+  // entraram nesta lista — e o catálogo de cupons cruza os dois registries.
+  // Consequência silenciosa: era IMPOSSÍVEL emitir cupom para o Mira. Nenhum
+  // erro, nenhum aviso: ele simplesmente não aparecia no dropdown do admin.
+  // Preços/cotas: fonte é miraEntitlement.ts (MIRA_TIERS / MIRA_PACKS).
+  { key: 'MIRA_ESSENCIAL', family: 'MIRA', name: 'Mira Essencial — prospecção com dossiê',
+    description: 'Add-on de inteligência de oportunidades: 50 Alvos verificados por mês, com dossiê completo (comitê de compra, demandas, incumbentes, janela de entrada) e Mira Score explicável.',
+    pricingMode: 'recurring_monthly', amountBrl: 297, unit: 'mes',
+    cmgBrl: 42, marginPct: 86,
+    availableFor: ['GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+  { key: 'MIRA_PRO', family: 'MIRA', name: 'Mira Pro — prospecção em escala',
+    description: 'Tudo do Essencial com 200 Alvos verificados por mês. Faixa recomendada para quem prospecta de forma contínua.',
+    pricingMode: 'recurring_monthly', amountBrl: 597, unit: 'mes',
+    cmgBrl: 85, marginPct: 86,
+    availableFor: ['GROWTH', 'SCALE'], stripePriceKey: 'monthly' },
+  { key: 'MIRA_SCALE', family: 'MIRA', name: 'Mira Scale — prospecção em volume',
+    description: 'Tudo do Pro com 600 Alvos verificados por mês. Para operações com time de vendas dedicado.',
+    pricingMode: 'recurring_monthly', amountBrl: 1197, unit: 'mes',
+    cmgBrl: 170, marginPct: 86,
+    availableFor: ['SCALE'], stripePriceKey: 'monthly' },
+  // Pack one-shot: recarrega a cota da faixa quando ela esgota antes da virada
+  // do mês. `couponable: true` EXPLÍCITO — pricingMode é one_time_pack, mas ao
+  // contrário dos packs AI_MSG/BROADCAST (que não têm checkout nenhum), este
+  // tem checkout próprio com campo de cupom (POST /api/mira-access/pack/checkout).
+  { key: 'MIRA_PACKS', family: 'MIRA', name: 'Mira — Pacotes avulsos de Alvos',
+    description: 'Pacote one-shot de Alvos (50, 200 ou 600) para recarregar a cota do mês quando ela esgota. Exige faixa ativa do Mira.',
+    pricingMode: 'one_time_pack', amountBrl: 356, unit: 'pacote',
+    cmgBrl: 50, marginPct: 86,
+    availableFor: ['GROWTH', 'SCALE'], stripePriceKey: 'pack_50',
+    couponable: true },
 ];
 
 export function listAddonsV4(): AddonV4[] {

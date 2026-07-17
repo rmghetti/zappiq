@@ -440,7 +440,13 @@ export const miraApi = {
     api.post('/api/mira/perfil/sugestao', {}),
   listAlvos: (params?: { status?: string; motor?: string; q?: string; campanhaId?: string }): Promise<{
     success: boolean;
-    data: { alvos: MiraAlvoListItem[]; quota: MiraQuota; monthKey: string };
+    data: {
+      alvos: MiraAlvoListItem[];
+      quota: MiraQuota;
+      monthKey: string;
+      /** 'trial' = teste grátis (sem faixa → não pode comprar pacote avulso). */
+      source: 'addon' | 'included' | 'alpha' | 'trial' | null;
+    };
   }> => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);

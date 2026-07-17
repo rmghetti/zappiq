@@ -52,6 +52,35 @@ Pra contornar (PRs cosméticos): adicione label `no-iza-impact` no PR.
 
 ## Entradas
 
+### 2026-07-16 · PR #308 · Mira no catálogo comercial + cupom em todo produto pago
+
+**O que mudou:** As 3 faixas do Mira Prospects (Essencial R$ 297/mês, Pro
+R$ 597/mês, Scale R$ 1.197/mês; anual −20%) e o pacote avulso passaram a ser
+registrados em `ADDONS_V4_LIST` (planConfig.ts) — antes só existiam no registry
+do Stripe, então eram invisíveis para o catálogo de cupons. Todo produto pago
+agora aceita cupom no checkout (o pacote avulso ganhou o campo). Corrigido um
+bug: cliente em teste grátis do Mira não compra pacote avulso (precisa assinar
+uma faixa antes).
+
+**Impacto na Iza:** Se um cliente perguntar, ela pode confirmar que o Mira tem
+faixas com preço (Essencial/Pro/Scale) e que **existe cupom de desconto para o
+Mira** (antes era impossível emitir). E que o **teste grátis do Mira é um teto
+de 10 Alvos vitalício** (não por dias, não renova no mês) — para continuar,
+assina uma faixa; o pacote avulso só serve para quem já tem faixa. Nada disso a
+Iza afirmava antes; o risco é ela dizer "o Mira não tem cupom" ou "seu teste
+renova mês que vem", ambos falsos agora.
+
+**Ação no /admin/iza-knowledge** (após merge):
+- [ ] UPDATE/CREATE fact do add-on Mira: faixas + preços + que aceita cupom
+- [ ] CREATE fact do teste grátis do Mira: teto de 10 Alvos vitalício, vira
+      faixa para continuar (não confundir com o trial de 14 dias do plano)
+
+**Smoke esperado:** "O Mira tem desconto?" → Iza confirma que há cupom para as
+faixas do Mira. "Meu teste do Mira renova mês que vem?" → Iza explica que é um
+teto único de 10 Alvos e que para continuar assina uma faixa.
+
+---
+
 ### 2026-05-17 · PR #155 · Camada 2 iza_facts + Markdown links
 
 **O que mudou:** Criada tabela `iza_facts` (single source-of-truth pra fatos da plataforma), injetada em runtime no system prompt da Iza em todos os canais (WA + IG + chat web). Chat web ganha renderização de links Markdown.

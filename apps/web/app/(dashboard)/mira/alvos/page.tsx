@@ -42,6 +42,8 @@ export default function MiraAlvosPage() {
   const [loading, setLoading] = useState(true);
   const [alvos, setAlvos] = useState<MiraAlvoListItem[]>([]);
   const [quota, setQuota] = useState<MiraQuota | null>(null);
+  /** Teste grátis: não tem faixa, então pacote avulso não se aplica. */
+  const [isTrial, setIsTrial] = useState(false);
   const [status, setStatus] = useState<string>('');
   const [q, setQ] = useState('');
   const [novaCampanha, setNovaCampanha] = useState<MiraCampanhaTipo | null>(null);
@@ -64,6 +66,7 @@ export default function MiraAlvosPage() {
           if (!alive) return;
           setAlvos(res.data.alvos);
           setQuota(res.data.quota);
+          setIsTrial(res.data.source === 'trial');
         })
         .catch(() => {})
         .finally(() => alive && setLoading(false));
@@ -95,8 +98,10 @@ export default function MiraAlvosPage() {
         </div>
         <div className="flex items-center gap-3">
           {quota && (
+            /* "no mês" é MENTIRA no teste grátis: o teto é vitalício e não
+               renova na virada (ledger monthKey:'TRIAL'). */
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${quota.blocked ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600'}`}>
-              {quota.used}/{quota.total} no mês
+              {quota.used}/{quota.total} {isTrial ? 'do teste grátis' : 'no mês'}
             </span>
           )}
           <button
@@ -128,10 +133,31 @@ export default function MiraAlvosPage() {
 
       {quota?.blocked && (
         <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5">
-          <p className="text-sm text-red-600 font-medium">
-            Cota do mês esgotada ({quota.used}/{quota.total}). Compre um pacote avulso para continuar mapeando agora, ou aguarde a virada do mês.
-          </p>
-          <ComprarPacks />
+          {isTrial ? (
+            /* NO TESTE GRÁTIS o pacote avulso NÃO se aplica: ele recarrega a
+               cota de uma faixa, e aqui não existe faixa (a API recusa com
+               403). Oferecer o pacote aqui era vender o que não funciona —
+               antes do fix do gate, era cobrar sem entregar. O caminho certo
+               é assinar uma faixa. */
+            <>
+              <p className="text-sm text-red-600 font-medium">
+                Seu teste grátis acabou ({quota.used}/{quota.total} Alvos). Assine uma faixa do Mira para continuar mapeando.
+              </p>
+              <Link
+                href="/mira"
+                className="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-lg bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700"
+              >
+                Ver faixas do Mira
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-red-600 font-medium">
+                Cota do mês esgotada ({quota.used}/{quota.total}). Compre um pacote avulso para continuar mapeando agora, ou aguarde a virada do mês.
+              </p>
+              <ComprarPacks />
+            </>
+          )}
         </div>
       )}
 

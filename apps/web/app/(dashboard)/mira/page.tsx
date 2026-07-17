@@ -165,6 +165,47 @@ function EntitledPanel({ accessData, alvos }: { accessData: MiraAccessData; alvo
 
   return (
     <>
+      {/* Faixa do teste grátis — SEMPRE visível durante o trial, não só quando
+          esgota. Paridade com o PaywallGate do trial de PLANO, que informa a
+          limitação e oferece a assinatura desde o primeiro dia.
+          Pedido do Rodrigo (16/07/2026): "informar qual a limitação e sempre
+          dar a opção dele contratar". Antes, a oferta só aparecia DEPOIS do
+          teste esgotar — quando o cliente já tinha parado de conseguir usar.
+          Pacote avulso NÃO entra aqui de propósito: ele recarrega a cota de
+          uma faixa, e no trial não há faixa (a API recusa — ver
+          miraAccess.ts). Oferecer seria vender o que não funciona. */}
+      {isTrial && !quota.blocked && (
+        <div className={`rounded-xl px-4 py-3 mb-4 border ${
+          quota.remaining <= 3 ? 'bg-amber-50 border-amber-200' : 'bg-primary-50/60 border-primary-100'
+        }`}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-800">
+                Você está no teste grátis do Mira · {quota.used} de {quota.total} Alvos usados ·{' '}
+                {quota.remaining === 1 ? 'falta 1' : `faltam ${quota.remaining}`}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                O teste é um teto único de {quota.total} Alvos e não renova na virada do mês.
+                Assine uma faixa para continuar sem interrupção (no anual você trava 20% de desconto).
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              {catalog.tiers.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => subscribe(t.key)}
+                  disabled={subBusy !== null}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60"
+                >
+                  {subBusy === t.key ? 'Abrindo…' : `${t.name} · ${formatBRL(t.priceMonthly)}/mês`}
+                </button>
+              ))}
+            </div>
+          </div>
+          {subError && <p className="text-xs text-red-500 mt-2">{subError}</p>}
+        </div>
+      )}
+
       {/* Cota + Prontidão */}
       <div className="grid md:grid-cols-2 gap-4 mb-6">
         <div className="bg-white border border-gray-200 rounded-xl p-5">
@@ -191,10 +232,13 @@ function EntitledPanel({ accessData, alvos }: { accessData: MiraAccessData; alvo
             <p className="text-xs text-gray-400 mt-2">Inclui +{quota.packExtra} de pack avulso neste mês.</p>
           )}
           {quota.blocked && !isTrial && (
+            /* O pack se compra na fila de Alvos (ComprarPacks), NÃO em
+               /billing — o /billing nem lista o Mira. A instrução antiga
+               mandava o cliente pro lugar errado. */
             <p className="text-xs text-gray-500 mt-2">
-              A geração de novos Alvos volta na virada do mês, ou contrate um pack avulso em{' '}
-              <Link href="/billing" className="text-primary-600 font-medium hover:underline">
-                Plano &amp; Fatura
+              A geração de novos Alvos volta na virada do mês, ou compre um pacote avulso em{' '}
+              <Link href="/mira/alvos" className="text-primary-600 font-medium hover:underline">
+                Alvos
               </Link>
               .
             </p>
