@@ -1176,12 +1176,16 @@ function PlaygroundPanel() {
     if (!message || sending) return;
     setError(null);
     setInput('');
+    // Histórico da sessão de teste (só role+content, últimos 20 turnos) pra IA ter
+    // memória entre turnos. Snapshot ANTES de adicionar o turno atual — a mensagem
+    // corrente vai separada em `message`, não pode entrar duplicada no history.
+    const history = turns.slice(-20).map((t) => ({ role: t.role, content: t.text }));
     setTurns((prev) => [...prev, { role: 'user', text: message }]);
     setSending(true);
     try {
       const res = await api.post<{ reply: string; usedContext: boolean; sources: PlaygroundSource[] }>(
         '/api/ai-training/test',
-        { message },
+        { message, history },
       );
       setTurns((prev) => [
         ...prev,
