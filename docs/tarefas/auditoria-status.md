@@ -110,3 +110,35 @@ sem passar pela task de aprovação (não é Impulso). E o cron não filtra
   mostra mais pacote).
 - 1 fix meu pronto (fail-soft), a mergear/deployar.
 - 1 achado pré-existente (Pix cross-tenant) aguardando DECISÃO DO RODRIGO.
+
+## Sessão 2 — encerramento
+
+### Fix da regressão do Impulso: NO AR
+PR #311 mergeada, Fly v380 (ambas as máquinas, health 200). O fail-soft está em
+produção.
+
+### Item 7 — nenhuma tela oferece o que a API recusa ✅
+- Mira trial: provado no loop anterior (esgotado → oferece faixa, não pacote).
+- Perfil do Contato (a página nova que fechou o 404): renderiza no ar, seção
+  Tarefas filtra por contactId (o perfil do LUIZ mostra só as 3 dele, esconde
+  METALURGICA/GISLAINE de outros contatos), painel "Nova tarefa" abre limpo com
+  o "Criar tarefa" acessível (z-index mantido). O contactId pré-vinculado é da
+  própria org do usuário → a API nunca recusa (seguro por construção).
+- Banco conferido: sem resíduo dos meus testes (METALURGICA voltou a PENDING,
+  0 notes/etiquetas de teste; as 2 DONE são históricas).
+
+## VEREDITO DA AUDITORIA
+
+Os 7 itens auditados. Tudo que foi CONSTRUÍDO nas duas frentes está sólido:
+isolamento de tenant correto em todas as rotas novas, cobrança do pacote
+fechada na origem, migração/FKs certas, trava anti-esquecimento provada
+não-tautológica, cron do Impulso inalterado, telas coerentes com a API.
+
+**1 regressão encontrada e CORRIGIDA** (fail-soft do Impulso, minha, do #307).
+
+**1 achado PRÉ-EXISTENTE aguardando decisão do Rodrigo:** POST /api/impulso/pix
+não valida a org do conversationId (gravidade baixa-média, não é deste
+trabalho, rota de cobrança). Fix proposto pronto; não aplicado por ser rota de
+cobrança fora do escopo.
+
+Nada mais a auditar nas frentes Tarefas e Mira/cupons.
