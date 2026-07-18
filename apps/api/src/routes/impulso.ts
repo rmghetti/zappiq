@@ -126,18 +126,37 @@ router.post('/', validate(createSchema), async (req: Request, res: Response, nex
     // SCHEDULED só visível pra quem entrasse na tela e notasse. Isto é um
     // LEMBRETE: concluir a tarefa NÃO publica a campanha, e não bloqueia o
     // disparo automático de uma campanha agendada (ver impulsoAprovacao.ts).
+    //
+    // FAIL-SOFT (fix da auditoria, 17/07/2026): a tarefa é SECUNDÁRIA. Antes
+    // este create ficava fora de try/catch — se ele falhasse (timeout, etc.),
+    // a campanha JÁ estava gravada mas o cliente recebia 500, e ao repetir o
+    // POST criava uma campanha DUPLICADA. A campanha é a operação principal e
+    // não pode ser derrubada por uma falha no lembrete. Mesmo padrão do
+    // crmAutomationService (a automação nunca bloqueia o fluxo principal).
+    // Dedupe por campanha recém-criada é desnecessário (cada campanha nasce uma
+    // vez); se um dia houver retry que reuse a campanha, o índice campaignId
+    // ajuda a achar a tarefa existente.
     if (precisaAprovacao(campaign)) {
-      const { title, description, dueDate } = montarTarefaAprovacao(campaign);
-      await prisma.task.create({
-        data: {
-          title,
-          description,
-          dueDate,
-          origem: 'IMPULSO' as any,
-          campaignId: campaign.id,
-          organizationId: req.organizationId!,
-        },
-      });
+      try {
+        const { title, description, dueDate } = montarTarefaAprovacao(campaign);
+        await prisma.task.create({
+          data: {
+            title,
+            description,
+            dueDate,
+            origem: 'IMPULSO' as any,
+            campaignId: campaign.id,
+            organizationId: req.organizationId!,
+          },
+        });
+      } catch (taskErr) {
+        // A campanha foi criada com sucesso; só o lembrete falhou. Loga e segue.
+        logger.warn(
+          `[Impulso] campanha ${campaign.id} criada, mas a tarefa de aprovação falhou: ${
+            taskErr instanceof Error ? taskErr.message : taskErr
+          }`,
+        );
+      }
     }
 
     res.status(201).json({ success: true, data: campaign });
