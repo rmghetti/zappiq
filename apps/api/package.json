@@ -25,6 +25,7 @@
     "@opentelemetry/sdk-node": "^0.55.0",
     "@opentelemetry/semantic-conventions": "^1.28.0",
     "@opentelemetry/winston-transport": "^0.6.0",
+    "@socket.io/redis-adapter": "^8.3.0",
     "@zappiq/database": "workspace:*",
     "@zappiq/shared": "workspace:*",
     "axios": "^1.8.0",

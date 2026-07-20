@@ -20,6 +20,7 @@ import { requireActivePlan } from './middleware/requireActivePlan.js'; // Trial 
 import { initQueues, closeQueues } from './services/queueService.js';
 import { initFlowTimerWorker } from './services/flowScheduler.js';
 import { setIo } from './utils/socketRegistry.js';
+import { setupSocketAdapter } from './utils/socketAdapter.js';
 import { prisma } from '@zappiq/database';
 
 // Routes
@@ -121,6 +122,11 @@ const io = new SocketIOServer(httpServer, {
     methods: ['GET', 'POST'],
   },
 });
+
+// Adapter Redis: sem ele, com >=2 máquinas no Fly, um emit só alcança os sockets
+// da MESMA máquina (a barra do Maestro travava, new_message/notificações
+// intermitentes). Ligado ANTES de setIo/io.use/connections. Fail-soft.
+const socketAdapterClients = setupSocketAdapter(io);
 
 app.set('io', io);
 
@@ -455,6 +461,19 @@ async function gracefulShutdown(signal: string): Promise<void> {
     // 2) Desconecta Socket.io clients
     io.close();
     logger.info('[Server] Socket.io closed');
+
+    // 2b) Fecha as conexões pub/sub do adapter Redis (se ligado)
+    if (socketAdapterClients) {
+      try {
+        await Promise.all([
+          socketAdapterClients.pubClient.quit(),
+          socketAdapterClients.subClient.quit(),
+        ]);
+        logger.info('[Server] Socket adapter Redis quit');
+      } catch (err) {
+        logger.warn('[Server] Socket adapter Redis quit error:', err);
+      }
+    }
 
     // 3) Drena workers/queues BullMQ
     await closeQueues();
