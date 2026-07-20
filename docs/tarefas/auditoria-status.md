@@ -142,3 +142,24 @@ trabalho, rota de cobrança). Fix proposto pronto; não aplicado por ser rota de
 cobrança fora do escopo.
 
 Nada mais a auditar nas frentes Tarefas e Mira/cupons.
+
+## Sessão 3 — fix do Pix APROVADO pelo Rodrigo (commit 58bad2c)
+
+O achado pré-existente virou fix, com aprovação explícita do Rodrigo.
+
+Fechado no PONTO DE ESTRANGULAMENTO: as 5 funções de envio do
+`channelDispatcher` (sendReplyText, sendReplyTemplate, markIncomingAsRead,
+sendReplyInteractive, sendReplyMedia) agora fazem
+`findFirst({where:{id, organizationId}})` em vez de `findUnique({where:{id}})`.
+
+Só `sendReplyText` era alcançável hoje por conversationId do cliente (via Pix).
+As outras 4 só têm callers confiáveis (orchestrator/flowEffects/queueService),
+MAS blindei as 5 pra nenhum caller futuro reabrir o buraco em silêncio — mesma
+classe de "meia-correção" que a auditoria existe pra pegar.
+
+PROVA de que não quebrei o caminho legítimo: suíte inteira da API 168/1712
+verde (os testes dos callers legítimos falhariam se o filtro os quebrasse).
+Teste novo `channelDispatcher.tenant.test.ts` trava o isolamento e PROVA que
+pega o vazamento (revert → 2/3 vermelhos).
+
+FALTA: PR + CI + merge + deploy Fly.
