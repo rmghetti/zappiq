@@ -43,12 +43,26 @@ export interface PlaygroundReply {
 
 /**
  * Limpa a saída bruta do LLM do MESMO jeito que o orchestrator faz antes de
- * mandar pro WhatsApp: remove tags estruturadas (<action>, <reply>, ...),
- * prefixos vazados ([áudio] etc.) e aplica o filtro de voz humana (sem
- * travessão, tom natural). Assim o teste reflete o que o cliente final veria.
+ * mandar pro WhatsApp: extrai o conteúdo de <reply>…</reply>, remove tags
+ * estruturadas (<action>, <buttons>, ...), prefixos vazados ([áudio] etc.) e
+ * aplica o filtro de voz humana (sem travessão, tom natural). Assim o teste
+ * reflete o que o cliente final veria.
+ *
+ * O passo de <reply> é o que faltava e causava a resposta DUPLICADA no
+ * "Testar minha IA": o promptEngine manda o modelo pôr <reply>…</reply> "no
+ * final da resposta", então o LLM escreve a resposta em prosa e DEPOIS repete
+ * dentro de <reply> — o texto vem 2x no raw. parseAgentResponse (produção,
+ * WhatsApp) e webChatService já priorizam o conteúdo de <reply>; o playground
+ * só fazia stripStructuredTags (que remove as TAGS, não a cópia em prosa) e
+ * devolvia as duas cópias. Agora usa a mesma lógica dos dois caminhos vivos.
  */
 export function cleanPlaygroundReply(rawLlmText: string): string {
-  let candidate = stripStructuredTags(rawLlmText ?? '');
+  const raw = rawLlmText ?? '';
+  // Se houver <reply>…</reply>, prioriza esse conteúdo (mesma lógica de
+  // parseAgentResponse/webChatService) — colapsa a duplicação prosa+tag.
+  const replyMatch = raw.match(/<reply>([\s\S]*?)<\/reply>/i);
+  let candidate = replyMatch ? replyMatch[1] : raw;
+  candidate = stripStructuredTags(candidate);
   candidate = stripLeakedPrefixes(candidate);
   candidate = applyVozHumanaFilter(candidate);
   return candidate.trim();
