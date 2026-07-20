@@ -918,6 +918,34 @@ export function stripLeakedPrefixes(text: string): string {
     .trim();
 }
 
+/**
+ * Bloco da "Mensagem de saudação" (settings.greetingMessage) configurada pelo
+ * dono do negócio no /ai-training ("Primeira mensagem que o cliente recebe").
+ *
+ * Até 20/07/2026 esse campo era WRITE-ONLY: salvo no signup (onboarding.ts) e
+ * no PUT /ai-training/identity, contado no aiReadinessService, mas NUNCA lido
+ * por nenhum prompt builder. A IA nunca via a saudação e, no primeiro contato,
+ * caía no default do CR-5 ("Como posso te chamar?") — o cliente reportava que a
+ * IA "não seguia o que foi pedido nos campos de treinamento".
+ *
+ * Só entra no PRIMEIRO contato. A instrução se auto-limita à primeira mensagem
+ * (o modelo enxerga o histórico da conversa), pra não re-saudar nos turnos
+ * seguintes — o que importa no playground "Testar minha IA", onde o contato é
+ * sintético e isFirstContact é SEMPRE true.
+ *
+ * Retorna '' quando não é primeiro contato ou não há saudação: o join com
+ * .filter(Boolean) descarta o bloco vazio.
+ */
+export function buildGreetingBlock(isFirstContact: boolean, greetingMessage?: string | null): string {
+  const msg = (greetingMessage || '').trim();
+  if (!isFirstContact || !msg) return '';
+  return [
+    '# Saudação configurada pelo dono do negócio',
+    'Na PRIMEIRA mensagem desta conversa (primeiro contato), abra com esta saudação, adaptando levemente ao seu tom mas mantendo o sentido e as informações. Depois de saudar, já responda à mensagem do cliente na mesma resposta. NÃO repita esta saudação nas mensagens seguintes:',
+    msg,
+  ].join('\n');
+}
+
 // ── Execute Actions ─────────────────────────────────────
 async function executeAction(
   organizationId: string,
@@ -1129,6 +1157,11 @@ export async function buildSystemPromptForContact(input: {
     `Primeiro contato? ${isFirstContact ? 'SIM' : 'NÃO (já tem histórico — não pergunte nome de novo, use o que está acima)'}`,
   ].filter(Boolean).join('\n');
 
+  // Saudação configurada pelo dono (settings.greetingMessage). Camada viva,
+  // igual linksBlock/factsBlock: montada das settings a cada turno, sem re-seedar
+  // o prompt (re-seedar apagaria a customização). Só no primeiro contato.
+  const saudacaoBlock = buildGreetingBlock(isFirstContact, orgSettings?.greetingMessage);
+
   // FASE 4 P7+ Camada 2 (2026-05-17): bloco "# FATOS ATUAIS" gerado em
   // runtime a partir de iza_facts table. Injetado ENTRE CORE_AGENT_RULES_V1
   // (inviolável) e agent.systemPrompt (DB seedado, sujeito a drift).
@@ -1173,6 +1206,7 @@ export async function buildSystemPromptForContact(input: {
         linksBlock,
         '',
         clienteBlock,
+        saudacaoBlock,
         '',
         `# Contexto recuperado (RAG)`,
         ragContext || '(sem contexto relevante encontrado para esta query)',
@@ -1199,7 +1233,7 @@ export async function buildSystemPromptForContact(input: {
     ragContext,
     currentDateTime: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
   });
-  return [CORE_AGENT_RULES_V1, factsBlock, fallback, '', clienteBlock]
+  return [CORE_AGENT_RULES_V1, factsBlock, fallback, '', clienteBlock, saudacaoBlock]
     .filter(Boolean)
     .join('\n');
 }
