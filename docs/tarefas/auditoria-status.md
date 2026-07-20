@@ -163,3 +163,33 @@ Teste novo `channelDispatcher.tenant.test.ts` trava o isolamento e PROVA que
 pega o vazamento (revert → 2/3 vermelhos).
 
 FALTA: PR + CI + merge + deploy Fly.
+
+## Fix do Pix NO AR + auditoria ENCERRADA (20/07/2026)
+
+PR #316 mergeada. Deploy do Fly falhou na 1a tentativa (release machine timeout,
+transitório — v382 failed) mas o Fly recuperou pra v383; redeploy limpo pra
+v384. Ambas as máquinas na v384, health 200.
+
+**Prova de que o fix está REALMENTE rodando** (não só o número da versão):
+`flyctl ssh console` + grep no `/app/dist/services/channelDispatcher.js` da
+imagem no ar → **7** ocorrências de `organizationId: input.organizationId`
+(as 5 funções de envio corrigidas + 2 lookups de org já existentes).
+
+Lição reforçada: release machine do Fly pode falhar por timeout e o `flyctl
+status` mostrar tudo "started/healthy" mesmo assim — conferir `flyctl releases`
+(qual VERSION completou) e, pra código sem migração/rota testável, grep no dist
+DENTRO da máquina.
+
+## VEREDITO FINAL DA AUDITORIA — ENCERRADA
+
+7 itens auditados, tudo que foi construído nas frentes Tarefas + Mira/cupons
+está sólido e provado em produção.
+
+Achados e desfecho:
+1. **Regressão do fail-soft do Impulso** (minha, #307) → CORRIGIDA, no ar (v380).
+2. **Vazamento cross-tenant do Pix** (pré-existente) → aprovado pelo Rodrigo,
+   CORRIGIDO no ponto de estrangulamento (5 funções do dispatcher), no ar (v384).
+3. Achado menor informativo (dedupe sem org no crmAutomationService; POST
+   /api/campaigns sem task de aprovação) → registrado, não exploitável, sem ação.
+
+Nada mais pendente. Fim da auditoria.
