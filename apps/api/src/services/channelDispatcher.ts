@@ -36,8 +36,18 @@ export interface SendReplyResult {
  * IGSID) on-demand do DB pra não exigir que o caller carregue tudo.
  */
 export async function sendReplyText(input: SendReplyInput): Promise<SendReplyResult> {
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: input.conversationId },
+  // ISOLAMENTO DE TENANT (fix da auditoria, 18/07/2026): findFirst com
+  // organizationId, não findUnique só por id. Antes, um caller que aceitasse
+  // conversationId do cliente (POST /api/impulso/pix) podia referenciar a
+  // conversa de OUTRA org e o dispatcher lia o contato dela e tentava enviar
+  // pelas credenciais do caller. Em produção a RLS não filtra pra API (conecta
+  // como postgres), então este filtro na aplicação é a barreira. Callers
+  // legítimos (orchestrator, flowEffects, queueService) sempre passam a org e a
+  // conversa do MESMO turno, então casam — o filtro não muda nada pra eles.
+  // Conversa de outra org → null → o throw abaixo (a rota Pix o captura no
+  // .catch e a cobrança segue; o envio cross-tenant é barrado).
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: input.conversationId, organizationId: input.organizationId },
     select: {
       channel: true,
       contact: {
@@ -122,8 +132,9 @@ export interface SendReplyTemplateInput {
  * credenciais por org do sendReplyText.
  */
 export async function sendReplyTemplate(input: SendReplyTemplateInput): Promise<SendReplyResult> {
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: input.conversationId },
+  // Filtro de org: ver sendReplyText. Blindagem uniforme do dispatcher.
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: input.conversationId, organizationId: input.organizationId },
     select: { channel: true, contact: { select: { whatsappId: true, phone: true } } },
   });
   if (!conversation) {
@@ -163,8 +174,10 @@ export async function markIncomingAsRead(input: {
   conversationId: string;
   externalMessageId: string;
 }): Promise<void> {
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: input.conversationId },
+  // Filtro de org: ver sendReplyText. Cross-tenant → null → return (no-op),
+  // que é o certo pra "marcar como lido".
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: input.conversationId, organizationId: input.organizationId },
     select: {
       channel: true,
       contact: { select: { instagramScopedId: true } },
@@ -202,8 +215,9 @@ export async function sendReplyInteractive(input: {
   body: string;
   options: { id: string; title: string }[];
 }): Promise<SendReplyResult> {
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: input.conversationId },
+  // Filtro de org: ver sendReplyText.
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: input.conversationId, organizationId: input.organizationId },
     select: { channel: true, contact: { select: { whatsappId: true, phone: true } } },
   });
   if (!conversation) throw new Error(`Conversation ${input.conversationId} not found`);
@@ -240,8 +254,9 @@ export async function sendReplyMedia(input: {
   url: string;
   caption?: string;
 }): Promise<SendReplyResult> {
-  const conversation = await prisma.conversation.findUnique({
-    where: { id: input.conversationId },
+  // Filtro de org: ver sendReplyText.
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: input.conversationId, organizationId: input.organizationId },
     select: { channel: true, contact: { select: { whatsappId: true, phone: true } } },
   });
   if (!conversation) throw new Error(`Conversation ${input.conversationId} not found`);
