@@ -76,6 +76,22 @@ describe('cleanPlaygroundReply', () => {
     expect(cleanPlaygroundReply('')).toBe('');
     expect(cleanPlaygroundReply(undefined as any)).toBe('');
   });
+  // Bug reportado pelo cliente (CMJ/Vera): a resposta aparecia DUPLICADA no
+  // "Testar minha IA". Causa: promptEngine manda o modelo pôr <reply>…</reply>
+  // "no final da resposta", então o LLM escreve a resposta em prosa e DEPOIS
+  // repete dentro de <reply> — o texto vem 2x no raw. parseAgentResponse
+  // (produção) e webChatService extraem só o conteúdo de <reply>; o playground
+  // não extraía e devolvia as duas cópias. Deve extrair só o <reply>.
+  it('não duplica a resposta quando o modelo repete o texto fora e dentro de <reply>', () => {
+    const raw = 'Olá! Como posso te chamar?\n<reply>Olá! Como posso te chamar?</reply>';
+    expect(cleanPlaygroundReply(raw)).toBe('Olá! Como posso te chamar?');
+  });
+  it('extrai o conteúdo de <reply> quando presente (mesma lógica da produção)', () => {
+    expect(cleanPlaygroundReply('<reply>só o conteúdo</reply>')).toBe('só o conteúdo');
+  });
+  it('sem <reply>, mantém o texto (retrocompatível)', () => {
+    expect(cleanPlaygroundReply('resposta simples sem tag')).toBe('resposta simples sem tag');
+  });
 });
 
 describe('buildPlaygroundResult', () => {
