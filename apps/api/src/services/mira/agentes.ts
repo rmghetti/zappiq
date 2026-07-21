@@ -240,8 +240,8 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
     '  "resumo": "parágrafo executivo do alvo para o vendedor (3-4 frases, só fatos fornecidos + leitura honesta)",',
     '  "planoAcao": "o PRÓXIMO PASSO concreto nesta conta, para alguém executar nos próximos 3 dias (2-4 frases). Comece pelo verbo. Diga QUEM procurar (nome da lista de decisores), POR ONDE (o canal que os dados sustentam) e COM QUE GANCHO. Se faltar dado para agir (ex.: sem decisor mapeado), o passo é conseguir esse dado. Nunca prometa contato que não temos.",',
     '  "oportunidades": [',
-    '    {"rank": 1, "produto": "nome EXATO do catálogo", "racional": "por que este produto encaixa nesta conta (2-3 frases, ancorado na atividade/porte/local E nas dores/casos de uso do perfil)", "demandaPresumida": "a dor provável que sustenta o encaixe (1 frase, honesta: é presunção, não fato)"},',
-    '    {"rank": 2, "produto": "outro nome EXATO do catálogo", "racional": "...", "demandaPresumida": "..."}',
+    '    {"rank": 1, "produto": "nome EXATO do catálogo", "racional": "por que este produto encaixa nesta conta (2-3 frases, ancorado na atividade/porte/local E nas dores/casos de uso do perfil)", "demandaPresumida": "a dor provável que sustenta o encaixe (1 frase, honesta: é presunção, não fato)", "valorEstimadoAnualBRL": <potencial ANUAL desta oportunidade em reais, estimado do ticket médio do perfil aplicado ao porte/faturamento da conta; use null se não der para estimar com honestidade>},',
+    '    {"rank": 2, "produto": "outro nome EXATO do catálogo", "racional": "...", "demandaPresumida": "...", "valorEstimadoAnualBRL": <número em reais ou null>}',
     '  ],',
     '  "roteiros": [',
     '    {"decisor": "nome EXATO da lista", "mensagem": "primeira mensagem de abordagem (3-5 frases, SPICED: situação, dor provável, impacto, gancho; antecipe a objeção declarada quando houver; sem travessão; sem inventar fatos; terminar com pergunta leve)"}',
@@ -279,7 +279,7 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
   const catalogoNorm = new Map(catalogo.map((c) => [norm(c.nome), c.nome]));
   const decisoresNorm = new Map(alvo.decisores.map((d: any) => [norm(d.nome), d]));
 
-  const oportunidadesOk: { rank: number; produto: string; racional: string; demandaPresumida: string }[] = [];
+  const oportunidadesOk: { rank: number; produto: string; racional: string; demandaPresumida: string; valorEstimado: number | null }[] = [];
   for (const o of Array.isArray(parsed.oportunidades) ? parsed.oportunidades.slice(0, 2) : []) {
     const produtoCanonico = catalogoNorm.get(norm(String(o?.produto ?? '')));
     if (!produtoCanonico) {
@@ -291,11 +291,18 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
       descartados.push(`oportunidade "${produtoCanonico}" sem racional`);
       continue;
     }
+    // valorEstimado é opcional e honesto: só entra se o LLM devolveu número
+    // positivo. Sem ele, o Deal continua nascendo sem valor (como antes), em
+    // vez de inventar um número. É a diferença entre dimensionar o pipeline e
+    // mentir sobre ele.
+    const rawValor = Number(o?.valorEstimadoAnualBRL);
+    const valorEstimado = Number.isFinite(rawValor) && rawValor > 0 ? Math.round(rawValor) : null;
     oportunidadesOk.push({
       rank: oportunidadesOk.length + 1,
       produto: produtoCanonico,
       racional: racional.slice(0, 900),
       demandaPresumida: String(o?.demandaPresumida ?? '').slice(0, 400),
+      valorEstimado,
     });
   }
 
@@ -364,6 +371,7 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
           rank: o.rank,
           produto: o.produto,
           racional: o.racional,
+          valorEstimado: o.valorEstimado ?? undefined,
           roteiro:
             o.rank === 1 && roteirosOk.length
               ? { porSponsor: roteirosOk, confianca: CONFIANCA_INFERENCIA, geradoEm: agora }

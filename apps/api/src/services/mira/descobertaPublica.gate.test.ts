@@ -48,7 +48,6 @@ vi.mock('./cnpj.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./cnpj.js')>()),
   fetchCnpj: (...a: any[]) => fetchCnpj(...a),
   normalizeCnpj: (s: string) => s.replace(/\D/g, '') || null,
-  arquetipoFromQualificacao: () => null,
 }));
 vi.mock('./cagedMirror.js', () => ({ buscarSinalSetorial: vi.fn().mockResolvedValue(null) }));
 vi.mock('./score.js', () => ({
@@ -174,6 +173,10 @@ describe('o Alvo com decisor sobe, como sempre', () => {
     expect(r.prontos).toBe(1);
     expect(r.descartadosCrus).toBe(0);
     expect(createAlvo).toHaveBeenCalledTimes(1);
+    // A sócia-administradora (ECONOMIC_BUYER) é marcada como provável champion:
+    // a coroa da UI, que nunca era escrita pelo backend, passa a aparecer.
+    const decisorCriado = createAlvo.mock.calls[0][0].data.decisores.create[0];
+    expect(decisorCriado.isChampion).toBe(true);
   });
 });
 
