@@ -93,6 +93,42 @@ beforeEach(() => {
   buscarCnpjsBigQuery.mockResolvedValue(['11222333000181']);
 });
 
+describe('recorte de porte/faturamento: empresa fora do tamanho pedido não sobe', () => {
+  it('cliente pediu faturamento acima de R$ 10M: MICRO (porte 01) não vira Alvo nem gasta cota', async () => {
+    findUniquePerfil.mockResolvedValue({ prontidao: 90, alvoB2B: { faturamentoAnual: 'R$ 10M+' } });
+    enriquecerCnpjsBigQuery.mockResolvedValue(new Map([['11222333000181', doEspelho({ porte: '01' })]]));
+
+    const r = await runDescobertaPublica('org-1', { alvos: ['2451-2'], regioes: ['SP'] });
+
+    expect(createAlvo).not.toHaveBeenCalled();
+    expect(r.criados).toBe(0);
+    expect(r.descartadosPorPorte).toBe(1);
+    // Honestidade: a empresa foi verificada, nós é que a recusamos pelo porte.
+    expect(r.cnpjsVerificados).toBe(1);
+    expect(r.avisos?.some((a) => a.includes('porte'))).toBe(true);
+  });
+
+  it('cliente pediu faturamento acima de R$ 10M: DEMAIS (porte 05) vira Alvo normalmente', async () => {
+    findUniquePerfil.mockResolvedValue({ prontidao: 90, alvoB2B: { faturamentoAnual: 'R$ 10M+' } });
+    enriquecerCnpjsBigQuery.mockResolvedValue(new Map([['11222333000181', doEspelho({ porte: '05' })]]));
+
+    const r = await runDescobertaPublica('org-1', { alvos: ['2451-2'], regioes: ['SP'] });
+
+    expect(r.criados).toBe(1);
+    expect(r.descartadosPorPorte).toBe(0);
+  });
+
+  it('sem recorte de tamanho no Perfil, porte não filtra (nenhuma regressão)', async () => {
+    findUniquePerfil.mockResolvedValue({ prontidao: 90 }); // sem portes nem faturamento
+    enriquecerCnpjsBigQuery.mockResolvedValue(new Map([['11222333000181', doEspelho({ porte: '01' })]]));
+
+    const r = await runDescobertaPublica('org-1', { alvos: ['2451-2'], regioes: ['SP'] });
+
+    expect(r.criados).toBe(1);
+    expect(r.descartadosPorPorte).toBe(0);
+  });
+});
+
 describe('o Alvo com decisor sobe, como sempre', () => {
   it('LTDA com sócio no QSA vira Alvo READY', async () => {
     enriquecerCnpjsBigQuery.mockResolvedValue(new Map([['11222333000181', doEspelho()]]));

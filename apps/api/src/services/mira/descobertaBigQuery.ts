@@ -59,11 +59,19 @@ export async function buscarCnpjsBigQuery(codigos: string[], regioes: string[]):
 
   // A tabela espelho já contém só empresas ATIVAS e o snapshot mais recente,
   // clusterizada por cnae_fiscal_principal + sigla_uf → varredura mínima.
+  //
+  // ORDER BY capital DESC: sem ordenação, o LIMIT trazia uma amostra dominada
+  // por ME/EPP (a esmagadora maioria dos CNPJs ativos), e cliente que pedia
+  // empresa grande recebia empresa pequena. Capital social é o único proxy de
+  // tamanho POR EMPRESA na base pública (a Receita não tem faturamento), então
+  // as maiores por capital sobem primeiro. SAFE_CAST nunca estoura (valor não
+  // numérico vira NULL e cai para o fim), então a query jamais quebra por isto.
   const sql = `
     SELECT cnpj
     FROM \`${mirrorFqn()}\`
     WHERE (${cnaeConds})
       ${ufCond}
+    ORDER BY SAFE_CAST(capital_social AS FLOAT64) DESC
     LIMIT ${MAX_CANDIDATOS};
   `;
 

@@ -23,6 +23,7 @@ import { separarAlvos } from './alvosDaBusca.js';
 import { traduzirAlvos } from './cnaeMapa.js';
 import { buscarSinalSetorial } from './cagedMirror.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
+import { portesPermitidos, normalizarPorte } from './porte.js';
 
 const MAX_QUERIES = 3;
 const MAX_CNPJS = 10;
@@ -98,6 +99,12 @@ export interface DescobertaPublicaResult {
    * Antes virava Alvo "candidato" com confiança 40 e enchia a base.
    */
   descartadosSoNome: number;
+  /**
+   * Empresa verificada e com decisor, mas de PORTE fora do que o cliente pediu
+   * (porte declarado ou piso implícito do faturamento). Não vira Alvo nem gasta
+   * cota. Porte desconhecido nunca é descartado (benefício da dúvida).
+   */
+  descartadosPorPorte: number;
   blocked: boolean;
   quota: { used: number; total: number; remaining: number };
   /** Região que a busca de fato usou (vem da campanha, semeada do Perfil). */
@@ -221,6 +228,9 @@ export async function runDescobertaPublica(
     err.status = 412;
     throw err;
   }
+  // Recorte de tamanho pedido no Perfil (portes declarados ou piso do
+  // faturamento). null = sem recorte. Empresa fora do porte não vira Alvo.
+  const permitidosPortes = portesPermitidos(perfil);
 
   // Alvo é código de CNAE ou atividade em texto. A atividade escrita também
   // vira código quando dá (traduzirAlvos), para chegar na base de 28M CNPJs em
@@ -332,6 +342,7 @@ export async function runDescobertaPublica(
     duplicados: 0,
     descartadosCrus: 0,
     descartadosSoNome: 0,
+    descartadosPorPorte: 0,
     blocked: ent.quota.blocked,
     quota: { used: ent.quota.used, total: ent.quota.total, remaining: ent.quota.remaining },
     regiaoAplicada: alvoRegiao || null,
@@ -398,6 +409,17 @@ export async function runDescobertaPublica(
         `[MiraDescobertaPublica] cnpj=${cnpj} não sobe: decisores=${dados.qsa.length} situacao=${dados.situacaoCadastral ?? '?'} natJur=${dados.naturezaJuridica ?? '?'}`
       );
       continue;
+    }
+
+    // Recorte de tamanho: empresa de porte fora do pedido não vira Alvo nem
+    // gasta cota. Porte desconhecido (null) é mantido, benefício da dúvida.
+    if (permitidosPortes) {
+      const porteAlvo = normalizarPorte(dados.porte);
+      if (porteAlvo && !permitidosPortes.has(porteAlvo)) {
+        result.descartadosPorPorte++;
+        logger.info(`[MiraDescobertaPublica] cnpj=${cnpj} fora do porte pedido (${dados.porte ?? 'n/d'} -> ${porteAlvo}); não sobe`);
+        continue;
+      }
     }
 
     const agora = new Date().toISOString();
@@ -537,8 +559,13 @@ export async function runDescobertaPublica(
     throw err;
   }
 
+  if (result.descartadosPorPorte > 0) {
+    const msg = `${result.descartadosPorPorte} empresa(s) de porte fora do que você pediu não entraram (a Receita não publica faturamento; o recorte é por porte/capital, uma aproximação de tamanho).`;
+    result.avisos = result.avisos ? [...result.avisos, msg] : [msg];
+  }
+
   logger.info(
-    `[MiraDescobertaPublica] org=${organizationId} alvos=${(busca.alvos ?? []).length} fonte=${result.fonte} buscas=${buscas} verificados=${result.cnpjsVerificados} prontos=${result.prontos} candidatos=${result.candidatos}`
+    `[MiraDescobertaPublica] org=${organizationId} alvos=${(busca.alvos ?? []).length} fonte=${result.fonte} buscas=${buscas} verificados=${result.cnpjsVerificados} prontos=${result.prontos} descartadosPorPorte=${result.descartadosPorPorte} candidatos=${result.candidatos}`
   );
   return result;
 }

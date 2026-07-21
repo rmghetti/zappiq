@@ -12,6 +12,7 @@
  * firmografia de registro público (Receita) nasce alta.
  */
 import type { CnpjData } from './cnpj.js';
+import { normalizarPorte } from './porte.js';
 
 /**
  * `type` e não `interface` de propósito: o breakdown é gravado numa coluna Json
@@ -109,12 +110,12 @@ function matchRegiao(perfil: PerfilLike, alvo: CnpjData): boolean {
 
 function matchPorte(perfil: PerfilLike, alvo: CnpjData): boolean {
   const portes = perfil.alvoB2B?.portes ?? [];
-  if (portes.length === 0 || !alvo.porte) return false;
-  const alvoP = norm(alvo.porte);
-  return portes.some((p) => {
-    const n = norm(p);
-    return alvoP.includes(n) || n.includes(alvoP) || (n === 'me' && alvoP.includes('micro')) || (n === 'epp' && alvoP.includes('pequeno'));
-  });
+  // Normaliza os dois lados: o porte do Alvo vem ora como código ('05'), ora
+  // como texto ('DEMAIS'), e o antigo includes falhava para o código, deixando
+  // o fator de porte quieto justo no caminho principal (espelho do BigQuery).
+  const alvoP = normalizarPorte(alvo.porte);
+  if (portes.length === 0 || !alvoP) return false;
+  return portes.some((p) => normalizarPorte(p) === alvoP);
 }
 
 /**
