@@ -108,6 +108,7 @@ const SAIDA_VALIDA = {
       produto: 'Consultoria de infra',
       racional: 'Atividade 6201-5 com porte médio indica operação de TI própria, onde downtime dói e a migração para nuvem é gatilho típico.',
       demandaPresumida: 'Reduzir downtime da operação',
+      valorEstimadoAnualBRL: 120000,
     },
     { rank: 2, produto: 'Produto Fantasma', racional: 'inventado pelo modelo sem base no catálogo.', demandaPresumida: 'x' },
   ],
@@ -239,6 +240,37 @@ describe('aprofundarAlvo', () => {
     // O verificador antigo continua de pé: produto fora do catálogo cai.
     expect(r.oportunidades).toBe(1);
     expect(r.descartadosPeloVerificador.some((d) => d.includes('Produto Fantasma'))).toBe(true);
+  });
+
+  it('grava o valorEstimado da oportunidade quando o LLM devolve uma faixa (Deal deixa de nascer sem valor)', async () => {
+    await aprofundarAlvo('org-1', 'alvo-1');
+    const call = txOportunidadeCreate.mock.calls.find((c: any[]) => c[0].data.produto === 'Consultoria de infra');
+    expect(call, 'oportunidade nº1 não foi criada').toBeTruthy();
+    expect(Number(call![0].data.valorEstimado)).toBe(120000);
+  });
+
+  it('valorEstimado que não é number NÃO vira valor (true viraria Deal de R$ 1)', async () => {
+    // Achado da revisão adversarial: Number(true) === 1 passa no "> 0". Um
+    // guard de typeof fecha a coerção silenciosa; valor não numérico = null.
+    complete.mockResolvedValue(
+      respostaLLM({
+        ...SAIDA_VALIDA,
+        oportunidades: [{ ...SAIDA_VALIDA.oportunidades[0], valorEstimadoAnualBRL: true }],
+      })
+    );
+    await aprofundarAlvo('org-1', 'alvo-1');
+    const call = txOportunidadeCreate.mock.calls.find((c: any[]) => c[0].data.produto === 'Consultoria de infra');
+    expect(call).toBeTruthy();
+    expect(call![0].data.valorEstimado).toBeUndefined();
+  });
+
+  it('sem valorEstimadoAnualBRL, o create roda com valorEstimado ausente (caminho null coberto)', async () => {
+    const { valorEstimadoAnualBRL: _omitido, ...semValor } = SAIDA_VALIDA.oportunidades[0] as any;
+    complete.mockResolvedValue(respostaLLM({ ...SAIDA_VALIDA, oportunidades: [semValor] }));
+    await aprofundarAlvo('org-1', 'alvo-1');
+    const call = txOportunidadeCreate.mock.calls.find((c: any[]) => c[0].data.produto === 'Consultoria de infra');
+    expect(call).toBeTruthy();
+    expect(call![0].data.valorEstimado).toBeUndefined();
   });
 
   it('persiste o corte confirmado no resumo do dossiê', async () => {

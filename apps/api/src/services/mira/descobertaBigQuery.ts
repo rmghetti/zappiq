@@ -46,7 +46,11 @@ function extrairUfsLocal(regiaoLivre: string, regioesConfig: string[]): string[]
  * separarAlvos) e as regiões dela. Antes lia o Perfil por dentro, o que
  * fazia a busca ignorar o que o cliente escolheu na campanha.
  */
-export async function buscarCnpjsBigQuery(codigos: string[], regioes: string[]): Promise<string[]> {
+export async function buscarCnpjsBigQuery(
+  codigos: string[],
+  regioes: string[],
+  opts?: { priorizarMaiores?: boolean }
+): Promise<string[]> {
   if (!bigQueryDisponivel()) return [];
   const cnaes: string[] = (codigos ?? []).map((c) => String(c).replace(/\D/g, '')).filter((c) => c.length >= 2);
   if (cnaes.length === 0) return [];
@@ -59,11 +63,26 @@ export async function buscarCnpjsBigQuery(codigos: string[], regioes: string[]):
 
   // A tabela espelho já contém só empresas ATIVAS e o snapshot mais recente,
   // clusterizada por cnae_fiscal_principal + sigla_uf → varredura mínima.
+  //
+  // ORDER BY capital DESC: sem ordenação, o LIMIT trazia uma amostra dominada
+  // por ME/EPP (a esmagadora maioria dos CNPJs ativos), e cliente que pedia
+  // empresa grande recebia empresa pequena. Capital social é o único proxy de
+  // tamanho POR EMPRESA na base pública (a Receita não tem faturamento), então
+  // as maiores por capital sobem primeiro. SAFE_CAST nunca estoura (valor não
+  // numérico vira NULL e cai para o fim), então a query jamais quebra por isto.
+  //
+  // CONDICIONAL ao recorte do cliente (achado convergente de duas revisões
+  // adversariais): quem pede só micro/pequeno receberia o lote inteiro das
+  // maiores por capital, o filtro de porte descartaria os MAX_CNPJS do funil e
+  // a campanha zeraria. Sem priorizar, volta a amostra natural (dominada por
+  // ME/EPP), que é o que esse recorte quer.
+  const orderBy = (opts?.priorizarMaiores ?? true) ? 'ORDER BY SAFE_CAST(capital_social AS FLOAT64) DESC' : '';
   const sql = `
     SELECT cnpj
     FROM \`${mirrorFqn()}\`
     WHERE (${cnaeConds})
       ${ufCond}
+    ${orderBy}
     LIMIT ${MAX_CANDIDATOS};
   `;
 

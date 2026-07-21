@@ -198,3 +198,13 @@ export function arquetipoFromQualificacao(qualificacao: string): string | null {
   if (q.includes('sócio') || q.includes('socio') || q.includes('titular')) return 'EXEC_SPONSOR';
   return null;
 }
+
+/**
+ * O decisor merece a coroa de "provável champion"? Marca quem tem poder de
+ * decisão/compra (sponsor executivo, comprador econômico, champion), não o
+ * usuário técnico nem o jurídico. Antes o backend NUNCA escrevia isChampion, e
+ * a coroa da UI (dossiê do Alvo) jamais aparecia.
+ */
+export function isChampionArquetipo(arquetipo?: string | null): boolean {
+  return arquetipo === 'EXEC_SPONSOR' || arquetipo === 'ECONOMIC_BUYER' || arquetipo === 'CHAMPION';
+}

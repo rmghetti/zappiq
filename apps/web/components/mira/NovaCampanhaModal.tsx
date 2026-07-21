@@ -655,6 +655,12 @@ function DescobrirModal({
                 {result.descartadosSoNome} apareceram na busca só com o nome (sem CNPJ) e não viraram Alvo.
               </li>
             )}
+            {(result.descartadosPorPorte ?? 0) > 0 && (
+              <li className="text-amber-700">
+                {result.descartadosPorPorte} empresa(s) de porte fora do que você pediu não entraram (a Receita não
+                publica faturamento; o recorte usa porte e capital, uma aproximação de tamanho). Não gastam cota.
+              </li>
+            )}
             {result.modo === 'B2C' && result.criados - result.prontos > 0 && (
               <li>{result.criados - result.prontos} sem contato verificável ficaram em qualificação (não gastam cota).</li>
             )}
