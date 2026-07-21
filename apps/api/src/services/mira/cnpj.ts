@@ -192,10 +192,73 @@ export async function fetchCnpj(organizationId: string, cnpjRaw: string): Promis
 }
 
 /** Papel de compra provável a partir da qualificação societária (registro público). */
+/**
+ * Tabela oficial de Qualificação do Sócio/Administrador da Receita (Tabela III
+ * do programa CNPJ). O espelho do BigQuery (base do BD Pro) guarda o CÓDIGO,
+ * não o texto: sem traduzir, o comitê mostrava "22" no lugar de "Sócio" e o
+ * arquétipo/coroa não saíam para nenhum decisor do QSA vindo da descoberta.
+ * A BrasilAPI já devolve o texto; por isso a tradução só age em código puro.
+ */
+const QUALIFICACAO_SOCIO: Record<string, string> = {
+  '05': 'Administrador', '08': 'Conselheiro de Administração', '09': 'Curador',
+  '10': 'Diretor', '11': 'Interventor', '12': 'Inventariante', '13': 'Liquidante',
+  '14': 'Mãe', '15': 'Pai', '16': 'Presidente', '17': 'Procurador',
+  '19': 'Síndico (Condomínio)', '20': 'Sociedade Consorciada', '21': 'Sociedade Filiada',
+  '22': 'Sócio', '23': 'Sócio Capitalista', '24': 'Sócio Comanditado',
+  '25': 'Sócio Comanditário', '26': 'Sócio de Indústria', '28': 'Sócio-Gerente',
+  '29': 'Sócio ou Acionista Incapaz ou Relativamente Incapaz (exceto menor)',
+  '30': 'Sócio ou Acionista Menor (Assistido/Representado)', '31': 'Sócio Ostensivo',
+  '32': 'Tabelião', '34': 'Titular de Empresa Individual Imobiliária', '35': 'Tutor',
+  '37': 'Sócio Pessoa Jurídica Domiciliado no Exterior',
+  '38': 'Sócio Pessoa Física Residente ou Domiciliado no Exterior',
+  '39': 'Diplomata', '40': 'Cônsul', '41': 'Representante de Organização Internacional',
+  '42': 'Oficial de Registro', '43': 'Responsável', '46': 'Ministro de Estado das Relações Exteriores',
+  '47': 'Sócio Pessoa Física Residente no Brasil', '48': 'Sócio Pessoa Jurídica Domiciliado no Brasil',
+  '49': 'Sócio-Administrador', '50': 'Empresário', '51': 'Candidato a Cargo Político Eletivo',
+  '52': 'Sócio com Capital', '53': 'Sócio sem Capital', '54': 'Fundador',
+  '55': 'Sócio Comanditado Residente no Exterior',
+  '56': 'Sócio Comanditário Pessoa Física Residente no Exterior',
+  '57': 'Sócio Comanditário Pessoa Jurídica Domiciliado no Exterior',
+  '58': 'Sócio Comanditário Incapaz', '59': 'Produtor Rural', '60': 'Cônsul Honorário',
+  '61': 'Responsável Indígena', '62': 'Representante das Instituições Extraterritoriais',
+  '63': 'Cotas em Tesouraria', '64': 'Administrador Judicial',
+  '65': 'Titular Pessoa Física Residente ou Domiciliado no Brasil',
+  '66': 'Titular Pessoa Física Residente ou Domiciliado no Exterior',
+  '67': 'Titular Pessoa Física Incapaz ou Relativamente Incapaz (exceto menor)',
+  '68': 'Titular Pessoa Física Menor (Assistido/Representado)',
+  '70': 'Administrador Residente ou Domiciliado no Exterior',
+  '71': 'Conselheiro de Administração Residente ou Domiciliado no Exterior',
+  '72': 'Diretor Residente ou Domiciliado no Exterior',
+  '73': 'Presidente Residente ou Domiciliado no Exterior',
+  '74': 'Sócio-Administrador Residente ou Domiciliado no Exterior',
+  '75': 'Fundador Residente ou Domiciliado no Exterior',
+  '78': 'Titular Pessoa Jurídica Domiciliada no Brasil',
+  '79': 'Titular Pessoa Jurídica Domiciliada no Exterior',
+};
+
+/**
+ * Devolve a descrição legível da qualificação. Código puro da Receita vira
+ * texto oficial; texto (BrasilAPI, titular de EI) passa direto; desconhecido
+ * passa direto (nunca esconde o dado).
+ */
+export function descricaoQualificacao(raw?: string | null): string {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  if (/^\d{1,2}$/.test(s)) return QUALIFICACAO_SOCIO[s.padStart(2, '0')] ?? s;
+  return s;
+}
+
 export function arquetipoFromQualificacao(qualificacao: string): string | null {
-  const q = qualificacao.toLowerCase();
+  // Traduz o código antes de classificar: 'administrador'/'presidente' etc. só
+  // aparecem no TEXTO, e o espelho manda o número.
+  const q = descricaoQualificacao(qualificacao).toLowerCase();
   if (q.includes('administrador') || q.includes('presidente') || q.includes('diretor')) return 'ECONOMIC_BUYER';
-  if (q.includes('sócio') || q.includes('socio') || q.includes('titular')) return 'EXEC_SPONSOR';
+  if (
+    q.includes('sócio') || q.includes('socio') || q.includes('titular') ||
+    q.includes('empresário') || q.includes('empresario') || q.includes('fundador')
+  ) {
+    return 'EXEC_SPONSOR';
+  }
   return null;
 }
 
