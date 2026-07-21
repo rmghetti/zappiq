@@ -216,7 +216,7 @@ export function nucleoDoNome(nome: string): string[] {
  *
  * Camada 1 (necessária): o token mais distintivo do nome aparece no texto.
  */
-function mencionaAConta(r: SerpResult, nucleo: string[]): boolean {
+export function mencionaAConta(r: SerpResult, nucleo: string[]): boolean {
   if (nucleo.length === 0) return false;
   const txt = norm(`${r.title} ${r.snippet} ${r.url}`);
   return txt.includes(nucleo[0]);

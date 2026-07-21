@@ -98,12 +98,15 @@ describe('Camada 4: contato de decisores já mapeados (ex.: sócios do QSA)', ()
     expect(r.buscasContato).toBeGreaterThan(0); // a busca por nome DE FATO rodou
   });
 
-  it('extrai LinkedIn, Instagram, e-mail e telefone SÓ de resultado que cita o nome', async () => {
-    findFirstAlvo.mockResolvedValue(ALVO_BASE);
+  it('REJEITA contato de empresa homônima: LinkedIn/e-mail/telefone de "Metalúrgica Rondello" NÃO entram no decisor da ACME', async () => {
+    // Cenário exato da reclamação do cliente: a Brave não honra aspas, então a
+    // busca por '"Carlos Roberto Rondello" "ACME METALURGICA LTDA"' devolve o
+    // perfil de um xará que trabalha em OUTRA empresa. O contato dele NUNCA
+    // pode ser gravado no decisor da ACME.
+    findFirstAlvo.mockResolvedValue(ALVO_BASE); // nome: 'ACME METALURGICA LTDA'
     findManyDecisor.mockResolvedValue([
       { id: 'dec-1', nome: 'Carlos Roberto Rondello', vinculoQsa: true, perfilPublico: null, contato: null, lineage: [] },
     ]);
-    // Camada 1 (query genérica da empresa): nada.
     webSearch.mockImplementation(async (_org: string, query: string) => {
       if (query.includes('site:linkedin.com/in') && query.includes('Carlos Roberto Rondello')) {
         return [
@@ -123,19 +126,118 @@ describe('Camada 4: contato de decisores já mapeados (ex.: sócios do QSA)', ()
           },
         ];
       }
-      return []; // Camada 1, genérica: nada
+      return [];
+    });
+
+    const r = await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    expect(r.contatosEnriquecidos).toBe(0); // fonte de outra empresa é pior que fonte nenhuma
+    const chamada = updateDecisor.mock.calls.find((c: any[]) => c[0].where.id === 'dec-1');
+    if (chamada) {
+      // Pode marcar contatoBuscadoEm (para não re-buscar), mas jamais gravar
+      // LinkedIn/e-mail/telefone de outra empresa.
+      const data = chamada[0].data;
+      expect(data.perfilPublico?.linkedinUrl ?? null).toBeNull();
+      expect(data.contato ?? null).toBeNull();
+    }
+  });
+
+  it('QSA pai/filho homônimos: hit do FILHO em outra empresa não vira contato do PAI, e a tentativa não é queimada', async () => {
+    // Achado da revisão adversarial: a exclusão por nome EXATO deixava o
+    // "JOAO SILVA FILHO" (outro sócio do QSA) confirmar a empresa num hit que
+    // na verdade é do filho em OUTRA firma — o check de nome usa includes e
+    // "joao silva" é substring de "joao silva filho". Nos dois sentidos.
+    findFirstAlvo.mockResolvedValue({
+      ...ALVO_BASE,
+      decisores: [
+        { id: 'd-pai', nome: 'JOAO SILVA', vinculoQsa: true },
+        { id: 'd-filho', nome: 'JOAO SILVA FILHO', vinculoQsa: true },
+      ],
+    });
+    findManyDecisor.mockResolvedValue([
+      { id: 'd-pai', nome: 'JOAO SILVA', vinculoQsa: true, perfilPublico: null, contato: null, lineage: [] },
+    ]);
+    webSearch.mockImplementation(async (_org: string, query: string) => {
+      if (query.includes('JOAO SILVA')) {
+        return [
+          {
+            title: 'Joao Silva Filho - Diretor - Metalurgica Rondello | LinkedIn',
+            url: 'https://linkedin.com/in/joao-silva-filho',
+            snippet: 'Diretor na Metalurgica Rondello. Joao Silva Filho.',
+          },
+        ];
+      }
+      return [];
+    });
+
+    const r = await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    expect(r.contatosEnriquecidos).toBe(0);
+    const chamada = updateDecisor.mock.calls.find((c: any[]) => c[0].where.id === 'd-pai');
+    if (chamada) {
+      expect(chamada[0].data.perfilPublico?.linkedinUrl ?? null).toBeNull();
+      // Tentativa NÃO queimada: todos os hits do nome foram recusados pelo
+      // anti-homônimo, então o próximo clique pode tentar de novo (ex.: depois
+      // de o Alvo ganhar site oficial, que confirma o que hoje não dá).
+      expect(chamada[0].data.perfilPublico?.contatoBuscadoEm ?? null).toBeNull();
+    }
+  });
+
+  it('decisor mapeado na WEB (vinculoQsa false) não serve de âncora para confirmar a empresa', async () => {
+    // Dado poluído (decisor errado criado antes do fix) não pode confirmar
+    // novos resultados da empresa errada: só sócio do QSA (registro oficial)
+    // entra nos sinais da conta.
+    findFirstAlvo.mockResolvedValue({
+      ...ALVO_BASE,
+      decisores: [{ id: 'd-web', nome: 'Fulano Poluido', vinculoQsa: false }],
+    });
+    findManyDecisor.mockResolvedValue([
+      { id: 'd-web', nome: 'Fulano Poluido', vinculoQsa: false, perfilPublico: null, contato: null, lineage: [] },
+    ]);
+    webSearch.mockImplementation(async (_org: string, query: string) => {
+      if (query.includes('Fulano Poluido')) {
+        return [
+          {
+            // Cita o próprio Fulano (nome bate), NÃO cita a ACME nem sinal
+            // nenhum da conta. Antes, "Fulano Poluido" nos sinais confirmaria.
+            title: 'Fulano Poluido - Gerente - Empresa Errada | LinkedIn',
+            url: 'https://linkedin.com/in/fulano-poluido',
+            snippet: 'Gerente na Empresa Errada. Fulano Poluido.',
+          },
+        ];
+      }
+      return [];
+    });
+
+    const r = await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    expect(r.contatosEnriquecidos).toBe(0);
+  });
+
+  it('ACEITA contato quando a MESMA fonte cita a empresa-alvo (ACME)', async () => {
+    findFirstAlvo.mockResolvedValue(ALVO_BASE);
+    findManyDecisor.mockResolvedValue([
+      { id: 'dec-1', nome: 'Carlos Roberto Rondello', vinculoQsa: true, perfilPublico: null, contato: null, lineage: [] },
+    ]);
+    webSearch.mockImplementation(async (_org: string, query: string) => {
+      if (query.includes('site:linkedin.com/in') && query.includes('Carlos Roberto Rondello')) {
+        return [
+          {
+            title: 'Carlos Roberto Rondello - Diretor - ACME Metalúrgica | LinkedIn',
+            url: 'https://linkedin.com/in/carlos-acme',
+            snippet: 'Diretor na ACME Metalúrgica Ltda.',
+          },
+        ];
+      }
+      return [];
     });
 
     const r = await enriquecerDecisoresPublico('org-1', 'alvo-1');
 
     expect(r.contatosEnriquecidos).toBe(1);
     const chamada = updateDecisor.mock.calls.find((c: any[]) => c[0].where.id === 'dec-1');
-    expect(chamada).toBeTruthy();
-    const data = chamada![0].data;
-    expect(data.perfilPublico.linkedinUrl).toBe('https://linkedin.com/in/carlos-rondello');
-    expect(data.contato.email).toBe('carlos.rondello@metalurgicarondello.com.br');
-    expect(data.contato.phone).toBe('11988887777');
-    expect(data.perfilPublico.contatoBuscadoEm).toBeTruthy();
+    expect(chamada![0].data.perfilPublico.linkedinUrl).toBe('https://linkedin.com/in/carlos-acme');
+    expect(chamada![0].data.perfilPublico.contatoBuscadoEm).toBeTruthy();
   });
 
   it('não repete a busca de contato para quem já foi checado (contatoBuscadoEm presente)', async () => {
@@ -177,6 +279,45 @@ describe('Camada 4: contato de decisores já mapeados (ex.: sócios do QSA)', ()
   });
 });
 
+describe('vínculo com a empresa-alvo: não mapeia homônimo de outra empresa', () => {
+  it('Camada 1: descarta candidato cujo resultado NÃO cita a empresa-alvo (xará em outra empresa)', async () => {
+    findFirstAlvo.mockResolvedValue(ALVO_BASE); // 'ACME METALURGICA LTDA'
+    findUniquePerfil.mockResolvedValue({ alvoB2B: { decisor: ['Diretor'], influenciadores: [], usuarioFinal: [] } });
+    // Resultado de LinkedIn de um homônimo em OUTRA empresa: não menciona a ACME.
+    webSearch.mockResolvedValue([
+      { title: 'João da Silva - Diretor - Metalúrgica Rondello | LinkedIn', url: 'https://linkedin.com/in/joao-silva-rondello', snippet: 'Diretor na Metalúrgica Rondello.' },
+    ]);
+    const { llmRouter } = await import('../llm/LLMRouter.js');
+    (llmRouter.complete as any).mockResolvedValue({
+      text: JSON.stringify({ decisores: [{ nome: 'João da Silva', cargo: 'Diretor', fonteIndice: 1 }] }),
+    });
+
+    const r = await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    expect(r.criados).toBe(0);
+    expect(createDecisor).not.toHaveBeenCalled();
+    // Honestidade na resposta (não só no log): a busca ACHOU e nós recusamos.
+    expect(r.homonimosFiltrados).toBe(1);
+  });
+
+  it('Camada 1: aceita candidato cujo resultado cita a empresa-alvo (ACME)', async () => {
+    findFirstAlvo.mockResolvedValue(ALVO_BASE);
+    findUniquePerfil.mockResolvedValue({ alvoB2B: { decisor: ['Diretor'], influenciadores: [], usuarioFinal: [] } });
+    webSearch.mockResolvedValue([
+      { title: 'João da Silva - Diretor - ACME Metalúrgica | LinkedIn', url: 'https://linkedin.com/in/joao-silva-acme', snippet: 'Diretor na ACME Metalúrgica.' },
+    ]);
+    const { llmRouter } = await import('../llm/LLMRouter.js');
+    (llmRouter.complete as any).mockResolvedValue({
+      text: JSON.stringify({ decisores: [{ nome: 'João da Silva', cargo: 'Diretor', fonteIndice: 1 }] }),
+    });
+
+    const r = await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    expect(r.criados).toBe(1);
+    expect(createDecisor).toHaveBeenCalled();
+  });
+});
+
 describe('Fontes verificadas: o que cada camada achou (não só o link)', () => {
   // O Rodrigo testou "Mapear decisores" e viu "1 enriquecido a partir de
   // pegada pública" sem nenhum jeito de saber O QUÊ. A Camada 4 atualizava o
@@ -189,7 +330,7 @@ describe('Fontes verificadas: o que cada camada achou (não só o link)', () => 
     ]);
     webSearch.mockImplementation(async (_org: string, query: string) => {
       if (query.includes('site:linkedin.com/in') && query.includes('Carlos Roberto Rondello')) {
-        return [{ title: 'Carlos Roberto Rondello - Sócio | LinkedIn', url: 'https://linkedin.com/in/carlos-rondello', snippet: 'Sócio' }];
+        return [{ title: 'Carlos Roberto Rondello - Sócio na ACME Metalúrgica | LinkedIn', url: 'https://linkedin.com/in/carlos-rondello', snippet: 'Sócio na ACME Metalúrgica' }];
       }
       return [];
     });
@@ -214,7 +355,7 @@ describe('Fontes verificadas: o que cada camada achou (não só o link)', () => 
     ]);
     webSearch.mockImplementation(async (_org: string, query: string) => {
       if (query.includes('Maria Teste') && !query.includes('linkedin')) {
-        return [{ title: 'Fale com Maria Teste', url: 'https://diretorio.com.br/maria', snippet: 'contato: maria@x.com.br' }];
+        return [{ title: 'Maria Teste - ACME Metalúrgica', url: 'https://diretorio.com.br/maria', snippet: 'ACME Metalúrgica - contato: maria@x.com.br' }];
       }
       return [];
     });

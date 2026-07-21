@@ -20,6 +20,7 @@ import { logger } from '../../utils/logger.js';
 import { llmRouter } from '../llm/LLMRouter.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
 import { reavaliarAlvo, type ReavaliarResult } from './reavaliar.js';
+import { nucleoDoNome, mencionaAConta, confirmaAConta, type SinaisDaConta } from './releasesPublico.js';
 
 const MAX_QUERIES = 4; // orcamento amigavel ao tier gratuito (100 buscas/dia)
 const MAX_DECISORES = 8;
@@ -153,6 +154,12 @@ export interface DecisoresPublicoResult {
   /** Camada 4: busca de CONTATO por nome, em decisores já mapeados. */
   buscasContato?: number;
   contatosEnriquecidos?: number;
+  /**
+   * Resultados que citavam a pessoa/cargo mas NÃO a empresa-alvo, recusados
+   * pelo anti-homônimo (Camadas 1 e 4). Exposto para a tela poder dizer
+   * "achamos e recusamos" em vez de um mudo "nenhum decisor novo".
+   */
+  homonimosFiltrados?: number;
   /** Falha pontual da Camada 4 (best-effort): não derruba o resultado principal. */
   avisos?: string[];
   /** Score/confiança/status recalculados quando o mapeamento mudou algo. */
@@ -183,6 +190,33 @@ export async function enriquecerDecisoresPublico(
     return { ok: false, buscas: 0, candidatos: 0, criados: 0, enriquecidos: 0, descartadosPeloVerificador: [], motivo: 'alvo_sem_nome' };
   }
 
+  // -- Guarda anti-homônimo (mesmo padrão provado em releasesPublico) ----
+  // A Brave não honra aspas: buscar '"Fulano" "Empresa X"' devolve o xará que
+  // trabalha em OUTRA empresa. Sem checar o vínculo, o dossiê recebia decisor
+  // de empresa errada (reclamação do cliente). Um resultado só entra se FALA
+  // da conta-alvo: cita o núcleo do nome dela OU traz sinal forte que a liga a
+  // este CNPJ (domínio do site oficial, CNPJ, telefone, ou OUTRO sócio do
+  // QSA). Município fica de fora: sozinho não separa homônimos na mesma cidade.
+  const nucleoEmpresa = nucleoDoNome(empresa);
+  // SÓ sócio do QSA (registro oficial) serve de âncora para confirmar a
+  // empresa. Decisor mapeado na web pode ser exatamente o dado poluído que
+  // este fix corrige — usá-lo como sinal deixaria o erro antigo confirmar
+  // novos erros da mesma empresa errada.
+  const decisoresQsa: string[] = (alvo.decisores ?? [])
+    .filter((d: any) => d?.vinculoQsa === true)
+    .map((d: any) => String(d?.nome ?? '').trim())
+    .filter((n: string) => n.length > 0);
+  const sinaisConta: SinaisDaConta = {
+    cnpj: alvo.cnpj ?? null,
+    municipio: null,
+    uf: alvo.uf ?? null,
+    telefone: alvo.telefone ?? null,
+    site: alvo.site ?? null,
+    decisores: decisoresQsa,
+  };
+  const resultadoEhDaConta = (r: SerpResult, sinais: SinaisDaConta = sinaisConta): boolean =>
+    mencionaAConta(r, nucleoEmpresa) || confirmaAConta(r, sinais).confirma;
+
   // -- Camada 1: buscas dirigidas pelos papeis-alvo do ICP -------------
   // Decisor, influenciadores e usuario final declarados no Perfil, por ordem
   // de prioridade; as queries usam os primeiros, o prompt ve os tres grupos.
@@ -198,6 +232,7 @@ export async function enriquecerDecisoresPublico(
   const resultados: SerpResult[] = [];
   const vistosUrl = new Set<string>();
   let buscas = 0;
+  let descartadosPorHomonimo = 0;
   for (const q of queries) {
     try {
       const hits = await webSearch(organizationId, q, { limit: 8, alvoId });
@@ -205,7 +240,14 @@ export async function enriquecerDecisoresPublico(
       for (const h of hits) {
         if (vistosUrl.has(h.url)) continue;
         vistosUrl.add(h.url);
-        if (pareceDecisor(h)) resultados.push(h);
+        if (!pareceDecisor(h)) continue;
+        // Só entra quem FALA da conta-alvo: mata o resultado do xará de outra
+        // empresa antes que o LLM sequer o veja como candidato.
+        if (!resultadoEhDaConta(h)) {
+          descartadosPorHomonimo++;
+          continue;
+        }
+        resultados.push(h);
       }
     } catch (err: any) {
       // 14-15/07/2026: antes só propagava em 501 ("nenhum provedor
@@ -436,17 +478,40 @@ export async function enriquecerDecisoresPublico(
 
     for (const d of semContato) {
       const nomeNorm = norm(d.nome);
+      // Nos sinais para ESTE decisor, o nome dele NÃO pode confirmar a empresa
+      // (a busca é pelo nome dele; ele sempre aparece). Só OUTROS sócios do QSA
+      // e os sinais firmográficos da conta contam como confirmação. A exclusão
+      // vale por SUBSTRING nos dois sentidos, não por igualdade: QSA de PME tem
+      // pai/filho homônimos ("JOAO SILVA" e "JOAO SILVA FILHO"), e o check de
+      // nome usa includes — um confirmaria o hit do outro em empresa errada.
+      const sinaisDoDecisor: SinaisDaConta = {
+        ...sinaisConta,
+        decisores: decisoresQsa.filter((n) => {
+          const nn = norm(n);
+          return nn !== nomeNorm && !nn.includes(nomeNorm) && !nomeNorm.includes(nn);
+        }),
+      };
       const queriesContato = [
         `"${d.nome}" "${empresa}" site:linkedin.com/in`,
         `"${d.nome}" "${empresa}" (instagram.com OR contato OR email OR telefone)`,
       ];
       const achados: SerpResult[] = [];
+      let hitsDoNome = 0;
       for (const q of queriesContato) {
         try {
           const hits = await webSearch(organizationId, q, { limit: 6, alvoId });
           buscasContato++;
           for (const h of hits) {
-            if (norm(`${h.title} ${h.snippet}`).includes(nomeNorm)) achados.push(h);
+            // Nome bate E o resultado é REALMENTE desta empresa (anti-homônimo):
+            // sem isso, o LinkedIn/telefone de um xará de outra firma entrava no
+            // decisor certo e o vendedor abordava/citava a pessoa errada.
+            if (!norm(`${h.title} ${h.snippet}`).includes(nomeNorm)) continue;
+            hitsDoNome++;
+            if (!resultadoEhDaConta(h, sinaisDoDecisor)) {
+              descartadosPorHomonimo++;
+              continue;
+            }
+            achados.push(h);
           }
         } catch (err: any) {
           logger.warn(`[MiraDecisoresPublico] busca de contato falhou p/ "${d.nome}": ${err?.message ?? err}`);
@@ -477,12 +542,21 @@ export async function enriquecerDecisoresPublico(
       );
       const lineageAntigo = Array.isArray(d.lineage) ? d.lineage : [];
 
+      // contatoBuscadoEm marca "já tentei e não há nada" para o clique não
+      // repetir busca inútil. EXCETO quando todos os hits do nome foram
+      // recusados pelo anti-homônimo: aí a tentativa NÃO é queimada — um
+      // clique futuro (ex.: depois de o Alvo ganhar site oficial) pode
+      // confirmar o que hoje não dá.
+      const tudoFiltrado = hitsDoNome > 0 && achados.length === 0;
       await prisma.miraDecisor.update({
         where: { id: d.id },
         data: {
-          // contatoBuscadoEm grava SEMPRE (achando ou não): sem isso, todo
-          // clique repetiria a mesma busca por quem já foi checado e nada tinha.
-          perfilPublico: { ...perfilPublicoAtual, linkedinUrl, instagramUrl, contatoBuscadoEm: agora },
+          perfilPublico: {
+            ...perfilPublicoAtual,
+            linkedinUrl,
+            instagramUrl,
+            ...(tudoFiltrado ? {} : { contatoBuscadoEm: agora }),
+          },
           contato: email || phone ? { ...contatoAtual, email, phone } : d.contato,
           lineage: novasFontes.length
             ? [...lineageAntigo, ...novasFontes.map((u) => ({ campo: 'contato_pegada_publica', url: u, data: agora }))]
@@ -539,7 +613,7 @@ export async function enriquecerDecisoresPublico(
   }
 
   logger.info(
-    `[MiraDecisoresPublico] alvo=${alvoId} buscas=${buscas} candidatos=${candidatosLen} criados=${criados} enriquecidos=${enriquecidos} descartados=${descartados.length} buscasContato=${buscasContato} contatosEnriquecidos=${contatosEnriquecidos}${reavaliacao ? ` score=${reavaliacao.scoreAntes}→${reavaliacao.scoreDepois} status=${reavaliacao.statusAntes}→${reavaliacao.statusDepois}` : ''}`
+    `[MiraDecisoresPublico] alvo=${alvoId} buscas=${buscas} candidatos=${candidatosLen} criados=${criados} enriquecidos=${enriquecidos} descartados=${descartados.length} homonimosFiltrados=${descartadosPorHomonimo} buscasContato=${buscasContato} contatosEnriquecidos=${contatosEnriquecidos}${reavaliacao ? ` score=${reavaliacao.scoreAntes}→${reavaliacao.scoreDepois} status=${reavaliacao.statusAntes}→${reavaliacao.statusDepois}` : ''}`
   );
   return {
     ok: true,
@@ -550,6 +624,7 @@ export async function enriquecerDecisoresPublico(
     descartadosPeloVerificador: descartados,
     buscasContato,
     contatosEnriquecidos,
+    homonimosFiltrados: descartadosPorHomonimo,
     ...(avisos.length ? { avisos } : {}),
     ...(reavaliacao ? { reavaliacao } : {}),
   };
