@@ -263,6 +263,27 @@ describe('Fontes verificadas: o que cada camada achou (não só o link)', () => 
   });
 });
 
+describe('isChampion no decisor mapeado por pegada pública', () => {
+  it('decisor NOVO com cargo de poder de compra nasce com a coroa (3º site de criação, achado da revisão)', async () => {
+    findFirstAlvo.mockResolvedValue(ALVO_BASE);
+    findUniquePerfil.mockResolvedValue({ alvoB2B: { decisor: [], influenciadores: [], usuarioFinal: [] } });
+    webSearch.mockResolvedValue([
+      { title: 'Joana Pereira - Diretora Financeira - ACME | LinkedIn', url: 'https://linkedin.com/in/joana-pereira', snippet: 'Diretora Financeira na ACME' },
+    ]);
+    const { llmRouter } = await import('../llm/LLMRouter.js');
+    (llmRouter.complete as any).mockResolvedValue({
+      text: JSON.stringify({ decisores: [{ nome: 'Joana Pereira', cargo: 'Diretora Financeira', fonteIndice: 1 }] }),
+    });
+
+    await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    expect(createDecisor).toHaveBeenCalled();
+    const data = createDecisor.mock.calls[0][0].data;
+    expect(data.arquetipo).toBe('ECONOMIC_BUYER'); // 'financ' no cargo
+    expect(data.isChampion).toBe(true);
+  });
+});
+
 describe('extrairContatoPublico — determinístico, nunca inventa', () => {
   it('não extrai nada de uma lista vazia', () => {
     expect(extrairContatoPublico([])).toEqual({ linkedinUrl: null, instagramUrl: null, email: null, telefone: null });

@@ -240,7 +240,7 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
     '  "resumo": "parágrafo executivo do alvo para o vendedor (3-4 frases, só fatos fornecidos + leitura honesta)",',
     '  "planoAcao": "o PRÓXIMO PASSO concreto nesta conta, para alguém executar nos próximos 3 dias (2-4 frases). Comece pelo verbo. Diga QUEM procurar (nome da lista de decisores), POR ONDE (o canal que os dados sustentam) e COM QUE GANCHO. Se faltar dado para agir (ex.: sem decisor mapeado), o passo é conseguir esse dado. Nunca prometa contato que não temos.",',
     '  "oportunidades": [',
-    '    {"rank": 1, "produto": "nome EXATO do catálogo", "racional": "por que este produto encaixa nesta conta (2-3 frases, ancorado na atividade/porte/local E nas dores/casos de uso do perfil)", "demandaPresumida": "a dor provável que sustenta o encaixe (1 frase, honesta: é presunção, não fato)", "valorEstimadoAnualBRL": <potencial ANUAL desta oportunidade em reais, estimado do ticket médio do perfil aplicado ao porte/faturamento da conta; use null se não der para estimar com honestidade>},',
+    '    {"rank": 1, "produto": "nome EXATO do catálogo", "racional": "por que este produto encaixa nesta conta (2-3 frases, ancorado na atividade/porte/local E nas dores/casos de uso do perfil)", "demandaPresumida": "a dor provável que sustenta o encaixe (1 frase, honesta: é presunção, não fato)", "valorEstimadoAnualBRL": <potencial ANUAL desta oportunidade em reais, estimado do ticket médio do perfil aplicado ao porte/faturamento da conta; NÚMERO PURO sem separador de milhar e sem aspas (ex.: 120000); use null se não der para estimar com honestidade>},',
     '    {"rank": 2, "produto": "outro nome EXATO do catálogo", "racional": "...", "demandaPresumida": "...", "valorEstimadoAnualBRL": <número em reais ou null>}',
     '  ],',
     '  "roteiros": [',
@@ -295,8 +295,12 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
     // positivo. Sem ele, o Deal continua nascendo sem valor (como antes), em
     // vez de inventar um número. É a diferença entre dimensionar o pipeline e
     // mentir sobre ele.
-    const rawValor = Number(o?.valorEstimadoAnualBRL);
-    const valorEstimado = Number.isFinite(rawValor) && rawValor > 0 ? Math.round(rawValor) : null;
+    // Guard de typeof: Number(true) === 1 e Number("120.000") === 120 passam
+    // no "> 0" e virariam Deal de R$ 1 ou 1000x menor, silenciosamente. Só
+    // number nativo do JSON entra; o resto é null (sem valor > valor errado).
+    const rawValor = o?.valorEstimadoAnualBRL;
+    const valorEstimado =
+      typeof rawValor === 'number' && Number.isFinite(rawValor) && rawValor > 0 ? Math.round(rawValor) : null;
     oportunidadesOk.push({
       rank: oportunidadesOk.length + 1,
       produto: produtoCanonico,

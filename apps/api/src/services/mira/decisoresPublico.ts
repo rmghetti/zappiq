@@ -18,6 +18,7 @@
 import { prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
 import { llmRouter } from '../llm/LLMRouter.js';
+import { isChampionArquetipo } from './cnpj.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
 import { reavaliarAlvo, type ReavaliarResult } from './reavaliar.js';
 
@@ -392,6 +393,10 @@ export async function enriquecerDecisoresPublico(
             nome,
             papel: cargo,
             arquetipo,
+            // A coroa também no 3º site de criação (achado da revisão): é aqui
+            // que nasce o CHAMPION de verdade (comercial/marketing/diretoria
+            // achados na pegada pública), e só o QSA ganhava isChampion.
+            isChampion: isChampionArquetipo(arquetipo),
             vinculoQsa: false,
             baseLegal: 'legitimo_interesse',
             fonte: urls[0],
