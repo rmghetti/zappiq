@@ -15,7 +15,7 @@
  */
 import { prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
-import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, titularDoRegistro, type CnpjData } from './cnpj.js';
+import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, isChampionArquetipo, titularDoRegistro, type CnpjData } from './cnpj.js';
 import { computeMiraScoreV1 } from './score.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
 import { buscarCnpjsBigQuery, enriquecerCnpjsBigQuery, type CnpjDoEspelho } from './descobertaBigQuery.js';
@@ -464,16 +464,20 @@ export async function runDescobertaPublica(
             { campo: 'firmografia', url: dados.fonteUrl, data: agora, confianca: 95 },
           ],
           decisores: {
-            create: dados.qsa.map((s) => ({
-              nome: s.nome,
-              papel: s.qualificacao,
-              arquetipo: arquetipoFromQualificacao(s.qualificacao),
-              vinculoQsa: true,
-              fonte: dados!.fonteUrl,
-              baseLegal: 'registro_publico',
-              lineage: [{ campo: 'nome_papel', url: dados!.fonteUrl, data: agora }],
-              confianca: 90,
-            })),
+            create: dados.qsa.map((s) => {
+              const arq = arquetipoFromQualificacao(s.qualificacao);
+              return {
+                nome: s.nome,
+                papel: s.qualificacao,
+                arquetipo: arq,
+                isChampion: isChampionArquetipo(arq),
+                vinculoQsa: true,
+                fonte: dados!.fonteUrl,
+                baseLegal: 'registro_publico',
+                lineage: [{ campo: 'nome_papel', url: dados!.fonteUrl, data: agora }],
+                confianca: 90,
+              };
+            }),
           },
         },
         select: { id: true },
