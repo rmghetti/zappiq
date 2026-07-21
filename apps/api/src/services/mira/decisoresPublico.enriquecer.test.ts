@@ -142,6 +142,78 @@ describe('Camada 4: contato de decisores já mapeados (ex.: sócios do QSA)', ()
     }
   });
 
+  it('QSA pai/filho homônimos: hit do FILHO em outra empresa não vira contato do PAI, e a tentativa não é queimada', async () => {
+    // Achado da revisão adversarial: a exclusão por nome EXATO deixava o
+    // "JOAO SILVA FILHO" (outro sócio do QSA) confirmar a empresa num hit que
+    // na verdade é do filho em OUTRA firma — o check de nome usa includes e
+    // "joao silva" é substring de "joao silva filho". Nos dois sentidos.
+    findFirstAlvo.mockResolvedValue({
+      ...ALVO_BASE,
+      decisores: [
+        { id: 'd-pai', nome: 'JOAO SILVA', vinculoQsa: true },
+        { id: 'd-filho', nome: 'JOAO SILVA FILHO', vinculoQsa: true },
+      ],
+    });
+    findManyDecisor.mockResolvedValue([
+      { id: 'd-pai', nome: 'JOAO SILVA', vinculoQsa: true, perfilPublico: null, contato: null, lineage: [] },
+    ]);
+    webSearch.mockImplementation(async (_org: string, query: string) => {
+      if (query.includes('JOAO SILVA')) {
+        return [
+          {
+            title: 'Joao Silva Filho - Diretor - Metalurgica Rondello | LinkedIn',
+            url: 'https://linkedin.com/in/joao-silva-filho',
+            snippet: 'Diretor na Metalurgica Rondello. Joao Silva Filho.',
+          },
+        ];
+      }
+      return [];
+    });
+
+    const r = await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    expect(r.contatosEnriquecidos).toBe(0);
+    const chamada = updateDecisor.mock.calls.find((c: any[]) => c[0].where.id === 'd-pai');
+    if (chamada) {
+      expect(chamada[0].data.perfilPublico?.linkedinUrl ?? null).toBeNull();
+      // Tentativa NÃO queimada: todos os hits do nome foram recusados pelo
+      // anti-homônimo, então o próximo clique pode tentar de novo (ex.: depois
+      // de o Alvo ganhar site oficial, que confirma o que hoje não dá).
+      expect(chamada[0].data.perfilPublico?.contatoBuscadoEm ?? null).toBeNull();
+    }
+  });
+
+  it('decisor mapeado na WEB (vinculoQsa false) não serve de âncora para confirmar a empresa', async () => {
+    // Dado poluído (decisor errado criado antes do fix) não pode confirmar
+    // novos resultados da empresa errada: só sócio do QSA (registro oficial)
+    // entra nos sinais da conta.
+    findFirstAlvo.mockResolvedValue({
+      ...ALVO_BASE,
+      decisores: [{ id: 'd-web', nome: 'Fulano Poluido', vinculoQsa: false }],
+    });
+    findManyDecisor.mockResolvedValue([
+      { id: 'd-web', nome: 'Fulano Poluido', vinculoQsa: false, perfilPublico: null, contato: null, lineage: [] },
+    ]);
+    webSearch.mockImplementation(async (_org: string, query: string) => {
+      if (query.includes('Fulano Poluido')) {
+        return [
+          {
+            // Cita o próprio Fulano (nome bate), NÃO cita a ACME nem sinal
+            // nenhum da conta. Antes, "Fulano Poluido" nos sinais confirmaria.
+            title: 'Fulano Poluido - Gerente - Empresa Errada | LinkedIn',
+            url: 'https://linkedin.com/in/fulano-poluido',
+            snippet: 'Gerente na Empresa Errada. Fulano Poluido.',
+          },
+        ];
+      }
+      return [];
+    });
+
+    const r = await enriquecerDecisoresPublico('org-1', 'alvo-1');
+
+    expect(r.contatosEnriquecidos).toBe(0);
+  });
+
   it('ACEITA contato quando a MESMA fonte cita a empresa-alvo (ACME)', async () => {
     findFirstAlvo.mockResolvedValue(ALVO_BASE);
     findManyDecisor.mockResolvedValue([
@@ -224,6 +296,8 @@ describe('vínculo com a empresa-alvo: não mapeia homônimo de outra empresa', 
 
     expect(r.criados).toBe(0);
     expect(createDecisor).not.toHaveBeenCalled();
+    // Honestidade na resposta (não só no log): a busca ACHOU e nós recusamos.
+    expect(r.homonimosFiltrados).toBe(1);
   });
 
   it('Camada 1: aceita candidato cujo resultado cita a empresa-alvo (ACME)', async () => {
