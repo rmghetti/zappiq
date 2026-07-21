@@ -12,7 +12,7 @@
  * firmografia de registro público (Receita) nasce alta.
  */
 import type { CnpjData } from './cnpj.js';
-import { normalizarPorte } from './porte.js';
+import { normalizarPorte, portesDaTag } from './porte.js';
 
 /**
  * `type` e não `interface` de propósito: o breakdown é gravado numa coluna Json
@@ -115,7 +115,9 @@ function matchPorte(perfil: PerfilLike, alvo: CnpjData): boolean {
   // o fator de porte quieto justo no caminho principal (espelho do BigQuery).
   const alvoP = normalizarPorte(alvo.porte);
   if (portes.length === 0 || !alvoP) return false;
-  return portes.some((p) => normalizarPorte(p) === alvoP);
+  // portesDaTag: a tag do cliente pode cobrir mais de um porte ("PME",
+  // "pequenas e médias"), e cada porte coberto conta como match.
+  return portes.some((p) => portesDaTag(p).includes(alvoP));
 }
 
 /**

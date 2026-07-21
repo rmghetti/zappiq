@@ -10,7 +10,7 @@
  * faturamento pedido) para o filtro da descoberta.
  */
 import { describe, it, expect } from 'vitest';
-import { normalizarPorte, parseFaturamentoFloorReais, portesPermitidos } from './porte.js';
+import { normalizarPorte, parseFaturamentoFloorReais, portesPermitidos, portesDaTag } from './porte.js';
 
 describe('normalizarPorte: canoniza todas as representações reais', () => {
   it('formas de MICRO', () => {
@@ -33,6 +33,23 @@ describe('normalizarPorte: canoniza todas as representações reais', () => {
       expect(normalizarPorte(v as any)).toBeNull();
     }
   });
+  it('feminino/plural de pequena também é PEQUENO (achado da revisão: excluía as EPP pedidas)', () => {
+    expect(normalizarPorte('Pequena')).toBe('PEQUENO');
+    expect(normalizarPorte('PEQUENAS')).toBe('PEQUENO');
+  });
+});
+
+describe('portesDaTag: uma tag do Perfil pode cobrir mais de um porte', () => {
+  it('PME cobre PEQUENO e DEMAIS', () => {
+    expect(new Set(portesDaTag('PME'))).toEqual(new Set(['PEQUENO', 'DEMAIS']));
+  });
+  it('"pequenas e médias" cobre PEQUENO e DEMAIS (antes caía só em DEMAIS)', () => {
+    expect(new Set(portesDaTag('pequenas e médias'))).toEqual(new Set(['PEQUENO', 'DEMAIS']));
+  });
+  it('tag simples equivale ao normalizarPorte', () => {
+    expect(portesDaTag('ME')).toEqual(['MICRO']);
+    expect(portesDaTag('grandes contas')).toEqual(['DEMAIS']);
+  });
 });
 
 describe('parseFaturamentoFloorReais: piso da faixa pedida', () => {
@@ -51,6 +68,16 @@ describe('parseFaturamentoFloorReais: piso da faixa pedida', () => {
   it('teto ("até X") não vira piso', () => {
     expect(parseFaturamentoFloorReais('até 5 milhões')).toBeNull();
   });
+  it('outras palavras de teto (menor/inferior/menos) também não viram piso (filtro invertido é o pior caso)', () => {
+    expect(parseFaturamentoFloorReais('menor que 5 milhões')).toBeNull();
+    expect(parseFaturamentoFloorReais('inferior a R$ 5 milhões')).toBeNull();
+    expect(parseFaturamentoFloorReais('menos que 2M')).toBeNull();
+  });
+  it('ponto decimal não é milhar: 4.8M é 4,8 milhões, não 48 milhões', () => {
+    expect(parseFaturamentoFloorReais('R$ 4.8M')).toBe(4_800_000);
+    expect(parseFaturamentoFloorReais('2.5 milhões')).toBe(2_500_000);
+    expect(parseFaturamentoFloorReais('R$ 1,5M')).toBe(1_500_000);
+  });
   it('vazio vira null', () => {
     expect(parseFaturamentoFloorReais('')).toBeNull();
     expect(parseFaturamentoFloorReais(null)).toBeNull();
@@ -61,6 +88,9 @@ describe('portesPermitidos: recorte de tamanho do Perfil', () => {
   it('portes declarados mandam', () => {
     expect(portesPermitidos({ alvoB2B: { portes: ['grandes contas'] } })).toEqual(new Set(['DEMAIS']));
     expect(portesPermitidos({ alvoB2B: { portes: ['ME', 'EPP'] } })).toEqual(new Set(['MICRO', 'PEQUENO']));
+  });
+  it('feminino/plural declarados filtram certo em vez de inverter o recorte', () => {
+    expect(portesPermitidos({ alvoB2B: { portes: ['Pequena', 'Média'] } })).toEqual(new Set(['PEQUENO', 'DEMAIS']));
   });
   it('sem portes, o faturamento pedido implica o piso de porte', () => {
     // acima do teto do Simples (R$ 4,8M) => só DEMAIS

@@ -369,6 +369,10 @@ export interface DescobrirResult {
   descartadosCrus?: number;
   /** Apareceram na busca só com o nome (CNPJ não resolvido). */
   descartadosSoNome?: number;
+  /** Verificadas mas de porte fora do recorte pedido no Perfil (não gastam cota). */
+  descartadosPorPorte?: number;
+  /** Ressalvas honestas da execução (ex.: recorte por porte é aproximação). */
+  avisos?: string[];
 }
 export type MotorBResult = DescobrirResult;
 

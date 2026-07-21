@@ -127,6 +127,41 @@ describe('recorte de porte/faturamento: empresa fora do tamanho pedido não sobe
     expect(r.criados).toBe(1);
     expect(r.descartadosPorPorte).toBe(0);
   });
+
+  it('ICP de porte PEQUENO não prioriza maiores por capital (senão o lote de 10 viria 100% descartável e a campanha zeraria)', async () => {
+    // Achado convergente de DUAS revisões adversariais: ORDER BY capital DESC
+    // incondicional + slice(0, MAX_CNPJS) + filtro de porte = campanha zerada
+    // para quem pede "ME, EPP" (o exemplo do próprio placeholder da tela).
+    findUniquePerfil.mockResolvedValue({ prontidao: 90, alvoB2B: { portes: ['ME', 'EPP'] } });
+    enriquecerCnpjsBigQuery.mockResolvedValue(new Map([['11222333000181', doEspelho({ porte: '01' })]]));
+
+    const r = await runDescobertaPublica('org-1', { alvos: ['2451-2'], regioes: ['SP'] });
+
+    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(expect.any(Array), expect.any(Array), { priorizarMaiores: false });
+    expect(r.criados).toBe(1); // a MICRO passa no recorte {MICRO, PEQUENO}
+    expect(r.descartadosPorPorte).toBe(0);
+  });
+
+  it('pedido de porte grande prioriza maiores por capital (o caso do cliente de R$ 10M+)', async () => {
+    findUniquePerfil.mockResolvedValue({ prontidao: 90, alvoB2B: { faturamentoAnual: 'R$ 10M+' } });
+    enriquecerCnpjsBigQuery.mockResolvedValue(new Map([['11222333000181', doEspelho({ porte: '05' })]]));
+
+    await runDescobertaPublica('org-1', { alvos: ['2451-2'], regioes: ['SP'] });
+
+    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(expect.any(Array), expect.any(Array), { priorizarMaiores: true });
+  });
+
+  it('descarte por porte + erro de verificação em OUTRO CNPJ não vira "verificacao_falhou" (a campanha explica, não explode)', async () => {
+    findUniquePerfil.mockResolvedValue({ prontidao: 90, alvoB2B: { faturamentoAnual: 'R$ 10M+' } });
+    buscarCnpjsBigQuery.mockResolvedValue(['11222333000181', '99888777000166']);
+    enriquecerCnpjsBigQuery.mockResolvedValue(new Map([['11222333000181', doEspelho({ porte: '01' })]]));
+    fetchCnpj.mockRejectedValue(new Error('brasilapi_403')); // o 2º CNPJ cai na BrasilAPI e falha
+
+    const r = await runDescobertaPublica('org-1', { alvos: ['2451-2'], regioes: ['SP'] });
+
+    expect(r.descartadosPorPorte).toBe(1);
+    expect(r.criados).toBe(0);
+  });
 });
 
 describe('o Alvo com decisor sobe, como sempre', () => {

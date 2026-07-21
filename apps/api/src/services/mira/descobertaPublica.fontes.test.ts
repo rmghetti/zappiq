@@ -81,7 +81,7 @@ describe('cada alvo vai para a fonte certa', () => {
 
     const r = await runDescobertaPublica('org-1', { alvos: ['4651-6'], regioes: ['SP'] });
 
-    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(['46516'], ['SP']);
+    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(['46516'], ['SP'], { priorizarMaiores: true });
     expect(webSearch).not.toHaveBeenCalled();
     expect(r.fonte).toBe('bigquery');
   });
@@ -92,7 +92,7 @@ describe('cada alvo vai para a fonte certa', () => {
     await runDescobertaPublica('org-1', { alvos: ['distribuidoras de TI'], regioes: ['SP'] });
 
     // "distribuidoras" é comércio atacadista = divisão 46.
-    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(['46'], ['SP']);
+    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(['46'], ['SP'], { priorizarMaiores: true });
     expect(webSearch).not.toHaveBeenCalled();
   });
 
@@ -118,7 +118,7 @@ describe('cada alvo vai para a fonte certa', () => {
     await runDescobertaPublica('org-1', { alvos: ['comércio varejista', 'xpto artesanal'], regioes: [] });
 
     // O que traduz foi para a base oficial...
-    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(['47'], []);
+    expect(buscarCnpjsBigQuery).toHaveBeenCalledWith(['47'], [], { priorizarMaiores: true });
     // ...e só o intraduzível virou busca.
     const queries = webSearch.mock.calls.map((c) => c[1]);
     expect(queries.every((q: string) => q.includes('xpto artesanal'))).toBe(true);

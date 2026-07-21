@@ -250,7 +250,14 @@ export async function runDescobertaPublica(
   // Antes era ou/ou: havendo um código, o texto do cliente não rodava. Quem
   // declarava os dois tipos no Perfil perdia metade do que pediu, calado.
   // Todo CNPJ, venha de onde vier, é re-verificado na Receita (BrasilAPI).
-  let cnpjsDiretos: string[] = codigosDaBusca.length ? await buscarCnpjsBigQuery(codigosDaBusca, regioes) : [];
+  let cnpjsDiretos: string[] = codigosDaBusca.length
+    ? await buscarCnpjsBigQuery(codigosDaBusca, regioes, {
+        // Só prioriza as maiores por capital quando o recorte ADMITE empresa
+        // grande; para ICP de micro/pequeno, a priorização entregaria um lote
+        // 100% descartável ao filtro de porte e a campanha zeraria.
+        priorizarMaiores: !permitidosPortes || permitidosPortes.has('DEMAIS'),
+      })
+    : [];
   let fonteDiretos: 'bigquery' | 'indice_local' | null = cnpjsDiretos.length ? 'bigquery' : null;
   if (!fonteDiretos && codigosDaBusca.length) {
     cnpjsDiretos = await buscarCandidatosIndiceLocal(codigosDaBusca, regioes);
@@ -541,7 +548,7 @@ export async function runDescobertaPublica(
   // Achou candidato e NENHUM passou porque a verificação quebrou: é falha de
   // fonte, não mercado vazio. Foi o que deixou a campanha do Rodrigo em 0 com
   // 300 candidatos encontrados.
-  if (result.criados === 0 && result.candidatos === 0 && errosEnriquecimento.length > 0) {
+  if (result.criados === 0 && result.candidatos === 0 && result.descartadosPorPorte === 0 && errosEnriquecimento.length > 0) {
     const err: any = new Error('verificacao_falhou');
     err.status = 502;
     err.detail = errosEnriquecimento[0];

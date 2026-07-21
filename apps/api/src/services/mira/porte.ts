@@ -38,9 +38,33 @@ export function normalizarPorte(raw?: string | null): PorteCanonico | null {
     // outros números não são porte conhecido: cai nas palavras abaixo
   }
   if (p === 'me' || p === 'mei' || p.includes('micro')) return 'MICRO';
-  if (p === 'epp' || p.includes('pequeno')) return 'PEQUENO';
-  if (p.includes('demais') || p.includes('medio') || p.includes('media') || p.includes('grande')) return 'DEMAIS';
+  // Prefixo 'pequen' cobre pequeno/pequena/pequenas (achado da revisão: o
+  // masculino exato deixava "Pequena" cair em DEMAIS e excluir as EPP pedidas).
+  if (p === 'epp' || p.includes('pequen')) return 'PEQUENO';
+  if (p.includes('demais') || p.includes('medi') || p.includes('grande')) return 'DEMAIS';
   return null;
+}
+
+/**
+ * Todos os portes que uma TAG do Perfil cobre. Diferente do Alvo (que tem UM
+ * porte), a tag declarada pode abranger vários: "PME" e "pequenas e médias"
+ * cobrem PEQUENO e DEMAIS. Usada pelo recorte (`portesPermitidos`) e pelo
+ * score (`matchPorte`), para a tag do cliente nunca inverter o filtro.
+ */
+export function portesDaTag(raw?: string | null): PorteCanonico[] {
+  const p = norm(String(raw ?? ''));
+  if (!p) return [];
+  const out = new Set<PorteCanonico>();
+  const unico = normalizarPorte(p);
+  if (unico) out.add(unico);
+  if (/\bpme\b/.test(p)) {
+    out.add('PEQUENO');
+    out.add('DEMAIS');
+  }
+  if (p.includes('micro') || /\bmei?\b/.test(p)) out.add('MICRO');
+  if (/\bepp\b/.test(p) || p.includes('pequen')) out.add('PEQUENO');
+  if (p.includes('demais') || p.includes('medi') || p.includes('grande')) out.add('DEMAIS');
+  return [...out];
 }
 
 /**
@@ -52,15 +76,21 @@ export function normalizarPorte(raw?: string | null): PorteCanonico | null {
 export function parseFaturamentoFloorReais(texto?: string | null): number | null {
   const t = norm(String(texto ?? ''));
   if (!t) return null;
-  // "até X" / "no máximo X" / "menos de X" descrevem teto, não piso.
-  if (/\b(ate|maximo|menos de|abaixo|no maximo)\b/.test(t)) return null;
+  // "até X" / "no máximo X" / "menor que X" descrevem teto, não piso. A lista
+  // é generosa de propósito: piso lido de um texto de teto INVERTE o filtro
+  // (cliente pede empresas menores e recebe só as maiores), o pior caso.
+  if (/\b(ate|maximo|menos|menor|inferior|abaixo|teto)\b/.test(t)) return null;
   const re = /(\d[\d.]*(?:,\d+)?)\s*(bilh\w*|bi|milh\w*|mil|mm|mi|m|k|b)?/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(t)) !== null) {
     const bruto = m[1];
     if (!bruto) continue;
-    // BR: pontos são separador de milhar, vírgula é decimal.
-    const numStr = bruto.replace(/\./g, '').replace(',', '.');
+    // BR: ponto é milhar ("10.000.000"), MAS um único ponto seguido de 1-2
+    // dígitos é decimal ("4.8M" = 4,8 milhões, não 48 milhões). Vírgula é
+    // sempre decimal.
+    let numStr = bruto;
+    if (!/^\d+\.\d{1,2}$/.test(numStr)) numStr = numStr.replace(/\./g, '');
+    numStr = numStr.replace(',', '.');
     const base = Number(numStr);
     if (!isFinite(base) || base <= 0) continue;
     const suf = (m[2] || '').toLowerCase();
@@ -87,10 +117,11 @@ interface PerfilPorteLike {
  */
 export function portesPermitidos(perfil: PerfilPorteLike | null | undefined): Set<PorteCanonico> | null {
   const portesRaw = perfil?.alvoB2B?.portes;
-  const declarados = (Array.isArray(portesRaw) ? portesRaw : [])
-    .map((p) => normalizarPorte(String(p)))
-    .filter((p): p is PorteCanonico => p !== null);
-  if (declarados.length) return new Set(declarados);
+  const declarados = new Set<PorteCanonico>();
+  for (const tag of Array.isArray(portesRaw) ? portesRaw : []) {
+    for (const pc of portesDaTag(String(tag))) declarados.add(pc);
+  }
+  if (declarados.size) return declarados;
 
   const faturamentoRaw = perfil?.alvoB2B?.faturamentoAnual;
   const piso = parseFaturamentoFloorReais(typeof faturamentoRaw === 'string' ? faturamentoRaw : null);
