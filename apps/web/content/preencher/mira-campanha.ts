@@ -60,7 +60,8 @@ export const miraCampanhaPreencher: PreencherCampoContent[] = [
         item: 'Porte ou tamanho: "empresas PME", "pequenas empresas", "grandes contas"',
         porque:
           'Porte não é ramo. A base pública separa as empresas pelo que elas fazem, não pelo tamanho, então isso nunca vira busca e a campanha procura no lugar errado.',
-        ondeVai: 'No Perfil de Prospecção, campo Portes-alvo. Lá o porte filtra os Alvos depois que a busca acha.',
+        ondeVai:
+          'No Perfil de Prospecção, campo Portes-alvo. Lá o porte entra no Mira Score e ajuda a priorizar empresas do tamanho que você procura. Importante: a Receita não publica faturamento, então porte e capital social são a aproximação de tamanho que a base pública tem, não um recorte exato de "acima de R$ X de faturamento".',
       },
       {
         item: 'Sinal de intenção: "empresas que estão contratando", "quem precisa de CRM", "quem está insatisfeito"',
@@ -96,7 +97,7 @@ export const miraCampanhaPreencher: PreencherCampoContent[] = [
         <rect x="16" y="0" width="570" height="42" rx="8" fill="#F5F6FF" stroke="#4A52D0" stroke-width="1.2" stroke-dasharray="4 3"/>
         <path d="M40 21 l14 0 m-5 -5 l5 5 l-5 5" fill="none" stroke="#4A52D0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         <text class="obs" x="66" y="18" style="fill:#3730A3;font-weight:600">"empresas PME" tem lugar certo</text>
-        <text class="obs" x="66" y="33">Perfil de Prospecção, campo Portes-alvo: lá o porte filtra depois da busca.</text>
+        <text class="obs" x="66" y="33">Perfil de Prospecção, campo Portes-alvo: lá o porte entra no Mira Score e prioriza.</text>
       </g>`, 200),
   },
 
