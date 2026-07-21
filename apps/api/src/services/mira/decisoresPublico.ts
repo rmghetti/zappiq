@@ -20,6 +20,7 @@ import { logger } from '../../utils/logger.js';
 import { llmRouter } from '../llm/LLMRouter.js';
 import { webSearch, buscaPublicaDisponivel, type SerpResult } from './buscaPublica.js';
 import { reavaliarAlvo, type ReavaliarResult } from './reavaliar.js';
+import { nucleoDoNome, mencionaAConta, confirmaAConta, type SinaisDaConta } from './releasesPublico.js';
 
 const MAX_QUERIES = 4; // orcamento amigavel ao tier gratuito (100 buscas/dia)
 const MAX_DECISORES = 8;
@@ -183,6 +184,28 @@ export async function enriquecerDecisoresPublico(
     return { ok: false, buscas: 0, candidatos: 0, criados: 0, enriquecidos: 0, descartadosPeloVerificador: [], motivo: 'alvo_sem_nome' };
   }
 
+  // -- Guarda anti-homônimo (mesmo padrão provado em releasesPublico) ----
+  // A Brave não honra aspas: buscar '"Fulano" "Empresa X"' devolve o xará que
+  // trabalha em OUTRA empresa. Sem checar o vínculo, o dossiê recebia decisor
+  // de empresa errada (reclamação do cliente). Um resultado só entra se FALA
+  // da conta-alvo: cita o núcleo do nome dela OU traz sinal forte que a liga a
+  // este CNPJ (domínio do site oficial, CNPJ, telefone, ou OUTRO sócio do
+  // QSA). Município fica de fora: sozinho não separa homônimos na mesma cidade.
+  const nucleoEmpresa = nucleoDoNome(empresa);
+  const decisoresQsa: string[] = (alvo.decisores ?? [])
+    .map((d: any) => String(d?.nome ?? '').trim())
+    .filter((n: string) => n.length > 0);
+  const sinaisConta: SinaisDaConta = {
+    cnpj: alvo.cnpj ?? null,
+    municipio: null,
+    uf: alvo.uf ?? null,
+    telefone: alvo.telefone ?? null,
+    site: alvo.site ?? null,
+    decisores: decisoresQsa,
+  };
+  const resultadoEhDaConta = (r: SerpResult, sinais: SinaisDaConta = sinaisConta): boolean =>
+    mencionaAConta(r, nucleoEmpresa) || confirmaAConta(r, sinais).confirma;
+
   // -- Camada 1: buscas dirigidas pelos papeis-alvo do ICP -------------
   // Decisor, influenciadores e usuario final declarados no Perfil, por ordem
   // de prioridade; as queries usam os primeiros, o prompt ve os tres grupos.
@@ -198,6 +221,7 @@ export async function enriquecerDecisoresPublico(
   const resultados: SerpResult[] = [];
   const vistosUrl = new Set<string>();
   let buscas = 0;
+  let descartadosPorHomonimo = 0;
   for (const q of queries) {
     try {
       const hits = await webSearch(organizationId, q, { limit: 8, alvoId });
@@ -205,7 +229,14 @@ export async function enriquecerDecisoresPublico(
       for (const h of hits) {
         if (vistosUrl.has(h.url)) continue;
         vistosUrl.add(h.url);
-        if (pareceDecisor(h)) resultados.push(h);
+        if (!pareceDecisor(h)) continue;
+        // Só entra quem FALA da conta-alvo: mata o resultado do xará de outra
+        // empresa antes que o LLM sequer o veja como candidato.
+        if (!resultadoEhDaConta(h)) {
+          descartadosPorHomonimo++;
+          continue;
+        }
+        resultados.push(h);
       }
     } catch (err: any) {
       // 14-15/07/2026: antes só propagava em 501 ("nenhum provedor
@@ -436,6 +467,13 @@ export async function enriquecerDecisoresPublico(
 
     for (const d of semContato) {
       const nomeNorm = norm(d.nome);
+      // Nos sinais para ESTE decisor, o nome dele NÃO pode confirmar a empresa
+      // (a busca é pelo nome dele; ele sempre aparece). Só OUTROS sócios do QSA
+      // e os sinais firmográficos da conta contam como confirmação.
+      const sinaisDoDecisor: SinaisDaConta = {
+        ...sinaisConta,
+        decisores: decisoresQsa.filter((n) => norm(n) !== nomeNorm),
+      };
       const queriesContato = [
         `"${d.nome}" "${empresa}" site:linkedin.com/in`,
         `"${d.nome}" "${empresa}" (instagram.com OR contato OR email OR telefone)`,
@@ -446,7 +484,12 @@ export async function enriquecerDecisoresPublico(
           const hits = await webSearch(organizationId, q, { limit: 6, alvoId });
           buscasContato++;
           for (const h of hits) {
-            if (norm(`${h.title} ${h.snippet}`).includes(nomeNorm)) achados.push(h);
+            // Nome bate E o resultado é REALMENTE desta empresa (anti-homônimo):
+            // sem isso, o LinkedIn/telefone de um xará de outra firma entrava no
+            // decisor certo e o vendedor abordava/citava a pessoa errada.
+            if (norm(`${h.title} ${h.snippet}`).includes(nomeNorm) && resultadoEhDaConta(h, sinaisDoDecisor)) {
+              achados.push(h);
+            }
           }
         } catch (err: any) {
           logger.warn(`[MiraDecisoresPublico] busca de contato falhou p/ "${d.nome}": ${err?.message ?? err}`);
@@ -539,7 +582,7 @@ export async function enriquecerDecisoresPublico(
   }
 
   logger.info(
-    `[MiraDecisoresPublico] alvo=${alvoId} buscas=${buscas} candidatos=${candidatosLen} criados=${criados} enriquecidos=${enriquecidos} descartados=${descartados.length} buscasContato=${buscasContato} contatosEnriquecidos=${contatosEnriquecidos}${reavaliacao ? ` score=${reavaliacao.scoreAntes}→${reavaliacao.scoreDepois} status=${reavaliacao.statusAntes}→${reavaliacao.statusDepois}` : ''}`
+    `[MiraDecisoresPublico] alvo=${alvoId} buscas=${buscas} candidatos=${candidatosLen} criados=${criados} enriquecidos=${enriquecidos} descartados=${descartados.length} homonimosFiltrados=${descartadosPorHomonimo} buscasContato=${buscasContato} contatosEnriquecidos=${contatosEnriquecidos}${reavaliacao ? ` score=${reavaliacao.scoreAntes}→${reavaliacao.scoreDepois} status=${reavaliacao.statusAntes}→${reavaliacao.statusDepois}` : ''}`
   );
   return {
     ok: true,
