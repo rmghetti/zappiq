@@ -8,7 +8,7 @@
 
 **Nenhuma alteração em página legal pública é mergeada sem:**
 
-1. Aprovação prévia por Rodrigo Ghetti (DPO ZappIQ).
+1. Aprovação prévia pelo Encarregado de Dados (DPO ZappIQ).
 2. Patch detalhado escrito em `~/Pessoal/ZappIQ/ZappIQ_V32_Actions/governanca/patches/<data>_<assunto>.md`.
 3. Checklist de Consistência (seção C abaixo) executado e arquivado.
 4. Smoke tests `grep` passando.
@@ -84,7 +84,7 @@ Resultado: criamos a SOP e este arquivo.
 
 ## Owner formal
 
-- **DPO + Aprovador:** Rodrigo Ghetti (rodrigo.ghetti@zappiq.com.br)
+- **DPO + Aprovador:** Encarregado de Dados (dpo@zappiq.com.br)
 - **Implementador:** dev lead da plataforma web
 - **Auditor automático:** scheduled task `weekly-legal-docs-audit` (segunda 09:30)
 - **Consultor de redação:** Claude (Cowork)

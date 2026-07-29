@@ -195,7 +195,7 @@ export default function RoadmapPage() {
             entregá-la com qualidade. Não queremos vender o que não está pronto. Se você se
             inscreveu para o add-on de Voz no trial,{' '}
             <a
-              href="mailto:rodrigo.ghetti@zappiq.com.br?subject=Add-on%20Voz%20-%20opc%C3%A3o%20escolhida"
+              href="mailto:vendas@zappiq.com.br?subject=Add-on%20Voz%20-%20opc%C3%A3o%20escolhida"
               style={{ color: '#9A3412', fontWeight: 600 }}
             >
               fale com a gente
@@ -270,7 +270,7 @@ export default function RoadmapPage() {
             Mande um e-mail e a gente avisa antes de virar pra o público geral.
           </p>
           <a
-            href="mailto:rodrigo.ghetti@zappiq.com.br?subject=Waitlist%20Voz%20ZappIQ"
+            href="mailto:vendas@zappiq.com.br?subject=Waitlist%20Voz%20ZappIQ"
             style={{
               display: 'inline-block',
               background: '#171717',

@@ -135,13 +135,13 @@ export const articles: BlogArticle[] = [
     category: 'Tecnologia',
     date: '2026-05-05',
     readingTime: '9 min',
-    author: { name: 'Rodrigo Ghetti', initials: 'RG' },
+    author: { name: 'Equipe ZappIQ', initials: 'ZQ' },
     relatedSlugs: ['como-recuperar-leads-perdidos-whatsapp', 'roi-chatbots-ia-como-calcular'],
     /* Conteúdo completo migrado da antiga página dedicada (removida em
        11/06/2026 por conflito de rota com /blog/[slug]: produção servia só
        o teaser). Preços atualizados pro pricing V4 (Lite R$ 247). */
     content: `
-<p><em>Por Rodrigo Ghetti, CEO da ZappIQ.</em></p>
+<p><em>Por Equipe ZappIQ.</em></p>
 
 <p>Em 29 de abril de 2026 a Meta lançou os <strong>Ads AI Connectors</strong>, um servidor MCP oficial que permite a qualquer agente de IA gerenciar campanhas no Meta Ads. Mas a Meta resolveu metade do problema: <strong>gerar lead inteligente</strong>. A outra metade (receber, qualificar e converter esse lead no WhatsApp) ficou em aberto. A ZappIQ é a primeira plataforma da América Latina a fechar essa ponte, formando o primeiro funil ponta-a-ponta conduzido por IA: a Meta gera, a Iza converte, seu time fecha.</p>
 
@@ -242,7 +242,7 @@ export const articles: BlogArticle[] = [
     category: 'Vendas',
     date: '2026-03-25',
     readingTime: '7 min',
-    author: { name: 'Rodrigo Ghetti', initials: 'RG' },
+    author: { name: 'Equipe ZappIQ', initials: 'ZQ' },
     relatedSlugs: ['roi-chatbots-ia-como-calcular', '5-fluxos-automação-loja-virtual'],
     /* PLACEHOLDER: substituir por conteúdo real do blog */
     content: `
@@ -555,7 +555,7 @@ export const articles: BlogArticle[] = [
     category: 'Gestão',
     date: '2026-03-10',
     readingTime: '8 min',
-    author: { name: 'Rodrigo Ghetti', initials: 'RG' },
+    author: { name: 'Equipe ZappIQ', initials: 'ZQ' },
     relatedSlugs: ['como-recuperar-leads-perdidos-whatsapp', 'guia-automação-whatsapp-clínicas-2026'],
     /* PLACEHOLDER: substituir por conteúdo real do blog */
     content: `

@@ -7,7 +7,7 @@
  * Fluxo:
  *   1. Valida payload (email obrigatorio).
  *   2. Insere row na public.early_access_leads via Supabase REST (service_role).
- *   3. Dispara email pra rodrigo.ghetti@zappiq.com.br via Resend (fire-and-forget).
+ *   3. Dispara email pra vendas@zappiq.com.br via Resend (fire-and-forget).
  *   4. Retorna { ok: true } ou { ok: false, error }.
  *
  * Tabela: criada via SQL no Supabase Dashboard (early_access_leads.sql).
@@ -20,7 +20,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY
  *   RESEND_API_KEY                 (opcional — log warn se ausente)
  *   LEADS_FROM_EMAIL               (default: marketing@zappiq.com.br)
- *   LEADS_NOTIFY_EMAIL             (default: rodrigo.ghetti@zappiq.com.br)
+ *   LEADS_NOTIFY_EMAIL             (default: vendas@zappiq.com.br)
  */
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -142,7 +142,7 @@ async function insertLead(payload: LeadPayload, meta: { ip: string; ua: string }
 async function notifyByEmail(payload: LeadPayload, meta: { ip: string }): Promise<void> {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.LEADS_FROM_EMAIL || 'marketing@zappiq.com.br';
-  const to = process.env.LEADS_NOTIFY_EMAIL || 'rodrigo.ghetti@zappiq.com.br';
+  const to = process.env.LEADS_NOTIFY_EMAIL || 'vendas@zappiq.com.br';
 
   if (!key) {
     console.warn('[leads] RESEND_API_KEY ausente — pulando notificação por email');

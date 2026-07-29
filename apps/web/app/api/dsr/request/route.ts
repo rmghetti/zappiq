@@ -25,7 +25,7 @@
  *   SUPABASE_URL                  — https://xxx.supabase.co
  *   SUPABASE_SERVICE_ROLE_KEY     — chave de serviço (bypass RLS)
  *   RESEND_API_KEY                — key da Resend
- *   DPO_EMAIL                     — default rodrigo.ghetti@zappiq.com.br
+ *   DPO_EMAIL                     — default dpo@zappiq.com.br
  *   DSR_FROM_EMAIL                — from verificado na Resend (ex: privacidade@zappiq.com.br)
  *   API_URL / NEXT_PUBLIC_API_URL — base da API Express (default http://localhost:3001)
  */
@@ -317,7 +317,7 @@ function buildSolicitanteEmailHtml(payload: DsrPayload, protocolo: string): stri
       <hr>
       <p style="color: #666; font-size: 13px;">
         ZappIQ — Encarregado de Dados (DPO)<br>
-        <a href="mailto:rodrigo.ghetti@zappiq.com.br">rodrigo.ghetti@zappiq.com.br</a>
+        <a href="mailto:dpo@zappiq.com.br">dpo@zappiq.com.br</a>
       </p>
     </div>
   `;
@@ -373,7 +373,7 @@ export async function POST(req: NextRequest) {
   }
 
   // E-mails (fire-and-forget — não bloqueia a resposta)
-  const dpoEmail = process.env.DPO_EMAIL || 'rodrigo.ghetti@zappiq.com.br';
+  const dpoEmail = process.env.DPO_EMAIL || 'dpo@zappiq.com.br';
   sendResendEmail(
     dpoEmail,
     `[DSR ${protocolo}] ${TIPO_LABEL[payload.tipo]} — ${payload.nomeCompleto}`,

@@ -63,7 +63,7 @@ const GENERIC: Examples = {
   crm_ltv: 'Ex: quanto um cliente gasta ao longo do relacionamento',
 };
 
-// ── Restaurante (Fase 1 — caso piloto Ghetti Italian Food) ───────────────────
+// ── Restaurante (Fase 1 — caso piloto) ──────────────────────────────────────
 const restaurante: Examples = {
   ide_nome_fantasia: 'Ex: Restaurante Dona Maria',
   ide_razao_social: 'Ex: Dona Maria Alimentos Ltda.',

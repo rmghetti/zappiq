@@ -6,7 +6,7 @@ import { ArticleJsonLd } from '@/components/seo/ArticleJsonLd';
 export const metadata: Metadata = {
   title: 'Por que cobrar setup fee de IA conversacional é fraude intelectual · ZappIQ',
   description:
-    'Análise técnica e financeira sobre por que setup fees em IA conversacional não sobrevivem a um exame honesto. Leia o artigo completo de Rodrigo Ghetti, founder da ZappIQ.',
+    'Análise técnica e financeira sobre por que setup fees em IA conversacional não sobrevivem a um exame honesto. Leia o artigo completo no blog da ZappIQ.',
   openGraph: {
     title: 'Por que cobrar setup fee de IA conversacional é fraude intelectual',
     description:
@@ -15,13 +15,13 @@ export const metadata: Metadata = {
     locale: 'pt_BR',
     url: 'https://zappiq.com.br/blog/setup-fee-fraude-intelectual',
     publishedTime: '2026-04-24T00:00:00Z',
-    authors: ['Rodrigo Ghetti'],
+    authors: ['Equipe ZappIQ'],
     images: ['/og-default.png'],
   },
 };
 
 const datePublished = '2026-04-24';
-const author = 'Rodrigo Ghetti';
+const author = 'Equipe ZappIQ';
 const title =
   'Por que cobrar setup fee de IA conversacional é fraude intelectual';
 const description =
@@ -63,7 +63,7 @@ export default function SetupFeeArticle() {
             <span className="h-1 w-1 rounded-full bg-gray-300"></span>
             <span>8 min de leitura</span>
             <span className="h-1 w-1 rounded-full bg-gray-300"></span>
-            <span>Rodrigo Ghetti</span>
+            <span>Equipe ZappIQ</span>
           </div>
 
           {/* Título */}
@@ -319,9 +319,9 @@ export default function SetupFeeArticle() {
             <div className="max-w-3xl">
               <p className="text-sm text-gray-600 mb-2">Sobre o autor</p>
               <p className="text-base text-gray-900">
-                <strong>Rodrigo Ghetti</strong> é founder da ZappIQ, plataforma brasileira de IA
-                conversacional para WhatsApp. Antes da ZappIQ, liderou estruturas de vendas e
-                pré-vendas em soluções de Digital Communications.
+                <strong>Equipe ZappIQ</strong>. A ZappIQ é uma plataforma brasileira de IA
+                conversacional para WhatsApp, construída por gente que veio de estruturas de
+                vendas e pré-vendas em soluções de Digital Communications.
               </p>
             </div>
           </div>

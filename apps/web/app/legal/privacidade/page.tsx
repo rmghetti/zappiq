@@ -222,10 +222,10 @@ export default function PrivacidadePage() {
           <li>
             <strong>Via DPO:</strong> e-mail para{' '}
             <a
-              href="mailto:rodrigo.ghetti@zappiq.com.br"
+              href="mailto:dpo@zappiq.com.br"
               className="text-blue-600 hover:text-blue-700"
             >
-              rodrigo.ghetti@zappiq.com.br
+              dpo@zappiq.com.br
             </a>{' '}
             com assunto &ldquo;Direitos LGPD: [tipo de solicitação]&rdquo;. Resposta em até 15 dias
             corridos (prazo ANPD).
@@ -245,17 +245,15 @@ export default function PrivacidadePage() {
 
         <h2>10. Encarregado pelo Tratamento (DPO)</h2>
         <p>
-          <strong>Nome:</strong> Rodrigo Ghetti
-          <br />
-          <strong>E-mail:</strong>{' '}
+          <strong>Canal oficial do Encarregado:</strong>{' '}
           <a
-            href="mailto:rodrigo.ghetti@zappiq.com.br"
+            href="mailto:dpo@zappiq.com.br"
             className="text-blue-600 hover:text-blue-700"
           >
-            rodrigo.ghetti@zappiq.com.br
+            dpo@zappiq.com.br
           </a>
           <br />
-          <strong>Endereço postal:</strong> ZappIQ Brasil Sistemas de IA LTDA, consulte{' '}
+          <strong>Endereço postal:</strong> consulte{' '}
           <a href="/legal/enderecos-comerciais" className="text-blue-600 hover:text-blue-700">
             endereços comerciais
           </a>

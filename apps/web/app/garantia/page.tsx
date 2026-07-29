@@ -10,7 +10,7 @@ import { redirect } from 'next/navigation';
  * Esta rota executa redirect 301-like (via Next redirect()) para /#precos,
  * preservando SEO de backlinks antigos sem expor página morta.
  *
- * Fonte de decisão: Rodrigo Ghetti · escopo V4 Chatbase-style · abr/2026.
+ * Fonte de decisão: fundação · escopo V4 Chatbase-style · abr/2026.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 export const metadata = {

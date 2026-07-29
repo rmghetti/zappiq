@@ -24,7 +24,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY
  *   RESEND_API_KEY                 (opcional — log warn se ausente)
  *   LEADS_FROM_EMAIL               (default: marketing@zappiq.com.br)
- *   LEADS_NOTIFY_EMAIL             (default: rodrigo.ghetti@zappiq.com.br)
+ *   LEADS_NOTIFY_EMAIL             (default: vendas@zappiq.com.br)
  *
  * Tabela: criada via SQL (supabase/diagnostico_leads.sql).
  */
@@ -279,7 +279,7 @@ export async function POST(req: NextRequest) {
   });
 
   // E-mails (fire-and-forget — não bloqueia a resposta ao cliente)
-  const notify = process.env.LEADS_NOTIFY_EMAIL || 'rodrigo.ghetti@zappiq.com.br';
+  const notify = process.env.LEADS_NOTIFY_EMAIL || 'vendas@zappiq.com.br';
   try {
     const relatorio = emailRelatorioCliente(dados, recommendation);
     sendResendEmail(email, relatorio.subject, relatorio.html).catch(() => {});

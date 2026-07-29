@@ -6,7 +6,7 @@
  * Não existia — só a lista + modal de editar. O `TaskPanel` já linkava pra cá
  * (`/contacts/${id}`, seção "Ligada a") desde a primeira sessão do Tarefas, e
  * o link dava 404 em produção. Esta página fecha esse bug e entrega a seção
- * de Tarefas que o Rodrigo pediu no perfil do contato.
+ * de Tarefas pedido no perfil do contato.
  *
  * Edição de nome/telefone/tags continua no modal existente (/contacts) — esta
  * página é o perfil (leitura + negócios + conversas + tarefas), não o form.

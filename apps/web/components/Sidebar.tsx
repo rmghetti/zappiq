@@ -58,7 +58,7 @@ const complianceItems = [
 
 // Itens SUPERADMIN — visibilidade CROSS-TENANT da plataforma toda.
 // Não confundir com `complianceItems` (admin do tenant). Aqui é admin da
-// PLATAFORMA inteira — Rodrigo CEO vê dados de todos os clientes.
+// PLATAFORMA inteira — o superadmin vê dados de todos os clientes.
 // Ordem: 2 itens de saúde da IA (mais críticos pro CEO no dia-a-dia) →
 // pipeline comercial → finance. Garante que "Qualidade do Agente" não
 // fique cortado pelo footer da sidebar em telas menores.
@@ -176,7 +176,7 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* Seção ADMIN PLATAFORMA — só SUPERADMIN (Rodrigo CEO + futuros) */}
+        {/* Seção ADMIN PLATAFORMA — só SUPERADMIN */}
         {user?.role === 'SUPERADMIN' && (
           <div className="pt-4 mt-4 border-t border-amber-100">
             {!sidebarCollapsed && (

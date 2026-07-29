@@ -168,7 +168,7 @@ function EntitledPanel({ accessData, alvos }: { accessData: MiraAccessData; alvo
       {/* Faixa do teste grátis — SEMPRE visível durante o trial, não só quando
           esgota. Paridade com o PaywallGate do trial de PLANO, que informa a
           limitação e oferece a assinatura desde o primeiro dia.
-          Pedido do Rodrigo (16/07/2026): "informar qual a limitação e sempre
+          Pedido da fundação (16/07/2026): "informar qual a limitação e sempre
           dar a opção dele contratar". Antes, a oferta só aparecia DEPOIS do
           teste esgotar — quando o cliente já tinha parado de conseguir usar.
           Pacote avulso NÃO entra aqui de propósito: ele recarrega a cota de

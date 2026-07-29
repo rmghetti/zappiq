@@ -6,7 +6,7 @@
  * caixa e o que não escrever"). Por isso a forma é outra: o valor está no
  * `naoDeve`, que diz o que sai fora E para onde a informação deve ir.
  *
- * Nasceu de um caso real: o Rodrigo pôs "empresas PME" no campo de atividade.
+ * Nasceu de um caso real: alguém pôs "empresas PME" no campo de atividade.
  * Porte não é ramo, então nunca viraria CNAE e a campanha ia buscar errado.
  * O campo não estava mal preenchido; o campo é que não ensinava. Enquanto o
  * cliente puder escrever qualquer coisa numa caixa que espera CNAE, a culpa

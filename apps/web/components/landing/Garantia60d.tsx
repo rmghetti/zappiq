@@ -6,7 +6,7 @@
  * escolher forma de pagamento. Este arquivo existe apenas para evitar
  * import órfão em caso de referência legada; NÃO deve ser renderizado.
  *
- * Fonte de decisão: Rodrigo Ghetti · escopo V4 Chatbase-style · abr/2026.
+ * Fonte de decisão: fundação · escopo V4 Chatbase-style · abr/2026.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 export function Garantia60d() {

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Painel "Ver tarefa" — o pedido do Rodrigo: abrir a tarefa completa, com prazo,
+ * Painel "Ver tarefa" — pedido da fundação: abrir a tarefa completa, com prazo,
  * observação, responsável e etiquetas.
  *
  * Serve para VER/EDITAR e para CRIAR (mode='create'). É o mesmo formulário de

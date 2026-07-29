@@ -20,7 +20,7 @@
  *  - §15 novo (LGPD e DPO): referência cruzada com Privacy.
  *  - Vigência separada de data de publicação.
  *
- * Aprovador: Rodrigo Ghetti (DPO ZappIQ).
+ * Aprovador: Encarregado de Dados (DPO ZappIQ).
  * Evidência: ZappIQ_V32_Actions/sprint_1_pricing_garantia_cloud_api/TERMOS_V32_APROVADA.md
  */
 
@@ -294,8 +294,8 @@ export default function TermosPage() {
           <a href="/legal/privacidade" className="text-blue-600 hover:text-blue-700">
             Política de Privacidade
           </a>
-          . O Encarregado pelo Tratamento de Dados (DPO) é Rodrigo Ghetti
-          (rodrigo.ghetti@zappiq.com.br). Solicitações de exercício de direitos
+          . O canal oficial do Encarregado pelo Tratamento de Dados (DPO) é
+          dpo@zappiq.com.br. Solicitações de exercício de direitos
           previstos no Art. 18 da LGPD podem ser feitas via{' '}
           <a href="/legal/deletar-dados" className="text-blue-600 hover:text-blue-700">
             zappiq.com.br/legal/deletar-dados
