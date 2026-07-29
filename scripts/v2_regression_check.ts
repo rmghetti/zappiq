@@ -41,6 +41,24 @@ function fileNotContains(rel: string, needle: string | RegExp): boolean {
   return typeof needle === 'string' ? !content.includes(needle) : !needle.test(content);
 }
 
+// Remoção provisória pedida pelo fundador: nenhuma página pública volta a
+// exibir a razão social, o CNPJ ou os identificadores legados da marca antiga.
+const SEM_RAZAO_SOCIAL = /Onze e Onze|ONZE E ONZE|46\.?788\.?145|footOnze|cobrandOnze/;
+const PAGINAS_SEM_RAZAO_SOCIAL = [
+  'apps/web/app/sobre/page.tsx',
+  'apps/web/app/contato/page.tsx',
+  'apps/web/app/lgpd/page.tsx',
+  'apps/web/app/roadmap/page.tsx',
+  'apps/web/app/legal/enderecos-comerciais/page.tsx',
+  'apps/web/app/legal/parceria-meta/page.tsx',
+  'apps/web/app/legal/privacidade/page.tsx',
+  'apps/web/components/landing/LandingFooter.tsx',
+  'apps/web/components/prelaunch/PrelaunchHeader.tsx',
+  'apps/web/components/prelaunch/PrelaunchFooter.tsx',
+  'apps/web/components/prelaunch/PrelaunchPage.tsx',
+  'apps/web/components/prelaunch/prelaunch.module.css',
+];
+
 // ── 52 Checks ──
 const CHECKS: Check[] = [
   // ── ONDA 1 — CRITICAL (prazo 22/04) ──
@@ -128,8 +146,7 @@ const CHECKS: Check[] = [
   {
     id: '04', wave: 2, desc: 'Site sem razão social nem CNPJ da Onze e Onze (remoção provisória)',
     fn: () =>
-      !fileContains('apps/web/components/landing/LandingFooter.tsx', '46.788.145/0001-08') &&
-      !fileContains('apps/web/app/lgpd/page.tsx', 'ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA'),
+      PAGINAS_SEM_RAZAO_SOCIAL.every((rel) => fileNotContains(rel, SEM_RAZAO_SOCIAL)),
     note: 'provisório: reverter quando a razão social definitiva for publicada',
   },
   {

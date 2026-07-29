@@ -20,7 +20,7 @@ export function PrelaunchFooter() {
             <Image
               src="/partners/machia/machia-symbol-dark.svg"
               alt="MACHIA"
-              className={s.footOnze}
+              className={s.footPartner}
               width={32}
               height={32}
             />
