@@ -84,7 +84,7 @@ describe('computeMiraScoreB2C', () => {
  * Ficou escrito `valor: 0` até 15/07/2026, com o motivo "entra na próxima
  * fase". Era honesto (nada pesquisava a web), mas capava TODO Alvo em 85 e
  * nunca destravava, porque nada nunca preenchia incumbente nem janela. Os
- * Alvos reais do Rodrigo vinham com 27, 29, 33: não era azar, era a fase que
+ * Alvos reais do fundador vinham com 27, 29, 33: não era azar, era a fase que
  * faltava. Estes testes travam os três estados do fator.
  */
 describe('Janela e incumbente: os três estados', () => {

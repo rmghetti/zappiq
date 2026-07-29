@@ -19,7 +19,7 @@ describe('normalizeUrl', () => {
 
   it('preserva URL já completa e tira barra final', () => {
     expect(normalizeUrl('https://machia.tech/')).toBe('https://machia.tech');
-    expect(normalizeUrl('https://ghettiitalianfood.com.br')).toBe('https://ghettiitalianfood.com.br');
+    expect(normalizeUrl('https://antonellaitalianfood.com.br')).toBe('https://antonellaitalianfood.com.br');
   });
 
   it('não transforma texto livre em URL', () => {

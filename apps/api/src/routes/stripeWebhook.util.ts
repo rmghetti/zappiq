@@ -18,7 +18,7 @@ const PLAN_ENUM = new Set(['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE
 /**
  * priceId → plano V4 lógico ('IZA_LITE' | 'GROWTH' | 'SCALE') + ciclo.
  * Fonte: STRIPE_V4_PRICES (packages/shared). Retorna null se o priceId não for
- * conhecido (ex.: legacy V3.2, price não mapeado — Rodrigo precisa completar o
+ * conhecido (ex.: legacy V3.2, price não mapeado — o fundador precisa completar o
  * mapa; ver manualSteps).
  */
 export function resolvePlanFromPriceId(

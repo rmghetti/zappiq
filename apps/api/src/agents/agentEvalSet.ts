@@ -4,7 +4,7 @@
  * O QUE MUDOU E POR QUÊ
  *
  * V1 (#235) era uma CONSTANTE: `AGENT_EVAL_SET`, 25 cenários com o comercial
- * da ZappIQ hardcoded (R$ 197 do Starter, cal.com/rodrigoghetti, trial de 14
+ * da ZappIQ hardcoded (R$ 197 do Starter, zappiq.com.br/agendar, trial de 14
  * dias, "Iza da ZappIQ", verticais bloqueadas). Essa constante era aplicada ao
  * agente de QUALQUER org: rota do cliente, admin e cron semanal.
  *

@@ -1,7 +1,7 @@
 /**
  * Alvo cru não sobe.
  *
- * Pedido do Rodrigo (15/07/2026): "precisamos garantir que o Alvo nem suba
+ * Pedido do fundador (15/07/2026): "precisamos garantir que o Alvo nem suba
  * para a campanha se já na pesquisa tiver apenas informação do nome da empresa
  * (que é o que tem vindo em muitos casos). Isso compromete a qualidade do Mira
  * e cria uma visão negativa do cliente com relação à entrega."

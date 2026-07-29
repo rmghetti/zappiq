@@ -137,7 +137,7 @@ export function renderTrialConvertedEmail(input: TrialConvertedEmailInput): Rend
 
                 <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#111827;">
                   Abraço,<br/>
-                  <strong>Rodrigo Ghetti, Founder da ZappIQ</strong>
+                  <strong>Equipe ZappIQ</strong>
                 </p>
               </td>
             </tr>
@@ -184,7 +184,7 @@ export function renderTrialConvertedEmail(input: TrialConvertedEmailInput): Rend
     'Obrigado por escolher ZappIQ. Vamos crescer junto.',
     '',
     'Abraço,',
-    'Rodrigo Ghetti, Founder da ZappIQ',
+    'Equipe ZappIQ',
   ]
     .filter(Boolean)
     .join('\n');

@@ -10,7 +10,7 @@
  *     fornecedor atual, janela e roteiro por decisor.
  * Idempotente: se o Alvo já tem contactId/dealId, reaproveita.
  *
- * DUAS MUDANÇAS DE 15/07/2026 (pedidos do Rodrigo):
+ * DUAS MUDANÇAS DE 15/07/2026 (pedidos do fundador):
  *
  * 1. "Garantir que o lead gerado no MIRA chegue no CRM com todas as
  *    informações possíveis". Antes o pouso levava 5 campos e jogava fora o

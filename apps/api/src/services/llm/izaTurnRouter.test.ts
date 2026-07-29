@@ -241,7 +241,7 @@ describe('routeIzaTurn — intent escalation (handoff/objection/enterprise)', ()
 
   it('tier STARTER + intent enterprise → escala pra Sonnet', async () => {
     mockClassify.mockResolvedValue('enterprise');
-    mockComplete.mockResolvedValueOnce(llmOk('Operação séria. Te conecto com Rodrigo.', 'anthropic-sonnet'));
+    mockComplete.mockResolvedValueOnce(llmOk('Operação séria. Te conecto com o time.', 'anthropic-sonnet'));
     const result = await routeIzaTurn({
       systemPrompt: SYSTEM_PROMPT,
       userMessage: 'sou CEO de logística com 2000 atendimentos/dia',

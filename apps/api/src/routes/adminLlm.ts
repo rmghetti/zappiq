@@ -394,7 +394,7 @@ async function quotaWatchHandler(req: Request, res: Response) {
       : orgs;
 
     // 1.6) Carrega owner (primeiro user ADMIN/SUPERADMIN) de cada org
-    //      Útil pra Rodrigo contatar leads parados sem precisar de SQL.
+    //      Útil pro time contatar leads parados sem precisar de SQL.
     const ownerRows = (await prisma.$queryRawUnsafe(`
       SELECT DISTINCT ON ("organizationId") "organizationId", name, email
       FROM users

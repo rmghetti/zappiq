@@ -1,7 +1,7 @@
 /**
  * "Aprofundar com IA" — Fase 2 (pesquisa na web).
  *
- * Pedido do Rodrigo (15/07/2026): os Alvos chegavam com "Demandas recentes",
+ * Pedido do fundador (15/07/2026): os Alvos chegavam com "Demandas recentes",
  * "Fornecedores atuais" e "Releases desta conta" vazios. Não era falta de dado
  * no mundo, era falta de quem fosse buscar: `miraIncumbente` não tinha UM
  * escritor no código inteiro, releases só nasciam num cron semanal, e o botão

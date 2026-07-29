@@ -3,7 +3,7 @@
  *
  * É o que faz a base de 28M CNPJs (paga, configurada) atender quem escreve
  * "comércio varejista" em vez de "47". Sem isto, o alvo escrito passava longe
- * dela e sobrava a busca pública — que na primeira campanha do Rodrigo
+ * dela e sobrava a busca pública — que na primeira campanha do fundador
  * respondeu 403 e devolveu zero.
  *
  * Determinístico de propósito: código de atividade é fato. Um palpite errado

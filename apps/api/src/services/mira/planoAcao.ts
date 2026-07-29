@@ -1,7 +1,7 @@
 /**
  * Mira Prospects — plano de ação do Alvo, e a Tarefa que nasce dele.
  *
- * Pedido do Rodrigo (15/07/2026): "oportunidades identificadas no portfólio
+ * Pedido do fundador (15/07/2026): "oportunidades identificadas no portfólio
  * que geram roteiro para os sponsors devem gerar automaticamente uma tarefa
  * PENDENTE em /tasks. Crie um campo 'plano de ação' onde a IA sugere o passo
  * imediato, e conforme a pessoa executa, a tarefa vira Concluída e alimenta a

@@ -18,7 +18,7 @@ const cuid = z.string().regex(/^[a-z0-9]{20,30}$/i, 'id inválido');
 
 /**
  * Etiquetas chegam como LISTA DE IDs do catálogo, nunca como texto.
- * Decisão do Rodrigo: etiqueta é catálogo. Aceitar string livre aqui seria a
+ * Decisão do fundador: etiqueta é catálogo. Aceitar string livre aqui seria a
  * porta dos fundos para "Urgente"/"urgente"/"URGENTE" na mesma conta.
  * O handler ainda confere que cada id é do catálogo DA ORG (senão dava pra
  * carimbar a tarefa com etiqueta de outro cliente sabendo o id).

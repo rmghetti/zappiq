@@ -1,7 +1,7 @@
 /**
  * Releases viram inteligência acionável: a matéria traz a fonte, a data real
  * de publicação, e o que ela EVIDENCIA (demanda) e ABRE (oportunidade no
- * catálogo). Pedido do Rodrigo em 15/07/2026:
+ * catálogo). Pedido do fundador em 15/07/2026:
  *
  *   "trazer as últimas matérias/anúncios publicados na internet e junto o link
  *    da fonte. Melhor ainda se analisar o que essa publicação teria de
@@ -186,7 +186,7 @@ describe('a matéria vira demanda e oportunidade, com a fonte junto', () => {
     expect(r.releases).toHaveLength(0);
   });
 
-  it('busca no Instagram entra nas queries (pedido explícito do Rodrigo)', async () => {
+  it('busca no Instagram entra nas queries (pedido explícito do fundador)', async () => {
     (webSearch as any).mockResolvedValue([]);
     (llmRouter.complete as any).mockResolvedValue(respostaLlm([]));
 

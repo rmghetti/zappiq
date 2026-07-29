@@ -4,7 +4,7 @@
  * A remediação reescreve prompt de cliente em PRODUÇÃO. O que não pode
  * acontecer, em ordem de gravidade:
  *   1. sobrar link nosso no prompt do cliente (o bug);
- *   2. sumir customização que o cliente/Rodrigo acumulou (dano novo);
+ *   2. sumir customização que o cliente acumulou (dano novo);
  *   3. rodar 2x e estragar (o script pode ser reexecutado).
  * ============================================================================
  */

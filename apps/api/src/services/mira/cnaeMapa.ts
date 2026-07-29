@@ -9,7 +9,7 @@
  *
  * Sem esta tradução, todo alvo escrito passava longe da base boa e sobrava só
  * a busca pública na web — que é pior (raspa CNPJ de snippet) e ainda depende
- * de provedor externo. Foi o que deixou a primeira campanha do Rodrigo com
+ * de provedor externo. Foi o que deixou a primeira campanha do fundador com
  * zero alvos: os 5 alvos dele eram texto, o BigQuery nem foi chamado, e a web
  * respondeu 403.
  *

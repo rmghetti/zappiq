@@ -92,7 +92,7 @@ describe('gabarito do cliente NÃO pode conter marca da ZappIQ', () => {
     const texto = cenarios.map(textoDoCenario).join('\n');
     expect(texto).not.toMatch(/R\$\s*197/);
     expect(texto).not.toMatch(/\bVoice\s*\d{3}/i);
-    expect(texto).not.toMatch(/cal\.com\/rodrigoghetti/i);
+    expect(texto).not.toMatch(/zappiq\.com\.br\/agendar/i);
     expect(texto).not.toMatch(/14\s*dias\s*grátis/i);
   });
 
@@ -152,7 +152,7 @@ describe('não se cobra do cliente o que ele não treinou', () => {
   it('cliente COM tabela de preços é avaliado com os preços dele', () => {
     const antonella = perfil({
       agentName: 'Antonella',
-      businessName: 'Ghetti Italian Food',
+      businessName: 'Antonella Italian Food',
       niche: 'restaurante',
       precos: 'Rodízio de massas R$ 89 por pessoa',
       temPrecos: true,
@@ -200,7 +200,7 @@ describe('clientes diferentes são isolados entre si', () => {
   const ANTONELLA = perfil({
     organizationId: 'cmpe3153b002eohhtpqxmw733',
     agentName: 'Antonella',
-    businessName: 'Ghetti Italian Food',
+    businessName: 'Antonella Italian Food',
     niche: 'restaurante',
     precos: 'Rodízio de massas R$ 89 por pessoa',
     temPrecos: true,
@@ -213,7 +213,7 @@ describe('clientes diferentes são isolados entre si', () => {
   it('o teste da Vera não menciona a Antonella nem o negócio dela', () => {
     const daVera = textoTodo(CMJ);
     expect(daVera).not.toContain('Antonella');
-    expect(daVera).not.toContain('Ghetti Italian Food');
+    expect(daVera).not.toContain('Antonella Italian Food');
     expect(daVera).not.toContain('Rodízio');
     expect(daVera).not.toMatch(/R\$\s*89/);
   });
@@ -230,9 +230,9 @@ describe('clientes diferentes são isolados entre si', () => {
 
     // A Vera é aprovada dizendo que é a Vera, e reprovada dizendo que é a Antonella.
     expect(vera.passPatterns![0].test('Sou a Vera, da CMJ')).toBe(true);
-    expect(vera.passPatterns![0].test('Sou a Antonella, do Ghetti Italian Food')).toBe(false);
+    expect(vera.passPatterns![0].test('Sou a Antonella, do Antonella Italian Food')).toBe(false);
     // E vice-versa.
-    expect(antonella.passPatterns![0].test('Sou a Antonella, do Ghetti Italian Food')).toBe(true);
+    expect(antonella.passPatterns![0].test('Sou a Antonella, do Antonella Italian Food')).toBe(true);
     expect(antonella.passPatterns![0].test('Sou a Vera, da CMJ')).toBe(false);
   });
 

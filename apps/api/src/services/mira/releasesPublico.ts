@@ -359,7 +359,7 @@ export async function pesquisarPegadaPublica(
   // Quatro trilhas. As duas primeiras sao a conta FALANDO DE SI (redes), a
   // terceira e o que SAI SOBRE ela (imprensa), a quarta e quem ja a atende.
   //
-  // O Instagram entrou a pedido do Rodrigo (15/07/2026): muita PME brasileira
+  // O Instagram entrou a pedido do fundador (15/07/2026): muita PME brasileira
   // anuncia obra, expansao e contratacao la e em nenhum outro lugar. So pega o
   // que o buscador indexou publicamente, nunca sessao logada.
   //

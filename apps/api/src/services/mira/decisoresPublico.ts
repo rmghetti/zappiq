@@ -282,7 +282,7 @@ export async function enriquecerDecisoresPublico(
 
   /**
    * O QUE cada camada achou, para "Fontes verificadas" mostrar o quê, não só
-   * o link. Achado pelo Rodrigo (16/07/2026): "Mapear decisores" dizia "1
+   * o link. Achado pelo fundador (16/07/2026): "Mapear decisores" dizia "1
    * enriquecido a partir de pegada pública" e não dava para saber o quê —
    * a Camada 4 (contato) atualiza o decisor, mas nunca escrevia em
    * `alvo.fontes`, então o rodapé do dossiê ficava mudo sobre ela.
@@ -461,7 +461,7 @@ export async function enriquecerDecisoresPublico(
   // duas camadas (ver "Fontes verificadas: o que cada camada achou" abaixo).
   } // fim do if (resultados.length > 0) — Camada 2/3
 
-  // ── Camada 4: contato dos decisores JÁ MAPEADOS (pedido do Rodrigo) ────
+  // ── Camada 4: contato dos decisores JÁ MAPEADOS (pedido do fundador) ────
   // Diferente da Camada 1 (procura o CARGO na empresa), aqui a busca é pelo
   // NOME EXATO de quem já está no comitê — tipicamente vindo do QSA (Motor
   // A/B), que tem só nome, sem LinkedIn/e-mail/telefone/Instagram. Sem isso
@@ -582,7 +582,7 @@ export async function enriquecerDecisoresPublico(
   }
 
   // ── Fontes verificadas: o que cada camada achou ────────────────────
-  // Achado pelo Rodrigo (16/07/2026): o status verde do topo dizia "1
+  // Achado pelo fundador (16/07/2026): o status verde do topo dizia "1
   // enriquecido a partir de pegada pública" e não dava para saber QUAL
   // informação chegou. Uma entrada por decisor tocado, com o campo
   // encontrado no texto (não um rótulo genérico) e a fonte real.
@@ -607,7 +607,7 @@ export async function enriquecerDecisoresPublico(
   }
 
   // ── Reavaliação: decisor novo muda a nota E pode mudar o status ────
-  // Este é o caso que mais importa do pedido do Rodrigo: um Alvo entra "Em
+  // Este é o caso que mais importa do pedido do fundador: um Alvo entra "Em
   // qualificação" justamente por NÃO ter decisor (firma individual, sem QSA).
   // Se o mapeamento acha alguém no LinkedIn, o motivo do "em qualificação"
   // deixou de existir e ele tem que virar Pronto na hora, sem o cliente

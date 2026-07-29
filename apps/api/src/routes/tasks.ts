@@ -370,7 +370,7 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
     });
 
     // Tarefa da Mira concluída → a oportunidade no CRM fica sabendo.
-    // A outra ponta do pedido do Rodrigo: sem isto, o vendedor executa o
+    // A outra ponta do pedido do fundador: sem isto, o vendedor executa o
     // plano de ação e o pipeline continua achando que ninguém fez nada.
     // Só na TRANSIÇÃO para DONE (reeditar uma tarefa já concluída não gera
     // outra entrada na timeline).

@@ -13,7 +13,7 @@
  *
  *   import { renderTrialSavingsFollowupEmail } from './templates/trialSavingsFollowup';
  *   const { subject, html, text } = renderTrialSavingsFollowupEmail({
- *     firstName: 'Rodrigo',
+ *     firstName: 'Ana',
  *     daysRemaining: 11,
  *     competitorSetupBrl: 8000,
  *     competitorMonthlyBrl: 1500,
@@ -39,7 +39,7 @@ export interface TrialSavingsEmailInput {
   zappiqMonthlyBrl?: number;
   /** URL absoluta do CTA (com cupom, trackers etc). */
   ctaUrl: string;
-  /** Nome do fundador que assina. Default: "Rodrigo Ghetti, Founder da ZappIQ". */
+  /** Nome do fundador que assina. Default: "Equipe ZappIQ". */
   signature?: string;
 }
 
@@ -112,7 +112,7 @@ export function renderTrialSavingsFollowupEmail(
     zappiqTierLabel = 'ZappIQ Starter',
     zappiqMonthlyBrl = 197,
     ctaUrl,
-    signature = 'Rodrigo Ghetti, Founder da ZappIQ',
+    signature = 'Equipe ZappIQ',
   } = input;
 
   const { firstYearCompetitor, firstYearZappiq, savings, pctSavings } = computeSavings(

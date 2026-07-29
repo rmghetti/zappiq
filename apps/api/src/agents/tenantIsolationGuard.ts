@@ -43,7 +43,7 @@ const BRAND_PATTERNS: Pattern[] = [
   // 'iza' vem precedido de letra. Underscore é \w, então IZA_LITE também não.
   { term: 'Iza', regex: /\bIza\b/gi },
   { term: 'ZappIQ', regex: /zappiq/gi },
-  { term: 'cal.com/rodrigoghetti', regex: /cal\.com\/rodrigoghetti/gi },
+  // O link de agendamento agora é zappiq.com.br/agendar, já coberto pelo termo 'ZappIQ'.
 ];
 
 /**

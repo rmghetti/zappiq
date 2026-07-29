@@ -151,7 +151,7 @@ describe('resolveTenantAgentProfile — o que o cliente treinou', () => {
       name: 'Antonella',
       settings: {
         agentName: 'Antonella',
-        businessName: 'Ghetti Italian Food',
+        businessName: 'Antonella Italian Food',
         niche: 'restaurante',
         surveyAnswers: {
           identidade_empresa: {

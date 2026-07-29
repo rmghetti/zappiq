@@ -144,13 +144,13 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
 
                 <p style="margin:24px 0 0;font-size:13px;line-height:1.7;color:#6b7280;">
                   Dúvida sobre integração? Funcionalidades? Pricing? Responda este e-mail.
-                  Eu (<strong>Rodrigo</strong>) leio tudo. Se for urgente e estivermos fora,
+                  A gente lê tudo. Se for urgente e estivermos fora,
                   aviso quando volto.
                 </p>
 
                 <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#111827;">
                   Abraço,<br/>
-                  <strong>Rodrigo Ghetti, Founder da ZappIQ</strong>
+                  <strong>Equipe ZappIQ</strong>
                 </p>
               </td>
             </tr>
@@ -193,7 +193,7 @@ export function renderTrialLastDayEmail(input: TrialLastDayEmailInput): Rendered
     'Dúvida? Responda este e-mail.',
     '',
     'Abraço,',
-    'Rodrigo Ghetti, Founder da ZappIQ',
+    'Equipe ZappIQ',
   ]
     .filter(Boolean)
     .join('\n');

@@ -1,7 +1,7 @@
 /**
  * Dossiê raso não vira trabalho.
  *
- * Pedido do Rodrigo (15/07/2026), depois de testar o Alvo GISLAINE em produção:
+ * Pedido do fundador (15/07/2026), depois de testar o Alvo GISLAINE em produção:
  * "o plano de ação só deve ser feito e gerar uma tarefa se temos informações
  * suficientes para ter um Alvo qualificado e pronto para gerar um lead".
  *
@@ -23,7 +23,7 @@ const REAIS = [
   { nome: 'PERFILADOS ATIBAIA', miraScore: 27, decisores: 2, sobe: true },
   { nome: 'YADOYA', miraScore: 20, decisores: 1, sobe: false }, // tem decisor, score baixo
   { nome: 'EDUARDO RONDINA', miraScore: 20, decisores: 1, sobe: false },
-  { nome: 'GISLAINE', miraScore: 13, decisores: 0, sobe: false }, // o caso do Rodrigo
+  { nome: 'GISLAINE', miraScore: 13, decisores: 0, sobe: false }, // o caso do fundador
   { nome: 'KRAMEPY', miraScore: 9, decisores: 0, sobe: false },
 ];
 
@@ -36,7 +36,7 @@ describe('o corte de 25 na base real', () => {
     expect(bloqueio === null).toBe(sobe);
   });
 
-  it('o corte é 25 (aprovado pelo Rodrigo)', () => {
+  it('o corte é 25 (aprovado pelo fundador)', () => {
     expect(SCORE_MINIMO_PLANO).toBe(25);
   });
 });

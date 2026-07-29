@@ -107,7 +107,7 @@ describe('trialLastDay · omite economia ausente em vez de inventar', () => {
 describe('trialSavingsFollowup · readiness opcional', () => {
   it('sem aiReadinessScore → bloco some', () => {
     const { html, text } = renderTrialSavingsFollowupEmail({
-      firstName: 'Rodrigo',
+      firstName: 'Ana',
       daysRemaining: 11,
       competitorSetupBrl: 8000,
       competitorMonthlyBrl: 1500,

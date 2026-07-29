@@ -1,7 +1,7 @@
 /**
  * Pouso no CRM: dossiê completo + "enviar assim mesmo".
  *
- * Dois pedidos do Rodrigo (15/07/2026):
+ * Dois pedidos do fundador (15/07/2026):
  *  1. "Garantir que o lead gerado no MIRA chegue no CRM com todas as
  *     informações possíveis, com campos específicos para cada informação."
  *     Antes o pouso levava 5 campos e jogava fora o dossiê: quem abria o Deal

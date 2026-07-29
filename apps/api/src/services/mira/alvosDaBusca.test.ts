@@ -1,7 +1,7 @@
 /**
  * A semente do wizard e a separação código x texto.
  *
- * Estes testes travam o pedido do Rodrigo (14/07): a campanha nasce com o que
+ * Estes testes travam o pedido do fundador (14/07): a campanha nasce com o que
  * está no Perfil, e o que o cliente vê é o que roda. Também travam o defeito
  * que descobrimos junto: alvo em texto era descartado em silêncio pelo filtro
  * numérico das fontes de CNPJ, e o Perfil aceita texto de propósito.

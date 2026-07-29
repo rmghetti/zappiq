@@ -11,7 +11,7 @@
  * gabarito de avaliação dele.
  *
  * Cobertura:
- *   ✓ pega Iza / ZappIQ / zappiq.com.br / cal.com/rodrigoghetti
+ *   ✓ pega Iza / ZappIQ / zappiq.com.br (cobre o link de agendamento)
  *   ✓ NÃO acusa falso positivo em português ("humanizar", "organiza", ...)
  *   ✓ deixa passar tudo quando a org É a ZappIQ (a Iza pode falar da Iza)
  *   ✓ termos comerciais (R$ 197, Voice 200) pegos no modo estrito do eval
@@ -43,9 +43,9 @@ describe('findForeignBrandLeaks — detecta marca da ZappIQ', () => {
     expect(leaks.length).toBeGreaterThan(0);
   });
 
-  it('pega o link do Cal do Rodrigo', () => {
-    const leaks = findForeignBrandLeaks('Mandar https://cal.com/rodrigoghetti/zappiq-demo');
-    expect(leaks.map((l) => l.term)).toContain('cal.com/rodrigoghetti');
+  it('pega o link de agendamento pelo termo ZappIQ', () => {
+    const leaks = findForeignBrandLeaks('Mandar https://zappiq.com.br/agendar');
+    expect(leaks.map((l) => l.term)).toContain('ZappIQ');
   });
 
   it('reporta o trecho onde achou, pra facilitar o conserto', () => {

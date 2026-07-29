@@ -186,7 +186,7 @@ router.post('/pack/checkout', async (req: Request, res: Response, next: NextFunc
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
-      // Decisão do Rodrigo (16/07/2026): TODO produto pago tem campo de cupom,
+      // Decisão do fundador (16/07/2026): TODO produto pago tem campo de cupom,
       // igual aos planos ZappIQ — se o cliente tiver um, usa. Era o único
       // checkout da plataforma sem o campo, num produto de até R$ 1.436.
       allow_promotion_codes: true,

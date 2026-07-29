@@ -1,7 +1,7 @@
 /**
  * Mira Prospects — reavaliação do Alvo (score, confiança e status).
  *
- * Pedido do Rodrigo (15/07/2026): "Alvo que teve atualizações, seja pelo
+ * Pedido do fundador (15/07/2026): "Alvo que teve atualizações, seja pelo
  * Aprofundar com IA ou Mapear Decisores, deve imediatamente ter as
  * informações complementares analisadas e o score e a confiança atualizados
  * automaticamente, inclusive o status."

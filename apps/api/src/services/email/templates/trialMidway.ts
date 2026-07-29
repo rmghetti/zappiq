@@ -178,7 +178,7 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
 
                 <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#111827;">
                   Abraço,<br/>
-                  <strong>Rodrigo Ghetti, Founder da ZappIQ</strong>
+                  <strong>Equipe ZappIQ</strong>
                 </p>
               </td>
             </tr>
@@ -216,7 +216,7 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
     'Cupom TRIAL14 já está ativo. Você tem 14% de desconto até o fim do trial.',
     '',
     'Abraço,',
-    'Rodrigo Ghetti, Founder da ZappIQ',
+    'Equipe ZappIQ',
   ]
     .filter(Boolean)
     .join('\n');

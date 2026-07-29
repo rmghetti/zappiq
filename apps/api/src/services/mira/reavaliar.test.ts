@@ -1,7 +1,7 @@
 /**
  * Reavaliação do Alvo: score, confiança e status automáticos.
  *
- * Pedido do Rodrigo (15/07/2026): Alvo que recebe dado novo pelo "Aprofundar
+ * Pedido do fundador (15/07/2026): Alvo que recebe dado novo pelo "Aprofundar
  * com IA" ou "Mapear decisores" tem que ser reanalisado na hora, atualizando
  * nota, confiança E status.
  *

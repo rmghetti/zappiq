@@ -1,7 +1,7 @@
 /**
  * Plano de ação → Tarefa pendente → conclusão volta ao CRM.
  *
- * Pedido do Rodrigo (15/07/2026): "oportunidades que geram roteiro para os
+ * Pedido do fundador (15/07/2026): "oportunidades que geram roteiro para os
  * sponsors devem gerar automaticamente uma tarefa PENDENTE em /tasks (que a
  * partir de agora recebe tarefas não só das Conversas, mas do Mira). Crie um
  * campo plano de ação onde a IA sugere o passo imediato, e conforme a pessoa

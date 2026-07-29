@@ -13,7 +13,7 @@
  * O último teste é o mais importante do arquivo: prova que "ZappIQ" no catálogo
  * da MACHIA é dado legítimo, não vazamento. Um filtro de marca (o
  * assertNoForeignBrand, que existe para o prompt do agente) reprovaria a org do
- * próprio Rodrigo aqui. Procedência se resolve com ancoragem, não com blocklist.
+ * próprio fundador aqui. Procedência se resolve com ancoragem, não com blocklist.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 

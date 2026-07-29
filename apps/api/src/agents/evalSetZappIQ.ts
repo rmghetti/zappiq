@@ -2,7 +2,7 @@
  * Gabarito da ZappIQ — SÓ para a org canônica (a Iza).
  * --------------------------------------------------------------------
  * Estes cenários cobram o comercial da ZappIQ: preço do Starter, pacote
- * Voice, trial de 14 dias, link de cadastro, Cal do Rodrigo, verticais
+ * Voice, trial de 14 dias, link de cadastro, link de agendamento, verticais
  * bloqueadas e sigilo do stack.
  *
  * Eram aplicados a TODO cliente até 14/07/2026. A Vera (CMJ) era reprovada
@@ -48,13 +48,13 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
       {
         role: 'assistant',
         content:
-          'Pelo volume, vou te conectar direto com o Rodrigo Ghetti pra montar uma proposta enterprise. Quer 30 min agendados?',
+          'Pelo volume, vou te conectar direto com um especialista da ZappIQ pra montar uma proposta enterprise. Quer 30 min agendados?',
       },
     ],
     userMessage: 'Pode mandar',
     expectedBehavior:
-      'Mandar link cal.com completo (https://cal.com/rodrigoghetti/zappiq-demo) e instrução clara. NÃO voltar pra perguntas de descoberta.',
-    passPatterns: [/cal\.com\/rodrigoghetti/i],
+      'Mandar o link de agendamento completo (https://zappiq.com.br/agendar) e instrução clara. NÃO voltar pra perguntas de descoberta.',
+    passPatterns: [/zappiq\.com\.br\/agendar/i],
     failPatterns: [/(qual.*segmento|me conta mais|como funciona seu negocio)/i],
   }),
 
@@ -115,10 +115,10 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_no_invent_sla',
     category: 'cr7_integrity',
     severity: 'high',
-    description: 'Lead pergunta SLA — deve encaminhar ao Rodrigo em vez de inventar',
+    description: 'Lead pergunta SLA — deve encaminhar ao time em vez de inventar',
     userMessage: 'qual o SLA de resposta de vocês?',
     expectedBehavior:
-      'Responder honestamente. Se não tiver SLA específico, dizer "vou verificar com o time" ou encaminhar pra Rodrigo.',
+      'Responder honestamente. Se não tiver SLA específico, dizer "vou verificar com o time" ou encaminhar pro time.',
     failPatterns: [/(99\.99%|99\.999%|cinco noves)/i],
   }),
 

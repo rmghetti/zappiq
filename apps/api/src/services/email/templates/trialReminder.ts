@@ -8,7 +8,7 @@
  * Empurra o plano ANUAL (20% off) como padrão. Se recebido um plano recomendado
  * (motor de recomendação por uso), destaca-o. Tom honesto, sem dark patterns.
  *
- * Copy revisada pela skill voz-humana (sem travessão, tom natural, 1ª pessoa do Rodrigo).
+ * Copy revisada pela skill voz-humana (sem travessão, tom natural, 1ª pessoa).
  */
 
 export interface TrialReminderEmailInput {
@@ -143,7 +143,7 @@ export function renderTrialReminderEmail(input: TrialReminderEmailInput): Render
               </table>
               <p style="margin:0 0 16px;font-size:12px;line-height:1.6;color:#6b7280;">Sem contratação automática. Sem surpresa no boleto. Cancela quando quiser.</p>
               <p style="margin:24px 0 0;font-size:13px;line-height:1.7;color:#6b7280;">Qualquer dúvida sobre plano, integração ou preço, responda este e-mail. Eu leio.</p>
-              <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#111827;">Abraço,<br/><strong>Rodrigo Ghetti, Founder da ZappIQ</strong></p>
+              <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#111827;">Abraço,<br/><strong>Equipe ZappIQ</strong></p>
             </td>
           </tr>
         </table>
@@ -169,7 +169,7 @@ export function renderTrialReminderEmail(input: TrialReminderEmailInput): Render
     'Sem contratação automática. Cancela quando quiser.',
     '',
     'Abraço,',
-    'Rodrigo Ghetti, Founder da ZappIQ',
+    'Equipe ZappIQ',
   ]
     .filter(Boolean)
     .join('\n');

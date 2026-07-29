@@ -463,7 +463,7 @@ export async function aprofundarAlvo(organizationId: string, alvoId: string): Pr
  * seria o pior dos dois mundos.
  */
 /**
- * Score mínimo para o Alvo virar trabalho. Aprovado pelo Rodrigo em
+ * Score mínimo para o Alvo virar trabalho. Aprovado pelo fundador em
  * 15/07/2026, e o número não é arbitrário: na base real da MACHIA ele é
  * exatamente a linha que separa os Alvos de 9/13/20 (sem decisor ou fora do
  * ICP) dos de 27/33/45 (com comitê mapeado e encaixe de catálogo).
@@ -501,7 +501,7 @@ async function gerarPlanoDeAcao(
   roteiros: { decisor: string }[]
 ): Promise<{ planoAcao: string; taskId: string; reused: boolean } | null> {
   // ── Gate de qualidade: dossiê raso não vira trabalho ──
-  // Pedido do Rodrigo (15/07/2026): "o plano de ação só deve ser feito e gerar
+  // Pedido do fundador (15/07/2026): "o plano de ação só deve ser feito e gerar
   // uma tarefa se temos informações suficientes para ter um Alvo qualificado e
   // pronto para gerar um lead".
   //
@@ -561,7 +561,7 @@ async function gerarPlanoDeAcao(
  * a conta publicou, quem já a atende e o que aconteceu de novo, e cada item
  * precisa apontar para uma URL real.
  *
- * Por que existe (pedido do Rodrigo, 15/07/2026): os Alvos chegavam com
+ * Por que existe (pedido do fundador, 15/07/2026): os Alvos chegavam com
  * "Demandas recentes", "Fornecedores atuais" e "Releases" vazios. Não era
  * falta de dado no mundo, era falta de quem fosse buscar: `miraIncumbente`
  * não tinha UM escritor no código inteiro, e releases só nasciam num cron

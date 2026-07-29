@@ -8,7 +8,7 @@
  *
  *   import { renderTrialWelcomeEmail } from './templates/trialWelcome';
  *   const { subject, html, text } = renderTrialWelcomeEmail({
- *     firstName: 'Rodrigo',
+ *     firstName: 'Ana',
  *     orgName: 'Acme Inc',
  *     ctaUrl: 'https://app.zappiq.com.br/ai-training',
  *     daysRemaining: 14,
@@ -133,7 +133,7 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
 
                 <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#111827;">
                   Abraço,<br/>
-                  <strong>Rodrigo Ghetti, Founder da ZappIQ</strong>
+                  <strong>Equipe ZappIQ</strong>
                 </p>
               </td>
             </tr>
@@ -176,7 +176,7 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
     'Qualquer dúvida? Responda esse e-mail.',
     '',
     'Abraço,',
-    'Rodrigo Ghetti, Founder da ZappIQ',
+    'Equipe ZappIQ',
   ]
     .filter(Boolean)
     .join('\n');

@@ -35,7 +35,7 @@ describe('stripStructuredTags', () => {
   });
 
   it('texto puro sem tags passa intacto', () => {
-    expect(stripStructuredTags('Olá, Rodrigo!')).toBe('Olá, Rodrigo!');
+    expect(stripStructuredTags('Olá, Ana!')).toBe('Olá, Ana!');
   });
 
   it('aceita tags case-insensitive', () => {
@@ -62,7 +62,7 @@ describe('stripStructuredTags', () => {
 
 describe('stripLeakedPrefixes', () => {
   it('remove [áudio] no início', () => {
-    expect(stripLeakedPrefixes('[áudio] Oi, Rodrigo!')).toBe('Oi, Rodrigo!');
+    expect(stripLeakedPrefixes('[áudio] Oi, Ana!')).toBe('Oi, Ana!');
   });
 
   it('remove [audio] (sem acento) no início', () => {
@@ -84,7 +84,7 @@ describe('stripLeakedPrefixes', () => {
   });
 
   it('texto sem prefixo passa intacto', () => {
-    expect(stripLeakedPrefixes('Olá, Rodrigo!')).toBe('Olá, Rodrigo!');
+    expect(stripLeakedPrefixes('Olá, Ana!')).toBe('Olá, Ana!');
   });
 
   it('string vazia retorna string vazia', () => {
@@ -99,9 +99,9 @@ describe('stripLeakedPrefixes', () => {
 describe('integração — fluxo do bug real reportado em smoke 2026-05-03', () => {
   it('mensagem complexa com action + action_data + prefix [áudio] vira só o texto', () => {
     const raw =
-      '<action>set_contact_name</action><action_data>{"name":"Rodrigo"}</action_data>[áudio] Entendido, Rodrigo!\n\nJá atualizei aqui.';
+      '<action>set_contact_name</action><action_data>{"name":"Ana"}</action_data>[áudio] Entendido, Ana!\n\nJá atualizei aqui.';
     // Aplica strip de tags primeiro, depois strip de prefix
     const cleaned = stripLeakedPrefixes(stripStructuredTags(raw));
-    expect(cleaned).toBe('Entendido, Rodrigo!\n\nJá atualizei aqui.');
+    expect(cleaned).toBe('Entendido, Ana!\n\nJá atualizei aqui.');
   });
 });

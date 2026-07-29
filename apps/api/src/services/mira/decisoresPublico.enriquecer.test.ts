@@ -1,7 +1,7 @@
 /**
  * enriquecerDecisoresPublico — honestidade da Camada 1 + Camada 4 (contato).
  *
- * O Rodrigo testou "Mapear decisores" e achou o resultado rápido e vazio
+ * O fundador testou "Mapear decisores" e achou o resultado rápido e vazio
  * demais para acreditar que a busca tinha rodado de verdade. Tinha razão:
  * webSearch tomava 403 do Google CSE, o catch só conferia `status === 501`
  * (nenhum provedor configurado) e engolia qualquer outro erro — a tela dizia
@@ -319,7 +319,7 @@ describe('vínculo com a empresa-alvo: não mapeia homônimo de outra empresa', 
 });
 
 describe('Fontes verificadas: o que cada camada achou (não só o link)', () => {
-  // O Rodrigo testou "Mapear decisores" e viu "1 enriquecido a partir de
+  // O fundador testou "Mapear decisores" e viu "1 enriquecido a partir de
   // pegada pública" sem nenhum jeito de saber O QUÊ. A Camada 4 atualizava o
   // decisor mas nunca escrevia em alvo.fontes: o rodapé do dossiê ficava
   // mudo justo na única fonte de detalhe que a tela tem.

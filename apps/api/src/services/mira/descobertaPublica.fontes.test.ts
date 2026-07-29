@@ -1,7 +1,7 @@
 /**
  * As duas fontes somam na mesma campanha.
  *
- * Regra atual, depois da campanha 1 de teste do Rodrigo ter voltado com zero:
+ * Regra atual, depois da campanha 1 de teste do fundador ter voltado com zero:
  *
  *  1. Código de CNAE -> base oficial de CNPJs.
  *  2. Atividade escrita que a gente sabe traduzir -> TAMBÉM base oficial (via

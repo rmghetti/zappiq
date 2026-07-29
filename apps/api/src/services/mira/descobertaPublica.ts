@@ -198,7 +198,7 @@ function doEspelhoParaCnpjData(e: CnpjDoEspelho): CnpjData {
  * Até 15/07/2026 este gate só decidia PROMOÇÃO para READY: o Alvo reprovado
  * era criado assim mesmo, em QUALIFYING, e ficava na base do cliente. Eram 11
  * de 20 na conta da MACHIA, todos com score 9 a 13, todos sem decisor nenhum.
- * O Rodrigo chamou de "entrega crua" e disse que "cria uma visão negativa do
+ * O fundador chamou de "entrega crua" e disse que "cria uma visão negativa do
  * cliente com relação à entrega". Ele tem razão: Alvo sem decisor não é um
  * Alvo, é uma linha.
  *
@@ -317,7 +317,7 @@ export async function runDescobertaPublica(
   }
 
   // A distinção que faltava: "a fonte quebrou" NÃO é "não achei ninguém".
-  // A campanha 1 de teste do Rodrigo devolveu 0 alvos com status CONCLUIDA
+  // A campanha 1 de teste do fundador devolveu 0 alvos com status CONCLUIDA
   // enquanto as 3 buscas falhavam com google_cse_403 (API não habilitada no
   // projeto). Falha de fonte agora estoura, a campanha fica FALHOU e o cliente
   // lê o motivo, em vez de achar que o mercado inteiro estava vazio.
@@ -536,7 +536,7 @@ export async function runDescobertaPublica(
       }
       // NÃO cria mais o "candidato".
       //
-      // Este era o pior ofensor do pedido do Rodrigo ("garantir que o Alvo nem
+      // Este era o pior ofensor do pedido do fundador ("garantir que o Alvo nem
       // suba se já na pesquisa tiver apenas informação do nome da empresa, que
       // é o que tem vindo em muitos casos"). O candidato nascia do TÍTULO de um
       // resultado de busca: sem CNPJ, sem decisor, sem firmografia, confiança
@@ -550,7 +550,7 @@ export async function runDescobertaPublica(
   }
 
   // Achou candidato e NENHUM passou porque a verificação quebrou: é falha de
-  // fonte, não mercado vazio. Foi o que deixou a campanha do Rodrigo em 0 com
+  // fonte, não mercado vazio. Foi o que deixou a campanha do fundador em 0 com
   // 300 candidatos encontrados.
   if (result.criados === 0 && result.candidatos === 0 && result.descartadosPorPorte === 0 && errosEnriquecimento.length > 0) {
     const err: any = new Error('verificacao_falhou');

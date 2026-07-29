@@ -149,7 +149,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // ── 0.5. AUTOREPLY MODE (Plano B pre-Go-Live) ───────
     // Quando IZA_AUTOREPLY_TEMPLATE estiver setado em env, responder
     // sempre o mesmo texto fixo e marcar contato como handoff (pausa AI
-    // até Rodrigo destrabar manualmente). Garante zero hallucination
+    // até destravar manualmente). Garante zero hallucination
     // enquanto Iza nao esta GA. Remover env quando Iza estiver pronta.
     const autoReplyTemplate = process.env.IZA_AUTOREPLY_TEMPLATE;
     if (autoReplyTemplate) {
@@ -903,7 +903,7 @@ export function stripStructuredTags(text: string): string {
  * V4 #159 (PR #71 HOTFIX) — Remove prefixos vazados do PR #69.
  * Quando audio inbound era transcrito, salvávamos "[áudio transcrito] X"
  * no Message.content. Esse texto entrava no history e a Iza, vendo o padrão,
- * imitava em respostas (ex: "[áudio] Oi, Rodrigo!"). TTS sintetizava
+ * imitava em respostas (ex: "[áudio] Oi, Ana!"). TTS sintetizava
  * literalmente "abre colchete áudio fecha colchete".
  *
  * Esta função remove SOMENTE no INÍCIO do texto (não no meio — alguém pode

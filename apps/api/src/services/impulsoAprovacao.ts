@@ -1,7 +1,7 @@
 /**
  * Zap Impulso — a Tarefa de aprovação do Co-Piloto.
  *
- * Achado ao mapear o pedido do Rodrigo (16/07/2026): "Co-Piloto" (autonomyLevel
+ * Achado ao mapear o pedido do fundador (16/07/2026): "Co-Piloto" (autonomyLevel
  * padrão 2, "a IA propõe e o humano aprova") é hoje só um CAMPO no schema — nada
  * no código lê `autonomyLevel`. Uma campanha nasce DRAFT (precisa de clique
  * manual em /publish) ou SCHEDULED (o cron dispara sozinho, na hora marcada,
@@ -14,7 +14,7 @@
  * pendente NÃO impede o cron de disparar uma campanha SCHEDULED. Fazer a
  * aprovação REALMENTE travar o disparo é mudança de comportamento em cima do
  * envio de mensagem de cliente pago — decisão de produto que exige sinal
- * explícito do Rodrigo (pode travar campanha que hoje depende do disparo
+ * explícito do fundador (pode travar campanha que hoje depende do disparo
  * automático), não uma inferência de "melhor recomendação" dentro de um loop
  * autônomo. Ver docs/tarefas/planner-status.md.
  */
