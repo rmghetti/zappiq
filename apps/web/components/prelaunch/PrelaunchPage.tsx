@@ -6,7 +6,7 @@
  * faz a home V5 voltar a renderizar em /.
  *
  * Estrutura:
- *   1. Header sticky (logo ZappIQ + onze&onze.ai prata + tag pill)
+ *   1. Header sticky (logo ZappIQ + logo MACHIA + tag pill)
  *   2. Hero (countdown + iPhone mockup com Iza)
  *   3. Pillars (Iza · Voz · Radar 360°)
  *   4. Compare (Antes vs Com ZappIQ)

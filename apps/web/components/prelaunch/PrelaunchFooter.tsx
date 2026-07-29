@@ -32,8 +32,7 @@ export function PrelaunchFooter() {
             <Link href="/home">ver home →</Link>
           </nav>
           <div className={s.footCopy}>
-            ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA · CNPJ 46.788.145/0001-08 · Av. das Nações Unidas, 12901
-            · São Paulo/SP · © 2026 ZappIQ. Produto brasileiro 🇧🇷
+            Av. das Nações Unidas, 12901 · São Paulo/SP · © 2026 ZappIQ. Produto brasileiro 🇧🇷
           </div>
         </div>
       </div>

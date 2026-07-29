@@ -142,8 +142,8 @@ export default function ParceriaMetaPage() {
           implica endosso ou parceria formal.
         </p>
         <p>
-          ZappIQ é marca comercial (d.b.a.) de <strong>Onze e Onze Consultoria Empresarial Ltda</strong>,
-          CNPJ 46.788.145/0001-08, empresa independente com sede em São Paulo/SP.
+          <strong>ZappIQ</strong> é o nome comercial de uma empresa brasileira independente, sem
+          vínculo societário com a Meta, com sede em São Paulo/SP.
         </p>
 
         <h2>8. Contato</h2>

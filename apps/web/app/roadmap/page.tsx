@@ -298,7 +298,7 @@ export default function RoadmapPage() {
           }}
         >
           Atualizado em {new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} ·{' '}
-          ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA · CNPJ 46.788.145/0001-08
+          ZappIQ
         </p>
       </div>
     </main>

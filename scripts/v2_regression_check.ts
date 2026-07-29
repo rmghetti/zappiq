@@ -126,10 +126,11 @@ const CHECKS: Check[] = [
   },
   // ── ONDA 2 — HIGH (prazo 27/04) ──
   {
-    id: '04', wave: 2, desc: 'Razão social canônica: Onze e Onze Consultoria Empresarial Ltda',
+    id: '04', wave: 2, desc: 'Site sem razão social nem CNPJ da Onze e Onze (remoção provisória)',
     fn: () =>
-      fileContains('apps/web/components/landing/LandingFooter.tsx', 'ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA') &&
-      fileContains('apps/web/app/lgpd/page.tsx', 'ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA'),
+      !fileContains('apps/web/components/landing/LandingFooter.tsx', '46.788.145/0001-08') &&
+      !fileContains('apps/web/app/lgpd/page.tsx', 'ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA'),
+    note: 'provisório: reverter quando a razão social definitiva for publicada',
   },
   {
     id: '05', wave: 2, desc: 'Página /founders com 30% de desconto vitalício',

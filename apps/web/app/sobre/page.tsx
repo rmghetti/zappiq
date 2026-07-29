@@ -21,9 +21,8 @@ export default function SobrePage() {
 
         <div className="prose prose-lg max-w-none text-gray-700 leading-relaxed space-y-6">
           <p>
-            ZappIQ é uma plataforma brasileira de inteligência conversacional para PMEs via WhatsApp,
-            operada por <strong>Onze e Onze Consultoria Empresarial Ltda</strong> (CNPJ 46.788.145/0001-08,
-            d.b.a. ZappIQ). Nossa sede fiscal e técnica está em São Paulo/SP.
+            ZappIQ é uma plataforma brasileira de inteligência conversacional para PMEs via WhatsApp.
+            Nossa sede fiscal e técnica está em São Paulo/SP.
           </p>
 
           <h2 className="font-display text-2xl font-bold text-gray-900 mt-12">Nossa tese</h2>

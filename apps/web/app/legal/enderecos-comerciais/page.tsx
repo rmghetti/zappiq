@@ -5,7 +5,7 @@ import { PublicLayout } from '../../../components/landing/PublicLayout';
 export const metadata: Metadata = {
   title: 'Endereços Comerciais da ZappIQ',
   description:
-    'Endereços fiscais, técnicos e de atendimento da ZappIQ, Onze e Onze Consultoria Empresarial Ltda (CNPJ 46.788.145/0001-08).',
+    'Endereços fiscais, técnicos e de atendimento da ZappIQ.',
 };
 
 /* V2-027: registro público de endereços comerciais, exigência
@@ -19,12 +19,16 @@ export default function EnderecosComerciaisPage() {
         <h1 className="font-display text-4xl font-extrabold text-gray-900">Endereços Comerciais</h1>
         <p className="text-gray-500">Última atualização: 18/04/2026 · Versão 1.0</p>
 
-        <h2>1. Razão social e identificação fiscal</h2>
+        <h2>1. Identificação</h2>
         <p>
-          <strong>ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA</strong> (d.b.a. ZappIQ)<br />
-          CNPJ 46.788.145/0001-08<br />
+          <strong>ZappIQ</strong> é o nome comercial sob o qual a plataforma é operada.<br />
           Inscrição Estadual: isento (prestadora de serviço)<br />
           Inscrição Municipal: em conformidade · CCM São Paulo
+        </p>
+        <p className="text-sm text-gray-500">
+          Razão social e CNPJ da empresa operadora estão em atualização cadastral e são informados
+          na proposta comercial, no contrato e a quem solicitar por{' '}
+          <a href="mailto:jur%C3%ADdico@zappiq.com.br">jurídico@zappiq.com.br</a>.
         </p>
 
         <h2>2. Endereço fiscal e correspondência</h2>
@@ -61,9 +65,10 @@ export default function EnderecosComerciaisPage() {
 
         <h2>6. Verificação</h2>
         <p className="text-sm text-gray-500">
-          A situação cadastral da ONZE E ONZE CONSULTORIA EMPRESARIAL LTDA pode ser consultada no
-          portal oficial da Receita Federal pelo CNPJ informado. Em caso de divergência entre esta
-          página e a consulta pública, prevalece a consulta pública.
+          Os dados cadastrais completos da empresa operadora podem ser solicitados por{' '}
+          <a href="mailto:jur%C3%ADdico@zappiq.com.br">jurídico@zappiq.com.br</a> e conferidos no
+          portal oficial da Receita Federal. Em caso de divergência entre esta página e a consulta
+          pública, prevalece a consulta pública.
         </p>
       </article>
     </PublicLayout>

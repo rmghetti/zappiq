@@ -21,7 +21,7 @@ export function PrelaunchHeader() {
             <Image
               src="/partners/machia/machia-logo-dark.svg"
               alt="MACHIA"
-              className={s.cobrandOnze}
+              className={s.cobrandPartner}
               width={120}
               height={26}
               priority

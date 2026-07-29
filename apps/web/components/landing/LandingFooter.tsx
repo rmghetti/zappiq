@@ -196,7 +196,7 @@ export function Footer() {
               MACHIA TECNOLOGIA DISRUPTIVA LTDA{' '}
               <span className="text-white/40 font-normal">(d.b.a. ZappIQ)</span>
             </p>
-            <p>CNPJ 46.788.145/0001-08, detentora da marca ZappIQ</p>
+            <p>Detentora da marca ZappIQ</p>
             <p>
               Av. das Nações Unidas, 12901, CENU Torre Norte, 25° andar, São Paulo/SP,
               CEP 04578-910

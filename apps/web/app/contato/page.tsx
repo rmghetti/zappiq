@@ -71,8 +71,7 @@ export default function ContatoPage() {
         <div className="bg-gray-50 border border-gray-200 rounded-2xl p-8 space-y-3 text-sm text-gray-600">
           <h2 className="font-display text-lg font-bold text-gray-900">Endereço comercial</h2>
           <p>
-            <strong>Onze e Onze Consultoria Empresarial Ltda</strong> (d.b.a. ZappIQ)<br />
-            CNPJ 46.788.145/0001-08<br />
+            <strong>ZappIQ</strong><br />
             Av. das Nações Unidas, 12901, CENU Torre Norte, 25° andar<br />
             Brooklin · São Paulo / SP · CEP 04578-910
           </p>
