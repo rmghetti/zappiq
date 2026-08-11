@@ -71,11 +71,23 @@ const WIDGET_JS = String.raw`
     } catch (e) {}
   }
 
-  /* ── estilos, isolados sob um único id pra não vazar no host page ── */
+  var root = document.createElement('div');
+  root.id = 'zqwc-root';
+  document.body.appendChild(root);
+
+  /* ── Shadow DOM: isola o widget do CSS/JS do site hospedeiro ──
+   * Sem isso, um reset global do host (ex.: button{all:unset}) ou um
+   * framework que re-renderiza o body periodicamente pode zerar nosso
+   * position:fixed ou apagar nossos nós sem avisar (visto na prática ao
+   * testar em cima do bundle do site do CMJ). Shadow DOM bloqueia CSS de
+   * fora, mas NÃO bloqueia propriedades herdadas (font, color) — por isso
+   * o :host{all:initial} abaixo. */
+  var shadow = root.attachShadow({ mode: 'open' });
+
   var style = document.createElement('style');
   style.textContent =
-    '#zqwc-root{all:initial;}' +
-    '#zqwc-root *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}' +
+    ':host{all:initial;}' +
+    '*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}' +
     '#zqwc-fab{position:fixed;right:22px;bottom:22px;z-index:2147483000;width:60px;height:60px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,' + COLOR + ',' + ACCENT + ');box-shadow:0 12px 32px -8px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;transition:transform .2s;}' +
     '#zqwc-fab:hover{transform:scale(1.07);}' +
     '#zqwc-fab svg{width:26px;height:26px;}' +
@@ -103,11 +115,25 @@ const WIDGET_JS = String.raw`
     '#zqwc-send{width:36px;height:36px;border-radius:50%;border:none;background:linear-gradient(135deg,' + COLOR + ',' + ACCENT + ');color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}' +
     '#zqwc-send:disabled{opacity:.4;cursor:default;}' +
     '@media (max-width:420px){#zqwc-panel{right:12px;left:12px;width:auto;bottom:86px;}#zqwc-fab{right:16px;bottom:16px;}}';
-  document.head.appendChild(style);
+  shadow.appendChild(style);
 
-  var root = document.createElement('div');
-  root.id = 'zqwc-root';
-  document.body.appendChild(root);
+  /* Auto-cura: alguns sites geram o HTML com um framework próprio que
+   * re-renderiza o <body> periodicamente (ex.: bundles tipo "enhance()" com
+   * setInterval + MutationObserver, comuns em export de page-builder). Isso
+   * apaga nós que não são dele, incluindo o nosso #zqwc-root. Em vez de tentar
+   * detectar cada framework, simplesmente reanexamos o MESMO nó (preserva
+   * listeners e estado) sempre que ele sai do documento. Sempre lê
+   * document.body ao vivo, então funciona mesmo se o body inteiro for trocado. */
+  function keepRootAttached() {
+    if (!document.body.contains(root)) {
+      document.body.appendChild(root);
+    }
+  }
+  new MutationObserver(keepRootAttached).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+  setInterval(keepRootAttached, 500);
 
   var CHAT_ICON =
     '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -117,7 +143,7 @@ const WIDGET_JS = String.raw`
   fab.type = 'button';
   fab.setAttribute('aria-label', 'Abrir chat com ' + AGENT_NAME);
   fab.innerHTML = CHAT_ICON;
-  root.appendChild(fab);
+  shadow.appendChild(fab);
 
   var panel = document.createElement('div');
   panel.id = 'zqwc-panel';
@@ -133,7 +159,7 @@ const WIDGET_JS = String.raw`
       '<input id="zqwc-input" type="text" autocomplete="off" placeholder="Digite sua mensagem..." />' +
       '<button id="zqwc-send" type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="15" height="15" fill="none"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
     '</form>';
-  root.appendChild(panel);
+  shadow.appendChild(panel);
 
   var msgsEl = panel.querySelector('#zqwc-msgs');
   var formEl = panel.querySelector('#zqwc-form');
