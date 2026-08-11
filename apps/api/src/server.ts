@@ -71,6 +71,7 @@ import agentQualityRoutes from './routes/agentQuality.js'; // FASE 2.2b #244 —
 import adminOnboardingJourneyRoutes from './routes/adminOnboardingJourney.js'; // FASE 1.B #240 onboarding D+1/D+3/D+7
 import adminClientesRoutes from './routes/adminClientes.js'; // Área Clientes Fase 2 — Visão Geral + 360 + financeiro
 import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-page site usa Iza real
+import webChatWidgetRoutes from './routes/webChatWidget.js'; // widget.js embedável pra sites de clientes (ex.: CMJ)
 import adminIzaFactsRoutes from './routes/adminIzaFacts.js'; // FASE 4 P7+ Admin Camada 2 CRUD
 import { initRetentionJob } from './services/retentionService.js';
 import { bootstrapFlowTemplates } from './bootstrap/seedFlowTemplates';
@@ -100,6 +101,14 @@ const ALLOWED_ORIGIN_PATTERNS: Array<string | RegExp> = [
   'https://www.zappiq.com.br',
   /^https:\/\/zappiq-git-[a-z0-9-]+-zappiq\.vercel\.app$/, // branch alias previews
   /^https:\/\/zappiq-[a-z0-9]+-zappiq\.vercel\.app$/, // deployment hash previews
+  // FEATURE webchat-por-org: sites de CLIENTES que embedam o widget público
+  // (POST /api/web-chat/org/:organizationId/message) precisam fazer fetch
+  // cross-origin daqui. Primeiro cliente: CMJ (cmj.com.br), widget da Vera.
+  'https://cmj.com.br',
+  'https://www.cmj.com.br',
+  // localhost: só pra testar o widget em dev local contra esta API (não
+  // expõe nada novo — endpoints seguem exigindo Bearer token onde precisam).
+  /^http:\/\/localhost:\d+$/,
 ];
 
 function corsOriginCheck(
@@ -282,6 +291,9 @@ app.use('/api/auth', authLimiter, authRoutes);
 // FASE 4 P7 (#263): chat in-page do site (zappiq.com.br) — público, sem auth,
 // rate-limit dedicado. Usa MESMA Iza do WhatsApp (system prompt v7.6 + cascade).
 app.use('/api/web-chat', webChatRoutes);
+// widget.js embedável — GET público, sem prefixo /api pra ficar curto no
+// <script src> que o cliente cola no HTML dele (ex.: cmj.com.br).
+app.use('/', webChatWidgetRoutes);
 app.use('/api/webhook', webhookRoutes);
 // FASE 4 (#251): Instagram Direct webhook montado na MESMA path mãe; o Express
 // resolve por sub-path (/whatsapp vs /instagram).
