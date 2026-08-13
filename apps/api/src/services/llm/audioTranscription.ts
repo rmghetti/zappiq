@@ -64,6 +64,39 @@ export interface TranscribeContext {
   contactPhone?: string;
 }
 
+/**
+ * Deriva filename + content-type pro multipart do Whisper a partir do
+ * content-type do CDN (preferência) ou da extensão na URL. Default mp4,
+ * que é o formato típico de voice note do Instagram.
+ */
+function inferAudioFile(
+  contentType: string | undefined,
+  url: string,
+): { filename: string; contentType: string } {
+  const extByType: Record<string, string> = {
+    'audio/ogg': 'ogg',
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/mp4': 'mp4',
+    'audio/aac': 'aac',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/x-m4a': 'm4a',
+    'audio/webm': 'webm',
+    'video/mp4': 'mp4',
+  };
+  const ct = (contentType || '').split(';')[0].trim().toLowerCase();
+  if (extByType[ct]) {
+    return { filename: `ig_audio.${extByType[ct]}`, contentType: ct };
+  }
+  const extMatch = url.split('?')[0].match(/\.(ogg|mp3|mp4|m4a|aac|wav|webm)$/i);
+  if (extMatch) {
+    const ext = extMatch[1].toLowerCase();
+    return { filename: `ig_audio.${ext}`, contentType: `audio/${ext === 'm4a' ? 'mp4' : ext}` };
+  }
+  return { filename: 'ig_audio.mp4', contentType: 'audio/mp4' };
+}
+
 export interface TranscribeResult {
   /** Texto transcrito. null se falhou em qualquer etapa. */
   text: string | null;
@@ -99,16 +132,35 @@ export async function transcribeAudio(
   }
 
   try {
-    // ── 1. Resolve URL temporária do Meta CDN ───────────────────────
-    const mediaUrl = await waService.getMediaUrl(mediaId);
-    if (!mediaUrl) {
-      return { text: null, latencyMs: Date.now() - t0, error: 'getMediaUrl retornou vazio' };
+    // ── 1+2. Resolver e baixar o binário ────────────────────────────
+    // FASE 4 (#251) fecho — dois formatos de mediaId chegam aqui:
+    //   • WhatsApp: media ID numérico → getMediaUrl + downloadMedia (Bearer).
+    //   • Instagram: o webhook entrega a URL DIRETA do CDN (lookaside,
+    //     assinada na própria URL) → baixa sem auth. Tratar a URL como media
+    //     ID quebrava a transcrição de todo áudio de DM.
+    const isDirectUrl = /^https?:\/\//i.test(mediaId);
+    let audioBuf: Buffer;
+    let directContentType: string | undefined;
+
+    if (isDirectUrl) {
+      const resp = await axios.get(mediaId, {
+        responseType: 'arraybuffer',
+        timeout: WHISPER_TIMEOUT_MS,
+        maxContentLength: 30 * 1024 * 1024,
+      });
+      audioBuf = Buffer.from(resp.data);
+      const ct = resp.headers?.['content-type'];
+      directContentType = typeof ct === 'string' ? ct : undefined;
+    } else {
+      const mediaUrl = await waService.getMediaUrl(mediaId);
+      if (!mediaUrl) {
+        return { text: null, latencyMs: Date.now() - t0, error: 'getMediaUrl retornou vazio' };
+      }
+      audioBuf = await waService.downloadMedia(mediaUrl);
     }
 
-    // ── 2. Download do binário (auth Bearer WHATSAPP_ACCESS_TOKEN) ──
-    const audioBuf = await waService.downloadMedia(mediaUrl);
     if (!audioBuf || audioBuf.length === 0) {
-      return { text: null, latencyMs: Date.now() - t0, error: 'downloadMedia retornou buffer vazio' };
+      return { text: null, latencyMs: Date.now() - t0, error: 'download retornou buffer vazio' };
     }
 
     // Sanity: WhatsApp limita áudio a ~16MB; Whisper aceita até 25MB.
@@ -122,10 +174,13 @@ export async function transcribeAudio(
 
     // ── 3. POST /v1/audio/transcriptions (multipart/form-data) ──────
     // WhatsApp envia áudio em OGG/Opus — Whisper aceita extensão .ogg.
+    // IG costuma entregar audio/mp4 (voice note) — Whisper infere pelo nome
+    // do arquivo, então derivamos a extensão do content-type do CDN.
+    const igFile = isDirectUrl ? inferAudioFile(directContentType, mediaId) : null;
     const form = new FormData();
     form.append('file', audioBuf, {
-      filename: `whatsapp_audio_${mediaId}.ogg`,
-      contentType: 'audio/ogg',
+      filename: igFile ? igFile.filename : `whatsapp_audio_${mediaId}.ogg`,
+      contentType: igFile ? igFile.contentType : 'audio/ogg',
     });
     form.append('model', WHISPER_MODEL);
     form.append('language', WHISPER_LANGUAGE);
