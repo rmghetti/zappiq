@@ -28,6 +28,7 @@ import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import { aiProcessQueue } from '../services/queueService.js';
 import { getUserProfile } from '../services/instagramService.js';
+import { isValidOrgWebhookVerifyToken } from '../services/webhookVerifyToken.js';
 
 /**
  * FASE 4 (#251) fecho — Contact de IG nascia com name null pra sempre (o
@@ -104,9 +105,10 @@ router.get('/instagram', (req: Request, res: Response) => {
   const challenge = req.query['hub.challenge'] as string;
 
   // FASE 4: aceita IG_WEBHOOK_VERIFY_TOKEN dedicado OU fallback pro do WhatsApp
-  // (algumas configs Meta usam o mesmo token pros 2 webhooks).
+  // (algumas configs Meta usam o mesmo token pros 2 webhooks). 13/08: aceita
+  // também o token derivado por org (self-service do caminho manual).
   const expected = env.IG_WEBHOOK_VERIFY_TOKEN || env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
-  if (mode === 'subscribe' && token === expected) {
+  if (mode === 'subscribe' && (token === expected || isValidOrgWebhookVerifyToken(token))) {
     logger.info('[WebhookIG] Instagram webhook verified successfully');
     res.status(200).send(challenge);
     return;

@@ -120,15 +120,20 @@ describe('redactOrgSecrets — não vazar segredos de canal', () => {
 // updateSettingsSchema (.strict) barra de propósito. Aqui a whitelist própria:
 // aceita SÓ os campos de canal + a intenção; plan/trial/stripe seguem impossíveis.
 describe('channelCredentialsSchema — save de canal (traga seu token)', () => {
+  // 13/08 — fixtures atualizadas pra valores realistas: o schema agora valida
+  // FORMATO (IDs numéricos 5-32 dígitos, tokens com tamanho mínimo), porque
+  // "tok"/"123" passavam e o cliente lia "Credenciais salvas!" com credencial
+  // impossível. A intenção destes testes (opcionalidade + whitelist) permanece;
+  // o formato é coberto por settings.channelValidation.test.ts.
   it('aceita credenciais de WhatsApp + Instagram + intenção', () => {
     const r = channelCredentialsSchema.safeParse({
       channelActivation: 'both',
       whatsappPhoneNumberId: '123456789012345',
       whatsappBusinessAccountId: '987654321',
-      whatsappAccessToken: 'EAAG-token',
+      whatsappAccessToken: 'EAAG'.padEnd(60, 'x'),
       instagramAccountId: '17841400000000000',
-      instagramPageId: '555',
-      instagramAccessToken: 'EAAG-igtoken',
+      instagramPageId: '111222333444555',
+      instagramAccessToken: 'IGQV'.padEnd(60, 'y'),
       metaAppSecret: 'a'.repeat(32),
     });
     expect(r.success).toBe(true);
@@ -137,8 +142,8 @@ describe('channelCredentialsSchema — save de canal (traga seu token)', () => {
   it('aceita salvar só um canal (campos opcionais)', () => {
     const r = channelCredentialsSchema.safeParse({
       channelActivation: 'whatsapp',
-      whatsappPhoneNumberId: '123',
-      whatsappAccessToken: 'tok',
+      whatsappPhoneNumberId: '123456789012345',
+      whatsappAccessToken: 'EAAG'.padEnd(60, 'x'),
     });
     expect(r.success).toBe(true);
   });

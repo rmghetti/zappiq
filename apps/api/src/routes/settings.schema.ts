@@ -56,18 +56,47 @@ export type ImpulsoIntegrationRequest = z.infer<typeof impulsoIntegrationSchema>
 // Aqui uma whitelist .strict() SÓ com os campos de canal + a intenção de ativação.
 // plan/trial/subscription/stripe/quota continuam impossíveis por request (não estão
 // na whitelist), então a proteção de W1.3 segue intacta.
+// Validação de formato (13/08): IDs da Meta são numéricos (5-32 dígitos) e
+// tokens têm tamanho mínimo. Antes, "abc" passava como Phone Number ID e o
+// cliente lia "Credenciais salvas!" com credencial impossível de funcionar.
+// "" e null continuam passando (limpar campo é legítimo — troca de número).
+const metaNumericId = (label: string) =>
+  z
+    .string()
+    .max(64)
+    .refine((v) => v === '' || /^\d{5,32}$/.test(v), {
+      message: `${label} deve conter só números (copie do painel da Meta, sem espaços nem letras).`,
+    })
+    .nullable()
+    .optional();
+
+const metaAccessToken = z
+  .string()
+  .max(2000)
+  .refine((v) => v === '' || v.length >= 20, {
+    message: 'Token muito curto — cole o token completo gerado na Meta.',
+  })
+  .nullable()
+  .optional();
+
 export const channelCredentialsSchema = z
   .object({
     channelActivation: z.enum(['whatsapp', 'instagram', 'both']).optional(),
-    // Tamanhos generosos: tokens de System User da Meta são longos; IDs são numéricos.
     // null limpa deliberadamente o campo (usado, por ex., ao trocar de número).
-    whatsappPhoneNumberId: z.string().max(64).nullable().optional(),
-    whatsappBusinessAccountId: z.string().max(64).nullable().optional(),
-    whatsappAccessToken: z.string().max(2000).nullable().optional(),
-    instagramAccountId: z.string().max(64).nullable().optional(),
-    instagramPageId: z.string().max(64).nullable().optional(),
-    instagramAccessToken: z.string().max(2000).nullable().optional(),
-    metaAppSecret: z.string().max(256).nullable().optional(),
+    whatsappPhoneNumberId: metaNumericId('Phone Number ID'),
+    whatsappBusinessAccountId: metaNumericId('Business Account ID (WABA)'),
+    whatsappAccessToken: metaAccessToken,
+    instagramAccountId: metaNumericId('Instagram Account ID'),
+    instagramPageId: metaNumericId('Page ID'),
+    instagramAccessToken: metaAccessToken,
+    metaAppSecret: z
+      .string()
+      .max(256)
+      .refine((v) => v === '' || v.length >= 16, {
+        message: 'App Secret muito curto — copie de Configurações → Básico no app da Meta.',
+      })
+      .nullable()
+      .optional(),
   })
   .strict();
 
