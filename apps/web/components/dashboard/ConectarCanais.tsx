@@ -26,7 +26,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Smartphone, Instagram, CheckCircle2, Loader2, X, BookOpen,
   CalendarClock, Download, ArrowRight, ShieldCheck, Save, AlertCircle,
-  Activity, PlugZap, RefreshCw,
+  Activity, PlugZap, RefreshCw, Copy, Webhook, XCircle,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { SaibaMais } from '@/components/shared/SaibaMais';
@@ -73,6 +73,26 @@ interface OrgSettingsResponse {
   settings?: Record<string, any> | null;
 }
 
+// 13/08 — Webhook por org (GET /api/settings/channels/webhook-info). É o que o
+// cliente cadastra no app Meta DELE pra RECEBER mensagens no caminho manual.
+interface WebhookInfo {
+  verifyToken: string;
+  whatsapp: { callbackUrl: string; subscribeFields: string[] };
+  instagram: { callbackUrl: string; subscribeFields: string[] };
+}
+
+// 13/08 — resultado do "Testar conexão" (POST /api/settings/channels/test).
+interface ChannelTestResult {
+  ok: boolean;
+  displayPhoneNumber?: string;
+  verifiedName?: string;
+  qualityRating?: string;
+  username?: string;
+  name?: string;
+  error?: string;
+  hint?: string;
+}
+
 export default function ConectarCanais() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -104,6 +124,11 @@ export default function ConectarCanais() {
   const [healthLoading, setHealthLoading] = useState(false);
   const [disconnecting, setDisconnecting] = useState<ChannelKey | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState<ChannelKey | null>(null);
+
+  // 13/08 — webhook por org + teste de conexão.
+  const [webhookInfo, setWebhookInfo] = useState<WebhookInfo | null>(null);
+  const [testResults, setTestResults] = useState<{ whatsapp: ChannelTestResult; instagram: ChannelTestResult } | null>(null);
+  const [testing, setTesting] = useState(false);
 
   // Carrega o SDK do Facebook (1x) e escuta o sessionInfo do Embedded Signup.
   useEffect(() => {
@@ -196,7 +221,35 @@ export default function ConectarCanais() {
     }
   }, []);
 
-  useEffect(() => { load(); loadHealth(); }, [load, loadHealth]);
+  // 13/08 — Callback URL + Verify Token da org (o cliente cadastra no app Meta
+  // dele pra receber mensagens). Antes o produto pedia o webhook sem mostrar
+  // nenhum dos dois.
+  const loadWebhookInfo = useCallback(async () => {
+    try {
+      const res = await api.get<{ success: boolean; data: WebhookInfo }>('/api/settings/channels/webhook-info');
+      setWebhookInfo(res?.data || null);
+    } catch {
+      setWebhookInfo(null); // fail-soft: a caixa simplesmente não aparece
+    }
+  }, []);
+
+  // 13/08 — teste de conexão read-only na Graph API com as credenciais salvas.
+  const handleTest = useCallback(async () => {
+    setTesting(true);
+    setTestResults(null);
+    try {
+      const res = await api.post<{ success: boolean; data: { whatsapp: ChannelTestResult; instagram: ChannelTestResult } }>(
+        '/api/settings/channels/test',
+      );
+      setTestResults(res?.data || null);
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao testar a conexão. Tente de novo.');
+    } finally {
+      setTesting(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); loadHealth(); loadWebhookInfo(); }, [load, loadHealth, loadWebhookInfo]);
 
   // Desconectar um canal: zera as credenciais na org (revogação). Pede confirmação
   // antes (o modal seta confirmDisconnect; aqui só executa).
@@ -242,6 +295,26 @@ export default function ConectarCanais() {
       return;
     }
 
+    // 13/08 — formato: IDs da Meta são numéricos. Espelho da validação do
+    // servidor pra falhar aqui, com mensagem clara, antes do request.
+    const idOk = (v: string) => !v.trim() || /^\d{5,32}$/.test(v.trim());
+    if (wantWa && !idOk(waPhone)) {
+      setError('Phone Number ID deve conter só números — copie do painel da Meta, sem espaços nem letras.');
+      return;
+    }
+    if (wantWa && !idOk(waBiz)) {
+      setError('Business Account ID (WABA) deve conter só números.');
+      return;
+    }
+    if (wantIg && !idOk(igAccount)) {
+      setError('Instagram Account ID deve conter só números — copie do painel da Meta.');
+      return;
+    }
+    if (wantIg && !idOk(igPage)) {
+      setError('Page ID (Facebook) deve conter só números.');
+      return;
+    }
+
     setSaving(true);
     try {
       // Rota DEDICADA de canais: o PUT /api/settings é .strict() e barra tokens de
@@ -267,7 +340,9 @@ export default function ConectarCanais() {
       await api.put('/api/settings/channels', payload);
       setOrigSettings((s) => ({ ...s, channelActivation: activation }));
       await loadHealth();
-      setOkMsg('Credenciais salvas! Seu agente já envia pelos canais ativados e o score de treinamento vai subir. Para também RECEBER mensagens, confira o passo do webhook no tutorial.');
+      setOkMsg('Credenciais salvas! Rodamos o teste de conexão — confira o resultado abaixo. Para também RECEBER mensagens, cadastre o webhook com os dados da caixa "Receber mensagens (webhook)".');
+      // 13/08 — prova na hora: nada de "salvo!" com token errado.
+      void handleTest();
     } catch (e: any) {
       setError(e?.message || 'Falha ao salvar. Tente novamente.');
     } finally {
@@ -576,14 +651,82 @@ export default function ConectarCanais() {
         </div>
       </div>
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="px-5 py-2.5 bg-primary-500 text-white rounded-lg text-sm font-semibold hover:bg-primary-600 disabled:opacity-50 flex items-center gap-2"
-      >
-        {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-        {saving ? 'Salvando…' : 'Salvar e ativar canais'}
-      </button>
+      {/* 13/08 — Receber mensagens (webhook por org). Só faz sentido no caminho
+          manual (app Meta do cliente): mostra a Callback URL + Verify Token que
+          antes o produto pedia sem nunca entregar. */}
+      {webhookInfo && (
+        <div className="rounded-xl border border-gray-100 bg-white p-5 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+              <Webhook size={20} className="text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Receber mensagens (webhook)</p>
+              <p className="text-xs text-gray-500">
+                Se você usa seu próprio app Meta, cadastre estes dados em Webhooks no painel do app.
+                Sem isso, o agente envia mas não recebe. Quem conectou em 1 clique não precisa deste passo.
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {wantWa && (
+              <CopyRow label="Callback URL (WhatsApp)" value={webhookInfo.whatsapp.callbackUrl} />
+            )}
+            {wantIg && (
+              <CopyRow label="Callback URL (Instagram)" value={webhookInfo.instagram.callbackUrl} />
+            )}
+            <CopyRow label="Verify Token (desta conta)" value={webhookInfo.verifyToken} />
+          </div>
+          <p className="text-xs text-gray-500">
+            Depois de cadastrar, assine o campo <span className="font-mono">messages</span> no webhook
+            {wantWa && wantIg ? ' dos produtos WhatsApp e Instagram' : wantIg ? ' do produto Instagram' : ' do produto WhatsApp'}.
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-5 py-2.5 bg-primary-500 text-white rounded-lg text-sm font-semibold hover:bg-primary-600 disabled:opacity-50 flex items-center gap-2"
+        >
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+          {saving ? 'Salvando…' : 'Salvar e ativar canais'}
+        </button>
+        {/* 13/08 — teste read-only na Graph API com as credenciais salvas. */}
+        <button
+          onClick={handleTest}
+          disabled={testing || saving}
+          className="px-5 py-2.5 rounded-lg text-sm font-semibold border border-primary-500 text-primary-600 hover:bg-primary-50 disabled:opacity-50 flex items-center gap-2"
+        >
+          {testing ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />}
+          {testing ? 'Testando…' : 'Testar conexão'}
+        </button>
+      </div>
+
+      {/* Resultado do teste por canal */}
+      {testResults && (
+        <div className="space-y-2" data-tour="canais-teste-resultado">
+          {wantWa && (
+            <TestResultRow
+              icon={<Smartphone size={16} className="text-green-600" />}
+              channelLabel="WhatsApp"
+              result={testResults.whatsapp}
+              okDetail={[testResults.whatsapp.displayPhoneNumber, testResults.whatsapp.verifiedName]
+                .filter(Boolean)
+                .join(' · ')}
+            />
+          )}
+          {wantIg && (
+            <TestResultRow
+              icon={<Instagram size={16} className="text-pink-600" />}
+              channelLabel="Instagram"
+              result={testResults.instagram}
+              okDetail={testResults.instagram.username ? `@${testResults.instagram.username}` : ''}
+            />
+          )}
+        </div>
+      )}
 
       {/* Onboarding assistido — sempre visível */}
       <div className="rounded-xl border border-gray-100 bg-gray-50 p-5 flex items-start gap-4">
@@ -607,6 +750,67 @@ export default function ConectarCanais() {
       {tutorialOpen && (
         <TutorialModal src={TUTORIAL_HTML_URL} pdfUrl={TUTORIAL_PDF_URL} onClose={() => setTutorialOpen(false)} />
       )}
+    </div>
+  );
+}
+
+// ── Linha copiável (webhook info) ─────────────────────────────────────────────
+function CopyRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">{label}</p>
+        <p className="text-xs font-mono text-gray-800 truncate" title={value}>{value}</p>
+      </div>
+      <button
+        type="button"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          } catch { /* clipboard bloqueado — o valor segue visível pra copiar na mão */ }
+        }}
+        className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1.5 shrink-0"
+      >
+        {copied ? <CheckCircle2 size={13} className="text-green-600" /> : <Copy size={13} />}
+        {copied ? 'Copiado' : 'Copiar'}
+      </button>
+    </div>
+  );
+}
+
+// ── Resultado do teste de conexão por canal ───────────────────────────────────
+function TestResultRow({
+  icon, channelLabel, result, okDetail,
+}: { icon: React.ReactNode; channelLabel: string; result: ChannelTestResult; okDetail?: string }) {
+  const notConfigured = result.error === 'not_configured';
+  return (
+    <div
+      className={`rounded-lg border p-3 flex items-start gap-3 ${
+        result.ok ? 'border-green-200 bg-green-50/60' : notConfigured ? 'border-gray-200 bg-gray-50' : 'border-red-200 bg-red-50/60'
+      }`}
+    >
+      <div className="mt-0.5 shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+          {channelLabel}
+          {result.ok ? (
+            <CheckCircle2 size={14} className="text-green-600" />
+          ) : notConfigured ? null : (
+            <XCircle size={14} className="text-red-600" />
+          )}
+          <span className={`text-xs font-medium ${result.ok ? 'text-green-700' : notConfigured ? 'text-gray-500' : 'text-red-700'}`}>
+            {result.ok ? 'Conectado' : notConfigured ? 'Não configurado' : 'Falhou'}
+          </span>
+        </p>
+        {result.ok && okDetail && <p className="text-xs text-gray-600 mt-0.5">{okDetail}</p>}
+        {!result.ok && !notConfigured && result.error && (
+          <p className="text-xs text-red-700 mt-0.5 break-words">{result.error}</p>
+        )}
+        {!result.ok && result.hint && <p className="text-xs text-gray-600 mt-0.5">{result.hint}</p>}
+      </div>
     </div>
   );
 }

@@ -19,6 +19,12 @@ import {
   type Channel,
   type ChannelHealth,
 } from './settings.channels.js';
+import { buildOrgWebhookVerifyToken } from '../services/webhookVerifyToken.js';
+import {
+  checkWhatsappCredentials,
+  checkInstagramCredentials,
+  type CredentialCheckResult,
+} from '../services/channelCredentialCheck.js';
 
 const router = Router();
 
@@ -228,6 +234,59 @@ router.get('/channels/health', async (req: Request, res: Response, next: NextFun
 
     const list: ChannelHealth[] = [health.whatsapp, health.instagram];
     res.json({ success: true, data: list });
+  } catch (err) { next(err); }
+});
+
+// ── Webhook info por org (13/08) ─────────────────────────────
+// GET /api/settings/channels/webhook-info — a Callback URL + o Verify Token que
+// o cliente cadastra no app Meta DELE (caminho manual). Antes o produto pedia
+// "configure o webhook" sem nunca mostrar nenhum dos dois, e o verify token era
+// um só, global, compartilhado entre todos os tenants. O token aqui é derivado
+// por HMAC do orgId (determinístico, sem migração) e aceito pelos GETs de
+// verificação de /api/webhook/whatsapp e /api/webhook/instagram.
+router.get('/channels/webhook-info', requireRole('ADMIN'), (req: Request, res: Response) => {
+  const orgId = req.organizationId!;
+  const base = (env.API_PUBLIC_URL || 'https://api.zappiq.com.br').replace(/\/+$/, '');
+  res.json({
+    success: true,
+    data: {
+      verifyToken: buildOrgWebhookVerifyToken(orgId),
+      whatsapp: { callbackUrl: `${base}/api/webhook/whatsapp`, subscribeFields: ['messages'] },
+      instagram: { callbackUrl: `${base}/api/webhook/instagram`, subscribeFields: ['messages', 'messaging_postbacks'] },
+    },
+  });
+});
+
+// ── Testar conexão (13/08) ───────────────────────────────────
+// POST /api/settings/channels/test — GET read-only na Graph API com as
+// credenciais SALVAS da org. Fecha o buraco do "Credenciais salvas!" com token
+// errado: o cliente vê na hora se o número/conta respondem, com dica em pt-BR.
+router.post('/channels/test', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const org = await prisma.organization.findUnique({ where: { id: orgId } });
+    if (!org) { res.status(404).json({ error: 'Organization not found' }); return; }
+    const o = org as any;
+
+    const notConfigured = (hint: string): CredentialCheckResult => ({ ok: false, error: 'not_configured', hint });
+    const [whatsapp, instagram] = await Promise.all([
+      o.whatsappPhoneNumberId && o.whatsappAccessToken
+        ? checkWhatsappCredentials(o.whatsappPhoneNumberId, o.whatsappAccessToken)
+        : Promise.resolve(notConfigured('Salve o Phone Number ID e o Access Token do WhatsApp antes de testar.')),
+      o.instagramAccountId && o.instagramAccessToken
+        ? checkInstagramCredentials(o.instagramAccountId, o.instagramAccessToken)
+        : Promise.resolve(notConfigured('Salve o Instagram Account ID e o Access Token antes de testar.')),
+    ]);
+
+    // Trilha de auditoria sem segredos: só o resultado.
+    await logAuditEvent(req, {
+      action: 'channel.test',
+      resource: 'organization',
+      resourceId: orgId,
+      details: { whatsappOk: whatsapp.ok, instagramOk: instagram.ok },
+    }).catch(() => null);
+
+    res.json({ success: true, data: { whatsapp, instagram } });
   } catch (err) { next(err); }
 });
 

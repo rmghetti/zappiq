@@ -7,6 +7,7 @@ import { aiProcessQueue } from '../services/queueService.js';
 import { inboundContentFromMessage } from '../services/inboundContent.js';
 import { applyMessageStatusUpdate, attributeCampaignReply } from './campaignStatus.util.js';
 import { recordCtwaAttribution } from '../services/ctwaAttribution.js';
+import { isValidOrgWebhookVerifyToken } from '../services/webhookVerifyToken.js';
 
 const router = Router();
 
@@ -57,7 +58,10 @@ router.get('/whatsapp', (req: Request, res: Response) => {
   const token = req.query['hub.verify_token'] as string;
   const challenge = req.query['hub.challenge'] as string;
 
-  if (mode === 'subscribe' && token === env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+  // Aceita o token global (retrocompat) OU o token derivado por org
+  // (zpq1.<orgId>.<hmac> — mostrado em Configurações → Canais → Webhook).
+  const valid = token === env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || isValidOrgWebhookVerifyToken(token);
+  if (mode === 'subscribe' && valid) {
     logger.info('[Webhook] WhatsApp webhook verified successfully');
     res.status(200).send(challenge);
     return;

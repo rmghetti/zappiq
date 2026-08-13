@@ -6,7 +6,12 @@ import { logger } from '../utils/logger.js';
 import { cache } from '../services/cloud/index.js';
 import * as waService from '../services/whatsappService.js';
 // FASE 4 (#251): channel-aware dispatcher — roteia send pra WA ou IG conforme conversation.channel
-import { sendReplyText, markIncomingAsRead } from '../services/channelDispatcher.js';
+import {
+  sendReplyText,
+  sendReplyInteractive,
+  markIncomingAsRead,
+  type SendReplyResult,
+} from '../services/channelDispatcher.js';
 import * as ragService from '../services/ragService.js';
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
 import { syncContactToCrm } from '../services/crmAutomationService.js'; // CRM Onda 1 — IA preenche o pipeline
@@ -60,6 +65,35 @@ export interface ProcessMessageInput {
    * roteia outbound via instagramService (channelDispatcher.sendReplyText).
    */
   channel?: 'whatsapp' | 'instagram' | 'web';
+}
+
+/**
+ * FASE 4 (#251) fecho — TODO envio de resposta do agente sai por aqui.
+ *
+ * Delega ao channelDispatcher, que lê conversation.channel do banco e roteia
+ * WhatsApp ou Instagram (botões degradam pra texto numerado no IG). NUNCA
+ * chamar waService.send* direto no orchestrator: era exatamente o bug que
+ * deixava o agente mudo no Direct — o destino `ig:<igsid>` ia pra Cloud API
+ * do WhatsApp como se fosse telefone. O guard estático em
+ * agentOrchestrator.channelRouting.test.ts trava a reintrodução.
+ */
+export async function deliverAgentReply(input: {
+  organizationId: string;
+  conversationId: string;
+  text: string;
+  buttons?: Array<{ id: string; title: string }> | null;
+}): Promise<SendReplyResult> {
+  const { organizationId, conversationId, text, buttons } = input;
+  if (buttons && buttons.length > 0) {
+    return sendReplyInteractive({
+      organizationId,
+      conversationId,
+      kind: 'button',
+      body: text,
+      options: buttons,
+    });
+  }
+  return sendReplyText({ organizationId, conversationId, content: text });
 }
 
 /**
@@ -135,7 +169,13 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
   // Token por org (self-serve multi-tenant). Resolve uma vez; cai no global se
   // a org não tem token próprio (ex.: Iza dogfood). Ver whatsappService.WaCreds.
+  // Hoje só o TTS (sendAudio) usa direto — o resto vai pelo channelDispatcher.
   const waCreds = await resolveWaCreds(organizationId);
+
+  // FASE 4 (#251) fecho — canal de origem do turno. O dispatcher relê
+  // conversation.channel pro envio; este valor gate o que é WhatsApp-only
+  // (TTS sobe pra CDN do WhatsApp e não tem equivalente IG ainda).
+  const channel = input.channel ?? 'whatsapp';
 
   try {
     // ── 0. Mark message as read ─────────────────────────
@@ -155,7 +195,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     if (autoReplyTemplate) {
       logger.info(`[Agent] AUTOREPLY mode active for ${contactPhone}`);
       try {
-        await waService.sendText(contactPhone, autoReplyTemplate, false, waCreds);
+        await deliverAgentReply({ organizationId, conversationId, text: autoReplyTemplate });
         await prisma.message.create({
           data: {
             direction: 'OUTBOUND',
@@ -254,19 +294,18 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       } else {
         // Transcrição falhou — manda fallback educado (sem emojis)
         logger.warn(`[Agent] Transcrição falhou: ${transcribeResult.error || 'unknown'} — fallback texto`);
-        await waService.sendText(
-          contactPhone,
-          'Não consegui processar seu áudio agora. Pode me mandar em texto?',
-          false,
-          waCreds,
-        );
+        await deliverAgentReply({
+          organizationId,
+          conversationId,
+          text: 'Não consegui processar seu áudio agora. Pode me mandar em texto?',
+        });
         return;
       }
     }
 
     // ── 2.5. Handle outros não-textos (image, document, video, location) ─
     if (messageType !== 'text' && messageType !== 'button_reply' && messageType !== 'list_reply') {
-      await handleNonTextMessage(contactPhone, messageType, waCreds);
+      await handleNonTextMessage(organizationId, conversationId, messageType);
       return;
     }
 
@@ -356,7 +395,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       await executeFlowEffects({
         organizationId, conversationId, contactId,
         effects: flowStep.effects,
-        onHandoff: () => handleHandoff(organizationId, contactPhone, contactId, orgSettings, io),
+        onHandoff: () => handleHandoff(organizationId, conversationId, contactPhone, contactId, orgSettings, io),
       });
       if (flowStep.next === 'scheduled') {
         // Timer já foi persistido/enfileirado pelo flowRuntime. Turno resolvido.
@@ -378,7 +417,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
     // ── 5. Check for handoff request ────────────────────
     if (intent === 'request_human') {
-      await handleHandoff(organizationId, contactPhone, contactId, orgSettings, io);
+      await handleHandoff(organizationId, conversationId, contactPhone, contactId, orgSettings, io);
       return;
     }
 
@@ -578,7 +617,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
     // ── 11. Execute actions ─────────────────────────────
     if (parsed.action) {
-      await executeAction(organizationId, contactId, contactPhone, parsed.action, parsed.actionData, io);
+      await executeAction(organizationId, conversationId, contactId, contactPhone, parsed.action, parsed.actionData, io);
     }
 
     // ── 12. Send reply via WhatsApp ─────────────────────
@@ -604,7 +643,11 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       // proativamente dizer "vou te passar a tabela por texto" em vez de
       // tentar narrar tudo em áudio.
       const MAX_TTS_CHARS = 800;
+      // FASE 4 (#251) fecho — TTS é WhatsApp-only: generateAndUploadSpeech sobe
+      // o áudio pra CDN do WhatsApp (phoneNumberId) e sendAudio fala com a
+      // Cloud API. Em conversa de Instagram a resposta segue como texto.
       const wantVoiceReply =
+        channel === 'whatsapp' &&
         voiceCfg.enabled === true &&
         trigger !== 'off' &&
         (!parsed.buttons || parsed.buttons.length === 0) &&
@@ -656,16 +699,24 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         }
       }
 
-      // Fallback ou caminho normal: envia como texto
+      // Fallback ou caminho normal: envia pelo canal da conversa (WA ou IG).
+      // FASE 4 (#251) fecho — era waService.sendText/sendButtons direto com
+      // contactPhone (`ig:<igsid>` ia pra Cloud API do WhatsApp e o Direct
+      // ficava mudo). Agora o dispatcher roteia pelo conversation.channel.
+      let sendResult: SendReplyResult | null = null;
       if (!sentAsAudio) {
-        if (parsed.buttons && parsed.buttons.length > 0) {
-          await waService.sendButtons(contactPhone, null, parsed.replyText, parsed.buttons, waCreds);
-        } else {
-          await waService.sendText(contactPhone, parsed.replyText, false, waCreds);
-        }
+        sendResult = await deliverAgentReply({
+          organizationId,
+          conversationId,
+          text: parsed.replyText,
+          buttons: parsed.buttons,
+        });
       }
 
-      // Save outbound message
+      // Save outbound message. Grava o id externo devolvido pelo canal (mesmo
+      // mapeamento do processMessageSendJob): wamid → whatsappMessageId,
+      // mid do IG → externalMessageId. Com isso os callbacks de status
+      // (delivered/read) passam a alcançar também as respostas da IA.
       await prisma.message.create({
         data: {
           direction: 'OUTBOUND',
@@ -675,6 +726,11 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
           conversationId,
           isFromBot: true,
           aiConfidence: parsed.action ? 0.9 : 0.95,
+          ...(sendResult?.externalMessageId
+            ? sendResult.channel === 'instagram'
+              ? { externalMessageId: sendResult.externalMessageId }
+              : { whatsappMessageId: sendResult.externalMessageId }
+            : {}),
         },
       });
     }
@@ -710,13 +766,12 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
   } catch (err) {
     logger.error('[Agent] Error processing message:', err);
 
-    // Fallback message
-    await waService.sendText(
-      contactPhone,
-      'Olá! Estou com uma dificuldade técnica momentânea. Em breve um atendente entrará em contato. Desculpe o inconveniente! 🙏',
-      false,
-      waCreds,
-    ).catch(() => {});
+    // Fallback message — pelo canal da conversa (WA ou IG), nunca waService direto.
+    await deliverAgentReply({
+      organizationId,
+      conversationId,
+      text: 'Olá! Estou com uma dificuldade técnica momentânea. Em breve um atendente entrará em contato. Desculpe o inconveniente! 🙏',
+    }).catch(() => {});
   }
 }
 
@@ -949,6 +1004,7 @@ export function buildGreetingBlock(isFirstContact: boolean, greetingMessage?: st
 // ── Execute Actions ─────────────────────────────────────
 async function executeAction(
   organizationId: string,
+  conversationId: string,
   contactId: string,
   contactPhone: string,
   action: string,
@@ -970,7 +1026,7 @@ async function executeAction(
         break;
 
       case 'handoff':
-        await handleHandoff(organizationId, contactPhone, contactId, {}, io);
+        await handleHandoff(organizationId, conversationId, contactPhone, contactId, {}, io);
         break;
 
       case 'save_lead':
@@ -1015,17 +1071,18 @@ async function executeAction(
 }
 
 // ── Handoff to Human ────────────────────────────────────
+// FASE 4 (#251) fecho — ganhou conversationId pra mandar o holding message
+// pelo canal da conversa (antes era waService direto: no IG o "vou te conectar
+// com um especialista" nunca chegava).
 async function handleHandoff(
   organizationId: string,
+  conversationId: string,
   contactPhone: string,
   contactId: string,
   orgSettings: any,
   io?: SocketIOServer
 ): Promise<void> {
   logger.info(`[Agent] Handoff triggered for ${contactPhone}`, { organizationId });
-
-  // Token por org pro envio do holding message (self-serve multi-tenant).
-  const waCreds = await resolveWaCreds(organizationId);
 
   // Pause AI for 1 hour
   await cache.set(`ai_paused:${organizationId}:${contactPhone}`, '1', 3600);
@@ -1048,7 +1105,7 @@ async function handleHandoff(
   // Send holding message
   const holdMsg = orgSettings?.handoffMessage ||
     'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido! 😊';
-  await waService.sendText(contactPhone, holdMsg, false, waCreds);
+  await deliverAgentReply({ organizationId, conversationId, text: holdMsg });
 }
 
 // ── Handle Non-Text Messages ────────────────────────────
@@ -1056,7 +1113,12 @@ async function handleHandoff(
 // ajudar?") removidos. Agora alinhado com REGRA 4 (anti-padrões) do
 // prompt V6 da Iza. Áudio NÃO cai mais aqui — é interceptado em
 // processIncomingMessage (etapa 2) e transcrito via Whisper.
-async function handleNonTextMessage(phone: string, msgType: string, creds?: waService.WaCreds): Promise<void> {
+// FASE 4 (#251) fecho — envia pelo canal da conversa (era waService direto).
+async function handleNonTextMessage(
+  organizationId: string,
+  conversationId: string,
+  msgType: string,
+): Promise<void> {
   const responses: Record<string, string> = {
     // audio nunca chega aqui em prod (Whisper trata antes), mas mantém fallback
     // pra caso mediaId esteja vazio ou OPENAI_API_KEY desconfigurada.
@@ -1068,7 +1130,7 @@ async function handleNonTextMessage(phone: string, msgType: string, creds?: waSe
   };
 
   const reply = responses[msgType] || 'Recebi sua mensagem. Me conta em texto o que você precisa.';
-  await waService.sendText(phone, reply, false, creds);
+  await deliverAgentReply({ organizationId, conversationId, text: reply });
 }
 
 // ── Token por org (self-serve multi-tenant) ─────────────

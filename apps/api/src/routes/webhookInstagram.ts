@@ -27,6 +27,37 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import { aiProcessQueue } from '../services/queueService.js';
+import { getUserProfile } from '../services/instagramService.js';
+import { isValidOrgWebhookVerifyToken } from '../services/webhookVerifyToken.js';
+
+/**
+ * FASE 4 (#251) fecho — Contact de IG nascia com name null pra sempre (o
+ * comentário do upsert dizia "pode buscar async depois" e ninguém buscava).
+ * Best-effort: busca name/username na Graph API e grava no Contact. Retorna o
+ * nome gravado (ou null). NUNCA propaga erro — o turno da IA não pode travar
+ * por causa de nome. Exportada pra teste.
+ */
+export async function enrichContactNameFromIg(
+  org: { instagramAccessToken: string | null },
+  igsid: string,
+  contactId: string,
+): Promise<string | null> {
+  if (!org.instagramAccessToken) return null;
+  try {
+    const profile = await getUserProfile(org.instagramAccessToken, igsid);
+    const name = (profile?.name || profile?.username || '').trim().slice(0, 80);
+    if (!name) return null;
+    await prisma.contact.update({ where: { id: contactId }, data: { name } });
+    logger.info('[WebhookIG] Contact name enriquecido via Graph API', { contactId, name });
+    return name;
+  } catch (err) {
+    logger.warn('[WebhookIG] enrichContactNameFromIg falhou (best-effort)', {
+      igsid,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
 
 const router = Router();
 
@@ -74,9 +105,10 @@ router.get('/instagram', (req: Request, res: Response) => {
   const challenge = req.query['hub.challenge'] as string;
 
   // FASE 4: aceita IG_WEBHOOK_VERIFY_TOKEN dedicado OU fallback pro do WhatsApp
-  // (algumas configs Meta usam o mesmo token pros 2 webhooks).
+  // (algumas configs Meta usam o mesmo token pros 2 webhooks). 13/08: aceita
+  // também o token derivado por org (self-service do caminho manual).
   const expected = env.IG_WEBHOOK_VERIFY_TOKEN || env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
-  if (mode === 'subscribe' && token === expected) {
+  if (mode === 'subscribe' && (token === expected || isValidOrgWebhookVerifyToken(token))) {
     logger.info('[WebhookIG] Instagram webhook verified successfully');
     res.status(200).send(challenge);
     return;
@@ -144,7 +176,7 @@ router.post('/instagram', async (req: Request, res: Response) => {
 
         // Inbound: DM real do usuário
         if (event.message) {
-          await handleIncomingMessage(org.id, event);
+          await handleIncomingMessage(org, event);
         }
       }
     }
@@ -154,7 +186,11 @@ router.post('/instagram', async (req: Request, res: Response) => {
 });
 
 // ── handleIncomingMessage — espelha lógica do WhatsApp ──
-async function handleIncomingMessage(orgId: string, event: any): Promise<void> {
+async function handleIncomingMessage(
+  org: { id: string; instagramAccessToken: string | null },
+  event: any,
+): Promise<void> {
+  const orgId = org.id;
   // event shape:
   // {
   //   sender: { id: '<igsid>' },     ← IGSID do usuário (estável por org)
@@ -214,12 +250,18 @@ async function handleIncomingMessage(orgId: string, event: any): Promise<void> {
       whatsappId: `ig:${igsid}`,
       phone: `ig:${igsid}`,
       instagramScopedId: igsid,
-      name: null, // Username só vem se a gente chamar Graph API; pode buscar async depois
+      name: null, // enriquecido logo abaixo via Graph API (fire-and-forget)
       organizationId: orgId,
       leadStatus: 'NEW',
       lastInteractionAt: new Date(),
     },
   });
+
+  // Nome do contato: fire-and-forget pra não segurar o turno da IA. O nome
+  // chega pro dashboard e pros turnos seguintes; falha é silenciosa (log).
+  if (!contact.name) {
+    void enrichContactNameFromIg(org, igsid, contact.id);
+  }
 
   // Find or create conversation (channel='instagram')
   let conversation = await prisma.conversation.findFirst({

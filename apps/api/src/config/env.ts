@@ -19,6 +19,9 @@ const envSchema = z.object({
   APP_URL: z.string().default('https://app.zappiq.com.br'),
   FRONTEND_URL: z.string().default('http://localhost:3003'),
   CORS_ORIGINS: z.string().default('http://localhost:3003,http://localhost:3000'),
+  // Base pública da PRÓPRIA API — usada pra montar a Callback URL de webhook
+  // mostrada ao cliente (GET /api/settings/channels/webhook-info).
+  API_PUBLIC_URL: z.string().default('https://api.zappiq.com.br'),
 
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6379'),
