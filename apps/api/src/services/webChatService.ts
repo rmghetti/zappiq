@@ -63,33 +63,50 @@ export const MAX_HISTORY_TURNS = 20;
 export const MAX_MESSAGE_LENGTH = 2000;
 export const MAX_OUTPUT_TOKENS = 1024;
 
-/* ── Cache do systemPrompt em memória (refresh a cada 5 min) ────────
- * Evita query no DB a cada turno. v7.6 = 19k chars, raramente muda. */
-let cachedSystemPrompt: string | null = null;
-let cachedAt = 0;
+/* ── Cache do systemPrompt em memória por org (refresh a cada 5 min) ────
+ * Evita query no DB a cada turno. Antes só cacheava a Iza (variável única);
+ * generalizado pra webchat multi-tenant (FEATURE webchat-por-org) — cada org
+ * embedada no site do cliente (ex.: CMJ/Vera) tem seu próprio slot de cache. */
+const systemPromptCache = new Map<string, { prompt: string; cachedAt: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-async function loadIzaSystemPrompt(): Promise<string> {
+async function loadOrgSystemPrompt(organizationId: string): Promise<string> {
   const now = Date.now();
-  if (cachedSystemPrompt && now - cachedAt < CACHE_TTL_MS) {
-    return cachedSystemPrompt;
+  const cached = systemPromptCache.get(organizationId);
+  if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.prompt;
   }
 
-  // Query direto: agents é snake_case, role='comercial' = Iza vendendo.
+  // Query direto: agents é snake_case, role='comercial' = agente vendendo/atendendo.
   const rows = await prisma.$queryRawUnsafe<Array<{ system_prompt: string }>>(
     `SELECT system_prompt FROM agents
      WHERE organization_id = $1 AND role = 'comercial' AND status = 'live'
      ORDER BY created_at ASC LIMIT 1`,
-    IZA_CANONICAL_ORG_ID,
+    organizationId,
   );
 
   if (!rows.length || !rows[0].system_prompt) {
-    throw new Error(`webChatService: Iza system_prompt não encontrado pra org ${IZA_CANONICAL_ORG_ID}`);
+    throw new Error(`webChatService: system_prompt não encontrado pra org ${organizationId}`);
   }
 
-  cachedSystemPrompt = rows[0].system_prompt;
-  cachedAt = now;
-  return cachedSystemPrompt;
+  systemPromptCache.set(organizationId, { prompt: rows[0].system_prompt, cachedAt: now });
+  return rows[0].system_prompt;
+}
+
+/* ── Webchat por org: flag de opt-in em organizations.settings ──────────
+ * Sem coluna nova: settings já é o padrão pra flags aditivas por org
+ * (mesmo esquema de requireImpulso/requireMira). Default false — nenhuma
+ * org ganha um endpoint público novo sem ligar explicitamente. */
+export async function getWebChatOrgConfig(
+  organizationId: string,
+): Promise<{ exists: boolean; enabled: boolean }> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { settings: true },
+  });
+  if (!org) return { exists: false, enabled: false };
+  const enabled = Boolean((org.settings as any)?.webChatEnabled);
+  return { exists: true, enabled };
 }
 
 /* ── Tipos ───────────────────────────────────────────── */
@@ -103,6 +120,8 @@ export interface WebChatRequest {
   sessionId: string;
   message: string;
   history: WebChatTurn[];
+  /** Org dona do agente. Default = Iza canonical (mantém /iza-message igual). */
+  organizationId?: string;
 }
 
 export interface WebChatResponse {
@@ -160,15 +179,20 @@ function sanitizeHistory(history: unknown): WebChatTurn[] {
  * ══════════════════════════════════════════════════════════════════════════ */
 
 /** Identidade determinística do lead de webchat a partir do sessionId.
- *  Pura e testável — não toca DB. Espelha o padrão `ig:${igsid}` do Instagram. */
-export function buildWebChatLeadIdentity(sessionId: string): {
+ *  Pura e testável — não toca DB. Espelha o padrão `ig:${igsid}` do Instagram.
+ *  organizationId default = Iza canonical, pra não mudar o comportamento do
+ *  endpoint original (/iza-message) que não passa esse parâmetro. */
+export function buildWebChatLeadIdentity(
+  sessionId: string,
+  organizationId: string = IZA_CANONICAL_ORG_ID,
+): {
   identifier: string;
   organizationId: string;
 } {
   const clean = String(sessionId || '').slice(0, 64) || 'anon';
   return {
     identifier: `web:${clean}`,
-    organizationId: IZA_CANONICAL_ORG_ID,
+    organizationId,
   };
 }
 
@@ -178,12 +202,16 @@ export interface WebChatLead {
 }
 
 /**
- * Cria/associa (idempotente) o Contact + Conversation do visitante do webchat.
+ * Cria/associa (idempotente) o Contact + Conversation do visitante do webchat,
+ * na org informada (cada org embedada vê seus próprios leads no CRM dela).
  * Idempotente por (whatsappId=`web:${sessionId}`, organizationId): chamar a
  * cada mensagem NÃO duplica contato nem conversa.
  */
-export async function ensureWebChatLead(sessionId: string): Promise<WebChatLead> {
-  const { identifier, organizationId } = buildWebChatLeadIdentity(sessionId);
+export async function ensureWebChatLead(
+  sessionId: string,
+  organizationId: string = IZA_CANONICAL_ORG_ID,
+): Promise<WebChatLead> {
+  const { identifier } = buildWebChatLeadIdentity(sessionId, organizationId);
   const now = new Date();
 
   // Upsert do Contact por (whatsappId, organizationId) — mesma estratégia do
@@ -252,34 +280,42 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     throw new Error('Mensagem vazia');
   }
   const history = sanitizeHistory(input.history);
+  const organizationId = input.organizationId || IZA_CANONICAL_ORG_ID;
+  const isIzaCanonical = organizationId === IZA_CANONICAL_ORG_ID;
 
   // 0. FEATURE 5a.4 — materializa o visitante como lead no CRM (idempotente por
-  //    sessão). Best-effort: NUNCA bloqueia nem quebra a resposta pública da
-  //    Iza. Se o CRM falhar, logamos e seguimos com o chat normalmente.
+  //    sessão), NA ORG DONA DO AGENTE (cada cliente embedado vê seus próprios
+  //    leads no CRM dele). Best-effort: NUNCA bloqueia nem quebra a resposta
+  //    pública do agente. Se o CRM falhar, logamos e seguimos com o chat normalmente.
   try {
-    await ensureWebChatLead(sessionId);
+    await ensureWebChatLead(sessionId, organizationId);
   } catch (err) {
     logger.warn('[webChat] ensureWebChatLead failed (fluxo público segue)', {
       sessionId,
+      organizationId,
       err: err instanceof Error ? err.message : String(err),
     });
   }
 
-  // 1. systemPrompt = CORE_AGENT_RULES_V1 + FATOS ATUAIS (runtime) + Iza v7.x + canal
-  //    Ordem importa: FATOS ATUAIS vêm DEPOIS de CORE_AGENT_RULES (que é
-  //    inviolável) e ANTES do izaPrompt seedado em DB. Isso garante que
-  //    fatos novos (canais, features GA, urls) overlayam descrições antigas
-  //    sem precisar re-seedar o agent.system_prompt a cada release.
-  const [izaPrompt, factsBlock] = await Promise.all([
-    loadIzaSystemPrompt(),
-    getIzaFactsBlock(),
+  // 1. systemPrompt = CORE_AGENT_RULES_V1 + [FATOS ATUAIS só pra Iza] + prompt do
+  //    agente da org + canal. Ordem importa: FATOS ATUAIS vêm DEPOIS de
+  //    CORE_AGENT_RULES (que é inviolável) e ANTES do prompt seedado em DB.
+  //    getIzaFactsBlock() é sobre o PRODUTO ZappIQ (preço, trial, features) —
+  //    só faz sentido pra Iza; outra org embedada (ex.: Vera/CMJ) usa só o
+  //    próprio agents.system_prompt, sem esse overlay.
+  const [orgPrompt, factsBlock] = await Promise.all([
+    loadOrgSystemPrompt(organizationId),
+    isIzaCanonical ? getIzaFactsBlock() : Promise.resolve(''),
   ]);
+  const canalInstrucoes = isIzaCanonical
+    ? 'Você está respondendo no CHAT IN-PAGE do site zappiq.com.br (não WhatsApp). Visitante anônimo navegando a landing page. Mantenha as mesmas regras, tom e calibração. Sempre que fizer sentido, ofereça mudar pro WhatsApp pra continuar a conversa com histórico salvo (use Markdown link: `[WhatsApp](https://wa.me/5511926160159)`).'
+    : 'Você está respondendo no CHAT do site institucional da empresa (widget embedado, não WhatsApp). Visitante anônimo navegando o site. Mantenha as mesmas regras, tom e calibração de sempre.';
   const systemPrompt = [
     CORE_AGENT_RULES_V1,
     factsBlock,
-    izaPrompt,
+    orgPrompt,
     '# CANAL DE COMUNICAÇÃO',
-    'Você está respondendo no CHAT IN-PAGE do site zappiq.com.br (não WhatsApp). Visitante anônimo navegando a landing page. Mantenha as mesmas regras, tom e calibração. Sempre que fizer sentido, ofereça mudar pro WhatsApp pra continuar a conversa com histórico salvo (use Markdown link: `[WhatsApp](https://wa.me/5511926160159)`).',
+    canalInstrucoes,
     '',
     '**FORMATO DE LINKS NESTE CANAL (CRÍTICO):** o chat in-page renderiza links em formato Markdown `[texto](url)` como clicáveis. URLs em texto plano viram texto comum. SEMPRE use formato Markdown ao oferecer cadastro, demo, ou qualquer URL.',
   ].filter(Boolean).join('\n\n');
@@ -294,7 +330,7 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   let llmResp;
   try {
     llmResp = await chatCompletion(systemPrompt, messages, MAX_OUTPUT_TOKENS, {
-      orgId: IZA_CANONICAL_ORG_ID,
+      orgId: organizationId,
       conversationId: `web-chat:${sessionId}`,
     });
   } catch (err) {

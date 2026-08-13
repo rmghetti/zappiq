@@ -96,6 +96,14 @@ function LoginCallbackInner() {
         return;
       }
 
+      // Limite de autenticação por IP (10/15min). Mensagem clara em vez do texto
+      // técnico do backend, pra pessoa saber que é só aguardar (incidente 13/08).
+      if (exchangeRes.status === 429) {
+        setErrorMsg('Tivemos muitas tentativas em pouco tempo. Aguarde cerca de 1 minuto e tente entrar de novo.');
+        setStatus('error');
+        return;
+      }
+
       if (!exchangeRes.ok || !exchange.token || !exchange.user) {
         throw new Error(exchange.error || 'Falha ao trocar sessão');
       }
