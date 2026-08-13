@@ -23,6 +23,7 @@ import Image from 'next/image';
 import { Loader2, Mail, Lock, ChevronDown, AlertCircle, CheckCircle2, ArrowRight, Info } from 'lucide-react';
 import { useAuthStore } from '../../../stores/authStore';
 import { Logo } from '../../../components/Logo';
+import { loginReasonMessage } from '@/lib/postOAuthDecision';
 
 type Mode = 'choose' | 'magic_sent' | 'password_form';
 
@@ -37,13 +38,14 @@ function LoginInner() {
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // PR #103.4: Banner explicativo quando vem do /onboarding com 409
-  // (cliente JA tinha conta e tentou completar onboarding de novo).
+  // Banner explicativo conforme o ?reason= da URL:
+  //  - already_registered: veio do /onboarding com 409 (já tinha conta) — PR #103.4
+  //  - rate_limited / verify_failed: veio do /cadastro quando o reconhecimento
+  //    de conta existente não deu 200 (hardening 13/08/2026). A mensagem vem de
+  //    loginReasonMessage (lógica pura, testada).
   useEffect(() => {
-    const reason = search.get('reason');
-    if (reason === 'already_registered') {
-      setInfo('Você já tem conta no ZappIQ. Entre com Google ou link mágico pra acessar seu dashboard.');
-    }
+    const msg = loginReasonMessage(search.get('reason'));
+    if (msg) setInfo(msg);
   }, [search]);
 
   // ─── Google OAuth login ──────────────────────────────────────────

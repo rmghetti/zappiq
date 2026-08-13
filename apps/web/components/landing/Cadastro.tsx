@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { isSelfSignupPlan, type PlanId } from '@zappiq/shared';
 import { track, getUtm } from '@/lib/analytics';
+import { decidePostOAuthReturn, type PasswordlessExchangeBody } from '@/lib/postOAuthDecision';
 
 type Step = 1 | 2 | 3;
 
@@ -158,43 +159,64 @@ export function Cadastro() {
       track('signup_email_confirmed', { provider: 'email' });
     }
 
-    // PR #105: Tentativa LOGIN RETORNO antes de signup flow.
-    // Quando cliente já tem conta (User + Org Prisma), Supabase OAuth retorna
-    // pra /cadastro?verified=1 mesmo sendo login (bug arquitetural com user
-    // existente). Fix: chama passwordless-exchange ANTES de setStep(3).
-    // Se 200 → cliente já existe → salva JWT + redirect /dashboard.
-    // Se 404 → no_account → segue flow signup atual.
+    // PR #105 + hardening 13/08/2026: LOGIN RETORNO antes do flow de signup.
+    // Quando o cliente já tem conta (User + Org Prisma), o Supabase OAuth volta
+    // pra /cadastro?verified=1 mesmo sendo login. Chamamos passwordless-exchange
+    // pra reconhecer a conta ANTES de qualquer setStep(3).
+    //
+    // A decisão do que fazer com a resposta vive em decidePostOAuthReturn
+    // (lógica pura, testada). Regra:
+    //   dashboard → conta existe, entra.
+    //   signup    → SÓ em 404 (conta nova de verdade), único sinal confiável.
+    //   go_login  → 429 (limite por IP) ou incerteza (rede/5xx): manda pro login
+    //               com aviso, NUNCA cai no cadastro em cima de conta existente.
+    //
+    // Incidente 13/08: sem esse desvio, um 429 (comum após tentativas repetidas)
+    // derrubava o cliente — inclusive o SUPERADMIN — no formulário de cadastro.
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://zappiq-api.fly.dev';
     void (async () => {
+      let status = 0;
+      let body: PasswordlessExchangeBody | undefined;
       try {
         const exchangeRes = await fetch(`${API_BASE}/api/auth/passwordless-exchange`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken }),
         });
-        if (exchangeRes.ok) {
-          const ex = await exchangeRes.json();
-          if (ex.token && ex.user) {
-            localStorage.setItem('zappiq_token', ex.token);
-            if (ex.refreshToken) {
-              localStorage.setItem('zappiq_refresh_token', ex.refreshToken);
-            }
-            // Limpa hash + redireciona pro dashboard
-            const cleanUrl = window.location.pathname;
-            window.history.replaceState({}, document.title, cleanUrl);
-            window.location.replace('/dashboard');
-            return;
-          }
-        }
-        // 404 ou outro erro: fallback pro signup flow
-        if (exchangeRes.status !== 404) {
-          console.warn('[cadastro] passwordless-exchange unexpected status:', exchangeRes.status);
+        status = exchangeRes.status;
+        try {
+          body = (await exchangeRes.json()) as PasswordlessExchangeBody;
+        } catch {
+          // corpo não-JSON (ex.: página de erro de proxy): trata como sem corpo
         }
       } catch (err) {
-        console.warn('[cadastro] passwordless-exchange failed, falling back to signup:', err);
+        // fetch lançou (rede/timeout): status 0 → a decisão manda pro login
+        console.warn('[cadastro] passwordless-exchange failed:', err);
       }
 
-      // FALLBACK: flow signup atual (cliente novo)
+      const decision = decidePostOAuthReturn({ status, body });
+
+      if (decision.action === 'dashboard') {
+        localStorage.setItem('zappiq_token', decision.token);
+        if (decision.refreshToken) {
+          localStorage.setItem('zappiq_refresh_token', decision.refreshToken);
+        }
+        // Limpa hash + redireciona pro dashboard
+        window.history.replaceState({}, document.title, window.location.pathname);
+        window.location.replace('/dashboard');
+        return;
+      }
+
+      if (decision.action === 'go_login') {
+        // Conta provavelmente existe (ou não deu pra confirmar). Em vez de abrir
+        // um cadastro novo, leva pro login com um motivo que vira aviso na tela.
+        track('cadastro_oauth_para_login', { reason: decision.reason });
+        window.history.replaceState({}, document.title, window.location.pathname);
+        window.location.replace(`/login?reason=${decision.reason}`);
+        return;
+      }
+
+      // decision.action === 'signup' → conta nova de verdade (404). Segue o wizard.
       setStep(3);
 
       // Limpa hash da URL pra não vazar tokens em logs/screenshots
