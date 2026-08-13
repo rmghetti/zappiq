@@ -244,7 +244,9 @@ router.get('/channels/health', async (req: Request, res: Response, next: NextFun
 // um só, global, compartilhado entre todos os tenants. O token aqui é derivado
 // por HMAC do orgId (determinístico, sem migração) e aceito pelos GETs de
 // verificação de /api/webhook/whatsapp e /api/webhook/instagram.
-router.get('/channels/webhook-info', requireRole('ADMIN'), (req: Request, res: Response) => {
+// ADMIN + SUPERADMIN (mesmo padrão do zap-impulso acima): o onboarding
+// assistido é o SUPERADMIN operando a org do cliente via override.
+router.get('/channels/webhook-info', requireRole('ADMIN', 'SUPERADMIN'), (req: Request, res: Response) => {
   const orgId = req.organizationId!;
   const base = (env.API_PUBLIC_URL || 'https://api.zappiq.com.br').replace(/\/+$/, '');
   res.json({
@@ -261,7 +263,7 @@ router.get('/channels/webhook-info', requireRole('ADMIN'), (req: Request, res: R
 // POST /api/settings/channels/test — GET read-only na Graph API com as
 // credenciais SALVAS da org. Fecha o buraco do "Credenciais salvas!" com token
 // errado: o cliente vê na hora se o número/conta respondem, com dica em pt-BR.
-router.post('/channels/test', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/channels/test', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.organizationId!;
     const org = await prisma.organization.findUnique({ where: { id: orgId } });
