@@ -56,6 +56,8 @@ type ChannelKey = 'whatsapp' | 'instagram';
 interface ChannelHealth {
   channel: ChannelKey;
   connected: boolean;
+  /** Conexão herdada da credencial global da plataforma (dogfood Iza). */
+  viaGlobal?: boolean;
   qualityRating?: string | null;
   numberStatus?: string | null;
   connectedAt?: string | null;
@@ -91,6 +93,8 @@ interface ChannelTestResult {
   name?: string;
   error?: string;
   hint?: string;
+  /** Teste feito com a credencial global da plataforma (dogfood Iza). */
+  viaGlobal?: boolean;
 }
 
 export default function ConectarCanais() {
@@ -806,6 +810,9 @@ function TestResultRow({
           </span>
         </p>
         {result.ok && okDetail && <p className="text-xs text-gray-600 mt-0.5">{okDetail}</p>}
+        {result.ok && result.viaGlobal && (
+          <p className="text-xs text-blue-700 mt-0.5">Atendendo pela credencial global da plataforma.</p>
+        )}
         {!result.ok && !notConfigured && result.error && (
           <p className="text-xs text-red-700 mt-0.5 break-words">{result.error}</p>
         )}
@@ -1031,6 +1038,11 @@ function ChannelHealthMonitor({
                       <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500' : 'bg-gray-400'}`} />
                       {connected ? 'Conectado' : 'Desconectado'}
                     </span>
+                    {connected && h?.viaGlobal && (
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border text-blue-700 bg-blue-50 border-blue-200">
+                        via credencial global da plataforma
+                      </span>
+                    )}
                     {connected && badge && (
                       <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${badge.cls}`}>
                         {badge.label}
@@ -1044,7 +1056,7 @@ function ChannelHealthMonitor({
                   </div>
                 </div>
               </div>
-              {connected && (
+              {connected && !h?.viaGlobal && (
                 <button
                   type="button"
                   onClick={() => onRequestDisconnect(ch)}

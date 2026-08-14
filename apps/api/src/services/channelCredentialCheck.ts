@@ -30,6 +30,8 @@ export interface CredentialCheckResult {
   /** Quando !ok: mensagem crua da Graph API + dica acionável em pt-BR. */
   error?: string;
   hint?: string;
+  /** 13/08: teste feito com a credencial GLOBAL da plataforma (dogfood Iza). */
+  viaGlobal?: boolean;
 }
 
 function graphErrorToResult(err: unknown, channel: 'whatsapp' | 'instagram'): CredentialCheckResult {

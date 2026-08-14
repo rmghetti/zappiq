@@ -81,6 +81,9 @@ type OrgChannelSnapshot = {
 export interface ChannelHealth {
   channel: Channel;
   connected: boolean;
+  /** 13/08: true quando a conexão vem da credencial GLOBAL da plataforma
+   *  (dogfood da Iza), não de credencial salva na org. A UI explica. */
+  viaGlobal?: boolean;
   /** quality_rating do número (GREEN/YELLOW/RED/UNKNOWN) quando buscável na Graph API. */
   qualityRating?: string | null;
   /** status do número na Cloud API (CONNECTED/FLAGGED/...) quando buscável. */
@@ -89,20 +92,39 @@ export interface ChannelHealth {
   disconnectedAt?: string | null;
 }
 
+export interface ChannelHealthOpts {
+  /** Org canônica da Iza (config/zappiqOrg). Só ela herda a credencial global. */
+  isIzaOrg?: boolean;
+  /** env.WHATSAPP_ACCESS_TOKEN + PHONE_NUMBER_ID presentes no servidor. */
+  globalWhatsappAvailable?: boolean;
+}
+
 /**
  * Deriva a saúde base de cada canal a partir só da presença de credencial na org
  * (sem chamar a Graph API). O route handler pode enriquecer o WhatsApp com
  * quality_rating buscado ao vivo; se a chamada falhar, cai neste base
  * (conectado/desconectado), nunca quebra.
  */
-export function deriveChannelHealth(org: OrgChannelSnapshot): Record<Channel, ChannelHealth> {
+export function deriveChannelHealth(
+  org: OrgChannelSnapshot,
+  opts: ChannelHealthOpts = {},
+): Record<Channel, ChannelHealth> {
   const settings = org.settings || {};
   const wa = (settings.whatsapp as Record<string, any>) || {};
   const ig = (settings.instagram as Record<string, any>) || {};
+  const ownWhatsapp = !!(org.whatsappAccessToken && org.whatsappPhoneNumberId);
+  // 13/08 (pergunta do fundador): a org da Iza atende pelo WhatsApp com a
+  // credencial GLOBAL (fallback de dogfood do whatsappService), mas o cartão
+  // dizia "Desconectado" porque só olhava credencial da org. Para a org
+  // canônica com global disponível, mostra conectado com o marcador viaGlobal.
+  // Cliente sem token continua Desconectado — fallback global não é estado
+  // saudável para cliente.
+  const dogfood = !ownWhatsapp && !!opts.isIzaOrg && !!opts.globalWhatsappAvailable;
   return {
     whatsapp: {
       channel: 'whatsapp',
-      connected: !!(org.whatsappAccessToken && org.whatsappPhoneNumberId),
+      connected: ownWhatsapp || dogfood,
+      ...(dogfood ? { viaGlobal: true } : {}),
       qualityRating: null,
       numberStatus: null,
       connectedAt: wa.connectedAt ?? null,
