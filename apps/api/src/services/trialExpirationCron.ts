@@ -18,15 +18,6 @@ import { logger } from '../utils/logger.js';
 import { deriveLifecycleStage } from './accountLifecycle.js';
 import { queueConnection as connection } from '../config/queueRedis.js';
 
-export const trialExpirationQueue = new Queue('trial-expiration-cron', {
-  connection,
-  defaultJobOptions: {
-    removeOnComplete: { count: 14 },
-    removeOnFail: { count: 30 },
-    attempts: 1,
-  },
-});
-
 let trialExpirationWorker: Worker | null = null;
 
 export async function runTrialExpirationCycle(): Promise<{
@@ -119,33 +110,3 @@ export async function runTrialExpirationCycle(): Promise<{
   return { trialsClosed, crmAccountsRecomputed: recomputed, failed, durationMs };
 }
 
-export async function initTrialExpirationCronJob(): Promise<void> {
-  // Kill-switch: TRIAL_EXPIRATION_CRON='0' desliga sem redeploy.
-  if (process.env.TRIAL_EXPIRATION_CRON === '0') {
-    logger.warn('[trialExpirationCron] desativado via TRIAL_EXPIRATION_CRON=0');
-    return;
-  }
-
-  trialExpirationWorker = new Worker(
-    'trial-expiration-cron',
-    async () => runTrialExpirationCycle(),
-    { connection, concurrency: 1 },
-  );
-
-  trialExpirationWorker.on('failed', (job, err) => {
-    logger.error({ msg: 'trial_expiration_cron_job_failed', jobId: job?.id, error: String(err?.message ?? err) });
-  });
-
-  // 03:40 UTC todo dia (após o Pulso 03:20, antes do eval 04:30).
-  await trialExpirationQueue.add(
-    'daily-trial-expiration',
-    {},
-    { repeat: { pattern: '40 3 * * *' }, jobId: 'trial-expiration-daily' },
-  );
-  logger.info('[trialExpirationCron] job diário registrado (03:40 UTC)');
-}
-
-export async function closeTrialExpirationCronJob(): Promise<void> {
-  await trialExpirationWorker?.close();
-  await trialExpirationQueue.close();
-}

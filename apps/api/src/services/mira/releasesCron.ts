@@ -26,11 +26,6 @@ import { reavaliarAlvo } from './reavaliar.js';
 import { alertarReleasesDoAlvo } from './releasesAlerta.js';
 import { queueConnection as connection } from '../../config/queueRedis.js';
 
-export const miraReleasesQueue = new Queue('mira-releases-cron', {
-  connection,
-  defaultJobOptions: { removeOnComplete: { count: 8 }, removeOnFail: { count: 16 }, attempts: 1 },
-});
-
 let miraReleasesWorker: Worker | null = null;
 
 const MAX_ALVOS_POR_ORG = 50;
@@ -270,22 +265,3 @@ export async function runMiraReleasesCycle(): Promise<{
   };
 }
 
-export async function initMiraReleasesCronJob(): Promise<void> {
-  miraReleasesWorker = new Worker(
-    'mira-releases-cron',
-    async () => {
-      await runMiraReleasesCycle();
-    },
-    { connection }
-  );
-  miraReleasesWorker.on('failed', (_job, err) => {
-    logger.error(`[MiraReleases] job falhou: ${err?.message ?? err}`);
-  });
-  // Semanal: segunda 06:00 UTC (03:00 BRT), fora do horário dos crons diários
-  await miraReleasesQueue.add(
-    'weekly',
-    {},
-    { repeat: { pattern: '0 6 * * 1' }, jobId: 'mira-releases-weekly' }
-  );
-  logger.info('[MiraReleases] cron semanal registrado (segunda 06:00 UTC)');
-}

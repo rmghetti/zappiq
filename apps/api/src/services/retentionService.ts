@@ -22,16 +22,6 @@ import { env } from '../config/env.js';
 import { anonymizeExpiredAuditLogs } from './auditService.js';
 import { queueConnection as connection } from '../config/queueRedis.js';
 
-export const retentionQueue = new Queue('lgpd-retention', {
-  connection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 60_000 },
-    removeOnComplete: { count: 50 },
-    removeOnFail: { count: 50 },
-  },
-});
-
 let retentionWorker: Worker | null = null;
 
 /** Purge físico de conversas soft-deletadas além do prazo. */
@@ -112,38 +102,3 @@ export async function runRetentionCycle(): Promise<{ deleted: number; anonymized
   return { deleted, anonymized, expiredDsrs };
 }
 
-export async function initRetentionJob(): Promise<void> {
-  // Worker que executa o ciclo
-  retentionWorker = new Worker(
-    'lgpd-retention',
-    async () => {
-      return runRetentionCycle();
-    },
-    { connection, concurrency: 1 },
-  );
-
-  retentionWorker.on('failed', (job, err) => {
-    logger.error(`[Retention] Job ${job?.id} falhou`, { error: err.message });
-  });
-
-  retentionWorker.on('completed', (job, result) => {
-    logger.info(`[Retention] Job ${job.id} concluído`, result as Record<string, unknown>);
-  });
-
-  // Agendar job diário às 03:00 UTC (baixo tráfego)
-  await retentionQueue.add(
-    'daily-retention',
-    {},
-    {
-      repeat: { pattern: '0 3 * * *' }, // cron: 03:00 UTC diariamente
-      jobId: 'lgpd-retention-daily',    // dedupe — não duplica no restart
-    },
-  );
-
-  logger.info('[Retention] Job de retenção LGPD agendado (diário 03:00 UTC)');
-}
-
-export async function closeRetentionJob(): Promise<void> {
-  await retentionWorker?.close();
-  await retentionQueue.close();
-}

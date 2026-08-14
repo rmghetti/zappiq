@@ -19,55 +19,10 @@ import { queueConnection as connection } from '../../config/queueRedis.js';
 export { syncCnpjMirror };
 
 /** Roda os dois espelhos mensais do Mira (CNPJ ativos + sinal setorial CAGED). */
-async function runMiraMirrors(): Promise<void> {
+export async function runMiraMirrors(): Promise<void> {
   await syncCnpjMirror();
   await syncCagedSetor();
 }
 
-
-export const cnpjMirrorQueue = new Queue('mira-cnpj-mirror-cron', {
-  connection,
-  defaultJobOptions: {
-    removeOnComplete: { count: 6 },
-    removeOnFail: { count: 12 },
-    attempts: 1,
-  },
-});
-
 let cnpjMirrorWorker: Worker | null = null;
 
-export async function initCnpjMirrorSyncCronJob(): Promise<void> {
-  // Kill-switch sem redeploy: MIRA_CNPJ_MIRROR_CRON='0'.
-  if (process.env.MIRA_CNPJ_MIRROR_CRON === '0') {
-    logger.warn('[cnpjMirrorSync] desativado via MIRA_CNPJ_MIRROR_CRON=0');
-    return;
-  }
-  // Sem BigQuery configurado, não registra o job (silencioso — o Mira degrada
-  // para índice local / busca pública, como já fazia).
-  if (!bigQueryDisponivel()) {
-    logger.info('[cnpjMirrorSync] BigQuery não configurado; espelho mensal inativo.');
-    return;
-  }
-
-  cnpjMirrorWorker = new Worker(
-    'mira-cnpj-mirror-cron',
-    async () => runMiraMirrors(),
-    { connection, concurrency: 1 },
-  );
-  cnpjMirrorWorker.on('failed', (job, err) => {
-    logger.error({ msg: 'mira_cnpj_mirror_cron_job_failed', jobId: job?.id, error: String(err?.message ?? err) });
-  });
-
-  // Dia 1 de cada mês, 06:00 UTC (a Base dos Dados atualiza a base mensalmente).
-  await cnpjMirrorQueue.add(
-    'monthly-cnpj-mirror',
-    {},
-    { repeat: { pattern: '0 6 1 * *' }, jobId: 'mira-cnpj-mirror-monthly' },
-  );
-  logger.info('[cnpjMirrorSync] job mensal registrado (dia 1, 06:00 UTC)');
-}
-
-export async function closeCnpjMirrorSyncCronJob(): Promise<void> {
-  await cnpjMirrorWorker?.close();
-  await cnpjMirrorQueue.close();
-}

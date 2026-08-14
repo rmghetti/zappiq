@@ -346,22 +346,11 @@ export async function initTrialFollowupJob(): Promise<void> {
     });
   });
 
-  // Scheduler: job repeatable diário às 14:00 UTC (11h BRT)
-  await trialFollowupQueue.add(
-    'trial-followup-scheduler',
-    { scheduler: true },
-    {
-      repeat: {
-        pattern: '0 14 * * *', // cron UTC: 14:00 (11h BRT)
-      },
-      jobId: 'trial-followup-scheduler-daily',
-    },
-  );
-
-  logger.info({
-    msg: 'trial_followup_job_initialized',
-    scheduler: '14:00 UTC daily',
-  });
+  // O tique diário (14:00 UTC / 11h BRT) saiu daqui e virou o job
+  // 'trial-followup-scheduler' da fila `cron` (services/cronQueue.ts). Esta
+  // fila continua existindo para os jobs POR ORGANIZAÇÃO, que são trabalho de
+  // verdade com concorrência 5 e não caberiam numa fila de rotina.
+  logger.info({ msg: 'trial_followup_job_initialized', scheduler: 'fila cron' });
 }
 
 export async function closeTrialFollowupJob(): Promise<void> {
