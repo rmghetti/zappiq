@@ -36,6 +36,11 @@ vi.mock('../config/env.js', () => ({
   },
 }));
 
+// 14/08 — marcador de entregas: Redis mockado (lista vazia) pra teste não abrir conexão real.
+vi.mock('../utils/redis.js', () => ({
+  redis: { lrange: vi.fn().mockResolvedValue([]), lpush: vi.fn(), ltrim: vi.fn() },
+}));
+
 vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));

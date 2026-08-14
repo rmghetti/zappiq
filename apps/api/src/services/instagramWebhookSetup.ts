@@ -23,6 +23,7 @@ import { prisma } from '@zappiq/database';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { buildOrgWebhookVerifyToken } from './webhookVerifyToken.js';
+import { redis } from '../utils/redis.js';
 
 const GRAPH_VERSION = env.WHATSAPP_API_VERSION || 'v21.0';
 const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -66,6 +67,9 @@ export interface IgWebhookStatus {
     error?: string;
   };
   org: { instagramAccountId: string | null; instagramPageId: string | null; hasToken: boolean };
+  /** 14/08 — últimas chegadas de POST no webhook (marcador em Redis), aceitas
+   *  ou rejeitadas por assinatura. Vazio = a Meta não entregou nada. */
+  recentHits?: Array<{ at: string; ok: boolean; object?: string; entryId?: string | null; note?: string }>;
 }
 
 /** Lê o estado das duas assinaturas, sem alterar nada. */
@@ -126,6 +130,22 @@ export async function getInstagramWebhookStatus(orgId: string): Promise<IgWebhoo
     }
   } else {
     out.page.error = 'Org sem instagramPageId/instagramAccessToken salvos';
+  }
+
+  // Marcador de entregas (14/08): últimas chegadas de POST no webhook.
+  try {
+    const raw = await redis.lrange('ig:webhook:hits', 0, 9);
+    out.recentHits = raw
+      .map((r) => {
+        try {
+          return JSON.parse(r);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch {
+    out.recentHits = [];
   }
 
   return out;
