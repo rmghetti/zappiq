@@ -1158,12 +1158,14 @@ function ConfirmDisconnectModal({
 // 14/08 (docs Meta + ManyChat/HubSpot/Bitrix24 2025-2026); o interruptor fica
 // abaixo da dobra e o menu já mudou de lugar mais de uma vez.
 function InstagramAccessMensagensModal({ onClose }: { onClose: () => void }) {
+  // Caminho conferido em conta real (iOS pt-BR, 14/08) + variantes de versões
+  // antigas do app. A Meta renomeia esses menus com frequência.
   const steps: React.ReactNode[] = [
     <>No Instagram, abra o seu <b>perfil</b> e toque no menu <b>☰</b> no canto superior direito.</>,
-    <>Toque em <b>Mensagens e respostas ao story</b> (seção "Como as pessoas podem interagir com você").</>,
-    <>Toque em <b>Controles de mensagens</b> (em algumas versões aparece como "Solicitações de mensagem").</>,
-    <><b>Role a tela até o fim</b>, até a seção <b>Ferramentas conectadas</b>.</>,
-    <>Ative <b>"Permitir acesso às mensagens"</b>.</>,
+    <>Toque em <b>Mensagens e respostas a stories</b> (seção "Como outras pessoas podem interagir com você").</>,
+    <>Toque em <b>Pedidos de contato</b> (em versões antigas: "Controles de mensagens" ou "Solicitações de mensagem").</>,
+    <>Na seção <b>Ferramentas conectadas</b>, ative <b>"Permitir acesso às mensagens"</b>.</>,
+    <>Logo abaixo, em <b>"Quem pode enviar pedidos de contato a você"</b>, marque <b>Todos</b>.</>,
   ];
   return (
     <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true">
@@ -1194,8 +1196,8 @@ function InstagramAccessMensagensModal({ onClose }: { onClose: () => void }) {
         </ol>
 
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-          <b>Dica:</b> na mesma tela, deixe "Quem pode enviar solicitações de mensagem" como{' '}
-          <b>Todos</b>, para o agente receber também de quem ainda não segue a conta.
+          <b>Já estava ativado e mesmo assim nada chega?</b> Desconecte e conecte o Instagram de
+          novo nesta tela: a permissão vale para conexões feitas depois de o interruptor ligar.
         </div>
 
         <details className="text-xs text-gray-600">
@@ -1218,9 +1220,8 @@ function InstagramAccessMensagensModal({ onClose }: { onClose: () => void }) {
         </details>
 
         <p className="text-xs text-gray-500">
-          Depois de ativar, mande uma mensagem de teste para a conta. Se nada aparecer em Conversas
-          em alguns minutos, desconecte e conecte o Instagram de novo nesta tela para atualizar a
-          permissão.
+          Depois de ativar, mande uma mensagem de teste de outra conta para a sua e acompanhe em
+          Conversas.
         </p>
 
         <div className="flex items-center justify-end gap-2 pt-2">

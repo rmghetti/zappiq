@@ -29,6 +29,7 @@ import { env } from '../config/env.js';
 import { aiProcessQueue } from '../services/queueService.js';
 import { getUserProfile } from '../services/instagramService.js';
 import { isValidOrgWebhookVerifyToken } from '../services/webhookVerifyToken.js';
+import { redis } from '../utils/redis.js';
 
 /**
  * FASE 4 (#251) fecho — Contact de IG nascia com name null pra sempre (o
@@ -80,19 +81,46 @@ function verifyMetaSignature(payload: string | Buffer, signature: string | undef
 // Resolve o secret de assinatura pro payload IG: app secret DA ORG (dona do
 // instagramAccountId) com fallback global. Parse antes do verify — usamos o
 // payload nao-verificado SO pra escolher a chave. Fail-soft: erro cai no global.
-async function resolveIgSigningSecret(rawBody: Buffer): Promise<string> {
+// 14/08 — devolve TODOS os candidatos (segredo da org, se houver, + global) e
+// o POST aceita se QUALQUER um bater. O mesmo callback serve entregas do nosso
+// app (assinadas com o segredo global) e do app próprio do cliente (segredo da
+// org); preferir um só derrubava o outro com 403 silencioso.
+async function resolveIgSigningSecrets(rawBody: Buffer): Promise<string[]> {
   const globalSecret = env.META_APP_SECRET || env.WHATSAPP_ACCESS_TOKEN || '';
+  // Rota "API do Instagram com login do Instagram": app próprio, segredo próprio.
+  const candidates: string[] = [globalSecret, env.META_IG_APP_SECRET || ''];
   try {
     const body = JSON.parse(rawBody.toString('utf8'));
     const igAccountId = body?.entry?.[0]?.id;
-    if (!igAccountId) return globalSecret;
-    const org = await prisma.organization.findFirst({
-      where: { instagramAccountId: igAccountId },
-      select: { metaAppSecret: true } as any,
-    });
-    return ((org as any)?.metaAppSecret as string) || globalSecret;
+    if (igAccountId) {
+      const org = await prisma.organization.findFirst({
+        where: { instagramAccountId: igAccountId },
+        select: { metaAppSecret: true } as any,
+      });
+      const orgSecret = (org as any)?.metaAppSecret as string | undefined;
+      if (orgSecret) candidates.unshift(orgSecret);
+    }
   } catch {
-    return globalSecret;
+    /* payload ilegível: só o global */
+  }
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+// 14/08 — Observabilidade sem logs: registra TODA chegada de POST no webhook
+// (aceita ou rejeitada por assinatura) em Redis, exposta pelo GET
+// /api/settings/channels/instagram/webhook-status. Sem isso, "a Meta entregou?"
+// era adivinhação (flyctl local sem token pra ler logs). Nunca lança.
+async function recordIgWebhookHit(hit: {
+  ok: boolean;
+  object?: string;
+  entryId?: string | null;
+  note?: string;
+}): Promise<void> {
+  try {
+    await redis.lpush('ig:webhook:hits', JSON.stringify({ at: new Date().toISOString(), ...hit }));
+    await redis.ltrim('ig:webhook:hits', 0, 19);
+  } catch {
+    /* Redis indisponível não pode afetar o webhook */
   }
 }
 
@@ -124,14 +152,27 @@ router.post('/instagram', async (req: Request, res: Response) => {
     : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
   const signature = req.headers['x-hub-signature-256'] as string | undefined;
 
+  let metaObject: string | undefined;
+  let metaEntryId: string | null = null;
+  try {
+    const peek = JSON.parse(rawBody.toString('utf8'));
+    metaObject = peek?.object;
+    metaEntryId = peek?.entry?.[0]?.id ?? null;
+  } catch {
+    /* corpo ilegível: marcador segue sem entryId */
+  }
+
   if (env.NODE_ENV === 'production') {
-    const signingSecret = await resolveIgSigningSecret(rawBody);
-    if (!verifyMetaSignature(rawBody, signature, signingSecret)) {
+    const signingSecrets = await resolveIgSigningSecrets(rawBody);
+    const signatureOk = signingSecrets.some((s) => verifyMetaSignature(rawBody, signature, s));
+    if (!signatureOk) {
       logger.warn('[WebhookIG] Invalid Instagram signature — rejecting');
+      void recordIgWebhookHit({ ok: false, object: metaObject, entryId: metaEntryId, note: 'assinatura' });
       res.status(403).json({ error: 'Invalid signature' });
       return;
     }
   }
+  void recordIgWebhookHit({ ok: true, object: metaObject, entryId: metaEntryId });
 
   // Always 200 immediately (Meta retry agressivamente em delays)
   res.status(200).json({ status: 'received' });
