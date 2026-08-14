@@ -123,7 +123,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install ruff
-        run: pip install ruff --quiet
+        # Versao FIXADA (14/08): o ruff 0.16 mudou as regras padrao e derrubou
+        # a main (BLE001/TRY004 em services/rag). Linter sem pino quebra o CI
+        # sem mudanca de codigo; subir a versao é decisao consciente com fix
+        # dos apontamentos junto.
+        run: pip install 'ruff==0.15.22' --quiet
 
       - name: Lint RAG service
         run: ruff check services/rag/
