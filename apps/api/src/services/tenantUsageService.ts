@@ -42,28 +42,7 @@ import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import redis from '../utils/redis.js';
 import { PLAN_CONFIG, type PlanConfig } from '@zappiq/shared';
-
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-};
-
-export const tenantUsageQueue = new Queue('tenant-usage-aggregation', {
-  connection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 60_000 },
-    removeOnComplete: { count: 30 },
-    removeOnFail: { count: 30 },
-  },
-});
+import { queueConnection as connection } from '../config/queueRedis.js';
 
 let tenantUsageWorker: Worker | null = null;
 
@@ -316,38 +295,4 @@ export async function runTenantUsageCycle(): Promise<{
 }
 
 // ── BullMQ bootstrap ────────────────────────────────────
-export async function initTenantUsageJob(): Promise<void> {
-  tenantUsageWorker = new Worker(
-    'tenant-usage-aggregation',
-    async () => {
-      return runTenantUsageCycle();
-    },
-    { connection, concurrency: 1 },
-  );
 
-  tenantUsageWorker.on('failed', (job, err) => {
-    logger.error(`[TenantUsage] Job ${job?.id} falhou`, { error: err.message });
-  });
-
-  tenantUsageWorker.on('completed', (job, result) => {
-    logger.info(`[TenantUsage] Job ${job.id} concluído`, result as Record<string, unknown>);
-  });
-
-  // 03:10 UTC diariamente — dez minutos depois do retention para não competir
-  // pelo mesmo pool de conexões Prisma na janela de baixo tráfego.
-  await tenantUsageQueue.add(
-    'daily-tenant-usage',
-    {},
-    {
-      repeat: { pattern: '10 3 * * *' },
-      jobId: 'tenant-usage-daily',
-    },
-  );
-
-  logger.info('[TenantUsage] Job de agregação de unit economics agendado (diário 03:10 UTC)');
-}
-
-export async function closeTenantUsageJob(): Promise<void> {
-  await tenantUsageWorker?.close();
-  await tenantUsageQueue.close();
-}

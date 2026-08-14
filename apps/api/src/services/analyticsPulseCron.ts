@@ -14,25 +14,7 @@ import { prisma } from '@zappiq/database';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { generatePulseInsight } from './analyticsPulse.js';
-
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-};
-
-export const analyticsPulseQueue = new Queue('analytics-pulse-cron', {
-  connection,
-  defaultJobOptions: {
-    removeOnComplete: { count: 14 },
-    removeOnFail: { count: 30 },
-    attempts: 1,
-  },
-});
+import { queueConnection as connection } from '../config/queueRedis.js';
 
 let analyticsPulseWorker: Worker | null = null;
 
@@ -72,35 +54,3 @@ export async function runAnalyticsPulseCycle(): Promise<{
   return { organizationsProcessed: processed, insightsCreated: created, alerted, failed, durationMs };
 }
 
-export async function initAnalyticsPulseCronJob(): Promise<void> {
-  // Kill-switch: ANALYTICS_PULSE_CRON='0' desliga a geração diária (custo de LLM)
-  // sem redeploy de código — basta `fly secrets set` e restart. Endpoint manual
-  // /insights/refresh continua funcionando.
-  if (process.env.ANALYTICS_PULSE_CRON === '0') {
-    logger.warn('[analyticsPulseCron] desativado via ANALYTICS_PULSE_CRON=0');
-    return;
-  }
-
-  analyticsPulseWorker = new Worker(
-    'analytics-pulse-cron',
-    async () => runAnalyticsPulseCycle(),
-    { connection, concurrency: 1 },
-  );
-
-  analyticsPulseWorker.on('failed', (job, err) => {
-    logger.error({ msg: 'analytics_pulse_cron_job_failed', jobId: job?.id, error: String(err?.message ?? err) });
-  });
-
-  // 03:20 UTC todo dia.
-  await analyticsPulseQueue.add(
-    'daily-analytics-pulse',
-    {},
-    { repeat: { pattern: '20 3 * * *' }, jobId: 'analytics-pulse-daily' },
-  );
-  logger.info('[analyticsPulseCron] job diário registrado (03:20 UTC)');
-}
-
-export async function closeAnalyticsPulseCronJob(): Promise<void> {
-  await analyticsPulseWorker?.close();
-  await analyticsPulseQueue.close();
-}

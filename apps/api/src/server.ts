@@ -17,6 +17,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
 import { rlsTenantMiddleware } from './middleware/rlsTenant.js';
 import { requireActivePlan } from './middleware/requireActivePlan.js'; // Trial Enforcement — gate de trial vencido (402)
+import { initCronQueue } from './services/cronQueue.js';
 import { initQueues, closeQueues } from './services/queueService.js';
 import { initFlowTimerWorker } from './services/flowScheduler.js';
 import { setIo } from './utils/socketRegistry.js';
@@ -38,8 +39,6 @@ import { requireImpulso } from './middleware/requireImpulso.js';
 import miraRoutes from './routes/mira.js';
 import miraAccessRoutes from './routes/miraAccess.js';
 import { requireMira } from './middleware/requireMira.js';
-import { initMiraReleasesCronJob } from './services/mira/releasesCron.js'; // Mira — Releases dos Alvos (semanal)
-import { initCnpjMirrorSyncCronJob } from './services/mira/cnpjMirrorSync.js'; // Mira — espelho mensal da base de CNPJ (BigQuery)
 import analyticsRoutes from './routes/analytics.js';
 import flowsRoutes from './routes/flows.js';
 import flowTemplatesRoutes from './routes/flowTemplates.js';
@@ -73,17 +72,10 @@ import adminClientesRoutes from './routes/adminClientes.js'; // Área Clientes F
 import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-page site usa Iza real
 import webChatWidgetRoutes from './routes/webChatWidget.js'; // widget.js embedável pra sites de clientes (ex.: CMJ)
 import adminIzaFactsRoutes from './routes/adminIzaFacts.js'; // FASE 4 P7+ Admin Camada 2 CRUD
-import { initRetentionJob } from './services/retentionService.js';
 import { bootstrapFlowTemplates } from './bootstrap/seedFlowTemplates';
 
-import { initTenantUsageJob } from './services/tenantUsageService.js'; // PR #149 — H10 unit economics
-import { initUsageReconciliationJob } from './services/usageReconciliationService.js'; // PR #149 — Quota Mgmt #6 audit-only
 import { initTrialFollowupJob } from './services/trialFollowupService.js'; // FASE 1.B #240 — onboarding D+1/D+3/D+7
-import { initAgentEvalCronJob } from './services/agentEvalCronService.js'; // FASE 2 / V5 #241 — eval diário + Slack alert
-import { initAnalyticsPulseCronJob } from './services/analyticsPulseCron.js'; // Analytics Pulso — insight diário por org
 import { initCampaignSchedulerCronJob } from './services/campaignSchedulerCron.js'; // W2.4 — dispara campanhas agendadas
-import { initTrialExpirationCronJob } from './services/trialExpirationCron.js'; // Área Clientes Fase 1 — fecha trials vencidos + recomputa lifecycleStage
-import { initSuperadminTrialDigestJob } from './services/superadminTrialDigestCron.js'; // Trial Enforcement — digest diário ao CEO (e-mail + Slack)
 
 const app = express();
 const httpServer = createServer(app);
@@ -382,59 +374,27 @@ app.use('/api/dsr', (req, res, next) => {
   });
 }, dsrRoutes);
 
-// ── LGPD retention job ──────────────────────────
-initRetentionJob().catch((err) => {
-  logger.error('[Server] Failed to initialize retention job:', err);
-});
-
-// ── PR #149: H10 unit economics (03:10 UTC) — estava órfão, wire-up agora ──
-initTenantUsageJob().catch((err) => {
-  logger.error('[Server] Failed to initialize tenant usage job:', err);
-});
-
-// ── PR #149: Quota Mgmt #6 reconciliação (04:00 UTC, audit-only Fase 1) ──
-initUsageReconciliationJob().catch((err) => {
-  logger.error('[Server] Failed to initialize usage reconciliation job:', err);
-});
-
-// ── FASE 1.B #240: trial onboarding journey D+1/D+3/D+7 (14:00 UTC daily) ──
-initTrialFollowupJob().catch((err) => {
-  logger.error('[Server] Failed to initialize trial followup job:', err);
-});
-
-// ── FASE 2 / V5 #241: agent eval cron diário + Slack alert (04:30 UTC daily) ──
-initAgentEvalCronJob().catch((err) => {
-  logger.error('[Server] Failed to initialize agent eval cron job:', err);
-});
-
-// ── Analytics "Pulso" cron diário (03:20 UTC) — insight narrado por org ──
-initAnalyticsPulseCronJob().catch((err) => {
-  logger.error('[Server] Failed to initialize analytics pulse cron job:', err);
-});
-
-// ── Mira Prospects: Releases dos Alvos (semanal, segunda 06:00 UTC) ──
-initMiraReleasesCronJob().catch((err) => {
-  logger.error('[Server] Failed to initialize mira releases cron job:', err);
-});
-
-// ── Mira Prospects: espelho mensal da base de CNPJ (dia 1, 06:00 UTC) ──
-initCnpjMirrorSyncCronJob().catch((err) => {
-  logger.error('[Server] Failed to initialize mira cnpj mirror cron job:', err);
-});
-
-// ── Área Clientes Fase 1: expiração de trial + recompute lifecycle (03:40 UTC) ──
-initTrialExpirationCronJob().catch((err) => {
-  logger.error('[Server] Failed to initialize trial expiration cron job:', err);
+// ── Rotinas agendadas ───────────────────────────
+// Uma fila `cron` só, com 11 jobs nomeados (retenção LGPD, unit economics,
+// reconciliação de uso, pulso de analytics, expiração de trial, agent eval,
+// crons da Mira, digest do superadmin, tique do trial followup). Antes eram
+// 11 filas BullMQ com worker próprio cada, o que punha 22 workers ociosos em
+// cima do Redis 24/7. Ver services/cronQueue.ts.
+initCronQueue().catch((err) => {
+  logger.error('[Server] Failed to initialize cron queue:', err);
 });
 
 // ── W2.4: sweep de campanhas agendadas (a cada minuto) — dispara SCHEDULED ──
+// Fora da fila `cron` de propósito: roda a cada minuto, então não é rotina
+// ociosa, e numa fila compartilhada ficaria atrás de rotina diária longa.
 initCampaignSchedulerCronJob().catch((err) => {
   logger.error('[Server] Failed to initialize campaign scheduler cron job:', err);
 });
 
-// ── Trial Enforcement: digest diário ao superadmin (13:00 UTC) — e-mail + Slack ──
-initSuperadminTrialDigestJob().catch((err) => {
-  logger.error('[Server] Failed to initialize superadmin trial digest cron job:', err);
+// ── FASE 1.B #240: worker dos e-mails de trial por organização ──
+// O tique diário virou job da fila `cron`; esta fila segue para o trabalho.
+initTrialFollowupJob().catch((err) => {
+  logger.error('[Server] Failed to initialize trial followup job:', err);
 });
 
 // ── Error Handler (must be last) ────────────────
@@ -490,14 +450,15 @@ async function gracefulShutdown(signal: string): Promise<void> {
     // 3) Drena workers/queues BullMQ
     await closeQueues();
 
-    // 3b) Fecha workers/queues PR #149 (tenant usage + reconciliação)
+    // 3b) Drena a fila de rotinas agendadas. Antes eram dois closes soltos
+    // (tenant usage e reconciliação) e as outras 9 filas de cron ficavam sem
+    // drenar no shutdown; agora é uma só.
     try {
-      const { closeTenantUsageJob } = await import('./services/tenantUsageService.js');
-      const { closeUsageReconciliationJob } = await import('./services/usageReconciliationService.js');
-      await Promise.all([closeTenantUsageJob(), closeUsageReconciliationJob()]);
-      logger.info('[Server] PR #149 jobs closed');
+      const { closeCronQueue } = await import('./services/cronQueue.js');
+      await closeCronQueue();
+      logger.info('[Server] Cron queue closed');
     } catch (err) {
-      logger.warn('[Server] PR #149 jobs close error:', err);
+      logger.warn('[Server] Cron queue close error:', err);
     }
 
     // 4) Fecha Prisma

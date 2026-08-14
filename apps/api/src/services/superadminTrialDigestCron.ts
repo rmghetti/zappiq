@@ -26,23 +26,7 @@ import {
   buildSectionBlock,
   buildContextBlock,
 } from './slackNotifier.js';
-
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-};
-
-export const superadminTrialDigestQueue = new Queue('superadmin-trial-digest', {
-  connection,
-  defaultJobOptions: { attempts: 2, removeOnComplete: { count: 20 }, removeOnFail: { count: 20 } },
-});
+import { queueConnection as connection } from '../config/queueRedis.js';
 
 let digestWorker: Worker | null = null;
 
@@ -142,7 +126,7 @@ async function sendDigestSlack(entries: SuperadminDigestEntry[], dateLabel: stri
   });
 }
 
-async function runDigest(): Promise<void> {
+export async function runDigest(): Promise<void> {
   if (process.env.SUPERADMIN_TRIAL_DIGEST_CRON === '0') {
     logger.info({ msg: 'superadmin_trial_digest_disabled_killswitch' });
     return;
@@ -171,30 +155,3 @@ async function runDigest(): Promise<void> {
   logger.info({ msg: 'superadmin_trial_digest_sent', to, count: entries.length });
 }
 
-export async function initSuperadminTrialDigestJob(): Promise<void> {
-  digestWorker = new Worker(
-    'superadmin-trial-digest',
-    async () => {
-      await runDigest();
-    },
-    { connection, concurrency: 1 },
-  );
-  digestWorker.on('failed', (job, err) => {
-    logger.error({ msg: 'superadmin_trial_digest_failed', jobId: job?.id, error: String(err) });
-  });
-
-  await superadminTrialDigestQueue.add(
-    'superadmin-trial-digest',
-    {},
-    { repeat: { pattern: '0 13 * * *' }, jobId: 'superadmin-trial-digest-daily' },
-  );
-
-  logger.info({ msg: 'superadmin_trial_digest_initialized', scheduler: '13:00 UTC daily' });
-}
-
-export async function closeSuperadminTrialDigestJob(): Promise<void> {
-  await digestWorker?.close();
-  digestWorker = null;
-  await superadminTrialDigestQueue.close();
-  logger.info({ msg: 'superadmin_trial_digest_closed' });
-}

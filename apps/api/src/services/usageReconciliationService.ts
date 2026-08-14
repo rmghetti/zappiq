@@ -69,29 +69,9 @@ import {
   buildContextBlock,
   buildDividerBlock,
 } from './slackNotifier.js';
+import { queueConnection as connection } from '../config/queueRedis.js';
 
 // ─── BullMQ connection (mesma config do tenantUsageService) ─────
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-  maxRetriesPerRequest: null as null,
-  enableReadyCheck: false,
-};
-
-export const usageReconciliationQueue = new Queue('usage-reconciliation', {
-  connection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 60_000 },
-    removeOnComplete: { count: 30 },
-    removeOnFail: { count: 30 },
-  },
-});
 
 let usageReconciliationWorker: Worker | null = null;
 
@@ -513,38 +493,3 @@ export async function runUsageReconciliationCycle(): Promise<{
 
 // ─── BullMQ bootstrap ──────────────────────────────────────────
 
-export async function initUsageReconciliationJob(): Promise<void> {
-  usageReconciliationWorker = new Worker(
-    'usage-reconciliation',
-    async () => {
-      return runUsageReconciliationCycle();
-    },
-    { connection, concurrency: 1 },
-  );
-
-  usageReconciliationWorker.on('failed', (job, err) => {
-    logger.error(`[UsageReconcil] Job ${job?.id} falhou`, { error: err.message });
-  });
-
-  usageReconciliationWorker.on('completed', (job, result) => {
-    logger.info(`[UsageReconcil] Job ${job.id} concluído`, result as Record<string, unknown>);
-  });
-
-  // 04:00 UTC diariamente — vinte minutos depois do tenant-usage-aggregation
-  // (03:10 UTC + buffer), garantindo TenantUsageMonthly fresca.
-  await usageReconciliationQueue.add(
-    'daily-usage-reconciliation',
-    {},
-    {
-      repeat: { pattern: '0 4 * * *' },
-      jobId: 'usage-reconciliation-daily',
-    },
-  );
-
-  logger.info('[UsageReconcil] Job de reconciliação agendado (diário 04:00 UTC, audit-only)');
-}
-
-export async function closeUsageReconciliationJob(): Promise<void> {
-  await usageReconciliationWorker?.close();
-  await usageReconciliationQueue.close();
-}

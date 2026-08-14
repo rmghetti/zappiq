@@ -58,26 +58,9 @@ import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
 import { resolveEvalSet, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { executeAgentEvalRun } from './agentEvalRunner.js';
+import { queueConnection as connection } from '../config/queueRedis.js';
 
 // ─── BullMQ connection (mesma config dos outros crons) ─────────
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-};
-
-export const agentEvalCronQueue = new Queue('agent-eval-cron', {
-  connection,
-  defaultJobOptions: {
-    removeOnComplete: { count: 30 },
-    removeOnFail: { count: 50 },
-    attempts: 1, // não retry — se o job todo falha, próximo dia roda fresh
-  },
-});
 
 let agentEvalCronWorker: Worker | null = null;
 
@@ -310,68 +293,4 @@ export async function runAgentEvalCronCycle(scope: CronScope = 'all'): Promise<{
 }
 
 // ─── BullMQ bootstrap ──────────────────────────────────────────
-export async function initAgentEvalCronJob(): Promise<void> {
-  agentEvalCronWorker = new Worker(
-    'agent-eval-cron',
-    async (job) => {
-      // Kill-switch de custo: AGENT_EVAL_CRON_DISABLED=true pausa a auditoria
-      // automática sem precisar deploy (rede de segurança durante o teste).
-      if (process.env.AGENT_EVAL_CRON_DISABLED === 'true') {
-        logger.warn('[agentEvalCron] AGENT_EVAL_CRON_DISABLED=true — ciclo pulado (kill-switch).');
-        return { agentsProcessed: 0, agentsAlerted: 0, agentsFailed: 0, durationMs: 0 };
-      }
-      // Escopo derivado do nome do job:
-      //   'daily-agent-eval-iza' → só a Iza (diário)
-      //   'weekly-agent-eval'    → só clientes (semanal)
-      const scope: CronScope = job.name === 'daily-agent-eval-iza' ? 'iza' : 'clients';
-      return runAgentEvalCronCycle(scope);
-    },
-    { connection, concurrency: 1 }, // 1 cycle por vez — sequencial entre agents
-  );
 
-  agentEvalCronWorker.on('failed', (job, err) => {
-    logger.error(`[agentEvalCron] Job ${job?.id} falhou`, { error: err.message });
-  });
-
-  agentEvalCronWorker.on('completed', (job, result) => {
-    logger.info(`[agentEvalCron] Job ${job.id} concluído`, result as Record<string, unknown>);
-  });
-
-  // Custo: a auditoria automática de CLIENTES roda SEMANAL (segundas 04:30 UTC)
-  // — corta ~85% do consumo de tokens do cron mantendo a vigília. A Iza (agente
-  // do SUPERADMIN / Cliente Zero) roda DIÁRIA (04:30 UTC) pra o CEO controlar
-  // de perto. Dois jobs separados, escopo derivado do nome (ver Worker acima).
-  //
-  // Remove o agendamento diário ÚNICO antigo (rodava em TODOS os agents) pra
-  // não rodar duplicado com o novo diário-só-Iza.
-  try {
-    await agentEvalCronQueue.removeRepeatable('daily-agent-eval', { pattern: '30 4 * * *' }, 'agent-eval-cron-daily');
-  } catch { /* fail-soft: pode não existir */ }
-
-  // DIÁRIO — só a org da Iza.
-  await agentEvalCronQueue.add(
-    'daily-agent-eval-iza',
-    {},
-    {
-      repeat: { pattern: '30 4 * * *' }, // todo dia 04:30 UTC
-      jobId: 'agent-eval-cron-iza-daily',
-    },
-  );
-
-  // SEMANAL — clientes (todas as orgs exceto a Iza).
-  await agentEvalCronQueue.add(
-    'weekly-agent-eval',
-    {},
-    {
-      repeat: { pattern: '30 4 * * 1' }, // segundas 04:30 UTC
-      jobId: 'agent-eval-cron-weekly',
-    },
-  );
-
-  logger.info('[agentEvalCron] Jobs agendados (Iza diário 04:30 UTC + clientes semanal segundas 04:30 UTC)');
-}
-
-export async function closeAgentEvalCronJob(): Promise<void> {
-  await agentEvalCronWorker?.close();
-  await agentEvalCronQueue.close();
-}

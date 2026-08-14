@@ -10,29 +10,10 @@ import {
 import { resolveAudienceWhere } from './impulsoAudience.js';
 import { resolveCampaignMessage } from './impulsoChannels.js';
 import { resolveCampaignSend, buildTemplateComponents, type TemplateVariable } from './impulsoTemplateSend.js';
+import { queueConnection as connection, IDLE_DRAIN_DELAY_SECONDS } from '../config/queueRedis.js';
 
 // ── Conexão Redis para BullMQ ────────────────────
 // BullMQ requer uma conexão própria (não reutiliza ioredis do app)
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-  maxRetriesPerRequest: null,              // BullMQ requirement for workers
-  enableReadyCheck: false,                 // avoid LOADING errors on reconnect
-  keepAlive: 10_000,                       // ping every 10s — prevents Upstash idle disconnect
-  retryStrategy(times: number) {
-    if (times > 30) return null;           // give up after 30 retries
-    return Math.min(times * 300, 15_000);  // 300ms, 600ms, ... max 15s
-  },
-  reconnectOnError(err: Error) {
-    const retryable = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'READONLY'];
-    return retryable.some((e) => err.message.includes(e));
-  },
-};
 
 // ── Filas (Queues) ───────────────────────────────
 
@@ -451,6 +432,7 @@ export async function initQueues(): Promise<void> {
     },
     {
       connection,
+      drainDelay: IDLE_DRAIN_DELAY_SECONDS,
       concurrency: 5,
       limiter: {
         max: 80,
@@ -466,6 +448,7 @@ export async function initQueues(): Promise<void> {
     async (job: Job) => dispatchCampaignJob(job.data, (p) => job.updateProgress(p)),
     {
       connection,
+      drainDelay: IDLE_DRAIN_DELAY_SECONDS,
       concurrency: 2,
     },
   );
@@ -547,6 +530,7 @@ export async function initQueues(): Promise<void> {
     },
     {
       connection,
+      drainDelay: IDLE_DRAIN_DELAY_SECONDS,
       concurrency: aiConcurrency,
     },
   );
