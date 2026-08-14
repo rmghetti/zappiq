@@ -50,6 +50,18 @@ describe('queueRedis — conexão única das filas', () => {
     expect(queueConnection.reconnectOnError(new Error('WRONGPASS'))).toBe(false);
   });
 
+  it('valida o certificado do Redis, nunca aceita qualquer um', () => {
+    // Em teste o REDIS_URL é `redis://` (sem TLS), então o bloco `tls` nem
+    // existe no objeto e uma asserção sobre ele passaria à toa. A trava real
+    // é no fonte: `rejectUnauthorized: false` não pode voltar.
+    const fonte = readFileSync(join(import.meta.dirname, 'queueRedis.ts'), 'utf8');
+    expect(fonte).toContain('rejectUnauthorized: true');
+    expect(
+      fonte.includes('rejectUnauthorized: false'),
+      'aceitar certificado sem validar abre espaço para interceptação até o Redis',
+    ).toBe(false);
+  });
+
   it('mantém o drainDelay acima do teto de 10s que o BullMQ aplica sozinho', () => {
     // Com job atrasado pendente o BullMQ ignora o drainDelay e limita o bloqueio
     // a maximumBlockTimeout = 10s. Abaixo disso a config não mudaria nada.
