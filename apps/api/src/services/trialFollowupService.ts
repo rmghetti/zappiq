@@ -31,7 +31,7 @@ import { renderTrialReminderEmail } from './email/templates/trialReminder.js';
 import { renderTrialConvertedEmail } from './email/templates/trialConverted.js';
 import { computeAIReadiness } from './aiReadinessService.js';
 import { pickTrialReminderStage } from './trialReminderStage.util.js';
-import { queueConnection as connection } from '../config/queueRedis.js';
+import { queueConnection as connection, IDLE_DRAIN_DELAY_SECONDS } from '../config/queueRedis.js';
 
 export const trialFollowupQueue = new Queue('trial-followup', {
   connection,
@@ -324,9 +324,15 @@ async function processTrialFollowupJob(job: any): Promise<void> {
 // ── Init/Close ─────────────────────────────────────
 export async function initTrialFollowupJob(): Promise<void> {
   // Worker: processa jobs da fila
+  // drainDelay: até a consolidação dos crons esta fila tinha job repetível, o
+  // que fazia o BullMQ limitar o bloqueio a 10s por conta própria. Sem o
+  // repetível, o worker voltou ao default de 5s e passou a ser o maior
+  // consumidor ocioso que sobrou (~3 comandos/s dos 13,4 medidos em produção).
+  // Não atrasa envio: `add` escreve na chave `:marker` e destrava na hora.
   trialFollowupWorker = new Worker('trial-followup', processTrialFollowupJob as any, {
     connection,
     concurrency: 5,
+    drainDelay: IDLE_DRAIN_DELAY_SECONDS,
   });
 
   trialFollowupWorker.on('completed', (job) => {
