@@ -546,7 +546,7 @@ export default function ConectarCanais() {
             className="px-4 py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 whitespace-nowrap shrink-0"
           >
             {waConnecting ? <Loader2 size={15} className="animate-spin" /> : <Smartphone size={15} />}
-            {waConnecting ? 'Conectando…' : 'Conectar com a Meta'}
+            {waConnecting ? 'Conectando…' : 'Conectar WhatsApp'}
           </button>
         </div>
       )}
@@ -573,7 +573,7 @@ export default function ConectarCanais() {
             className="px-4 py-2.5 bg-pink-600 text-white rounded-lg text-sm font-semibold hover:bg-pink-700 disabled:opacity-50 flex items-center gap-2 whitespace-nowrap shrink-0"
           >
             {igConnecting ? <Loader2 size={15} className="animate-spin" /> : <Instagram size={15} />}
-            {igConnecting ? 'Conectando…' : 'Conectar com a Meta'}
+            {igConnecting ? 'Conectando…' : 'Conectar Instagram'}
           </button>
         </div>
       )}
