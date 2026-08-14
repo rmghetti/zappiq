@@ -14,6 +14,7 @@ import { logger } from '../../utils/logger.js';
 import { bigQueryDisponivel } from './bigqueryClient.js';
 import { syncCnpjMirror } from './cnpjMirror.js';
 import { syncCagedSetor } from './cagedMirror.js';
+import { queueConnection as connection } from '../../config/queueRedis.js';
 
 export { syncCnpjMirror };
 
@@ -23,15 +24,6 @@ async function runMiraMirrors(): Promise<void> {
   await syncCagedSetor();
 }
 
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-};
 
 export const cnpjMirrorQueue = new Queue('mira-cnpj-mirror-cron', {
   connection,

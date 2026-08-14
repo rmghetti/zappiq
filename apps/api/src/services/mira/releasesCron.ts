@@ -24,16 +24,7 @@ import { buscaPublicaDisponivel } from './buscaPublica.js';
 import { getMiraEntitlement } from '../../middleware/requireMira.js';
 import { reavaliarAlvo } from './reavaliar.js';
 import { alertarReleasesDoAlvo } from './releasesAlerta.js';
-
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-};
+import { queueConnection as connection } from '../../config/queueRedis.js';
 
 export const miraReleasesQueue = new Queue('mira-releases-cron', {
   connection,

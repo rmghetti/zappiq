@@ -40,30 +40,11 @@ import { executeFlowEffects } from '../agents/flowEffects.js';
 import { generateAiResumeReply } from '../agents/flowAiResume.js';
 import { buildEvalContext } from '../agents/evalContextBuilder.js';
 import { recordNodeStats } from './flowAnalytics.js';
+import { queueConnection as connection, IDLE_DRAIN_DELAY_SECONDS } from '../config/queueRedis.js';
 
 // ── Conexão Redis para BullMQ ────────────────────
 // Espelha queueService.ts (BullMQ requer conexão própria, não reutiliza
 // o ioredis do app). Mantido em sincronia manual — mesma config.
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-  maxRetriesPerRequest: null,              // BullMQ requirement for workers
-  enableReadyCheck: false,                 // avoid LOADING errors on reconnect
-  keepAlive: 10_000,                       // ping every 10s — prevents Upstash idle disconnect
-  retryStrategy(times: number) {
-    if (times > 30) return null;           // give up after 30 retries
-    return Math.min(times * 300, 15_000);  // 300ms, 600ms, ... max 15s
-  },
-  reconnectOnError(err: Error) {
-    const retryable = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'READONLY'];
-    return retryable.some((e) => err.message.includes(e));
-  },
-};
 
 // ── Constantes de estado do fluxo ────────────────
 // Duplicadas de flowRuntime.ts (não exportadas lá; importar o runtime aqui
@@ -472,7 +453,7 @@ export function initFlowTimerWorker(): void {
         effects: result.effects.map((e) => e.kind),
       });
     },
-    { connection, concurrency: 5 },
+    { connection, concurrency: 5, drainDelay: IDLE_DRAIN_DELAY_SECONDS },
   );
 
   flowTimerWorker.on('failed', (job, err) => {

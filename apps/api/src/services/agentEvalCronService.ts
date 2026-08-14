@@ -58,17 +58,9 @@ import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
 import { resolveEvalSet, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { executeAgentEvalRun } from './agentEvalRunner.js';
+import { queueConnection as connection } from '../config/queueRedis.js';
 
 // ─── BullMQ connection (mesma config dos outros crons) ─────────
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-};
 
 export const agentEvalCronQueue = new Queue('agent-eval-cron', {
   connection,

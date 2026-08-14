@@ -42,18 +42,7 @@ import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import redis from '../utils/redis.js';
 import { PLAN_CONFIG, type PlanConfig } from '@zappiq/shared';
-
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-};
+import { queueConnection as connection } from '../config/queueRedis.js';
 
 export const tenantUsageQueue = new Queue('tenant-usage-aggregation', {
   connection,

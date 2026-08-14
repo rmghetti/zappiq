@@ -26,18 +26,7 @@ import {
   buildSectionBlock,
   buildContextBlock,
 } from './slackNotifier.js';
-
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-};
+import { queueConnection as connection } from '../config/queueRedis.js';
 
 export const superadminTrialDigestQueue = new Queue('superadmin-trial-digest', {
   connection,

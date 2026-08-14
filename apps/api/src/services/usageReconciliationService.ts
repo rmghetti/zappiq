@@ -69,19 +69,9 @@ import {
   buildContextBlock,
   buildDividerBlock,
 } from './slackNotifier.js';
+import { queueConnection as connection } from '../config/queueRedis.js';
 
 // ─── BullMQ connection (mesma config do tenantUsageService) ─────
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-  maxRetriesPerRequest: null as null,
-  enableReadyCheck: false,
-};
 
 export const usageReconciliationQueue = new Queue('usage-reconciliation', {
   connection,

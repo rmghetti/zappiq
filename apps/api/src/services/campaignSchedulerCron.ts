@@ -21,16 +21,7 @@ import { prisma } from '@zappiq/database';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { campaignDispatchQueue } from './queueService.js';
-
-const redisUrl = new URL(env.REDIS_URL);
-const isTLS = env.REDIS_URL.startsWith('rediss://');
-const connection = {
-  host: redisUrl.hostname || 'localhost',
-  port: Number(redisUrl.port) || 6379,
-  password: redisUrl.password || undefined,
-  username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
-};
+import { queueConnection as connection } from '../config/queueRedis.js';
 
 export const campaignSchedulerQueue = new Queue('campaign-scheduler-cron', {
   connection,
