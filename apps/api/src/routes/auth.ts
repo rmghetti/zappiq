@@ -113,8 +113,17 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response,
       return;
     }
 
+    // Equipe (14/08): membro desativado não entra; a conta continua existindo
+    // (histórico preservado) e um ADMIN pode reativar em Configurações > Equipe.
+    if (user.isActive === false) {
+      res.status(403).json({ error: 'Acesso desativado. Fale com o administrador da sua organização.' });
+      return;
+    }
+
     const token = signToken(user, user.organizationId);
     const refreshToken = signRefreshToken(user.id);
+
+    void prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => null);
 
     logger.info(`[Auth] Login: ${user.email}`);
 
@@ -226,8 +235,16 @@ router.post('/passwordless-exchange', validate(passwordlessSchema), async (req: 
       return;
     }
 
+    // Equipe (14/08): mesmo bloqueio do login com senha — desativado não entra.
+    if (user.isActive === false) {
+      res.status(403).json({ error: 'Acesso desativado. Fale com o administrador da sua organização.' });
+      return;
+    }
+
     const token = signToken(user, user.organizationId);
     const refreshToken = signRefreshToken(user.id);
+
+    void prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => null);
 
     logger.info(`[Auth] Passwordless login: ${user.email}`);
 

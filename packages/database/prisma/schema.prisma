@@ -402,6 +402,10 @@ model User {
   role                  UserRole       @default(AGENT)
   avatar                String?
   isOnline              Boolean        @default(false)
+  // Equipe profissional (14/08): desativar preserva histórico (hard delete
+  // quebra em FK de auditoria/mensagens); lastLoginAt alimenta "último acesso".
+  isActive              Boolean        @default(true)
+  lastLoginAt           DateTime?
   maxConcurrentChats    Int            @default(5)
   organizationId        String
   organization          Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)

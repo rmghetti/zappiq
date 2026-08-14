@@ -22,32 +22,42 @@ import {
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
 
+// 14/08 — visibilidade por papel (sem `roles` = todos): Atendente vê a
+// operação do dia-a-dia; Supervisor soma as ferramentas de gestão/IA; Auditor
+// vê relatórios + a seção Compliance abaixo. O backend continua sendo a
+// segurança de verdade; aqui é honestidade de UX.
+const OPERATION_ROLES = ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'AGENT'];
+const MANAGEMENT_ROLES = ['ADMIN', 'SUPERADMIN', 'SUPERVISOR'];
+
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/conversations', label: 'Conversas', icon: MessageSquare },
-  { href: '/contacts', label: 'Contatos', icon: Users },
-  { href: '/crm', label: 'CRM', icon: Target },
+  // 14/08 — Configurações promovida pro topo (logo abaixo do Dashboard): no
+  // rodapé o cliente não achava onde ajustar conta, canais e equipe.
+  { href: '/settings', label: 'Configurações', icon: Settings },
+  { href: '/conversations', label: 'Conversas', icon: MessageSquare, roles: OPERATION_ROLES },
+  { href: '/contacts', label: 'Contatos', icon: Users, roles: OPERATION_ROLES },
+  { href: '/crm', label: 'CRM', icon: Target, roles: OPERATION_ROLES },
   // Agendamento — agenda interna (hub). A IA grava aqui; calendários externos sincronizam.
-  { href: '/crm/agenda', label: 'Agenda', icon: CalendarClock },
+  { href: '/crm/agenda', label: 'Agenda', icon: CalendarClock, roles: OPERATION_ROLES },
   // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA. A automação (crmAutomationService)
   // já cria Tasks quando detecta intenção de compra; aqui a PME finalmente as vê e conclui.
-  { href: '/tasks', label: 'Tarefas', icon: ListChecks },
+  { href: '/tasks', label: 'Tarefas', icon: ListChecks, roles: OPERATION_ROLES },
   // Mira Prospects — add-on de inteligência e qualificação de oportunidades.
   // Menu sempre visível (descoberta/cross-sell); a página resolve o estado
   // via /api/mira-access (vitrine de ativação quando não contratado).
-  { href: '/mira', label: 'Mira Prospects', icon: Crosshair, highlight: true },
-  { href: '/campaigns', label: 'Zap Impulso', icon: Megaphone },
+  { href: '/mira', label: 'Mira Prospects', icon: Crosshair, highlight: true, roles: MANAGEMENT_ROLES },
+  { href: '/campaigns', label: 'Zap Impulso', icon: Megaphone, roles: MANAGEMENT_ROLES },
   // FEATURE 5b.2 — gestão de templates de WhatsApp (aprovados pela Meta;
   // alimentam o seletor de campanha e o reengajamento fora da janela de 24h).
-  { href: '/templates', label: 'Templates', icon: FileText },
+  { href: '/templates', label: 'Templates', icon: FileText, roles: MANAGEMENT_ROLES },
   // Maestro (GA 2026-05-22): builder de fluxos visível. Backend /api/flows pronto;
   // publicar liga maestro.enabled na org e o gate suporta FIRST_CONTACT/KEYWORD.
-  { href: '/flows', label: 'Maestro', icon: GitBranch },
-  { href: '/analytics', label: 'Radar 360°', icon: BarChart3 },
+  { href: '/flows', label: 'Maestro', icon: GitBranch, roles: MANAGEMENT_ROLES },
+  { href: '/analytics', label: 'Radar 360°', icon: BarChart3, roles: [...MANAGEMENT_ROLES, 'AUDITOR'] },
   // PR #106 — Treinar IA destacado: principal entry point pra evolução contínua do agente.
-  { href: '/ai-training', label: 'Treinar IA', icon: Sparkles, highlight: true },
+  { href: '/ai-training', label: 'Treinar IA', icon: Sparkles, highlight: true, roles: MANAGEMENT_ROLES },
   // FASE 2.2b #244 — Qualidade da IA do cliente (dashboard + auto-fix + audit).
-  { href: '/treinar/qualidade', label: 'Qualidade da IA', icon: Gauge },
+  { href: '/treinar/qualidade', label: 'Qualidade da IA', icon: Gauge, roles: MANAGEMENT_ROLES },
 ];
 
 // Itens restritos a ADMIN / AUDITOR — compliance e governança LGPD
@@ -81,8 +91,8 @@ const platformClientesItems = [
 ];
 
 const bottomItems = [
-  { href: '/settings', label: 'Configurações', icon: Settings },
-  { href: '/billing', label: 'Plano & Fatura', icon: CreditCard },
+  // Cobrança é assunto de ADMIN (matriz de papéis 14/08).
+  { href: '/billing', label: 'Plano & Fatura', icon: CreditCard, roles: ['ADMIN', 'SUPERADMIN'] },
 ];
 
 export function Sidebar() {
@@ -125,7 +135,9 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map(({ href, label, icon: Icon, highlight }) => {
+        {navItems
+          .filter((i) => !('roles' in i) || (i.roles as string[]).includes(user?.role ?? ''))
+          .map(({ href, label, icon: Icon, highlight }) => {
           const active = isActive(href);
           const baseClass = 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors';
           let className = baseClass;
@@ -233,7 +245,9 @@ export function Sidebar() {
 
       {/* Bottom */}
       <div className="px-3 py-4 border-t border-gray-100 space-y-1">
-        {bottomItems.map(({ href, label, icon: Icon }) => (
+        {bottomItems
+          .filter((i) => !i.roles || i.roles.includes(user?.role ?? ''))
+          .map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}

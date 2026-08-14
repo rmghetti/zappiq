@@ -30,6 +30,12 @@ import {
   getInstagramWebhookStatus,
   subscribeInstagramWebhooks,
 } from '../services/instagramWebhookSetup.js';
+import {
+  teamCreateSchema,
+  teamUpdateSchema,
+  generateTempPassword,
+  guardTeamChange,
+} from './settings.team.js';
 
 const router = Router();
 
@@ -72,7 +78,9 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   } catch (err) { next(err); }
 });
 
-router.put('/', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+// ADMIN + SUPERADMIN (14/08): mesmo padrão das rotas de canal — o onboarding
+// assistido é o SUPERADMIN operando a org do cliente via override.
+router.put('/', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.organizationId!;
     // W1.3: whitelist .strict() — bloqueia mass assignment de plan/trial/
@@ -381,25 +389,34 @@ router.post('/channels/:channel/disconnect', requireRole('ADMIN', 'SUPERADMIN'),
   } catch (err) { next(err); }
 });
 
-// ── Team Management ─────────────────────────────
+// ── Team Management (14/08 — Equipe profissional) ─────────────────────────
+// GET aberto a qualquer membro autenticado (ver os colegas faz parte do
+// produto); escrita é ADMIN + SUPERADMIN (onboarding assistido via override).
+// Regras em settings.team.ts: whitelist de papéis SEM SUPERADMIN (antes um
+// ADMIN de org conseguia criar um admin de PLATAFORMA), senha temporária
+// gerada no servidor e guardas de ciclo de vida (próprio papel / último ADMIN).
 router.get('/team', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const users = await prisma.user.findMany({
       where: { organizationId: req.organizationId! },
-      select: { id: true, email: true, name: true, role: true, avatar: true, isOnline: true, createdAt: true },
+      select: {
+        id: true, email: true, name: true, role: true, avatar: true,
+        isOnline: true, isActive: true, lastLoginAt: true, createdAt: true,
+      },
       orderBy: { createdAt: 'asc' },
     });
     res.json({ success: true, data: users });
   } catch (err) { next(err); }
 });
 
-router.post('/team', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/team', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, name, role, password } = req.body;
-    if (!email || !name || !password) {
-      res.status(400).json({ error: 'email, name, and password are required' });
+    const parsed = teamCreateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message || 'Dados inválidos' });
       return;
     }
+    const { name, email, role } = parsed.data;
 
     // Camada 2 — limite de atendentes/seats (plano + addon AGENT_SEAT). audit default.
     const seatCount = await prisma.user.count({ where: { organizationId: req.organizationId! } });
@@ -409,49 +426,110 @@ router.post('/team', requireRole('ADMIN'), async (req: Request, res: Response, n
       return;
     }
 
+    // Sem senha no body, o servidor gera uma temporária forte e devolve UMA
+    // única vez (fluxo sem servidor de e-mail: o admin copia e repassa).
+    const tempPassword = parsed.data.password ? null : generateTempPassword();
     const bcrypt = await import('bcrypt');
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await bcrypt.hash(parsed.data.password ?? tempPassword!, 12);
 
     const user = await prisma.user.create({
-      data: {
-        email: email.toLowerCase(),
-        name,
-        role: role || 'AGENT',
-        passwordHash,
-        organizationId: req.organizationId!,
-      },
-      select: { id: true, email: true, name: true, role: true },
+      data: { email, name, role, passwordHash, organizationId: req.organizationId! },
+      select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
     });
 
-    res.status(201).json({ success: true, data: user });
+    await logAuditEvent(req, {
+      action: 'team.member.create',
+      resource: 'user',
+      resourceId: user.id,
+      details: { role, viaTempPassword: !!tempPassword },
+    }).catch(() => null);
+
+    res.status(201).json({ success: true, data: user, ...(tempPassword ? { tempPassword } : {}) });
   } catch (err: any) {
-    if (err.code === 'P2002') { res.status(409).json({ error: 'Email already exists' }); return; }
+    if (err.code === 'P2002') { res.status(409).json({ error: 'Este e-mail já tem conta na plataforma.' }); return; }
     next(err);
   }
 });
 
-router.put('/team/:userId', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+router.put('/team/:userId', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, role } = req.body;
-    const user = await prisma.user.updateMany({
+    const parsed = teamUpdateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message || 'Dados inválidos' });
+      return;
+    }
+    const target = await prisma.user.findFirst({
       where: { id: req.params.userId, organizationId: req.organizationId! },
-      data: { ...(name && { name }), ...(role && { role }) },
+      select: { id: true, role: true, isActive: true },
     });
-    if (user.count === 0) { res.status(404).json({ error: 'User not found' }); return; }
-    res.json({ success: true });
+    if (!target) { res.status(404).json({ error: 'Membro não encontrado' }); return; }
+
+    const activeAdminCount = await prisma.user.count({
+      where: { organizationId: req.organizationId!, role: 'ADMIN', isActive: true },
+    });
+    const guard = guardTeamChange({
+      requesterUserId: req.user!.userId,
+      target,
+      change: { role: parsed.data.role, isActive: parsed.data.isActive },
+      activeAdminCount,
+    });
+    if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+    const updated = await prisma.user.update({
+      where: { id: target.id },
+      data: parsed.data,
+      select: { id: true, email: true, name: true, role: true, isActive: true, lastLoginAt: true },
+    });
+
+    await logAuditEvent(req, {
+      action: 'team.member.update',
+      resource: 'user',
+      resourceId: target.id,
+      details: parsed.data,
+    }).catch(() => null);
+
+    res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 });
 
-router.delete('/team/:userId', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/team/:userId', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    if (req.params.userId === req.user!.userId) {
-      res.status(400).json({ error: 'Cannot delete yourself' });
+    const target = await prisma.user.findFirst({
+      where: { id: req.params.userId, organizationId: req.organizationId! },
+      select: { id: true, role: true, isActive: true },
+    });
+    if (!target) { res.status(404).json({ error: 'Membro não encontrado' }); return; }
+
+    const activeAdminCount = await prisma.user.count({
+      where: { organizationId: req.organizationId!, role: 'ADMIN', isActive: true },
+    });
+    const guard = guardTeamChange({
+      requesterUserId: req.user!.userId,
+      target,
+      change: { remove: true },
+      activeAdminCount,
+    });
+    if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+    await prisma.user.delete({ where: { id: target.id } });
+
+    await logAuditEvent(req, {
+      action: 'team.member.remove',
+      resource: 'user',
+      resourceId: target.id,
+    }).catch(() => null);
+
+    res.json({ success: true, message: 'Membro removido' });
+  } catch (err: any) {
+    // FK de histórico (mensagens/auditoria) impede hard delete — orienta desativar.
+    if (err?.code === 'P2003') {
+      res.status(409).json({
+        error: 'Este membro tem histórico (conversas ou auditoria) e não pode ser excluído. Desative o acesso em vez de remover.',
+      });
       return;
     }
-    const result = await prisma.user.deleteMany({ where: { id: req.params.userId, organizationId: req.organizationId! } });
-    if (result.count === 0) { res.status(404).json({ error: 'User not found' }); return; }
-    res.json({ success: true, message: 'User removed' });
-  } catch (err) { next(err); }
+    next(err);
+  }
 });
 
 export default router;
