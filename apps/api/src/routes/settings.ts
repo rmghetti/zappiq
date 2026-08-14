@@ -9,6 +9,7 @@ import { env } from '../config/env.js';
 import { randomBytes } from 'node:crypto';
 import { checkResourceLimit, resourceLimitBody } from '../middleware/planLimits.js';
 import { updateSettingsSchema, redactOrgSecrets, impulsoIntegrationSchema, channelCredentialsSchema } from './settings.schema.js';
+import { isZappIQOrg } from '../config/zappiqOrg.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { applyImpulsoIntegration, readImpulsoIntegrationStatus } from '../services/impulsoIntegrations.js';
 import {
@@ -224,14 +225,25 @@ router.put('/channels', requireRole('ADMIN'), async (req: Request, res: Response
 // (best-effort; se falhar, fica só o base).
 router.get('/channels/health', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
+    const orgId = req.organizationId!;
+    const org = await prisma.organization.findUnique({ where: { id: orgId } });
     if (!org) { res.status(404).json({ error: 'Organization not found' }); return; }
-    const health = deriveChannelHealth(org as any);
+    // 13/08: a org da Iza atende pela credencial GLOBAL (dogfood) — o cartão
+    // dizia "Desconectado" com o WhatsApp funcionando. deriveChannelHealth
+    // ganha o contexto e marca viaGlobal.
+    const health = deriveChannelHealth(org as any, {
+      isIzaOrg: isZappIQOrg(orgId),
+      globalWhatsappAvailable: !!(env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID),
+    });
 
     // Enriquecimento ao vivo só do WhatsApp (Graph expõe quality_rating do número).
     const o = org as any;
     if (health.whatsapp.connected && o.whatsappPhoneNumberId && o.whatsappAccessToken) {
       const live = await fetchWhatsappNumberHealth(o.whatsappPhoneNumberId, o.whatsappAccessToken);
+      health.whatsapp.qualityRating = live.qualityRating;
+      health.whatsapp.numberStatus = live.numberStatus;
+    } else if (health.whatsapp.viaGlobal) {
+      const live = await fetchWhatsappNumberHealth(env.WHATSAPP_PHONE_NUMBER_ID!, env.WHATSAPP_ACCESS_TOKEN!);
       health.whatsapp.qualityRating = live.qualityRating;
       health.whatsapp.numberStatus = live.numberStatus;
     }
@@ -275,10 +287,17 @@ router.post('/channels/test', requireRole('ADMIN', 'SUPERADMIN'), async (req: Re
     const o = org as any;
 
     const notConfigured = (hint: string): CredentialCheckResult => ({ ok: false, error: 'not_configured', hint });
+    // 13/08: a org da Iza atende pela credencial global — o teste também
+    // precisa enxergar isso em vez de responder "não configurado".
+    const globalWaOk = isZappIQOrg(orgId) && !!(env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID);
     const [whatsapp, instagram] = await Promise.all([
       o.whatsappPhoneNumberId && o.whatsappAccessToken
         ? checkWhatsappCredentials(o.whatsappPhoneNumberId, o.whatsappAccessToken)
-        : Promise.resolve(notConfigured('Salve o Phone Number ID e o Access Token do WhatsApp antes de testar.')),
+        : globalWaOk
+          ? checkWhatsappCredentials(env.WHATSAPP_PHONE_NUMBER_ID!, env.WHATSAPP_ACCESS_TOKEN!).then(
+              (r) => ({ ...r, viaGlobal: true }),
+            )
+          : Promise.resolve(notConfigured('Salve o Phone Number ID e o Access Token do WhatsApp antes de testar.')),
       o.instagramAccountId && o.instagramAccessToken
         ? checkInstagramCredentials(o.instagramAccountId, o.instagramAccessToken)
         : Promise.resolve(notConfigured('Salve o Instagram Account ID e o Access Token antes de testar.')),
