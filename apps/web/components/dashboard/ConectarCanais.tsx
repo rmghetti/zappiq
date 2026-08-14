@@ -128,6 +128,10 @@ export default function ConectarCanais() {
   const [healthLoading, setHealthLoading] = useState(false);
   const [disconnecting, setDisconnecting] = useState<ChannelKey | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState<ChannelKey | null>(null);
+  // 14/08 — sem "Permitir acesso às mensagens" ligado no app do Instagram, a
+  // Meta NÃO entrega as DMs ao webhook (visto ao vivo: DM na caixa, evento
+  // nenhum). O popup abre sozinho após conectar e fica acessível no cartão.
+  const [igAccessOpen, setIgAccessOpen] = useState(false);
 
   // 13/08 — webhook por org + teste de conexão.
   const [webhookInfo, setWebhookInfo] = useState<WebhookInfo | null>(null);
@@ -426,6 +430,8 @@ export default function ConectarCanais() {
           .then(async () => {
             await load();
             setOkMsg('Instagram conectado! Seu agente ja pode atender pelo Direct.');
+            // Passo obrigatório no app do Instagram — sem ele nada chega.
+            setIgAccessOpen(true);
           })
           .catch((e: any) => {
             setError(e?.message || 'Nao consegui concluir a conexao automatica. Use o modo manual abaixo.');
@@ -521,6 +527,7 @@ export default function ConectarCanais() {
         disconnecting={disconnecting}
         onRefresh={loadHealth}
         onRequestDisconnect={(ch) => setConfirmDisconnect(ch)}
+        onIgAccessHelp={() => setIgAccessOpen(true)}
       />
 
       {confirmDisconnect && (
@@ -531,6 +538,8 @@ export default function ConectarCanais() {
           onConfirm={() => handleDisconnect(confirmDisconnect)}
         />
       )}
+
+      {igAccessOpen && <InstagramAccessMensagensModal onClose={() => setIgAccessOpen(false)} />}
 
       {/* Conectar WhatsApp em 1 clique (Embedded Signup) — acima do manual */}
       {wantWa && (
@@ -982,13 +991,14 @@ function qualityBadge(rating?: string | null): { label: string; cls: string } | 
 }
 
 function ChannelHealthMonitor({
-  health, loading, disconnecting, onRefresh, onRequestDisconnect,
+  health, loading, disconnecting, onRefresh, onRequestDisconnect, onIgAccessHelp,
 }: {
   health: ChannelHealth[];
   loading: boolean;
   disconnecting: ChannelKey | null;
   onRefresh: () => void;
   onRequestDisconnect: (ch: ChannelKey) => void;
+  onIgAccessHelp: () => void;
 }) {
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-5 space-y-4">
@@ -1059,17 +1069,29 @@ function ChannelHealthMonitor({
                   </div>
                 </div>
               </div>
-              {connected && !h?.viaGlobal && (
-                <button
-                  type="button"
-                  onClick={() => onRequestDisconnect(ch)}
-                  disabled={disconnecting === ch}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap shrink-0"
-                >
-                  {disconnecting === ch ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} />}
-                  Desconectar
-                </button>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {ch === 'instagram' && connected && (
+                  <button
+                    type="button"
+                    onClick={onIgAccessHelp}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 flex items-center gap-1.5 whitespace-nowrap"
+                  >
+                    <AlertCircle size={13} />
+                    Liberar acesso às mensagens
+                  </button>
+                )}
+                {connected && !h?.viaGlobal && (
+                  <button
+                    type="button"
+                    onClick={() => onRequestDisconnect(ch)}
+                    disabled={disconnecting === ch}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap"
+                  >
+                    {disconnecting === ch ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} />}
+                    Desconectar
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
@@ -1121,6 +1143,101 @@ function ConfirmDisconnectModal({
           >
             {busy ? <Loader2 size={15} className="animate-spin" /> : <PlugZap size={15} />}
             {busy ? 'Desconectando…' : 'Sim, desconectar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 14/08 — Acesso às mensagens no app do Instagram ─────────────────────────
+// A Meta só entrega DMs ao webhook depois que a própria conta profissional
+// liga "Permitir acesso às mensagens" (Ferramentas conectadas) no app do
+// Instagram. Visto ao vivo: conta conectada, assinatura ok, DM na caixa e
+// NENHUM evento entregue até esse interruptor ligar. Caminho verificado em
+// 14/08 (docs Meta + ManyChat/HubSpot/Bitrix24 2025-2026); o interruptor fica
+// abaixo da dobra e o menu já mudou de lugar mais de uma vez.
+function InstagramAccessMensagensModal({ onClose }: { onClose: () => void }) {
+  const steps: React.ReactNode[] = [
+    <>No Instagram, abra o seu <b>perfil</b> e toque no menu <b>☰</b> no canto superior direito.</>,
+    <>Toque em <b>Mensagens e respostas ao story</b> (seção "Como as pessoas podem interagir com você").</>,
+    <>Toque em <b>Controles de mensagens</b> (em algumas versões aparece como "Solicitações de mensagem").</>,
+    <><b>Role a tela até o fim</b>, até a seção <b>Ferramentas conectadas</b>.</>,
+    <>Ative <b>"Permitir acesso às mensagens"</b>.</>,
+  ];
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-pink-50 flex items-center justify-center shrink-0">
+            <Instagram size={20} className="text-pink-600" />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-gray-900">Importante: falta 1 passo no seu Instagram</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Sem esta autorização, o Instagram <b>não entrega as mensagens do Direct</b> para a
+              plataforma e seu agente não consegue responder. Leva 1 minuto, no app do Instagram
+              da conta que você conectou.
+            </p>
+          </div>
+        </div>
+
+        <ol className="space-y-2">
+          {steps.map((s, i) => (
+            <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700">
+              <span className="w-5 h-5 rounded-full bg-pink-100 text-pink-700 text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                {i + 1}
+              </span>
+              <span>{s}</span>
+            </li>
+          ))}
+        </ol>
+
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+          <b>Dica:</b> na mesma tela, deixe "Quem pode enviar solicitações de mensagem" como{' '}
+          <b>Todos</b>, para o agente receber também de quem ainda não segue a conta.
+        </div>
+
+        <details className="text-xs text-gray-600">
+          <summary className="cursor-pointer font-medium text-gray-800">Não encontrou a opção?</summary>
+          <ul className="mt-2 space-y-1.5 list-disc pl-4">
+            <li>
+              Confirme que a conta é <b>profissional</b> (empresa ou criador): Configurações e
+              atividade, depois "Tipo de conta e ferramentas".
+            </li>
+            <li>
+              <b>Atualize o app</b> do Instagram na loja e abra de novo: versões antigas mostram o
+              menu em outro lugar (Privacidade, depois Mensagens).
+            </li>
+            <li>
+              Pelo computador: <b>Meta Business Suite</b> (business.facebook.com), em Configurações,
+              Contas vinculadas, Instagram: conecte e confirme{' '}
+              <b>"Permitir o acesso às mensagens do Instagram na Caixa de Entrada"</b>.
+            </li>
+          </ul>
+        </details>
+
+        <p className="text-xs text-gray-500">
+          Depois de ativar, mande uma mensagem de teste para a conta. Se nada aparecer em Conversas
+          em alguns minutos, desconecte e conecte o Instagram de novo nesta tela para atualizar a
+          permissão.
+        </p>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50"
+          >
+            Ver depois
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-pink-600 text-white hover:bg-pink-700 flex items-center gap-2"
+          >
+            <CheckCircle2 size={15} />
+            Já ativei
           </button>
         </div>
       </div>
