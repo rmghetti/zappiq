@@ -20,17 +20,20 @@ const isTLS = env.REDIS_URL.startsWith('rediss://');
 /**
  * Opções de conexão para Queue e Worker do BullMQ.
  *
- * NOTA sobre `rejectUnauthorized: false`: mantido exatamente como estava nas
- * 13 cópias. O `utils/redis.ts` (conexão do app, fora do BullMQ) já valida
- * certificado. Igualar os dois é mudança de comportamento em produção e sai
- * em troca própria, não escondida num commit de consolidação.
+ * `rejectUnauthorized: true` valida o certificado do servidor. As 13 cópias
+ * antigas usavam `false`, o que aceitava qualquer certificado e abria espaço
+ * para interceptação no caminho até o Redis. O `utils/redis.ts` já validava
+ * desde o commit 322d40d; as filas tinham ficado para trás.
+ *
+ * Verificado ANTES da troca, de dentro do container de produção e contra o
+ * endpoint real: PING respondeu PONG com `rejectUnauthorized: true`.
  */
 export const queueConnection = {
   host: redisUrl.hostname || 'localhost',
   port: Number(redisUrl.port) || 6379,
   password: redisUrl.password || undefined,
   username: redisUrl.username || undefined,
-  ...(isTLS ? { tls: { rejectUnauthorized: false } } : {}),
+  ...(isTLS ? { tls: { rejectUnauthorized: true } } : {}),
   maxRetriesPerRequest: null,              // BullMQ requirement for workers
   enableReadyCheck: false,                 // avoid LOADING errors on reconnect
   keepAlive: 10_000,                       // ping every 10s — prevents Upstash idle disconnect
