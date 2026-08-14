@@ -189,7 +189,7 @@ router.post('/instagram', async (req: Request, res: Response) => {
 
     for (const entry of body.entry || []) {
       const igAccountId: string | undefined = entry.id;
-      const messagingArray: any[] = entry.messaging || [];
+      const messagingArray: any[] = extractIgMessagingEvents(entry);
 
       if (!igAccountId || messagingArray.length === 0) continue;
 
@@ -225,6 +225,23 @@ router.post('/instagram', async (req: Request, res: Response) => {
     logger.error('[WebhookIG] Processing error:', err);
   }
 });
+
+/**
+ * 14/08 — normaliza os DOIS formatos de entrega da Meta para DMs do Instagram:
+ *   - Rota Messenger (Página vinculada): entry.messaging[] com o evento direto.
+ *   - Rota "API do Instagram com login do Instagram" (app ZappIQ-IG):
+ *     entry.changes[] = [{ field: 'messages', value: {sender, recipient,
+ *     timestamp, message} }] — o `value` tem o MESMO shape do evento messaging.
+ * Sem isso, a DM entregue pela rota nova passava na assinatura e era ignorada
+ * em silêncio (o loop só lia entry.messaging). Exportada pra teste.
+ */
+export function extractIgMessagingEvents(entry: any): any[] {
+  const fromMessaging: any[] = Array.isArray(entry?.messaging) ? entry.messaging : [];
+  const fromChanges: any[] = (Array.isArray(entry?.changes) ? entry.changes : [])
+    .filter((c: any) => c?.field === 'messages' && c?.value)
+    .map((c: any) => c.value);
+  return [...fromMessaging, ...fromChanges];
+}
 
 // ── handleIncomingMessage — espelha lógica do WhatsApp ──
 async function handleIncomingMessage(
