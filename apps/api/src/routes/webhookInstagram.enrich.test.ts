@@ -28,6 +28,12 @@ vi.mock('../services/instagramService.js', () => ({
   getUserProfile: getUserProfileMock,
 }));
 
+// 14/08 — marcador de entregas: Redis mockado pro import da rota não abrir
+// conexão real (o util lê env.REDIS_URL no load do módulo).
+vi.mock('../utils/redis.js', () => ({
+  redis: { lpush: vi.fn(), ltrim: vi.fn(), lrange: vi.fn().mockResolvedValue([]) },
+}));
+
 vi.mock('../services/queueService.js', () => ({
   aiProcessQueue: { add: vi.fn() },
 }));
