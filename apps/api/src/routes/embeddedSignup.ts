@@ -114,7 +114,7 @@ const whatsappSchema = z.object({
 
 router.post(
   '/whatsapp',
-  requireRole('ADMIN'),
+  requireRole('ADMIN', 'SUPERADMIN'),
   validate(whatsappSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     const orgId = req.organizationId!;
@@ -200,7 +200,7 @@ const instagramSchema = z.object({
 
 router.post(
   '/instagram',
-  requireRole('ADMIN'),
+  requireRole('ADMIN', 'SUPERADMIN'),
   validate(instagramSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     const orgId = req.organizationId!;

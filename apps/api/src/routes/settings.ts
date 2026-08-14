@@ -25,6 +25,10 @@ import {
   checkInstagramCredentials,
   type CredentialCheckResult,
 } from '../services/channelCredentialCheck.js';
+import {
+  getInstagramWebhookStatus,
+  subscribeInstagramWebhooks,
+} from '../services/instagramWebhookSetup.js';
 
 const router = Router();
 
@@ -289,6 +293,30 @@ router.post('/channels/test', requireRole('ADMIN', 'SUPERADMIN'), async (req: Re
     }).catch(() => null);
 
     res.json({ success: true, data: { whatsapp, instagram } });
+  } catch (err) { next(err); }
+});
+
+// ── Webhook do Instagram: status + auto-reparo (13/08, DM sem resposta) ──
+// A DM real chegava na conta e nenhum evento batia no nosso webhook: faltava
+// assinatura (app e/ou página) e não havia como ver nem consertar pelo produto.
+router.get('/channels/instagram/webhook-status', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const status = await getInstagramWebhookStatus(req.organizationId!);
+    res.json({ success: true, data: status });
+  } catch (err) { next(err); }
+});
+
+router.post('/channels/instagram/subscribe', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const result = await subscribeInstagramWebhooks(orgId);
+    await logAuditEvent(req, {
+      action: 'channel.instagram.subscribe',
+      resource: 'organization',
+      resourceId: orgId,
+      details: { appOk: result.app.ok, pageOk: result.page.ok, viaFallback: result.page.viaFallback ?? false },
+    }).catch(() => null);
+    res.json({ success: true, data: result });
   } catch (err) { next(err); }
 });
 
