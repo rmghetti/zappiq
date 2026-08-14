@@ -152,7 +152,7 @@ router.put('/integrations/zap-impulso', requireRole('ADMIN', 'SUPERADMIN'), asyn
 // e barra qualquer token de canal (W1.3). Sem esta rota, o "Salvar e ativar canais"
 // respondia 400 e a conexão manual era impossível. Só ADMIN. plan/trial/stripe
 // seguem impossíveis (não estão na whitelist do channelCredentialsSchema).
-router.put('/channels', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+router.put('/channels', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.organizationId!;
     const parsed = channelCredentialsSchema.safeParse(req.body);
@@ -342,7 +342,7 @@ router.post('/channels/instagram/subscribe', requireRole('ADMIN', 'SUPERADMIN'),
 // POST /api/settings/channels/:channel/disconnect — revoga (zera) as credenciais
 // do canal na org. LGPD/troca-de-número: sem token, a ZappIQ para de usar o
 // canal na hora. Só ADMIN. Idempotente: desconectar já-desconectado é 200.
-router.post('/channels/:channel/disconnect', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/channels/:channel/disconnect', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const raw = String(req.params.channel || '').toLowerCase();
     if (!isDisconnectableChannel(raw)) {
