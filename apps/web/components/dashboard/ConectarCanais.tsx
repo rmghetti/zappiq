@@ -436,7 +436,10 @@ export default function ConectarCanais() {
         config_id: igConfigId,
         response_type: 'code',
         override_default_response_type: true,
-        extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+        // 13/08: SEM `extras` — setup/featureType/sessionInfoVersion são do
+        // Embedded Signup do WHATSAPP. Herdados aqui, faziam a Meta abrir o
+        // diálogo da WABA mesmo com config General de Instagram (bug visto
+        // ao vivo pelo fundador). O login do IG é FB Login for Business puro.
       },
     );
   }, [load]);
