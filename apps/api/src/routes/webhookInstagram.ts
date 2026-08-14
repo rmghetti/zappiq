@@ -87,7 +87,8 @@ function verifyMetaSignature(payload: string | Buffer, signature: string | undef
 // org); preferir um só derrubava o outro com 403 silencioso.
 async function resolveIgSigningSecrets(rawBody: Buffer): Promise<string[]> {
   const globalSecret = env.META_APP_SECRET || env.WHATSAPP_ACCESS_TOKEN || '';
-  const candidates: string[] = [globalSecret];
+  // Rota "API do Instagram com login do Instagram": app próprio, segredo próprio.
+  const candidates: string[] = [globalSecret, env.META_IG_APP_SECRET || ''];
   try {
     const body = JSON.parse(rawBody.toString('utf8'));
     const igAccountId = body?.entry?.[0]?.id;

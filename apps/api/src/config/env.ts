@@ -94,6 +94,13 @@ const envSchema = z.object({
   // Meta for Developers > seu App > Settings > Basic > App Secret.
   META_APP_SECRET: z.string().optional(),
 
+  // 14/08 — o produto "API do Instagram" (login do Instagram) tem um APP
+  // PROPRIO ("ZappIQ-IG") com chave secreta PROPRIA; webhooks dessa rota são
+  // assinados com ELA, não com a do app do Facebook. Sem este candidato, toda
+  // entrega dessa rota levava 403 silencioso. Painel: caso de uso API do
+  // Instagram > Chave secreta do app do Instagram.
+  META_IG_APP_SECRET: z.string().optional(),
+
   // Embedded Signup (2026-05-20): App ID público da ZappIQ na Meta. Usado com
   // META_APP_SECRET pra trocar o `code` do popup por token (oauth/access_token).
   META_APP_ID: z.string().default('1603310040738671'),
