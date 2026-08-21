@@ -378,13 +378,19 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       return;
     }
 
-    // ── 3. Load conversation history (last 20 turns) ────
-    const historyMessages = await prisma.message.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: 'asc' },
-      take: 20,
-      select: { direction: true, content: true },
-    });
+    // ── 3. Load conversation history (últimas 20 mensagens) ────
+    // desc + take + reverse: pega as 20 ÚLTIMAS mensagens e devolve em ordem
+    // cronológica, igual ao flowAiResume. (O padrão antigo, asc + take, pegava
+    // as 20 PRIMEIRAS: em conversa longa a Iza enxergava o começo e não o fim
+    // do histórico.)
+    const historyMessages = (
+      await prisma.message.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { direction: true, content: true },
+      })
+    ).reverse();
 
     // ── 3.5. ZappIQ Maestro — flow runtime híbrido (#280) ───────
     // Aditivo + fail-soft: resolveActiveFlowStep retorna null se a org não tem
