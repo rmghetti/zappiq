@@ -381,3 +381,53 @@ describe('isRiskRow / filterRowsBySpecial (filtros clicáveis da Visão Geral �
     expect(filterRowsBySpecial(rows, { kind: 'none' })).toHaveLength(rows.length);
   });
 });
+
+describe('filtro de seed nos agregados (PR-L 20/08/2026, MRR fantasma)', () => {
+  const mk = (over: Partial<AccountRawInput>): AccountRawInput => ({
+    crmAccountId: null, organizationId: null, signupId: null,
+    name: null, email: `${Math.random()}@x.com`, company: null, cnpj: null,
+    plan: null, createdAt: NOW, ...over,
+  });
+
+  // Conta pagante REAL (Stripe) e uma seed de abril/2026 marcada como PAGO
+  // com mrr fictício nos preços antigos. A seed NÃO pode somar no MRR.
+  const pagante = buildAccountRow(
+    mk({ organizationId: 'org-real', materializedStage: 'PAGO', mrrCents: 59700 }),
+    NOW,
+  );
+  const seedPaga = buildAccountRow(
+    mk({ organizationId: 'org-seed', materializedStage: 'PAGO', mrrCents: 199700, isSeed: true }),
+    NOW,
+  );
+  const seedNovo = buildAccountRow(
+    mk({ organizationId: 'org-seed-2', materializedStage: 'NOVO', isSeed: true }),
+    NOW,
+  );
+
+  it('buildAccountRow materializa isSeed (badge da listagem)', () => {
+    expect(seedPaga.isSeed).toBe(true);
+    expect(seedNovo.isSeed).toBe(true);
+    expect(pagante.isSeed).toBe(false);
+  });
+
+  it('org seed fica FORA do MRR real dos KPIs', () => {
+    const k = computeKpis([pagante, seedPaga, seedNovo], NOW);
+    // Só a pagante real soma: R$ 597,00. A seed de R$ 1.997,00 fica de fora.
+    expect(k.mrrRealCents).toBe(59700);
+  });
+
+  it('seed continua VISÍVEL na listagem (não é removida como staging)', () => {
+    const rows = [pagante, seedPaga, seedNovo];
+    // A lista que o route devolve mantém as seeds; quem some é só o MRR delas.
+    expect(rows.filter((r) => r.isSeed)).toHaveLength(2);
+    const k = computeKpis(rows, NOW);
+    // As seeds seguem contadas por estágio (abas da UI continuam batendo).
+    expect(k.byStage.PAGO).toBe(2);
+    expect(k.byStage.NOVO).toBe(1);
+  });
+
+  it('sem seeds o MRR soma normalmente (regressão)', () => {
+    const k = computeKpis([pagante], NOW);
+    expect(k.mrrRealCents).toBe(59700);
+  });
+});

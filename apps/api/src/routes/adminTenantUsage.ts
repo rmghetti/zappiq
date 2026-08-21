@@ -15,7 +15,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@zappiq/database';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
-import { runTenantUsageCycle, currentYearMonth } from '../services/tenantUsageService.js';
+import { runTenantUsageCycle, currentYearMonth, isSeedOrg } from '../services/tenantUsageService.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
@@ -34,9 +34,13 @@ router.get('/summary', async (req: Request, res: Response, next: NextFunction) =
       },
     }) as any[];
 
-    // Totais agregados para o board
+    // Totais agregados para o board. PR-L (20/08/2026): orgs seed
+    // (settings.seed=true) ficam FORA dos totais — inclusive das linhas
+    // históricas com receita fantasma gravada nos preços antigos — mas
+    // continuam listadas individualmente abaixo, com o badge isSeed.
     const totals = rows.reduce(
       (acc: { revenueBrlCents: number; llmCostUsd: number; infraCostUsd: number; tenants: number; aiMessages: number }, r: any) => {
+        if (isSeedOrg(r.organization?.settings)) return acc;
         acc.revenueBrlCents += r.revenueBrlCents;
         acc.llmCostUsd += r.llmCostUsd;
         acc.infraCostUsd += r.infraCostUsd;
@@ -63,6 +67,8 @@ router.get('/summary', async (req: Request, res: Response, next: NextFunction) =
         plan: r.organization.plan,
         subscriptionStatus: r.organization.subscriptionStatus,
         isTrialActive: r.organization.isTrialActive,
+        // Badge de seed: linha visível, mas fora dos totais (PR-L 20/08/2026).
+        isSeed: isSeedOrg(r.organization?.settings),
         revenueBrl: r.revenueBrlCents / 100,
         llmCostUsd: r.llmCostUsd,
         infraCostUsd: r.infraCostUsd,

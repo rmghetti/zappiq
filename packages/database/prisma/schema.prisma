@@ -20,6 +20,13 @@ enum PlanType {
   SCALE
   BUSINESS
   ENTERPRISE
+  // Resposta Meta out/2026 (PR-L, 20/08/2026): valores ADITIVOS para a grade
+  // nova (docs/resposta-meta-2026/PLANO-RESPOSTA-META.md). Nenhum plano
+  // existente muda de valor; o shared PlanId já contém IZA_LITE e o enum do
+  // banco era o bloqueador. ESSENCIAL entra junto para a grade nova gravar
+  // direto no tipo, sem mapeamento improvisado.
+  IZA_LITE
+  ESSENCIAL
 }
 
 enum UserRole {

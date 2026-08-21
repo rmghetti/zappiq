@@ -169,6 +169,9 @@ export interface ClienteAccountRow {
   engaged: boolean;
   ownerUserId: string | null;
   isStaging: boolean;
+  /** Org seed de abril/2026 (settings.seed=true). Fica VISÍVEL na lista com
+   *  badge, mas fora dos totais de MRR (PR-L 20/08/2026). */
+  isSeed: boolean;
   createdAt: string;
 }
 
@@ -199,6 +202,8 @@ export interface AccountRawInput {
   lastActivityAt?: Date | string | null;
   ownerUserId?: string | null;
   isStaging?: boolean;
+  /** settings.seed=true na org (marcado por scripts/marcar-seeds.ts). */
+  isSeed?: boolean;
   createdAt: Date | string;
 }
 
@@ -267,6 +272,7 @@ export function buildAccountRow(raw: AccountRawInput, now: Date = new Date()): C
     engaged: msgs > 0,
     ownerUserId: raw.ownerUserId ?? null,
     isStaging: Boolean(raw.isStaging),
+    isSeed: Boolean(raw.isSeed),
     createdAt: toIso(raw.createdAt) ?? new Date(now).toISOString(),
   };
 }
@@ -309,8 +315,11 @@ export function computeKpis(rows: ClienteAccountRow[], now: Date = new Date()): 
     (r) => r.stage === 'NOVO' && new Date(r.createdAt) >= sevenDaysAgo,
   ).length;
 
+  // PR-L (20/08/2026): seed NUNCA soma MRR — mesmo que uma marcação manual de
+  // estágio a coloque como PAGO, a receita dela é fictícia (seed de abril/2026
+  // nos preços antigos). A linha segue visível na lista, com badge isSeed.
   const mrrRealCents = active
-    .filter((r) => r.stage === 'PAGO')
+    .filter((r) => r.stage === 'PAGO' && !r.isSeed)
     .reduce((sum, r) => sum + (r.mrrCents ?? 0), 0);
 
   const contasEmRisco = active.filter(
