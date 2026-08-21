@@ -33,10 +33,11 @@ const HORARIOS_ESPERADOS: Record<string, string> = {
   'trial-followup-scheduler': '0 14 * * *', // era o tique da fila trial-followup
   'conversation-expiry': '50 * * * *',      // nova (Resposta Meta out/2026), de hora em hora
   'waba-health': '5 */6 * * *',             // nova (Resposta Meta out/2026), a cada 6 horas
+  'cost-guard': '20 * * * *',               // nova (PR-H Resposta Meta out/2026), de hora em hora
 };
 
 describe('fila cron — registro consolidado', () => {
-  it('mantém as 13 rotinas, nenhuma a mais e nenhuma a menos', () => {
+  it('mantém as 14 rotinas, nenhuma a mais e nenhuma a menos', () => {
     const nomes = CRON_JOBS.map((c) => c.name).sort();
     expect(nomes).toEqual(Object.keys(HORARIOS_ESPERADOS).sort());
   });

@@ -26,6 +26,7 @@ import { logger } from '../utils/logger.js';
 import { runAgentEvalCronCycle } from './agentEvalCronService.js';
 import { runAnalyticsPulseCycle } from './analyticsPulseCron.js';
 import { runConversationExpiryCycle } from './conversationExpiryService.js';
+import { runCostGuardCycle } from './costGuardService.js';
 import { runMiraMirrors } from './mira/cnpjMirrorSync.js';
 import { runMiraReleasesCycle } from './mira/releasesCron.js';
 import { runRetentionCycle } from './retentionService.js';
@@ -76,6 +77,11 @@ export const CRON_JOBS: CronJobDefinition[] = [
   // Varredura de saúde do WABA a cada 6 horas. O handler real chega no PR-D;
   // o stub atual garante que o registro compila e o horário já fica travado.
   { name: 'waba-health', pattern: '5 */6 * * *', run: runWabaHealthSweep },
+  // Cost Guard (PR-H, decisão D5): custo Meta do mês × teto efetivo por org,
+  // de hora em hora no minuto 20 (fora dos minutos 50 e 5 das rotinas acima).
+  // Às 03:20 coincide com o analytics-pulse diário; a concorrência 3 do
+  // worker absorve as duas sem uma segurar a outra.
+  { name: 'cost-guard', pattern: '20 * * * *', run: runCostGuardCycle },
 ];
 
 /**

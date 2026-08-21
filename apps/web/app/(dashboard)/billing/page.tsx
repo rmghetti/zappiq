@@ -24,6 +24,7 @@ import { api } from '../../../lib/api';
 import { useAuthStore } from '../../../stores/authStore';
 import { RecommendationHero } from './RecommendationHero';
 import { PlanChangeModal } from './PlanChangeModal';
+import { ContaClara } from './ContaClara';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 
 // Enum do banco (org.plan) → tier lógico V4. STARTER/legado = Iza Lite.
@@ -440,6 +441,10 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+
+      {/* Conta Clara beta (PR-J Resposta Meta 2026): extrato do custo Meta por
+          mensagem do mês, direto do ledger, no valor da Meta e sem markup. */}
+      <ContaClara />
 
       {/* Modal de troca de plano (pagante) — mostra a conta e aplica a mudança. */}
       {changeTarget && (

@@ -52,6 +52,8 @@ import dealsRoutes from './routes/deals.js';
 import crmRoutes from './routes/crm.js'; // PR #217 — métricas executivas /api/crm/metrics
 import tasksRoutes from './routes/tasks.js'; // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA
 import billingRoutes from './routes/billing.js';
+import metaCostsRoutes from './routes/metaCosts.js'; // PR-J Resposta Meta 2026: Conta Clara (extrato de custo Meta)
+import billingCostGuardRoutes from './routes/billingCostGuard.js'; // PR-H Resposta Meta 2026: Cost Guard (teto de custo Meta)
 import settingsRoutes from './routes/settings.js';
 import onboardingRoutes from './routes/onboarding.js';
 import embeddedSignupRoutes from './routes/embeddedSignup.js'; // #273/#274 — callbacks OAuth WA/IG Embedded Signup
@@ -346,6 +348,14 @@ app.use('/api/appointments', authMiddleware, rlsTenantMiddleware, requireActiveP
 // browser sem nosso token, validado por state assinado).
 app.use('/api/integrations/google', integrationsGoogleRoutes);
 app.use('/api/tasks', authMiddleware, rlsTenantMiddleware, requireActivePlan, tasksRoutes); // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA
+// PR-J Conta Clara: montada ANTES de /api/billing pra requisição não atravessar
+// o router de billing à toa (mesma razão do /api/flows/templates). Também SEM
+// requireActivePlan: cliente em past_due/paywall precisa enxergar o próprio custo.
+app.use('/api/billing/meta-costs', authMiddleware, rlsTenantMiddleware, metaCostsRoutes);
+// PR-H Cost Guard: mesma razão da Conta Clara acima (antes de /api/billing e
+// SEM requireActivePlan): teto de custo Meta é dinheiro do cliente, precisa
+// ficar visível e ajustável até pra org que caiu no paywall.
+app.use('/api/billing/cost-guard', authMiddleware, rlsTenantMiddleware, billingCostGuardRoutes);
 app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes); // SEM gate: paywall precisa ser acessível
 app.use('/api/settings', authMiddleware, rlsTenantMiddleware, requireActivePlan, settingsRoutes);
 app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, requireActivePlan, auditLogsRoutes);
