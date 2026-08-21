@@ -5,6 +5,7 @@ import { cache } from '../services/cloud/index.js';
 import { logger } from '../utils/logger.js';
 import { reportOverageMeterEvent, estimateOverageBrl } from '../services/quotaOverageService.js';
 import { env } from '../config/env.js';
+import { isZappIQOrg } from '../config/zappiqOrg.js';
 
 // PR #V4-005.3: migrado de redis direto pra abstração cloud-agnostic (cache).
 // cache.incrby / cache.incrbyfloat / cache.get / cache.expire são fail-soft
@@ -30,6 +31,9 @@ import { env } from '../config/env.js';
 export type LimitKind =
   | 'agents'
   | 'aiMessagesPerMonth'
+  // Resposta Meta out/2026 — unidade "atendimento de IA" em SOMBRA: só
+  // medição (não existe em PlanLimits, nunca é enforced, nunca bloqueia).
+  | 'aiAttendancesPerMonth'
   | 'broadcastsPerMonth'
   | 'contacts'
   | 'flows'
@@ -68,6 +72,64 @@ export async function incrementUsage(
 export async function getUsage(orgId: string, kind: LimitKind): Promise<number> {
   const raw = await cache.get(usageKey(orgId, kind));
   return raw ? parseInt(raw, 10) : 0;
+}
+
+/*
+ * ─────────────────────────────────────────────────────────────────
+ * Resposta Meta out/2026 — metering SOMBRA da unidade "atendimento de IA".
+ *
+ * 1 atendimento = 1 conversa que recebeu resposta da IA, com fair use de 12
+ * respostas: da 13ª resposta em diante abre uma "parte" nova da mesma
+ * conversa, contada como novo atendimento (13..24 → parte 2, 25..36 → parte
+ * 3, e assim por diante).
+ *
+ * SOMBRA PURA: alimenta contadores pra calibrar o preço da unidade nova.
+ * Nunca bloqueia, nunca alerta, nunca lança. As chaves seguem a mesma
+ * convenção usada pelo webChatService (marcador `zappiq:att:{org}:{conv}` e
+ * contador mensal via usageKey), então os dois canais somam no mesmo lugar.
+ * ─────────────────────────────────────────────────────────────────
+ */
+
+/** TTL das chaves por conversa (marcador e contador de respostas): 90 dias. */
+const ATTENDANCE_TTL_SECONDS = 90 * 24 * 3600;
+
+/** Fair use: respostas de IA por atendimento antes de abrir parte nova. */
+export const ATTENDANCE_FAIR_USE_REPLIES = 12;
+
+export async function recordAttendanceShadow(
+  orgId: string,
+  conversationId: string,
+): Promise<void> {
+  try {
+    // 1) Conta a resposta de IA desta conversa (INCR; TTL só na criação).
+    const repliesKey = `zappiq:attreplies:${conversationId}`;
+    const replies = await cache.incrby(repliesKey, 1);
+    if (replies === null) return; // backend fora do ar — sombra não insiste
+    if (replies === 1) {
+      await cache.expire(repliesKey, ATTENDANCE_TTL_SECONDS);
+    }
+
+    // 2) Parte corrente pelo fair use. A parte 1 usa a chave base (mesma do
+    // webChatService); da 2ª em diante entra o sufixo `:N`. Manter a chave da
+    // parte anterior no lugar (em vez de apagar e recriar) impede a mesma
+    // parte de ser contada duas vezes.
+    const part = Math.ceil(replies / ATTENDANCE_FAIR_USE_REPLIES);
+    const baseKey = `zappiq:att:${orgId}:${conversationId}`;
+    const attKey = part === 1 ? baseKey : `${baseKey}:${part}`;
+
+    // 3) SET NX: só a PRIMEIRA resposta de cada parte cria o marcador e
+    // incrementa o contador mensal. `false` (já existia) e `null` (erro de
+    // backend) não contam — em sombra, subcontar é melhor que duplicar.
+    const created = await cache.setNX(attKey, '1', ATTENDANCE_TTL_SECONDS);
+    if (created === true) {
+      await incrementUsage(orgId, 'aiAttendancesPerMonth');
+    }
+  } catch (err: any) {
+    // Sombra pura: erro aqui jamais toca a resposta da IA.
+    logger.warn(
+      `[planLimits] recordAttendanceShadow falhou org=${orgId} conv=${conversationId}: ${err?.message ?? err}`,
+    );
+  }
 }
 
 /**
@@ -157,7 +219,9 @@ export async function checkLimit(
   overageDelta?: number;
 }> {
   const { planId, limits, isTrialing } = await getEffectivePlan(orgId);
-  const limit = limits[kind];
+  // aiAttendancesPerMonth é kind de SOMBRA: não existe em PlanLimits e nunca
+  // é enforced — para qualquer caller, comporta como ilimitado.
+  const limit = kind === 'aiAttendancesPerMonth' ? -1 : limits[kind];
 
   if (limit === -1) {
     return { allowed: true, limit: -1, current: 0, remaining: -1, planId, isTrialing };
@@ -521,38 +585,157 @@ export function resourceLimitBody(kind: ResourceLimitKind, dec: ResourceLimitDec
   };
 }
 
-/**
- * Trial cost cap — chamado de dentro do agentOrchestrator antes
- * de efetuar chamada LLM paga.
+/*
+ * ═════════════════════════════════════════════════════════════════
+ * Resposta Meta out/2026 (PR-E): estágio de custo LLM da org.
  *
- * Se o tenant está em trial e já gastou > trialCostCapUsd, bloqueia
- * a chamada e retorna mensagem amigável para o cliente final.
+ * Uma org entra no regime protegido de custo (cap de trial + modelo leve +
+ * rate limits) quando está em TRIAL (janela aberta) ou em estágio NOVO
+ * (nunca iniciou trial E não tem assinatura Stripe). Qualquer org com
+ * stripeSubscriptionId fica FORA do regime: o comportamento de conta
+ * pagante não muda em nada. A org da própria ZappIQ (vitrine Iza) também
+ * fica fora: ela não é um tenant em teste.
+ * ═════════════════════════════════════════════════════════════════
+ */
+
+export type LlmCostStage = 'TRIAL' | 'NOVO' | 'OTHER';
+
+export interface TrialLlmStageInfo {
+  /** true quando a org está no regime protegido (TRIAL ou NOVO). */
+  capped: boolean;
+  stage: LlmCostStage;
+  /** Teto de custo em USD (organizations.trialCostCapUsd, default 15). */
+  capUsd: number;
+}
+
+/** Campos mínimos da org para decidir o estágio (função pura, testável). */
+export interface LlmCostStageOrgInput {
+  trialStartedAt?: Date | string | null;
+  trialEndsAt?: Date | string | null;
+  isTrialActive?: boolean | null;
+  trialConverted?: boolean | null;
+  stripeSubscriptionId?: string | null;
+}
+
+/**
+ * Decisão PURA do estágio de custo LLM.
+ *   - Assinatura Stripe presente (ativa ou não): 'OTHER', nunca mexemos.
+ *   - Trial com janela aberta (mesma regra do getEffectivePlan): 'TRIAL'.
+ *   - Nunca iniciou trial e sem assinatura: 'NOVO'.
+ *   - Resto (ex.: trial expirado, que já tem paywall próprio): 'OTHER'.
+ */
+export function decideLlmCostStage(org: LlmCostStageOrgInput, now = new Date()): LlmCostStage {
+  const hasSubscription = Boolean(
+    org.stripeSubscriptionId && String(org.stripeSubscriptionId).trim() !== '',
+  );
+  if (hasSubscription) return 'OTHER';
+
+  const trialEndsAt = org.trialEndsAt ? new Date(org.trialEndsAt) : null;
+  const isTrialing =
+    Boolean(org.isTrialActive) &&
+    !org.trialConverted &&
+    trialEndsAt !== null &&
+    !Number.isNaN(trialEndsAt.getTime()) &&
+    trialEndsAt > now;
+  if (isTrialing) return 'TRIAL';
+
+  if (org.trialStartedAt == null) return 'NOVO';
+  return 'OTHER';
+}
+
+/** TTL do cache do estágio: 5 min. Conversão de plano demora até 5 min pra refletir. */
+const TRIAL_STAGE_CACHE_TTL_SECONDS = 300;
+
+/**
+ * Estágio de custo LLM da org com cache Redis de 5 min (1 query de org a cada
+ * 5 min por tenant, o resto é um GET no cache). Fail-soft: qualquer erro
+ * devolve 'OTHER' (prefere servir sem restrição a travar cliente por engano).
+ */
+export async function getTrialLlmStage(orgId: string): Promise<TrialLlmStageInfo> {
+  try {
+    if (!orgId || isZappIQOrg(orgId)) {
+      return { capped: false, stage: 'OTHER', capUsd: 0 };
+    }
+
+    const cacheKey = `zappiq:trial_stage:${orgId}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached) as { stage?: LlmCostStage; capUsd?: number };
+        if (parsed.stage === 'TRIAL' || parsed.stage === 'NOVO' || parsed.stage === 'OTHER') {
+          return {
+            capped: parsed.stage !== 'OTHER',
+            stage: parsed.stage,
+            capUsd: typeof parsed.capUsd === 'number' ? parsed.capUsd : 15,
+          };
+        }
+      } catch {
+        // valor corrompido no cache: recalcula abaixo
+      }
+    }
+
+    const org = (await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: {
+        trialStartedAt: true,
+        trialEndsAt: true,
+        isTrialActive: true,
+        trialConverted: true,
+        stripeSubscriptionId: true,
+        trialCostCapUsd: true,
+      },
+    })) as any;
+    if (!org) return { capped: false, stage: 'OTHER', capUsd: 0 };
+
+    const stage = decideLlmCostStage(org);
+    const capUsd = typeof org.trialCostCapUsd === 'number' ? org.trialCostCapUsd : 15;
+    // cache.set é fail-soft (false em erro): estágio só fica sem cache.
+    await cache.set(cacheKey, JSON.stringify({ stage, capUsd }), TRIAL_STAGE_CACHE_TTL_SECONDS);
+    return { capped: stage !== 'OTHER', stage, capUsd };
+  } catch (err: any) {
+    logger.warn(`[planLimits] getTrialLlmStage falhou org=${orgId}: ${err?.message ?? err}`);
+    return { capped: false, stage: 'OTHER', capUsd: 0 };
+  }
+}
+
+/**
+ * Trial cost cap: chamado de dentro do agentOrchestrator antes de efetuar
+ * chamada LLM paga. Vale pra org em TRIAL ou em estágio NOVO (sem assinatura).
+ *
+ * Se o tenant já gastou > trialCostCapUsd (acumulado por recordTrialCost via
+ * llmCallAudit), bloqueia a chamada; o caller degrada pra mensagem fixa.
+ * Fail-soft: erro interno NUNCA bloqueia (retorna allowed=true) e nunca lança.
  */
 export async function assertTrialCostCap(
   orgId: string,
   additionalUsdEstimate = 0.02,
 ): Promise<{ allowed: boolean; reason?: string; spentUsd: number; capUsd: number }> {
-  const { isTrialing, trialCostCapUsd } = await getEffectivePlan(orgId);
+  try {
+    const { capped, capUsd, stage } = await getTrialLlmStage(orgId);
 
-  if (!isTrialing) {
-    return { allowed: true, spentUsd: 0, capUsd: trialCostCapUsd };
+    if (!capped) {
+      return { allowed: true, spentUsd: 0, capUsd };
+    }
+
+    // Custo acumulado do período (populado por recordTrialCost no llmCallAudit).
+    const costKey = `zappiq:trial_cost_usd:${orgId}`;
+    const raw = await cache.get(costKey);
+    const spentUsd = raw ? parseFloat(raw) : 0;
+
+    if (spentUsd + additionalUsdEstimate > capUsd) {
+      return {
+        allowed: false,
+        reason: `Cap de custo do ${stage === 'TRIAL' ? 'trial' : 'estágio NOVO'} atingido (US$ ${spentUsd.toFixed(2)} / US$ ${capUsd.toFixed(2)}). Assine um plano para continuar.`,
+        spentUsd,
+        capUsd,
+      };
+    }
+
+    return { allowed: true, spentUsd, capUsd };
+  } catch (err: any) {
+    logger.warn(`[planLimits] assertTrialCostCap falhou org=${orgId}: ${err?.message ?? err}`);
+    return { allowed: true, spentUsd: 0, capUsd: 0 };
   }
-
-  // Consulta custo acumulado via cache (populado pelo metrics.ts).
-  const costKey = `zappiq:trial_cost_usd:${orgId}`;
-  const raw = await cache.get(costKey);
-  const spentUsd = raw ? parseFloat(raw) : 0;
-
-  if (spentUsd + additionalUsdEstimate > trialCostCapUsd) {
-    return {
-      allowed: false,
-      reason: `Trial cost cap atingido (US$ ${spentUsd.toFixed(2)} / US$ ${trialCostCapUsd.toFixed(2)}). Assine um plano para continuar.`,
-      spentUsd,
-      capUsd: trialCostCapUsd,
-    };
-  }
-
-  return { allowed: true, spentUsd, capUsd: trialCostCapUsd };
 }
 
 /**
@@ -567,4 +750,72 @@ export async function recordTrialCost(orgId: string, costUsd: number): Promise<v
   if (result !== null) {
     await cache.expire(key, 60 * 24 * 3600);
   }
+}
+
+/*
+ * ═════════════════════════════════════════════════════════════════
+ * Resposta Meta out/2026 (PR-E): rate limits do regime TRIAL/NOVO.
+ *
+ * Dois tetos, ambos por janela de 1 hora, ambos INCR + TTL na criação:
+ *   - WhatsApp/IG: respostas de IA por CONTATO (loop de bot com bot,
+ *     contato abusivo). Ao exceder, a IA sai de cena em silêncio e o
+ *     humano pode assumir a conversa.
+ *   - Webchat: mensagens processadas por ORG (flood no widget público).
+ *
+ * Só valem pra org em regime TRIAL/NOVO (o caller gateia por
+ * getTrialLlmStage). Fail-soft: backend de cache fora do ar libera.
+ * ═════════════════════════════════════════════════════════════════
+ */
+
+/** Teto de respostas de IA por contato por hora (org em TRIAL/NOVO). */
+export const TRIAL_CONTACT_REPLIES_PER_HOUR = 30;
+
+/** Teto de mensagens de webchat por org por hora (org em TRIAL/NOVO). */
+export const WEBCHAT_ORG_REPLIES_PER_HOUR = 300;
+
+const RATE_LIMIT_WINDOW_SECONDS = 3600;
+
+async function consumeHourlyBudget(
+  key: string,
+  limit: number,
+): Promise<{ allowed: boolean; count: number }> {
+  try {
+    const count = await cache.incrby(key, 1);
+    if (count === null) {
+      // Backend fora do ar: prefere servir a bloquear (mesmo contrato do resto).
+      return { allowed: true, count: 0 };
+    }
+    if (count === 1) {
+      await cache.expire(key, RATE_LIMIT_WINDOW_SECONDS);
+    }
+    return { allowed: count <= limit, count };
+  } catch {
+    return { allowed: true, count: 0 };
+  }
+}
+
+/**
+ * Consome 1 unidade do teto horário de respostas de IA pro contato.
+ * A 31ª resposta na mesma hora vem com allowed=false: o orchestrator loga e
+ * NÃO responde (silêncio; humano pode assumir). Nunca lança.
+ */
+export async function consumeTrialContactReplyBudget(
+  orgId: string,
+  contactId: string,
+): Promise<{ allowed: boolean; count: number }> {
+  return consumeHourlyBudget(
+    `zappiq:rl:contact:${orgId}:${contactId}`,
+    TRIAL_CONTACT_REPLIES_PER_HOUR,
+  );
+}
+
+/**
+ * Consome 1 unidade do teto horário de webchat da org. A 301ª mensagem na
+ * mesma hora vem com allowed=false: a rota devolve 429 sem tocar LLM.
+ * Nunca lança.
+ */
+export async function consumeWebChatOrgReplyBudget(
+  orgId: string,
+): Promise<{ allowed: boolean; count: number }> {
+  return consumeHourlyBudget(`zappiq:rl:webchat:${orgId}`, WEBCHAT_ORG_REPLIES_PER_HOUR);
 }

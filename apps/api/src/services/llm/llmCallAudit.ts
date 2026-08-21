@@ -17,6 +17,10 @@
 import { prisma, Prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
 import { estimateCostUsd } from '../../utils/llmCost.js';
+// Resposta Meta out/2026 (PR-E): custo de org em TRIAL/NOVO acumula no teto
+// do trial (zappiq:trial_cost_usd:{orgId}). getTrialLlmStage é cacheado em
+// Redis por 5 min, então o caminho quente é 1 GET por chamada.
+import { getTrialLlmStage, recordTrialCost } from '../../middleware/planLimits.js';
 
 export interface LLMCallAuditInput {
   /** ID da organização (tenant). null aceito pra contextos system. */
@@ -41,6 +45,12 @@ export interface LLMCallAuditInput {
   attemptCount?: number;
   /** Mensagem de erro quando todos providers falharam. */
   error?: string | null;
+  /**
+   * Resposta Meta out/2026 (PR-E): atalho pro cap de trial. Caller que JÁ tem
+   * a org carregada informa aqui se ela está em TRIAL/NOVO e evita a consulta
+   * (cacheada) de estágio. undefined = descobrir via getTrialLlmStage.
+   */
+  orgIsTrialOrNew?: boolean;
 }
 
 /**
@@ -50,8 +60,9 @@ export interface LLMCallAuditInput {
  * Fail-soft: erro de DB não propaga.
  */
 export async function logLLMCall(input: LLMCallAuditInput): Promise<void> {
+  let cost = 0;
   try {
-    const cost = estimateCostUsd(input.model, input.inputTokens, input.outputTokens);
+    cost = estimateCostUsd(input.model, input.inputTokens, input.outputTokens);
 
     await prisma.lLMCallLog.create({
       data: {
@@ -75,6 +86,29 @@ export async function logLLMCall(input: LLMCallAuditInput): Promise<void> {
       error: err instanceof Error ? err.message : String(err),
       provider: input.provider,
       model: input.model,
+      organizationId: input.organizationId,
+    });
+  }
+
+  // ── Resposta Meta out/2026 (PR-E): teto de custo do TRIAL/NOVO ──────
+  // Acumula o custo desta chamada quando a org está em trial ou no estágio
+  // NOVO (sem assinatura). Cobre TODAS as operações (chat, classify,
+  // transcribe, tts): o cap protege o gasto total de LLM do tenant em teste.
+  // Bloco isolado e fail-soft: falha aqui nunca afeta o audit nem a resposta,
+  // e falha no audit acima não impede o acúmulo aqui.
+  try {
+    if (input.organizationId && cost > 0) {
+      const capped =
+        typeof input.orgIsTrialOrNew === 'boolean'
+          ? input.orgIsTrialOrNew
+          : (await getTrialLlmStage(input.organizationId)).capped;
+      if (capped) {
+        await recordTrialCost(input.organizationId, cost);
+      }
+    }
+  } catch (err) {
+    logger.warn('[llmCallAudit] Falha ao acumular custo de trial (fail-soft)', {
+      error: err instanceof Error ? err.message : String(err),
       organizationId: input.organizationId,
     });
   }

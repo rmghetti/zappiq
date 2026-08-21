@@ -15,8 +15,28 @@ import {
   MAX_HISTORY_TURNS,
   MAX_MESSAGE_LENGTH,
 } from '../services/webChatService.js';
+// Resposta Meta out/2026 (PR-E): limitador por org (300/h) pra org em regime
+// TRIAL/NOVO. Org pagante e org da ZappIQ ficam de fora (capped=false).
+import {
+  getTrialLlmStage,
+  consumeWebChatOrgReplyBudget,
+} from '../middleware/planLimits.js';
 
 const router = Router();
+
+/*
+ * Resposta Meta out/2026 (PR-E): HONEYPOT anti-bot.
+ * O campo opcional `website` não existe no formulário visível do widget:
+ * humano não preenche, bot de spam preenche. Quando vier preenchido, a rota
+ * devolve 200 com um texto genérico SEM processar LLM (o bot acha que
+ * funcionou e não insiste). A mudança do widget pra enviar o campo fica fora
+ * deste backend: aqui apenas toleramos e usamos quando vier.
+ */
+const HONEYPOT_REPLY = 'Recebi sua mensagem. Obrigado pelo contato, em breve retornamos.';
+
+function isHoneypotHit(website: string | undefined): boolean {
+  return typeof website === 'string' && website.trim().length > 0;
+}
 
 // Rate-limit dedicado: 30 mensagens / 5 min por IP. Mais permissivo que o
 // authLimiter (10/15min) mas restritivo o suficiente pra impedir scraping.
@@ -41,6 +61,8 @@ const webChatSchema = z.object({
     .max(MAX_HISTORY_TURNS * 2) // user+assistant pairs
     .optional()
     .default([]),
+  // HONEYPOT (PR-E): campo invisível pro humano. Preenchido = bot.
+  website: z.string().max(200).optional(),
 });
 
 /* POST /api/web-chat/iza-message
@@ -56,7 +78,13 @@ router.post('/iza-message', webChatLimiter, async (req: Request, res: Response) 
     });
   }
 
-  const { sessionId, message, history } = parsed.data;
+  const { sessionId, message, history, website } = parsed.data;
+
+  // HONEYPOT (PR-E): bot preencheu o campo invisível. 200 genérico, zero LLM.
+  if (isHoneypotHit(website)) {
+    logger.warn('[webChat] honeypot acionado no /iza-message', { sessionId });
+    return res.json({ reply: HONEYPOT_REPLY, latencyMs: 0 });
+  }
 
   try {
     const result = await processWebChatTurn({ sessionId, message, history });
@@ -112,7 +140,31 @@ router.post('/org/:organizationId/message', webChatLimiter, async (req: Request,
     return res.status(404).json({ error: 'not_found' });
   }
 
-  const { sessionId, message, history } = parsed.data;
+  const { sessionId, message, history, website } = parsed.data;
+
+  // HONEYPOT (PR-E): bot preencheu o campo invisível. 200 genérico, zero LLM.
+  if (isHoneypotHit(website)) {
+    logger.warn('[webChat] honeypot acionado no webchat por org', { sessionId, organizationId });
+    return res.json({ reply: HONEYPOT_REPLY, latencyMs: 0 });
+  }
+
+  // Rate limit por ORG (PR-E), além do por IP acima: 300 mensagens/hora pra
+  // org em regime TRIAL/NOVO. Um flood distribuído (vários IPs) não estoura o
+  // custo de LLM de um tenant em teste. Org pagante segue sem esse teto.
+  const trialStage = await getTrialLlmStage(organizationId);
+  if (trialStage.capped) {
+    const orgBudget = await consumeWebChatOrgReplyBudget(organizationId);
+    if (!orgBudget.allowed) {
+      logger.warn(
+        `[webChat] rate limit por org no ${trialStage.stage}: ${orgBudget.count}/300 na última hora`,
+        { organizationId },
+      );
+      return res.status(429).json({
+        error: 'rate_limited',
+        reply: 'Estamos recebendo muitas mensagens agora. Tenta de novo em alguns minutos?',
+      });
+    }
+  }
 
   try {
     const result = await processWebChatTurn({ sessionId, message, history, organizationId });

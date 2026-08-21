@@ -33,7 +33,15 @@ import { executeFlowEffects } from './flowEffects.js';
 import { runAgenticTurn } from './flowAiAgent.js';
 import { buildWebhookToolDef, executeWebhook, type WebhookToolConfig } from './webhookTool.js';
 import { getIo } from '../utils/socketRegistry.js';
-import { enforceAiReplyQuota } from '../middleware/planLimits.js';
+import {
+  enforceAiReplyQuota,
+  recordAttendanceShadow,
+  // Resposta Meta out/2026 (PR-E): regime de custo do TRIAL/NOVO
+  getTrialLlmStage,
+  assertTrialCostCap,
+  consumeTrialContactReplyBudget,
+  decideLlmCostStage,
+} from '../middleware/planLimits.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
 /* ── Org canônica da Iza (dogfood ZappIQ) ─────────────────────────────
@@ -421,6 +429,77 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       return;
     }
 
+    // ── 5.5a. Resposta Meta out/2026 (PR-E): proteções do TRIAL/NOVO ─────
+    // Antes do gate de quota (pra não queimar crédito nem contar atendimento
+    // em turno que não vira resposta de IA). Só vale pra org em regime
+    // TRIAL/NOVO (getTrialLlmStage devolve capped=false pra org pagante e pra
+    // org da ZappIQ). Duas travas, nesta ordem:
+    //   1. Teto de respostas de IA por contato por hora (30): excedeu, a IA
+    //      sai em silêncio e o humano pode assumir a conversa.
+    //   2. Cap de custo LLM do trial (default US$ 15): estourou, degrada pra
+    //      mensagem fixa curta SEM chamada LLM.
+    // Todo o bloco de decisão é fail-soft: erro aqui segue o fluxo normal.
+    let trialSilencioso = false;
+    let trialDegradado = false;
+    try {
+      const trialStage = await getTrialLlmStage(organizationId);
+      if (trialStage.capped) {
+        const contactBudget = await consumeTrialContactReplyBudget(organizationId, contactId);
+        if (!contactBudget.allowed) {
+          logger.warn(
+            `[Agent] Rate limit por contato no ${trialStage.stage}: ${contactBudget.count}/30 respostas na última hora. IA em silêncio, humano pode assumir.`,
+            { organizationId, contactId, contactPhone },
+          );
+          trialSilencioso = true;
+        } else {
+          const cap = await assertTrialCostCap(organizationId);
+          if (!cap.allowed) {
+            logger.warn(
+              `[Agent] Cap de custo do ${trialStage.stage} estourado (US$ ${cap.spentUsd.toFixed(2)} / US$ ${cap.capUsd.toFixed(2)}). Resposta degradada sem LLM.`,
+              { organizationId, contactPhone },
+            );
+            trialDegradado = true;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn('[Agent] Guarda de trial falhou (fail-soft, segue fluxo normal)', {
+        organizationId,
+        err: String(err),
+      });
+    }
+    if (trialSilencioso) {
+      return;
+    }
+    if (trialDegradado) {
+      const degradedReply =
+        'Estou em modo limitado neste período de teste; um humano continua te atendendo.';
+      await deliverAgentReply({ organizationId, conversationId, text: degradedReply });
+      await prisma.message.create({
+        data: {
+          direction: 'OUTBOUND',
+          type: 'TEXT',
+          content: degradedReply,
+          status: 'SENT',
+          conversationId,
+          isFromBot: true,
+          aiConfidence: 1.0, // mensagem fixa, sem LLM
+        },
+      });
+      if (io) {
+        io.to(`org:${organizationId}`).emit('new_message', {
+          conversationId,
+          message: {
+            content: degradedReply,
+            direction: 'OUTBOUND',
+            isFromBot: true,
+            createdAt: new Date().toISOString(),
+          },
+        });
+      }
+      return;
+    }
+
     // ── 5.5. W2.5 — Gate de quota (aiMessagesPerMonth) ──────────────
     // A IA decidiu responder ao inbound: consome 1 crédito do plano ANTES
     // de gastar LLM. Respeita QUOTA_OVERAGE_MODE:
@@ -435,6 +514,12 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       );
       return;
     }
+
+    // Resposta Meta out/2026 — débito SOMBRA por atendimento: marca a conversa
+    // como atendimento de IA (fair use de 12 respostas por parte). Sombra
+    // pura: nunca bloqueia nem alerta, e a função engole o próprio erro —
+    // fire-and-forget de propósito pra não somar latência à resposta.
+    void recordAttendanceShadow(organizationId, conversationId);
 
     // ── 6. Retrieve RAG context ─────────────────────────
     let ragContext = '';
@@ -801,9 +886,28 @@ export async function pickTierAndOverride(orgId: string): Promise<{
   try {
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
-      select: { plan: true, settings: true },
+      select: {
+        plan: true,
+        settings: true,
+        // Resposta Meta out/2026 (PR-E): campos pra decidir o regime TRIAL/NOVO
+        trialStartedAt: true,
+        trialEndsAt: true,
+        isTrialActive: true,
+        trialConverted: true,
+        stripeSubscriptionId: true,
+      },
     });
     if (!org) return {};
+
+    // Resposta Meta out/2026 (PR-E): org em TRIAL ou estágio NOVO roda no tier
+    // mais leve (STARTER, primário google-gemini-flash via TIER_PRIMARY_PROVIDER),
+    // ANTES de qualquer override de settings.llm_routing. A cascade de fallback
+    // fica preservada (tier, não forceProvider) e a escalada por intent
+    // (request_human/handoff vai de preferProvider no izaTurnRouter) segue
+    // valendo. Org da ZappIQ (vitrine Iza) e org pagante não entram aqui.
+    if (!isZappIQOrg(orgId) && decideLlmCostStage(org as any) !== 'OTHER') {
+      return { tier: 'STARTER' };
+    }
 
     // Per-org override (#133 + #68)
     const settings = (org.settings as any) ?? {};
