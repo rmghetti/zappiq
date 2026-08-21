@@ -9,6 +9,7 @@ import { applyMessageStatusUpdate, attributeCampaignReply } from './campaignStat
 import { recordCtwaAttribution } from '../services/ctwaAttribution.js';
 import { recordMetaBillingEvent } from '../services/metaBillingLedger.js';
 import { isValidOrgWebhookVerifyToken } from '../services/webhookVerifyToken.js';
+import { activateTrialOnFirstInbound } from '../services/trialActivation.util.js';
 
 const router = Router();
 
@@ -162,6 +163,23 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
     if (!org) {
       logger.warn(`[Webhook] No org found for phone_number_id: ${phoneNumberId}`);
       return;
+    }
+
+    // Trial por ATIVAÇÃO (decisão D-plano, 20/08/2026): o relógio dos 14 dias
+    // começa AQUI, na primeira conversa real de WhatsApp da org, não no
+    // cadastro (routes/onboarding.ts deixa as datas NULL). Idempotente por
+    // construção: o WHERE do updateMany só casa trialStartedAt NULL, então a
+    // segunda mensagem não muda nada; org com assinatura Stripe nunca ganha
+    // trial. Roda UMA vez por request (este handler processa uma mensagem por
+    // payload) e nunca no caminho de status, que retorna antes deste ponto.
+    // Best-effort: falha aqui não pode derrubar o processamento da mensagem.
+    try {
+      const activated = await activateTrialOnFirstInbound(prisma, org.id);
+      if (activated > 0) {
+        logger.info(`[Webhook] Trial ativado pela primeira conversa real (org ${org.id})`);
+      }
+    } catch (err) {
+      logger.warn(`[Webhook] ativação de trial falhou (não bloqueante): ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // Upsert contact

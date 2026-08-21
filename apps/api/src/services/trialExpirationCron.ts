@@ -16,11 +16,13 @@ import { prisma } from '@zappiq/database';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { deriveLifecycleStage } from './accountLifecycle.js';
+import { forceActivateDormantTrials } from './trialActivation.util.js';
 import { queueConnection as connection } from '../config/queueRedis.js';
 
 let trialExpirationWorker: Worker | null = null;
 
 export async function runTrialExpirationCycle(): Promise<{
+  trialsForceActivated: number;
   trialsClosed: number;
   crmAccountsRecomputed: number;
   failed: number;
@@ -28,9 +30,25 @@ export async function runTrialExpirationCycle(): Promise<{
 }> {
   const startedAt = Date.now();
   const now = new Date();
+  let trialsForceActivated = 0;
   let trialsClosed = 0;
   let recomputed = 0;
   let failed = 0;
+
+  // 0) Ativação forçada D+30 (trial por ativação, decisão D-plano 20/08/2026):
+  //    conta dormente que nunca recebeu mensagem de WhatsApp (trialStartedAt
+  //    NULL) não fica em limbo eterno: 30 dias após o signup o relógio dos 14
+  //    dias começa à força. Só pega quem nunca teve janela nem assinatura
+  //    (WHERE restritivo em trialActivation.util). Fail-soft como os demais.
+  try {
+    trialsForceActivated = await forceActivateDormantTrials(prisma, now);
+    if (trialsForceActivated > 0) {
+      logger.info({ msg: 'trial_forced_activation_d30', activated: trialsForceActivated });
+    }
+  } catch (err: any) {
+    failed++;
+    logger.error({ msg: 'trial_forced_activation_failed', error: String(err?.message ?? err) });
+  }
 
   // 1) Fecha trials vencidos (aditivo: só flip do booleano onde já venceu).
   //    A comparação de trialEndsAt vs now é feita pelo Postgres aqui; a
@@ -106,7 +124,7 @@ export async function runTrialExpirationCycle(): Promise<{
   }
 
   const durationMs = Date.now() - startedAt;
-  logger.info({ msg: 'trial_expiration_cron_done', trialsClosed, crmAccountsRecomputed: recomputed, failed, durationMs });
-  return { trialsClosed, crmAccountsRecomputed: recomputed, failed, durationMs };
+  logger.info({ msg: 'trial_expiration_cron_done', trialsForceActivated, trialsClosed, crmAccountsRecomputed: recomputed, failed, durationMs });
+  return { trialsForceActivated, trialsClosed, crmAccountsRecomputed: recomputed, failed, durationMs };
 }
 

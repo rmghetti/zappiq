@@ -83,9 +83,12 @@ router.post(
     try {
       const orgId = String(req.body?.orgId || '');
       const stage = String(req.body?.stage || '') as TrialStage;
-      const validStages: TrialStage[] = ['D1', 'T3', 'T2', 'T1', 'T0'];
+      // W7 (trial por ativação, 20/08/2026): lembrete "conecte seu WhatsApp"
+      // também pode ser forçado pelo superadmin; o worker re-checa se ainda
+      // se aplica antes de enviar.
+      const validStages: TrialStage[] = ['D1', 'W7', 'T3', 'T2', 'T1', 'T0'];
       if (!orgId || !validStages.includes(stage)) {
-        res.status(400).json({ error: 'orgId + stage (D1|T3|T2|T1|T0) obrigatórios' });
+        res.status(400).json({ error: 'orgId + stage (D1|W7|T3|T2|T1|T0) obrigatórios' });
         return;
       }
 
