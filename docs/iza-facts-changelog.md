@@ -52,6 +52,17 @@ Pra contornar (PRs cosméticos): adicione label `no-iza-impact` no PR.
 
 ## Entradas
 
+### 2026-08-20 · PR #343 · Bandeira nova "por atendimento" + kit Outubro sem Susto
+
+**O que mudou:** toda a copy do site trocou a bandeira "mensalidade fixa sem cobrança por conversa" pela nova: "Mensalidade fixa por atendimento: cada conversa que a Iza cuida conta um, com mensagens à vontade dentro dela. A tarifa do WhatsApp vai a custo, na sua conta, com medidor e teto. Zero markup, zero setup, zero surpresa." Fair use de 12 respostas por atendimento aparece em linha visível. A página /novidades-meta virou o kit "Outubro sem susto" (calculadora da tarifa Meta de 01/10, referência R$ 0,035 por resposta, tabela final até 01/09) e nasceu /legal/subprocessadores. Decisões D1/D2 do plano Resposta Meta, aprovadas pelo fundador em 20/08.
+
+**Impacto na Iza:** a Iza NÃO pode mais afirmar "sem cobrança por conversa" nem "mensagens ilimitadas" secas. Passa a falar: mensalidade fixa por atendimento (conversa que se encerra após 72h de silêncio), mensagens à vontade dentro do atendimento com fair use de 12 respostas de IA, tarifa do WhatsApp é da Meta e vai a custo na conta do cliente (zero markup), com medidor (Conta Clara) e teto (Cost Guard) dentro da plataforma, e a partir de 01/10 a Meta cobra cada resposta (referência R$ 0,035; tabela final até 01/09). Para dúvida de custo, apontar zappiq.com.br/novidades-meta.
+
+**Ação no /admin/iza-knowledge** (após merge):
+- [ ] UPDATE fact de pricing/bandeira: remover "sem cobrança por conversa", inserir a bandeira nova com o fair use (status: live)
+- [ ] CREATE fact `meta_tarifa_outubro` em pricing (cobrança da Meta a partir de 01/10, a custo, medidor e teto; link /novidades-meta; status: live)
+- [ ] Smoke test no chat da Iza: perguntar "vocês cobram por conversa?" e "quanto vou pagar de WhatsApp em outubro?"
+
 ### 2026-07-16 · PR #308 · Mira no catálogo comercial + cupom em todo produto pago
 
 **O que mudou:** As 3 faixas do Mira Prospects (Essencial R$ 297/mês, Pro
