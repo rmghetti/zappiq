@@ -58,6 +58,7 @@ import embeddedSignupRoutes from './routes/embeddedSignup.js'; // #273/#274 — 
 import stripeWebhookRoutes from './routes/stripeWebhook.js';
 import asaasWebhookRoutes from './routes/asaasWebhook.js'; // Impulso — confirmacao de pagamento Pix (Asaas)
 import auditLogsRoutes from './routes/auditLogs.js';
+import channelHealthRoutes from './routes/channelHealth.js'; // PR-D Resposta Meta 2026: card "seu canal NÃO está no ar"
 import dsrRoutes from './routes/dataSubjectRequests.js';
 import adminWhatsappRoutes from './routes/adminWhatsapp.js';
 import adminOrganizationsRoutes from './routes/adminOrganizations.js'; // PR #218.1 — montar endpoint admin orgs (era órfão)
@@ -348,6 +349,8 @@ app.use('/api/tasks', authMiddleware, rlsTenantMiddleware, requireActivePlan, ta
 app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes); // SEM gate: paywall precisa ser acessível
 app.use('/api/settings', authMiddleware, rlsTenantMiddleware, requireActivePlan, settingsRoutes);
 app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, requireActivePlan, auditLogsRoutes);
+// PR-D Resposta Meta 2026: histórico da varredura de saúde do WABA pro dash.
+app.use('/api/channel-health', authMiddleware, rlsTenantMiddleware, requireActivePlan, channelHealthRoutes);
 app.use('/api/embedded-signup', authMiddleware, rlsTenantMiddleware, requireActivePlan, embeddedSignupRoutes); // #273/#274
 
 // DSR — POST público (titular não é usuário); demais exigem auth + RLS.
