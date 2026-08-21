@@ -7,6 +7,7 @@ import { aiProcessQueue } from '../services/queueService.js';
 import { inboundContentFromMessage } from '../services/inboundContent.js';
 import { applyMessageStatusUpdate, attributeCampaignReply } from './campaignStatus.util.js';
 import { recordCtwaAttribution } from '../services/ctwaAttribution.js';
+import { recordMetaBillingEvent } from '../services/metaBillingLedger.js';
 import { isValidOrgWebhookVerifyToken } from '../services/webhookVerifyToken.js';
 
 const router = Router();
@@ -108,8 +109,37 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
     // PRIMEIRA vez que a mensagem cruza cada patamar — Meta reenvia status e
     // não podemos contar em dobro.
     if (value.statuses?.length) {
+      // Resposta Meta 2026 (plano 8.1 item 1): os campos pricing/billable/
+      // category dos status callbacks eram descartados; agora cada status
+      // também vira um MetaBillingEvent (ledger de custo Meta). A org é
+      // resolvida UMA vez pelo phone_number_id do payload — este branch
+      // retorna antes da resolução usada pelas mensagens, logo abaixo.
+      // Best-effort: nada aqui pode atrapalhar o applyMessageStatusUpdate.
+      const statusPhoneNumberId: string | undefined = value.metadata?.phone_number_id;
+      let billingOrgId: string | null = null;
+      try {
+        if (statusPhoneNumberId) {
+          const billingOrg = await prisma.organization.findFirst({
+            where: { whatsappPhoneNumberId: statusPhoneNumberId },
+            select: { id: true },
+          });
+          billingOrgId = billingOrg?.id ?? null;
+        }
+      } catch (err) {
+        logger.warn(`[Webhook] ledger Meta: falha ao resolver org do phone_number_id: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
       for (const status of value.statuses) {
         await applyMessageStatusUpdate(prisma, status);
+        if (billingOrgId) {
+          try {
+            // recordMetaBillingEvent já é best-effort; try/catch é cinto e
+            // suspensório pro fluxo de status (o 200 já foi respondido).
+            await recordMetaBillingEvent(status, statusPhoneNumberId, billingOrgId);
+          } catch (err) {
+            logger.warn(`[Webhook] ledger Meta: falha ao registrar evento: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
       }
       return;
     }

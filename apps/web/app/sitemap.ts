@@ -102,6 +102,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.3,
     },
     {
+      url: `${baseUrl}/legal/subprocessadores`,
+      lastModified: today,
+      changeFrequency: 'monthly',
+      priority: 0.3,
+    },
+    {
       url: `${baseUrl}/observabilidade`,
       lastModified: today,
       changeFrequency: 'monthly',
@@ -133,7 +139,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${baseUrl}/novidades-meta`,
-      lastModified: '2026-06-10',
+      lastModified: '2026-08-20',
       changeFrequency: 'weekly',
       priority: 0.8,
     },

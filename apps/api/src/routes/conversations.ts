@@ -242,7 +242,7 @@ router.put('/:id/close', async (req: Request, res: Response, next: NextFunction)
 
     const updated = await prisma.conversation.update({
       where: { id: req.params.id },
-      data: { status: 'CLOSED', closedAt: new Date() },
+      data: { status: 'CLOSED', closedAt: new Date(), closeReason: 'manual' },
     });
 
     await logAuditEvent(req, {

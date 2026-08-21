@@ -101,6 +101,31 @@ async function readLlmCostUsd(organizationId: string, start: Date, end: Date): P
   }
 }
 
+// Resposta Meta out/2026 — atendimentos de IA em sombra: conversas DISTINTAS
+// que receberam resposta do bot no período. É a foto durável (banco) da
+// unidade nova; o contador Redis do planLimits é o tempo real. SQL builder
+// puro (testável), mesmo padrão do llmCostSql.
+export function aiAttendancesSql(): string {
+  return `SELECT COUNT(DISTINCT m."conversationId")::int AS n
+          FROM messages m
+          JOIN conversations c ON c.id = m."conversationId"
+          WHERE c."organizationId" = $1
+            AND m.direction = 'OUTBOUND'
+            AND m."isFromBot" = true
+            AND m."createdAt" >= $2 AND m."createdAt" < $3`;
+}
+
+async function readAiAttendances(organizationId: string, start: Date, end: Date): Promise<number> {
+  try {
+    const rows = (await prisma.$queryRawUnsafe(
+      aiAttendancesSql(), organizationId, start, end,
+    )) as Array<{ n: number }>;
+    return rows?.[0]?.n ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 // ── Agregação por org ───────────────────────────────────
 export async function aggregateOrgUsage(
   organizationId: string,
@@ -178,6 +203,7 @@ export async function aggregateOrgUsage(
   );
 
   const llmCostUsd = await readLlmCostUsd(organizationId, start, end);
+  const aiAttendances = await readAiAttendances(organizationId, start, end);
   const infraCostUsd = estimatedInfraCostUsd(org.plan);
   const revenueBrlCents = payingRevenueBrlCents(org.plan, (org as any).subscriptionStatus ?? null);
 
@@ -203,6 +229,7 @@ export async function aggregateOrgUsage(
       llmInputTokens: BigInt(0),
       llmOutputTokens: BigInt(0),
       aiMessagesProcessed,
+      aiAttendances,
       broadcastsSent,
       conversationsOpened,
       conversationsClosed,
@@ -216,6 +243,7 @@ export async function aggregateOrgUsage(
     update: {
       llmCostUsd,
       aiMessagesProcessed,
+      aiAttendances,
       broadcastsSent,
       conversationsOpened,
       conversationsClosed,

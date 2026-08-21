@@ -25,6 +25,7 @@ import { queueConnection as connection } from '../config/queueRedis.js';
 import { logger } from '../utils/logger.js';
 import { runAgentEvalCronCycle } from './agentEvalCronService.js';
 import { runAnalyticsPulseCycle } from './analyticsPulseCron.js';
+import { runConversationExpiryCycle } from './conversationExpiryService.js';
 import { runMiraMirrors } from './mira/cnpjMirrorSync.js';
 import { runMiraReleasesCycle } from './mira/releasesCron.js';
 import { runRetentionCycle } from './retentionService.js';
@@ -33,6 +34,7 @@ import { runTenantUsageCycle } from './tenantUsageService.js';
 import { runTrialExpirationCycle } from './trialExpirationCron.js';
 import { runTrialFollowupScheduler } from './trialFollowupService.js';
 import { runUsageReconciliationCycle } from './usageReconciliationService.js';
+import { runWabaHealthSweep } from './wabaHealthService.js';
 
 export const cronQueue = new Queue('cron', {
   connection,
@@ -67,6 +69,13 @@ export const CRON_JOBS: CronJobDefinition[] = [
   { name: 'mira-cnpj-mirror', pattern: '0 6 1 * *', run: runMiraMirrors },
   { name: 'superadmin-trial-digest', pattern: '0 13 * * *', run: runDigest },
   { name: 'trial-followup-scheduler', pattern: '0 14 * * *', run: runTrialFollowupScheduler },
+  // Resposta Meta out/2026 — rotinas novas (não vieram de fila antiga).
+  // Expiração de conversa parada 72h, de hora em hora no minuto 50: fora dos
+  // minutos das rotinas da madrugada pra não empilhar carga no mesmo instante.
+  { name: 'conversation-expiry', pattern: '50 * * * *', run: runConversationExpiryCycle },
+  // Varredura de saúde do WABA a cada 6 horas. O handler real chega no PR-D;
+  // o stub atual garante que o registro compila e o horário já fica travado.
+  { name: 'waba-health', pattern: '5 */6 * * *', run: runWabaHealthSweep },
 ];
 
 /**

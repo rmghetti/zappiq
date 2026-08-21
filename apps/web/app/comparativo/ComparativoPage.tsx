@@ -199,7 +199,7 @@ export function ComparativoPage() {
       {/* ───────── Pilares ───────── */}
       <div className="max-w-6xl mx-auto px-6 mb-20 grid md:grid-cols-3 gap-4">
         {[
-          { icon: Zap, title: 'Setup fee = R$ 0', desc: 'Mensalidade é tudo. Nada escondido. Nada cobrado a mais para ligar a IA.' },
+          { icon: Zap, title: 'Setup fee = R$ 0', desc: 'Mensalidade fixa por atendimento. Tarifa da Meta a custo, com medidor e teto. Zero markup, zero setup.' },
           { icon: Sparkles, title: 'Você treina em minutos', desc: 'Survey, upload e Q&A. Sem consultor, sem prompt engineering, sem espera.' },
           { icon: ShieldCheck, title: 'LGPD + SLA + Observabilidade', desc: 'Transparência contratual e métricas abertas desde o dia 1. Nada vendido como add-on.' },
         ].map(({ icon: Icon, title, desc }) => (
