@@ -52,12 +52,15 @@ import dealsRoutes from './routes/deals.js';
 import crmRoutes from './routes/crm.js'; // PR #217 — métricas executivas /api/crm/metrics
 import tasksRoutes from './routes/tasks.js'; // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA
 import billingRoutes from './routes/billing.js';
+import metaCostsRoutes from './routes/metaCosts.js'; // PR-J Resposta Meta 2026: Conta Clara (extrato de custo Meta)
+import billingCostGuardRoutes from './routes/billingCostGuard.js'; // PR-H Resposta Meta 2026: Cost Guard (teto de custo Meta)
 import settingsRoutes from './routes/settings.js';
 import onboardingRoutes from './routes/onboarding.js';
 import embeddedSignupRoutes from './routes/embeddedSignup.js'; // #273/#274 — callbacks OAuth WA/IG Embedded Signup
 import stripeWebhookRoutes from './routes/stripeWebhook.js';
 import asaasWebhookRoutes from './routes/asaasWebhook.js'; // Impulso — confirmacao de pagamento Pix (Asaas)
 import auditLogsRoutes from './routes/auditLogs.js';
+import channelHealthRoutes from './routes/channelHealth.js'; // PR-D Resposta Meta 2026: card "seu canal NÃO está no ar"
 import dsrRoutes from './routes/dataSubjectRequests.js';
 import adminWhatsappRoutes from './routes/adminWhatsapp.js';
 import adminOrganizationsRoutes from './routes/adminOrganizations.js'; // PR #218.1 — montar endpoint admin orgs (era órfão)
@@ -345,9 +348,19 @@ app.use('/api/appointments', authMiddleware, rlsTenantMiddleware, requireActiveP
 // browser sem nosso token, validado por state assinado).
 app.use('/api/integrations/google', integrationsGoogleRoutes);
 app.use('/api/tasks', authMiddleware, rlsTenantMiddleware, requireActivePlan, tasksRoutes); // FEATURE 5b.5 — tela de Tarefas / follow-ups da IA
+// PR-J Conta Clara: montada ANTES de /api/billing pra requisição não atravessar
+// o router de billing à toa (mesma razão do /api/flows/templates). Também SEM
+// requireActivePlan: cliente em past_due/paywall precisa enxergar o próprio custo.
+app.use('/api/billing/meta-costs', authMiddleware, rlsTenantMiddleware, metaCostsRoutes);
+// PR-H Cost Guard: mesma razão da Conta Clara acima (antes de /api/billing e
+// SEM requireActivePlan): teto de custo Meta é dinheiro do cliente, precisa
+// ficar visível e ajustável até pra org que caiu no paywall.
+app.use('/api/billing/cost-guard', authMiddleware, rlsTenantMiddleware, billingCostGuardRoutes);
 app.use('/api/billing', authMiddleware, rlsTenantMiddleware, billingRoutes); // SEM gate: paywall precisa ser acessível
 app.use('/api/settings', authMiddleware, rlsTenantMiddleware, requireActivePlan, settingsRoutes);
 app.use('/api/audit-logs', authMiddleware, rlsTenantMiddleware, requireActivePlan, auditLogsRoutes);
+// PR-D Resposta Meta 2026: histórico da varredura de saúde do WABA pro dash.
+app.use('/api/channel-health', authMiddleware, rlsTenantMiddleware, requireActivePlan, channelHealthRoutes);
 app.use('/api/embedded-signup', authMiddleware, rlsTenantMiddleware, requireActivePlan, embeddedSignupRoutes); // #273/#274
 
 // DSR — POST público (titular não é usuário); demais exigem auth + RLS.

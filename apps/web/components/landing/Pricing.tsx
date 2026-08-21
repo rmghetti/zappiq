@@ -95,8 +95,17 @@ export function Pricing() {
             Um plano pra cada tamanho.{' '}
             <span className="text-grad">Sem pegadinha.</span>
           </h2>
-          <p className="text-[16px] text-muted">
-            14 dias grátis · sem fidelidade · você escolhe a forma de pagamento depois
+          {/* Bandeira nova (D1, 20/08/2026): substitui "mensalidade fixa sem
+              cobrança por conversa". Fair use SEMPRE visível em linha, nunca
+              em asterisco. A grade de planos abaixo só muda com o gate D4. */}
+          <p className="text-[16px] text-muted leading-relaxed mb-2">
+            Mensalidade fixa por atendimento: cada conversa que a Iza cuida conta um, com mensagens
+            à vontade dentro dela. A tarifa do WhatsApp vai a custo, na sua conta, com medidor e
+            teto. Zero markup, zero setup, zero surpresa.
+          </p>
+          <p className="text-[13px] text-muted">
+            Fair use de 12 respostas de IA por atendimento · 14 dias grátis · sem fidelidade · você
+            escolhe a forma de pagamento depois
           </p>
         </div>
 

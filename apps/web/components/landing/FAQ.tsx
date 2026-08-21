@@ -104,7 +104,7 @@ const FAQS: FaqItem[] = [
   {
     group: 'Conexão WhatsApp',
     q: 'Quanto a Meta cobra por mês?',
-    a: 'A Meta cobra por "conversa" (janela de 24h). Pequena loja: R$ 30-80/mês. PME ativa: R$ 200-500/mês. Operação grande com marketing: R$ 1.500-4.000/mês. ZappIQ NÃO marca up sobre Meta: você paga direto à Meta, com dashboard de gasto em tempo real no nosso painel.',
+    a: 'Hoje a Meta cobra por "conversa" (janela de 24h). A partir de 1º de outubro de 2026 ela passa a cobrar por mensagem de resposta enviada (referência: R$ 0,035; tabela final até 1º de setembro). A ZappIQ não coloca markup: a tarifa vai a custo, direto na sua conta com a Meta, com medidor e teto de gasto na plataforma. Faça a conta da sua operação em /novidades-meta.',
   },
 
   // ─────────────────────────── Instagram Direct ─────────────────────────

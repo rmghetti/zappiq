@@ -69,6 +69,7 @@ const COLUMNS = [
       { label: 'Política de Privacidade', href: '/legal/privacidade' },
       { label: 'Política de Cookies', href: '/legal/cookies' },
       { label: 'DPA (Data Processing Addendum)', href: '/legal/dpa' },
+      { label: 'Subprocessadores', href: '/legal/subprocessadores' },
       { label: 'Fair-Use & Limites Técnicos', href: '/legal/fair-use' },
       { label: 'Parceria WhatsApp Business', href: '/legal/parceria-meta' },
       { label: 'Deletar meus dados (LGPD)', href: '/legal/deletar-dados' },

@@ -1,8 +1,21 @@
 /**
- * Quota Overage Service (#147 — Onda 1.A).
+ * Quota Overage Service (#147, Onda 1.A). SERVIÇO APOSENTADO EM 20/08/2026 (PR-L).
  *
- * Reporta uso excedente pra Stripe via Billing Meter Events. Cada mensagem
- * acima do limite do plano vira 1 event, agregado pelo Stripe Meter
+ * DECISÃO (Resposta Meta out/2026, docs/resposta-meta-2026/PLANO-RESPOSTA-META.md):
+ * packs + upgrade de plano substituem o metered billing de R$ 0,03/msg. O meter
+ * será arquivado no dashboard do Stripe (fica no .command do Rodrigo); aqui o
+ * código foi neutralizado ANTES: o caminho de envio em modo enforce agora
+ * curto-circuita com erro logado e NÃO dispara meter event. Isso previne uma
+ * cobrança por meter morto se alguém flipar QUOTA_OVERAGE_MODE para 'enforce'.
+ *
+ * TODO(resposta-meta-2026): o branch de autoOverage em planLimits.ts continua
+ * chamando reportOverageMeterEvent (fire-and-forget, fail-soft) e fica como
+ * está até o enforcement novo (packs + upgrade) ser construído. Nessa hora,
+ * remover a chamada de lá e apagar este serviço inteiro.
+ *
+ * Comportamento histórico (hoje inerte, mantido para referência):
+ * reportava uso excedente pra Stripe via Billing Meter Events. Cada mensagem
+ * acima do limite do plano virava 1 event, agregado pelo Stripe Meter
  * mtr_61UlFW... e cobrado no fim do ciclo via Price overage AI_MSG.
  *
  * Princípios:
@@ -10,7 +23,7 @@
  *   - Idempotente: identifier unico por orgId+ym+counter (Stripe deduplica).
  *   - Audit em logger estruturado (Grafana Loki captura).
  *
- * Pre-condicoes pra cobranca real funcionar:
+ * Pre-condicoes que a cobranca real exigia:
  *   - env.QUOTA_OVERAGE_MODE === 'enforce'
  *   - org.settings.billing.autoOverage === true
  *   - org.settings.stripeCustomerId presente (vem do checkout.session.completed)
@@ -26,6 +39,12 @@ import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
 const STRIPE_API_BASE = 'https://api.stripe.com/v1';
+
+// Kill-switch da aposentadoria (PR-L 20/08/2026): enquanto true, o modo
+// enforce NUNCA envia meter event (ver curto-circuito em
+// reportOverageMeterEvent). Tipado como boolean de propósito, para o TS
+// manter o código histórico abaixo do curto-circuito compilável.
+const METER_APOSENTADO: boolean = true;
 
 interface OverageReportInput {
   orgId: string;
@@ -50,6 +69,12 @@ function currentYearMonth(d: Date = new Date()): string {
 /**
  * Reporta evento de overage pro Stripe Meter.
  *
+ * @deprecated APOSENTADO em 20/08/2026 (PR-L, Resposta Meta out/2026): packs +
+ * upgrade de plano substituem o metered billing; o meter de R$ 0,03/msg será
+ * arquivado no Stripe. Esta função NÃO envia mais meter event em nenhum modo:
+ * em enforce ela curto-circuita com erro logado (ver corpo). Não reative sem
+ * decisão nova registrada em docs/resposta-meta-2026/PLANO-RESPOSTA-META.md.
+ *
  * Identifier idempotency: `zappiq_overage_${orgId}_${yyyy-mm}_${counter}`
  * onde counter eh o segundo do dia (pra granularidade adequada sem duplicar
  * dois events do mesmo segundo do mesmo org). Stripe dedup garante 1 cobranca.
@@ -70,6 +95,23 @@ export async function reportOverageMeterEvent(
       `[overage] mode=${env.QUOTA_OVERAGE_MODE}, skip report org=${orgId} count=${count}`,
     );
     return { reported: false, skipped: 'mode_audit_only' };
+  }
+
+  // ── CURTO-CIRCUITO (PR-L 20/08/2026) ─────────────────────────────────
+  // O meter de overage está APOSENTADO (packs + upgrade substituem o metered
+  // billing; decisão em docs/resposta-meta-2026/PLANO-RESPOSTA-META.md).
+  // Mesmo em modo enforce com autoOverage ligado, NÃO enviamos meter event:
+  // logamos um erro claro e saímos. Isso previne cobrança por meter morto se
+  // alguém flipar QUOTA_OVERAGE_MODE antes da aposentadoria no dashboard.
+  // Todo o código abaixo deste return é o caminho antigo, mantido apenas como
+  // referência até o serviço ser apagado junto com o branch do planLimits.
+  if (METER_APOSENTADO) {
+    logger.error(
+      `[overage] METER APOSENTADO (20/08/2026): meter event NAO enviado org=${orgId} count=${count}. ` +
+        'Packs + upgrade substituem o metered billing; QUOTA_OVERAGE_MODE=enforce nao cobra mais por meter. ' +
+        'Ver docs/resposta-meta-2026/PLANO-RESPOSTA-META.md.',
+    );
+    return { reported: false, skipped: 'meter_aposentado_20260820' };
   }
 
   if (!env.STRIPE_SECRET_KEY) {
@@ -147,6 +189,12 @@ export async function reportOverageMeterEvent(
 
 /**
  * Helper: estima custo BRL do overage (pra checar contra hardCeilingBrl).
+ *
+ * @deprecated APOSENTADO em 20/08/2026 (PR-L, Resposta Meta out/2026): packs +
+ * upgrade substituem o metered billing e o Price de R$ 0,03/msg será arquivado
+ * no Stripe. A função continua computando o valor histórico apenas porque o
+ * teto de projeção em planLimits.ts ainda a chama (fail-soft); some junto com
+ * este serviço quando o enforcement novo for construído.
  *
  * Usa o unit_amount cents fixo do Price overage AI_MSG = R$ 0,03/msg.
  */

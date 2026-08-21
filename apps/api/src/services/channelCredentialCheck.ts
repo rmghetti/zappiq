@@ -24,12 +24,16 @@ export interface CredentialCheckResult {
   displayPhoneNumber?: string;
   verifiedName?: string;
   qualityRating?: string;
+  /** PR-D: tier de envio (TIER_250, TIER_1K...) quando pedido via opts. */
+  messagingTier?: string;
   /** Instagram: dados da conta quando ok. */
   username?: string;
   name?: string;
   /** Quando !ok: mensagem crua da Graph API + dica acionável em pt-BR. */
   error?: string;
   hint?: string;
+  /** PR-D: código numérico do erro da Graph (190, 100...), quando houver. */
+  errorCode?: number;
   /** 13/08: teste feito com a credencial GLOBAL da plataforma (dogfood Iza). */
   viaGlobal?: boolean;
 }
@@ -52,17 +56,27 @@ function graphErrorToResult(err: unknown, channel: 'whatsapp' | 'instagram'): Cr
   }
 
   logger.warn('[ChannelCheck] credencial reprovada no teste', { channel, code, message });
-  return { ok: false, error: message, hint };
+  return { ok: false, error: message, hint, ...(typeof code === 'number' ? { errorCode: code } : {}) };
 }
 
-/** GET no node do número: prova token + Phone Number ID de uma vez. */
+/**
+ * GET no node do número: prova token + Phone Number ID de uma vez.
+ *
+ * PR-D: `opts.includeMessagingTier` acrescenta `messaging_limit_tier` aos
+ * fields (usado pela varredura de saúde). Opcional de propósito: os callers
+ * existentes (Testar conexão) continuam com a mesma requisição de sempre.
+ */
 export async function checkWhatsappCredentials(
   phoneNumberId: string,
   accessToken: string,
+  opts?: { includeMessagingTier?: boolean },
 ): Promise<CredentialCheckResult> {
+  const fields = opts?.includeMessagingTier
+    ? 'display_phone_number,verified_name,quality_rating,messaging_limit_tier'
+    : 'display_phone_number,verified_name,quality_rating';
   try {
     const { data } = await axios.get(`${GRAPH}/${encodeURIComponent(phoneNumberId)}`, {
-      params: { fields: 'display_phone_number,verified_name,quality_rating' },
+      params: { fields },
       headers: { Authorization: `Bearer ${accessToken}` },
       timeout: TIMEOUT_MS,
     });
@@ -71,6 +85,7 @@ export async function checkWhatsappCredentials(
       displayPhoneNumber: data?.display_phone_number,
       verifiedName: data?.verified_name,
       qualityRating: data?.quality_rating,
+      ...(data?.messaging_limit_tier ? { messagingTier: data.messaging_limit_tier } : {}),
     };
   } catch (err) {
     return graphErrorToResult(err, 'whatsapp');

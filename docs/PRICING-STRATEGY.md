@@ -1,3 +1,10 @@
+> **DOCUMENTO APOSENTADO EM 20/08/2026.**
+> Os planos e preços descritos abaixo NÃO valem mais. A grade, os valores e a
+> estratégia vigentes estão em `docs/resposta-meta-2026/PLANO-RESPOSTA-META.md`
+> (plano Resposta Meta out/2026). Este arquivo permanece apenas como registro
+> histórico da estratégia anterior. Não use nada daqui em proposta, site,
+> billing ou material de venda.
+
 # ZappIQ — Estratégia de Pricing e Plano Enterprise
 
 ## Contexto executivo

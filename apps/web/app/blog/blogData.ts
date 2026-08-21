@@ -97,7 +97,7 @@ export const articles: BlogArticle[] = [
 <li>65% dos atendimentos resolvidos sem humano: um atendente realocado para venda ativa (R$ 2,8 mil/mês de eficiência direta)</li>
 <li>Primeira resposta em menos de 1 minuto, 24/7, com 100% das respostas da IA auditadas automaticamente</li>
 </ul>
-<p>Contra uma mensalidade fixa de plataforma (sem setup fee e sem cobrança por conversa) a conta fecha com folga mesmo aplicando um desconto severo sobre a projeção. E é justamente por isso que nós não pedimos que ninguém acredite na projeção: pedimos 30 dias de medição.</p>
+<p>Contra uma mensalidade fixa por atendimento (sem setup fee, com mensagens à vontade dentro de cada conversa e a tarifa do WhatsApp repassada a custo, sem markup) a conta fecha com folga mesmo aplicando um desconto severo sobre a projeção. E é justamente por isso que nós não pedimos que ninguém acredite na projeção: pedimos 30 dias de medição.</p>
 
 <h2>Como a ZappIQ constrói esse business case com você</h2>
 <p>Projeção não fecha contrato. Telemetria fecha. Nosso método tem quatro passos:</p>
@@ -119,7 +119,7 @@ export const articles: BlogArticle[] = [
 
 <p>O lançamento da Meta confirmou a direção que apostamos desde o primeiro dia da ZappIQ: a conversa é a nova interface de negócios, e a IA não é o "quê"; é o "como". A camada que separa quem vai vender mais de quem vai assistir é implementação, orquestração e medição. É nela que trabalhamos.</p>
 
-<p>Quer ver onde sua operação está nessa régua? A Iza, nossa agente oficial, faz o primeiro diagnóstico com você no WhatsApp: é a própria ZappIQ rodando no ZappIQ. E na página <a href="/novidades-meta">Novidades Meta</a> você encontra o detalhe de cada lançamento e como implementamos cada um.</p>
+<p>Quer ver onde sua operação está nessa régua? A Iza, nossa agente oficial, faz o primeiro diagnóstico com você no WhatsApp: é a própria ZappIQ rodando no ZappIQ. E na página <a href="/novidades-meta">Outubro sem susto</a> você entende o que muda no preço do WhatsApp em 1º de outubro e calcula a fatura Meta da sua operação.</p>
 
 <p><em><strong>Caio Menezes</strong> é COO da ZappIQ, plataforma brasileira de IA conversacional para WhatsApp e Instagram. A Platform MACHIA Company.</em></p>
 

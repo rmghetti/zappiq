@@ -14,8 +14,12 @@ import { describe, expect, it } from 'vitest';
 
 import { CRON_JOBS, LEGACY_CRON_QUEUES } from './cronQueue.js';
 
-/** name → pattern exatamente como estava antes da consolidação. */
-const HORARIOS_ORIGINAIS: Record<string, string> = {
+/**
+ * name → pattern esperado. As 11 primeiras vieram das filas ANTIGAS, com o
+ * horário exatamente como era antes da consolidação; as demais nasceram já
+ * na fila `cron` e entram aqui no momento em que são registradas.
+ */
+const HORARIOS_ESPERADOS: Record<string, string> = {
   'lgpd-retention': '0 3 * * *',            // era fila lgpd-retention
   'tenant-usage-aggregation': '10 3 * * *', // era fila tenant-usage-aggregation
   'analytics-pulse': '20 3 * * *',          // era fila analytics-pulse-cron
@@ -27,17 +31,20 @@ const HORARIOS_ORIGINAIS: Record<string, string> = {
   'mira-cnpj-mirror': '0 6 1 * *',          // era fila mira-cnpj-mirror-cron
   'superadmin-trial-digest': '0 13 * * *',  // era fila superadmin-trial-digest
   'trial-followup-scheduler': '0 14 * * *', // era o tique da fila trial-followup
+  'conversation-expiry': '50 * * * *',      // nova (Resposta Meta out/2026), de hora em hora
+  'waba-health': '5 */6 * * *',             // nova (Resposta Meta out/2026), a cada 6 horas
+  'cost-guard': '20 * * * *',               // nova (PR-H Resposta Meta out/2026), de hora em hora
 };
 
 describe('fila cron — registro consolidado', () => {
-  it('mantém as 11 rotinas, nenhuma a mais e nenhuma a menos', () => {
+  it('mantém as 14 rotinas, nenhuma a mais e nenhuma a menos', () => {
     const nomes = CRON_JOBS.map((c) => c.name).sort();
-    expect(nomes).toEqual(Object.keys(HORARIOS_ORIGINAIS).sort());
+    expect(nomes).toEqual(Object.keys(HORARIOS_ESPERADOS).sort());
   });
 
   it('preserva o horário de cada rotina exatamente como era antes', () => {
     const atual = Object.fromEntries(CRON_JOBS.map((c) => [c.name, c.pattern]));
-    expect(atual).toEqual(HORARIOS_ORIGINAIS);
+    expect(atual).toEqual(HORARIOS_ESPERADOS);
   });
 
   it('não repete nome, senão o worker despacharia sempre a primeira', () => {

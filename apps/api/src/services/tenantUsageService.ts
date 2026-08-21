@@ -72,6 +72,15 @@ export function payingRevenueBrlCents(plan: string, subscriptionStatus: string |
   return subscriptionStatus === 'active' ? revenueForPlan(plan) : 0;
 }
 
+// PR-L (20/08/2026) — higiene do MRR fantasma: org marcada como seed
+// (settings.seed=true, gravado pelo script apps/api/scripts/marcar-seeds.ts)
+// NUNCA entra nos totais de receita/margem do admin. Helper PURO, reusado
+// pelos routes (adminTenantUsage, adminClientes) para o mesmo critério valer
+// em todo lugar. As linhas continuam visíveis individualmente com badge.
+export function isSeedOrg(settings: unknown): boolean {
+  return Boolean(settings && typeof settings === 'object' && (settings as any).seed === true);
+}
+
 // Custo infra rateado por tenant. Placeholder conservador — ajustar conforme
 // cloud bill real (Fly.io, Neon, Upstash, Cloudflare R2).
 // Regra provisória: 5% do MRR do plano, com piso de US$ 1,50.
@@ -101,6 +110,31 @@ async function readLlmCostUsd(organizationId: string, start: Date, end: Date): P
   }
 }
 
+// Resposta Meta out/2026 — atendimentos de IA em sombra: conversas DISTINTAS
+// que receberam resposta do bot no período. É a foto durável (banco) da
+// unidade nova; o contador Redis do planLimits é o tempo real. SQL builder
+// puro (testável), mesmo padrão do llmCostSql.
+export function aiAttendancesSql(): string {
+  return `SELECT COUNT(DISTINCT m."conversationId")::int AS n
+          FROM messages m
+          JOIN conversations c ON c.id = m."conversationId"
+          WHERE c."organizationId" = $1
+            AND m.direction = 'OUTBOUND'
+            AND m."isFromBot" = true
+            AND m."createdAt" >= $2 AND m."createdAt" < $3`;
+}
+
+async function readAiAttendances(organizationId: string, start: Date, end: Date): Promise<number> {
+  try {
+    const rows = (await prisma.$queryRawUnsafe(
+      aiAttendancesSql(), organizationId, start, end,
+    )) as Array<{ n: number }>;
+    return rows?.[0]?.n ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 // ── Agregação por org ───────────────────────────────────
 export async function aggregateOrgUsage(
   organizationId: string,
@@ -108,10 +142,11 @@ export async function aggregateOrgUsage(
 ): Promise<void> {
   const { start, end } = monthRange(yearMonth);
 
-  // Carrega plano atual para calcular revenue + infra
+  // Carrega plano atual para calcular revenue + infra (settings entra para
+  // detectar seed — PR-L 20/08/2026).
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, plan: true, subscriptionStatus: true },
+    select: { id: true, plan: true, subscriptionStatus: true, settings: true },
   });
   if (!org) return;
 
@@ -178,8 +213,16 @@ export async function aggregateOrgUsage(
   );
 
   const llmCostUsd = await readLlmCostUsd(organizationId, start, end);
+  const aiAttendances = await readAiAttendances(organizationId, start, end);
   const infraCostUsd = estimatedInfraCostUsd(org.plan);
-  const revenueBrlCents = payingRevenueBrlCents(org.plan, (org as any).subscriptionStatus ?? null);
+  // Seed de abril/2026 (settings.seed=true) tem "assinatura" fictícia nos
+  // preços antigos — receita FORÇADA a zero para o ciclo diário limpar o MRR
+  // fantasma do tenant_usage_monthly na fonte. Custos continuam reais; com
+  // receita 0 a margem sai null (sem margem fictícia). PR-L 20/08/2026.
+  const seed = isSeedOrg((org as any).settings);
+  const revenueBrlCents = seed
+    ? 0
+    : payingRevenueBrlCents(org.plan, (org as any).subscriptionStatus ?? null);
 
   // Margem bruta = (receita BRL convertida em USD − custo variável USD) / receita USD
   // Usa câmbio fixo conservador; aceitável para sinalização executiva, não para contabilidade.
@@ -203,6 +246,7 @@ export async function aggregateOrgUsage(
       llmInputTokens: BigInt(0),
       llmOutputTokens: BigInt(0),
       aiMessagesProcessed,
+      aiAttendances,
       broadcastsSent,
       conversationsOpened,
       conversationsClosed,
@@ -216,6 +260,7 @@ export async function aggregateOrgUsage(
     update: {
       llmCostUsd,
       aiMessagesProcessed,
+      aiAttendances,
       broadcastsSent,
       conversationsOpened,
       conversationsClosed,

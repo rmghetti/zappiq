@@ -12,3 +12,4 @@ export * from './couponCatalog.js';
 export * from './schedulingEntitlement.js';
 export * from './miraEntitlement.js';
 export * from './regiaoUf.js';
+export * from './metaRateCard.js';

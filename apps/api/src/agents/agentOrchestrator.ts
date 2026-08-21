@@ -33,7 +33,19 @@ import { executeFlowEffects } from './flowEffects.js';
 import { runAgenticTurn } from './flowAiAgent.js';
 import { buildWebhookToolDef, executeWebhook, type WebhookToolConfig } from './webhookTool.js';
 import { getIo } from '../utils/socketRegistry.js';
-import { enforceAiReplyQuota } from '../middleware/planLimits.js';
+import {
+  enforceAiReplyQuota,
+  recordAttendanceShadow,
+  // Resposta Meta out/2026 (PR-E): regime de custo do TRIAL/NOVO
+  getTrialLlmStage,
+  assertTrialCostCap,
+  consumeTrialContactReplyBudget,
+  decideLlmCostStage,
+} from '../middleware/planLimits.js';
+// Resposta Meta out/2026 (PR-I): circuit breaker de custo por org. Quando o
+// gasto LLM do mês estoura a premissa do contrato, o turno roda em Modo
+// Econômico (tier STARTER, menos tokens, RAG menor, escalada só pra handoff).
+import { evaluateCostBreaker } from '../services/llm/circuitBreaker.js';
 import type { Server as SocketIOServer } from 'socket.io';
 
 /* ── Org canônica da Iza (dogfood ZappIQ) ─────────────────────────────
@@ -366,13 +378,19 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       return;
     }
 
-    // ── 3. Load conversation history (last 20 turns) ────
-    const historyMessages = await prisma.message.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: 'asc' },
-      take: 20,
-      select: { direction: true, content: true },
-    });
+    // ── 3. Load conversation history (últimas 20 mensagens) ────
+    // desc + take + reverse: pega as 20 ÚLTIMAS mensagens e devolve em ordem
+    // cronológica, igual ao flowAiResume. (O padrão antigo, asc + take, pegava
+    // as 20 PRIMEIRAS: em conversa longa a Iza enxergava o começo e não o fim
+    // do histórico.)
+    const historyMessages = (
+      await prisma.message.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { direction: true, content: true },
+      })
+    ).reverse();
 
     // ── 3.5. ZappIQ Maestro — flow runtime híbrido (#280) ───────
     // Aditivo + fail-soft: resolveActiveFlowStep retorna null se a org não tem
@@ -421,6 +439,77 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       return;
     }
 
+    // ── 5.5a. Resposta Meta out/2026 (PR-E): proteções do TRIAL/NOVO ─────
+    // Antes do gate de quota (pra não queimar crédito nem contar atendimento
+    // em turno que não vira resposta de IA). Só vale pra org em regime
+    // TRIAL/NOVO (getTrialLlmStage devolve capped=false pra org pagante e pra
+    // org da ZappIQ). Duas travas, nesta ordem:
+    //   1. Teto de respostas de IA por contato por hora (30): excedeu, a IA
+    //      sai em silêncio e o humano pode assumir a conversa.
+    //   2. Cap de custo LLM do trial (default US$ 15): estourou, degrada pra
+    //      mensagem fixa curta SEM chamada LLM.
+    // Todo o bloco de decisão é fail-soft: erro aqui segue o fluxo normal.
+    let trialSilencioso = false;
+    let trialDegradado = false;
+    try {
+      const trialStage = await getTrialLlmStage(organizationId);
+      if (trialStage.capped) {
+        const contactBudget = await consumeTrialContactReplyBudget(organizationId, contactId);
+        if (!contactBudget.allowed) {
+          logger.warn(
+            `[Agent] Rate limit por contato no ${trialStage.stage}: ${contactBudget.count}/30 respostas na última hora. IA em silêncio, humano pode assumir.`,
+            { organizationId, contactId, contactPhone },
+          );
+          trialSilencioso = true;
+        } else {
+          const cap = await assertTrialCostCap(organizationId);
+          if (!cap.allowed) {
+            logger.warn(
+              `[Agent] Cap de custo do ${trialStage.stage} estourado (US$ ${cap.spentUsd.toFixed(2)} / US$ ${cap.capUsd.toFixed(2)}). Resposta degradada sem LLM.`,
+              { organizationId, contactPhone },
+            );
+            trialDegradado = true;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn('[Agent] Guarda de trial falhou (fail-soft, segue fluxo normal)', {
+        organizationId,
+        err: String(err),
+      });
+    }
+    if (trialSilencioso) {
+      return;
+    }
+    if (trialDegradado) {
+      const degradedReply =
+        'Estou em modo limitado neste período de teste; um humano continua te atendendo.';
+      await deliverAgentReply({ organizationId, conversationId, text: degradedReply });
+      await prisma.message.create({
+        data: {
+          direction: 'OUTBOUND',
+          type: 'TEXT',
+          content: degradedReply,
+          status: 'SENT',
+          conversationId,
+          isFromBot: true,
+          aiConfidence: 1.0, // mensagem fixa, sem LLM
+        },
+      });
+      if (io) {
+        io.to(`org:${organizationId}`).emit('new_message', {
+          conversationId,
+          message: {
+            content: degradedReply,
+            direction: 'OUTBOUND',
+            isFromBot: true,
+            createdAt: new Date().toISOString(),
+          },
+        });
+      }
+      return;
+    }
+
     // ── 5.5. W2.5 — Gate de quota (aiMessagesPerMonth) ──────────────
     // A IA decidiu responder ao inbound: consome 1 crédito do plano ANTES
     // de gastar LLM. Respeita QUOTA_OVERAGE_MODE:
@@ -436,10 +525,42 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       return;
     }
 
+    // Resposta Meta out/2026 — débito SOMBRA por atendimento: marca a conversa
+    // como atendimento de IA (fair use de 12 respostas por parte). Sombra
+    // pura: nunca bloqueia nem alerta, e a função engole o próprio erro —
+    // fire-and-forget de propósito pra não somar latência à resposta.
+    void recordAttendanceShadow(organizationId, conversationId);
+
+    // ── 5.6. Resposta Meta out/2026 (PR-I): breaker de custo por org ─────
+    // Vale pra TODA org (não só trial): compara o custo LLM acumulado do mês
+    // (zappiq:llmcost:{org}:{yyyy-mm}, alimentado pelo logLLMCall em toda
+    // chamada) com a premissa do contrato (franquia de atendimentos x R$ 0,12
+    // em USD x fator 2). Estourou, arma zappiq:ecomode:{org} por 6h e este
+    // turno já roda em Modo Econômico: a resposta SEMPRE sai, apenas mais
+    // barata (tier STARTER, maxTokens 512, RAG top-k 3, escalada pra Sonnet
+    // só no pedido de humano). Nunca vale pra org da casa. Fail-soft: erro
+    // aqui mantém o turno 100% normal.
+    let ecoMode = false;
+    try {
+      ecoMode = await evaluateCostBreaker(organizationId);
+      if (ecoMode) {
+        logger.info('[Agent] Modo Econômico ativo neste turno (breaker de custo)', {
+          organizationId,
+          conversationId,
+        });
+      }
+    } catch (err) {
+      logger.warn('[Agent] Breaker de custo falhou (fail-soft, turno normal)', {
+        organizationId,
+        err: String(err),
+      });
+    }
+
     // ── 6. Retrieve RAG context ─────────────────────────
     let ragContext = '';
     try {
-      ragContext = await ragService.search(organizationId, messageContent, 5);
+      // Modo Econômico (PR-I): top-k 5 -> 3 encolhe o contexto RAG do turno.
+      ragContext = await ragService.search(organizationId, messageContent, ecoMode ? 3 : 5);
     } catch (e: any) {
       logger.warn('[Agent] RAG unavailable:', e.message);
     }
@@ -473,7 +594,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // Ativado apenas quando o nó-IA tem tools do tipo 'webhook' configuradas.
     // Qualquer erro cai silenciosamente pro caminho normal (routeIzaTurn).
     // O no-tools path (e todos os caminhos não-flow) são byte-a-byte inalterados.
-    const { tier, forceProvider } = await pickTierAndOverride(organizationId);
+    const { tier, forceProvider } = await pickTierAndOverride(organizationId, { ecoMode });
     if (flowStep?.next === 'ai' && Array.isArray(flowStep.aiTools) && flowStep.aiTools.length > 0) {
       const aiTools = flowStep.aiTools as WebhookToolConfig[];
       const webhookTools = aiTools.filter((t) => t && t.type === 'webhook');
@@ -575,6 +696,17 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       conversationId,
       contactId,
       tools: turnTools,
+      // Modo Econômico (PR-I), três cortes de custo no turno:
+      //   maxTokens 2048 -> 512;
+      //   skipClassify QUANDO a intent do turno já é conhecida (o classify do
+      //     passo 4 SEMPRE roda e o gate de handoff request_human vive nos
+      //     passos 4-5, antes deste ponto: pular o SEGUNDO classify nunca
+      //     quebra o pedido de humano; intent 'other'/ruído mantém o classify);
+      //   escalada pra Sonnet restrita ao caso handoff.
+      // A resposta sempre sai: nada aqui silencia o turno.
+      maxTokens: ecoMode ? 512 : undefined,
+      skipClassify: ecoMode && INTENTS_CONHECIDAS_TURNO.has(intent) ? true : undefined,
+      sonnetOnlyForHandoff: ecoMode,
     });
 
     // ── 9.5. Vertical bloqueada — template estático, sem LLM ──────
@@ -794,16 +926,75 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 // Sem org → fallback pra cascade default (Sonnet primário).
 const VALID_TIERS: LLMTier[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
 
-export async function pickTierAndOverride(orgId: string): Promise<{
+/**
+ * Intents que o classificador do passo 4 devolve e que valem como "intent
+ * conhecida" pro Modo Econômico (PR-I): com uma delas em mãos, o SEGUNDO
+ * classify (do izaTurnRouter) vira custo puro e é pulado. Ficam de fora:
+ *   - 'request_human': nunca chega ao routeIzaTurn (o handoff resolve no
+ *     passo 5, antes, e o Modo Econômico não toca nesse gate);
+ *   - 'other' e qualquer ruído de parse: intent desconhecida mantém o
+ *     classify normal.
+ */
+const INTENTS_CONHECIDAS_TURNO: ReadonlySet<string> = new Set([
+  'scheduling',
+  'pricing',
+  'faq',
+  'complaint',
+  'purchase',
+  'greeting',
+  'followup',
+]);
+
+export async function pickTierAndOverride(
+  orgId: string,
+  opts?: {
+    /**
+     * Resposta Meta out/2026 (PR-I): true = turno em Modo Econômico (breaker
+     * de custo armado). Força tier STARTER também pra org PAGANTE, com a
+     * mesma semântica do regime TRIAL/NOVO logo acima: vence os overrides de
+     * settings.llm_routing, preserva a cascade de fallback (tier, não
+     * forceProvider) e a escalada por intent segue possível no izaTurnRouter.
+     */
+    ecoMode?: boolean;
+  },
+): Promise<{
   tier?: LLMTier;
   forceProvider?: LLMProviderId;
 }> {
   try {
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
-      select: { plan: true, settings: true },
+      select: {
+        plan: true,
+        settings: true,
+        // Resposta Meta out/2026 (PR-E): campos pra decidir o regime TRIAL/NOVO
+        trialStartedAt: true,
+        trialEndsAt: true,
+        isTrialActive: true,
+        trialConverted: true,
+        stripeSubscriptionId: true,
+      },
     });
     if (!org) return {};
+
+    // Resposta Meta out/2026 (PR-E): org em TRIAL ou estágio NOVO roda no tier
+    // mais leve (STARTER, primário google-gemini-flash via TIER_PRIMARY_PROVIDER),
+    // ANTES de qualquer override de settings.llm_routing. A cascade de fallback
+    // fica preservada (tier, não forceProvider) e a escalada por intent
+    // (request_human/handoff vai de preferProvider no izaTurnRouter) segue
+    // valendo. Org da ZappIQ (vitrine Iza) e org pagante não entram aqui.
+    if (!isZappIQOrg(orgId) && decideLlmCostStage(org as any) !== 'OTHER') {
+      return { tier: 'STARTER' };
+    }
+
+    // Resposta Meta out/2026 (PR-I): Modo Econômico força STARTER também pra
+    // org PAGANTE (o trial acima já força pro TRIAL/NOVO). Mesma semântica:
+    // vence settings.llm_routing, cascade preservada, e a escalada pro pedido
+    // de humano segue valendo no izaTurnRouter. Org da casa nunca entra
+    // (o breaker já não arma pra ela; o guard aqui é cinto e suspensório).
+    if (opts?.ecoMode && !isZappIQOrg(orgId)) {
+      return { tier: 'STARTER' };
+    }
 
     // Per-org override (#133 + #68)
     const settings = (org.settings as any) ?? {};

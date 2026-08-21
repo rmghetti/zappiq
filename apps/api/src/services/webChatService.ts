@@ -26,8 +26,17 @@
  *   - Sem RAG (KB chunks) por enquanto. A Iza canonical tem KB própria mas
  *     o RAG depende de orgId de tenant cliente, não do dogfood. Em V2,
  *     podemos plugar ragService.search('cmo1ywwfe00ko1jskexiexsm4', text).
- *   - Sem persistência DB. Se quiser virar lead/contact, V2 cria Contact
- *     ad-hoc + Conversation channel='web'.
+ *
+ * Persistência espelho (Resposta Meta 2026, revisa a decisão V1 "sem DB"):
+ *   - Cada turno agora grava Message INBOUND (antes da LLM) e OUTBOUND
+ *     (depois) na Conversation channel='web' do lead 5a.4, tudo best-effort:
+ *     falha de persistência NUNCA quebra a resposta pública ao widget.
+ *   - É espelho, não fonte: o history do widget continua vindo do
+ *     localStorage do visitante e voltando a cada POST. O contrato
+ *     request/response do widget fica INTOCADO.
+ *   - Junto vêm o emit realtime `new_message` (a conversa aparece viva em
+ *     /conversations, mesmo padrão do agentOrchestrator) e o débito de
+ *     atendimento em SOMBRA (1 por conversa, só medição, nada bloqueia).
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { prisma } from '@zappiq/database';
@@ -35,6 +44,8 @@ import { chatCompletion, type LLMMessage } from './llm/langchainClient.js';
 import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
 import { getIzaFactsBlock } from './izaFactsService.js';
 import { logger } from '../utils/logger.js';
+import { cache } from './cloud/index.js';
+import { getIo } from '../utils/socketRegistry.js';
 
 /* ── Cleanup helpers (duplicados de agentOrchestrator pra evitar circular dep
  *    — alinhar com PR #71 caso o original mude). ──────────────────────── */
@@ -270,6 +281,65 @@ export async function ensureWebChatLead(
   return { contactId: contact.id, conversationId: conversation.id };
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * Resposta Meta 2026: débito de atendimento em SOMBRA
+ * --------------------------------------------------------------------------
+ * 1 atendimento = 1 conversa de webchat que recebeu ao menos 1 resposta da
+ * IA. O marcador `zappiq:att:{org}:{conversationId}` (SET NX, TTL 90 dias)
+ * garante que a mesma conversa nunca conta duas vezes; só quando o marcador
+ * é NOVO o contador mensal `aiAttendancesPerMonth` incrementa.
+ *
+ * SOMBRA de verdade: só medição. Nada aqui bloqueia, cobra nem altera a
+ * resposta ao visitante. Erro de backend do cache (retorno null/false do
+ * contrato fail-soft do ICache) simplesmente não conta.
+ *
+ * NOTA DE UNIFICAÇÃO: o incremento replica de propósito a convenção de chave
+ * do middleware/planLimits.ts (`zappiq:usage:{orgId}:{yyyy-mm}:{kind}`, mês
+ * UTC, TTL 35 dias no primeiro incremento). Não dá pra chamar incrementUsage()
+ * daqui sem editar aquele arquivo (o union LimitKind ainda não conhece
+ * 'aiAttendancesPerMonth' e o arquivo está em alteração paralela). Quando
+ * planLimits.ts ganhar esse kind, trocar este bloco por incrementUsage(orgId,
+ * 'aiAttendancesPerMonth'): as chaves já batem, nenhum contador se perde.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/** TTL do marcador por conversa: 90 dias. */
+const ATT_MARKER_TTL_SECONDS = 90 * 24 * 3600;
+/** TTL do contador mensal: 35 dias, espelho do TTL_SECONDS do planLimits.ts. */
+const ATT_USAGE_TTL_SECONDS = 35 * 24 * 3600;
+
+/** Chave do marcador de atendimento único por conversa. Exportada pra teste. */
+export function buildAttendanceMarkerKey(organizationId: string, conversationId: string): string {
+  return `zappiq:att:${organizationId}:${conversationId}`;
+}
+
+/** Chave do contador mensal, MESMA convenção do usageKey() do planLimits.ts. */
+export function buildAttendanceUsageKey(organizationId: string, now = new Date()): string {
+  const ym = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+  return `zappiq:usage:${organizationId}:${ym}:aiAttendancesPerMonth`;
+}
+
+async function debitWebChatAttendanceShadow(
+  organizationId: string,
+  conversationId: string,
+): Promise<void> {
+  const created = await cache.setNX(
+    buildAttendanceMarkerKey(organizationId, conversationId),
+    '1',
+    ATT_MARKER_TTL_SECONDS,
+  );
+  // false = conversa já contada; null = backend indisponível. Nos dois casos,
+  // não incrementa (em sombra, preferimos subcontar a contar duas vezes).
+  if (created !== true) return;
+
+  const usageKey = buildAttendanceUsageKey(organizationId);
+  const current = await cache.incrby(usageKey, 1);
+  // TTL só na criação do contador (contador igual ao incremento = chave nova),
+  // mesmo padrão incr+expire do planLimits.ts.
+  if (current === 1) {
+    await cache.expire(usageKey, ATT_USAGE_TTL_SECONDS);
+  }
+}
+
 /* ── Handler principal ────────────────────────────── */
 
 export async function processWebChatTurn(input: WebChatRequest): Promise<WebChatResponse> {
@@ -287,14 +357,42 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   //    sessão), NA ORG DONA DO AGENTE (cada cliente embedado vê seus próprios
   //    leads no CRM dele). Best-effort: NUNCA bloqueia nem quebra a resposta
   //    pública do agente. Se o CRM falhar, logamos e seguimos com o chat normalmente.
+  //    Resposta Meta 2026: agora capturamos o retorno pra espelhar as Messages
+  //    do turno na Conversation do lead. Sem lead (falha aqui), sem espelho.
+  let lead: WebChatLead | null = null;
   try {
-    await ensureWebChatLead(sessionId, organizationId);
+    lead = await ensureWebChatLead(sessionId, organizationId);
   } catch (err) {
     logger.warn('[webChat] ensureWebChatLead failed (fluxo público segue)', {
       sessionId,
       organizationId,
       err: err instanceof Error ? err.message : String(err),
     });
+  }
+
+  // 0.b Resposta Meta 2026: espelho INBOUND antes da LLM. Se a cascade cair,
+  //     a pergunta do visitante já ficou registrada na conversa do CRM.
+  //     Best-effort: falha de banco nunca segura a resposta pública.
+  if (lead) {
+    try {
+      await prisma.message.create({
+        data: {
+          direction: 'INBOUND',
+          type: 'TEXT',
+          content: userMessage,
+          status: 'DELIVERED',
+          conversationId: lead.conversationId,
+          isFromBot: false,
+        },
+      });
+    } catch (err) {
+      logger.warn('[webChat] espelho INBOUND falhou (fluxo público segue)', {
+        sessionId,
+        organizationId,
+        conversationId: lead.conversationId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   // 1. systemPrompt = CORE_AGENT_RULES_V1 + [FATOS ATUAIS só pra Iza] + prompt do
@@ -349,6 +447,51 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   if (replyMatch) reply = replyMatch[1].trim();
   reply = stripStructuredTags(reply);
   reply = stripLeakedPrefixes(reply);
+
+  // 5. Resposta Meta 2026: espelho OUTBOUND + realtime + débito sombra.
+  //    Tudo best-effort num try/catch próprio: o visitante recebe a resposta
+  //    mesmo que banco, socket ou cache estejam fora.
+  if (lead) {
+    try {
+      await prisma.message.create({
+        data: {
+          direction: 'OUTBOUND',
+          type: 'TEXT',
+          content: reply,
+          status: 'SENT',
+          conversationId: lead.conversationId,
+          isFromBot: true,
+        },
+      });
+
+      // Realtime dashboard push: mesmo padrão do agentOrchestrator (passo 13
+      // de lá), via singleton do socketRegistry, gated por `if (io)`, então
+      // vira no-op seguro em testes ou antes do setIo() do boot.
+      const io = getIo();
+      if (io) {
+        io.to(`org:${organizationId}`).emit('new_message', {
+          conversationId: lead.conversationId,
+          message: {
+            content: reply,
+            direction: 'OUTBOUND',
+            isFromBot: true,
+            createdAt: new Date().toISOString(),
+          },
+        });
+      }
+
+      // Débito de atendimento em SOMBRA: só depois do OUTBOUND persistido,
+      // 1 por conversa via SET NX. Cache é fail-soft por contrato (não lança).
+      await debitWebChatAttendanceShadow(organizationId, lead.conversationId);
+    } catch (err) {
+      logger.warn('[webChat] espelho OUTBOUND/débito falhou (fluxo público segue)', {
+        sessionId,
+        organizationId,
+        conversationId: lead.conversationId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   const latencyMs = Date.now() - startedAt;
   logger.info('[webChat] turn ok', {

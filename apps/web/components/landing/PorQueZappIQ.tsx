@@ -212,9 +212,14 @@ export function PorQueZappIQ() {
               <h3 className="text-[18px] font-medium text-ink leading-tight tracking-tight mb-2">
                 Zero surpresa no boleto.
               </h3>
+              {/* Bandeira nova (D1, 20/08/2026), com fair use em linha visível. */}
               <p className="text-[13px] text-muted leading-relaxed">
-                Mensalidade fixa. A gente não cobra por conversa, não tem taxa escondida,
-                não inventa "janela de 24h" pra pesar no final do mês. O que você vê é o que paga.
+                Mensalidade fixa por atendimento: cada conversa que a Iza cuida conta um, com
+                mensagens à vontade dentro dela. A tarifa do WhatsApp vai a custo, na sua conta,
+                com medidor e teto. Zero markup, zero setup.
+              </p>
+              <p className="text-[11.5px] text-muted mt-2">
+                Fair use de 12 respostas de IA por atendimento.
               </p>
             </div>
             <div className="card-soft p-7 relative">

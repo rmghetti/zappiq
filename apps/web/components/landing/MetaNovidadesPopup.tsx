@@ -1,10 +1,13 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * MetaNovidadesPopup: popup automático leve na home (V1 · 10/06/2026)
+ * MetaNovidadesPopup: popup automático leve na home (V2 · 20/08/2026)
  * --------------------------------------------------------------------------
  * Card discreto no canto inferior direito que promove /novidades-meta
- * (lançamentos Meta: Business Agent, usernames, pagamentos).
+ * (kit "Outubro sem susto": a mudança de preço da Meta em 01/10/2026 e a
+ * calculadora da fatura Meta). V1 (10/06/2026) promovia os lançamentos do
+ * Conversations Brasil. STORAGE_KEY bumped pra _v2 pra nova mensagem
+ * aparecer a quem já tinha silenciado a anterior.
  *
  * Comportamento (deliberadamente não intrusivo):
  *   - aparece 5s após o load, não bloqueia a tela, não é modal
@@ -22,7 +25,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Sparkles, X } from 'lucide-react';
 
-const STORAGE_KEY = 'zappiq_meta_novidades_popup_until_v1';
+const STORAGE_KEY = 'zappiq_meta_novidades_popup_until_v2';
 const SHOW_DELAY_MS = 5000;
 const AUTO_HIDE_MS = 25000;
 const DAYS_IF_CLOSED = 7;
@@ -104,17 +107,17 @@ export function MetaNovidadesPopup() {
           <X size={13} className="text-white/80" />
         </button>
         <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] bg-emerald-400/15 border border-emerald-400/50 text-emerald-300 px-2 py-0.5 rounded-full">
-          <Sparkles size={10} /> Novidade · Junho 2026
+          <Sparkles size={10} /> Outubro sem susto
         </span>
         <h4 className="mt-2 text-[15px] font-bold leading-snug">
-          O WhatsApp ganhou um vendedor de IA.{' '}
-          <span className="text-emerald-400">A ZappIQ chegou primeiro.</span>
+          Em outubro a Meta muda o preço dela.{' '}
+          <span className="text-emerald-400">O seu não muda.</span>
         </h4>
       </div>
       <div className="px-5 py-4">
         <p className="text-[12.5px] text-muted leading-relaxed">
-          Meta Business Agent, @usernames e pagamentos no chat. Somos uma das primeiras plataformas
-          da América Latina a implementar, com pilotos já em andamento junto a clientes e à Meta.
+          A partir de 1º de outubro, a Meta passa a cobrar pelas respostas no WhatsApp. A tarifa vai
+          a custo, na sua conta, com medidor e teto. Faça a conta da sua operação em 30 segundos.
         </p>
         <Link
           href="/novidades-meta"

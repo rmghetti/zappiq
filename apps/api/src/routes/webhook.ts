@@ -7,7 +7,9 @@ import { aiProcessQueue } from '../services/queueService.js';
 import { inboundContentFromMessage } from '../services/inboundContent.js';
 import { applyMessageStatusUpdate, attributeCampaignReply } from './campaignStatus.util.js';
 import { recordCtwaAttribution } from '../services/ctwaAttribution.js';
+import { recordMetaBillingEvent } from '../services/metaBillingLedger.js';
 import { isValidOrgWebhookVerifyToken } from '../services/webhookVerifyToken.js';
+import { activateTrialOnFirstInbound } from '../services/trialActivation.util.js';
 
 const router = Router();
 
@@ -108,8 +110,37 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
     // PRIMEIRA vez que a mensagem cruza cada patamar — Meta reenvia status e
     // não podemos contar em dobro.
     if (value.statuses?.length) {
+      // Resposta Meta 2026 (plano 8.1 item 1): os campos pricing/billable/
+      // category dos status callbacks eram descartados; agora cada status
+      // também vira um MetaBillingEvent (ledger de custo Meta). A org é
+      // resolvida UMA vez pelo phone_number_id do payload — este branch
+      // retorna antes da resolução usada pelas mensagens, logo abaixo.
+      // Best-effort: nada aqui pode atrapalhar o applyMessageStatusUpdate.
+      const statusPhoneNumberId: string | undefined = value.metadata?.phone_number_id;
+      let billingOrgId: string | null = null;
+      try {
+        if (statusPhoneNumberId) {
+          const billingOrg = await prisma.organization.findFirst({
+            where: { whatsappPhoneNumberId: statusPhoneNumberId },
+            select: { id: true },
+          });
+          billingOrgId = billingOrg?.id ?? null;
+        }
+      } catch (err) {
+        logger.warn(`[Webhook] ledger Meta: falha ao resolver org do phone_number_id: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
       for (const status of value.statuses) {
         await applyMessageStatusUpdate(prisma, status);
+        if (billingOrgId) {
+          try {
+            // recordMetaBillingEvent já é best-effort; try/catch é cinto e
+            // suspensório pro fluxo de status (o 200 já foi respondido).
+            await recordMetaBillingEvent(status, statusPhoneNumberId, billingOrgId);
+          } catch (err) {
+            logger.warn(`[Webhook] ledger Meta: falha ao registrar evento: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
       }
       return;
     }
@@ -132,6 +163,23 @@ router.post('/whatsapp', async (req: Request, res: Response) => {
     if (!org) {
       logger.warn(`[Webhook] No org found for phone_number_id: ${phoneNumberId}`);
       return;
+    }
+
+    // Trial por ATIVAÇÃO (decisão D-plano, 20/08/2026): o relógio dos 14 dias
+    // começa AQUI, na primeira conversa real de WhatsApp da org, não no
+    // cadastro (routes/onboarding.ts deixa as datas NULL). Idempotente por
+    // construção: o WHERE do updateMany só casa trialStartedAt NULL, então a
+    // segunda mensagem não muda nada; org com assinatura Stripe nunca ganha
+    // trial. Roda UMA vez por request (este handler processa uma mensagem por
+    // payload) e nunca no caminho de status, que retorna antes deste ponto.
+    // Best-effort: falha aqui não pode derrubar o processamento da mensagem.
+    try {
+      const activated = await activateTrialOnFirstInbound(prisma, org.id);
+      if (activated > 0) {
+        logger.info(`[Webhook] Trial ativado pela primeira conversa real (org ${org.id})`);
+      }
+    } catch (err) {
+      logger.warn(`[Webhook] ativação de trial falhou (não bloqueante): ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // Upsert contact

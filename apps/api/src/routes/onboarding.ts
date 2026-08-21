@@ -112,23 +112,20 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
     const result = await prisma.$transaction(async (tx) => {
       const slug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-      // Trial de 14 dias com cap de US$ 15 em custo LLM.
-      // Janela curta o bastante para criar urgência, longa o bastante
-      // para o cliente sentir ROI. Cap protege margem de signups curiosos.
-      const trialStartedAt = new Date();
-      const trialEndsAt = new Date(trialStartedAt.getTime() + 14 * 24 * 60 * 60 * 1000);
-
+      // Trial por ATIVAÇÃO (decisão D-plano, 20/08/2026): o relógio dos 14
+      // dias NÃO começa mais no cadastro. trialStartedAt/trialEndsAt nascem
+      // NULL e são preenchidos na primeira mensagem inbound real de WhatsApp
+      // (routes/webhook.ts) ou, para conta dormente, à força em D+30 do
+      // signup (services/trialExpirationCron.ts). Antes da ativação a conta
+      // fica no estágio NOVO (paywall none). Efeito desejado no checkout:
+      // com trialStartedAt NULL, effectiveTrialDays (billingCheckout.util)
+      // concede o trial do Stripe a quem assinar antes de ativar.
       const org = await tx.organization.create({
         data: {
           name: businessName,
           slug: `${slug}-${Date.now().toString(36)}`,
           plan: resolvedPlan,
-          trialStartedAt,
-          trialEndsAt,
-          trialCostCapUsd: 15.0,
-          isTrialActive: true,
-          trialConverted: false,
-          subscriptionStatus: 'trialing',
+          ...orgTrialSeedAtSignup(),
           settings: {
             niche,
             // Segmento (key) + subsegmentos (keys) — base pra personalização
@@ -257,6 +254,33 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
     next(err);
   }
 });
+
+/**
+ * Campos de trial no MOMENTO DO CADASTRO, no desenho de trial por ativação (D-plano,
+ * 20/08/2026). As datas ficam NULL de propósito: quem as preenche é a
+ * primeira conversa real de WhatsApp (webhook) ou a ativação forçada D+30
+ * (trialExpirationCron). isTrialActive segue true como "janela de avaliação
+ * aberta"; sem trialEndsAt a conta deriva pra NOVO (accountLifecycle), não
+ * pra TRIAL. Cap de US$ 15 em custo LLM protege margem de signups curiosos.
+ * Pura e exportada pra teste travar que o cadastro não volte a setar datas.
+ */
+export function orgTrialSeedAtSignup(): {
+  trialStartedAt: null;
+  trialEndsAt: null;
+  trialCostCapUsd: number;
+  isTrialActive: boolean;
+  trialConverted: boolean;
+  subscriptionStatus: string;
+} {
+  return {
+    trialStartedAt: null,
+    trialEndsAt: null,
+    trialCostCapUsd: 15.0,
+    isTrialActive: true,
+    trialConverted: false,
+    subscriptionStatus: 'trialing',
+  };
+}
 
 /**
  * Normaliza um plano declarado no signup (signups.plan_chosen, texto livre)

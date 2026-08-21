@@ -27,7 +27,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@zappiq/database';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
-import { currentYearMonth } from '../services/tenantUsageService.js';
+import { currentYearMonth, isSeedOrg } from '../services/tenantUsageService.js';
 import { mrrCentsForPlan } from './stripeWebhook.util.js';
 import {
   buildAccountRow,
@@ -71,6 +71,16 @@ async function loadStagingOrgIds(): Promise<Set<string>> {
     )
     AND EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = o.id)
   `)) as Array<{ id: string }>;
+  return new Set(rows.map((r) => r.id));
+}
+
+/** Ids de orgs marcadas como seed (settings.seed=true — PR-L 20/08/2026).
+ *  Ficam fora dos totais financeiros; visíveis na lista com badge isSeed. */
+async function loadSeedOrgIds(): Promise<Set<string>> {
+  const rows = await prisma.organization.findMany({
+    where: { settings: { path: ['seed'], equals: true } },
+    select: { id: true },
+  });
   return new Set(rows.map((r) => r.id));
 }
 
@@ -127,6 +137,8 @@ async function listHandler(req: Request, res: Response, next: NextFunction) {
             trialConverted: true,
             paidAt: true,
             aiReadinessScore: true,
+            // settings entra só para o badge de seed (PR-L 20/08/2026).
+            settings: true,
             users: {
               where: { role: { in: ['SUPERADMIN', 'ADMIN'] } },
               orderBy: { createdAt: 'asc' },
@@ -173,6 +185,8 @@ async function listHandler(req: Request, res: Response, next: NextFunction) {
         lastActivityAt: a.lastActivityAt,
         ownerUserId: a.ownerUserId,
         isStaging,
+        // Seed fica na lista (badge), mas fora do MRR dos KPIs (computeKpis).
+        isSeed: isSeedOrg((org as any)?.settings),
         createdAt: a.createdAt,
       };
     });
@@ -228,6 +242,7 @@ async function financeiroSummaryHandler(req: Request, res: Response, next: NextF
       },
     });
     const stagingOrgIds = await loadStagingOrgIds();
+    const seedOrgIds = await loadSeedOrgIds();
     const usageByOrg = await loadUsageByOrg(period);
 
     let mrrRealCents = 0;
@@ -250,6 +265,10 @@ async function financeiroSummaryHandler(req: Request, res: Response, next: NextF
         (a.organizationId && stagingOrgIds.has(a.organizationId)) ||
         a.email.toLowerCase().endsWith(STAGING_EMAIL_DOMAIN);
       if (isStaging) continue;
+      // PR-L (20/08/2026): seed fora de TODOS os totais financeiros — MRR,
+      // potencial de catálogo, margem e receita reconhecida. Este endpoint só
+      // devolve agregados; a listagem individual (com badge) fica no GET /.
+      if (a.organizationId && seedOrgIds.has(a.organizationId)) continue;
 
       const stage = (a.lifecycleStage ?? '').toUpperCase();
       const isPaying = stage === 'PAGO' || stage === 'ACTIVE' || stage === 'ATIVO';
@@ -437,6 +456,8 @@ async function detailHandler(req: Request, res: Response, next: NextFunction) {
         grossMarginPercent: usage.grossMarginPercent,
         lastActivityAt: account.lastActivityAt,
         ownerUserId: account.ownerUserId,
+        // Badge de seed no perfil 360 (PR-L 20/08/2026).
+        isSeed: isSeedOrg((org as any)?.settings),
         createdAt: account.createdAt,
       },
       now,

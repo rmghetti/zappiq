@@ -97,6 +97,16 @@ vi.mock('./izaFactsService.js', () => ({ getIzaFactsBlock: vi.fn(async () => '')
 vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+// Resposta Meta 2026: o service passou a importar cache (débito sombra) e
+// socketRegistry (realtime). Mock inerte: importar o real puxa redis + env.
+vi.mock('./cloud/index.js', () => ({
+  cache: {
+    setNX: vi.fn(async () => true),
+    incrby: vi.fn(async () => 1),
+    expire: vi.fn(async () => true),
+  },
+}));
+vi.mock('../utils/socketRegistry.js', () => ({ getIo: vi.fn(() => undefined) }));
 
 const { buildWebChatLeadIdentity, ensureWebChatLead } = await import('./webChatService.js');
 

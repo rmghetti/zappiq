@@ -3,9 +3,12 @@
 /* ══════════════════════════════════════════════════════════════════════════
  * AnnouncementBanner: Top-of-page ribbon
  *
- * V3 (10/06/2026): Pivô pra anunciar os lançamentos Meta (Conversations
- * Brasil 2026): Meta Business Agent + usernames + pagamentos. Link pra
- * /novidades-meta. Pioneirismo LATAM com pilotos junto a clientes e à Meta.
+ * V4 (20/08/2026): Pivô pro kit "Outubro sem susto": em 01/10/2026 a Meta
+ * passa a cobrar pelas respostas no WhatsApp; a mensalidade ZappIQ não muda.
+ * Link pra /novidades-meta (explicação + calculadora da fatura Meta).
+ *
+ * V3 (10/06/2026): Lançamentos Meta (Conversations Brasil 2026): Meta
+ * Business Agent + usernames + pagamentos. Pioneirismo LATAM.
  *
  * V2 (17/05/2026): Pivô pra anunciar Instagram Direct em rollout, narrativa
  * multichannel reforçada pra demos enterprise/investidores.
@@ -13,14 +16,14 @@
  * V1 (29/04/2026): Meta Ads AI Connectors first-mover LATAM (PR #96).
  *
  * Aparece logo após Navbar, acima do Hero. Dismissível via localStorage.
- * STORAGE_KEY bumped pra _v3 pra reaparecer pra quem já dispensou o V2.
+ * STORAGE_KEY bumped pra _v4 pra reaparecer pra quem já dispensou o V3.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Sparkles, ArrowRight, X } from 'lucide-react';
 
-const STORAGE_KEY = 'zappiq_meta_business_agent_banner_dismissed_v3';
+const STORAGE_KEY = 'zappiq_meta_business_agent_banner_dismissed_v4';
 
 export function AnnouncementBanner() {
   const [visible, setVisible] = useState(false);
@@ -86,11 +89,10 @@ export function AnnouncementBanner() {
           </span>
 
           <p className="text-[12.5px] lg:text-[14px] font-medium leading-snug">
-            <strong className="text-white uppercase tracking-wide">Meta Business Agent</strong>{' '}
-            <span className="text-white/85">chegou.</span>{' '}
-            <span className="text-emerald-300">A ZappIQ é uma das primeiras da América Latina a implementar</span>
-            <span className="hidden md:inline text-white/85">, com pilotos junto a clientes e à Meta</span>
-            <span className="hidden lg:inline text-white/85">. Usernames, busca por nome e pagamentos no chat</span>
+            <strong className="text-white uppercase tracking-wide">Outubro sem susto</strong>
+            <span className="text-white/85">: em 1º de outubro a Meta muda o preço do WhatsApp.</span>{' '}
+            <span className="text-emerald-300">A sua mensalidade ZappIQ não muda</span>
+            <span className="hidden md:inline text-white/85">, e a tarifa vai a custo, com medidor e teto</span>
             <span className="text-white/60">.</span>
           </p>
 
@@ -98,7 +100,7 @@ export function AnnouncementBanner() {
             href="/novidades-meta"
             className="inline-flex items-center gap-1 text-[12px] lg:text-[13px] font-semibold text-emerald-300 hover:text-emerald-200 transition-colors whitespace-nowrap underline-offset-4 hover:underline"
           >
-            Saber mais <ArrowRight size={12} />
+            Fazer a conta <ArrowRight size={12} />
           </Link>
         </div>
       </div>

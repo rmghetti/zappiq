@@ -29,6 +29,7 @@ import {
   Activity, PlugZap, RefreshCw, Copy, Webhook, XCircle,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { resolveWhatsAppSignupConfig } from '../../lib/metaEmbeddedSignup';
 import { SaibaMais } from '@/components/shared/SaibaMais';
 import { TourLauncher } from '@/components/shared/GuidedTour';
 
@@ -47,6 +48,16 @@ const TUTORIAL_PDF_URL = '/tutoriais/cadastrar-whatsapp-instagram.pdf';
 // Advanced Access aprovado no App Review; até la funciona pra test users do app.
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || '1603310040738671';
 const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '3990962534537609';
+// Resposta Meta 2026 (PR-G): a v2 do Embedded Signup foi depreciada pela Meta,
+// com corte em 15/10/2026. A v4 usa uma configuração NOVA de Facebook Login
+// for Business (variante WhatsApp Embedded Signup) e o FB.login passa a mandar
+// extras apenas { setup: {} }, sem featureType/sessionInfoVersion. Rollout
+// flag-gated: com NEXT_PUBLIC_META_CONFIG_ID_V4 setada o botão usa a v4; sem
+// ela, o fluxo v2 atual segue intocado. A decisão pura (config_id + extras)
+// mora em lib/metaEmbeddedSignup.ts, coberta em lib/__tests__. Na v4 o fluxo
+// também pode terminar em FINISH_ONLY_WABA (concluiu sem registrar número) ou
+// CANCEL (com current_step de onde parou); ver o listener de postMessage.
+const META_CONFIG_ID_V4 = process.env.NEXT_PUBLIC_META_CONFIG_ID_V4 || '';
 const META_GRAPH_VERSION = 'v21.0';
 
 type Activation = 'whatsapp' | 'instagram' | 'both';
@@ -119,9 +130,16 @@ export default function ConectarCanais() {
   const [metaAppSecret, setMetaAppSecret] = useState('');
 
   // Embedded Signup (1 clique): estado de conexão + sessionInfo capturado da Meta.
+  // `event`/`currentStep` existem por causa da v4 (FINISH_ONLY_WABA e CANCEL);
+  // na v2 só chega FINISH e os campos extras ficam sem efeito.
   const [waConnecting, setWaConnecting] = useState(false);
   const [igConnecting, setIgConnecting] = useState(false);
-  const sessionInfoRef = useRef<{ wabaId?: string; phoneNumberId?: string }>({});
+  const sessionInfoRef = useRef<{
+    wabaId?: string;
+    phoneNumberId?: string;
+    event?: 'FINISH' | 'FINISH_ONLY_WABA' | 'CANCEL';
+    currentStep?: string;
+  }>({});
 
   // FEATURE 5b.3 — monitor de saúde + desconexão de canal.
   const [health, setHealth] = useState<ChannelHealth[]>([]);
@@ -157,15 +175,34 @@ export default function ConectarCanais() {
       w.FB.init({ appId: META_APP_ID, autoLogAppEvents: true, xfbml: false, version: META_GRAPH_VERSION });
     }
     // O popup do Embedded Signup manda waba_id + phone_number_id por postMessage.
+    // v2 só emite FINISH; a v4 (Resposta Meta 2026) também emite FINISH_ONLY_WABA
+    // (concluiu sem registrar número) e CANCEL (desistiu, com current_step).
     function onWaMessage(e: MessageEvent) {
       if (e.origin !== 'https://www.facebook.com' && e.origin !== 'https://web.facebook.com') return;
       try {
         const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-        if (data?.type === 'WA_EMBEDDED_SIGNUP' && data?.event === 'FINISH') {
+        if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;
+        if (data?.event === 'FINISH') {
           sessionInfoRef.current = {
+            event: 'FINISH',
             wabaId: data.data?.waba_id,
             phoneNumberId: data.data?.phone_number_id,
           };
+        } else if (data?.event === 'FINISH_ONLY_WABA') {
+          // v4: WABA criada, número NÃO registrado. Não vem phone_number_id.
+          sessionInfoRef.current = {
+            event: 'FINISH_ONLY_WABA',
+            wabaId: data.data?.waba_id,
+          };
+        } else if (data?.event === 'CANCEL') {
+          // v4: pessoa fechou o fluxo. Log discreto com o passo, pro suporte.
+          sessionInfoRef.current = {
+            event: 'CANCEL',
+            currentStep: data.data?.current_step,
+          };
+          console.info('[EmbeddedSignup/WA] fluxo cancelado pelo usuário', {
+            currentStep: data.data?.current_step || null,
+          });
         }
       } catch {
         /* mensagem não-JSON: ignora */
@@ -361,6 +398,9 @@ export default function ConectarCanais() {
   // Conectar WhatsApp em 1 clique (Embedded Signup). O popup da Meta devolve um
   // `code` (via FB.login) + waba_id/phone_number_id (via postMessage). Mandamos
   // pro backend /api/embedded-signup/whatsapp, que troca por token e grava na org.
+  // v2 x v4: a decisão de config_id + extras fica em resolveWhatsAppSignupConfig
+  // (v2 depreciada pela Meta, corte em 15/10/2026; a v4 dispensa
+  // featureType/sessionInfoVersion e traz os eventos FINISH_ONLY_WABA e CANCEL).
   const launchWhatsAppSignup = useCallback(() => {
     const w = window as any;
     if (!w.FB) {
@@ -370,14 +410,38 @@ export default function ConectarCanais() {
     setError(null);
     setOkMsg(null);
     sessionInfoRef.current = {};
+    const signup = resolveWhatsAppSignupConfig(META_CONFIG_ID, META_CONFIG_ID_V4);
     w.FB.login(
       (response: any) => {
         const code = response?.authResponse?.code;
-        if (!code) {
-          setError('Conexão com a Meta cancelada ou não autorizada. Você também pode conectar manualmente abaixo.');
+        const { wabaId, phoneNumberId, event, currentStep } = sessionInfoRef.current;
+        // v4: FINISH_ONLY_WABA = concluiu o fluxo SEM registrar número. O backend
+        // (/api/embedded-signup/whatsapp) exige code + wabaId + phoneNumberId no
+        // schema, então sem número não há o que persistir sem inventar dado:
+        // informamos o próximo passo e logamos o waba_id pro suporte.
+        if (event === 'FINISH_ONLY_WABA') {
+          console.warn('[EmbeddedSignup/WA] FINISH_ONLY_WABA: WABA criada sem número registrado', {
+            wabaId: wabaId || null,
+          });
+          setError(
+            'Sua conta WhatsApp Business foi criada na Meta, mas o fluxo terminou sem um número registrado. ' +
+            'Clique em conectar de novo e conclua a etapa do número de telefone (ou registre o número no WhatsApp Manager antes). ' +
+            'Se preferir, use o modo manual abaixo.',
+          );
           return;
         }
-        const { wabaId, phoneNumberId } = sessionInfoRef.current;
+        if (!code) {
+          // v4: CANCEL traz current_step (onde a pessoa parou). Mensagem neutra.
+          if (event === 'CANCEL' && currentStep) {
+            setError(
+              `Conexão com a Meta não concluída (você parou na etapa "${currentStep}"). ` +
+              'Tente de novo quando quiser, ou conecte manualmente abaixo.',
+            );
+          } else {
+            setError('Conexão com a Meta cancelada ou não autorizada. Você também pode conectar manualmente abaixo.');
+          }
+          return;
+        }
         setWaConnecting(true);
         api
           .post('/api/embedded-signup/whatsapp', { code, wabaId, phoneNumberId })
@@ -391,10 +455,10 @@ export default function ConectarCanais() {
           .finally(() => setWaConnecting(false));
       },
       {
-        config_id: META_CONFIG_ID,
+        config_id: signup.configId,
         response_type: 'code',
         override_default_response_type: true,
-        extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+        extras: signup.extras,
       },
     );
   }, [load]);

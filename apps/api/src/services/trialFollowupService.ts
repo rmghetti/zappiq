@@ -29,8 +29,10 @@ import { computeSavings } from './email/templates/trialSavingsFollowup.js';
 import { renderTrialMidwayEmail } from './email/templates/trialMidway.js';
 import { renderTrialReminderEmail } from './email/templates/trialReminder.js';
 import { renderTrialConvertedEmail } from './email/templates/trialConverted.js';
+import { renderTrialWhatsappNudgeEmail } from './email/templates/trialWhatsappNudge.js';
 import { computeAIReadiness } from './aiReadinessService.js';
 import { pickTrialReminderStage } from './trialReminderStage.util.js';
+import { isWhatsappNudgeDue, isWhatsappStillDisconnected } from './trialActivation.util.js';
 import { queueConnection as connection, IDLE_DRAIN_DELAY_SECONDS } from '../config/queueRedis.js';
 
 export const trialFollowupQueue = new Queue('trial-followup', {
@@ -48,12 +50,14 @@ let trialFollowupWorker: Worker | null = null;
 // ── Job payload types ──────────────────────────────
 // Trial Enforcement (2026-07): cadência regressiva T-3/T-2/T-1/T-0 (dias ATÉ o
 // fim do trial), substituindo D3/D7. D1 (ativação, 24h após cadastro) mantido.
-export type TrialStage = 'D1' | 'T3' | 'T2' | 'T1' | 'T0';
+// W7 (2026-08, trial por ativação): lembrete D+7 pós-signup para org que ainda
+// não conectou o WhatsApp (e portanto nunca ativou o trial).
+export type TrialStage = 'D1' | 'W7' | 'T3' | 'T2' | 'T1' | 'T0';
 
 export interface TrialFollowupJobData {
   orgId: string;
   userId: string;
-  type: 'trial:D1' | 'trial:T3' | 'trial:T2' | 'trial:T1' | 'trial:T0' | 'trial:converted';
+  type: 'trial:D1' | 'trial:W7' | 'trial:T3' | 'trial:T2' | 'trial:T1' | 'trial:T0' | 'trial:converted';
   // Extras para trial:converted
   tierLabel?: string;
   monthlyBrl?: number;
@@ -229,6 +233,37 @@ async function processTrialFollowupJob(job: any): Promise<void> {
         aiReadinessScore: readiness,
         savings,
         ctaUrl: `${appUrl}/onboarding?utm_source=email&utm_campaign=trial_d1`,
+      });
+      subject = rendered.subject;
+      html = rendered.html;
+      text = rendered.text;
+    }
+
+    // D+7 · trial:W7: "você ainda não ligou seu WhatsApp" (trial por
+    // ativação, decisão D-plano 20/08/2026). Só faz sentido enquanto a org
+    // não conectou canal nem ativou o trial; se entre o enqueue e o envio
+    // ela conectou (ou a 1ª mensagem chegou), o lembrete ficaria falso,
+    // então re-checamos aqui e desistimos em silêncio.
+    else if (type === 'trial:W7') {
+      stage = 'W7';
+      templateId = 'trialWhatsappNudge';
+      if (await alreadySent(orgId, stage)) {
+        logger.info({ msg: 'trial_followup_already_sent_skip', orgId, stage });
+        return;
+      }
+      if (!isWhatsappStillDisconnected({
+        trialStartedAt: org.trialStartedAt ?? null,
+        whatsappPhoneNumberId: org.whatsappPhoneNumberId ?? null,
+      })) {
+        logger.info({ msg: 'trial_followup_w7_no_longer_applicable', orgId });
+        return;
+      }
+      const rendered = renderTrialWhatsappNudgeEmail({
+        firstName,
+        // Configurações > Canais (deep-link por hash; query de UTM antes do #).
+        connectUrl: `${appUrl}/settings?utm_source=email&utm_campaign=trial_w7#canais`,
+        // Demo no navegador: playground "Testar minha IA" (/ai-training).
+        demoUrl: `${appUrl}/ai-training?utm_source=email&utm_campaign=trial_w7`,
       });
       subject = rendered.subject;
       html = rendered.html;
@@ -440,7 +475,7 @@ export async function runTrialFollowupScheduler(): Promise<void> {
 
     logger.info({ msg: 'trial_followup_scheduler_run', orgsToProcess: orgs.length });
 
-    let enqueuedD1 = 0, enqueuedT3 = 0, enqueuedT2 = 0, enqueuedT1 = 0, enqueuedT0 = 0, skippedNoAdmin = 0;
+    let enqueuedD1 = 0, enqueuedW7 = 0, enqueuedT3 = 0, enqueuedT2 = 0, enqueuedT1 = 0, enqueuedT0 = 0, skippedNoAdmin = 0;
 
     for (const org of orgs) {
       const adminUser = (org as any).users[0];
@@ -456,6 +491,23 @@ export async function runTrialFollowupScheduler(): Promise<void> {
       if (org.isTrialActive === true && dsc >= 1 && !(await alreadySent(org.id, 'D1'))) {
         await enqueueTrialFollowup(org.id, adminUser.id, 'trial:D1');
         enqueuedD1++;
+      }
+
+      // W7 · D+7 pós-signup: "você ainda não ligou seu WhatsApp" (trial por
+      // ativação). Só para org que NUNCA ativou o trial (trialStartedAt NULL)
+      // e NÃO conectou canal (whatsappPhoneNumberId NULL). Mesmo padrão de
+      // idempotência dos demais: gate alreadySent aqui + jobId determinístico
+      // no enqueue + re-check no worker antes do envio.
+      if (
+        isWhatsappNudgeDue({
+          trialStartedAt: org.trialStartedAt ? new Date(org.trialStartedAt) : null,
+          whatsappPhoneNumberId: org.whatsappPhoneNumberId ?? null,
+          createdAt: new Date(org.createdAt),
+        }) &&
+        !(await alreadySent(org.id, 'W7'))
+      ) {
+        await enqueueTrialFollowup(org.id, adminUser.id, 'trial:W7');
+        enqueuedW7++;
       }
 
       // T-3/T-2/T-1/T-0 · só para orgs SEM pagamento (quem já assinou não recebe).
@@ -482,7 +534,7 @@ export async function runTrialFollowupScheduler(): Promise<void> {
     logger.info({
       msg: 'trial_followup_scheduler_complete',
       orgsProcessed: orgs.length,
-      enqueuedD1, enqueuedT3, enqueuedT2, enqueuedT1, enqueuedT0, skippedNoAdmin,
+      enqueuedD1, enqueuedW7, enqueuedT3, enqueuedT2, enqueuedT1, enqueuedT0, skippedNoAdmin,
     });
   } catch (err) {
     logger.error({

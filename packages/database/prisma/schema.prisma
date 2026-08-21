@@ -20,6 +20,13 @@ enum PlanType {
   SCALE
   BUSINESS
   ENTERPRISE
+  // Resposta Meta out/2026 (PR-L, 20/08/2026): valores ADITIVOS para a grade
+  // nova (docs/resposta-meta-2026/PLANO-RESPOSTA-META.md). Nenhum plano
+  // existente muda de valor; o shared PlanId já contém IZA_LITE e o enum do
+  // banco era o bloqueador. ESSENCIAL entra junto para a grade nova gravar
+  // direto no tipo, sem mapeamento improvisado.
+  IZA_LITE
+  ESSENCIAL
 }
 
 enum UserRole {
@@ -226,6 +233,8 @@ model Organization {
   templates               MessageTemplate[]
   dataSubjectRequests     DataSubjectRequest[]
   tenantUsageMonthly      TenantUsageMonthly[]
+  metaBillingEvents       MetaBillingEvent[]
+  channelHealthChecks     ChannelHealthCheck[]
   qaPairs                 QAPair[]
   onboardingJourneyStates OnboardingJourneyState[] // FASE 1.B task #240
   // CRM sinérgico (Onda 0): pipeline, timeline de atividades e tarefas por org.
@@ -374,6 +383,9 @@ model TenantUsageMonthly {
   llmInputTokens             BigInt       @default(0)
   llmOutputTokens            BigInt       @default(0)
   aiMessagesProcessed        Int          @default(0)
+  // Resposta Meta out/2026 — unidade nova em SOMBRA: conversas distintas com
+  // resposta de IA no período (fechamento por 72h). Não cobra nada ainda.
+  aiAttendances              Int          @default(0)
   broadcastsSent             Int          @default(0)
   conversationsOpened        Int          @default(0)
   conversationsClosed        Int          @default(0)
@@ -392,6 +404,57 @@ model TenantUsageMonthly {
   @@unique([organizationId, periodYearMonth])
   @@index([periodYearMonth])
   @@map("tenant_usage_monthly")
+}
+
+// Resposta Meta out/2026 — ledger de eventos de cobrança da Meta por mensagem.
+// Fonte: webhooks de status da Cloud API (pricing.billable/pricing_model/
+// category/type), hoje descartados pelos handlers. Append-only com upsert por
+// wamid; o VALOR em R$ não vem no webhook e é derivado do rate card local
+// versionado (packages/shared, metaRateCard). Sem FK para Message: o status
+// pode chegar para wamid que não existe em messages (envio externo, race).
+model MetaBillingEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wamid          String       @unique
+  recipientId    String?
+  status         String
+  billable       Boolean?
+  pricingModel   String?
+  category       String?
+  // pricing.type da Meta: 'regular' | 'free_customer_service' | 'free_entry_point'.
+  pricingType    String?
+  phoneNumberId  String?
+  conversationId String?
+  messageId      String?
+  rawPricing     Json?
+  statusTs       DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, statusTs])
+  @@index([organizationId, deliveredAt])
+  @@map("meta_billing_events")
+}
+
+// Resposta Meta out/2026 — histórico do verificador periódico de saúde das
+// WABAs gerenciadas (R3). O check on-demand já existia (channelCredentialCheck);
+// aqui fica o rastro por org para alerta, card no dash e matéria-prima do Radar.
+model ChannelHealthCheck {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channel        String       @default("whatsapp")
+  ok             Boolean
+  qualityRating  String?
+  messagingTier  String?
+  errorCode      String?
+  detail         Json?
+  checkedAt      DateTime     @default(now())
+
+  @@index([organizationId, checkedAt])
+  @@map("channel_health_checks")
 }
 
 model User {
@@ -490,6 +553,9 @@ model Conversation {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   closedAt         DateTime?
+  // Resposta Meta out/2026 — por que a conversa fechou: 'manual' | 'auto_72h'
+  // | 'resolved'. Base da unidade "atendimento de IA" e da métrica de resolução.
+  closeReason      String?
   deletedAt        DateTime? // LGPD Art. 16 — marcação de exclusão
   deletedById      String?
   deletedBy        User?              @relation("DeletedConversations", fields: [deletedById], references: [id])
@@ -534,6 +600,9 @@ model Message {
   @@index([conversationId])
   @@index([createdAt])
   @@index([campaignId])
+  // Resposta Meta out/2026 — expiração de conversa por inatividade (72h) faz
+  // NOT EXISTS por conversa+janela; o par composto evita seq scan no job.
+  @@index([conversationId, createdAt])
   @@map("messages")
 }
 
