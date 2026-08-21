@@ -64,6 +64,14 @@ export interface IzaTurnRequest {
   /** Pula classify (otimização — quando se sabe que é caso normal). */
   skipClassify?: boolean;
   /**
+   * Resposta Meta out/2026 (PR-I): Modo Econômico. true restringe a escalada
+   * por intent (preferProvider Sonnet) SOMENTE ao caso handoff: pedido de
+   * humano segue indo pro modelo forte, as demais intents (objection,
+   * enterprise, purchase_intent, price_question) ficam no tier corrente.
+   * Não silencia nada: só muda o provider preferido da resposta.
+   */
+  sonnetOnlyForHandoff?: boolean;
+  /**
    * Org ID pra audit E pro pre-filter saber de quem é o funil.
    * Ausente = tratado como org de cliente (fail-safe): o pre-filter só aplica
    * as verticais de compliance, nunca a política comercial da ZappIQ.
@@ -179,14 +187,24 @@ export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> 
   // → "all providers exhausted" → lead recebe vazio. Agora cai pra Haiku/Gemini.
   // forceProvider (Enterprise override hard) preservado intacto.
   const hardForce = req.forceProvider; // override Enterprise (sem fallback)
+  // Modo Econômico (PR-I): com sonnetOnlyForHandoff, só o pedido de humano
+  // (intent handoff) escala; o resto responde no tier corrente, mais barato.
+  const escalaPermitida = !req.sonnetOnlyForHandoff || intent === 'handoff';
   const softPrefer =
-    !hardForce && shouldEscalateToSonnet(intent) ? 'anthropic-sonnet' : undefined;
+    !hardForce && escalaPermitida && shouldEscalateToSonnet(intent) ? 'anthropic-sonnet' : undefined;
 
   if (intent !== 'normal') {
-    logger.info(
-      `[izaTurnRouter] Intent=${intent} → prefer Sonnet com fallback (tier=${req.tier})`,
-      { orgId: req.orgId, conversationId: req.conversationId },
-    );
+    if (softPrefer) {
+      logger.info(
+        `[izaTurnRouter] Intent=${intent} → prefer Sonnet com fallback (tier=${req.tier})`,
+        { orgId: req.orgId, conversationId: req.conversationId },
+      );
+    } else if (req.sonnetOnlyForHandoff && !hardForce) {
+      logger.info(
+        `[izaTurnRouter] Intent=${intent} sem escalada (Modo Econômico: Sonnet só pra handoff)`,
+        { orgId: req.orgId, conversationId: req.conversationId },
+      );
+    }
   }
 
   // ── 4. Chamada LLM principal ─────────────────────────────────

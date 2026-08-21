@@ -13,11 +13,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { prismaMock, planLimitsMock } = vi.hoisted(() => ({
+const { prismaMock, planLimitsMock, circuitBreakerMock } = vi.hoisted(() => ({
   prismaMock: { lLMCallLog: { create: vi.fn() } },
   planLimitsMock: {
     getTrialLlmStage: vi.fn(),
     recordTrialCost: vi.fn(),
+  },
+  // PR-I: acumulador mensal do breaker (mock evita puxar o cache real aqui)
+  circuitBreakerMock: {
+    recordMonthlyLlmCost: vi.fn(),
   },
 }));
 
@@ -35,6 +39,7 @@ vi.mock('../../utils/logger.js', () => ({
 }));
 
 vi.mock('../../middleware/planLimits.js', () => planLimitsMock);
+vi.mock('./circuitBreaker.js', () => circuitBreakerMock);
 
 const { logLLMCall } = await import('./llmCallAudit.js');
 
@@ -59,6 +64,7 @@ beforeEach(() => {
   prismaMock.lLMCallLog.create.mockResolvedValue({ id: 'log-1' });
   planLimitsMock.getTrialLlmStage.mockResolvedValue({ capped: false, stage: 'OTHER', capUsd: 0 });
   planLimitsMock.recordTrialCost.mockResolvedValue(undefined);
+  circuitBreakerMock.recordMonthlyLlmCost.mockResolvedValue(undefined);
 });
 
 describe('logLLMCall — acúmulo de custo do TRIAL/NOVO', () => {
@@ -133,5 +139,41 @@ describe('logLLMCall — acúmulo de custo do TRIAL/NOVO', () => {
     const data = prismaMock.lLMCallLog.create.mock.calls[0][0].data;
     expect(data.organizationId).toBe('org-1');
     expect(data.provider).toBe('anthropic-sonnet');
+  });
+});
+
+describe('logLLMCall — acumulador mensal do breaker (PR-I)', () => {
+  it('org PAGANTE (fora do trial) também acumula no breaker', async () => {
+    await logLLMCall(chamadaBase());
+
+    expect(circuitBreakerMock.recordMonthlyLlmCost).toHaveBeenCalledTimes(1);
+    const [orgId, custo] = circuitBreakerMock.recordMonthlyLlmCost.mock.calls[0];
+    expect(orgId).toBe('org-1');
+    expect(custo).toBeCloseTo(CUSTO_SONNET_1K_1K, 6);
+    // E o teto de trial segue intocado pra pagante.
+    expect(planLimitsMock.recordTrialCost).not.toHaveBeenCalled();
+  });
+
+  it('org em TRIAL acumula nos DOIS lugares (teto do trial + breaker)', async () => {
+    planLimitsMock.getTrialLlmStage.mockResolvedValue({ capped: true, stage: 'TRIAL', capUsd: 15 });
+
+    await logLLMCall(chamadaBase());
+
+    expect(planLimitsMock.recordTrialCost).toHaveBeenCalledTimes(1);
+    expect(circuitBreakerMock.recordMonthlyLlmCost).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem org ou custo 0: breaker não acumula', async () => {
+    await logLLMCall(chamadaBase({ organizationId: null }));
+    await logLLMCall(chamadaBase({ inputTokens: null, outputTokens: null }));
+
+    expect(circuitBreakerMock.recordMonthlyLlmCost).not.toHaveBeenCalled();
+  });
+
+  it('falha no acumulador do breaker é fail-soft (nunca lança)', async () => {
+    circuitBreakerMock.recordMonthlyLlmCost.mockRejectedValue(new Error('redis off'));
+
+    await expect(logLLMCall(chamadaBase())).resolves.toBeUndefined();
+    expect(prismaMock.lLMCallLog.create).toHaveBeenCalledTimes(1);
   });
 });

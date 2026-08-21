@@ -21,10 +21,112 @@ export interface ExecuteEffectsInput {
    * por LLM, não determinístico.
    */
   aiConfidence?: number;
+  /**
+   * Resposta Meta out/2026 (PR-I): consolidador de balões. Caller que JÁ tem
+   * a org carregada decide aqui (true/false) e evita a consulta; undefined =
+   * o executor resolve sozinho via resolverConsolidarBaloes (e SÓ consulta o
+   * banco quando o lote tem send_text consecutivos pra consolidar).
+   */
+  consolidarBaloes?: boolean;
+}
+
+/*
+ * ─────────────────────────────────────────────────────────────────
+ * Resposta Meta out/2026 (PR-I): consolidador de balões do Maestro.
+ *
+ * Fluxos com vários nós de mensagem em sequência disparavam um envio de
+ * WhatsApp por send_text (1 balão = 1 mensagem cobrada/entregue). Com o
+ * consolidador, send_text CONSECUTIVOS do mesmo lote viram UM envio só,
+ * separados por linha em branco. Efeito não-texto no meio (botões, mídia,
+ * tag) quebra a sequência: só o que é adjacente se junta.
+ *
+ * Gate por org via settings.flags.consolidarBaloes:
+ *   - flag booleana explícita vence sempre;
+ *   - sem flag: LIGADO pra org criada a partir do corte (2026-10-01, junto
+ *     com o modelo de cobrança novo da Meta) e DESLIGADO pras anteriores,
+ *     cujos fluxos foram desenhados contando com um balão por nó.
+ * ─────────────────────────────────────────────────────────────────
+ */
+
+/** Corte de coorte: org criada a partir daqui nasce com consolidação LIGADA. */
+export const CORTE_CONSOLIDACAO_BALOES = new Date('2026-10-01T00:00:00Z');
+
+/** Separador entre textos consolidados (linha em branco no WhatsApp). */
+export const SEPARADOR_CONSOLIDACAO = '\n\n';
+
+/** true quando o lote tem pelo menos um par de send_text adjacentes. */
+export function temSendTextConsecutivos(effects: FlowEffect[]): boolean {
+  for (let i = 1; i < effects.length; i++) {
+    if (effects[i].kind === 'send_text' && effects[i - 1].kind === 'send_text') return true;
+  }
+  return false;
+}
+
+/**
+ * Junta send_text CONSECUTIVOS num único efeito (separador de linha em
+ * branco). Pura: não muda a ordem nem os demais efeitos, e não muta o array
+ * de entrada.
+ */
+export function consolidarSendTextConsecutivos(effects: FlowEffect[]): FlowEffect[] {
+  const out: FlowEffect[] = [];
+  for (const eff of effects) {
+    const prev = out[out.length - 1];
+    if (eff.kind === 'send_text' && prev?.kind === 'send_text') {
+      out[out.length - 1] = { ...prev, text: `${prev.text}${SEPARADOR_CONSOLIDACAO}${eff.text}` };
+    } else {
+      out.push(eff);
+    }
+  }
+  return out;
+}
+
+/**
+ * Resolve a flag da org quando o caller não decidiu: flag explícita em
+ * settings.flags.consolidarBaloes vence; sem flag, default pela coorte de
+ * criação (createdAt >= corte). Fail-soft: qualquer erro desliga a
+ * consolidação (comportamento antigo, um balão por send_text).
+ */
+export async function resolverConsolidarBaloes(organizationId: string): Promise<boolean> {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true, createdAt: true },
+    });
+    if (!org) return false;
+    const flag = (org.settings as any)?.flags?.consolidarBaloes;
+    if (typeof flag === 'boolean') return flag;
+    const createdAt = org.createdAt ? new Date(org.createdAt as any) : null;
+    return (
+      createdAt !== null &&
+      !Number.isNaN(createdAt.getTime()) &&
+      createdAt.getTime() >= CORTE_CONSOLIDACAO_BALOES.getTime()
+    );
+  } catch (e) {
+    logger.warn('[Maestro] resolverConsolidarBaloes falhou (fail-soft: sem consolidação)', {
+      organizationId,
+      err: String(e),
+    });
+    return false;
+  }
 }
 
 export async function executeFlowEffects(input: ExecuteEffectsInput): Promise<void> {
-  const { organizationId, conversationId, contactId, effects, onHandoff, aiConfidence = 1.0 } = input;
+  const { organizationId, conversationId, contactId, onHandoff, aiConfidence = 1.0 } = input;
+
+  // Consolidador de balões (PR-I): só entra em ação quando há send_text
+  // consecutivos no lote E a flag da org (ou do caller) está ligada. Fora
+  // disso, o lote atravessa intocado (zero consulta extra no caminho comum).
+  let effects = input.effects;
+  if (temSendTextConsecutivos(effects)) {
+    const ligado =
+      typeof input.consolidarBaloes === 'boolean'
+        ? input.consolidarBaloes
+        : await resolverConsolidarBaloes(organizationId);
+    if (ligado) {
+      effects = consolidarSendTextConsecutivos(effects);
+    }
+  }
+
   for (const eff of effects) {
     if (eff.kind === 'send_text') {
       await sendReplyText({ organizationId, conversationId, content: eff.text });

@@ -21,6 +21,10 @@ import { estimateCostUsd } from '../../utils/llmCost.js';
 // do trial (zappiq:trial_cost_usd:{orgId}). getTrialLlmStage é cacheado em
 // Redis por 5 min, então o caminho quente é 1 GET por chamada.
 import { getTrialLlmStage, recordTrialCost } from '../../middleware/planLimits.js';
+// Resposta Meta out/2026 (PR-I): TODA org acumula o custo do mês em
+// zappiq:llmcost:{orgId}:{yyyy-mm}; o orchestrator compara com a premissa
+// do contrato no início do turno e arma o Modo Econômico quando estourar.
+import { recordMonthlyLlmCost } from './circuitBreaker.js';
 
 export interface LLMCallAuditInput {
   /** ID da organização (tenant). null aceito pra contextos system. */
@@ -108,6 +112,21 @@ export async function logLLMCall(input: LLMCallAuditInput): Promise<void> {
     }
   } catch (err) {
     logger.warn('[llmCallAudit] Falha ao acumular custo de trial (fail-soft)', {
+      error: err instanceof Error ? err.message : String(err),
+      organizationId: input.organizationId,
+    });
+  }
+
+  // ── Resposta Meta out/2026 (PR-I): acumulador do circuit breaker ────
+  // TODA org (não só trial) soma o custo desta chamada no acumulador mensal
+  // do breaker. Bloco isolado e fail-soft, independente dos dois acima:
+  // falha aqui nunca afeta o audit, o teto de trial nem a resposta.
+  try {
+    if (input.organizationId && cost > 0) {
+      await recordMonthlyLlmCost(input.organizationId, cost);
+    }
+  } catch (err) {
+    logger.warn('[llmCallAudit] Falha ao acumular custo mensal do breaker (fail-soft)', {
       error: err instanceof Error ? err.message : String(err),
       organizationId: input.organizationId,
     });
