@@ -315,6 +315,17 @@ const WIDGET_JS = String.raw`
 router.get('/widget.js', (_req: Request, res: Response) => {
   res.type('application/javascript; charset=utf-8');
   res.set('Cache-Control', 'public, max-age=300'); // 5min — dá pra iterar sem cache colado
+
+  /* O helmet() global aplica Cross-Origin-Resource-Policy: same-origin, que
+   * derruba este arquivo em QUALQUER site de cliente: uma tag <script src>
+   * é uma requisicao no-cors, e o CORP barra antes do CORS ser considerado.
+   * O navegador recusa com ERR_BLOCKED_BY_RESPONSE.NotSameOrigin, sem erro
+   * de CORS visivel, e o chat simplesmente nao aparece.
+   * Este e o unico arquivo publico por natureza (script embedavel), entao a
+   * excecao fica aqui e nao no helmet global.
+   * Achado em 14/08 testando o embed real no site do CMJ. */
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+
   res.send(WIDGET_JS);
 });
 

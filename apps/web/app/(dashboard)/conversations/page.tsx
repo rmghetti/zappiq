@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import {
-  MessageSquare, Send, Search, Bot, User, Instagram, Smartphone,
+  MessageSquare, Send, Search, Bot, User, Instagram, Smartphone, Globe,
   Tag, Target, Flame, CheckSquare, Clock, TrendingUp, Sparkles, ArrowRightCircle,
   UserPlus, FileText, DollarSign, X, Hand, CheckCircle2, RotateCcw, PauseCircle, StickyNote,
 } from 'lucide-react';
@@ -277,17 +277,35 @@ export default function ConversationsPage() {
   const filtered = conversations.filter((c) => {
     if (statusFilter !== 'all' && c.status !== statusFilter) return false;
     if (channelFilter !== 'all' && (c.channel || 'whatsapp') !== channelFilter) return false;
-    if (searchTerm && !(c.contact.name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.contact.phone.includes(searchTerm))) return false;
+    // A busca precisa cobrir o contato de site, que não tem telefone.
+    if (searchTerm) {
+      const t = searchTerm.toLowerCase();
+      const achou =
+        c.contact.name?.toLowerCase().includes(t) ||
+        (c.contact.phone || '').toLowerCase().includes(t) ||
+        (c.channel === 'web' && 'visitante do site chat'.includes(t));
+      if (!achou) return false;
+    }
     return true;
   });
 
   const formatTime = (date: string) => new Date(date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const formatDay = (date: string) => new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
 
+  /* O chat do site grava channel='web'. Antes deste ícone ele caía no `else` e
+     aparecia com o ícone verde do WhatsApp, o que fazia o time achar que um
+     lead do site tinha chegado pelo WhatsApp e procurar a conversa no celular. */
   const ChannelIcon = ({ channel }: { channel?: string }) =>
     (channel === 'instagram')
       ? <Instagram size={11} className="text-pink-500" />
-      : <Smartphone size={11} className="text-green-500" />;
+      : (channel === 'web')
+        ? <Globe size={11} className="text-blue-500" />
+        : <Smartphone size={11} className="text-green-500" />;
+
+  /* Contato de site não tem telefone: a identidade dele é `web:<sessão>`.
+     Sem isto a linha da conversa aparecia sem nenhum rótulo. */
+  const identidade = (c: Conversation) =>
+    c.contact.name || (c.channel === 'web' ? 'Visitante do site' : c.contact.phone);
 
   return (
     <div className="flex h-[calc(100vh-7rem)] -m-6 bg-white">
@@ -311,7 +329,7 @@ export default function ConversationsPage() {
               </button>
             ))}
             <span className="w-px h-4 bg-gray-200 mx-0.5" />
-            {[['all', 'Canal'], ['whatsapp', 'WA'], ['instagram', 'IG']].map(([v, l]) => (
+            {[['all', 'Canal'], ['whatsapp', 'WA'], ['instagram', 'IG'], ['web', 'Site']].map(([v, l]) => (
               <button key={v} onClick={() => setChannelFilter(v)}
                 className={`px-2 py-1 rounded-full text-[11px] font-medium ${channelFilter === v ? 'bg-secondary-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                 {l}
@@ -340,7 +358,7 @@ export default function ConversationsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
                       <span className="text-sm font-semibold text-gray-900 truncate flex items-center gap-1">
-                        <ChannelIcon channel={conv.channel} /> {conv.contact.name || conv.contact.phone}
+                        <ChannelIcon channel={conv.channel} /> {identidade(conv)}
                       </span>
                       <span className="text-[10px] text-gray-400 flex-shrink-0">{formatTime(conv.updatedAt)}</span>
                     </div>
@@ -378,10 +396,12 @@ export default function ConversationsPage() {
                     {selected.contact.name?.charAt(0)?.toUpperCase() || '?'}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{selected.contact.name || selected.contact.phone}</p>
+                    <p className="text-sm font-semibold text-gray-900 truncate">{identidade(selected)}</p>
                     <div className="flex items-center gap-2">
                       <ChannelIcon channel={selected.channel} />
-                      <span className="text-xs text-gray-500">{selected.contact.phone}</span>
+                      <span className="text-xs text-gray-500">
+                        {selected.channel === 'web' ? 'Chat do site' : selected.contact.phone}
+                      </span>
                       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${selected.status === 'OPEN' ? 'bg-green-100 text-green-700' : selected.status === 'WAITING' ? 'bg-yellow-100 text-yellow-700' : selected.status === 'ASSIGNED' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                         {selected.status}
                       </span>
