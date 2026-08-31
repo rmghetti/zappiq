@@ -13,7 +13,7 @@
  */
 import { prisma } from '@zappiq/database';
 import { logger } from '../../utils/logger.js';
-import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, isChampionArquetipo, type CnpjData } from './cnpj.js';
+import { fetchCnpj, normalizeCnpj, arquetipoFromQualificacao, isChampionArquetipo, descricaoQualificacao, type CnpjData } from './cnpj.js';
 import { computeMiraScoreV1 } from './score.js';
 import { buscarSinalSetorial } from './cagedMirror.js';
 import { getMiraEntitlement, consumeMiraQuota, MiraQuotaExceededError } from '../../middleware/requireMira.js';
@@ -170,7 +170,7 @@ export async function runMotorA(
               const arq = arquetipoFromQualificacao(s.qualificacao);
               return {
                 nome: s.nome,
-                papel: s.qualificacao,
+                papel: descricaoQualificacao(s.qualificacao),
                 arquetipo: arq,
                 isChampion: isChampionArquetipo(arq),
                 vinculoQsa: true,

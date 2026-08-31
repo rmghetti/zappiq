@@ -178,6 +178,22 @@ describe('o Alvo com decisor sobe, como sempre', () => {
     const decisorCriado = createAlvo.mock.calls[0][0].data.decisores.create[0];
     expect(decisorCriado.isChampion).toBe(true);
   });
+
+  it('QSA do espelho vem como CÓDIGO da Receita: vira papel legível + arquétipo + coroa', async () => {
+    // Em produção o espelho manda qualificacao como '22', não 'Sócio': sem a
+    // tradução, o comitê mostrava '22' e nenhum decisor do QSA ganhava coroa.
+    enriquecerCnpjsBigQuery.mockResolvedValue(
+      new Map([['11222333000181', doEspelho({ qsa: [{ nome: 'ANA COSTA', qualificacao: '22' }] })]])
+    );
+
+    const r = await runDescobertaPublica('org-1', { alvos: ['2451-2'], regioes: ['SP'] });
+
+    expect(r.criados).toBe(1);
+    const dec = createAlvo.mock.calls[0][0].data.decisores.create[0];
+    expect(dec.papel).toBe('Sócio'); // não '22'
+    expect(dec.arquetipo).toBe('EXEC_SPONSOR');
+    expect(dec.isChampion).toBe(true);
+  });
 });
 
 describe('PERSISTIR: o Empresário Individual é recuperado antes de qualquer descarte', () => {
