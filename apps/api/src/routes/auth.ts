@@ -320,8 +320,11 @@ router.get('/me', authMiddleware, async (req: Request, res: Response, next: Next
 
     // Trial Enforcement: expõe o estágio + modo de paywall pro AuthGuard/banner.
     // Fonte única (computeAccessState) — o web NÃO reimplementa a regra.
+    // O `role` entra na conta porque o SUPERADMIN não pode cair no paywall:
+    // sem ele, o AuthGuard chutava o operador pra /billing?reason=trial_expired
+    // enquanto a API (requireActivePlan) deixava passar.
     const access = user.organization
-      ? computeAccessState(user.organization as any)
+      ? computeAccessState({ ...(user.organization as any), role: user.role })
       : { stage: 'NOVO' as const, paywall: 'none' as const };
 
     res.json({

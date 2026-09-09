@@ -39,6 +39,35 @@ describe('computeAccessState', () => {
     expect(s.paywall).toBe('hard');
   });
 
+  // ── SUPERADMIN (operador da plataforma) ──────────────────────────────
+  // A conta interna da ZappIQ não assina o próprio produto. Antes disso o
+  // /api/auth/me devolvia paywall 'hard' e o AuthGuard chutava o superadmin
+  // pra /billing, mesmo com a API liberando (requireActivePlan já isentava).
+  it('SUPERADMIN com trial vencido → none (nunca cai no paywall)', () => {
+    const s = computeAccessState({ ...base, trialEndsAt: past, role: 'SUPERADMIN', now });
+    expect(s.paywall).toBe('none');
+    // O estágio real é preservado: liberar acesso não pode falsear billing/MRR.
+    expect(s.stage).toBe('TRIAL_EXPIRED');
+  });
+
+  it('SUPERADMIN em org cancelada (CHURNED) → none', () => {
+    const s = computeAccessState({ ...base, churnedAt: past, role: 'SUPERADMIN', now });
+    expect(s.paywall).toBe('none');
+    expect(s.stage).toBe('CHURNED');
+  });
+
+  it('papel de CLIENTE não escapa do paywall (só SUPERADMIN isenta)', () => {
+    for (const role of ['ADMIN', 'OWNER', 'AGENT', 'USER', 'superadmin', '']) {
+      expect(computeAccessState({ ...base, trialEndsAt: past, role, now }).paywall).toBe('hard');
+    }
+  });
+
+  it('sem role (digest/Área Clientes olhando org de terceiro) → regra do cliente', () => {
+    // Quem avalia a conta ALHEIA não passa role: o superadmin enxergando o
+    // painel não pode mascarar o trial vencido do cliente.
+    expect(computeAccessState({ ...base, trialEndsAt: past, now }).paywall).toBe('hard');
+  });
+
   it('TRIAL_EXPIRED com carência ativa → soft', () => {
     expect(
       computeAccessState({ ...base, trialEndsAt: past, paywallGraceUntil: future, now }).paywall,
