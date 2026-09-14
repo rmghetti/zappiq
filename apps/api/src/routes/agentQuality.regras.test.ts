@@ -561,9 +561,10 @@ describe('re-test: 3 amostras gravadas (A049)', () => {
     expect(runnerMock.executeAgentEvalRun).toHaveBeenCalledTimes(3);
     expect(res.statusCode).toBe(200);
     expect(res.body.amostras).toHaveLength(3);
-    // Rodada 3 do PR #375: cada amostra é uma conversa MAIS uma avaliação.
-    // O campo dizia 3 e a explicação ao lado falava em 6 chamadas.
-    expect(res.body.custo.chamadasDeLlm).toBe(6);
+    // Rodada 4 do PR #375: cada amostra são TRÊS chamadas ao modelo. A
+    // classificação da intenção (classifyIntent, agentEvalRunner.ts), a
+    // resposta do agente e o juiz. O campo dizia 6 e esquecia a primeira.
+    expect(res.body.custo.chamadasDeLlm).toBe(9);
     expect(res.body.veredito).toBe('funcionou');
   });
 
@@ -616,7 +617,7 @@ describe('re-test: 3 amostras gravadas (A049)', () => {
     expect(res.body.amostras).toHaveLength(3);
   });
 
-  // ── PC-2: o clique custa 6 chamadas, não 12 ──────────────────────
+  // ── PC-2: o clique custa 9 chamadas, não 15 ──────────────────────
   it('não pede sugestão nova em nenhuma das 3 amostras', async () => {
     respostas('fail', 'fail', 'fail');
     const res = makeRes();
@@ -672,6 +673,8 @@ describe('re-test: 3 amostras gravadas (A049)', () => {
     const res = makeRes();
     await getHandler('post', RETEST)({ ...USER, params: paramsApply, body: {} }, res);
     expect(res.body.custo.explicacao).toMatch(/3 conversas de teste e 3 avaliações/i);
+    // E o mesmo número do campo, para a explicação não voltar a contar menos.
+    expect(res.body.custo.explicacao).toContain(`${res.body.custo.chamadasDeLlm} chamadas`);
   });
 
   // ── PI-6: contra qual versão do prompt o agente foi medido ───────

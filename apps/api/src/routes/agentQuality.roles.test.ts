@@ -199,8 +199,9 @@ describe('portão de papel na Qualidade do Agente (A115)', () => {
 
 describe('cota diária por organização (A115)', () => {
   // O re-teste tem cota PRÓPRIA, de 7, e não as 20 padrão (PC-2 da revisão do
-  // PR #375): cada clique custa 3 conversas com o agente mais 3 avaliações,
-  // então 7 cliques já são 42 chamadas ao modelo em um dia, numa empresa só.
+  // PR #375): cada clique custa 9 chamadas ao modelo (3 amostras, cada uma
+  // com a classificação da intenção, a resposta do agente e o juiz), então
+  // 7 cliques já são 63 chamadas em um dia, numa empresa só.
   it('a 8ª chamada de re-test no mesmo dia recebe 429 em português', async () => {
     for (let i = 1; i <= 7; i++) {
       const { res } = await rodaRota('post', RE_TEST, pedido('ADMIN'));

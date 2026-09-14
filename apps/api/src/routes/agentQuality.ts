@@ -1015,17 +1015,19 @@ router.post(
 // Objetivo: feedback imediato pra o usuário ver se a correção empurrou o
 // score em direção a 90%+. Se não passou, ele edita e re-aplica.
 //
-// CUSTO: 3 chats + 3 juízes por clique. São três amostras do mesmo cenário
-// (A049), e cada amostra é uma conversa com o agente mais uma avaliação em
-// Sonnet. O comentário antigo falava de "1 chat + 1 judge", da época em que
-// o re-teste rodava uma vez só.
+// CUSTO: 9 chamadas ao modelo por clique. São três amostras do mesmo cenário
+// (A049), e cada amostra são três chamadas: a classificação da intenção
+// (classifyIntent, como no atendimento de verdade), a conversa com o agente
+// e a avaliação do juiz. O comentário antigo falava de "1 chat + 1 judge",
+// da época em que o re-teste rodava uma vez só; a rodada 3 contava 6 e
+// esquecia a classificação.
 //
 // O que NÃO entra nessa conta: a sugestão nova. O sugeridor era chamado por
 // baixo em toda amostra reprovada e a sugestão era descartada, o que levava
-// o clique a 9 ou 12 chamadas. Agora o contexto vai com `pularSugestao`.
+// o clique a 12 ou 15 chamadas. Agora o contexto vai com `pularSugestao`.
 //
 // Cota de 7 por dia, por organização, em vez das 20 padrão: 7 cliques já são
-// 42 chamadas ao modelo, e quem precisa de mais do que isso num dia não está
+// 63 chamadas ao modelo, e quem precisa de mais do que isso num dia não está
 // re-testando, está tentando a sorte.
 // ════════════════════════════════════════════════════════════════════
 router.post(
@@ -1079,7 +1081,7 @@ router.post(
           profile,
           // O re-teste lê o veredito e joga o resto fora. Sem esta marca, cada
           // amostra reprovada pedia uma sugestão nova (às vezes duas) que
-          // ninguém ia ver: o clique custava 12 chamadas em vez de 6.
+          // ninguém ia ver: o clique custava até 15 chamadas em vez de 9.
           { pularSugestao: true, regrasBlock },
         );
         const r = results[0];
@@ -1162,16 +1164,17 @@ router.post(
         resumo,
         severity: scenario.severity,
         promptVersion: versaoVigente,
-        // O dono vê o que custou, com o número certo: cada amostra é uma
-        // conversa com o agente MAIS uma avaliação. Três amostras são seis
-        // chamadas ao modelo, não três (rodada 3 do PR #375: o campo dizia
-        // 3 enquanto a explicação ao lado falava em 6).
+        // O dono vê o que custou, com o número certo. Cada amostra são três
+        // chamadas ao modelo: a classificação da intenção, a resposta do
+        // agente e o juiz (agentEvalRunner.ts, runScenario). Rodada 4 do PR
+        // #375: o campo dizia 6 e esquecia a classificação.
         custo: {
-          chamadasDeLlm: AMOSTRAS_DO_RETESTE * 2,
+          chamadasDeLlm: AMOSTRAS_DO_RETESTE * 3,
           explicacao:
             `Este re-teste roda o cenário ${AMOSTRAS_DO_RETESTE} vezes para não confundir sorte ` +
             `com correção: ${AMOSTRAS_DO_RETESTE} conversas de teste e ${AMOSTRAS_DO_RETESTE} ` +
-            'avaliações da IA.',
+            'avaliações da IA. Cada conversa começa lendo a intenção da mensagem, como no ' +
+            `atendimento de verdade, então são ${AMOSTRAS_DO_RETESTE * 3} chamadas ao modelo.`,
         },
       });
     } catch (err: any) {

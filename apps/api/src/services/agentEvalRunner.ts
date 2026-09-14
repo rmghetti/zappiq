@@ -501,9 +501,9 @@ export interface ContextoDoSugeridor {
    *
    * É o caso do re-teste. Ele roda o mesmo cenário três vezes só para ler o
    * veredito, e cada amostra reprovada chamava o sugeridor por baixo, com a
-   * sugestão sendo descartada em seguida. Um clique custava de 9 a 12
-   * chamadas ao modelo em vez das 6 que a tela declara (e o sugeridor ainda
-   * pede DUAS quando a primeira resposta volta cortada).
+   * sugestão sendo descartada em seguida. Um clique custava até 15
+   * chamadas ao modelo em vez das 9 que o re-teste declara (e o sugeridor
+   * ainda pede DUAS quando a primeira resposta volta cortada).
    */
   pularSugestao?: boolean;
   /**

@@ -108,6 +108,19 @@ describe('o teste da Qualidade tem dono em toda chamada de LLM', () => {
   });
 });
 
+/* Rodada 4 do PR #375: a conta que o re-teste declara. Com `pularSugestao`
+ * (é o que o re-teste passa), cada amostra são TRÊS chamadas ao modelo: a
+ * classificação da intenção, a resposta do agente e o juiz. O re-teste roda
+ * 3 amostras, então declara 9. */
+describe('custo de uma amostra do re-teste', () => {
+  it('com pularSugestao, uma amostra reprovada são 3 chamadas: classificação, agente e juiz', async () => {
+    await executeAgentEvalRun([CENARIO_QUE_REPROVA], AGENTE, PERFIL, { pularSugestao: true });
+
+    expect(classifyMock).toHaveBeenCalledTimes(1);
+    expect(completeMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('o juiz não é gasto de bastidor fora do avaliador', () => {
   it("sem operação explícita, runJudge grava 'classify'", async () => {
     // É o caso da simulação do Maestro (agents/flowSimulation.ts), que é
