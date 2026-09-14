@@ -15,6 +15,7 @@ import {
   caminhoSemQuery,
   atributosSemQueryDoUndici,
   atributosSemQueryDoHttp,
+  atributosSemQueryDaEntrada,
   instrumentacoesSemQueryNaUrl,
 } from './redacaoDeUrl.js';
 
@@ -111,6 +112,60 @@ describe('configuração entregue às auto-instrumentações', () => {
     expect(() => cfg['@opentelemetry/instrumentation-undici'].startSpanHook(undefined)).not.toThrow();
     expect(() =>
       cfg['@opentelemetry/instrumentation-http'].startOutgoingSpanHook(undefined),
+    ).not.toThrow();
+  });
+});
+
+describe('gancho de ENTRADA do http (P6 da revisão do PR #369)', () => {
+  it('o código do OAuth do Google não sobrevive em nenhum atributo', () => {
+    const attrs = atributosSemQueryDaEntrada({
+      url: '/api/auth/google/callback?code=CODIGO_DE_TROCA&scope=email',
+      headers: { host: 'api.zappiq.com.br' },
+    });
+    expect(JSON.stringify(attrs)).not.toContain('CODIGO_DE_TROCA');
+    expect(attrs['http.target']).toBe('/api/auth/google/callback');
+    expect(attrs['url.path']).toBe('/api/auth/google/callback');
+    expect(attrs['url.query']).toBe('');
+    expect(attrs['http.url']).toBe('http://api.zappiq.com.br/api/auth/google/callback');
+  });
+
+  it('o verify token do webhook da Meta não sobrevive', () => {
+    const attrs = atributosSemQueryDaEntrada({
+      url: '/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=TOKEN_DO_WEBHOOK',
+      headers: { host: 'api.zappiq.com.br' },
+    });
+    expect(JSON.stringify(attrs)).not.toContain('TOKEN_DO_WEBHOOK');
+  });
+
+  it('o session_id do Stripe não sobrevive', () => {
+    const attrs = atributosSemQueryDaEntrada({
+      url: '/api/billing/success?session_id=cs_live_SEGREDO',
+      headers: { host: 'api.zappiq.com.br' },
+      socket: { encrypted: true },
+    });
+    expect(JSON.stringify(attrs)).not.toContain('cs_live_SEGREDO');
+    expect(attrs['http.url']).toBe('https://api.zappiq.com.br/api/billing/success');
+  });
+
+  it('não quebra sem host nem url', () => {
+    expect(() => atributosSemQueryDaEntrada({})).not.toThrow();
+    expect(atributosSemQueryDaEntrada({})['url.query']).toBe('');
+  });
+});
+
+describe('gancho de entrada ligado na configuração (P6)', () => {
+  it('a instrumentação http recebe startIncomingSpanHook', () => {
+    const cfg: any = instrumentacoesSemQueryNaUrl;
+    expect(typeof cfg['@opentelemetry/instrumentation-http'].startIncomingSpanHook).toBe(
+      'function',
+    );
+    const attrs = cfg['@opentelemetry/instrumentation-http'].startIncomingSpanHook({
+      url: '/api/auth/google/callback?code=CODIGO_DE_TROCA',
+      headers: { host: 'api.zappiq.com.br' },
+    });
+    expect(JSON.stringify(attrs)).not.toContain('CODIGO_DE_TROCA');
+    expect(() =>
+      cfg['@opentelemetry/instrumentation-http'].startIncomingSpanHook(undefined),
     ).not.toThrow();
   });
 });

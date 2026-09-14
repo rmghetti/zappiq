@@ -3,16 +3,20 @@
  * ----------------------------------------------------------------------------
  * As auto-instrumentações do OpenTelemetry sobem quase todas ligadas, inclusive
  * as de HTTP e de undici (o cliente por trás do `fetch`). As duas gravam a URL
- * COMPLETA de cada chamada de saída num atributo de span (`url.full`/`url.query`
- * no undici, `http.url`/`http.target` no http). Quando o exportador aponta para
- * um serviço de observabilidade de terceiro, tudo que estiver na query string vai
- * junto, com a retenção de lá.
+ * COMPLETA num atributo de span (`url.full`/`url.query` no undici,
+ * `http.url`/`http.target` no http). Quando o exportador aponta para um serviço
+ * de observabilidade de terceiro, tudo que estiver na query string vai junto,
+ * com a retenção de lá.
  *
- * Como esta casa tinha credencial em query string (a chave do Gemini, a do TTS
- * do Google e o par de app da Meta na assinatura de webhook), o atributo do span
- * virava um caminho de vazamento. A chave do Gemini saiu da URL na mesma
- * mudança; isto aqui é a segunda camada, que vale para qualquer chamada, hoje e
- * amanhã: nenhum span registra query string.
+ * Vale para os dois sentidos, e os dois vazavam:
+ *   • SAÍDA: a chave do Gemini, a do TTS do Google e o par de app da Meta na
+ *     assinatura de webhook andavam em query string. A chave do Gemini saiu da
+ *     URL na mesma mudança; a redação é a segunda camada, que vale para
+ *     qualquer chamada, hoje e amanhã.
+ *   • ENTRADA: o `?code=` que o Google devolve no retorno do OAuth, o
+ *     `hub.verify_token` com que a Meta assina a verificação de webhook e o
+ *     `session_id` com que o Stripe volta do checkout chegam na query string de
+ *     rotas nossas, e viravam atributo de span do mesmo jeito.
  *
  * Só toca em atributo. Não muda a requisição, não muda o corpo, não desliga
  * instrumentação.
@@ -84,8 +88,46 @@ export function atributosSemQueryDoHttp(opcoes: {
 }
 
 /**
+ * Atributos de substituição para uma chamada que CHEGA na API. O objeto que
+ * chega é o `IncomingMessage` do Node, com `url` (caminho mais query) e o
+ * cabeçalho `host`.
+ *
+ * A entrada também carrega segredo em query string: o `?code=` que o Google
+ * devolve no retorno do OAuth, o `hub.verify_token` com que a Meta assina a
+ * verificação de webhook e o `session_id` com que o Stripe volta do checkout.
+ * Na instrumentação do http os atributos de entrada que levam a query são
+ * `http.url` (URL absoluta, montada com o caminho mais a query) e `http.target`
+ * (o caminho com a query). `url.path` e `url.query` entram aqui também para o
+ * caso de a convenção estável passar a preenchê-los.
+ */
+export function atributosSemQueryDaEntrada(request: {
+  url?: string | null;
+  headers?: Record<string, unknown> | null;
+  socket?: { encrypted?: boolean } | null;
+}): Record<string, string> {
+  const caminho = caminhoSemQuery(String(request?.url ?? ''));
+  const maquina = String(request?.headers?.host ?? '');
+  const protocolo = request?.socket?.encrypted ? 'https:' : 'http:';
+  const completa = maquina ? `${protocolo}//${maquina}${caminho}` : caminho;
+  return {
+    'http.url': completa,
+    'http.target': caminho,
+    'url.path': caminho,
+    'url.query': '',
+  };
+}
+
+/**
  * Configuração das auto-instrumentações com a redação ligada. Vai inteira para
  * `getNodeAutoInstrumentations`.
+ *
+ * Os ganchos devolvem atributos que a instrumentação aplica POR ÚLTIMO, por
+ * cima dos que ela mesma montou (conferido no pacote instalado,
+ * `@opentelemetry/instrumentation-http@0.54.2`, em
+ * `getIncomingRequestAttributes`/`getOutgoingRequestAttributes`: os dois
+ * terminam em `Object.assign(..., options.hookAttributes)`). É por isso que
+ * devolver o valor sem query basta para apagar o que a instrumentação tinha
+ * gravado com query.
  */
 export const instrumentacoesSemQueryNaUrl = {
   // fs e dns geram ruído enorme sem valor de negócio.
@@ -96,5 +138,6 @@ export const instrumentacoesSemQueryNaUrl = {
   },
   '@opentelemetry/instrumentation-http': {
     startOutgoingSpanHook: (opcoes: any) => atributosSemQueryDoHttp(opcoes || {}),
+    startIncomingSpanHook: (request: any) => atributosSemQueryDaEntrada(request || {}),
   },
 };
