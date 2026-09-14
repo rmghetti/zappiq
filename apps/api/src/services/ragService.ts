@@ -193,7 +193,7 @@ export function buildCacheKey(input: {
     String(input.topK),
     String(input.minSimilarity),
     String(input.configVersion),
-  ].join(' ');
+  ].join('\n');
   const digest = createHash('sha256').update(material, 'utf8').digest('base64url');
   return `rag:${namespaceFor(input.organizationId)}:${digest}`;
 }

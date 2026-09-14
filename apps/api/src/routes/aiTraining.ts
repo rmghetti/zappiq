@@ -167,7 +167,13 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     const orgSettings = (org?.settings as any) || {};
 
     // 1. Retrieval RAG real (namespace da org) + fontes estruturadas pra UI.
-    const { context: ragContext, sources } = await ragService.searchWithSources(orgId, message, 5);
+    // Mesma função da produção: com a versão da organização na chave, o
+    // playground e o WhatsApp param de divergir depois de uma edição (A033).
+    const {
+      context: ragContext,
+      sources,
+      status: ragStatus,
+    } = await ragService.searchDetailed(orgId, message, 5);
 
     // 2. System prompt idêntico ao de produção. contactId sintético → sem DB write.
     const systemPrompt = await buildSystemPromptForContact({
@@ -175,6 +181,7 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
       contactId: `playground:${orgId}`,
       orgSettings,
       ragContext,
+      ragStatus,
     });
 
     // 3. Mesmo roteamento de tier/provider do bot real.

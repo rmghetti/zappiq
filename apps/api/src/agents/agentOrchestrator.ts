@@ -13,6 +13,12 @@ import {
   type SendReplyResult,
 } from '../services/channelDispatcher.js';
 import * as ragService from '../services/ragService.js';
+import {
+  buildRetrievalQuery,
+  isShortMessage,
+  parseClassifierOutput,
+  type HistoryTurn,
+} from '../services/ragQueryRewrite.js';
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
 import { syncContactToCrm } from '../services/crmAutomationService.js'; // CRM Onda 1 — IA preenche o pipeline
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
@@ -430,7 +436,13 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // ── 4. Classify intent ──────────────────────────────
     // V2-018: passa contexto pra audit por turn em llm_call_logs
     const llmCtx: LLMContext = { orgId: organizationId, conversationId };
-    const intent = await classifyIntent(messageContent, llmCtx);
+    // O histórico entra aqui pela consulta de continuação (A026): a MESMA
+    // chamada devolve a intenção e a pergunta reescrita, sem chamada nova.
+    const turnHistory: HistoryTurn[] = historyMessages.map((msg) => ({
+      role: msg.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
+      content: msg.content,
+    }));
+    const { intent, retrievalQuery } = await classifyIntent(messageContent, llmCtx, turnHistory);
     logger.info(`[Agent] Intent: ${intent}`, { contactPhone, organizationId });
 
     // ── 5. Check for handoff request ────────────────────
@@ -557,11 +569,35 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     }
 
     // ── 6. Retrieve RAG context ─────────────────────────
+    // A consulta não é mais a última mensagem crua: quando ela depende do
+    // contexto ("e quanto fica?"), vale a reescrita do classificador ou, sem
+    // ela, as duas últimas mensagens do cliente (A026).
+    const { query: consultaBusca, origem: origemConsulta } = buildRetrievalQuery({
+      message: messageContent,
+      history: turnHistory,
+      rewritten: retrievalQuery,
+    });
+    if (origemConsulta !== 'mensagem') {
+      logger.info('[Agent] consulta de busca reescrita', {
+        organizationId,
+        conversationId,
+        origem: origemConsulta,
+      });
+    }
+
     let ragContext = '';
+    let ragStatus: ragService.RagSearchStatus = 'servico_fora';
     try {
       // Modo Econômico (PR-I): top-k 5 -> 3 encolhe o contexto RAG do turno.
-      ragContext = await ragService.search(organizationId, messageContent, ecoMode ? 3 : 5);
+      const busca = await ragService.searchDetailed(
+        organizationId,
+        consultaBusca,
+        ecoMode ? 3 : 5,
+      );
+      ragContext = busca.context;
+      ragStatus = busca.status;
     } catch (e: any) {
+      // searchDetailed já é fail-soft; este catch é a última rede.
       logger.warn('[Agent] RAG unavailable:', e.message);
     }
 
@@ -576,6 +612,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       contactPhone, // V4 #157 (PR #70) — pra REGRA 9 do prompt V7
       orgSettings,
       ragContext,
+      ragStatus,
     });
 
     // Maestro (#280): se viemos de um nó-IA, injeta a instrução do passo NO TOPO
@@ -1027,19 +1064,60 @@ export async function pickTierAndOverride(
 }
 
 // ── Intent Classification ───────────────────────────────
-async function classifyIntent(text: string, ctx?: LLMContext): Promise<string> {
+/** Últimas `n` falas da conversa (cliente e agente), já rotuladas e cortadas. */
+function ultimasMensagens(history: HistoryTurn[], n: number): string[] {
+  return (history ?? [])
+    .filter((t) => t && typeof t.content === 'string' && t.content.trim())
+    .slice(-n)
+    .map((t) => `${t.role === 'user' ? 'Cliente' : 'Atendente'}: ${t.content.trim().slice(0, 300)}`);
+}
+
+/**
+ * Uma chamada, dois resultados: a intenção do turno e a consulta de busca
+ * reescrita quando a mensagem depende do contexto.
+ *
+ * A026: a busca usava a última mensagem isolada, e a mediana das mensagens
+ * recebidas é de 18 caracteres ("e quanto fica?"). A064: já rodam DOIS
+ * classificadores Haiku por turno — a reescrita entra como um campo a mais na
+ * MESMA resposta, sem chamada nova. Mensagem que já se explica (>= 25
+ * caracteres) nem chega a usar a reescrita, então o caminho quente de hoje não
+ * muda.
+ */
+async function classifyIntent(
+  text: string,
+  ctx?: LLMContext,
+  history: HistoryTurn[] = [],
+): Promise<{ intent: string; retrievalQuery: string | null }> {
   // Isolamento de tenant (14/07/2026): a chave antiga era
   // `intent:${base64(text).slice(0,32)}` — SEM organizationId e truncando o
   // texto em 24 bytes. O rótulo cacheado pela org A era reusado na org B
   // quando os primeiros 24 bytes coincidiam, contaminando o gate de handoff
   // entre clientes. Agora a chave leva o orgId e o hash do texto COMPLETO.
   const orgScope = ctx?.orgId || 'no-org';
+  const precisaDeContexto = isShortMessage(text);
+  // A reescrita depende da conversa, não só do texto: "sim" numa conversa sobre
+  // preço e "sim" noutra sobre horário não podem compartilhar cache. Só a
+  // mensagem curta paga esse hash a mais; a longa mantém a chave de hoje.
+  const contextHash = precisaDeContexto
+    ? createHash('sha256')
+        .update(ultimasMensagens(history, 4).join('\n'))
+        .digest('base64url')
+        .slice(0, 16)
+    : '';
   const textHash = createHash('sha256').update(text).digest('base64url').slice(0, 32);
-  const cacheKey = `intent:${orgScope}:${textHash}`;
+  const cacheKey = `intent:${orgScope}:${textHash}${contextHash ? `:${contextHash}` : ''}`;
 
   // cache.get é fail-soft (null em erro). Sem try/catch defensivo.
+  // parseClassifierOutput aguenta o formato antigo (só a palavra), que é o que
+  // está gravado no cache de 5 minutos no momento do deploy.
   const cached = await cache.get(cacheKey);
-  if (cached) return cached;
+  if (cached) return parseClassifierOutput(cached);
+
+  const blocoHistorico = precisaDeContexto && history.length > 0
+    ? `\nÚltimas mensagens da conversa (mais antiga primeiro):\n${ultimasMensagens(history, 4)
+        .map((m) => `- ${m}`)
+        .join('\n')}\n`
+    : '';
 
   // V4 #156 (2026-05-03) — calibração conservadora pra request_human.
   // Bug observado smoke test 03/05: cliente perguntou "responde por voz?"
@@ -1068,19 +1146,20 @@ classifique como pricing.
 Saudação simples (ex: "oi", "olá", "bom dia") classifique como greeting.
 
 Em DÚVIDA, nunca classifique como request_human — use other ou faq.
-
+${blocoHistorico}
 Customer message: "${text}"
 
-Respond with ONLY the intent word, nothing else.`;
+Responda SÓ com este JSON, sem mais nada:
+{"intent":"<uma categoria da lista>","consulta":"<a mensagem do cliente reescrita para fazer sentido sozinha, em português, no máximo 15 palavras; use string vazia se ela já se explica sozinha>"}`;
 
   // V2-018: classify usa Haiku 4.5 forçado via LLMRouter (com fallback automático
   // pra cascade completa se Haiku cair). Audit por turn em llm_call_logs.
-  const intent = await classify(prompt, ctx);
+  const bruto = await classify(prompt, ctx);
 
   // cache.set é fail-soft (false em erro). TTL idêntico (300s = 5min).
-  await cache.set(cacheKey, intent, 300);
+  await cache.set(cacheKey, bruto, 300);
 
-  return intent;
+  return parseClassifierOutput(bruto);
 }
 
 // ── Parse Structured Response ───────────────────────────
@@ -1361,8 +1440,22 @@ export async function buildSystemPromptForContact(input: {
   contactPhone?: string;
   orgSettings: any;
   ragContext: string;
+  /**
+   * A028: 'nada acima do corte' e 'o serviço caiu' produziam a MESMA frase, e
+   * a IA respondia "não tenho essa informação" quando na verdade a base estava
+   * fora do ar. Default 'ok' preserva o comportamento de quem ainda não passa
+   * o campo (playground, eval, Maestro).
+   */
+  ragStatus?: ragService.RagSearchStatus;
 }): Promise<string> {
   const { organizationId, contactId, contactPhone, orgSettings, ragContext } = input;
+  const ragStatus = input.ragStatus ?? 'ok';
+  const ragBlock = [
+    '# Contexto recuperado (RAG)',
+    ragStatus === 'servico_fora' ? 'base de conhecimento indisponível neste momento' : ragContext,
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   // V4 #157 (PR #70) — Lookup completo do Contact pra injetar nome no prompt.
   // Antes: lookup só pegava leadStatus → Iza não sabia o nome → sempre
@@ -1461,8 +1554,7 @@ export async function buildSystemPromptForContact(input: {
         clienteBlock,
         saudacaoBlock,
         '',
-        `# Contexto recuperado (RAG)`,
-        ragContext || '(sem contexto relevante encontrado para esta query)',
+        ragBlock,
         '',
         `# Agora`,
         now,
@@ -1483,7 +1575,10 @@ export async function buildSystemPromptForContact(input: {
     // Links do próprio tenant (ver tenantConversionUrls.ts). Antes daqui saíam
     // as URLs da ZappIQ pro agente de todo cliente.
     conversionUrls: extractConversionUrls(orgSettings),
-    ragContext,
+    // Mesmo aviso do caminho principal (A028): com o serviço fora, o agente
+    // precisa saber que a base não respondeu, e não que a resposta não existe.
+    ragContext:
+      ragStatus === 'servico_fora' ? 'base de conhecimento indisponível neste momento' : ragContext,
     currentDateTime: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
   });
   return [CORE_AGENT_RULES_V1, factsBlock, fallback, '', clienteBlock, saudacaoBlock]

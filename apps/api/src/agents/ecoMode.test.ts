@@ -101,9 +101,17 @@ vi.mock('../services/channelDispatcher.js', () => ({
 
 vi.mock('../services/whatsappService.js', () => ({ sendAudio: vi.fn() }));
 
-const ragSearchMock = vi.fn(async () => '');
+// B4: o orchestrator passou a chamar searchDetailed (contexto + status), para
+// separar 'nada encontrado' de 'serviço fora do ar' (A028).
+const ragSearchMock = vi.fn(async () => ({
+  context: '',
+  sources: [],
+  status: 'sem_resultado' as const,
+  fromCache: false,
+}));
 vi.mock('../services/ragService.js', () => ({
-  search: (...a: unknown[]) => ragSearchMock(...(a as [])),
+  searchDetailed: (...a: unknown[]) => ragSearchMock(...(a as [])),
+  search: vi.fn(async () => ''),
 }));
 
 // classify do PASSO 4 do orchestrator (langchainClient) — sempre roda.
@@ -222,7 +230,7 @@ beforeEach(() => {
   evaluateCostBreakerMock.mockResolvedValue(false);
   classifyTurnoMock.mockResolvedValue('faq');
   izaClassifyMock.mockResolvedValue('normal');
-  ragSearchMock.mockResolvedValue('');
+  ragSearchMock.mockResolvedValue({ context: '', sources: [], status: 'sem_resultado', fromCache: false } as any);
   llmCompleteMock.mockResolvedValue({
     text: 'Resposta curta e barata.',
     provider: 'google-gemini-flash',
