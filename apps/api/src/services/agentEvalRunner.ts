@@ -24,6 +24,14 @@ import { llmRouter, type LLMOperation } from './llm/LLMRouter.js';
 import { classifyIntent, shouldEscalateToSonnet, type IzaIntent } from './llm/intentClassifier.js';
 import { logger } from '../utils/logger.js';
 import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
+// A043/A078: o sugeridor precisa VER as regras base e as regras já aprovadas.
+// Sem isso ele propôs, em produção, o oposto do CR-7 (20% de desconto contra
+// o teto de 10%) e numerou por conta própria, colidindo cinco vezes no "#14".
+import {
+  resumirCoreParaSugeridor,
+  resumirRegrasParaSugeridor,
+  type RegraDoAgente,
+} from '../agents/regrasDoAgente.js';
 import type { EvalScenario } from '../agents/agentEvalSet.js';
 import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
 // A088: a MESMA extração que o WhatsApp usa. Antes o avaliador lia resp.text
@@ -437,6 +445,14 @@ em formato fraco e bullets soltos):
    ponto final. NUNCA pare no meio de uma palavra, de uma frase ou logo
    depois de "Exemplo INCORRETO:". Se não couber, encurte os exemplos.
 
+7. REGRAS BASE (A078 — a mais cara de violar): o pedido traz o resumo das
+   REGRAS BASE DO AGENTE, que são imutáveis e prevalecem sobre qualquer
+   patch. NUNCA proponha patch que as contradiga (desconto acima do teto,
+   nome do cliente em todas as mensagens, pedir dado sensível). Um patch que
+   contradiz a base deixa o agente dividido e o erro volta. O pedido também
+   traz as regras JÁ APROVADAS: se uma delas trata do mesmo tema, fortaleça
+   aquela (where = "fortalecer a regra do cenário X") em vez de criar outra.
+
 Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
 {"summary": "1 linha executiva", "patches": [{"where": "INVIOLÁVEIS — novo item #N | REGRA INVIOLÁVEL #X — fortalecer", "diff": "+ **REGRA INVIOLÁVEL #N — TÍTULO:** ... Exemplo CORRETO: ... Exemplo INCORRETO: ..."}], "confidence": 0-100}`;
 }
@@ -468,6 +484,20 @@ function cortarEmFronteiraDeFrase(texto: string, teto = TETO_DO_PATCH): string {
   return ultimaPontuacao > 0 ? recorte.slice(0, ultimaPontuacao + 1) : recorte;
 }
 
+/**
+ * O que o sugeridor precisa saber além do cenário que falhou (A043, A078).
+ *
+ * Opcional para não quebrar chamada existente, mas quem tem o dado passa: o
+ * sugeridor que não vê o CORE propõe o contrário dele, e o que não vê as
+ * regras aprovadas escreve a sexta versão da mesma regra.
+ */
+export interface ContextoDoSugeridor {
+  /** Regras já aprovadas pelo dono para este agente. */
+  regrasAtivas?: RegraDoAgente[];
+  /** Bloco vivo do turno (tom, horário, agendamento), quando disponível. */
+  blocoVivo?: string | null;
+}
+
 export async function suggestFix(
   scenarioId: string,
   expectedBehavior: string,
@@ -475,6 +505,7 @@ export async function suggestFix(
   judgeReason: string,
   systemPromptExcerpt: string,
   profile: JudgeProfile,
+  contexto: ContextoDoSugeridor = {},
 ): Promise<ScenarioResult['suggestedFix']> {
   const primeira = await pedirPatch(
     scenarioId,
@@ -483,6 +514,8 @@ export async function suggestFix(
     judgeReason,
     systemPromptExcerpt,
     profile,
+    false,
+    contexto,
   );
 
   // A188: a regra cortada no meio nunca deveria chegar à tela. Uma segunda
@@ -500,6 +533,7 @@ export async function suggestFix(
     systemPromptExcerpt,
     profile,
     true,
+    contexto,
   );
   return segunda ?? primeira;
 }
@@ -512,6 +546,7 @@ async function pedirPatch(
   systemPromptExcerpt: string,
   profile: JudgeProfile,
   segundaTentativa = false,
+  contexto: ContextoDoSugeridor = {},
 ): Promise<ScenarioResult['suggestedFix']> {
   try {
     const aviso = segundaTentativa
@@ -533,6 +568,16 @@ ${judgeReason}
 ### Trecho relevante do system prompt atual
 ${systemPromptExcerpt.slice(0, 2000)}
 
+### REGRAS BASE DO AGENTE (resumo — imutáveis, prevalecem sobre o patch)
+${resumirCoreParaSugeridor()}
+
+### Regras já aprovadas pelo dono (fortaleça, não duplique)
+${resumirRegrasParaSugeridor(contexto.regrasAtivas ?? [])}
+${
+  contexto.blocoVivo
+    ? `\n### O que está configurado hoje neste atendimento\n${String(contexto.blocoVivo).slice(0, 800)}\n`
+    : ''
+}
 ### Patches sugeridos (JSON)`;
 
     const out = await withRetry(() =>
@@ -713,6 +758,7 @@ async function runScenario(
   scenario: EvalScenario,
   agent: { id: string; systemPrompt: string | null; name: string },
   profile: JudgeProfile,
+  contexto: ContextoDoSugeridor = {},
 ): Promise<ScenarioResult> {
   const systemPrompt = buildEvalSystemPrompt(agent, scenario);
 
@@ -850,6 +896,7 @@ async function runScenario(
       judge.reason,
       agent.systemPrompt || '(sem prompt customizado)',
       profile,
+      contexto,
     );
   }
 
@@ -949,6 +996,12 @@ export async function executeAgentEvalRun(
   scenarios: EvalScenario[],
   agent: { id: string; name: string; systemPrompt: string | null },
   profile: JudgeProfile,
+  /**
+   * A043: as regras já aprovadas e o bloco vivo, para o sugeridor fortalecer
+   * a regra existente em vez de escrever a sexta versão dela. Quem chama é
+   * quem tem banco; o avaliador não vai buscar sozinho.
+   */
+  contexto: ContextoDoSugeridor = {},
 ): Promise<{ results: ScenarioResult[]; durationMs: number; summary: RunSummary }> {
   const t0 = Date.now();
   const results: ScenarioResult[] = [];
@@ -957,7 +1010,7 @@ export async function executeAgentEvalRun(
     if (!isFirst) await sleep(THROTTLE_BETWEEN_SCENARIOS_MS);
     isFirst = false;
     try {
-      const r = await runScenario(s, agent, profile);
+      const r = await runScenario(s, agent, profile, contexto);
       results.push(r);
     } catch (err: any) {
       // A171: cenário que quebra é FALHA TÉCNICA, não reprovação. Eram 90

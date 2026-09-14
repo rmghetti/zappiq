@@ -78,6 +78,8 @@ import {
 } from '../services/agentPromptPatcher.js';
 // FASE 2.2d (#252): on-demand suggestion pra cenários partial
 import { suggestFix } from '../services/agentEvalRunner.js';
+// C3 (A043): as regras aprovadas pelo dono, para o sugeridor não duplicar.
+import { carregarRegrasAtivas } from '../services/agentRulesService.js';
 // A083: toda escrita no prompt declara a origem e vira versão; reverter só
 // vale enquanto o prompt ainda for o que aquela correção deixou.
 import {
@@ -562,6 +564,14 @@ router.post(
         scenarioResult.judge?.reason || 'Cenário parcial — usuário pediu sugestão de melhoria',
         run.agent.systemPrompt || '',
         profile,
+        // A043: as regras já aprovadas deste agente vão junto, para o
+        // sugeridor fortalecer a existente em vez de duplicá-la.
+        {
+          regrasAtivas: await carregarRegrasAtivas({
+            organizationId: run.agent.organizationId,
+            agentId: run.agentId,
+          }),
+        },
       );
       if (!suggestion) {
         res.status(500).json({ error: 'IA não conseguiu gerar sugestão' });

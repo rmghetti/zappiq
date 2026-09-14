@@ -641,6 +641,10 @@ router.post(
         scenarioResult.judge?.reason || 'Cenário parcial — usuário pediu sugestão de melhoria',
         run.agent.systemPrompt || '',
         profile,
+        // A043: o sugeridor vê o CORE (sempre) e as regras já aprovadas
+        // deste agente, para fortalecer a existente em vez de escrever a
+        // sexta versão dela.
+        { regrasAtivas: await carregarRegrasAtivas({ organizationId: orgId, agentId: run.agentId }) },
       );
       if (!suggestion) {
         res.status(500).json({ error: 'IA não conseguiu gerar sugestão' });
