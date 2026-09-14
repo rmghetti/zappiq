@@ -30,6 +30,8 @@ import multer from 'multer';
 import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { authMiddleware } from '../middleware/auth.js';
+import { UnsupportedFileTypeError } from '../middleware/errorHandler.js';
+import { MAX_UPLOAD_BYTES } from '../config/upload.js';
 import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
@@ -103,12 +105,17 @@ const ALLOWED_MIMES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
 
+// O limite vive em config/upload.ts, porque o errorHandler precisa do MESMO
+// número para escrever a mensagem de 413 que o cliente lê.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB — suficiente para contratos e FAQs extensos
+  limits: { fileSize: MAX_UPLOAD_BYTES },
+  // Erro TIPADO: o errorHandler transforma em 415 com mensagem em português.
+  // Antes era um Error cru, que virava 500 "Internal Server Error" e fazia o
+  // cliente achar que a plataforma tinha caído.
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_MIMES.has(file.mimetype)) return cb(null, true);
-    cb(new Error(`Tipo de arquivo não suportado: ${file.mimetype}`));
+    cb(new UnsupportedFileTypeError());
   },
 });
 

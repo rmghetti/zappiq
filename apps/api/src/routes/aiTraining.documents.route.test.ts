@@ -11,6 +11,12 @@ import { describe, it, expect, vi, beforeEach, afterAll, beforeAll } from 'vites
 import express from 'express';
 import type { Server } from 'node:http';
 
+// O limite real de upload é 20 MB. Mandar 20 MB por loopback só para ver um
+// 413 é lento e escorregadio (o multer corta o fluxo no meio do envio), então
+// o teste aperta o limite para 1 MB antes de o router ser importado. Em
+// produção a variável não existe e vale o default de 20 MB.
+process.env.AI_TRAINING_MAX_UPLOAD_MB = '1';
+
 // ── Mocks: tudo que a rota toca fora do processo ────────────────────────────
 const ORG = 'org-do-teste';
 
@@ -74,9 +80,13 @@ let base: string;
 
 beforeAll(async () => {
   const { default: router } = await import('./aiTraining.js');
+  const { errorHandler } = await import('../middleware/errorHandler.js');
   const app = express();
   app.use(express.json());
   app.use('/api/ai-training', router);
+  // O errorHandler de produção entra aqui porque é ele que traduz o erro do
+  // multer em 413/415. Sem ele, o teste mediria o handler padrão do Express.
+  app.use(errorHandler);
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => {
       base = `http://127.0.0.1:${(server.address() as any).port}`;
@@ -230,5 +240,40 @@ describe('PUT /api/ai-training/documents/:id', () => {
     });
 
     expect(res.status).toBe(200); // conteúdo salvo no banco; RAG reconcilia depois
+  });
+});
+
+// ── POST /documents (upload) ────────────────────────────────────────────────
+// O upload é a porta mais exposta do Treinar IA: qualquer conta com plano
+// ativo chega nela. Os dois casos abaixo provam que ela recusa em português,
+// com o status certo, e sem tocar no vector store.
+describe('POST /api/ai-training/documents, recusas de upload', () => {
+  const enviar = (nome: string, tipo: string, bytes: Uint8Array) => {
+    const form = new FormData();
+    form.append('file', new Blob([bytes], { type: tipo }), nome);
+    return fetch(`${base}/api/ai-training/documents`, { method: 'POST', body: form });
+  };
+
+  it('arquivo executável é recusado com 415 e mensagem em português', async () => {
+    const res = await enviar('malware.exe', 'application/x-msdownload', new Uint8Array([77, 90]));
+    const body = await res.json();
+
+    expect(res.status).toBe(415);
+    expect(body.error).toBe('Tipo de arquivo não suportado: envie PDF, TXT, MD ou CSV.');
+    expect(ingestDocument).not.toHaveBeenCalled();
+  });
+
+  it('arquivo acima do limite é recusado com 413, com o limite REAL na mensagem', async () => {
+    const grande = new Uint8Array(1024 * 1024 + 4096); // 1 MB + folga, acima do limite do teste
+    const res = await enviar('contrato.pdf', 'application/pdf', grande);
+    const body = await res.json();
+
+    expect(res.status).toBe(413);
+    // O limite aqui é 1 MB (a variável de ambiente lá em cima). A mensagem tem
+    // de dizer 1 MB, e não 20: até 14/09/2026 o número estava escrito à mão no
+    // errorHandler, então quem apertasse o limite por variável de ambiente
+    // mandava o cliente procurar um problema que não existia.
+    expect(body.error).toBe('Arquivo maior que 1 MB. Divida o arquivo ou envie um menor.');
+    expect(ingestDocument).not.toHaveBeenCalled();
   });
 });

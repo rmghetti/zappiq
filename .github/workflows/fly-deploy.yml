@@ -21,9 +21,16 @@ permissions:
   contents: read
 
 jobs:
-  # ── Build gate — must pass before any deploy ──────────────────
+  # ── Portão de build e de teste: nada vai ao ar sem passar aqui ──
+  # Este job é o único portão entre um push na main e a produção. O ci.yml roda
+  # em paralelo, no MESMO push, e o deploy não espera por ele: até 14/09/2026
+  # bastava o build passar aqui para um commit com teste quebrado ir ao ar
+  # (achado A122). Por isso os testes são executados AQUI, e não só lá.
+  #
+  # Nenhum passo deste job pode terminar em `|| true`. Passo que nunca falha
+  # não é portão, é decoração.
   build-check:
-    name: Build & Security Check
+    name: Build, Test & Security Check
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -47,9 +54,46 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @zappiq/database exec prisma generate
 
-      - name: Audit dependencies for known vulnerabilities
-        run: pnpm audit --prod --audit-level=high || true
+      - name: Lint
+        run: pnpm run lint
 
+      - name: Type-check API
+        run: pnpm --filter @zappiq/api exec tsc --noEmit
+
+      - name: Type-check Web
+        run: pnpm --filter @zappiq/web exec tsc --noEmit
+
+      # As duas variáveis são as únicas obrigatórias do schema de env: os testes
+      # importam módulos que validam env no boot. São dummies, nenhum teste
+      # conecta de fato (mesmos valores do ci.yml).
+      - name: Test API (Vitest)
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/zappiq_ci?schema=public
+          JWT_SECRET: ci-dummy-jwt-secret-min-32-chars-0000000000
+        run: pnpm --filter @zappiq/api test
+
+      - name: Test Shared (Vitest)
+        run: pnpm --filter @zappiq/shared test
+
+      - name: Test Web (Vitest)
+        run: pnpm --filter @zappiq/web test
+
+      # Não existe `pnpm audit` aqui de propósito.
+      #
+      # Este job é o caminho do hotfix: quando a API está fora do ar, o conserto
+      # passa por ele. Auditoria de dependência é um portão de PRAZO, não de
+      # correção: uma advisory de terceiro publicada hoje de manhã deixaria o
+      # passo vermelho e bloquearia um hotfix que não tem nada a ver com ela,
+      # sem que ninguém possa corrigir a dependência no meio do incêndio.
+      #
+      # O portão de produção aqui é o que fala sobre ESTE código: lint, tipo,
+      # teste e build. A auditoria de dependência mora no ci.yml (`pnpm audit
+      # --prod --audit-level=high`, `pip-audit --strict` e o osv-scanner), que
+      # roda na PR e barra a ENTRADA da dependência nova, que é onde a decisão
+      # cabe. Exceções aceitas ficam em osv-scanner.toml e espelhadas em
+      # pnpm.auditConfig.ignoreGhsas no package.json da raiz, cada uma com
+      # motivo, dono e prazo (teste
+      # apps/api/src/config/excecoesDeAuditoria.test.ts, que roda logo acima).
       - name: Build all packages
         run: pnpm run build
 
@@ -69,18 +113,32 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install flyctl
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        # Pinada por SHA. Antes era @master: qualquer commit no repositório da
+        # action entrava no caminho de deploy da produção sem revisão. Este SHA
+        # é o mesmo conteúdo que a tag 1.6 aponta hoje.
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
 
       - name: Deploy API
         run: flyctl deploy --remote-only --config fly.toml
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
-      - name: Smoke test — API health
+      # Sem continue-on-error: deploy que sobe e não responde é deploy que
+      # falhou. A espera é em laço porque a máquina tem cold start.
+      - name: Smoke da API (health)
         run: |
-          sleep 10
-          curl -sf https://zappiq-api.fly.dev/health | jq .
-        continue-on-error: true
+          set -euo pipefail
+          for tentativa in $(seq 1 12); do
+            if curl -sf --max-time 10 https://zappiq-api.fly.dev/health | jq -e '.' > /dev/null; then
+              echo "API respondeu na tentativa ${tentativa}."
+              curl -sf --max-time 10 https://zappiq-api.fly.dev/health | jq .
+              exit 0
+            fi
+            echo "Tentativa ${tentativa}: API ainda não respondeu. Nova tentativa em 5s."
+            sleep 5
+          done
+          echo "::error::A API não respondeu em /health depois do deploy."
+          exit 1
 
   # ── Deploy RAG to Fly.io (gru region) ─────────────────────────
   deploy-rag:
@@ -97,15 +155,34 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install flyctl
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
 
       - name: Deploy RAG service
         run: flyctl deploy --remote-only --config services/rag/fly.toml
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
-      - name: Smoke test — RAG health
+      # O smoke confere PROVEDOR e MODELO de embedding, não só se o serviço
+      # está de pé. A coluna rag_chunks.embedding é vector(1536): se o serviço
+      # subir apontando para outro provedor ou outro modelo, toda ingestão e
+      # toda busca passam a falhar por dimensão incompatível, e hoje nada
+      # avisa. Decisão registrada em docs/architecture/embeddings.md.
+      - name: Smoke do RAG (ready, provedor e modelo de embedding)
         run: |
-          sleep 10
-          curl -sf https://zappiq-rag.fly.dev/health | jq .
-        continue-on-error: true
+          set -euo pipefail
+          for tentativa in $(seq 1 12); do
+            if curl -sf --max-time 10 https://zappiq-rag.fly.dev/ready > /tmp/ready.json; then
+              echo "RAG respondeu na tentativa ${tentativa}."
+              cat /tmp/ready.json | jq .
+              jq -e '.checks.embedding.provider == "openai"' /tmp/ready.json > /dev/null \
+                || { echo "::error::provider de embedding diferente de openai."; exit 1; }
+              jq -e '.checks.embedding.model == "text-embedding-3-small"' /tmp/ready.json > /dev/null \
+                || { echo "::error::modelo de embedding diferente de text-embedding-3-small."; exit 1; }
+              echo "Embedding conforme: openai / text-embedding-3-small."
+              exit 0
+            fi
+            echo "Tentativa ${tentativa}: RAG ainda não respondeu. Nova tentativa em 5s."
+            sleep 5
+          done
+          echo "::error::O serviço RAG não respondeu em /ready depois do deploy."
+          exit 1

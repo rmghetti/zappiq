@@ -1,0 +1,161 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Exceções do portão de dependências (osv-scanner)
+# ---------------------------------------------------------------------------
+# Este arquivo é o ÚNICO lugar onde um alerta de dependência pode ser aceito.
+# Nada de `|| true` no CI: o job `osv` do ci.yml compara a base com o branch da
+# PR e fica vermelho quando a PR INTRODUZ vulnerabilidade, até alguém corrigir
+# a dependência ou escrever a exceção aqui, com id, motivo, dono e prazo.
+# O passivo que já existe é cobrado pelo `pnpm audit --prod --audit-level=high`
+# e pelo `pip-audit --strict`, no mesmo CI e também sem `|| true`.
+#
+# Regras da casa:
+#   1. Toda entrada tem `reason` dizendo POR QUE o alerta não se aplica (ou o
+#      que impede a correção agora), QUEM é o dono e o que fecha a exceção.
+#   2. Toda entrada tem `ignoreUntil`. Prazo padrão: 30 dias. Vencido o prazo,
+#      o scanner volta a apontar e o CI fica vermelho de novo. É de propósito:
+#      exceção sem validade vira dívida invisível.
+#   3. Exceção é para alerta sem correção publicada, ou para correção que exige
+#      trabalho maior do que o PR em curso. Nunca para "dá trabalho".
+#
+# Formato (documentação: https://google.github.io/osv-scanner/configuration/):
+#
+#   [[IgnoredVulns]]
+#   id = "GHSA-xxxx-xxxx-xxxx"
+#   ignoreUntil = 2026-10-14T00:00:00Z     # sem aspas: é data TOML
+#   reason = "por que, quem é o dono, o que fecha"
+#
+#   [[PackageOverrides]]
+#   name = "pacote"
+#   ecosystem = "npm"
+#   ignore = true
+#   effectiveUntil = 2026-10-14T00:00:00Z
+#   reason = "..."
+#
+# O mesmo conjunto de ids está espelhado em `pnpm.auditConfig.ignoreGhsas` no
+# package.json da raiz, porque o `pnpm audit` não lê este arquivo. Mexeu aqui,
+# mexa lá.
+#
+# Este arquivo precisa ficar na RAIZ, ao lado do pnpm-lock.yaml: o scanner
+# procura o osv-scanner.toml na pasta do arquivo que está lendo. O CI não passa
+# `--config` de propósito, porque caminho fixo quebra a varredura da base no
+# modo de PR (a base é a main, onde o arquivo pode ainda não existir).
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Nota de 14/09/2026: houve uma tentativa de recortar as dependências só de
+# desenvolvimento com `[[PackageOverrides]] group = "dev"`. Na execução real do
+# scanner o recorte não pegou (vitest, vite, esbuild e turbo continuaram na
+# saída), então a regra foi removida em vez de ficar aqui fingindo que filtra.
+# O recorte de produção é feito pelo `pnpm audit --prod` e pelo `pip-audit`,
+# ambos no mesmo CI e ambos falhando de verdade.
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Exceções abertas em 14/09/2026
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── next 14.2.35 (apps/web) ────────────────────────────────────────────────
+# Dono: Rodrigo (MACHIA).
+#
+# Em 14/09/2026 o apps/web subiu de 14.2.18 para 14.2.35, um salto de patch
+# dentro da minor. Ele fechou três alertas, que por isso SAÍRAM desta lista:
+# GHSA-f82v-jwr5-mffw (crítico, a CVE-2025-29927 do middleware),
+# GHSA-mwv6-3258-q52c e GHSA-5j59-xgg2-r9c4.
+#
+# O que sobra só fecha no next 15.x, ou seja, uma major que mexe em App Router,
+# em build e em todas as páginas. Não cabe no PR da rede de segurança do
+# Treinar IA sem risco de derrubar a landing.
+#
+# Fatos MEDIDOS no apps/web em 14/09/2026. Cada exceção abaixo aponta para um
+# deles, e a medição tem de ser refeita antes de renovar qualquer prazo:
+#   a) não existe middleware.ts nem middleware.js em apps/web (busca por
+#      `find apps/web -name "middleware.*"` voltou vazia). Ou seja, a família de
+#      alertas de middleware não tem superfície aqui, e a CVE-2025-29927 nunca
+#      foi explorável neste app, mesmo antes do patch.
+#   b) não existe apps/web/pages: o app é todo App Router, e o next.config.js
+#      não configura i18n.
+#   c) nenhum arquivo de apps/web tem a diretiva 'use server': não há Server
+#      Action no código.
+#   d) o apps/web roda na Vercel, em Linux. Não existe servidor Windows nesta
+#      conta, então alerta específico de Windows não se aplica.
+#   e) o único rewrite do next.config.js aponta para host FIXO
+#      (zappiq-api.fly.dev/api/integrations/*); nada do destino vem do pedido.
+#
+# O que fecha: PR próprio de upgrade do Next para a 15.x, com preview
+#   verificado página a página.
+# Prazo: 14/10/2026.
+
+[[IgnoredVulns]]
+id = "GHSA-2xp9-vwfh-vxw4"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.35 no apps/web: execução remota pela API de otimização de imagem com AVIF. Correção só no 15.5.24 (major). Mitigação medida: images.remotePatterns limita as origens a **.zappiq.com.br, **.supabase.co e **.r2.cloudflarestorage.com. Risco residual aceito por 30 dias. Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-p293-qw3h-jr36"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.35 no apps/web: o alerta é execução remota em servidor hospedado no WINDOWS. O apps/web roda na Vercel, em Linux (fato d), então não se aplica. Correção só no 15.5.24 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-36qx-fr4f-26g5"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.35 no apps/web: desvio de middleware em app de Pages Router com i18n. O apps/web não tem middleware (fato a), não tem pasta pages nem i18n (fato b), então não se aplica. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-89xv-2m56-2m9x"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.35 no apps/web: falsificação de requisição do servidor em Server Action rodando em servidor próprio. Não há Server Action no código (fato c) e o deploy é na Vercel (fato d), então não se aplica. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-8h8q-6873-q5fj"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.35 no apps/web: negação de serviço por Server Component. Sem mitigação medida: o app é App Router e tem a superfície. É indisponibilidade, não vazamento nem execução, e o risco residual está aceito por 30 dias. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-c4j6-fc7j-m34r"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.35 no apps/web: falsificação de requisição em app que trata upgrade de WebSocket no servidor Next. O apps/web não trata upgrade nenhum: o WebSocket do dashboard fala com o apps/api, no Fly. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-h25m-26qc-wcjf"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.35 no apps/web: negação de serviço na desserialização de requisição de React Server Component. Sem mitigação medida. É indisponibilidade, e o risco residual está aceito por 30 dias. Correção só no 15.0.8 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-m99w-x7hq-7vfj"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.35 no apps/web: negação de serviço no App Router via Server Action. Não há Server Action no código (fato c), então não se aplica. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-p9j2-gv94-2wf4"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.35 no apps/web: falsificação de requisição em rewrite cujo host de destino é controlado pelo atacante. O único rewrite aponta para host fixo (fato e), então não se aplica. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-q4gf-8mx6-v5v3"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.35 no apps/web: negação de serviço por Server Component. Sem mitigação medida, mesma leitura do GHSA-8h8q-6873-q5fj. Correção só no 15.5.15 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+# ── OpenTelemetry no apps/api ──────────────────────────────────────────────
+# Dono: Rodrigo (MACHIA).
+# Motivo: os dois alertas dependem de configuração que a ZappIQ não usa.
+#   GHSA-q7rr-3cgh-j5r3 derruba o processo pelo servidor embutido do exporter
+#   Prometheus; apps/api/src/config/tracing.ts só usa exportadores OTLP por
+#   HTTP e não define OTEL_METRICS_EXPORTER, então esse servidor nunca sobe.
+#   GHSA-45rx-2jwx-cxfr derruba o processo pelo JaegerPropagator; o serviço usa
+#   o propagador padrão W3C e não define OTEL_PROPAGATORS.
+#   A correção exige pular de @opentelemetry/sdk-node 0.55 para 0.217 e de
+#   auto-instrumentations-node 0.52 para 0.75, o que reescreve a instrumentação
+#   inteira da API.
+# O que fecha: PR próprio de upgrade do OpenTelemetry do apps/api, com o
+#   serviço checado no Grafana Cloud depois do deploy. Se antes disso alguém
+#   ligar OTEL_METRICS_EXPORTER=prometheus ou OTEL_PROPAGATORS=jaeger, a
+#   exceção deixa de valer na hora.
+# Prazo: 14/10/2026.
+
+[[IgnoredVulns]]
+id = "GHSA-q7rr-3cgh-j5r3"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "@opentelemetry/sdk-node e auto-instrumentations-node no apps/api. O alerta é no servidor embutido do exporter Prometheus, que a ZappIQ não usa (só OTLP HTTP, sem OTEL_METRICS_EXPORTER). Dono: Rodrigo. Fecha com o PR de upgrade do OpenTelemetry."
+
+[[IgnoredVulns]]
+id = "GHSA-45rx-2jwx-cxfr"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "@opentelemetry/propagator-jaeger no apps/api. O alerta é no JaegerPropagator, que a ZappIQ não registra (propagação padrão W3C, sem OTEL_PROPAGATORS). Dono: Rodrigo. Fecha com o PR de upgrade do OpenTelemetry."
