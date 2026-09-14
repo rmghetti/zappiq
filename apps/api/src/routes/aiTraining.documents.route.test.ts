@@ -42,15 +42,20 @@ vi.mock('@zappiq/database', () => ({
 
 const ingestDocument = vi.fn().mockResolvedValue(undefined);
 const deleteDocument = vi.fn().mockResolvedValue(undefined);
-vi.mock('../services/ragService.js', () => ({
-  ingestDocument: (...a: any[]) => ingestDocument(...a),
-  deleteDocument: (...a: any[]) => deleteDocument(...a),
-  ingestUrl: vi.fn(),
-  urlToSource: (u: string) => u,
-  search: vi.fn(),
-  searchWithSources: vi.fn(),
-  namespaceFor: (o: string) => `org_${o}`,
-}));
+// O módulo real entra por baixo: a rota usa dele o `falhaDeIngestao`, que
+// traduz o erro da ingestão no status e na frase que o cliente lê. Só as
+// funções que saem do processo são substituídas.
+vi.mock('../services/ragService.js', async () => {
+  const real = await vi.importActual<any>('../services/ragService.js');
+  return {
+    ...real,
+    ingestDocument: (...a: any[]) => ingestDocument(...a),
+    deleteDocument: (...a: any[]) => deleteDocument(...a),
+    ingestUrl: vi.fn(),
+    search: vi.fn(),
+    searchWithSources: vi.fn(),
+  };
+});
 
 // Auth: injeta a org do teste, sem JWT.
 vi.mock('../middleware/auth.js', () => ({
@@ -171,20 +176,26 @@ describe('PUT /api/ai-training/documents/:id', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(update).toHaveBeenCalledWith(
+    // O texto novo e o estado 'processando' entram juntos, ANTES da
+    // reingestão: o 'pronto' só vem depois que o vetor aceitou. Marcar
+    // 'pronto' de saída deixava o documento verde na tela mesmo quando a
+    // reingestão falhava, com zero trecho no vetor (revisão PI-3).
+    expect(update).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         where: { id: 'doc-1' },
         data: {
           title: 'Política de troca',
           content: 'Trocas em até 30 dias corridos, com nota fiscal e produto sem uso.',
-          // Edição bem-sucedida devolve o documento ao estado 'pronto': se a
-          // ingestão anterior tinha falhado, a lista não pode continuar
-          // mostrando o erro antigo (achado A142).
-          status: 'pronto',
+          status: 'processando',
           motivo: null,
         },
       }),
     );
+    // Edição bem-sucedida devolve o documento ao estado 'pronto': se a
+    // ingestão anterior tinha falhado, a lista não pode continuar mostrando o
+    // erro antigo (achado A142).
+    expect(update.mock.calls.at(-1)![0].data).toEqual({ status: 'pronto', motivo: null });
     expect(ingestDocument).toHaveBeenCalledTimes(1);
     const [org, payload] = ingestDocument.mock.calls[0];
     expect(org).toBe(ORG);
@@ -241,7 +252,10 @@ describe('PUT /api/ai-training/documents/:id', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it('falha do RAG não derruba a edição (best-effort, igual ao Q&A)', async () => {
+  it('falha do RAG salva o texto, mas diz que não indexou e marca o documento', async () => {
+    // Era "best-effort": respondia 200 e a lista mostrava o documento pronto
+    // com o conteúdo velho (ou nenhum) no vetor. O texto continua salvo no
+    // Postgres, mas o cliente precisa saber que a IA ainda não sabe disso.
     findFirst.mockResolvedValue(TEXT_DOC);
     update.mockResolvedValue(TEXT_DOC);
     ingestDocument.mockRejectedValueOnce(new Error('vector store fora do ar'));
@@ -250,8 +264,12 @@ describe('PUT /api/ai-training/documents/:id', () => {
       title: 'Política de troca',
       content: 'Trocas em até 30 dias corridos, com nota fiscal e produto sem uso.',
     });
+    const body = await res.json();
 
-    expect(res.status).toBe(200); // conteúdo salvo no banco; RAG reconcilia depois
+    expect(res.status).toBe(503);
+    expect(body.error).toBe('Não consegui indexar este conteúdo agora. Tente de novo em alguns minutos.');
+    expect(update.mock.calls.at(-1)![0].data.status).toBe('falhou');
+    expect(deleteDocument).not.toHaveBeenCalled();
   });
 });
 

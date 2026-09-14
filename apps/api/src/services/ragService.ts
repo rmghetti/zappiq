@@ -343,6 +343,9 @@ export const MENSAGEM_REDE_SOCIAL =
 export const MENSAGEM_PAGINA_ILEGIVEL =
   'Não consegui abrir esta página. Confira o endereço ou cole o conteúdo como texto.';
 
+export const MENSAGEM_URL_NAO_PUBLICA =
+  'Este endereço não é público. Cole o conteúdo como texto ou use um link que abra no navegador.';
+
 const MENSAGEM_INGESTAO_GENERICA =
   'Não consegui indexar este conteúdo. Confira o arquivo e envie de novo.';
 
@@ -482,12 +485,23 @@ export async function ingestDocument(
   return res.json();
 }
 
-// Block SSRF: reject internal/private network URLs
+/**
+ * Recusa endereço interno (SSRF).
+ *
+ * Todas as recusas saem como RagRequestError 422. Antes era `new Error` cru:
+ * a rota não reconhecia o erro, `falhaDeIngestao` devolvia 503 e o cliente lia
+ * "Tente de novo em alguns minutos" para um endereço que nunca vai funcionar,
+ * por mais que ele tente. A frase agora diz a verdade e o que fazer.
+ */
 function assertPublicUrl(url: string): void {
-  let parsed: URL;
-  try { parsed = new URL(url); } catch { throw new Error('Invalid URL'); }
+  const recusar = (): never => {
+    throw new RagRequestError(422, MENSAGEM_URL_NAO_PUBLICA);
+  };
 
-  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only http/https URLs allowed');
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return recusar(); }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) return recusar();
 
   const hostname = parsed.hostname.toLowerCase();
   const blocked = [
@@ -495,14 +509,14 @@ function assertPublicUrl(url: string): void {
     '169.254.169.254',   // cloud metadata
     'metadata.google.internal',
   ];
-  if (blocked.includes(hostname)) throw new Error('Internal URLs are not allowed');
+  if (blocked.includes(hostname)) return recusar();
 
   // Block RFC 1918 private ranges
   const parts = hostname.split('.').map(Number);
   if (parts.length === 4 && parts.every(p => !isNaN(p))) {
-    if (parts[0] === 10) throw new Error('Private IP not allowed');
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) throw new Error('Private IP not allowed');
-    if (parts[0] === 192 && parts[1] === 168) throw new Error('Private IP not allowed');
+    if (parts[0] === 10) return recusar();
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return recusar();
+    if (parts[0] === 192 && parts[1] === 168) return recusar();
   }
 }
 
@@ -515,6 +529,81 @@ function assertPublicUrl(url: string): void {
  * 404/422. Aqui fazemos o fetch da URL e reaproveitamos `ingestDocument`,
  * respeitando o contrato real. O guard anti-SSRF continua valendo.
  */
+/**
+ * HTML → texto legível, feito aqui na API.
+ *
+ * Isto NÃO é código morto e não foi substituído pelo Readability do serviço de
+ * indexação: é o caminho de quando o RAG que está no ar ainda não sabe ler
+ * HTML. Ver `ragCapabilities`. Sem ele, a página inteira (script, menu,
+ * rodapé) entrava no vetor: uma única página do YouTube gerou 1.532 trechos de
+ * lixo que competiam no retrieval com o conteúdo curado do cliente.
+ */
+export function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<\/(p|div|section|article|li|tr|h[1-6]|br)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .trim();
+}
+
+// ── Capacidade do serviço de indexação ───────────────────────────────────────
+
+/**
+ * O que o RAG que está no ar sabe extrair.
+ *
+ * A janela de deploy não é simétrica: a API sobe sozinha ao fundir na `main`,
+ * o RAG só sobe depois, num `workflow_dispatch` manual. Durante esse intervalo
+ * a API nova conversa com o RAG antigo, que trata `text/html` como `text/*` e
+ * grava a página inteira no vetor, com selo verde de indexado na tela. Depender
+ * de alguém lembrar a ordem do deploy não é correção.
+ *
+ * Então a API pergunta. O `/ready` do RAG novo traz
+ * `extratores: ["pdf","docx","xlsx","html","texto"]`; o antigo não traz campo
+ * nenhum, e a ausência é lida como "não sabe HTML", que é o caminho seguro.
+ * Cache de 5 minutos em memória porque isso muda uma vez por deploy, e o custo
+ * de errar por 5 minutos é usar a limpeza antiga, não indexar lixo.
+ */
+const CAPACIDADES_TTL_MS = 5 * 60_000;
+
+let capacidadesDoRag: { extratores: Set<string>; expiraEm: number } | null = null;
+
+/** Só para teste: derruba o cache entre casos. */
+export function esquecerCapacidadesDoRag(): void {
+  capacidadesDoRag = null;
+}
+
+export async function ragCapabilities(): Promise<Set<string>> {
+  const agora = Date.now();
+  if (capacidadesDoRag && capacidadesDoRag.expiraEm > agora) return capacidadesDoRag.extratores;
+
+  let extratores = new Set<string>();
+  try {
+    const { data } = await ragClient.get('/ready');
+    const lista = (data as { extratores?: unknown } | null)?.extratores;
+    if (Array.isArray(lista)) {
+      extratores = new Set(lista.filter((item): item is string => typeof item === 'string'));
+    }
+  } catch (err: any) {
+    // Serviço fora do ar não é motivo para mandar HTML cru: fica a lista vazia,
+    // que leva ao caminho antigo.
+    logger.warn(`[RAG] não consegui ler as capacidades do /ready: ${err?.message}`);
+  }
+
+  capacidadesDoRag = { extratores, expiraEm: agora + CAPACIDADES_TTL_MS };
+  return extratores;
+}
+
 /**
  * Nome de `source` estável derivado da URL (hostname+pathname, sem protocolo).
  * Usado na ingestão E na reconciliação de chunks por documento — precisa ser
@@ -558,17 +647,32 @@ export async function ingestUrl(
     (resp.headers['content-type'] as string | undefined)?.split(';')[0]?.trim() ||
     'text/plain';
 
-  // O HTML vai CRU para o serviço de indexação, que extrai o conteúdo
-  // principal com Readability e recusa página sem texto legível. A limpeza por
-  // expressão regular que existia aqui entregava menu e rodapé: o site do CMJ
-  // rendeu 1 trecho de 29 caracteres e apareceu como indexado.
+  const metadata = opcoes.titulo ? { titulo: opcoes.titulo } : undefined;
+  const ehPagina = mimeType === 'text/html' || mimeType === 'application/xhtml+xml';
+
+  // Com o RAG novo, a página vai CRUA: lá ela passa pelo Readability, que tira
+  // menu e rodapé, e pelo portão de conteúdo mínimo. Com o RAG antigo, que
+  // aceitaria o HTML como texto e gravaria a página inteira, a limpeza
+  // acontece aqui, como sempre aconteceu.
+  if (ehPagina && !(await ragCapabilities()).has('html')) {
+    const texto = htmlToPlainText(Buffer.from(resp.data).toString('utf-8'));
+    if (!texto) throw new RagRequestError(422, MENSAGEM_PAGINA_ILEGIVEL);
+    return ingestDocument(organizationId, {
+      filename: urlToSource(url),
+      content: Buffer.from(texto, 'utf-8'),
+      mimeType: 'text/plain',
+      source: opcoes.source,
+      metadata,
+    });
+  }
+
   return ingestDocument(organizationId, {
     filename: urlToSource(url),
     content: Buffer.from(resp.data),
     mimeType,
     source: opcoes.source,
     sourceUrl: url,
-    metadata: opcoes.titulo ? { titulo: opcoes.titulo } : undefined,
+    metadata,
   });
 }
 

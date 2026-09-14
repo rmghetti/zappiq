@@ -68,6 +68,36 @@ export function nomeDeArquivoDoUpload(bruto: string | undefined | null): string 
   return corrigido.normalize('NFC');
 }
 
+/**
+ * Nome de uma página enquanto ela não tem título de verdade.
+ *
+ * O documento de URL nascia com a URL inteira no título: na lista,
+ * "https://cmj.com.br/cursos/conselho-do-futuro" ocupa a linha toda e não diz
+ * que página é aquela. Aqui fica "cmj.com.br/conselho-do-futuro". Quando o
+ * serviço de indexação devolve o `titulo_detectado` (a tag `<title>` da
+ * página), esse é melhor ainda e substitui este.
+ */
+export function tituloDeUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+
+  const trechos = parsed.pathname.split('/').filter(Boolean);
+  const ultimo = trechos[trechos.length - 1];
+  if (!ultimo) return parsed.hostname;
+
+  let legivel = ultimo;
+  try {
+    legivel = decodeURIComponent(ultimo);
+  } catch {
+    // Percent-encoding quebrado: fica o trecho como veio.
+  }
+  return `${parsed.hostname}/${legivel}`;
+}
+
 /** Quantos documentos da organização dividem cada source antigo. */
 export function donosDoSourceLegado(docs: DocumentoParaSource[]): Map<string, number> {
   const donos = new Map<string, number>();

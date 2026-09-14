@@ -56,6 +56,7 @@ import {
   nomeDeArquivoDoUpload,
   donosDoSourceLegado,
   trechosDoDocumento,
+  tituloDeUrl,
   type DocumentoParaSource,
 } from './aiTraining.documents.util.js';
 import {
@@ -106,8 +107,13 @@ async function logTraining(
 
 // ── Multer config ───────────────────────────────────────
 // A lista de formatos vive em aiTraining.text.util.ts, com teste: é ela que
-// mantém a tela, o accept do input e o filtro dizendo a mesma coisa. Word e
-// Excel saíram dela: o indexador responde 415 e nenhum documento é criado.
+// mantém a tela, o accept do input e o filtro dizendo a mesma coisa. Word
+// (.docx) e Excel (.xlsx) entraram nela em 14/09/2026, quando os conversores
+// passaram a existir de verdade no motor de indexação. Ficam fora de propósito
+// 'application/msword' (.doc) e 'application/vnd.ms-excel' (.xls), os binários
+// do Office 97: o mammoth e o openpyxl leem só OOXML, e aceitar na porta
+// adiava a recusa para depois do upload inteiro.
+//
 // O limite vive em config/upload.ts, porque o errorHandler precisa do MESMO
 // número para escrever a mensagem de 413 que o cliente lê.
 const upload = multer({
@@ -250,6 +256,19 @@ const SELECT_DOCUMENTO = {
 } as const;
 
 /**
+ * Documento em `falhou` não ocupa lugar nenhum.
+ *
+ * Ele existe só para o cliente ler o motivo e tentar de novo. Contá-lo como
+ * repetido fazia o reenvio do MESMO arquivo virar 409 "Já existe um documento
+ * com este título": o cliente ficava com uma linha que não indexa e que ele
+ * não consegue substituir. A tela manda tentar de novo e a API recusava.
+ */
+const SO_OS_QUE_VALEM = { status: { not: 'falhou' } } as const;
+
+/** Chave pela qual um reenvio reconhece o documento que já tentou entrar. */
+type ChaveDoDocumento = { title: string } | { sourceUrl: string };
+
+/**
  * Recusa título repetido na mesma organização (409).
  *
  * Sem isto, dois documentos com o mesmo título dividiam o mesmo lugar no vetor
@@ -267,11 +286,42 @@ async function garantirTituloLivre(
   const repetidos = await prisma.kBDocument.count({
     where: {
       title,
+      ...SO_OS_QUE_VALEM,
       knowledgeBase: { organizationId: orgId },
       ...(ignorarId ? { NOT: { id: ignorarId } } : {}),
     },
   });
   return repetidos === 0;
+}
+
+/** A mesma página já está na base? URL casa por endereço, não por título. */
+async function paginaJaNaBase(orgId: string, url: string): Promise<boolean> {
+  const repetidas = await prisma.kBDocument.count({
+    where: {
+      sourceUrl: url,
+      ...SO_OS_QUE_VALEM,
+      knowledgeBase: { organizationId: orgId },
+    },
+  });
+  return repetidas > 0;
+}
+
+/**
+ * A linha que este mesmo documento já tem na base e ficou em `falhou`.
+ *
+ * O reenvio reaproveita ela em vez de criar outra: duas linhas do mesmo
+ * arquivo, uma vermelha e uma verde, é lixo na tela do cliente e faz a
+ * contagem de documentos do score mentir.
+ */
+async function linhaQueFalhou(
+  orgId: string,
+  chave: ChaveDoDocumento,
+): Promise<{ id: string } | null> {
+  return prisma.kBDocument.findFirst({
+    where: { ...chave, status: 'falhou', knowledgeBase: { organizationId: orgId } },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
+  });
 }
 
 /** Os outros documentos da organização, para saber quem divide qual source. */
@@ -329,15 +379,20 @@ async function concluirIngestao(
   orgId: string,
   docId: string,
   erro: unknown | null,
+  opcoes: { statusDeSucesso?: number; tituloNovo?: string } = {},
 ) {
   if (!erro) {
     const documento = await prisma.kBDocument.update({
       where: { id: docId },
-      data: { status: 'pronto', motivo: null },
+      data: {
+        status: 'pronto',
+        motivo: null,
+        ...(opcoes.tituloNovo ? { title: opcoes.tituloNovo } : {}),
+      },
       select: SELECT_DOCUMENTO,
     });
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
-    res.status(201).json({ document: documento, readiness });
+    res.status(opcoes.statusDeSucesso ?? 201).json({ document: documento, readiness });
     return;
   }
 
@@ -350,7 +405,39 @@ async function concluirIngestao(
       select: SELECT_DOCUMENTO,
     })
     .catch(() => null);
-  res.status(falha.status).json({ error: falha.mensagem, document: documento });
+  // O score muda na falha também: o documento saiu de 'processando' e a
+  // contagem de documentos prontos da organização não é mais a mesma. Deixar
+  // de recalcular aqui fazia a tela mostrar o número de antes do envio até o
+  // cliente recarregar a página.
+  const readiness = await refreshAIReadiness(orgId).catch(() => null);
+  res.status(falha.status).json({ error: falha.mensagem, document: documento, readiness });
+}
+
+/**
+ * A linha do documento para esta tentativa: a que falhou antes, ou uma nova.
+ *
+ * Reaproveitar a linha em `falhou` é o que faz o botão "enviar de novo"
+ * funcionar sem deixar duas linhas do mesmo arquivo na tela.
+ */
+async function abrirDocumento(
+  orgId: string,
+  chave: ChaveDoDocumento,
+  dados: Record<string, unknown>,
+) {
+  const anterior = await linhaQueFalhou(orgId, chave);
+  if (anterior) {
+    return prisma.kBDocument.update({
+      where: { id: anterior.id },
+      data: { ...dados, status: 'processando', motivo: null },
+      select: SELECT_DOCUMENTO,
+    });
+  }
+
+  const kb = await ensureKnowledgeBase(orgId);
+  return prisma.kBDocument.create({
+    data: { ...(dados as any), status: 'processando', knowledgeBaseId: kb.id },
+    select: SELECT_DOCUMENTO,
+  });
 }
 
 // Contagem de chunks por source no vector store (mesma instância Postgres).
@@ -414,22 +501,19 @@ router.post(
         return;
       }
 
-      // Garante existência da knowledgeBase (criada no onboarding, mas seguro).
-      const kb = await ensureKnowledgeBase(orgId);
-
       // O documento nasce ANTES da ingestão. Assim o source do vetor pode ser
       // o id (único por definição) e uma falha deixa rastro na tela em vez de
-      // um alerta que some (achados A001, A017b e A142).
-      const doc = await prisma.kBDocument.create({
-        data: {
+      // um alerta que some (achados A001, A017b e A142). Se já existe uma
+      // tentativa que falhou com este título, ela é reaproveitada.
+      const doc = await abrirDocumento(
+        orgId,
+        { title },
+        {
           title,
           sourceType: file.mimetype,
           content: '', // chunks ficam no vector store; contrato mínimo aqui
-          status: 'processando',
-          knowledgeBaseId: kb.id,
         },
-        select: SELECT_DOCUMENTO,
-      });
+      );
 
       let erro: unknown = null;
       try {
@@ -467,39 +551,44 @@ router.post(
       const { url } = req.body as { url: string };
 
       // A mesma URL duas vezes duplicava trechos na base e disputava o top 5
-      // com o conteúdo bom (achado A012).
-      if (!(await garantirTituloLivre(orgId, url))) {
+      // com o conteúdo bom (achado A012). A comparação é pelo ENDEREÇO: o
+      // título deixa de ser a URL assim que a página é lida.
+      if (await paginaJaNaBase(orgId, url)) {
         res.status(409).json({ error: MENSAGEM_TITULO_REPETIDO });
         return;
       }
 
-      const kb = await ensureKnowledgeBase(orgId);
-
-      const doc = await prisma.kBDocument.create({
-        data: {
-          title: url,
-          sourceType: 'url',
-          sourceUrl: url,
-          content: '',
-          status: 'processando',
-          knowledgeBaseId: kb.id,
-        },
-        select: SELECT_DOCUMENTO,
-      });
+      // O título nasce sendo a própria URL e é trocado quando a leitura der
+      // certo: assim, se falhar, o cliente vê o endereço exato para conferir.
+      const doc = await abrirDocumento(
+        orgId,
+        { sourceUrl: url },
+        { title: url, sourceType: 'url', sourceUrl: url, content: '' },
+      );
 
       let erro: unknown = null;
+      let tituloNovo: string | undefined;
       try {
-        await ragService.ingestUrl(orgId, url, {
+        const resposta = await ragService.ingestUrl(orgId, url, {
           source: sourceDoDocumento(doc.id),
           titulo: url,
         });
+        // "https://cmj.com.br/cursos/conselho-do-futuro" ocupa a linha inteira
+        // da lista e não diz que página é aquela. O <title> da página diz; sem
+        // ele, hostname mais o último trecho do caminho já diz mais.
+        const detectado = (resposta as { titulo_detectado?: unknown } | null)?.titulo_detectado;
+        const candidato =
+          typeof detectado === 'string' && detectado.trim() ? detectado.trim() : tituloDeUrl(url);
+        if (candidato !== doc.title && (await garantirTituloLivre(orgId, candidato, doc.id))) {
+          tituloNovo = candidato;
+        }
       } catch (falha) {
         erro = falha;
       }
 
       await logTraining(req, 'kb.url.create', 'kb_document', doc.id, `URL ingerida: ${url}`);
 
-      await concluirIngestao(res, orgId, doc.id, erro);
+      await concluirIngestao(res, orgId, doc.id, erro, { tituloNovo });
     } catch (err: any) {
       logger.warn(`[AITraining] URL ingest falhou: ${err.message}`);
       next(err);
@@ -524,18 +613,15 @@ router.post(
         return;
       }
 
-      const kb = await ensureKnowledgeBase(orgId);
-
-      const doc = await prisma.kBDocument.create({
-        data: {
+      const doc = await abrirDocumento(
+        orgId,
+        { title },
+        {
           title,
           sourceType: 'text',
           content, // texto colado é curto: guardamos o canônico aqui também
-          status: 'processando',
-          knowledgeBaseId: kb.id,
         },
-        select: SELECT_DOCUMENTO,
-      });
+      );
 
       let erro: unknown = null;
       try {
@@ -625,18 +711,38 @@ router.put(
         return;
       }
 
-      const doc = await prisma.kBDocument.update({
+      // 'processando' enquanto a reingestão roda. Antes daqui a rota marcava
+      // 'pronto' ANTES de reingerir e engolia o erro: uma reingestão que
+      // falhava deixava o documento verde na tela com o conteúdo velho, ou
+      // nenhum, no vetor (achado da revisão PI-3).
+      await prisma.kBDocument.update({
         where: { id },
-        data: { title, content, status: 'pronto', motivo: null },
+        data: { title, content, status: 'processando', motivo: null },
         select: SELECT_DOCUMENTO,
       });
+
+      let erro: unknown = null;
+      try {
+        await ragService.ingestDocument(orgId, {
+          filename: title,
+          content: Buffer.from(content, 'utf-8'),
+          mimeType: 'text/plain',
+          source: sourceDoDocumento(id),
+          metadata: { titulo: title },
+        });
+      } catch (falha) {
+        erro = falha;
+      }
 
       // O source é doc-<id>, então mudar o título não move mais os trechos de
       // lugar: a reingestão substitui o conteúdo no mesmo source. O que sai é
       // o source ANTIGO (título), que ainda existe enquanto o reprocessamento
       // do RAG não roda, e só quando ninguém mais divide ele (achado A001).
+      //
+      // SÓ depois do sucesso: apagar antes trocava o conteúdo velho por nada
+      // quando a reingestão falhava.
       const legado = sourceLegado({ ...existing, sourceType: existing.sourceType });
-      if (legado !== sourceDoDocumento(id)) {
+      if (!erro && legado !== sourceDoDocumento(id)) {
         const donos = donosDoSourceLegado(await outrosDocumentos(orgId, id));
         if ((donos.get(legado) ?? 0) === 0) {
           await ragService
@@ -647,25 +753,11 @@ router.put(
         }
       }
 
-      // Best-effort, igual ao Q&A: o conteúdo já está salvo no Postgres.
-      await ragService
-        .ingestDocument(orgId, {
-          filename: title,
-          content: Buffer.from(content, 'utf-8'),
-          mimeType: 'text/plain',
-          source: sourceDoDocumento(id),
-          metadata: { titulo: title },
-        })
-        .catch((err: any) =>
-          logger.warn(`[AITraining] RAG re-sync texto (update) falhou: ${err.message}`),
-        );
-
-      await logTraining(req, 'kb.text.update', 'kb_document', doc.id,
+      await logTraining(req, 'kb.text.update', 'kb_document', id,
         `Texto editado: "${title}"`,
         { before: { title: existing.title, content: existing.content }, after: { title, content } });
 
-      const readiness = await refreshAIReadiness(orgId).catch(() => null);
-      res.json({ document: doc, readiness });
+      await concluirIngestao(res, orgId, id, erro, { statusDeSucesso: 200 });
     } catch (err: any) {
       logger.warn(`[AITraining] Edição de texto falhou: ${err.message}`);
       next(err);

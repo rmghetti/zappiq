@@ -63,7 +63,10 @@ vi.mock('../services/ragService.js', async () => {
       passos.push('ingest-url');
       return ingestUrl(...a);
     },
-    deleteDocument: (...a: any[]) => deleteDocument(...a),
+    deleteDocument: (...a: any[]) => {
+      passos.push('delete');
+      return deleteDocument(...a);
+    },
     search: vi.fn(),
     searchWithSources: vi.fn(),
   };
@@ -370,5 +373,215 @@ describe('GET /documents', () => {
     const body = await (await fetch(`${base}/api/ai-training/documents`)).json();
 
     expect(body.documents[0].ragChunks).toBeNull();
+  });
+});
+
+// ── Reenvio depois de uma falha ─────────────────────────────────────────────
+describe('documento que falhou não tranca o reenvio', () => {
+  it('a checagem de título repetido ignora os que estão em "falhou"', async () => {
+    await enviarArquivo('Proposta.pdf');
+
+    const [argumentos] = kbDoc.count.mock.calls[0];
+    expect(argumentos.where.status).toEqual({ not: 'falhou' });
+  });
+
+  it('reaproveita a linha que falhou em vez de criar uma segunda', async () => {
+    // Antes: a linha 'falhou' contava como título repetido, o reenvio do MESMO
+    // arquivo virava 409 e o cliente ficava com um documento que não indexa e
+    // não pode ser substituído.
+    kbDoc.findFirst.mockResolvedValue({ id: 'ckfalhou' });
+
+    const res = await enviarArquivo('Proposta.pdf');
+
+    expect(res.status).toBe(201);
+    expect(kbDoc.create).not.toHaveBeenCalled();
+    expect(passos).toEqual(['update:processando', 'ingest', 'update:pronto']);
+    expect(ingestDocument.mock.calls[0][1].source).toBe('doc-ckfalhou');
+  });
+
+  it('texto colado também reaproveita a linha que falhou', async () => {
+    kbDoc.findFirst.mockResolvedValue({ id: 'ckfalhou' });
+
+    await postJson('/documents/text', {
+      title: 'Política de troca',
+      content: 'Aceitamos trocas em até 7 dias corridos, com nota fiscal.',
+    });
+
+    expect(kbDoc.create).not.toHaveBeenCalled();
+    expect(ingestDocument.mock.calls[0][1].source).toBe('doc-ckfalhou');
+  });
+
+  it('URL também reaproveita, e a busca é pelo endereço, não pelo título', async () => {
+    kbDoc.findFirst.mockResolvedValue({ id: 'ckfalhou' });
+
+    await postJson('/documents/url', { url: 'https://cmj.com.br/cursos' });
+
+    expect(kbDoc.create).not.toHaveBeenCalled();
+    expect(kbDoc.findFirst.mock.calls[0][0].where.sourceUrl).toBe('https://cmj.com.br/cursos');
+    expect(ingestUrl.mock.calls[0][2].source).toBe('doc-ckfalhou');
+  });
+
+  it('a falha também atualiza o score: o documento saiu de "processando"', async () => {
+    const { refreshAIReadiness } = await import('../services/aiReadinessService.js');
+    (refreshAIReadiness as any).mockClear();
+    ingestDocument.mockRejectedValue(new Error('fetch failed'));
+
+    const body = await (await enviarArquivo('Proposta.pdf')).json();
+
+    expect(refreshAIReadiness).toHaveBeenCalledWith(ORG);
+    expect(body.readiness).toEqual({ score: 42 });
+  });
+});
+
+// ── Endereço interno ────────────────────────────────────────────────────────
+describe('POST /documents/url com endereço não público', () => {
+  it('devolve 422 com o que fazer, e não 503 "tente de novo em alguns minutos"', async () => {
+    // O guard anti-SSRF lançava Error cru: virava 503 e o cliente lia uma
+    // promessa falsa, porque http://127.0.0.1 nunca vai funcionar por espera.
+    const real = await vi.importActual<any>('../services/ragService.js');
+    ingestUrl.mockImplementation((...a: any[]) => real.ingestUrl(...a));
+
+    const res = await postJson('/documents/url', { url: 'http://127.0.0.1:8001/admin' });
+    const body = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(body.error).toBe(
+      'Este endereço não é público. Cole o conteúdo como texto ou use um link que abra no navegador.',
+    );
+    expect(body.error).not.toContain('alguns minutos');
+    const falha = kbDoc.update.mock.calls.find((c: any[]) => c[0].data.status === 'falhou');
+    expect(falha![0].data.motivo).toContain('não é público');
+  });
+});
+
+// ── Título da página ────────────────────────────────────────────────────────
+describe('título do documento de URL', () => {
+  it('vira o <title> da página quando o serviço devolve um', async () => {
+    ingestUrl.mockResolvedValue({ chunks_ingested: 3, titulo_detectado: 'Conselho do Futuro | CMJ' });
+
+    await postJson('/documents/url', { url: 'https://cmj.com.br/cursos/conselho-do-futuro' });
+
+    const pronto = kbDoc.update.mock.calls.find((c: any[]) => c[0].data.status === 'pronto');
+    expect(pronto![0].data.title).toBe('Conselho do Futuro | CMJ');
+  });
+
+  it('sem <title>, fica hostname mais o último trecho do caminho', async () => {
+    ingestUrl.mockResolvedValue({ chunks_ingested: 3 });
+
+    await postJson('/documents/url', { url: 'https://cmj.com.br/cursos/conselho-do-futuro' });
+
+    const pronto = kbDoc.update.mock.calls.find((c: any[]) => c[0].data.status === 'pronto');
+    expect(pronto![0].data.title).toBe('cmj.com.br/conselho-do-futuro');
+  });
+
+  it('a ingestão que falha não renomeia nada: o endereço fica visível para conferir', async () => {
+    ingestUrl.mockRejectedValue(new Error('fetch failed'));
+
+    await postJson('/documents/url', { url: 'https://cmj.com.br/cursos' });
+
+    const falha = kbDoc.update.mock.calls.find((c: any[]) => c[0].data.status === 'falhou');
+    expect(falha![0].data.title).toBeUndefined();
+  });
+});
+
+// ── Tipos de arquivo aceitos na porta ───────────────────────────────────────
+describe('porta de entrada do upload', () => {
+  it.each([
+    ['contrato.doc', 'application/msword'],
+    ['tabela.xls', 'application/vnd.ms-excel'],
+  ])('recusa %s na porta, com a lista do que entra', async (nome, tipo) => {
+    // O .doc e o .xls binários (Office 97) não são lidos por mammoth nem por
+    // openpyxl. Aceitar na porta só adiava a recusa para depois do upload
+    // inteiro, com um 422 genérico em vez da lista do que serve.
+    const res = await enviarArquivo(nome, tipo);
+    const body = await res.json();
+
+    expect(res.status).toBe(415);
+    expect(body.error).toContain('Word (.docx)');
+    expect(ingestDocument).not.toHaveBeenCalled();
+  });
+
+  it('.docx e .xlsx continuam entrando', async () => {
+    const docx = await enviarArquivo(
+      'politica.docx',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    const xlsx = await enviarArquivo(
+      'precos.xlsx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+
+    expect(docx.status).toBe(201);
+    expect(xlsx.status).toBe(201);
+  });
+});
+
+// ── PUT: o estado tem de refletir a reingestão ──────────────────────────────
+describe('PUT /documents/:id', () => {
+  const TEXTO = {
+    id: 'cktexto',
+    title: 'Política de troca',
+    sourceType: 'text',
+    sourceUrl: null,
+    content: 'versão antiga',
+  };
+
+  const editar = (corpo: unknown) =>
+    fetch(`${base}/api/ai-training/documents/cktexto`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+    });
+
+  const CORPO = {
+    title: 'Política de troca',
+    content: 'Aceitamos trocas em até 30 dias corridos, com nota fiscal.',
+  };
+
+  it('edição que reingere bem responde 200 e deixa o documento pronto', async () => {
+    kbDoc.findFirst.mockResolvedValue(TEXTO);
+
+    const res = await editar(CORPO);
+
+    expect(res.status).toBe(200);
+    expect(passos).toEqual(['update:processando', 'ingest', 'delete', 'update:pronto']);
+  });
+
+  it('reingestão que falha deixa "falhou" com o motivo, e não "pronto" com zero trechos', async () => {
+    // Antes o PUT marcava 'pronto' ANTES de reingerir e engolia o erro: o
+    // documento ficava verde na tela com o conteúdo velho (ou nenhum) no vetor.
+    kbDoc.findFirst.mockResolvedValue(TEXTO);
+    const { RagRequestError } = await import('../services/ragService.js');
+    ingestDocument.mockRejectedValue(new RagRequestError(422, 'Não encontrei texto neste arquivo.'));
+
+    const res = await editar(CORPO);
+    const body = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(body.error).toBe('Não encontrei texto neste arquivo.');
+    const falha = kbDoc.update.mock.calls.find((c: any[]) => c[0].data.status === 'falhou');
+    expect(falha![0].data.motivo).toBe('Não encontrei texto neste arquivo.');
+    expect(kbDoc.update.mock.calls.some((c: any[]) => c[0].data.status === 'pronto')).toBe(false);
+  });
+
+  it('o source antigo só some depois que a reingestão dá certo', async () => {
+    kbDoc.findFirst.mockResolvedValue(TEXTO);
+    kbDoc.findMany.mockResolvedValue([]);
+
+    await editar(CORPO);
+
+    expect(deleteDocument).toHaveBeenCalledWith(ORG, 'Política de troca');
+    expect(passos.indexOf('ingest')).toBeLessThan(passos.indexOf('delete'));
+  });
+
+  it('reingestão que falha não apaga o source antigo', async () => {
+    // Apagar antes de reingerir trocava conteúdo velho por nada.
+    kbDoc.findFirst.mockResolvedValue(TEXTO);
+    kbDoc.findMany.mockResolvedValue([]);
+    ingestDocument.mockRejectedValue(new Error('fetch failed'));
+
+    await editar(CORPO);
+
+    expect(deleteDocument).not.toHaveBeenCalled();
   });
 });

@@ -15,6 +15,7 @@ import {
   nomeDeArquivoDoUpload,
   donosDoSourceLegado,
   trechosDoDocumento,
+  tituloDeUrl,
 } from './aiTraining.documents.util.js';
 
 const ARQUIVO = {
@@ -129,5 +130,42 @@ describe('trechosDoDocumento', () => {
     // A consulta ao vetor pode falhar. Pintar a base inteira de âmbar assusta o
     // cliente e o faz reenviar documento que está no lugar certo (A017).
     expect(trechosDoDocumento(ARQUIVO, null, new Map())).toBeNull();
+  });
+});
+
+describe('tituloDeUrl', () => {
+  // Na lista, "https://cmj.com.br/cursos/conselho-do-futuro" ocupa a linha
+  // inteira e não diz que página é aquela. O título da página é melhor, mas só
+  // existe depois da ingestão: este é o nome enquanto isso, e o definitivo
+  // quando a página não tem <title>.
+  it('usa hostname e o último trecho do caminho', () => {
+    expect(tituloDeUrl('https://cmj.com.br/cursos/conselho-do-futuro')).toBe(
+      'cmj.com.br/conselho-do-futuro',
+    );
+  });
+
+  it('ignora a barra final', () => {
+    expect(tituloDeUrl('https://cmj.com.br/cursos/')).toBe('cmj.com.br/cursos');
+  });
+
+  it('página raiz fica só com o hostname', () => {
+    expect(tituloDeUrl('https://cmj.com.br')).toBe('cmj.com.br');
+    expect(tituloDeUrl('https://cmj.com.br/')).toBe('cmj.com.br');
+  });
+
+  it('descarta a query, que é ruído para quem lê', () => {
+    expect(tituloDeUrl('https://cmj.com.br/cursos?utm_source=email')).toBe(
+      'cmj.com.br/cursos',
+    );
+  });
+
+  it('devolve o caminho com acento legível', () => {
+    expect(tituloDeUrl('https://cmj.com.br/pol%C3%ADtica-de-privacidade')).toBe(
+      'cmj.com.br/política-de-privacidade',
+    );
+  });
+
+  it('endereço que não parseia volta inteiro, sem inventar nome', () => {
+    expect(tituloDeUrl('isto não é uma URL')).toBe('isto não é uma URL');
   });
 });
