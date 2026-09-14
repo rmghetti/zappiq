@@ -24,6 +24,7 @@ const chatCompletionMock = vi.fn(async () => ({
 }));
 const agentFindFirst = vi.fn();
 const blocoDeRegras = vi.fn();
+const isFlagOn = vi.fn();
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -56,7 +57,7 @@ vi.mock('./llm/langchainClient.js', () => ({
 }));
 vi.mock('../agents/coreAgentRules.js', () => ({ CORE_AGENT_RULES_V1: 'CORE' }));
 vi.mock('./izaFactsService.js', () => ({ getIzaFactsBlock: vi.fn(async () => '') }));
-vi.mock('./featureFlags.js', () => ({ isFlagOn: vi.fn(async () => false) }));
+vi.mock('./featureFlags.js', () => ({ isFlagOn: (...args: any[]) => isFlagOn(...args) }));
 vi.mock('./agentRulesService.js', () => ({
   blocoDeRegrasDaOrganizacao: (...args: any[]) => blocoDeRegras(...args),
 }));
@@ -75,6 +76,16 @@ beforeEach(() => {
   vi.clearAllMocks();
   agentFindFirst.mockResolvedValue({ id: 'agente-comercial-1' });
   blocoDeRegras.mockResolvedValue('');
+  isFlagOn.mockResolvedValue(true);
+});
+
+describe('com o interruptor regrasComoRegistros DESLIGADO', () => {
+  it('não procura agente nenhum: a organização não paga consulta por turno', async () => {
+    isFlagOn.mockResolvedValue(false);
+    await processWebChatTurn(TURNO as any);
+    expect(agentFindFirst).not.toHaveBeenCalled();
+    expect(blocoDeRegras).not.toHaveBeenCalled();
+  });
 });
 
 describe('o bloco de regras do chat do site', () => {

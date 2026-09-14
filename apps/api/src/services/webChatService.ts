@@ -628,9 +628,25 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   // organização tem um agente comercial vivo, então filtrar só por
   // organização dava no mesmo; basta a primeira ligar um agente de suporte
   // para as regras do comercial vazarem para ele.
-  const regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
-    agentId: await idDoAgenteComercial(organizationId),
-  });
+  //
+  // O interruptor é conferido AQUI, e não só lá dentro, para a busca do
+  // agente nem acontecer com ele desligado. O serviço também confere (é ele
+  // quem decide se lê as regras), mas a segunda leitura sai do cache. Com o
+  // interruptor off, a organização não paga consulta nenhuma por turno, que
+  // é a promessa feita no resto deste PR.
+  let regrasBlock = '';
+  try {
+    if (await isFlagOn(organizationId, 'regrasComoRegistros')) {
+      regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
+        agentId: await idDoAgenteComercial(organizationId),
+      });
+    }
+  } catch (err) {
+    logger.warn('[webChat] bloco de regras indisponível neste turno (segue sem ele)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   const systemPrompt = buildWebChatSystemPrompt({
     orgPrompt,
