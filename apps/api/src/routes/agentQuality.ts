@@ -43,10 +43,7 @@ import {
 } from '../agents/tenantAgentProfile.js';
 import { assertNoForeignBrand, ForeignBrandLeakError } from '../agents/tenantIsolationGuard.js';
 import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
-import {
-  notifySlackQualityIssue,
-  shouldAlertQuality,
-} from '../services/agentEvalCronService.js';
+import { enqueueEvalRun } from '../services/agentEvalQueue.js';
 import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
 // A083: quem grava o prompt declara a origem da mudança e o histórico vira
 // versão no banco. Reverter passa a exigir que o prompt ainda seja o que a
@@ -299,18 +296,25 @@ router.post('/run-async', async (req: Request, res: Response) => {
       return;
     }
 
-    // Cooldown: bloqueia se já rodou nas últimas 24h
+    // Cooldown: bloqueia se o CLIENTE já concluiu um teste nas últimas 24 h.
+    //
+    // A048: antes contava qualquer execução 'manual' ou 'client_manual' com
+    // status diferente de 'failed'. Duas consequências medidas: execução presa
+    // em 'running' por reinício de máquina travava o botão por um dia, e teste
+    // disparado pelo superadmin gastava o direito do cliente. Agora conta só o
+    // que ele mesmo rodou e concluiu.
     const cutoff = new Date(Date.now() - RUN_COOLDOWN_HOURS * 3600 * 1000);
     const recent = await prisma.agentEvalRun.findFirst({
       where: {
         agentId,
-        triggeredBy: { in: ['manual', 'client_manual'] },
+        triggeredBy: 'client_manual',
+        status: 'completed',
         startedAt: { gte: cutoff },
       },
       orderBy: { startedAt: 'desc' },
       select: { id: true, startedAt: true, status: true },
     });
-    if (recent && recent.status !== 'failed') {
+    if (recent) {
       const nextAvailable = new Date(recent.startedAt.getTime() + RUN_COOLDOWN_HOURS * 3600 * 1000);
       res.status(429).json({
         error: 'cooldown',
@@ -345,95 +349,13 @@ router.post('/run-async', async (req: Request, res: Response) => {
       select: { id: true, startedAt: true },
     });
 
-    setImmediate(async () => {
-      try {
-        await prisma.agentEvalRun.update({
-          where: { id: run.id },
-          data: { status: 'running' },
-        });
-        logger.info(
-          `[agentQuality] client run iniciado runId=${run.id} agentId=${agentId} orgId=${orgId} scenarios=${scenarios.length}`,
-        );
-
-        const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile);
-
-        await prisma.agentEvalRun.update({
-          where: { id: run.id },
-          data: {
-            status: 'completed',
-            ...summary,
-            results: results as any,
-            completedAt: new Date(),
-            durationMs,
-          },
-        });
-
-        // Slack alert (mesma lógica do admin — score < 90 ou critical fail)
-        if (!shouldAlertQuality(summary)) {
-          await prisma.agentEvalRun.update({
-            where: { id: run.id },
-            data: { slackAlertStatus: 'skipped' },
-          }).catch(() => {});
-        } else {
-          try {
-            const topFails = (results as any[])
-              .filter((r) => r.combined === 'fail')
-              .map((r) => ({
-                scenarioId: r.scenarioId,
-                category: r.category,
-                severity: r.severity,
-              }));
-
-            const orgInfo = await prisma.agent.findUnique({
-              where: { id: agentId },
-              select: { organization: { select: { name: true } } },
-            });
-
-            const sent = await notifySlackQualityIssue({
-              agentId,
-              agentName: agent.name,
-              organizationName: orgInfo?.organization?.name || '—',
-              runId: run.id,
-              scorePercent: summary.scorePercent,
-              passed: summary.passed,
-              partial: summary.partial,
-              failed: summary.failed,
-              criticalFailed: summary.criticalFailed,
-              totalScenarios: scenarios.length,
-              durationMs,
-              topFails,
-            });
-
-            await prisma.agentEvalRun.update({
-              where: { id: run.id },
-              data: {
-                slackAlertStatus: sent ? 'sent' : 'failed',
-                slackAlertError: sent ? null : 'sendSlackAlert retornou false',
-                slackAlertSentAt: sent ? new Date() : null,
-              },
-            }).catch(() => {});
-          } catch (slackErr: any) {
-            await prisma.agentEvalRun.update({
-              where: { id: run.id },
-              data: {
-                slackAlertStatus: 'failed',
-                slackAlertError: String(slackErr?.message || slackErr).slice(0, 1000),
-              },
-            }).catch(() => {});
-          }
-        }
-      } catch (err: any) {
-        logger.error(`[agentQuality] client run failed runId=${run.id}`, { err: err?.message });
-        await prisma.agentEvalRun.update({
-          where: { id: run.id },
-          data: {
-            status: 'failed',
-            error: String(err?.message || 'unknown'),
-            completedAt: new Date(),
-          },
-        }).catch(() => {});
-      }
-    });
+    // A048: a execução deixou de rodar dentro do processo da API. Sai daqui
+    // como job da fila `agent-eval` (concorrência 1, jobId = runId) e o worker
+    // roda executeRunJob, o MESMO corpo do cron e da rota do superadmin.
+    // Antes era um setImmediate: reinício de máquina no meio deixava a linha
+    // em 'running' para sempre, e era essa linha presa que travava o botão do
+    // cliente pelo cooldown de 24 h.
+    await enqueueEvalRun(run.id);
 
     res.status(202).json({
       runId: run.id,

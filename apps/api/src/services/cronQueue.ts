@@ -23,7 +23,11 @@ import { Queue, Worker, type Job } from 'bullmq';
 
 import { queueConnection as connection } from '../config/queueRedis.js';
 import { logger } from '../utils/logger.js';
-import { runAgentEvalCronCycle } from './agentEvalCronService.js';
+import {
+  runAgentEvalCronCycle,
+  runAgentEvalOnChangeCycle,
+} from './agentEvalCronService.js';
+import { sweepStuckEvalRuns } from './agentEvalQueue.js';
 import { runAnalyticsPulseCycle } from './analyticsPulseCron.js';
 import { runConversationExpiryCycle } from './conversationExpiryService.js';
 import { runCostGuardCycle } from './costGuardService.js';
@@ -64,8 +68,21 @@ export const CRON_JOBS: CronJobDefinition[] = [
   { name: 'analytics-pulse', pattern: '20 3 * * *', run: runAnalyticsPulseCycle },
   { name: 'trial-expiration', pattern: '40 3 * * *', run: runTrialExpirationCycle },
   { name: 'usage-reconciliation', pattern: '0 4 * * *', run: runUsageReconciliationCycle },
-  { name: 'agent-eval-iza', pattern: '30 4 * * *', run: () => runAgentEvalCron('iza') },
+  // Qualidade do Agente (A045 / A067): as duas auditorias automáticas são
+  // SEMANAIS. A da Iza era diária e custava sozinha cerca de USD 1,25 por dia
+  // sem detectar o que o ciclo semanal não detecte; a de clientes já era
+  // semanal, e agora só roda para organização elegível (fora STAGING, trial
+  // vencido sem assinatura e quem não tem base cadastrada).
+  { name: 'agent-eval-iza', pattern: '30 4 * * 0', run: () => runAgentEvalCron('iza') },
   { name: 'agent-eval-clients', pattern: '30 4 * * 1', run: () => runAgentEvalCron('clients') },
+  // Diário por MUDANÇA: cobre o vão do semanal sem voltar ao teste diário de
+  // todo mundo. Só avalia agente cuja organização mexeu na base depois da
+  // última execução concluída, no máximo 1 vez por dia. 04:50 fica depois dos
+  // dois ciclos semanais das 04:30, então nunca disputa com eles.
+  { name: 'agent-eval-on-change', pattern: '50 4 * * *', run: runAgentEvalOnChange },
+  // Varredura de execução presa (A048). De hora em hora no minuto 35, fora dos
+  // minutos 20 (cost-guard) e 50 (conversation-expiry).
+  { name: 'agent-eval-sweep', pattern: '35 * * * *', run: () => sweepStuckEvalRuns() },
   { name: 'mira-releases', pattern: '0 6 * * 1', run: runMiraReleasesCycle },
   { name: 'mira-cnpj-mirror', pattern: '0 6 1 * *', run: runMiraMirrors },
   { name: 'superadmin-trial-digest', pattern: '0 13 * * *', run: runDigest },
@@ -91,9 +108,18 @@ export const CRON_JOBS: CronJobDefinition[] = [
 async function runAgentEvalCron(scope: 'iza' | 'clients'): Promise<unknown> {
   if (process.env.AGENT_EVAL_CRON_DISABLED === 'true') {
     logger.warn('[cron] AGENT_EVAL_CRON_DISABLED=true — ciclo do agent-eval pulado (kill-switch).');
-    return { agentsProcessed: 0, agentsAlerted: 0, agentsFailed: 0, durationMs: 0 };
+    return { agentsProcessed: 0, agentsSkipped: 0, agentsFailed: 0, durationMs: 0 };
   }
   return runAgentEvalCronCycle(scope);
+}
+
+/** O mesmo kill-switch vale para o ciclo por mudança: um interruptor só. */
+async function runAgentEvalOnChange(): Promise<unknown> {
+  if (process.env.AGENT_EVAL_CRON_DISABLED === 'true') {
+    logger.warn('[cron] AGENT_EVAL_CRON_DISABLED=true — ciclo por mudança pulado (kill-switch).');
+    return { agentsProcessed: 0, agentsSkipped: 0, agentsFailed: 0, durationMs: 0 };
+  }
+  return runAgentEvalOnChangeCycle();
 }
 
 /**

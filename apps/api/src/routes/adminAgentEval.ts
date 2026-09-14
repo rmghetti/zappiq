@@ -55,11 +55,9 @@ import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 // V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
 // Q1: computeReverifyVerdict exportado pra teste unitário puro.
 import { executeAgentEvalRun, computeReverifyVerdict } from '../services/agentEvalRunner.js';
+import { enqueueEvalRun } from '../services/agentEvalQueue.js';
 // FASE 2.1 (#241): Slack notify reusável entre cron e route manual.
-import {
-  notifySlackQualityIssue,
-  shouldAlertQuality,
-} from '../services/agentEvalCronService.js';
+import { notifySlackQualityIssue } from '../services/agentEvalCronService.js';
 import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services/slackNotifier.js';
 // FASE 2.2a (#243): aplicação cirúrgica de patches no system_prompt.
 // FASE 2.2c (#246): DuplicatePatchError pra rejeitar sugestão IA repetida.
@@ -272,107 +270,12 @@ router.post(
         select: { id: true, startedAt: true },
       });
 
-      // Dispara execução em background (setImmediate libera response imediato)
-      setImmediate(async () => {
-        try {
-          await prisma.agentEvalRun.update({
-            where: { id: run.id },
-            data: { status: 'running' },
-          });
-          logger.info(`[agentEval] async run iniciado runId=${run.id} agentId=${agentId} scenarios=${scenarios.length}`);
-
-          const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile);
-
-          await prisma.agentEvalRun.update({
-            where: { id: run.id },
-            data: {
-              status: 'completed',
-              ...summary,
-              results: results as any,
-              completedAt: new Date(),
-              durationMs,
-            },
-          });
-          logger.info(`[agentEval] async run completed runId=${run.id} score=${summary.scorePercent}%`);
-
-          // FASE 2.2a (#243): instrumentação Slack — persiste status no DB
-          // pra diagnosticar falhas silenciosas que antes só ficavam nos
-          // Fly logs (que somem com restart).
-          if (!shouldAlertQuality(summary)) {
-            await prisma.agentEvalRun.update({
-              where: { id: run.id },
-              data: { slackAlertStatus: 'skipped' }, // score >= 90, sem critical
-            }).catch(() => {});
-          } else {
-            try {
-              const topFails = (results as any[])
-                .filter((r) => r.combined === 'fail')
-                .map((r) => ({
-                  scenarioId: r.scenarioId,
-                  category: r.category,
-                  severity: r.severity,
-                }));
-
-              const orgInfo = await prisma.agent.findUnique({
-                where: { id: agentId },
-                select: { organization: { select: { name: true } } },
-              });
-
-              const sent = await notifySlackQualityIssue({
-                agentId,
-                agentName: agent.name,
-                organizationName: orgInfo?.organization?.name || '—',
-                runId: run.id,
-                scorePercent: summary.scorePercent,
-                passed: summary.passed,
-                partial: summary.partial,
-                failed: summary.failed,
-                criticalFailed: summary.criticalFailed,
-                totalScenarios: scenarios.length,
-                durationMs,
-                topFails,
-              });
-
-              await prisma.agentEvalRun.update({
-                where: { id: run.id },
-                data: {
-                  slackAlertStatus: sent ? 'sent' : 'failed',
-                  slackAlertError: sent
-                    ? null
-                    : 'sendSlackAlert retornou false (webhook não configurado, 4xx/5xx, ou timeout)',
-                  slackAlertSentAt: sent ? new Date() : null,
-                },
-              }).catch(() => {});
-
-              logger.info(
-                `[agentEval] Slack alert ${sent ? 'enviado' : 'falhou silenciosamente'} runId=${run.id}`,
-              );
-            } catch (slackErr: any) {
-              await prisma.agentEvalRun.update({
-                where: { id: run.id },
-                data: {
-                  slackAlertStatus: 'failed',
-                  slackAlertError: String(slackErr?.message || slackErr).slice(0, 1000),
-                },
-              }).catch(() => {});
-              logger.warn(`[agentEval] Slack alert exceção (não bloqueia run)`, {
-                err: slackErr?.message,
-                runId: run.id,
-              });
-            }
-          }
-        } catch (err: any) {
-          logger.error(`[agentEval] async run failed runId=${run.id}`, { err: err?.message });
-          await prisma.agentEvalRun.update({
-            where: { id: run.id },
-            data: {
-              status: 'failed',
-              error: String(err?.message || 'unknown'),
-              completedAt: new Date(),
-            },
-          }).catch(() => {});
-        }
-      });
+      // A048: a execução deixou de rodar dentro do processo da API. Vira job
+      // da fila `agent-eval` (concorrência 1, jobId = runId) e o worker roda
+      // executeRunJob, o MESMO corpo do cron e da rota do cliente. Antes era
+      // um setImmediate, e reinício de máquina no meio deixava a linha em
+      // 'running' para sempre (duas execuções da Iza de 15/07 seguem assim).
+      await enqueueEvalRun(run.id);
 
       res.status(202).json({
         runId: run.id,

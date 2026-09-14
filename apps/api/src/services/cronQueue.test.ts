@@ -25,8 +25,10 @@ const HORARIOS_ESPERADOS: Record<string, string> = {
   'analytics-pulse': '20 3 * * *',          // era fila analytics-pulse-cron
   'trial-expiration': '40 3 * * *',         // era fila trial-expiration-cron
   'usage-reconciliation': '0 4 * * *',      // era fila usage-reconciliation
-  'agent-eval-iza': '30 4 * * *',           // era job daily-agent-eval-iza
+  'agent-eval-iza': '30 4 * * 0',           // semanal (domingo) — era diária, A045/A067
   'agent-eval-clients': '30 4 * * 1',       // era job weekly-agent-eval
+  'agent-eval-on-change': '50 4 * * *',     // nova (A045): só quem mexeu na base
+  'agent-eval-sweep': '35 * * * *',         // nova (A048): execução presa vira failed
   'mira-releases': '0 6 * * 1',             // era fila mira-releases-cron
   'mira-cnpj-mirror': '0 6 1 * *',          // era fila mira-cnpj-mirror-cron
   'superadmin-trial-digest': '0 13 * * *',  // era fila superadmin-trial-digest
@@ -37,7 +39,7 @@ const HORARIOS_ESPERADOS: Record<string, string> = {
 };
 
 describe('fila cron — registro consolidado', () => {
-  it('mantém as 14 rotinas, nenhuma a mais e nenhuma a menos', () => {
+  it('mantém as 16 rotinas, nenhuma a mais e nenhuma a menos', () => {
     const nomes = CRON_JOBS.map((c) => c.name).sort();
     expect(nomes).toEqual(Object.keys(HORARIOS_ESPERADOS).sort());
   });

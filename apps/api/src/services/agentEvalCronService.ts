@@ -1,81 +1,71 @@
 /**
- * Agent Eval Cron Service (FASE 2 / V5 — task #238/#241)
+ * Agent Eval Cron Service — auditoria automática da Qualidade do Agente.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * Objetivo
+ * O que faz
  * ═══════════════════════════════════════════════════════════════════════════
- * Roda diariamente às 04:30 UTC (10min depois do usage-reconciliation pra não
- * concorrer por bandwidth Anthropic). Pra cada agent com `isActive=true`:
+ * Para cada agente 'live' de organização ELEGÍVEL (ver isEvalEligible):
  *
- *   1. Cria row pending em AgentEvalRun (triggeredBy='cron')
- *   2. Executa golden set completo via executeRunLoop()
- *   3. Persiste resultado em AgentEvalRun
- *   4. Se scorePercent < 90 OU criticalFailed > 0 → dispara Slack alert
- *
- * Padrão de eval: idêntico ao endpoint /run-async (mesmo helper compartilhado),
- * só que disparado em loop por todos os agents.
+ *   1. Cria a linha em AgentEvalRun (triggeredBy='cron')
+ *   2. Chama executeRunJob, o corpo único compartilhado com as duas rotas
+ *      /run-async (services/agentEvalQueue.ts)
+ *   3. O corpo único persiste o resultado, grava slackAlertStatus e alerta
+ *      quando há crítico reprovado ou reprovação repetida
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * Por que cron diário e não on-demand
+ * Custo: por que semanal e por que com dono (A045 / A067)
  * ═══════════════════════════════════════════════════════════════════════════
- * - Detecta drift silencioso: agent foi treinado pelo cliente, prompt mudou,
- *   regex novo do core rules quebrou comportamento — sem cron, ninguém vê.
- * - Histórico contínuo: dashboard /admin/agent-quality vai mostrar score over
- *   time. Gaps no histórico tornam regressão difícil de localizar.
- * - Slack alert = signal early. Não esperar cliente reclamar.
+ * O cabeçalho antigo dizia "1 agente ativo, USD 7,50 por mês". A medição de
+ * 90 dias em llm_call_logs mostrou outra coisa: cerca de USD 60 por mês de
+ * eval contra cerca de USD 10 de TODO o tráfego real de clientes. Quase todo
+ * esse gasto não tinha dono: 9 das 15 organizações com agente 'live' eram
+ * '-STAGING' e duas estavam com trial vencido sem assinatura. Toda segunda
+ * saíam 13 alertas no Slack por organizações que ninguém ia olhar.
+ *
+ * O que mudou:
+ *   - a auditoria da Iza passou de DIÁRIA para semanal (domingo). O ganho de
+ *     rodar todo dia era detectar deriva, e deriva não aparece em 24 h num
+ *     prompt que muda algumas vezes por mês;
+ *   - o ciclo de clientes (segunda) só roda para organização elegível;
+ *   - um ciclo DIÁRIO por mudança (agent-eval-on-change) cobre o que o cron
+ *     semanal perderia: se o cliente mexeu na base, avalia no dia seguinte,
+ *     no máximo uma vez por organização por dia.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * Limite de custo
+ * Alerta (configurável por variável de ambiente)
  * ═══════════════════════════════════════════════════════════════════════════
- * Hoje: 1 agent ativo (Iza). 25 cenários × 2 LLM calls = 50 calls × $0.005
- * = ~$0.25/dia/agent = ~$7.50/mês.
+ *   AGENT_EVAL_ALERT_CRITICAL   (padrão: 1)  — alerta com 1 crítico reprovado
+ *   SLACK_WEBHOOK_AGENT_QUALITY (sem padrão) — para onde mandar
+ *     Reserva: SLACK_WEBHOOK_QUOTA_ALERTS (canal único de operação serve)
  *
- * Quando crescer pra 50+ agents, mover pra eval semanal por padrão e diário
- * só pra agents flagados como "high-traffic" (config no Agent model).
- *
- * ═══════════════════════════════════════════════════════════════════════════
- * Threshold de alerta (configurável via env)
- * ═══════════════════════════════════════════════════════════════════════════
- *   AGENT_EVAL_ALERT_SCORE_MIN  (default: 90)  — alert se score < 90%
- *   AGENT_EVAL_ALERT_CRITICAL   (default: 1)   — alert se criticalFailed >= 1
- *   SLACK_WEBHOOK_AGENT_QUALITY (sem default)  — onde mandar
- *     Fallback: SLACK_WEBHOOK_QUOTA_ALERTS (canal único de ops é OK pra MVP)
+ * A nota deixou de disparar alerta: ver shouldAlertQuality.
  */
 
-import { Queue, Worker } from 'bullmq';
 import { prisma } from '@zappiq/database';
-import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
-import {
-  sendSlackAlert,
-  buildHeaderBlock,
-  buildSectionBlock,
-  buildFieldsBlock,
-  buildContextBlock,
-  buildDividerBlock,
-} from './slackNotifier.js';
+import { sendSlackAlert, buildSectionBlock } from './slackNotifier.js';
 import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
 import { resolveEvalSet, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
-import { executeAgentEvalRun } from './agentEvalRunner.js';
-import { queueConnection as connection } from '../config/queueRedis.js';
 // Fonte única da regra de acesso (a mesma do requireActivePlan e do /auth/me).
 import { computeAccessState, type AccessInput } from './accountAccess.js';
-
-// ─── BullMQ connection (mesma config dos outros crons) ─────────
-
-let agentEvalCronWorker: Worker | null = null;
+// Mesma contagem de trechos indexados que o termômetro do Treinar IA usa:
+// linha em kb_documents não prova que a IA enxerga o conteúdo, chunk prova.
+import { countRagChunksByNamespace } from './aiReadinessService.js';
+// Corpo único da execução, compartilhado com as duas rotas /run-async.
+import { executeRunJob } from './agentEvalQueue.js';
 
 // ─── Org da Iza (agente do SUPERADMIN / Cliente Zero) ──────────
 // Mesmo id canonical usado em adminLeadsIza.ts, LLMRouter.ts, tools.ts.
-// A auditoria automática da Iza roda DIÁRIA (o CEO controla de perto);
-// agentes de clientes rodam SEMANAL (corta custo de tokens do cron).
+// As duas auditorias automáticas são SEMANAIS: a da Iza no domingo, a dos
+// clientes na segunda. A da Iza era diária e custava sozinha cerca de USD
+// 1,25 por dia sem detectar nada que o ciclo semanal não detecte.
 const IZA_ORG_ID = 'cmo1ywwfe00ko1jskexiexsm4';
 
-// Escopo do ciclo: 'iza' = só o agente da org da Iza (diário);
-// 'clients' = todos os agents live EXCETO a org da Iza (semanal);
-// 'all' = todos (usado por triggers manuais/legados).
-type CronScope = 'iza' | 'clients' | 'all';
+// Escopo do ciclo semanal: 'iza' = só a organização da Iza (domingo);
+// 'clients' = todas as demais com agente 'live' (segunda).
+// O escopo 'all' saiu: nenhum caminho chamava (A053).
+export type CronScope = 'iza' | 'clients';
 
 // ─── Elegibilidade: quem o cron pode avaliar (A045 / A067) ──────
 //
@@ -148,8 +138,8 @@ export function isEvalEligible(org: EvalEligibilityInput): EvalEligibility {
   return { elegivel: true };
 }
 
-// ─── Thresholds ─────────────────────────────────────────────────
-const SCORE_MIN = Number(process.env.AGENT_EVAL_ALERT_SCORE_MIN ?? 90);
+// ─── Limiar ─────────────────────────────────────────────────────
+// AGENT_EVAL_ALERT_SCORE_MIN saiu junto com o critério por nota (A047).
 const CRITICAL_MIN = Number(process.env.AGENT_EVAL_ALERT_CRITICAL ?? 1);
 
 /**
@@ -208,8 +198,6 @@ export function scenariosFailingTwice(resultsAtual: unknown, resultsAnterior: un
   const atual = reprovadosEm(resultsAtual);
   return [...atual].filter((id) => anterior.has(id));
 }
-
-export { SCORE_MIN as AGENT_EVAL_ALERT_SCORE_MIN };
 
 // ─── Slack notifier (exportado pra reuso em route /run-async) ──
 export async function notifySlackQualityIssue(input: {
@@ -290,122 +278,129 @@ export async function notifySlackQualityIssue(input: {
   });
 }
 
-// ─── Core loop: itera por agents ativos do escopo ─────────────
-export async function runAgentEvalCronCycle(scope: CronScope = 'all'): Promise<{
+// ─── Elegibilidade com ida ao banco ────────────────────────────
+
+/** Colunas da organização que a elegibilidade precisa ler. */
+const SELECT_ORG_ELEGIBILIDADE = {
+  id: true,
+  name: true,
+  slug: true,
+  churnedAt: true,
+  subscriptionStatus: true,
+  stripeSubscriptionId: true,
+  trialEndsAt: true,
+  isTrialActive: true,
+  trialConverted: true,
+  paidAt: true,
+  paywallGraceUntil: true,
+} as const;
+
+/**
+ * A organização tem base cadastrada?
+ *
+ * Base = pelo menos um trecho indexado no RAG OU um Q&A ativo. A pergunta é
+ * sobre o que a IA CONSEGUE usar: linha em kb_documents que nunca virou chunk
+ * não ajuda o agente e não deve gerar teste pago.
+ *
+ * Fail-soft: erro de consulta responde true. Deixar de avaliar por falha de
+ * infraestrutura é pior que gastar um teste.
+ */
+async function temBaseCadastrada(organizationId: string): Promise<boolean> {
+  try {
+    const [{ docChunks, qaChunks }, qaAtivos] = await Promise.all([
+      countRagChunksByNamespace(organizationId),
+      prisma.qAPair.count({ where: { organizationId, isActive: true } }),
+    ]);
+    return docChunks + qaChunks > 0 || qaAtivos > 0;
+  } catch (err: any) {
+    logger.warn({
+      msg: 'agent_eval_base_indeterminada',
+      organizationId,
+      error: String(err?.message || err),
+    });
+    return true;
+  }
+}
+
+/** Contagem de organizações puladas, por motivo. Vai inteira para o log. */
+type PuladasPorMotivo = Partial<Record<MotivoInelegivel, number>>;
+
+export interface CronCycleResult {
   agentsProcessed: number;
-  agentsAlerted: number;
+  agentsSkipped: number;
+  skippedByReason: PuladasPorMotivo;
   agentsFailed: number;
   durationMs: number;
-}> {
-  const startedAt = Date.now();
-  logger.info(`[agentEvalCron] cycle iniciado (scope=${scope})`);
+}
 
-  // Lista agents 'live' (Iza canonical + futuros agents de clientes ativos).
-  // Agent.status enum: 'draft' | 'reviewed' | 'live' — só rodamos eval em live.
-  // Escopo:
-  //   'iza'     → só a org da Iza (diário, controle do CEO)
-  //   'clients' → todas as orgs EXCETO a Iza (semanal, custo controlado)
-  //   'all'     → todas (compat com triggers manuais)
+// ─── Ciclo: itera pelos agentes ativos do escopo ───────────────
+export async function runAgentEvalCronCycle(scope: CronScope): Promise<CronCycleResult> {
+  const startedAt = Date.now();
+  logger.info(`[agentEvalCron] ciclo iniciado (escopo=${scope})`);
+
+  // Agent.status: 'draft' | 'reviewed' | 'live'. Só avaliamos 'live'.
+  //   'iza'     → só a organização da Iza (semanal, domingo)
+  //   'clients' → todas menos a Iza (semanal, segunda)
   const orgFilter =
-    scope === 'iza'
-      ? { organizationId: IZA_ORG_ID }
-      : scope === 'clients'
-        ? { organizationId: { not: IZA_ORG_ID } }
-        : {};
+    scope === 'iza' ? { organizationId: IZA_ORG_ID } : { organizationId: { not: IZA_ORG_ID } };
 
   const agents = await prisma.agent.findMany({
     where: { status: 'live', ...orgFilter },
-    include: {
-      organization: { select: { id: true, name: true } },
-    },
+    include: { organization: { select: SELECT_ORG_ELEGIBILIDADE } },
   });
 
   let agentsProcessed = 0;
-  let agentsAlerted = 0;
+  let agentsSkipped = 0;
   let agentsFailed = 0;
+  const skippedByReason: PuladasPorMotivo = {};
 
   for (const agent of agents) {
     try {
-      // 0. Resolve o gabarito DESTE tenant.
-      // Antes daqui saía AGENT_EVAL_SET (a prova da ZappIQ) pra todo mundo:
-      // era esse loop que gravava score 48% no dashboard do CMJ toda segunda.
+      const org = agent.organization;
+      const elegibilidade = isEvalEligible({
+        ...org,
+        temBase: await temBaseCadastrada(agent.organizationId),
+      });
+
+      if (!elegibilidade.elegivel) {
+        const motivo = elegibilidade.motivo!;
+        agentsSkipped++;
+        skippedByReason[motivo] = (skippedByReason[motivo] ?? 0) + 1;
+        logger.info({
+          msg: 'agent_eval_cron_org_pulada',
+          organizationName: org.name,
+          agentId: agent.id,
+          motivo,
+          detalhe: MOTIVO_INELEGIVEL_TEXTO[motivo],
+        });
+        continue;
+      }
+
+      // O gabarito é resolvido aqui só para gravar totalScenarios na linha; a
+      // execução resolve de novo, a partir do mesmo perfil.
       const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId: agent.id });
       const scenarios = resolveEvalSet(profile);
 
-      // 1. Cria row pending
       const run = await prisma.agentEvalRun.create({
         data: {
           agentId: agent.id,
-          status: 'running',
+          status: 'pending',
           evalSetVersion: EVAL_SET_VERSION,
           coreRulesVersion: CORE_RULES_VERSION,
           triggeredBy: 'cron',
           scenarioFilter: {
-            source: scope === 'iza' ? 'cron_daily_iza' : 'cron_weekly',
-            all: true,
+            source: scope === 'iza' ? 'cron_semanal_iza' : 'cron_semanal',
           } as any,
           totalScenarios: scenarios.length,
         },
+        select: { id: true },
       });
 
-      // 2. Executa eval completo
-      const { results, durationMs, summary } = await executeAgentEvalRun(
-        scenarios,
-        { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' },
-        profile,
-      );
-
-      // 3. Persiste
-      await prisma.agentEvalRun.update({
-        where: { id: run.id },
-        data: {
-          status: 'completed',
-          passed: summary.passed,
-          partial: summary.partial,
-          failed: summary.failed,
-          criticalFailed: summary.criticalFailed,
-          scorePercent: summary.scorePercent,
-          results: results as any,
-          completedAt: new Date(),
-          durationMs,
-        },
-      });
-
+      // Corpo único: o mesmo que o worker da fila roda para as rotas. Aqui é
+      // chamado em linha de propósito, porque o ciclo já roda dentro do worker
+      // da fila `cron` e as contagens abaixo precisam do resultado.
+      await executeRunJob(run.id);
       agentsProcessed++;
-      logger.info({
-        msg: 'agent_eval_cron_run_completed',
-        agentId: agent.id,
-        runId: run.id,
-        score: summary.scorePercent,
-        criticalFailed: summary.criticalFailed,
-      });
-
-      // 4. Slack alert se threshold cruzado
-      if (shouldAlertQuality(summary)) {
-        const topFails = (results as any[])
-          .filter((r) => r.combined === 'fail')
-          .map((r) => ({
-            scenarioId: r.scenarioId,
-            category: r.category,
-            severity: r.severity,
-          }));
-
-        const sent = await notifySlackQualityIssue({
-          agentId: agent.id,
-          agentName: agent.name,
-          organizationName: agent.organization.name,
-          runId: run.id,
-          scorePercent: summary.scorePercent,
-          passed: summary.passed,
-          partial: summary.partial,
-          failed: summary.failed,
-          criticalFailed: summary.criticalFailed,
-          totalScenarios: scenarios.length, // o gabarito DESTE tenant, não um set global
-          durationMs,
-          topFails,
-        });
-        if (sent) agentsAlerted++;
-      }
     } catch (err: any) {
       agentsFailed++;
       logger.error({
@@ -419,14 +414,157 @@ export async function runAgentEvalCronCycle(scope: CronScope = 'all'): Promise<{
   const durationMs = Date.now() - startedAt;
   logger.info({
     msg: 'agent_eval_cron_cycle_completed',
+    escopo: scope,
     agentsProcessed,
-    agentsAlerted,
+    agentsSkipped,
+    skippedByReason,
     agentsFailed,
     durationMs,
   });
 
-  return { agentsProcessed, agentsAlerted, agentsFailed, durationMs };
+  return { agentsProcessed, agentsSkipped, skippedByReason, agentsFailed, durationMs };
 }
 
-// ─── BullMQ bootstrap ──────────────────────────────────────────
+// ─── Ciclo diário por MUDANÇA (agent-eval-on-change) ───────────
+//
+// O ciclo semanal barato tem um custo: se o cliente treina a IA na terça, o
+// teste dele só roda na segunda seguinte. Este ciclo cobre esse vão sem
+// voltar ao teste diário de todo mundo: roda de madrugada, e só para quem
+// mexeu na base depois da última execução concluída.
+//
+// Teto duro de 1 execução por agente por dia. Sem isso, uma tarde de trabalho
+// no Treinar IA (cada upload e cada Q&A gera evento) viraria uma execução por
+// evento.
 
+/** Trigger gravado nas execuções deste ciclo. */
+export const TRIGGER_ON_CHANGE = 'cron_on_change';
+
+/**
+ * Eventos de treino que justificam reavaliar o agente.
+ *
+ * Todos os eventos do Treinar IA nascem com o prefixo 'kb.' (ver
+ * routes/aiTraining.ts). O teste do playground também nasce assim e fica de
+ * FORA: ele não muda a base, e cada mensagem de teste dispararia uma
+ * avaliação paga no dia seguinte.
+ */
+const ACAO_PLAYGROUND = 'kb.playground.test';
+
+/** Início do dia UTC, para o teto de 1 execução por agente por dia. */
+function inicioDoDiaUtc(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+export interface OnChangeCycleResult {
+  agentsProcessed: number;
+  agentsSkipped: number;
+  agentsFailed: number;
+  durationMs: number;
+}
+
+export async function runAgentEvalOnChangeCycle(
+  now: Date = new Date(),
+): Promise<OnChangeCycleResult> {
+  const startedAt = Date.now();
+  const desdeHoje = inicioDoDiaUtc(now);
+  logger.info('[agentEvalCron] ciclo por mudança iniciado');
+
+  const agents = await prisma.agent.findMany({
+    where: { status: 'live' },
+    include: { organization: { select: SELECT_ORG_ELEGIBILIDADE } },
+  });
+
+  let agentsProcessed = 0;
+  let agentsSkipped = 0;
+  let agentsFailed = 0;
+
+  for (const agent of agents) {
+    try {
+      // 1. Teto do dia. Primeiro porque é a consulta mais barata.
+      const jaRodouHoje = await prisma.agentEvalRun.count({
+        where: { agentId: agent.id, startedAt: { gte: desdeHoje } },
+        take: 1,
+      });
+      if (jaRodouHoje > 0) {
+        agentsSkipped++;
+        continue;
+      }
+
+      // 2. Houve mudança na base depois da última execução concluída?
+      // TODO: quando agent_prompt_versions existir, versão nova de prompt
+      // também deve acionar este ciclo (hoje só audit_logs).
+      const ultima = await prisma.agentEvalRun.findFirst({
+        where: { agentId: agent.id, status: 'completed' },
+        orderBy: { startedAt: 'desc' },
+        select: { completedAt: true, startedAt: true },
+      });
+      const desde = ultima?.completedAt ?? ultima?.startedAt ?? null;
+
+      const mudancas = await prisma.auditLog.count({
+        where: {
+          organizationId: agent.organizationId,
+          action: { startsWith: 'kb.' },
+          NOT: { action: ACAO_PLAYGROUND },
+          ...(desde ? { createdAt: { gt: desde } } : {}),
+        },
+        take: 1,
+      });
+      if (mudancas === 0) {
+        agentsSkipped++;
+        continue;
+      }
+
+      // 3. A organização ainda precisa ser elegível (mesma porta do semanal).
+      const elegibilidade = isEvalEligible({
+        ...agent.organization,
+        temBase: await temBaseCadastrada(agent.organizationId),
+      });
+      if (!elegibilidade.elegivel) {
+        agentsSkipped++;
+        logger.info({
+          msg: 'agent_eval_on_change_org_pulada',
+          organizationName: agent.organization.name,
+          agentId: agent.id,
+          motivo: elegibilidade.motivo,
+        });
+        continue;
+      }
+
+      const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId: agent.id });
+      const scenarios = resolveEvalSet(profile);
+
+      const run = await prisma.agentEvalRun.create({
+        data: {
+          agentId: agent.id,
+          status: 'pending',
+          evalSetVersion: EVAL_SET_VERSION,
+          coreRulesVersion: CORE_RULES_VERSION,
+          triggeredBy: TRIGGER_ON_CHANGE,
+          scenarioFilter: { source: TRIGGER_ON_CHANGE } as any,
+          totalScenarios: scenarios.length,
+        },
+        select: { id: true },
+      });
+
+      await executeRunJob(run.id);
+      agentsProcessed++;
+    } catch (err: any) {
+      agentsFailed++;
+      logger.error({
+        msg: 'agent_eval_on_change_falhou',
+        agentId: agent.id,
+        error: String(err?.message || err),
+      });
+    }
+  }
+
+  const durationMs = Date.now() - startedAt;
+  logger.info({
+    msg: 'agent_eval_on_change_cycle_completed',
+    agentsProcessed,
+    agentsSkipped,
+    agentsFailed,
+    durationMs,
+  });
+
+  return { agentsProcessed, agentsSkipped, agentsFailed, durationMs };
+}

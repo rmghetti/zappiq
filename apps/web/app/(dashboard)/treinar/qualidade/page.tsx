@@ -39,6 +39,7 @@ const TRIGGER_LABELS: Record<string, string> = {
   cron: 'Semanal automático',
   manual: 'Manual (admin)',
   client_manual: 'Manual (você)',
+  cron_on_change: 'Automático após mudança',
   pre_release: 'Pré-deploy',
 };
 
