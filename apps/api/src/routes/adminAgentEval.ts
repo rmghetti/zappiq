@@ -39,11 +39,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
-import {
-  resolveEvalSet,
-  EVAL_SET_VERSION,
-  type EvalScenario,
-} from '../agents/agentEvalSet.js';
+import { resolveEvalSet, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
 // Isolamento de tenant: o gabarito deixou de ser constante global e passou a
 // ser resolvido pelo perfil da org do agente testado.
 import {
@@ -55,7 +51,7 @@ import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 // V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
 // Q1: computeReverifyVerdict exportado pra teste unitário puro.
 import { executeAgentEvalRun, computeReverifyVerdict } from '../services/agentEvalRunner.js';
-import { enqueueEvalRun } from '../services/agentEvalQueue.js';
+import { enqueueEvalRun, resolveScenariosForRun } from '../services/agentEvalQueue.js';
 // FASE 2.1 (#241): Slack notify reusável entre cron e route manual.
 import { notifySlackQualityIssue } from '../services/agentEvalCronService.js';
 import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services/slackNotifier.js';
@@ -139,27 +135,10 @@ router.get(
   },
 );
 
-// ─── Filtro de cenários (helper compartilhado pelos 2 endpoints) ────
-
-// A base é sempre o gabarito do tenant do agente testado. Antes era a constante
-// AGENT_EVAL_SET (a prova da ZappIQ), que caía em cima de todo mundo: o filtro
-// só pode recortar dentro do que se aplica àquele agente.
-function filterScenarios(
-  profile: TenantAgentProfile,
-  opts: {
-    scenarioIds?: string[];
-    category?: string;
-    criticalOnly?: boolean;
-  },
-): EvalScenario[] {
-  const base = resolveEvalSet(profile);
-  if (opts.scenarioIds && opts.scenarioIds.length > 0) {
-    return base.filter((s) => opts.scenarioIds!.includes(s.id));
-  }
-  if (opts.criticalOnly) return base.filter((s) => s.severity === 'critical');
-  if (opts.category) return base.filter((s) => s.category === opts.category);
-  return base;
-}
+// ─── Filtro de cenários: um só, em services/agentEvalQueue.ts ───────
+// Era uma cópia por rota mais a leitura da execução: três lugares lendo o
+// mesmo scenarioFilter. resolveScenariosForRun é a leitura única, e a base
+// continua sendo o gabarito do tenant do agente testado.
 
 // ─── executeRunLoop e computeSummary agora vêm de services/agentEvalRunner ─
 //    (extraídos em FASE 2 / V5 — reusados pelo agentEvalCronService).
@@ -190,7 +169,7 @@ router.post(
       // Perfil da org DO AGENTE. O superadmin é da ZappIQ e o agente pode ser de
       // qualquer cliente: usar a org do logado reintroduziria o gabarito da Iza.
       const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId });
-      const scenarios = filterScenarios(profile, {
+      const scenarios = resolveScenariosForRun(profile, {
         scenarioIds: Array.isArray(req.body?.scenarios) ? req.body.scenarios : undefined,
         category: req.body?.category,
         criticalOnly: req.body?.criticalOnly === true,
@@ -250,7 +229,7 @@ router.post(
 
       // Perfil da org DO AGENTE, não a do superadmin logado (ver cabeçalho).
       const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId });
-      const scenarios = filterScenarios(profile, { scenarioIds, category, criticalOnly });
+      const scenarios = resolveScenariosForRun(profile, { scenarioIds, category, criticalOnly });
       if (scenarios.length === 0) {
         res.status(400).json({ error: 'nenhum scenario corresponde ao filtro' });
         return;
