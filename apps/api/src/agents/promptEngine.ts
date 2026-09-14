@@ -1,4 +1,5 @@
-import { NICHE_PROMPTS, type NichePrompt } from './nichePrompts.js';
+import { NICHE_PROMPTS, resolveNicheKey, type NichePrompt } from './nichePrompts.js';
+import { normalizarHorario, TEXTO_HORARIO_AUSENTE } from './tenantLiveProfile.js';
 
 const BASE_INSTRUCTIONS = `
 ## INSTRUÇÕES GERAIS
@@ -61,20 +62,29 @@ Quando tiver uma ação a executar, use os tags XML no final da resposta:
 - <reply>Texto para o cliente</reply>  (SEMPRE presente)
 - <action>schedule|handoff|save_lead|pay_link</action>  (quando aplicável)
 - <action_data>{"chave":"valor"}</action_data>  (dados da ação)
-- <buttons>[{"id":"sim","title":"✅ Sim!"},{"id":"nao","title":"❌ Não"}]</buttons>  (máx 3)
+
+Não ofereça botão nem menu clicável. O clique do cliente chega ao sistema
+num formato que o atendimento ainda não lê, e a pessoa recebe de volta um
+"me conta em texto". Pergunte em texto, com as opções escritas na mensagem.
 `;
 
-const SCHEDULING_INSTRUCTIONS = `
-### Fluxo de Agendamento
-Quando o cliente quiser agendar:
-1. Pergunte qual serviço/procedimento.
-2. Pergunte a preferência de data e horário.
-3. Confirme disponibilidade (os horários disponíveis serão fornecidos pelo sistema).
-4. Confirme nome completo e telefone (se ainda não tiver).
-5. Confirme o agendamento com todos os detalhes.
-6. Informe que um lembrete será enviado 24h e 1h antes.
-7. Use <action>schedule</action> com os dados coletados.
-`;
+/*
+ * SCHEDULING_INSTRUCTIONS foi REMOVIDO em 14/09/2026 (A153, A164, A194).
+ *
+ * Ele era gravado no prompt de 15 dos 17 segmentos, no cadastro, estivesse
+ * o agendamento ligado ou não, e mandava: "Confirme o agendamento com todos
+ * os detalhes. Informe que um lembrete será enviado 24h e 1h antes. Use
+ * <action>schedule</action>". No código, a ação 'schedule' só emite um aviso
+ * de socket para quem estiver com o painel aberto: não cria agendamento, não
+ * cria tarefa, e não existe envio de lembrete em lugar nenhum do produto.
+ *
+ * Ou seja: o agente prometia ao cliente final uma coisa que não acontece.
+ *
+ * O que entra no lugar: instrução montada NO TURNO a partir do estado real
+ * (tipo de agendamento ativo E direito ao recurso), em agents/tenantLiveProfile.ts
+ * com agentOrchestrator.resolveSchedulingRuntime. Sem agendamento de verdade,
+ * a instrução é a honesta: colete a preferência e passe para a equipe.
+ */
 
 /**
  * Links oficiais DO TENANT que o agente pode mandar pro lead.
@@ -96,7 +106,14 @@ export interface SystemPromptOptions {
   niche: string;
   agentName: string;
   businessName: string;
-  tone: string;
+  /**
+   * Opcional desde 14/09/2026 (A058). O SEED não passa tom: ele congelava
+   * "TOM DE VOZ AMIGÁVEL" no prompt de todo agente e 14 de 15 organizações
+   * em produção ficaram com um tom que não era o delas. O tom vivo é montado
+   * no turno (tenantLiveProfile). O FALLBACK (organização sem Agent seedado)
+   * continua passando, porque lá não existe camada viva por cima.
+   */
+  tone?: string;
   businessHours?: any;
   ragContext?: string;
   currentDateTime?: string;
@@ -112,27 +129,31 @@ export interface SystemPromptOptions {
 }
 
 export function getSystemPrompt(opts: SystemPromptOptions): string {
-  const nicheSection: NichePrompt = NICHE_PROMPTS[opts.niche] || NICHE_PROMPTS['generic'];
-  const toneSection = getToneInstructions(opts.tone);
+  // resolveNicheKey cobre a chave com acento do cadastro ('psicólogo') e o
+  // segmento sem modelo ('servicos_b2b'), que antes caíam no genérico em
+  // silêncio e faziam o consultório perder a regra de crise (A155, A184).
+  const nicheSection: NichePrompt = NICHE_PROMPTS[resolveNicheKey(opts.niche)];
+  const toneSection = opts.tone ? getToneInstructions(opts.tone) : '';
   const hoursSection = opts.businessHours ? buildHoursSection(opts.businessHours) : '';
   const contextSection = opts.ragContext ? buildContextSection(opts.ragContext) : '';
-  const scheduling = nicheSection.usesScheduling ? SCHEDULING_INSTRUCTIONS : '';
   const urlsSection = renderConversionUrlsBlock(opts.businessName, opts.conversionUrls);
 
-  const dateTime = opts.currentDateTime || new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  // Data só quando quem chama passa uma hora FRESCA. O seed não passa: ele
+  // gravava o momento do cadastro e 14 agentes carregam até hoje uma data de
+  // julho, brigando com o bloco "# Agora" que o turno acrescenta (A060).
+  const dataLinha = opts.currentDateTime
+    ? `\nData/hora atual: ${opts.currentDateTime} (Fuso: America/Sao_Paulo)`
+    : '';
 
   return `
 ## IDENTIDADE
-Você é ${opts.agentName}, atendente virtual ${nicheSection.roleDescription} da ${opts.businessName}.
-Data/hora atual: ${dateTime} (Fuso: America/Sao_Paulo)
+Você é ${opts.agentName}, atendente virtual ${nicheSection.roleDescription} da ${opts.businessName}.${dataLinha}
 
 ${BASE_INSTRUCTIONS}
 
 ${urlsSection}
 
 ${nicheSection.instructions}
-
-${scheduling}
 
 ${toneSection}
 
@@ -201,16 +222,26 @@ Foque em fatos, dados e procedimentos. O cliente aprecia detalhes técnicos.`,
   return tones[tone] || tones.friendly;
 }
 
+/**
+ * Seção de horário do FALLBACK, no formato único.
+ *
+ * O que havia aqui (A059): a função lia só weekdays/saturday/sunday/holidays
+ * e tinha um default '• Domingo: Fechado' quando não havia domingo. O
+ * cadastro grava as chaves em português, então a seção saía vazia EXCETO
+ * pela linha inventada: a Antonella abre domingo das 12h às 22h e o prompt
+ * dela afirmava que domingo é fechado. Ausência de dado virava afirmação.
+ *
+ * Agora o texto sai do normalizador (tenantLiveProfile), que lê os três
+ * formatos, e a ausência vira a trava explícita de não afirmar horário.
+ */
 function buildHoursSection(hours: any): string {
+  const { texto } = normalizarHorario({ businessHours: hours, businessHoursConfig: hours?.days ? hours : undefined });
   return `
-## HORÁRIO DE FUNCIONAMENTO
-${hours.weekdays ? `• Seg-Sex: ${hours.weekdays}` : ''}
-${hours.saturday ? `• Sábado: ${hours.saturday}` : ''}
-${hours.sunday ? `• Domingo: ${hours.sunday}` : '• Domingo: Fechado'}
-${hours.holidays ? `• Feriados: ${hours.holidays}` : ''}
+## HORÁRIO DE ATENDIMENTO HUMANO
+${texto ?? TEXTO_HORARIO_AUSENTE}
 
-Fora do horário comercial, informe quando poderão ser atendidos pessoalmente,
-mas continue agendando e respondendo dúvidas — você funciona 24/7!`;
+Fora desse horário você continua respondendo, mas não prometa atendimento
+humano imediato: diga quando a equipe volta.`;
 }
 
 function buildContextSection(ragContext: string): string {

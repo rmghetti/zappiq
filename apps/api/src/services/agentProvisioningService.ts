@@ -79,8 +79,15 @@ export function buildSeedSystemPrompt(settings?: Record<string, any> | null): st
     niche: s.niche || 'generic',
     agentName: s.agentName || 'Assistente',
     businessName: s.businessName || 'Empresa',
-    tone: s.tone || 'friendly',
-    businessHours: s.businessHours,
+    // Sem tone, sem businessHours e sem currentDateTime de propósito
+    // (14/09/2026, achados A058, A059, A060). Pelo mesmo motivo dos links
+    // logo abaixo: são dados VIVOS e o prompt seedado é gravado uma vez e
+    // nunca mais relido. Congelados aqui, produziram 14 agentes dizendo
+    // "TOM DE VOZ AMIGÁVEL" para organizações configuradas como
+    // profissional, 4 afirmando "Domingo: Fechado" para negócio aberto no
+    // domingo, e todos carregando a data do dia do cadastro.
+    //
+    // Tom, horário e "agora" entram no TURNO, em agents/tenantLiveProfile.ts.
     // Sem conversionUrls de propósito: link NÃO se congela em prompt seedado.
     //
     // Este seed roda no signup (onboarding.ts), quando surveyAnswers está vazio

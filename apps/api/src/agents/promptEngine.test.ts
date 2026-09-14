@@ -106,3 +106,81 @@ describe('getSystemPrompt: conversionUrls do tenant', () => {
     expect(prompt).toContain('diga que vai verificar');
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 14/09/2026 (A8) — o que o seed NÃO pode mais gravar.
+ * --------------------------------------------------------------------
+ * O prompt do seed é gravado uma vez, no cadastro, e nunca mais relido.
+ * Tudo que for dado VIVO (tom, horário, data, capacidade de agendamento)
+ * tem de sair de lá e ser montado no turno (tenantLiveProfile). O que
+ * ficou congelado em produção: 14 de 15 agentes com "TOM DE VOZ AMIGÁVEL"
+ * para organizações configuradas como profissional, 4 com "Domingo:
+ * Fechado" para negócio aberto no domingo, e a data do dia do cadastro.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('getSystemPrompt: o que sai do texto gravado (A060, A153, A164, A194, A233)', () => {
+  it('sem currentDateTime, NÃO grava data nenhuma no prompt', () => {
+    const prompt = getSystemPrompt(CMJ);
+    expect(prompt).not.toContain('Data/hora atual');
+  });
+
+  it('com currentDateTime (fallback, que recebe a hora fresca), a data entra', () => {
+    const prompt = getSystemPrompt({ ...CMJ, currentDateTime: '16/09/2026, 14:00:00' });
+    expect(prompt).toContain('Data/hora atual: 16/09/2026, 14:00:00');
+  });
+
+  it('sem tone, não existe seção de tom (o tom vivo entra no turno)', () => {
+    const prompt = getSystemPrompt({ ...CMJ, tone: undefined });
+    expect(prompt).not.toContain('TOM DE VOZ');
+  });
+
+  it('com tone, o fallback continua com a seção (org sem Agent seedado)', () => {
+    expect(getSystemPrompt({ ...CMJ, tone: 'formal' })).toContain('TOM DE VOZ');
+  });
+
+  it('nunca grava o Fluxo de Agendamento nem promessa de lembrete', () => {
+    for (const niche of ['dentista', 'academia', 'restaurante', 'psicologo', 'generic']) {
+      const prompt = getSystemPrompt({ ...CMJ, niche });
+      expect(prompt, niche).not.toContain('Fluxo de Agendamento');
+      expect(prompt, niche).not.toContain('lembrete será enviado');
+      expect(prompt, niche).not.toContain('<action>schedule</action>');
+    }
+  });
+
+  it('o bloco <buttons> sai do formato de saída (A233: o clique volta como texto)', () => {
+    expect(getSystemPrompt(CMJ)).not.toContain('<buttons>');
+  });
+
+  it('horário do painel (inglês) vira texto único, sem inventar domingo', () => {
+    const prompt = getSystemPrompt({
+      ...CMJ,
+      businessHours: { weekdays: '09:00 às 18:00', saturday: '09:00 às 13:00' },
+    });
+    expect(prompt).toContain('Segunda a sexta: 09:00 às 18:00');
+    expect(prompt).not.toMatch(/Domingo/i);
+  });
+
+  it('horário do cadastro (português) é lido, e domingo aberto aparece aberto', () => {
+    const prompt = getSystemPrompt({
+      ...CMJ,
+      businessHours: { Segunda: 'fechado', Domingo: '12:00-22:00' },
+    });
+    expect(prompt).toContain('Domingo: 12:00 às 22:00');
+  });
+
+  it('horário presente mas ilegível vira "não informado", nunca "Domingo: Fechado"', () => {
+    const prompt = getSystemPrompt({ ...CMJ, businessHours: { qualquerCoisa: '' } });
+    expect(prompt).not.toMatch(/Domingo:\s*Fechado/i);
+    expect(prompt).toContain('não informado');
+  });
+
+  it('nunca mais promete funcionar 24/7 no bloco de horário', () => {
+    const prompt = getSystemPrompt({ ...CMJ, businessHours: { weekdays: '09:00 às 18:00' } });
+    expect(prompt).not.toContain('24/7');
+  });
+
+  it('o segmento com acento do cadastro acha o modelo certo (A155)', () => {
+    const prompt = getSystemPrompt({ ...CMJ, niche: 'psicólogo' });
+    expect(prompt).toContain('PSICOLOGIA');
+    expect(prompt).toContain('188');
+  });
+});
