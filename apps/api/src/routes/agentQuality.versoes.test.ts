@@ -23,6 +23,7 @@ const prismaMock: any = {
   agentEvalRun: { findFirst: vi.fn(), update: vi.fn() },
   user: { findUnique: vi.fn() },
   $executeRaw: vi.fn(async () => 1),
+  $queryRaw: vi.fn(async () => []),
   $transaction: vi.fn(async (fn: any) => fn(prismaMock)),
 };
 
@@ -100,22 +101,24 @@ describe('GET /agents/:agentId/versions', () => {
       systemPrompt: 'prompt atual',
       organizationId: 'org-cmj',
     });
-    prismaMock.agentPromptVersion.findMany.mockResolvedValue([
+    // Quem conta os caracteres é o banco: o texto das versões não vem para
+    // a aplicação só para virar um `.length`.
+    prismaMock.$queryRaw.mockResolvedValue([
       {
         version: 2,
         source: 'fix_apply',
         hash: 'h2',
-        createdBy: 'gestor@cmj.com.br',
-        createdAt: new Date('2026-09-14T10:00:00Z'),
-        systemPrompt: 'texto com 21 chars..',
+        created_by: 'gestor@cmj.com.br',
+        created_at: new Date('2026-09-14T10:00:00Z'),
+        chars: 20,
       },
       {
         version: 1,
         source: 'migracao',
         hash: 'h1',
-        createdBy: null,
-        createdAt: new Date('2026-09-13T10:00:00Z'),
-        systemPrompt: 'curto',
+        created_by: null,
+        created_at: new Date('2026-09-13T10:00:00Z'),
+        chars: 5,
       },
     ]);
 
@@ -135,8 +138,16 @@ describe('GET /agents/:agentId/versions', () => {
       created_at: '2026-09-14T10:00:00.000Z',
       chars: 20,
     });
-    // O texto não sai na listagem.
-    expect(JSON.stringify(res.body)).not.toContain('texto com 21 chars');
+
+    // A consulta pede o tamanho, nunca o texto. Cem prompts de 27 mil chars
+    // atravessando a rede para contar caracteres era o defeito.
+    const [pedaços, ...valores] = prismaMock.$queryRaw.mock.calls[0];
+    const sql = (pedaços as string[]).join('?');
+    expect(sql).toMatch(/length\(system_prompt\)\s+AS chars/);
+    expect(sql).not.toMatch(/SELECT[^)]*\bsystem_prompt\b[^)]*,/);
+    // O escopo por agente vai como parâmetro, não concatenado no SQL.
+    expect(valores).toContain('ag1');
+    expect(prismaMock.agentPromptVersion.findMany).not.toHaveBeenCalled();
   });
 
   it('agente de outra organização responde 404 (não 403)', async () => {
@@ -149,7 +160,7 @@ describe('GET /agents/:agentId/versions', () => {
     );
 
     expect(res.statusCode).toBe(404);
-    expect(prismaMock.agentPromptVersion.findMany).not.toHaveBeenCalled();
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
   });
 });
 

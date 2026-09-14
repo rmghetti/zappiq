@@ -186,19 +186,25 @@ router.get('/agents/:agentId/versions', async (req: Request, res: Response) => {
       return;
     }
 
-    const linhas = await prisma.agentPromptVersion.findMany({
-      where: { agentId: agent.id },
-      orderBy: { version: 'desc' },
-      take: VERSOES_POR_PAGINA,
-      select: {
-        version: true,
-        source: true,
-        hash: true,
-        createdBy: true,
-        createdAt: true,
-        systemPrompt: true,
-      },
-    });
+    // Quem conta os caracteres é o banco. Com findMany + select do
+    // systemPrompt, cem versões de um prompt como o da Iza (26.886 chars)
+    // viajavam do Postgres até aqui só para virar um `.length` e serem
+    // jogadas fora. O escopo por organização já foi feito no loadAgentScoped
+    // acima; aqui o agentId entra como parâmetro, nunca concatenado.
+    const linhas = await prisma.$queryRaw<
+      Array<{
+        version: number;
+        source: string;
+        hash: string;
+        created_by: string | null;
+        created_at: Date;
+        chars: number;
+      }>
+    >`SELECT version, source, hash, created_by, created_at, length(system_prompt) AS chars
+        FROM agent_prompt_versions
+       WHERE agent_id = ${agent.id}
+       ORDER BY version DESC
+       LIMIT ${VERSOES_POR_PAGINA}`;
 
     res.json({
       agentId: agent.id,
@@ -208,9 +214,9 @@ router.get('/agents/:agentId/versions', async (req: Request, res: Response) => {
         version: v.version,
         source: v.source,
         hash: v.hash,
-        created_by: v.createdBy,
-        created_at: v.createdAt.toISOString(),
-        chars: (v.systemPrompt || '').length,
+        created_by: v.created_by,
+        created_at: new Date(v.created_at).toISOString(),
+        chars: Number(v.chars ?? 0),
       })),
     });
   } catch (err: any) {
