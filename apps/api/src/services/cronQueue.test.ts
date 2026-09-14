@@ -41,10 +41,11 @@ const HORARIOS_ESPERADOS: Record<string, string> = {
   'conversation-expiry': '50 * * * *',      // nova (Resposta Meta out/2026), de hora em hora
   'waba-health': '5 */6 * * *',             // nova (Resposta Meta out/2026), a cada 6 horas
   'cost-guard': '20 * * * *',               // nova (PR-H Resposta Meta out/2026), de hora em hora
+  'signup-orfaos-vigia': '10 13 * * *',     // nova (A242), logo depois do digest de trial
 };
 
 describe('fila cron — registro consolidado', () => {
-  it('mantém as 16 rotinas, nenhuma a mais e nenhuma a menos', () => {
+  it('mantém as 17 rotinas, nenhuma a mais e nenhuma a menos', () => {
     const nomes = CRON_JOBS.map((c) => c.name).sort();
     expect(nomes).toEqual(Object.keys(HORARIOS_ESPERADOS).sort());
   });
@@ -165,5 +166,25 @@ describe('fila cron: agendamento obsoleto sai do Redis', () => {
     const fila = filaCom([undefined, { key: 'md5-orfa', name: 'sumiu', pattern: '0 5 * * *' }]);
 
     expect(await removeObsoleteCronSchedulers(fila)).toBe(1);
+  });
+});
+
+// A242 — a vigia da porta de entrada entrou na fila única, não numa fila nova.
+describe('cron: vigia dos cadastros órfãos', () => {
+  const vigia = CRON_JOBS.find((j) => j.name === 'signup-orfaos-vigia');
+
+  it('está registrada na fila `cron`', () => {
+    expect(vigia).toBeDefined();
+  });
+
+  it('roda uma vez por dia', () => {
+    expect(vigia!.pattern).toMatch(/^\d+ \d+ \* \* \*$/);
+  });
+
+  it('não colide de minuto com nenhuma outra rotina diária', () => {
+    const mesmoMinuto = CRON_JOBS.filter(
+      (j) => j.name !== 'signup-orfaos-vigia' && j.pattern === vigia!.pattern,
+    );
+    expect(mesmoMinuto).toEqual([]);
   });
 });

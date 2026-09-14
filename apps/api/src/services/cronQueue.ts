@@ -34,6 +34,7 @@ import { runCostGuardCycle } from './costGuardService.js';
 import { runMiraMirrors } from './mira/cnpjMirrorSync.js';
 import { runMiraReleasesCycle } from './mira/releasesCron.js';
 import { runRetentionCycle } from './retentionService.js';
+import { runSignupOrfaosCycle } from './signupVigiaService.js';
 import {
   NOME_DO_JOB_DE_REINGESTAO,
   executarReingestaoDoQuestionario,
@@ -109,6 +110,11 @@ export const CRON_JOBS: CronJobDefinition[] = [
   { name: 'mira-releases', pattern: '0 6 * * 1', run: runMiraReleasesCycle },
   { name: 'mira-cnpj-mirror', pattern: '0 6 1 * *', run: runMiraMirrors },
   { name: 'superadmin-trial-digest', pattern: '0 13 * * *', run: runDigest },
+  // Vigia da porta de entrada (A242). Diária às 13:10 UTC (10h10 de Brasília),
+  // logo depois do digest de trial: os dois são leitura para o fundador e
+  // chegam juntos. Avisa quando há cadastro confirmado há mais de 24 h sem
+  // organização, que foi o silêncio de 60 dias que ninguém viu.
+  { name: 'signup-orfaos-vigia', pattern: '10 13 * * *', run: () => runSignupOrfaosCycle() },
   { name: 'trial-followup-scheduler', pattern: '0 14 * * *', run: runTrialFollowupScheduler },
   // Resposta Meta out/2026 — rotinas novas (não vieram de fila antiga).
   // Expiração de conversa parada 72h, de hora em hora no minuto 50: fora dos
