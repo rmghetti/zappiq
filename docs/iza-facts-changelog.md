@@ -52,6 +52,25 @@ Pra contornar (PRs cosméticos): adicione label `no-iza-impact` no PR.
 
 ## Entradas
 
+### 2026-09-14 · Raio-X do prompt · `getToneInstructions` exportada (sem mudança de texto)
+
+**O que mudou:** `apps/api/src/agents/promptEngine.ts` ganhou a palavra `export` na
+função `getToneInstructions`. Nenhum texto de prompt, nenhuma regra e nenhum
+comportamento mudaram: o diff é a palavra `export` e o comentário que explica por
+quê. A nova tela `/admin/ai-xray` (Raio-X do prompt) precisa procurar dentro do
+prompt montado exatamente o mesmo texto de tom que a produção injeta. Copiar o
+mapa de tons para o Raio-X criaria uma segunda fonte de verdade, que é justamente
+o tipo de defeito que o Raio-X existe para encontrar.
+
+**Impacto na Iza:** nenhum. A Iza não passa a falar nada novo nem deixa de falar
+nada. O prompt gerado é byte a byte o mesmo de antes.
+
+**Ação no /admin/iza-knowledge** (após merge):
+- [ ] Nenhuma (mudança técnica sem impacto narrativo)
+
+**Smoke esperado:** nenhum. O teste `promptXray.test.ts` monta o prompt pelo
+montador real de produção e confere as fatias, o que cobre a regressão.
+
 ### 2026-08-20 · PR #343 · Bandeira nova "por atendimento" + kit Outubro sem Susto
 
 **O que mudou:** toda a copy do site trocou a bandeira "mensalidade fixa sem cobrança por conversa" pela nova: "Mensalidade fixa por atendimento: cada conversa que a Iza cuida conta um, com mensagens à vontade dentro dela. A tarifa do WhatsApp vai a custo, na sua conta, com medidor e teto. Zero markup, zero setup, zero surpresa." Fair use de 12 respostas por atendimento aparece em linha visível. A página /novidades-meta virou o kit "Outubro sem susto" (calculadora da tarifa Meta de 01/10, referência R$ 0,035 por resposta, tabela final até 01/09) e nasceu /legal/subprocessadores. Decisões D1/D2 do plano Resposta Meta, aprovadas pelo fundador em 20/08.
