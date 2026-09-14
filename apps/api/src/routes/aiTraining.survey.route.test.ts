@@ -1,5 +1,5 @@
 /**
- * GET/PUT /api/ai-training/survey — teste de ROTA.
+ * GET/PUT /api/ai-training/survey: teste de ROTA.
  *
  * Prova o que a lógica pura não alcança: que o salvamento do questionário
  * NÃO ingere nada dentro da requisição (A007) e que a tela recebe o estado
@@ -16,12 +16,14 @@ const ORG = 'org-do-teste';
 
 const findUnique = vi.fn();
 const update = vi.fn();
+const executeRaw = vi.fn();
 vi.mock('@zappiq/database', () => ({
   prisma: {
     organization: {
       findUnique: (...a: any[]) => findUnique(...a),
       update: (...a: any[]) => update(...a),
     },
+    $executeRaw: (...a: any[]) => executeRaw(...a),
     kBDocument: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
     knowledgeBase: { findFirst: vi.fn(), create: vi.fn() },
     auditLog: { findMany: vi.fn().mockResolvedValue([]) },
@@ -83,7 +85,8 @@ beforeAll(async () => {
   const { default: router } = await import('./aiTraining.js');
   const { errorHandler } = await import('../middleware/errorHandler.js');
   const app = express();
-  app.use(express.json());
+  // Mesmo teto do server.ts, senão o body-parser devolve 413 antes da rota.
+  app.use(express.json({ limit: '10mb' }));
   app.use('/api/ai-training', router);
   app.use(errorHandler);
   await new Promise<void>((resolve) => {
@@ -100,6 +103,8 @@ beforeEach(() => {
   findUnique.mockReset();
   update.mockReset();
   update.mockResolvedValue({});
+  executeRaw.mockReset();
+  executeRaw.mockResolvedValue(1);
   ingestDocument.mockClear();
   deleteDocument.mockClear();
   agendar.mockClear();
@@ -126,11 +131,14 @@ describe('PUT /api/ai-training/survey', () => {
     expect(agendar).toHaveBeenCalledWith(ORG);
     expect(corpo.reingestaoAgendada).toBe(true);
     expect(corpo.surveySync.status).toBe('pendente');
-    expect(update).toHaveBeenCalledTimes(1);
-    const gravado = update.mock.calls[0][0].data.settings;
-    expect(gravado.surveyAnswers).toEqual(RESPOSTAS);
-    // O estado da sincronização é gravado POR CHAVE, fora do JSON inteiro.
-    expect(gravado.surveySync).toBeUndefined();
+    // A gravação é por CHAVE (jsonb_set), nunca o JSON inteiro de settings.
+    expect(update).not.toHaveBeenCalled();
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    const [sql, json, orgGravada] = executeRaw.mock.calls[0];
+    expect(sql.join('?')).toContain("jsonb_set");
+    expect(sql.join('?')).toContain("'{surveyAnswers}'");
+    expect(JSON.parse(json)).toEqual(RESPOSTAS);
+    expect(orgGravada).toBe(ORG);
     expect(marcarPendente).toHaveBeenCalledTimes(1);
     // Não pode apagar o que já está no ar: até o job rodar, a IA continua
     // com a versão anterior do questionário.
@@ -184,7 +192,139 @@ describe('PUT /api/ai-training/survey', () => {
 
     expect(res.status).toBe(200);
     expect(corpo.reingestaoAgendada).toBe(false);
-    expect(update).toHaveBeenCalledTimes(1);
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a gravação não pode apagar o que outra requisição escreveu', () => {
+  it('chave gravada por fora, entre a leitura e a escrita, sobrevive', () => {
+    // Banco de mentira com settings de verdade. A leitura da rota dispara a
+    // escrita concorrente: é exatamente a janela do defeito (A155, A156).
+    let noBanco: Record<string, any> = { niche: 'padaria', surveyAnswers: { antigo: 'x' } };
+
+    findUnique.mockImplementation(async () => {
+      const lido = { settings: { ...noBanco }, name: 'Padaria' };
+      noBanco = {
+        ...noBanco,
+        businessHoursConfig: { timezone: 'America/Sao_Paulo' },
+        llm_routing: { tier: 'premium' },
+      };
+      return lido;
+    });
+    // Regravar o JSON inteiro é o defeito: deixamos o caminho aberto para o
+    // teste falhar de verdade se alguém voltar a usá-lo.
+    update.mockImplementation(async ({ data }: any) => {
+      noBanco = data.settings;
+      return {};
+    });
+    executeRaw.mockImplementation(async (_sql: any, json: string) => {
+      noBanco = { ...noBanco, surveyAnswers: JSON.parse(json) };
+      return 1;
+    });
+
+    return fetch(`${base}/api/ai-training/survey`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ surveyAnswers: RESPOSTAS }),
+    }).then(async (res) => {
+      expect(res.status).toBe(200);
+      expect(noBanco.surveyAnswers).toEqual(RESPOSTAS);
+      expect(noBanco.businessHoursConfig).toEqual({ timezone: 'America/Sao_Paulo' });
+      expect(noBanco.llm_routing).toEqual({ tier: 'premium' });
+    });
+  });
+
+  it('os sources que a tela mostra vêm de leitura FRESCA, depois da escrita', async () => {
+    findUnique
+      .mockResolvedValueOnce({
+        settings: {
+          niche: 'padaria',
+          surveySync: { status: 'ok', at: '2026-09-13T10:00:00.000Z', sources: ['survey-velho'] },
+        },
+        name: 'Padaria',
+      })
+      // O job da fila gravou surveySync no meio do caminho.
+      .mockResolvedValueOnce({
+        settings: {
+          niche: 'padaria',
+          surveySync: {
+            status: 'ok',
+            at: '2026-09-14T11:00:00.000Z',
+            sources: ['survey-identidade_empresa', 'survey-precos_condicoes'],
+          },
+        },
+      });
+
+    await fetch(`${base}/api/ai-training/survey`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ surveyAnswers: RESPOSTAS }),
+    });
+
+    expect(findUnique).toHaveBeenCalledTimes(2);
+    expect(marcarPendente.mock.calls[0][1]).toEqual({
+      sources: ['survey-identidade_empresa', 'survey-precos_condicoes'],
+    });
+  });
+});
+
+describe('tetos de tamanho do questionário (A118)', () => {
+  beforeEach(() => {
+    findUnique.mockResolvedValue({ settings: { niche: 'padaria' }, name: 'Padaria' });
+  });
+
+  async function salvar(surveyAnswers: any) {
+    const res = await fetch(`${base}/api/ai-training/survey`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ surveyAnswers }),
+    });
+    return { res, corpo: await res.json() };
+  }
+
+  it('resposta acima de 8.000 caracteres é recusada com 422 em português', async () => {
+    const { res, corpo } = await salvar({
+      precos_condicoes: { pre_desconto_maximo: 'a'.repeat(8001) },
+    });
+
+    expect(res.status).toBe(422);
+    expect(corpo.error).toBe('resposta_longa_demais');
+    expect(corpo.message).toContain('8.000 caracteres');
+    expect(corpo.campo).toBe('pre_desconto_maximo');
+    expect(executeRaw).not.toHaveBeenCalled();
+    expect(agendar).not.toHaveBeenCalled();
+  });
+
+  it('resposta de exatamente 8.000 caracteres passa', async () => {
+    const { res } = await salvar({ precos_condicoes: { pre_desconto_maximo: 'a'.repeat(8000) } });
+    expect(res.status).toBe(200);
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('o teto vale em qualquer profundidade do JSON', async () => {
+    const { res, corpo } = await salvar({
+      subsegmentos: { consultoria: { reg_nao_pode_prometer: 'b'.repeat(9000) } },
+    });
+    expect(res.status).toBe(422);
+    expect(corpo.campo).toBe('reg_nao_pode_prometer');
+  });
+
+  it('questionário inteiro acima de 200 KB é recusado com 422 em português', async () => {
+    // 40 respostas de 7.000 caracteres: cada uma cabe, o conjunto não.
+    const grandes: Record<string, string> = {};
+    for (let i = 0; i < 40; i++) grandes[`campo_${i}`] = 'c'.repeat(7000);
+
+    const { res, corpo } = await salvar({ precos_condicoes: grandes });
+
+    expect(res.status).toBe(422);
+    expect(corpo.error).toBe('questionario_grande_demais');
+    expect(corpo.message).toContain('200 KB');
+    expect(executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('questionário de tamanho normal passa sem reclamar', async () => {
+    const { res } = await salvar(RESPOSTAS);
+    expect(res.status).toBe(200);
   });
 });
 
