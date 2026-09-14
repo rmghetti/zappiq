@@ -319,32 +319,41 @@ cliente para /roadmap, /observabilidade ou /como-funciona-survey, que agora redi
 
 **Ação no /admin/iza-knowledge (obrigatória, os facts contradizem o site agora):**
 
-- [ ] (aberto em 2026-09-14) UPDATE `kb_upload`: tirar DOCX e site da lista. Formatos aceitos hoje: PDF, TXT, MD
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE `kb_upload`: tirar DOCX e site da lista. Formatos aceitos hoje: PDF, TXT, MD
       e CSV, mais link de página e texto colado.
-- [ ] (aberto em 2026-09-14) UPDATE `self_healing`: tirar "plataforma aprende", "loop fechado" e "única no
+      Feito: fact reescrito em produção (PDF, TXT, MD, CSV, páginas do site; Word e Excel não são lidos).
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE `self_healing`: tirar "plataforma aprende", "loop fechado" e "única no
       mundo". Redação factual: a bateria semanal aponta o desvio e sugere a correção,
       que só vale depois de aprovada por uma pessoa.
-- [ ] (aberto em 2026-09-14) UPDATE `instagram_direct`: sair de "em operação real" enquanto não houver nenhuma
+      Feito: fact reescrito em produção (testes automáticos, sugestão, uma pessoa aprova; nada muda sozinho).
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE `instagram_direct`: sair de "em operação real" enquanto não houver nenhuma
       conversa de Instagram na base.
-- [ ] (aberto em 2026-09-14) UPDATE `chat_site`: tirar "mesma cascade LLM do WhatsApp".
-- [ ] (aberto em 2026-09-14) UPDATE `como_funciona`: o link para /como-funciona-survey agora redireciona;
+      Feito: fact reescrito em produção (piloto interno; liberação depende do App Review da Meta).
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE `chat_site`: tirar "mesma cascade LLM do WhatsApp".
+      Feito: fact reescrito em produção (mesmo agente e regras do WhatsApp; a base no site está em correção).
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE `como_funciona`: o link para /como-funciona-survey agora redireciona;
       apontar para /#precos ou para o cadastro.
-- [ ] (aberto em 2026-09-14) UPDATE `feat_voz_outbound`: tirar "treinada nativamente em português brasileiro",
+      Feito: fact reescrito em produção (a explicação fica na página inicial).
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE `feat_voz_outbound`: tirar "treinada nativamente em português brasileiro",
       tirar o nome do fornecedor de voz e tirar "tecnologia proprietária". Redação
       factual: voz em português brasileiro.
-- [ ] (aberto em 2026-09-14) UPDATE de qualquer fact que afirme dados no Brasil, banco no Brasil ou residência em
+      Feito: fact `voz_outbound` reescrito em produção (voz natural em português brasileiro, 6 pacotes) e as 4 ocorrências de 'treinada nativamente' saíram do prompt da Iza (agent_prompt_versions v3, created_by alinharPromptDaIzaComA4).
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE de qualquer fact que afirme dados no Brasil, banco no Brasil ou residência em
       território nacional. Redação factual: os dados ficam em servidores nos Estados Unidos
       (banco de dados e processamento de IA), com salvaguardas contratuais para
       transferência internacional.
-- [ ] (aberto em 2026-09-14) UPDATE de qualquer fact que prometa lembrete automático (vencimento, aula, consulta,
+      Feito: fact `lgpd` diz dados nos Estados Unidos com salvaguardas contratuais; as 2 ocorrências de 'dados no Brasil' saíram do prompt da Iza (v3).
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE de qualquer fact que prometa lembrete automático (vencimento, aula, consulta,
       vacina, documento) ou áudio antes do evento. A agenda consulta o horário e cria o
       compromisso; o aviso ao cliente continua com a equipe.
-- [ ] (aberto em 2026-09-14) LIMPAR o prompt gravado dos agentes (`agents.system_prompt`), não só os facts. A
+      Feito: conferido em produção em 14/09: nenhum fact e nenhuma linha do prompt da Iza promete lembrete automático.
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) LIMPAR o prompt gravado dos agentes (`agents.system_prompt`), não só os facts. A
       migração `20260427_agent_model` semeou a instrução "para questões sobre Voz
       Padrão/Premium, comunicar status 'em desenvolvimento, disponível em julho/2026' e
       linkar /roadmap". A rota /roadmap agora redireciona, e a data já passou, então essa
       instrução tem de sair do `agents.system_prompt` de cada organização. A limpeza é
       feita pelo script da tarefa A9, não por UPDATE manual no /admin.
+      Feito: conferido em produção em 14/09: o prompt da Iza não contém /roadmap, 'Voz Padrão', 'Voz Premium' nem 'julho/2026'; a tabela de preços mortos saiu na v2 (removerTabelaDePrecosDaIza).
 
 **Smoke esperado no chat da Iza:**
 
@@ -481,8 +490,10 @@ R$ 247, Growth R$ 497, Scale R$ 1.497 e Enterprise sob consulta, com o anual a
 
 **Ações abertas desta entrada:**
 
-- [ ] (aberto em 2026-09-14) Rodar `apps/api/scripts/removerTabelaDePrecosDaIza.ts` contra o prompt da Iza em produção. O roteiro que vale é o do CABEÇALHO do script, não o do corpo do PR #367: aquele citava uma coluna `actor` que não existe em `agent_prompt_versions` (é `created_by`) e a grafia `"updatedAt"` para a data de `agents` (é `updated_at`). Prova de que pegou: `SELECT count(*) FROM agents WHERE organization_id = '<ZAPPIQ_ORG_ID>' AND system_prompt LIKE '%997%'` devolve 0.
-- [ ] (aberto em 2026-09-14) Tirar do `agents.system_prompt` da Iza a instrução que manda oferecer a página `/roadmap`. A página virou redirecionamento na tarefa A4, então a Iza está mandando o lead para um link que não tem mais conteúdo próprio.
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) Rodar `apps/api/scripts/removerTabelaDePrecosDaIza.ts` contra o prompt da Iza em produção. O roteiro que vale é o do CABEÇALHO do script, não o do corpo do PR #367: aquele citava uma coluna `actor` que não existe em `agent_prompt_versions` (é `created_by`) e a grafia `"updatedAt"` para a data de `agents` (é `updated_at`). Prova de que pegou: `SELECT count(*) FROM agents WHERE organization_id = '<ZAPPIQ_ORG_ID>' AND system_prompt LIKE '%997%'` devolve 0.
+      Feito: aplicado em produção em 14/09 pela mesma cadeia de replace() do script, com trava md5 (v2 em agent_prompt_versions, created_by removerTabelaDePrecosDaIza); `LIKE '%997%'` devolve 0.
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) Tirar do `agents.system_prompt` da Iza a instrução que manda oferecer a página `/roadmap`. A página virou redirecionamento na tarefa A4, então a Iza está mandando o lead para um link que não tem mais conteúdo próprio.
+      Feito: conferido em produção em 14/09: o prompt da Iza (v3) não contém '/roadmap'.
 
 **Regra nova que vale daqui em diante:** preço de plano da Iza sai do
 `planConfig` e de lugar nenhum mais. Não volte a escrever preço no prompt e não
