@@ -1985,7 +1985,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
           'Sim, mas só dados-chave (nome, serviço, última interação)',
           'Não — cada conversa é independente',
         ],
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'Histórico permite: "Olá Maria! Da última vez conversamos sobre clareamento. Decidiu?".',
         category: 'personalizacao',
       },
@@ -2167,7 +2170,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
           'Sim — resumo breve (motivo + nome do lead)',
           'Não — o atendente lê o histórico completo',
         ],
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'O resumo economiza tempo do atendente e evita que o cliente repita tudo. Melhora a experiência.',
         category: 'escalonamento',
       },
@@ -2181,7 +2187,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
           'Pode sugerir horários — mas humano finaliza',
           'Não pode agendar — apenas coleta interesse',
         ],
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'O nível de autonomia da IA no agendamento afeta diretamente a velocidade de conversão.',
         category: 'autonomia',
       },
@@ -2212,7 +2221,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         label: 'Em quais horários a IA atende sozinha e quando tem humano disponível?',
         type: 'textarea',
         placeholder: 'Ex: IA sozinha: 19h-08h e fins de semana. Com humano backup: 08h-18h Seg-Sex.',
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'Quando não há humano, a IA deve informar: "No momento, estou atendendo. Para falar com um especialista, retorne das 8h às 18h".',
         category: 'autonomia',
       },
@@ -2274,7 +2286,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         label: 'Quais situações devem ser escaladas com PRIORIDADE ALTA?',
         type: 'textarea',
         placeholder: 'Ex: Emergência médica, cliente com risco de cancelamento, reclamação pública (citou redes sociais), VIP.',
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'Prioridade alta significa atendimento humano imediato, sem fila. A IA avisa: "Estou te conectando agora com um especialista".',
         category: 'gatilhos',
       },
@@ -2337,7 +2352,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         label: 'Para quem a IA deve escalar em cada situação?',
         type: 'textarea',
         placeholder: 'Ex:\n- Dúvidas comerciais → Equipe de vendas\n- Reclamações → Gerente de atendimento\n- Assuntos financeiros → Financeiro\n- Emergências → Proprietário/Diretor\n- VIPs → Gerente comercial',
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'Direcionar para a pessoa certa evita que o cliente seja jogado de um lado para o outro.',
         category: 'direcionamento',
       },
@@ -2353,7 +2371,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
           'Mensagem direta para o responsável',
           'Dashboard do ZappIQ',
         ],
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'O canal de escalonamento deve ser rápido e confiável. O cliente não pode ficar esperando sem retorno.',
         category: 'direcionamento',
       },
@@ -2373,7 +2394,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
           'Tentativas anteriores de resolução',
           'Tempo de espera do cliente',
         ],
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'O resumo completo permite que o humano comece o atendimento já sabendo tudo, sem repetir perguntas.',
         category: 'protocolo',
       },
@@ -2382,7 +2406,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         label: 'Qual mensagem a IA deve enviar ao cliente durante a transferência?',
         type: 'textarea',
         placeholder: 'Ex: "Para melhor te atender, vou transferir você para [nome/setor]. Já passei todas as informações da nossa conversa para que você não precise repetir nada. Um momento, por favor! 😊"',
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'A mensagem de transição deve tranquilizar o cliente e mostrar que a transferência é positiva, não abandono.',
         category: 'protocolo',
       },
@@ -2400,7 +2427,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
           'Até 24 horas',
           'Não temos SLA definido',
         ],
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'A IA pode informar: "Nosso especialista vai entrar em contato em até [SLA]". Definir SLA é essencial.',
         category: 'sla',
       },
@@ -2409,7 +2439,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         label: 'O que a IA deve fazer se não houver humano disponível?',
         type: 'textarea',
         placeholder: 'Ex: Informar previsão de retorno, registrar o caso, enviar e-mail para equipe, oferecer agendar callback.',
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'Fora do horário ou quando todos estão ocupados, a IA precisa de um plano B claro.',
         category: 'contingencia',
       },
@@ -2451,7 +2484,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
           'Humano continua até o fim da conversa',
           'Depende do caso — humano decide',
         ],
-        required: true,
+        // A211: esta pergunta configura uma função do sistema, não descreve o
+        // negócio. Enquanto o produto não executa (ou executa por outro campo),
+        // ela não pode ser obrigatória. Ver packages/shared/src/surveyDestino.ts.
+        required: false,
         helpText: 'Definir quem retoma evita confusão. Em alguns casos, é melhor o humano finalizar para garantir satisfação.',
         category: 'protocolo',
       },
