@@ -8,7 +8,8 @@
  *
  * O contador vive no Redis, numa chave por organização, por rota e por dia
  * (`zappiq:quota:<org>:<rota>:<aaaa-mm-dd>`), com validade de 36 horas: a chave
- * morre sozinha no dia seguinte.
+ * morre sozinha no dia seguinte. O dia é o de Brasília (ver
+ * `chaveDaCotaDiaria`), porque é o relógio de quem clica.
  *
  * Duas decisões que valem comentário:
  *   • Sem Redis não há cota. O contador do cache é `fail-soft` por contrato
@@ -30,13 +31,25 @@ export const COTA_DIARIA_PADRAO = 20;
 /** Validade da chave: 36 horas cobrem o dia inteiro em qualquer fuso. */
 const VALIDADE_SEGUNDOS = 36 * 3600;
 
-/** Chave do contador. Exportada para o teste conferir o formato combinado. */
+/** Diferença de Brasília para o UTC, em milissegundos (UTC-3). */
+const FUSO_DE_BRASILIA_MS = 3 * 3600_000;
+
+/**
+ * Chave do contador. Exportada para o teste conferir o formato combinado.
+ *
+ * O dia é o de Brasília, não o do UTC. A máquina roda em UTC, e com o dia do
+ * UTC a cota virava às 21:00 no relógio do cliente: quem clicava às 22h de
+ * terça já estava consumindo a cota de quarta, e o teto do dia dobrava toda
+ * noite. O Brasil não tem mais horário de verão desde 2019, então o
+ * deslocamento fixo de três horas basta e evita depender de base de fusos.
+ */
 export function chaveDaCotaDiaria(
   organizationId: string,
   rota: string,
   agora: Date = new Date(),
 ): string {
-  return `zappiq:quota:${organizationId}:${rota}:${agora.toISOString().slice(0, 10)}`;
+  const emBrasilia = new Date(agora.getTime() - FUSO_DE_BRASILIA_MS);
+  return `zappiq:quota:${organizationId}:${rota}:${emBrasilia.toISOString().slice(0, 10)}`;
 }
 
 /**
