@@ -73,7 +73,7 @@ describe('flagLigada', () => {
   });
 
   it('repassa o valor lido', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'contextoUnico');
     await expect(flagLigada('org', 'contextoUnico')).resolves.toBe(true);
     expect(isFlagOn).toHaveBeenCalledWith('org', 'contextoUnico');
   });
