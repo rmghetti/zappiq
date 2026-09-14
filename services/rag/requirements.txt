@@ -28,7 +28,7 @@ sqlalchemy[asyncio]==2.0.35
 # dimensoes (ver docs/architecture/embeddings.md e services/rag/fly.toml).
 # O voyageai continua instalado porque main.py ainda oferece o provider, mas ele
 # so volta a valer com reingestao completa da rag_chunks.
-voyageai==0.3.0
+voyageai==0.5.0
 openai==1.51.0
 
 # Observabilidade (alinhado com apps/api)
