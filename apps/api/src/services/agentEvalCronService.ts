@@ -152,15 +152,61 @@ export function isEvalEligible(org: EvalEligibilityInput): EvalEligibility {
 const SCORE_MIN = Number(process.env.AGENT_EVAL_ALERT_SCORE_MIN ?? 90);
 const CRITICAL_MIN = Number(process.env.AGENT_EVAL_ALERT_CRITICAL ?? 1);
 
-// FASE 2.1 (2026-05-13): exportado pra ser reusado em /run-async manual.
-// Antes só rodava em runAgentEvalCronCycle, então runs manuais nunca
-// alertavam mesmo quando estouravam threshold. Bug capturado em
-// produção (run 13/05 72% sem notificação Slack).
-export function shouldAlertQuality(summary: {
-  scorePercent: number;
-  criticalFailed: number;
-}): boolean {
-  return summary.scorePercent < SCORE_MIN || summary.criticalFailed >= CRITICAL_MIN;
+/**
+ * A047 — o alerta parou de ser por NOTA e passou a ser por FATO NOVO.
+ *
+ * O critério antigo era absoluto (nota < 90 ou 1 crítico). Como toda
+ * organização de teste ficava abaixo de 90, a mesma falha estrutural alertava
+ * todo dia: 13 mensagens numa única segunda, e o time parou de ler o canal.
+ *
+ * Agora alerta só quando há ação a tomar:
+ *   (a) um cenário CRÍTICO reprovou; ou
+ *   (b) o MESMO cenário reprovou nas duas últimas execuções concluídas
+ *       (defeito que sobreviveu a um ciclo inteiro, então não é ruído).
+ *
+ * A nota continua no painel, que é o lugar dela.
+ *
+ * FASE 2.1 (2026-05-13): exportado pra ser reusado em /run-async manual.
+ */
+export function shouldAlertQuality(
+  summary: { scorePercent: number; criticalFailed: number },
+  contexto: { repetidos?: string[] } = {},
+): boolean {
+  if (summary.criticalFailed >= CRITICAL_MIN) return true;
+  return (contexto.repetidos?.length ?? 0) > 0;
+}
+
+/** Um item do results JSONB, na parte que o alerta precisa ler. */
+interface ResultadoDeCenario {
+  scenarioId?: unknown;
+  combined?: unknown;
+}
+
+/** Ids de cenário reprovados num results JSONB. Tolera formato inesperado. */
+function reprovadosEm(results: unknown): Set<string> {
+  const ids = new Set<string>();
+  if (!Array.isArray(results)) return ids;
+  for (const r of results as ResultadoDeCenario[]) {
+    if (r && typeof r.scenarioId === 'string' && r.combined === 'fail') {
+      ids.add(r.scenarioId);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Cenários que reprovaram NAS DUAS execuções: a atual e a concluída
+ * imediatamente anterior do mesmo agente. Pura (recebe os results JSON).
+ *
+ * 'partial' não conta: o alerta é para o que falhou de verdade duas vezes.
+ * Sem execução anterior (primeira do agente) o resultado é vazio, porque
+ * ainda não há repetição a provar.
+ */
+export function scenariosFailingTwice(resultsAtual: unknown, resultsAnterior: unknown): string[] {
+  const anterior = reprovadosEm(resultsAnterior);
+  if (anterior.size === 0) return [];
+  const atual = reprovadosEm(resultsAtual);
+  return [...atual].filter((id) => anterior.has(id));
 }
 
 export { SCORE_MIN as AGENT_EVAL_ALERT_SCORE_MIN };
@@ -179,6 +225,13 @@ export async function notifySlackQualityIssue(input: {
   totalScenarios: number;
   durationMs: number;
   topFails: Array<{ scenarioId: string; category: string; severity: string }>;
+  /** A047 — cenários que reprovaram nesta E na execução anterior. */
+  repetidos?: string[];
+  /**
+   * A047 — para onde o link leva. O painel do cliente e o do superadmin são
+   * telas diferentes; mandar o dono do negócio para /admin era um beco.
+   */
+  dashboardPath?: string;
 }): Promise<boolean> {
   const webhook =
     process.env.SLACK_WEBHOOK_AGENT_QUALITY || process.env.SLACK_WEBHOOK_QUOTA_ALERTS;
@@ -204,11 +257,21 @@ export async function notifySlackQualityIssue(input: {
   // único section block markdown (mesmo padrão do /test-slack que funciona)
   // + emoji unicode em vez de `:chart_with_downwards_trend:` (que pode
   // causar reject silencioso em alguns workspaces).
+  // A047: o motivo vem no corpo. Antes a mensagem dizia sempre "abaixo do
+  // limiar", inclusive quando o problema era outro, e o limiar deixou de ser
+  // o critério.
+  const repetidos = input.repetidos ?? [];
+  const motivo =
+    input.criticalFailed > 0
+      ? `${input.criticalFailed} cenário(s) crítico(s) reprovado(s)`
+      : `reprovação repetida em ${repetidos.length} cenário(s): ${repetidos.slice(0, 5).join(', ')}`;
+
   const messageMarkdown = [
-    `*${severity} — Qualidade do Agente abaixo do limiar*`,
+    `*${severity} — Qualidade do Agente exige revisão*`,
     '',
     `*Agente:* ${input.agentName} (${input.organizationName})`,
-    `*Score:* ${input.scorePercent}% (limiar ${SCORE_MIN}%)`,
+    `*Motivo:* ${motivo}`,
+    `*Score:* ${input.scorePercent}%`,
     `*Aprovados:* ${input.passed}/${input.totalScenarios} · *Parciais:* ${input.partial} · *Reprovados:* ${input.failed} · *Críticos:* ${input.criticalFailed}`,
     `*Duração:* ${(input.durationMs / 1000).toFixed(1)}s`,
     '',
@@ -216,7 +279,7 @@ export async function notifySlackQualityIssue(input: {
     topFailsLines,
     '',
     `runId \`${input.runId}\` · eval ${EVAL_SET_VERSION} · core ${CORE_RULES_VERSION}`,
-    `<${baseUrl}/admin/agent-quality|🔗 Abrir dashboard>`,
+    `<${baseUrl}${input.dashboardPath ?? '/admin/agent-quality'}|🔗 Abrir painel>`,
   ].join('\n');
 
   return sendSlackAlert({
