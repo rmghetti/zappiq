@@ -59,6 +59,8 @@ import { resolveEvalSet, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { executeAgentEvalRun } from './agentEvalRunner.js';
 import { queueConnection as connection } from '../config/queueRedis.js';
+// Fonte única da regra de acesso (a mesma do requireActivePlan e do /auth/me).
+import { computeAccessState, type AccessInput } from './accountAccess.js';
 
 // ─── BullMQ connection (mesma config dos outros crons) ─────────
 
@@ -74,6 +76,77 @@ const IZA_ORG_ID = 'cmo1ywwfe00ko1jskexiexsm4';
 // 'clients' = todos os agents live EXCETO a org da Iza (semanal);
 // 'all' = todos (usado por triggers manuais/legados).
 type CronScope = 'iza' | 'clients' | 'all';
+
+// ─── Elegibilidade: quem o cron pode avaliar (A045 / A067) ──────
+//
+// O ciclo pegava todo agente 'live'. Em produção isso era 9 organizações
+// '-STAGING', 2 contas com trial vencido sem assinatura e organizações sem
+// nenhuma base cadastrada: 13 alertas no Slack toda segunda e cerca de USD 60
+// por mês de LLM sem dono. A porta é esta função, pura e testável.
+
+/** Por que a organização ficou de fora do ciclo. Vai para o log do ciclo. */
+export type MotivoInelegivel = 'staging' | 'paywall' | 'sem_base';
+
+export interface EvalEligibilityInput extends AccessInput {
+  /** Nome da organização. */
+  name: string;
+  /** Slug da organização. */
+  slug: string;
+  /**
+   * true quando a organização tem pelo menos um trecho indexado no RAG OU
+   * pelo menos um Q&A ativo. Sem isso o agente responde só com as regras
+   * base e o teste mede o gabarito, não o treino do cliente.
+   */
+  temBase: boolean;
+}
+
+export interface EvalEligibility {
+  elegivel: boolean;
+  motivo?: MotivoInelegivel;
+}
+
+/** Texto do motivo, para o log do ciclo. */
+export const MOTIVO_INELEGIVEL_TEXTO: Record<MotivoInelegivel, string> = {
+  staging: 'organização de teste (STAGING)',
+  paywall: 'trial vencido sem assinatura ou conta cancelada',
+  sem_base: 'sem base cadastrada (nenhum trecho no RAG e nenhum Q&A ativo)',
+};
+
+/** Marca de organização de teste no nome ou no slug, sem diferenciar caixa. */
+const MARCA_STAGING = 'staging';
+
+/**
+ * Decide se o cron pode avaliar esta organização. Pura e determinística
+ * (injete `now` para congelar o relógio).
+ *
+ * O critério de conta vencida é o MESMO das rotas de paywall: delega a
+ * computeAccessState e corta só o bloqueio duro. Quem está em carência
+ * (soft) ou inadimplente (past_due) continua com acesso ao produto, então
+ * continua sendo avaliado.
+ *
+ * `role` nunca é passado: aqui avaliamos a conta de TERCEIRO, e um
+ * superadmin olhando não pode transformar conta vencida em elegível.
+ */
+export function isEvalEligible(org: EvalEligibilityInput): EvalEligibility {
+  const marcaTeste = `${org.name ?? ''} ${org.slug ?? ''}`.toLowerCase();
+  if (marcaTeste.includes(MARCA_STAGING)) {
+    return { elegivel: false, motivo: 'staging' };
+  }
+
+  const { paywall } = computeAccessState({
+    ...org,
+    role: null,
+  });
+  if (paywall === 'hard') {
+    return { elegivel: false, motivo: 'paywall' };
+  }
+
+  if (!org.temBase) {
+    return { elegivel: false, motivo: 'sem_base' };
+  }
+
+  return { elegivel: true };
+}
 
 // ─── Thresholds ─────────────────────────────────────────────────
 const SCORE_MIN = Number(process.env.AGENT_EVAL_ALERT_SCORE_MIN ?? 90);
