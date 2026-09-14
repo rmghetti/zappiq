@@ -418,7 +418,7 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
   });
 
   it('com o interruptor LIGADO, o bloco vivo aparece no WhatsApp E no site', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
 
     for (const canal of ['whatsapp', 'site']) {
       const res = await chamar({ ...corpoValido, canal });
@@ -426,6 +426,8 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
 
       expect(res.statusCode, canal).toBe(200);
       expect(prompt, canal).toContain(CABECALHO_VIVO);
+      // Só perfilVivo ligada: é o caminho de antes que mostra o bloco vivo.
+      expect(res.body.turnos[0].motor, canal).toBe('antes');
       // O horário do cadastro, já normalizado pelo bloco vivo.
       expect(prompt, canal).toContain('Segunda a sexta: 09:00 às 18:00');
       expect(prompt, canal).toContain('Você é Antonella, de Cantina da Nona.');
@@ -433,7 +435,7 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
   });
 
   it('com o interruptor LIGADO, a saudação do dono entra no primeiro turno do site (A068)', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
 
     const res = await chamar({
       ...corpoValido,
@@ -453,7 +455,7 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
   });
 
   it('a checagem horario_confere fica VERDE nos dois canais com o interruptor ligado', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
 
     for (const canal of ['whatsapp', 'site']) {
       const res = await chamar({ ...corpoValido, canal });
@@ -472,7 +474,7 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
 
 describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => {
   it('resolve o agendamento e mostra a linha honesta quando não há tipo ativo', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
     orgFindUnique.mockResolvedValue({
       id: 'org-1',
       name: 'Cantina da Nona',
@@ -489,7 +491,7 @@ describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => 
   });
 
   it('com tipo ativo e direito ao recurso, o prompt lista o que dá para marcar', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
     orgFindUnique.mockResolvedValue({
       id: 'org-1',
       name: 'Cantina da Nona',
@@ -504,7 +506,7 @@ describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => 
   });
 
   it('o primeiro turno diz que o histórico NÃO está no contexto (A212)', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
     // Contato antigo: o contador do CONTATO já passou de 1, mas o Raio-X
     // começa sem uma linha de histórico no contexto. É o achado A212: a
     // conversa fecha sozinha em 72 h e quem volta abre outra, então o

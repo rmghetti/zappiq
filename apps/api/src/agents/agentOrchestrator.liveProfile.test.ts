@@ -51,7 +51,11 @@ vi.mock('../utils/logger.js', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { buildSystemPromptForContact, resolveSchedulingRuntime } from './agentOrchestrator.js';
+import {
+  buildSystemPromptForContact,
+  buildAgentContextForContact,
+  resolveSchedulingRuntime,
+} from './agentOrchestrator.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 import { TEXTO_HORARIO_AUSENTE } from './tenantLiveProfile.js';
 
@@ -147,7 +151,16 @@ describe('interruptor perfilVivo DESLIGADO: prompt byte a byte igual ao de hoje'
 
 describe('interruptor perfilVivo LIGADO: o bloco entra no lugar combinado', () => {
   beforeEach(() => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
+  });
+
+  it('só perfilVivo ligado: o prompt sai pelo caminho de antes, com o bloco vivo', async () => {
+    // Este describe prova o caminho de antes com o bloco vivo. O motor único
+    // (contextoUnico) tem a própria prova no snapshot; aqui ele fica desligado.
+    const r = await buildAgentContextForContact(ENTRADA);
+    expect(r.viaContextoUnico).toBe(false);
+    expect(r.partes).toEqual([]);
+    expect(r.systemPrompt).toContain('# Como você atende nesta empresa');
   });
 
   it('o bloco vem depois do prompt do agente e antes dos links, da saudação e do RAG', async () => {
@@ -268,14 +281,14 @@ describe('agendamento ligado é tipo ativo E direito ao recurso (A066, A165)', (
 
 describe('"já tem histórico": a IA só ouve isso quando o histórico está no contexto (A212)', () => {
   it('com o interruptor ligado e sem histórico no contexto, a frase muda', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
     const prompt = await buildSystemPromptForContact({ ...ENTRADA, temHistoricoNoContexto: false });
     expect(prompt).not.toContain('já tem histórico');
     expect(prompt).toContain('o que foi conversado antes NÃO está aqui');
   });
 
   it('com o interruptor ligado e histórico presente, a frase antiga continua', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
     const prompt = await buildSystemPromptForContact({ ...ENTRADA, temHistoricoNoContexto: true });
     expect(prompt).toContain('já tem histórico');
   });
@@ -310,7 +323,7 @@ describe('as regras do questionário chegam ao prompt (B3)', () => {
   });
 
   it('ligado, quem perguntar sobre desconto encontra a política nas instruções', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
     const prompt = await buildSystemPromptForContact(COM_REGRAS);
     expect(prompt).toContain('Até 10% à vista, aprovado pelo gerente');
     expect(prompt).toContain('O gerente comercial');
