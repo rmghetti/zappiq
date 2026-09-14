@@ -28,13 +28,15 @@ from contextlib import asynccontextmanager
 from typing import Literal
 
 import asyncpg
-import fitz  # PyMuPDF
 import retrieval
 import tiktoken
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pgvector.asyncpg import register_vector
 from pydantic import BaseModel, Field
+
+import chunking
+import extractors
 
 # ── OpenTelemetry ──────────────────────────────────────────────────────
 # SDK init precisa rodar antes de qualquer import instrumentado.
@@ -304,38 +306,6 @@ async def _require_service_secret(request: Request, call_next):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Utilities — text extraction
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def _extract_pdf(data: bytes) -> str:
-    """Extrai texto de PDF com PyMuPDF. Preserva quebras de pagina com \\n\\n."""
-    with fitz.open(stream=data, filetype="pdf") as doc:
-        pages = [page.get_text("text") for page in doc]
-    return "\n\n".join(pages).strip()
-
-
-def _extract_text(content_type: str | None, filename: str, data: bytes) -> str:
-    """Dispatch por content-type ou extensao. Levanta HTTPException se nao suportado."""
-    lower = filename.lower()
-    if (content_type == "application/pdf") or lower.endswith(".pdf"):
-        return _extract_pdf(data)
-    if (content_type and content_type.startswith("text/")) or lower.endswith(
-        (".txt", ".md")
-    ):
-        try:
-            return data.decode("utf-8", errors="replace").strip()
-        except Exception as exc:
-            raise HTTPException(
-                status_code=400, detail=f"Falha ao decodificar texto: {exc}"
-            )
-    raise HTTPException(
-        status_code=415,
-        detail=f"Content-type nao suportado: {content_type} ({filename}). Use pdf/txt/md.",
-    )
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Utilities — chunking (token-based, com overlap)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -475,16 +445,22 @@ async def _embed_openai(texts: list[str]) -> list[list[float]]:
 #     USING hnsw (embedding vector_cosine_ops);
 
 
-def _chunk_hash(namespace: str, source: str, chunk_idx: int, text: str) -> str:
-    """Hash idempotente pra upsert. Inclui texto pra re-embed se conteudo mudou."""
-    payload = f"{namespace}|{source}|{chunk_idx}|{text}".encode("utf-8")
+def _chunk_hash(
+    namespace: str, source: str, chunk_idx: int, text: str, header: str = ""
+) -> str:
+    """
+    Hash idempotente pra upsert. Inclui o texto para re-embed quando o conteudo
+    muda, e o cabecalho de contexto (P64) porque e ele, junto com o texto, que
+    vai para o embedding: mudar o cabecalho muda o vetor.
+    """
+    payload = f"{namespace}|{source}|{chunk_idx}|{header}|{text}".encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
 async def _upsert_chunks(
     namespace: str,
     source: str,
-    chunks: list[str],
+    trechos: list[chunking.Trecho],
     vectors: list[list[float]],
     metadata: dict,
 ) -> int:
@@ -499,21 +475,23 @@ async def _upsert_chunks(
     """
     if not state.pool:
         raise HTTPException(status_code=503, detail="DB pool nao inicializado")
-    if len(chunks) != len(vectors):
-        raise RuntimeError("chunks e vectors com tamanhos diferentes")
+    if len(trechos) != len(vectors):
+        raise RuntimeError("trechos e vectors com tamanhos diferentes")
 
-    metadata_json = json.dumps(metadata)
+    # metadata.header guarda o cabecalho de contexto que entrou no embedding.
+    # Sem isso nao da para reprocessar nem auditar o que foi embedado: o `text`
+    # gravado e o original, de proposito, porque e o que o cliente le.
     rows = [
         (
             namespace,
             source,
             idx,
-            _chunk_hash(namespace, source, idx, chunk),
-            chunk,
+            _chunk_hash(namespace, source, idx, trecho.texto, trecho.cabecalho),
+            trecho.texto,
             vec,
-            metadata_json,
+            json.dumps({**metadata, "header": trecho.cabecalho}),
         )
-        for idx, (chunk, vec) in enumerate(zip(chunks, vectors))
+        for idx, (trecho, vec) in enumerate(zip(trechos, vectors))
     ]
 
     async with state.pool.acquire() as conn:
@@ -718,16 +696,19 @@ async def ingest(
     source: str | None = Form(None),
     metadata: str | None = Form(None),  # JSON string
     single_chunk: bool = Form(False),
+    source_url: str | None = Form(None),
 ):
     """
-    Ingestao: upload -> extract -> chunk -> embed -> upsert.
+    Ingestao: upload -> extract -> chunk -> cabecalho -> embed -> upsert.
 
     Form fields:
-      file         = PDF, TXT ou MD (max 20MB)
-      namespace    = 'org_<uuid>' (isola multi-tenant)
-      source       = identificador do doc (default: filename)
-      metadata     = JSON extra (ex: {"uploader":"user_123","category":"faq"})
-      single_chunk = nao fatiar: o conteudo vira UM trecho so (Q&A, A011)
+      file       — PDF, DOCX, XLSX, TXT, MD, CSV ou HTML (max 20MB)
+      namespace  — 'org_<uuid>' (isola multi-tenant)
+      source     — identificador do doc (a API manda doc-<id do kb_document>)
+      metadata   — JSON extra. Dois campos com significado aqui:
+                   titulo   — nome do documento para o cabecalho de contexto
+                   pergunta — repete a pergunta no cabecalho de todo trecho de Q&A
+      source_url — endereco de origem, quando o conteudo veio de uma pagina
     """
     import time
 
@@ -742,7 +723,7 @@ async def ingest(
     if size_mb > MAX_UPLOAD_MB:
         raise HTTPException(
             status_code=413,
-            detail=f"Arquivo {size_mb:.1f}MB excede limite de {MAX_UPLOAD_MB}MB",
+            detail=extractors.mensagem_arquivo_grande(size_mb, MAX_UPLOAD_MB),
         )
 
     # Parse metadata
@@ -761,11 +742,15 @@ async def ingest(
     meta.setdefault("original_filename", file.filename)
     meta.setdefault("content_type", file.content_type)
     meta.setdefault("size_bytes", len(data))
+    if source_url:
+        meta.setdefault("source_url", source_url)
 
     # Extract
-    text = _extract_text(file.content_type, file.filename or "", data)
+    text = extractors.extrair_texto(
+        file.content_type, file.filename or "", data, source_url=source_url
+    )
     if not text.strip():
-        raise HTTPException(status_code=422, detail="Arquivo sem texto extraivel")
+        raise HTTPException(status_code=422, detail=extractors.MENSAGEM_SEM_TEXTO)
 
     # Chunk. Q&A nao pode ser fatiado: so o primeiro pedaco carrega
     # 'Pergunta: ...' e os seguintes viram resposta solta que nao casa com a
@@ -778,18 +763,24 @@ async def ingest(
     else:
         chunks = _chunk_text(text)
     if not chunks:
-        raise HTTPException(
-            status_code=422, detail="Nenhum chunk gerado apos tokenizacao"
-        )
+        raise HTTPException(status_code=422, detail=extractors.MENSAGEM_SEM_TEXTO)
 
-    # Embed
-    vectors = await _embed_batch(chunks, input_type="document")
+    # Cabecalho de contexto por trecho (P64): o titulo vem do kb_document
+    # quando a API manda, senao do nome do arquivo.
+    titulo = str(meta.get("titulo") or file.filename or source_id)
+    pergunta = meta.get("pergunta")
+    trechos = chunking.montar_trechos(
+        chunks, titulo, pergunta=str(pergunta) if pergunta else None
+    )
+
+    # Embed do cabecalho + texto; o texto guardado continua sendo o original.
+    vectors = await _embed_batch([t.embed for t in trechos], input_type="document")
 
     # Upsert
     await _upsert_chunks(
         namespace=namespace,
         source=source_id,
-        chunks=chunks,
+        trechos=trechos,
         vectors=vectors,
         metadata=meta,
     )
@@ -849,8 +840,17 @@ async def delete_source(namespace: str, source: str):
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(_request, exc: Exception):
+    """
+    Devolvia um dict cru: o Starlette nao consegue enviar isso e o cliente
+    recebia 500 com corpo "Internal Server Error" em texto puro, sem o detalhe
+    (achado A019). Quem chama e a API, que precisa de JSON para repassar a
+    mensagem ao dono do negocio.
+    """
     logger.error(f"unhandled exception: {exc}", exc_info=True)
-    return {"error": "internal_server_error", "detail": str(exc)}
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal_server_error", "detail": str(exc)},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
