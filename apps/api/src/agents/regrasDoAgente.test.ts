@@ -26,6 +26,7 @@ import {
   resumirRegrasParaSugeridor,
   detectarConflitos,
 } from './regrasDoAgente.js';
+import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 
 const regra = (texto: string, extra: Record<string, unknown> = {}) => ({
   id: 'r-' + texto.slice(0, 6),
@@ -118,8 +119,15 @@ describe('resumirCoreParaSugeridor (A043, A078)', () => {
   });
 
   it('cabe no pedido do sugeridor (é resumo, não o texto inteiro)', () => {
-    expect(resumo.length).toBeLessThan(2600);
+    // A régua é RELATIVA ao CORE, e não um número fixo: o texto das regras
+    // base cresce quando o produto ganha comportamento novo (o PR #374, da
+    // rede de crise, engordou o CR-3), e um teto absoluto quebraria a cada
+    // mudança dessas sem dizer nada sobre o que importa. O que importa é
+    // que isto continue sendo RESUMO: menos da metade do original.
+    expect(resumo.length).toBeLessThan(CORE_AGENT_RULES_V1.length / 2);
     expect(resumo.length).toBeGreaterThan(300);
+    // E que ainda caiba no pedido do sugeridor sem comer o orçamento dele.
+    expect(resumo.length).toBeLessThan(4000);
   });
 });
 
