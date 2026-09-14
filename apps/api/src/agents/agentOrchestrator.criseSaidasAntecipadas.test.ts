@@ -1,5 +1,5 @@
 /**
- * agentOrchestrator.criseSaidasAntecipadas.test.ts — I3 da revisão do PR #374
+ * agentOrchestrator.criseSaidasAntecipadas.test.ts (I3 da revisão do PR #374)
  * ============================================================================
  * A rede de crise só cobria o caminho que passa pelo routeIzaTurn. O turno
  * tem SEIS saídas antecipadas que terminam antes dele, e em todas elas uma
