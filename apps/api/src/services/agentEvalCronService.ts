@@ -4,13 +4,20 @@
  * ═══════════════════════════════════════════════════════════════════════════
  * O que faz
  * ═══════════════════════════════════════════════════════════════════════════
- * Para cada agente 'live' de organização ELEGÍVEL (ver isEvalEligible):
+ * Para cada agente 'live' de organização ELEGÍVEL (ver isEvalEligible) que
+ * ainda cabe no teto do dia (ver podeAgendarAvaliacao):
  *
  *   1. Cria a linha em AgentEvalRun (triggeredBy='cron')
- *   2. Chama executeRunJob, o corpo único compartilhado com as duas rotas
- *      /run-async (services/agentEvalQueue.ts)
- *   3. O corpo único persiste o resultado, grava slackAlertStatus e alerta
- *      quando há crítico reprovado ou reprovação repetida
+ *   2. ENFILEIRA na fila `agent-eval` (enqueueEvalRun), a mesma fila que o
+ *      botão do cliente e o do superadmin usam
+ *   3. O worker daquela fila roda o corpo único (executeRunJob), persiste o
+ *      resultado, grava slackAlertStatus e alerta quando há crítico reprovado
+ *      ou reprovação repetida
+ *
+ * O ciclo NÃO executa em linha. Executar aqui dentro colocava um teste de
+ * minutos dentro do worker da fila `cron`, agente por agente, e o ciclo por
+ * mudança das 04:50 começava no meio do semanal das 04:30: quem o semanal
+ * ainda não tinha alcançado ganhava duas execuções na mesma madrugada.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * Custo: por que semanal e por que com dono (A045 / A067)
@@ -51,16 +58,20 @@ import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { computeAccessState, type AccessInput } from './accountAccess.js';
 // Mesma contagem de trechos indexados que o termômetro do Treinar IA usa:
 // linha em kb_documents não prova que a IA enxerga o conteúdo, chunk prova.
-import { countRagChunksByNamespace } from './aiReadinessService.js';
-// Corpo único da execução, compartilhado com as duas rotas /run-async.
-import { executeRunJob } from './agentEvalQueue.js';
+// A variante `OrNull` distingue "não tem base" de "não deu para saber": é a
+// diferença entre pular quem não treinou e pular quem o banco não respondeu.
+import { countRagChunksByNamespaceOrNull } from './aiReadinessService.js';
+// Fila única da execução, compartilhada com as duas rotas /run-async.
+import { enqueueEvalRun } from './agentEvalQueue.js';
 
 // ─── Org da Iza (agente do SUPERADMIN / Cliente Zero) ──────────
-// Mesmo id canonical usado em adminLeadsIza.ts, LLMRouter.ts, tools.ts.
+// Fonte única do id (config/zappiqOrg.ts). Antes esta constante vivia copiada
+// aqui, que é exatamente o que aquele módulo existe para impedir.
+//
 // As duas auditorias automáticas são SEMANAIS: a da Iza no domingo, a dos
 // clientes na segunda. A da Iza era diária e custava sozinha cerca de USD
 // 1,25 por dia sem detectar nada que o ciclo semanal não detecte.
-const IZA_ORG_ID = 'cmo1ywwfe00ko1jskexiexsm4';
+import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 
 // Escopo do ciclo semanal: 'iza' = só a organização da Iza (domingo);
 // 'clients' = todas as demais com agente 'live' (segunda).
@@ -307,16 +318,23 @@ const SELECT_ORG_ELEGIBILIDADE = {
  * sobre o que a IA CONSEGUE usar: linha em kb_documents que nunca virou chunk
  * não ajuda o agente e não deve gerar teste pago.
  *
- * Fail-soft: erro de consulta responde true. Deixar de avaliar por falha de
- * infraestrutura é pior que gastar um teste.
+ * Fail-soft DE VERDADE: erro de consulta responde true (desconhecido, portanto
+ * elegível). O try/catch daqui não bastava, porque countRagChunksByNamespace
+ * engolia o próprio erro e devolvia 0/0 — indistinguível de "não tem base".
+ * O cliente que treinou a IA era pulado em silêncio por uma falha de banco.
+ * Por isso a contagem vem da variante que devolve null em erro.
  */
 async function temBaseCadastrada(organizationId: string): Promise<boolean> {
   try {
-    const [{ docChunks, qaChunks }, qaAtivos] = await Promise.all([
-      countRagChunksByNamespace(organizationId),
+    const [contagem, qaAtivos] = await Promise.all([
+      countRagChunksByNamespaceOrNull(organizationId),
       prisma.qAPair.count({ where: { organizationId, isActive: true } }),
     ]);
-    return docChunks + qaChunks > 0 || qaAtivos > 0;
+    if (contagem === null) {
+      logger.warn({ msg: 'agent_eval_base_indeterminada', organizationId, fonte: 'rag' });
+      return true;
+    }
+    return contagem.docChunks + contagem.qaChunks > 0 || qaAtivos > 0;
   } catch (err: any) {
     logger.warn({
       msg: 'agent_eval_base_indeterminada',
@@ -327,8 +345,55 @@ async function temBaseCadastrada(organizationId: string): Promise<boolean> {
   }
 }
 
+// ─── Teto de avaliação por ORGANIZAÇÃO ─────────────────────────
+
+/** Início do dia UTC, régua do teto de uma avaliação por organização por dia. */
+function inicioDoDiaUtc(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+/**
+ * A organização ainda cabe numa avaliação automática hoje?
+ *
+ * Porta ÚNICA dos três ciclos (Iza, clientes e por mudança). Duas travas:
+ *
+ *   1. execução viva ('pending' ou 'running') na organização. É o que impede
+ *      o ciclo por mudança das 04:50 de disparar por cima do semanal das
+ *      04:30 que ainda está rodando. Linha presa não bloqueia para sempre: a
+ *      varredura horária (sweepStuckEvalRuns) marca como falha o que passou
+ *      de uma hora, e falha não conta aqui;
+ *   2. execução já concluída HOJE (UTC) na organização.
+ *
+ * O teto é por ORGANIZAÇÃO, não por agente: o teste custa dinheiro de LLM da
+ * casa, e quem tem dois agentes 'live' pagava dois testes por dia. O vínculo é
+ * o `agent.organizationId` da própria linha de execução.
+ */
+export async function podeAgendarAvaliacao(
+  organizationId: string,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const viva = await prisma.agentEvalRun.count({
+    where: { status: { in: ['pending', 'running'] }, agent: { organizationId } },
+    take: 1,
+  });
+  if (viva > 0) return false;
+
+  const concluidaHoje = await prisma.agentEvalRun.count({
+    where: {
+      status: 'completed',
+      startedAt: { gte: inicioDoDiaUtc(now) },
+      agent: { organizationId },
+    },
+    take: 1,
+  });
+  return concluidaHoje === 0;
+}
+
+/** Por que a organização ficou de fora do ciclo, inclusive o teto do dia. */
+export type MotivoPulada = MotivoInelegivel | 'teto_diario';
+
 /** Contagem de organizações puladas, por motivo. Vai inteira para o log. */
-type PuladasPorMotivo = Partial<Record<MotivoInelegivel, number>>;
+type PuladasPorMotivo = Partial<Record<MotivoPulada, number>>;
 
 export interface CronCycleResult {
   agentsProcessed: number;
@@ -339,7 +404,10 @@ export interface CronCycleResult {
 }
 
 // ─── Ciclo: itera pelos agentes ativos do escopo ───────────────
-export async function runAgentEvalCronCycle(scope: CronScope): Promise<CronCycleResult> {
+export async function runAgentEvalCronCycle(
+  scope: CronScope,
+  now: Date = new Date(),
+): Promise<CronCycleResult> {
   const startedAt = Date.now();
   logger.info(`[agentEvalCron] ciclo iniciado (escopo=${scope})`);
 
@@ -347,7 +415,7 @@ export async function runAgentEvalCronCycle(scope: CronScope): Promise<CronCycle
   //   'iza'     → só a organização da Iza (semanal, domingo)
   //   'clients' → todas menos a Iza (semanal, segunda)
   const orgFilter =
-    scope === 'iza' ? { organizationId: IZA_ORG_ID } : { organizationId: { not: IZA_ORG_ID } };
+    scope === 'iza' ? { organizationId: ZAPPIQ_ORG_ID } : { organizationId: { not: ZAPPIQ_ORG_ID } };
 
   const agents = await prisma.agent.findMany({
     where: { status: 'live', ...orgFilter },
@@ -381,6 +449,20 @@ export async function runAgentEvalCronCycle(scope: CronScope): Promise<CronCycle
         continue;
       }
 
+      // Teto do dia, por ORGANIZAÇÃO. É a mesma porta do ciclo por mudança:
+      // sem ela, os dois ciclos da madrugada avaliavam o mesmo agente duas
+      // vezes, cada uma com o custo de LLM de um teste inteiro.
+      if (!(await podeAgendarAvaliacao(agent.organizationId, now))) {
+        agentsSkipped++;
+        skippedByReason.teto_diario = (skippedByReason.teto_diario ?? 0) + 1;
+        logger.info({
+          msg: 'agent_eval_cron_org_no_teto_do_dia',
+          organizationName: org.name,
+          agentId: agent.id,
+        });
+        continue;
+      }
+
       // O gabarito é resolvido aqui só para gravar totalScenarios na linha; a
       // execução resolve de novo, a partir do mesmo perfil.
       const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId: agent.id });
@@ -401,14 +483,14 @@ export async function runAgentEvalCronCycle(scope: CronScope): Promise<CronCycle
         select: { id: true },
       });
 
-      // Corpo único: o mesmo que o worker da fila roda para as rotas. Aqui é
-      // chamado em linha de propósito, porque o ciclo já roda dentro do worker
-      // da fila `cron`; enfileirar só adicionaria um salto e um modo de falha.
+      // Fila, não execução em linha. O teste leva minutos e roda com
+      // concorrência 1 na fila `agent-eval`; rodar aqui dentro prenderia o
+      // worker da fila `cron` e é o que produzia a execução em duplicidade.
       //
-      // executeRunJob nunca lança: erro da execução vira status 'failed' na
-      // própria linha. Então agentsProcessed conta execuções DISPARADAS, e
-      // agentsFailed conta falha em montar a execução (perfil, gabarito, linha).
-      await executeRunJob(run.id);
+      // enqueueEvalRun LANÇA se a fila recusar (e marca a linha como falha na
+      // hora). Então agentsProcessed conta execuções ENFILEIRADAS, e
+      // agentsFailed conta falha em montar ou enfileirar a execução.
+      await enqueueEvalRun(run.id);
       agentsProcessed++;
     } catch (err: any) {
       agentsFailed++;
@@ -441,9 +523,10 @@ export async function runAgentEvalCronCycle(scope: CronScope): Promise<CronCycle
 // voltar ao teste diário de todo mundo: roda de madrugada, e só para quem
 // mexeu na base depois da última execução concluída.
 //
-// Teto duro de 1 execução por agente por dia. Sem isso, uma tarde de trabalho
-// no Treinar IA (cada upload e cada Q&A gera evento) viraria uma execução por
-// evento.
+// Teto duro de 1 execução por ORGANIZAÇÃO por dia (podeAgendarAvaliacao, o
+// mesmo helper do ciclo semanal). Sem isso, uma tarde de trabalho no Treinar
+// IA (cada upload e cada Q&A gera evento) viraria uma execução por evento, e
+// quem tem dois agentes 'live' pagaria dois testes por dia.
 
 /** Trigger gravado nas execuções deste ciclo. */
 export const TRIGGER_ON_CHANGE = 'cron_on_change';
@@ -458,11 +541,6 @@ export const TRIGGER_ON_CHANGE = 'cron_on_change';
  */
 const ACAO_PLAYGROUND = 'kb.playground.test';
 
-/** Início do dia UTC, para o teto de 1 execução por agente por dia. */
-function inicioDoDiaUtc(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
 export interface OnChangeCycleResult {
   agentsProcessed: number;
   agentsSkipped: number;
@@ -474,7 +552,6 @@ export async function runAgentEvalOnChangeCycle(
   now: Date = new Date(),
 ): Promise<OnChangeCycleResult> {
   const startedAt = Date.now();
-  const desdeHoje = inicioDoDiaUtc(now);
   logger.info('[agentEvalCron] ciclo por mudança iniciado');
 
   const agents = await prisma.agent.findMany({
@@ -488,12 +565,10 @@ export async function runAgentEvalOnChangeCycle(
 
   for (const agent of agents) {
     try {
-      // 1. Teto do dia. Primeiro porque é a consulta mais barata.
-      const jaRodouHoje = await prisma.agentEvalRun.count({
-        where: { agentId: agent.id, startedAt: { gte: desdeHoje } },
-        take: 1,
-      });
-      if (jaRodouHoje > 0) {
+      // 1. Teto do dia, por ORGANIZAÇÃO. Primeiro porque é a consulta mais
+      // barata, e porque é ela que impede este ciclo (04:50) de disparar por
+      // cima do semanal (04:30) que ainda está na fila ou rodando.
+      if (!(await podeAgendarAvaliacao(agent.organizationId, now))) {
         agentsSkipped++;
         continue;
       }
@@ -554,7 +629,9 @@ export async function runAgentEvalOnChangeCycle(
         select: { id: true },
       });
 
-      await executeRunJob(run.id);
+      // Mesma fila do semanal e das rotas: a execução nunca roda dentro do
+      // worker da fila `cron`.
+      await enqueueEvalRun(run.id);
       agentsProcessed++;
     } catch (err: any) {
       agentsFailed++;
