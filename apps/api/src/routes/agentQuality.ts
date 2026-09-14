@@ -263,7 +263,7 @@ router.get('/agents/:agentId/versions/:version', async (req: Request, res: Respo
 });
 
 // ════════════════════════════════════════════════════════════════════
-// POST /run-async — dispara eval (cooldown 24h por agent)
+// POST /run-async — dispara eval (uma execução viva por agente + 24 h)
 // ════════════════════════════════════════════════════════════════════
 router.post('/run-async', async (req: Request, res: Response) => {
   const orgId = req.user!.organizationId;
@@ -280,13 +280,42 @@ router.post('/run-async', async (req: Request, res: Response) => {
       return;
     }
 
-    // Cooldown: bloqueia se o CLIENTE já concluiu um teste nas últimas 24 h.
+    // Trava 1 — execução VIVA: um teste por agente de cada vez, sem janela de
+    // tempo. Com a fila, a linha fica 'pending' enquanto a trava global não
+    // libera, o que em dia cheio são dezenas de minutos. Se só o cooldown de
+    // 24 h contasse (e ele conta apenas 'completed'), cada clique impaciente
+    // criaria OUTRA execução paga, todas na fila, todas cobradas.
+    const viva = await prisma.agentEvalRun.findFirst({
+      where: {
+        agentId,
+        triggeredBy: 'client_manual',
+        status: { in: ['pending', 'running'] },
+      },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true, status: true },
+    });
+    if (viva) {
+      // O código continua 'cooldown' porque é o que a tela do cliente já sabe
+      // ler para mostrar a mensagem no lugar certo; `reason` distingue os dois
+      // motivos para quem consome a API.
+      res.status(429).json({
+        error: 'cooldown',
+        reason: 'execucao_em_andamento',
+        message: 'Já existe um teste em andamento para este agente. Aguarde ele terminar.',
+        lastRunId: viva.id,
+      });
+      return;
+    }
+
+    // Trava 2 — cooldown: bloqueia se o CLIENTE já CONCLUIU um teste nas
+    // últimas 24 h.
     //
     // A048: antes contava qualquer execução 'manual' ou 'client_manual' com
     // status diferente de 'failed'. Duas consequências medidas: execução presa
     // em 'running' por reinício de máquina travava o botão por um dia, e teste
     // disparado pelo superadmin gastava o direito do cliente. Agora conta só o
-    // que ele mesmo rodou e concluiu.
+    // que ele mesmo rodou e concluiu. Execução 'failed' não gasta nada: o
+    // cliente pode tentar de novo na hora.
     const cutoff = new Date(Date.now() - RUN_COOLDOWN_HOURS * 3600 * 1000);
     const recent = await prisma.agentEvalRun.findFirst({
       where: {
@@ -302,6 +331,7 @@ router.post('/run-async', async (req: Request, res: Response) => {
       const nextAvailable = new Date(recent.startedAt.getTime() + RUN_COOLDOWN_HOURS * 3600 * 1000);
       res.status(429).json({
         error: 'cooldown',
+        reason: 'aguardando_24h',
         message: `Você já executou um teste nas últimas ${RUN_COOLDOWN_HOURS}h. Próximo disponível em ${nextAvailable.toLocaleString('pt-BR')}.`,
         nextAvailableAt: nextAvailable.toISOString(),
         lastRunId: recent.id,
