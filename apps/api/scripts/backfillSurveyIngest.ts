@@ -2,10 +2,10 @@
  * backfillSurveyIngest (CLI) — garante que TODA fonte do /ai-training
  * alimenta o RAG, para orgs antigas:
  *
- *  1. Survey/qualificação: orgs com settings.surveyAnswers preenchido mas
- *     SEM chunks onboarding-survey-* no namespace → ingere agora e grava
- *     settings.surveyDocFilename (usado pelo PUT /survey pra apagar o doc
- *     antigo quando o niche mudar).
+ *  1. Questionário: toda org com settings.surveyAnswers preenchido é
+ *     reingerida no formato novo (um documento por seção, com o texto das
+ *     perguntas). A execução é a MESMA do salvamento e do job da fila, e
+ *     apaga sozinha o documento antigo de arquivo único.
  *  2. Documentos por URL: re-ingere com a limpeza de HTML (antes o markup
  *     cru virava milhares de chunks-lixo; replace-on-ingest substitui).
  *
@@ -15,8 +15,9 @@
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { prisma } from '@zappiq/database';
-import { ingestDocument, ingestUrl } from '../src/services/ragService.js';
-import { buildKnowledgeBase, surveyDocFilename, countAnsweredQuestions } from '../src/services/knowledgeBaseBuilder.js';
+import { ingestUrl } from '../src/services/ragService.js';
+import { countAnsweredQuestions } from '../src/services/knowledgeBaseBuilder.js';
+import { executarReingestaoDoQuestionario } from '../src/services/surveyReingest.js';
 
 const DRY = process.env.BACKFILL_DRY_RUN === '1';
 
@@ -24,15 +25,13 @@ async function main() {
   console.log(`[backfillSurveyIngest] início${DRY ? ' (DRY RUN)' : ''}`);
 
   // ── 1. Surveys sem chunks ────────────────────────────────────────────
+  // Sem o NOT EXISTS de antes: o formato do documento mudou, então quem JÁ
+  // tem trecho de questionário no vetor é justamente quem precisa passar por
+  // aqui. Reingerir de novo é idempotente (mesmo source, replace na origem).
   const orgs = (await prisma.$queryRawUnsafe(`
     SELECT o.id, o.name, o.settings
       FROM organizations o
      WHERE o.settings ? 'surveyAnswers'
-       AND NOT EXISTS (
-         SELECT 1 FROM rag_chunks rc
-          WHERE rc.namespace = 'org_' || o.id
-            AND rc.source LIKE 'onboarding-survey%'
-       )
   `)) as Array<{ id: string; name: string; settings: any }>;
 
   let surveyOk = 0, surveySkip = 0, surveyFail = 0;
@@ -42,28 +41,15 @@ async function main() {
     if (countAnsweredQuestions(surveyAnswers) === 0) { surveySkip++; continue; }
 
     const niche = settings.niche || 'geral';
-    const filename = surveyDocFilename(niche);
-    console.log(`  survey org=${org.id} (${org.name}) niche=${niche} → ${filename}`);
+    console.log(`  questionário org=${org.id} (${org.name}) niche=${niche}`);
     if (DRY) { surveyOk++; continue; }
     try {
-      const kb = buildKnowledgeBase({
-        businessName: settings.businessName || org.name || 'Empresa',
-        niche,
-        surveyAnswers,
-      });
-      await ingestDocument(org.id, {
-        filename,
-        content: Buffer.from(kb, 'utf8'),
-        mimeType: 'text/plain',
-      });
-      await prisma.organization.update({
-        where: { id: org.id },
-        data: { settings: { ...settings, surveyDocFilename: filename } },
-      });
+      const r = await executarReingestaoDoQuestionario(org.id);
+      console.log(`    seções=${r.sources.length} removidos=${r.removidos.length}`);
       surveyOk++;
     } catch (e: any) {
       surveyFail++;
-      console.error(`  survey org=${org.id} FALHOU: ${e?.message}`);
+      console.error(`  questionário org=${org.id} FALHOU: ${e?.message}`);
     }
   }
 
