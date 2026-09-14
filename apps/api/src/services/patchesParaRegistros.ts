@@ -266,6 +266,22 @@ export function planejarRegistros(blocos: BlocoDePatch[]): RegistroPlanejado[] {
   return plano;
 }
 
+/**
+ * Quantos CARACTERES o texto tem, no mesmo sentido do `length()` do Postgres:
+ * pontos de código, e não unidades UTF-16.
+ *
+ * Rodada 3 do PR #375. O `.length` do JS conta cada emoji como 2 (par
+ * substituto), e o Postgres conta 1. O prompt da Marcia tem 3 caracteres
+ * astrais: o banco dizia 6288 e o script imprimia 6291. A 4a prova do
+ * roteiro compara os dois números e manda ROLLBACK em qualquer divergência,
+ * então o operador desfaria uma gravação correta.
+ *
+ * O `wc -c` do terminal conta BYTES e dá ainda mais, por causa dos acentos.
+ */
+export function contarCaracteres(texto: string): number {
+  return [...String(texto ?? '')].length;
+}
+
 export interface Validacao {
   ok: boolean;
   motivos: string[];

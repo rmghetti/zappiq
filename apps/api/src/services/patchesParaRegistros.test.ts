@@ -18,6 +18,7 @@ import {
   extrairPatches,
   planejarRegistros,
   validarPromptLimpo,
+  contarCaracteres,
 } from './patchesParaRegistros.js';
 import {
   PROMPT_COM_PATCHES_MANUAIS,
@@ -230,5 +231,40 @@ describe('validarPromptLimpo — recusa antes de gravar', () => {
     const antes = 'texto qualquer sem cabeçalho de identidade, com bastante corpo para medir.';
     const v = validarPromptLimpo(antes, antes);
     expect(v.ok).toBe(true);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+/* Rodada 3 do PR #375. A 4a prova do roteiro manda comparar o
+ * `length(system_prompt)` do Postgres com o Y de "tamanho: X → Y" que o
+ * script imprime. Só que Y era o `.length` do JS, que conta unidades UTF-16:
+ * cada emoji vale 2. O prompt da Marcia tem 3 caracteres astrais, então o
+ * Postgres dizia 6288 e o script imprimia 6291. Como o roteiro diz "qualquer
+ * divergência: ROLLBACK", o operador desfaria uma gravação correta. */
+describe('contarCaracteres — o mesmo número que o length() do Postgres', () => {
+  it('conta pontos de código: o emoji vale 1, como no Postgres, e não 2 como no .length', () => {
+    const texto = 'Bom dia 😀!';
+    expect(texto.length).toBe(11); // o que o script imprimia
+    expect(contarCaracteres(texto)).toBe(10); // o que o Postgres devolve
+  });
+
+  it('acento não muda a conta (o problema é só o par substituto)', () => {
+    expect(contarCaracteres('ação')).toBe(4);
+    expect(contarCaracteres('ação')).toBe('ação'.length);
+  });
+
+  it('texto vazio ou ausente conta zero', () => {
+    expect(contarCaracteres('')).toBe(0);
+    expect(contarCaracteres(undefined as unknown as string)).toBe(0);
+  });
+
+  it('o caso da Marcia: três astrais fazem o .length passar 3 à frente do Postgres', () => {
+    // A fixture deste repositório não tem emoji; o prompt de produção da
+    // Marcia tem três. Reproduzimos a diferença medida (6288 no banco,
+    // 6291 no script) com três astrais num texto qualquer.
+    const texto = `${PROMPT_SEM_PATCHES}\n✅ ok 🚀 vai 📦 pronto 🎯`;
+    const astrais = [...texto].filter((c) => c.codePointAt(0)! > 0xffff).length;
+    expect(astrais).toBe(3);
+    expect(texto.length - contarCaracteres(texto)).toBe(3);
   });
 });

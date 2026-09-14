@@ -112,9 +112,12 @@
  *     -- 4a prova: o que entrou no banco é o arquivo revisado, inteiro.
  *     -- As três acima passariam mesmo com o prompt cortado pelo caminho (um
  *     -- copiar e colar que perde a última linha, por exemplo). O número a
- *     -- comparar é o Y da linha "tamanho: X → Y" que o script imprime, que
- *     -- é contagem de CARACTERES, igual ao length() do Postgres (o `wc -c`
- *     -- do terminal conta BYTES e dá mais, por causa dos acentos):
+ *     -- comparar é o Y da linha "tamanho: X → Y" que o script imprime. Ele
+ *     -- conta PONTOS DE CÓDIGO (cada emoji vale 1), que é exatamente o que
+ *     -- o length() do Postgres devolve. Não use o `.length` do JS nem o
+ *     -- `wc -c` do terminal para conferir: o primeiro conta o emoji como 2
+ *     -- e o segundo conta BYTES (os acentos valem 2), e os dois dariam um
+ *     -- número maior sem o prompt estar errado.
  *     SELECT length(system_prompt), md5(system_prompt) FROM agents
  *      WHERE id = '<agent>';        -- iguais ao Y e ao md5 impressos
  *     -- qualquer divergência -> ROLLBACK;
@@ -139,6 +142,7 @@ import {
   extrairPatches,
   planejarRegistros,
   validarPromptLimpo,
+  contarCaracteres,
   type RegistroPlanejado,
 } from '../src/services/patchesParaRegistros.js';
 
@@ -163,7 +167,9 @@ function mascararHost(url?: string): string {
 
 function imprimirPlano(antes: string, depois: string, plano: RegistroPlanejado[]): void {
   console.log(`\n== O que sai do prompt ==`);
-  console.log(`  tamanho: ${antes.length} → ${depois.length} caracteres`);
+  // Pontos de código, igual ao length() do Postgres. O .length do JS conta o
+  // emoji como 2 e a 4a prova do roteiro compararia números diferentes.
+  console.log(`  tamanho: ${contarCaracteres(antes)} → ${contarCaracteres(depois)} caracteres`);
   if (plano.length === 0) {
     console.log('  (nada a migrar: este prompt não tem patch colado)');
     return;
