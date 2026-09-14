@@ -25,7 +25,6 @@ import { logger } from '../utils/logger.js';
 /** Nomes válidos de interruptor. Trocar aqui quebra o compilador, de propósito. */
 export type FlagName =
   | 'perfilVivo'
-  | 'compositorUnico'
   | 'guardaComercial'
   | 'ragNoChatDoSite'
   | 'evalNoTier'
@@ -51,11 +50,6 @@ export const FLAGS: Record<FlagName, FlagDef> = {
       'O perfil do agente passa a ser lido do que o cliente preencheu, e não do texto congelado no prompt.',
     removeBy: '2026-12-31',
   },
-  compositorUnico: {
-    descricao:
-      'Um único compositor monta o prompt que vai para o modelo, no lugar dos caminhos paralelos de hoje.',
-    removeBy: '2027-03-31',
-  },
   guardaComercial: {
     descricao:
       'Guarda que barra promessa comercial inventada na resposta do agente antes de ela sair.',
@@ -68,7 +62,7 @@ export const FLAGS: Record<FlagName, FlagDef> = {
   },
   evalNoTier: {
     descricao:
-      'A avaliação de qualidade passa a respeitar a faixa do plano (quantas execuções e com qual modelo).',
+      'A avaliação de qualidade passa a respeitar a faixa do plano (quantas execuções e com qual modelo). Ainda sem leitor no código: só passa a valer com a tarefa C2.',
     removeBy: '2027-03-31',
   },
   treinarSomenteAdmin: {
