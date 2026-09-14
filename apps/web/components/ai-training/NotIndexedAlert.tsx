@@ -22,7 +22,7 @@ export interface NotIndexedItem {
 }
 
 const FIX_HINT: Record<NotIndexedItem['kind'], string> = {
-  file: 'Reenvie o arquivo. Se ele for uma imagem digitalizada ou um PDF protegido, a IA não consegue ler o texto. Converta para um PDF com texto selecionável, TXT, MD ou CSV.',
+  file: 'Reenvie o arquivo. Se ele for uma imagem digitalizada ou um PDF protegido, a IA não consegue ler o texto. Salve como PDF com texto selecionável, Word (.docx), Excel (.xlsx) ou TXT. Os formatos antigos .doc e .xls não são lidos.',
   url: 'Verifique se o link abre publicamente no navegador. Páginas que exigem login, ou que carregam o conteúdo só depois por scripts, podem não ter texto para ler. Prefira colar o conteúdo como texto.',
   text: 'Reenvie o texto. Ele pode ter ficado curto demais ou só com formatação. Cole um trecho com informação de verdade.',
   qa: 'Edite e salve a resposta novamente. Confirme que ela está ativa. Se persistir, apague e recrie a pergunta.',

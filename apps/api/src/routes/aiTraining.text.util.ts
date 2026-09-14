@@ -28,23 +28,6 @@ export function isEditableDocument(sourceType: string): boolean {
 }
 
 /**
- * Sincronia com o RAG numa edição de texto colado. O `source` no vector store é
- * o título do documento, e a ingestão faz replace-on-ingest por source — então
- * um título inalterado só precisa reingerir. Se o título mudou, os chunks do
- * título antigo precisam ser removidos, senão ficam órfãos e a IA continua
- * respondendo com a versão anterior do texto.
- */
-export function planTextDocRagSync(
-  oldTitle: string,
-  newTitle: string,
-): { deleteSource: string | null; ingestSource: string } {
-  return {
-    deleteSource: oldTitle === newTitle ? null : oldTitle,
-    ingestSource: newTitle,
-  };
-}
-
-/**
  * Normaliza o corpo de um PUT /qa/:id antes do prisma.update.
  *
  * Categoria apagada chega como string vazia (o modal não pode mandar undefined:

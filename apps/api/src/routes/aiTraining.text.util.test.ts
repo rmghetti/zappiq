@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   textDocSchema,
   isEditableDocument,
-  planTextDocRagSync,
   normalizeQaUpdate,
   ALLOWED_UPLOAD_MIMES,
   ALLOWED_UPLOAD_EXTENSIONS,
@@ -50,24 +49,6 @@ describe('isEditableDocument', () => {
     expect(isEditableDocument('text/markdown')).toBe(false);
     expect(isEditableDocument('')).toBe(false);
     expect(isEditableDocument('Text')).toBe(false); // case-sensitive: sourceType é gravado em lower
-  });
-});
-
-describe('planTextDocRagSync', () => {
-  it('título inalterado: re-ingere no mesmo source, sem delete (replace-on-ingest cobre)', () => {
-    expect(planTextDocRagSync('Política de troca', 'Política de troca')).toEqual({
-      deleteSource: null,
-      ingestSource: 'Política de troca',
-    });
-  });
-
-  it('título alterado: remove o source antigo antes de ingerir o novo', () => {
-    // Sem o delete, os chunks do título antigo ficam órfãos no vector store e a
-    // IA segue respondendo com a versão anterior do texto.
-    expect(planTextDocRagSync('Política de troca', 'Política de troca e devolução')).toEqual({
-      deleteSource: 'Política de troca',
-      ingestSource: 'Política de troca e devolução',
-    });
   });
 });
 
