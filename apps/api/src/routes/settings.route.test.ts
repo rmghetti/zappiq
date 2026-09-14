@@ -146,7 +146,7 @@ beforeEach(() => {
   };
 });
 
-describe('PUT /api/settings — merge por chave (A156)', () => {
+describe('PUT /api/settings, merge por chave (A156)', () => {
   it('PUT sem addons NÃO altera settings.addons nem apaga o segredo do servidor', async () => {
     const handler = pegaHandler('put', '/');
     const res = fazRes();

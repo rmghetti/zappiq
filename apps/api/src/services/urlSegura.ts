@@ -14,18 +14,20 @@
  *   1. aceita só http e https;
  *   2. recusa nome interno conhecido (`*.internal` do Fly, `*.local`,
  *      `localhost`, `metadata.google.internal`);
- *   3. aceita só as portas de uso normal na web (80, 443, 8080, 8443), para a
+ *   3. recusa endereço interno escrito direto na URL, antes de qualquer
+ *      consulta de DNS;
+ *   4. aceita só as portas de uso normal na web (80, 443, 8080, 8443), para a
  *      URL não virar varredura de porta da rede de saída;
- *   4. resolve o nome com `dns.lookup(..., { all: true })` e recusa se QUALQUER
+ *   5. resolve o nome com `dns.lookup(..., { all: true })` e recusa se QUALQUER
  *      endereço cair em faixa interna (loopback, link-local com o endereço de
  *      metadados da nuvem, 10/8, 172.16/12, 192.168/16, 100.64/10, ::1,
  *      fc00::/7 que cobre o fdaa::/16 do Fly, fe80::/10, e todas as formas de
  *      IPv6 que carregam um IPv4 por dentro: o mapeado `::ffff:0:0/96`, o
  *      compatível `::/96` e o NAT64 `64:ff9b::/96`);
- *   5. conecta com `lookup` fixo no endereço que acabou de ser aprovado, o que
+ *   6. conecta com `lookup` fixo no endereço que acabou de ser aprovado, o que
  *      fecha a janela entre a checagem e a conexão;
- *   6. não deixa o cliente HTTP seguir redirecionamento sozinho
- *      (`maxRedirects: 0`): cada destino passa pelas etapas 1 a 5 de novo, no
+ *   7. não deixa o cliente HTTP seguir redirecionamento sozinho
+ *      (`maxRedirects: 0`): cada destino passa pelas etapas 1 a 6 de novo, no
  *      máximo três vezes.
  *
  * Os limites de 20 MB e 30 segundos da ingestão continuam valendo.
