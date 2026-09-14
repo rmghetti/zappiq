@@ -25,12 +25,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isSelfSignupPlan, type PlanId } from '@zappiq/shared';
-
-/** Nome do cookie que carrega a escolha do plano pelo round-trip do OAuth. */
-export const COOKIE_PLANO_ESCOLHIDO = 'zq_plano_escolhido';
-
-/** Meia hora: tempo de sobra para o lead concluir o login do Google. */
-const COOKIE_MAX_AGE_SEGUNDOS = 30 * 60;
+import {
+  COOKIE_PLANO_ESCOLHIDO,
+  COOKIE_MAX_AGE_SEGUNDOS,
+} from '../../../../lib/signupPlanCookie';
 
 // PR #105 — Helper pra resolver baseUrl do redirectTo.
 // Em prod: hardcoded zappiq.com.br (custom domain, sem Vercel Auth).
@@ -43,8 +41,10 @@ function getBaseUrl(req: Request): string {
   return `${url.protocol}//${url.host}`;
 }
 
+// Não exportado de propósito: o Next só aceita os handlers HTTP e a
+// configuração de rota como exports de um route.ts.
 /** E-mail em minúsculas, ou null quando não é e-mail. Não lança. */
-export function normalizarEmail(raw: unknown): string | null {
+function normalizarEmail(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const email = raw.trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;

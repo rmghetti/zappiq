@@ -23,32 +23,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isSelfSignupPlan, type PlanId } from '@zappiq/shared';
-import { COOKIE_PLANO_ESCOLHIDO } from '../../api/signup/google/route.js';
-
-/** Plano do cookie HttpOnly gravado em /api/signup/google. */
-export function planoDoCookie(req: Request): PlanId | null {
-  const bruto = req.headers.get('cookie') || '';
-  const par = bruto
-    .split(';')
-    .map((p) => p.trim())
-    .find((p) => p.startsWith(`${COOKIE_PLANO_ESCOLHIDO}=`));
-  if (!par) return null;
-  const valor = decodeURIComponent(par.slice(COOKIE_PLANO_ESCOLHIDO.length + 1));
-  return isSelfSignupPlan(valor) ? valor : null;
-}
-
-/**
- * Plano do lead que chega pelo Google sem linha em `signups`.
- * Ordem: cookie (gravado por nós) → parâmetro da URL → plano de entrada.
- */
-export function resolverPlanoDoOAuth(
-  doCookie: string | null,
-  daUrl: string | null,
-): PlanId {
-  if (isSelfSignupPlan(doCookie)) return doCookie;
-  if (isSelfSignupPlan(daUrl)) return daUrl;
-  return 'IZA_LITE';
-}
+import {
+  COOKIE_PLANO_ESCOLHIDO,
+  planoDoCookie,
+  resolverPlanoDoOAuth,
+} from '../../../lib/signupPlanCookie';
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
