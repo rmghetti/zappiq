@@ -1,6 +1,7 @@
 export * from './enums.js';
 export * from './types.js';
 export * from './planConfig.js';
+export * from './signupContract.js';
 export * from './planStripeIds';
 
 export * from './addonStripeIds';
