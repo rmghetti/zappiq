@@ -87,9 +87,13 @@ router.post('/iza-message', webChatLimiter, async (req: Request, res: Response) 
   }
 
   try {
+    // A190: `history` do corpo é ignorado pelo serviço (o histórico vem do que
+    // o servidor gravou). Segue sendo aceito para o widget já publicado não
+    // quebrar. `paused` avisa que um atendente assumiu a conversa.
     const result = await processWebChatTurn({ sessionId, message, history });
     res.json({
       reply: result.reply,
+      paused: result.paused === true,
       provider: result.provider,
       model: result.model,
       latencyMs: result.latencyMs,
@@ -170,6 +174,7 @@ router.post('/org/:organizationId/message', webChatLimiter, async (req: Request,
     const result = await processWebChatTurn({ sessionId, message, history, organizationId });
     res.json({
       reply: result.reply,
+      paused: result.paused === true,
       provider: result.provider,
       model: result.model,
       latencyMs: result.latencyMs,

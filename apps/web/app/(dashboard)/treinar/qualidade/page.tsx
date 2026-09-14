@@ -24,9 +24,11 @@ import {
   classifyQuality,
   QUALITY_LABELS,
   friendlyScenarioLabel,
+  podeAgirNaQualidade,
   type ClientAgentLite,
   type TestScope,
 } from '@/lib/clientAgentQualityApi';
+import { useAuthStore } from '@/stores/authStore';
 import type {
   AgentEvalRunRow,
   AgentEvalRunDetail,
@@ -44,6 +46,9 @@ const TRIGGER_LABELS: Record<string, string> = {
 };
 
 export default function QualidadeIAClientePage() {
+  // A115: o backend só aceita ação de ADMIN ou SUPERADMIN. Quem não pode agir
+  // continua vendo o resultado, mas sem botão que sempre termina em 403.
+  const podeAgir = podeAgirNaQualidade(useAuthStore((s) => s.user?.role));
   const [agents, setAgents] = useState<ClientAgentLite[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [runs, setRuns] = useState<AgentEvalRunRow[]>([]);
@@ -197,13 +202,19 @@ export default function QualidadeIAClientePage() {
           ))}
         </select>
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={handleTrigger}
-            disabled={triggering || !selectedAgent}
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {triggering ? 'Executando teste (3–5 min)…' : 'Executar teste agora'}
-          </button>
+          {podeAgir ? (
+            <button
+              onClick={handleTrigger}
+              disabled={triggering || !selectedAgent}
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {triggering ? 'Executando teste (3–5 min)…' : 'Executar teste agora'}
+            </button>
+          ) : (
+            <span className="text-xs text-neutral-500">
+              Só um administrador da empresa executa teste e aplica correção.
+            </span>
+          )}
           <SaibaMais featureKey="qualidade.executar-teste" />
         </div>
       </div>
@@ -305,6 +316,7 @@ export default function QualidadeIAClientePage() {
           ) : (
             <RunDetailPanel
               run={selectedRun}
+              podeAgir={podeAgir}
               failedScenarios={failedScenarios}
               onAfterAction={() => {
                 refreshRuns();
@@ -324,11 +336,13 @@ export default function QualidadeIAClientePage() {
 // ════════════════════════════════════════════════════════════════════
 function RunDetailPanel({
   run,
+  podeAgir,
   failedScenarios,
   onAfterAction,
   currentAgentName,
 }: {
   run: AgentEvalRunDetail;
+  podeAgir: boolean;
   failedScenarios: AgentEvalRunDetailScenario[];
   onAfterAction: () => void;
   currentAgentName: string;
@@ -474,6 +488,7 @@ function RunDetailPanel({
             <ClientFixCard
               key={scenario.scenarioId}
               runId={run.id}
+              podeAgir={podeAgir}
               scenario={scenario}
               existingDecision={decisionsByScenario.get(scenario.scenarioId) || null}
               onAfterAction={onAfterAction}
@@ -516,11 +531,13 @@ function KPISmall({
 // ════════════════════════════════════════════════════════════════════
 function ClientFixCard({
   runId,
+  podeAgir,
   scenario,
   existingDecision,
   onAfterAction,
 }: {
   runId: string;
+  podeAgir: boolean;
   scenario: AgentEvalRunDetailScenario;
   existingDecision: AgentEvalFixDecision | null;
   onAfterAction: () => void;
@@ -723,11 +740,13 @@ function ClientFixCard({
                 </>
               )}
             </div>
-            <ClientGenerateSuggestionButton
-              runId={runId}
-              scenarioId={scenario.scenarioId}
-              onGenerated={onAfterAction}
-            />
+            {podeAgir && (
+              <ClientGenerateSuggestionButton
+                runId={runId}
+                scenarioId={scenario.scenarioId}
+                onGenerated={onAfterAction}
+              />
+            )}
           </div>
         ) : (
           <div className="p-3 bg-blue-50 border border-blue-200 rounded">
@@ -772,7 +791,7 @@ function ClientFixCard({
                     )}
                 </>
               )}
-              {!decisionMade && (
+              {!decisionMade && podeAgir && (
                 <span className="mt-2 inline-flex items-center gap-1">
                   <button
                     onClick={() => setEditing(!editing)}
@@ -786,7 +805,7 @@ function ClientFixCard({
               )}
             </div>
 
-            {!decisionMade && (
+            {!decisionMade && podeAgir && (
               <div className="mt-2 space-y-1.5">
                 <input
                   type="text"
@@ -834,7 +853,11 @@ function ClientFixCard({
             )}
 
             <div className="flex gap-2 mt-3 items-center">
-              {!decisionMade ? (
+              {!podeAgir ? (
+                <div className="text-[10px] text-neutral-500 italic flex-1">
+                  Só um administrador da empresa aplica ou recusa esta correção.
+                </div>
+              ) : !decisionMade ? (
                 <>
                   <button
                     onClick={handleApply}

@@ -22,6 +22,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, X, Minus, Send, Phone, ExternalLink } from 'lucide-react';
+import { idAleatorio } from '@/lib/idAnonimo';
 
 const WHATSAPP_NUMBER = '5511926160159';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://zappiq-api.fly.dev';
@@ -44,20 +45,21 @@ type ChatMessage = {
   ts: number;
 };
 
-/* ── Session ID: UUID estável por visitante, persistido em localStorage. ── */
+/* ── Session ID: UUID estável por visitante, persistido em localStorage. ──
+ * Sem localStorage não há como manter o mesmo identificador entre recargas:
+ * cada abertura do chat vira uma conversa nova. É o preço de não usar o
+ * relógio como identificador, que era adivinhável e colidia entre visitantes
+ * no mesmo milissegundo. */
 function getOrCreateSessionId(): string {
   if (typeof window === 'undefined') return 'ssr';
   try {
     const existing = window.localStorage.getItem(STORAGE_SESSION_ID);
     if (existing) return existing;
-    const fresh =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const fresh = idAleatorio();
     window.localStorage.setItem(STORAGE_SESSION_ID, fresh);
     return fresh;
   } catch {
-    return 'anon-' + Date.now();
+    return 'anon-' + idAleatorio();
   }
 }
 
@@ -94,6 +96,11 @@ async function callIzaBackend(
       throw new Error(`HTTP ${res.status}`);
     }
     const body = await res.json();
+    // A190: um atendente assumiu a conversa. Sem resposta do robô, e sem cara
+    // de erro: o visitante precisa saber que alguém vai responder.
+    if (body?.paused === true) {
+      return 'Um atendente da equipe vai responder por aqui em instantes.';
+    }
     if (!body?.reply || typeof body.reply !== 'string') {
       throw new Error('reply ausente');
     }

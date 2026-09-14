@@ -9,6 +9,7 @@ import { env } from '../config/env.js';
 import { randomBytes } from 'node:crypto';
 import { checkResourceLimit, resourceLimitBody } from '../middleware/planLimits.js';
 import { updateSettingsSchema, redactOrgSecrets, impulsoIntegrationSchema, channelCredentialsSchema } from './settings.schema.js';
+import { rejeitaChavesDoServidor, mesclarSettingsPorChave } from './settings.serverOnlyKeys.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { applyImpulsoIntegration, readImpulsoIntegrationStatus } from '../services/impulsoIntegrations.js';
@@ -96,14 +97,36 @@ router.put('/', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Re
       res.status(400).json({ error: 'Invalid settings payload', details: parsed.error.flatten() });
       return;
     }
+    // A156: chave que só o servidor grava (direito pago, roteamento de modelo,
+    // interruptor, credencial de canal, segredo cifrado) responde 400. Nada de
+    // ignorar em silêncio: quem mandou precisa saber que não foi gravado.
+    const proibidas = rejeitaChavesDoServidor(parsed.data);
+    if (proibidas.length > 0) {
+      logger.warn('[settings] PUT recusado: chaves só do servidor no corpo', {
+        orgId,
+        chaves: proibidas,
+      });
+      res.status(400).json({
+        error: 'Estas configurações são gravadas só pelo servidor e não podem vir no corpo.',
+        chaves: proibidas,
+      });
+      return;
+    }
     const data = parsed.data;
     const before = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    // A156: merge por chave. Antes o JSON inteiro era substituído, então a tela
+    // (que reenvia o retrato do GET, sem os segredos) apagava o que o servidor
+    // tinha gravado depois que ela abriu.
+    const settingsMesclado =
+      data.settings === undefined
+        ? undefined
+        : mesclarSettingsPorChave(before?.settings, data.settings);
     const org = await prisma.organization.update({
       where: { id: orgId },
-      data,
+      data: settingsMesclado === undefined ? data : { ...data, settings: settingsMesclado as any },
     });
     // Maestro reativo: identidade/treino mudou → marca os fluxos como desatualizados
-    const newSettings = data.settings;
+    const newSettings = settingsMesclado;
     if (newSettings && trainingFieldsChanged((before?.settings as any) || {}, newSettings)) {
       await refreshAIReadiness(orgId).catch(() => null);
     }

@@ -318,8 +318,12 @@ app.use('/api/admin/clientes', adminClientesRoutes); // Área Clientes Fase 2: l
 app.use('/api/admin/ai-xray', adminAiXrayRoutes); // Tarefa A3: Raio-X do prompt por canal (SUPERADMIN, sem LLM)
 
 // ── Client-facing Qualidade do Agente (FASE 2.2b #244) ─
-// authMiddleware aplicado dentro da própria route + RLS por organizationId.
-app.use('/api/agent-quality', agentQualityRoutes);
+// A115: montada como as outras rotas de cliente. Faltava a sessão do banco com
+// o inquilino (rlsTenantMiddleware) e o portão de trial vencido
+// (requireActivePlan): sete organizações com trial vencido, sem pagamento e com
+// agente no ar podiam disparar avaliação paga. O authMiddleware continua também
+// dentro da própria rota, que assim segue protegida onde quer que seja montada.
+app.use('/api/agent-quality', authMiddleware, rlsTenantMiddleware, requireActivePlan, agentQualityRoutes);
 
 // ── Protected Routes (auth + RLS tenant isolation + gate de trial vencido) ─
 // requireActivePlan (Trial Enforcement) bloqueia (402) orgs sem plano pago ativo,

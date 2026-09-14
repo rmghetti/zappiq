@@ -16,6 +16,22 @@ import type {
   AgentEvalFixDecision,
 } from './adminApi';
 
+/**
+ * Papéis que executam ação na Qualidade da IA.
+ *
+ * O portão de verdade é o do backend (A115): /run-async, generate-suggestion,
+ * apply-fix, re-test, reject-fix e revert exigem ADMIN ou SUPERADMIN, e
+ * respondem 403 para os demais. Esconder o botão aqui é só para o SUPERVISOR
+ * (e o AGENT, e o AUDITOR) não clicar num caminho que sempre termina em erro.
+ * Leitura continua aberta a qualquer usuário da própria organização.
+ */
+export const PAPEIS_QUE_AGEM_NA_QUALIDADE = ['ADMIN', 'SUPERADMIN'];
+
+/** Verdadeiro quando o papel pode executar ação na Qualidade. */
+export function podeAgirNaQualidade(papel: string | null | undefined): boolean {
+  return PAPEIS_QUE_AGEM_NA_QUALIDADE.includes(String(papel ?? ''));
+}
+
 export interface ClientAgentLite {
   id: string;
   name: string;

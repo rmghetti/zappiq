@@ -376,8 +376,10 @@ export default function SettingsPage() {
       // niche, agentName, handoffMessage) — é isso que alimenta o prompt do
       // agente (fallback), o Maestro e o readiness. Mantém o objeto `agent`
       // aninhado por compatibilidade com telas que ainda o leem.
+      // A156: manda SÓ o que esta seção muda. O servidor mescla por chave, então
+      // reenviar o retrato inteiro só servia para apagar o que ele gravou depois
+      // que a tela abriu (segredo do Impulso, add-on, questionário).
       const mergedSettings: OrgSettings = {
-        ...(org?.settings || {}),
         agentName: agentName.trim(),
         tone: agentTone,
         segmento: agentSegment,
@@ -415,8 +417,8 @@ export default function SettingsPage() {
     }
     setSavingBilling(true);
     try {
+      // A156: só a seção de cobrança; o servidor mescla por chave.
       const mergedSettings: OrgSettings = {
-        ...(org?.settings || {}),
         billing: {
           autoOverage,
           hardCeilingBrl: ceilingNum,
@@ -492,8 +494,8 @@ export default function SettingsPage() {
   async function handleSaveBusinessHours() {
     setSavingBusinessHours(true);
     try {
+      // A156: só o horário comercial; o servidor mescla por chave.
       const mergedSettings: OrgSettings = {
-        ...(org?.settings || {}),
         businessHoursConfig: businessHours,
       };
       const res = await api.put<{ data: Organization }>('/api/settings', { settings: mergedSettings });

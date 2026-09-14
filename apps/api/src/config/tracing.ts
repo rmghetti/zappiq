@@ -8,6 +8,7 @@ import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
+import { instrumentacoesSemQueryNaUrl } from './redacaoDeUrl.js';
 
 // Logging interno do SDK apenas em dev (evita ruido em producao)
 if (process.env.NODE_ENV !== 'production') {
@@ -50,13 +51,10 @@ const sdk = new NodeSDK({
     exportIntervalMillis: 30_000,
     exportTimeoutMillis: 10_000,
   }),
-  instrumentations: [
-    getNodeAutoInstrumentations({
-      // fs/dns geram ruido enorme sem valor de negocio
-      '@opentelemetry/instrumentation-fs': { enabled: false },
-      '@opentelemetry/instrumentation-dns': { enabled: false },
-    }),
-  ],
+  // A201: a configuracao mora em redacaoDeUrl.ts. Alem de desligar fs e dns,
+  // ela tira a query string dos atributos de URL dos spans de saida, para
+  // nenhuma credencial que ainda ande em query string ser exportada.
+  instrumentations: [getNodeAutoInstrumentations(instrumentacoesSemQueryNaUrl as any)],
 });
 
 try {

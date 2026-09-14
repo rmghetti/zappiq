@@ -2,7 +2,9 @@
  * /api/agent-quality — versão CLIENTE da Qualidade do Agente (task #244 / FASE 2.2b)
  *
  * Mesma lógica do admin (adminAgentEval.ts) MAS:
- *   • Sem requireRole('SUPERADMIN') — qualquer usuário autenticado acessa.
+ *   • Sem requireRole('SUPERADMIN'), mas TODA rota que escreve no prompt ou
+ *     gasta modelo exige ADMIN ou SUPERADMIN (A115). Leitura segue aberta a
+ *     qualquer usuário autenticado da própria organização.
  *   • RLS forçada por `req.user.organizationId` em TODAS as operações.
  *     Cliente só vê agentes da própria org, só roda eval no próprio agent,
  *     só vê runs e decisões da própria org.
@@ -29,7 +31,10 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, requireRole } from '../middleware/auth.js';
+// A115: quem escreve no prompt do agente é ADMIN ou SUPERADMIN, e o que custa
+// modelo tem teto por organização por dia.
+import { cotaDiaria } from '../middleware/cotaDiaria.js';
 import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
 import { resolveEvalSet, getSkippedScenarios, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
 import {
@@ -265,7 +270,7 @@ router.get('/agents/:agentId/versions/:version', async (req: Request, res: Respo
 // ════════════════════════════════════════════════════════════════════
 // POST /run-async: dispara eval (uma execução viva por agente + 24 h)
 // ════════════════════════════════════════════════════════════════════
-router.post('/run-async', async (req: Request, res: Response) => {
+router.post('/run-async', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response) => {
   const orgId = req.user!.organizationId;
   const agentId = String(req.body?.agentId || '');
   if (!agentId) {
@@ -483,6 +488,8 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
 // ════════════════════════════════════════════════════════════════════
 router.post(
   '/runs/:runId/scenarios/:scenarioId/generate-suggestion',
+  requireRole('ADMIN', 'SUPERADMIN'),
+  cotaDiaria('generate-suggestion'),
   async (req: Request, res: Response) => {
     const orgId = req.user!.organizationId;
     const { runId, scenarioId } = req.params;
@@ -549,6 +556,7 @@ router.post(
 // ════════════════════════════════════════════════════════════════════
 router.post(
   '/runs/:runId/scenarios/:scenarioId/apply-fix',
+  requireRole('ADMIN', 'SUPERADMIN'),
   async (req: Request, res: Response) => {
     const orgId = req.user!.organizationId;
     const actorUserId = req.user?.userId;
@@ -712,6 +720,8 @@ router.post(
 // ════════════════════════════════════════════════════════════════════
 router.post(
   '/runs/:runId/scenarios/:scenarioId/re-test',
+  requireRole('ADMIN', 'SUPERADMIN'),
+  cotaDiaria('re-test'),
   async (req: Request, res: Response) => {
     const orgId = req.user!.organizationId;
     const { runId, scenarioId } = req.params;
@@ -765,6 +775,7 @@ router.post(
 // ════════════════════════════════════════════════════════════════════
 router.post(
   '/runs/:runId/scenarios/:scenarioId/reject-fix',
+  requireRole('ADMIN', 'SUPERADMIN'),
   async (req: Request, res: Response) => {
     const orgId = req.user!.organizationId;
     const actorUserId = req.user?.userId;
@@ -828,7 +839,7 @@ router.post(
 // ════════════════════════════════════════════════════════════════════
 // POST /fix-decisions/:decisionId/revert — reverte aplicação
 // ════════════════════════════════════════════════════════════════════
-router.post('/fix-decisions/:decisionId/revert', async (req: Request, res: Response) => {
+router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response) => {
   const orgId = req.user!.organizationId;
   const actorUserId = req.user?.userId;
   const { decisionId } = req.params;

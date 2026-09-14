@@ -531,11 +531,14 @@ class GoogleProvider implements LLMProvider {
       },
     };
     if (req.system) body.systemInstruction = { parts: [{ text: req.system }] };
+    // A201: a chave vai no cabeçalho, nunca na query string. A instrumentação
+    // de rastreamento grava a URL cheia de toda chamada de saída, então chave
+    // na URL vira atributo de span exportado para fora.
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify(body),
       },
     );

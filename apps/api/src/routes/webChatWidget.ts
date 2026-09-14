@@ -52,7 +52,11 @@ const WIDGET_JS = String.raw`
       localStorage.setItem(STORAGE_SESSION, fresh);
       return fresh;
     } catch (e) {
-      return 'anon-' + Date.now();
+      /* Sem localStorage (janela anônima, cookies de terceiro bloqueados) o
+       * visitante perde a continuidade da conversa entre recargas. O relógio
+       * como identificador era pior: colidia entre dois visitantes no mesmo
+       * milissegundo e era adivinhável por quem soubesse o horário. */
+      return 'anon-' + uid();
     }
   }
 
@@ -286,9 +290,15 @@ const WIDGET_JS = String.raw`
       if (!res.ok) {
         throw new Error(body && body.reply ? body.reply : 'HTTP ' + res.status);
       }
-      var reply = body && body.reply ? String(body.reply) : null;
-      if (!reply) throw new Error('sem resposta');
-      messages.push({ role: 'bot', text: reply });
+      // A190: um atendente assumiu a conversa no painel. Sem resposta do robô,
+      // e sem cara de erro: o visitante precisa saber que alguém vai responder.
+      if (body && body.paused === true) {
+        messages.push({ role: 'bot', text: 'Um atendente vai responder por aqui em instantes.' });
+      } else {
+        var reply = body && body.reply ? String(body.reply) : null;
+        if (!reply) throw new Error('sem resposta');
+        messages.push({ role: 'bot', text: reply });
+      }
     } catch (err) {
       var fallbackText = (err && err.message && /^(HTTP |sem resposta)/.test(err.message))
         ? 'Tive uma instabilidade aqui agora. Pode tentar de novo em instantes?'
