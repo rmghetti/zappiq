@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * tenantLiveProfile — o que a IA recebe sobre a própria empresa, a cada turno.
+ * tenantLiveProfile: o que a IA recebe sobre a própria empresa, a cada turno.
  * --------------------------------------------------------------------
  * O que estes testes trancam (achados A058, A059, A060, A070, A153, A164):
  *   • o horário sai do que o cliente preencheu, nos TRÊS formatos que existem

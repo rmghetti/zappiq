@@ -113,7 +113,7 @@ router.put('/', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Re
 });
 
 /**
- * PUT /api/settings/perfil-do-agente — nome, tom, segmento, mensagem de
+ * PUT /api/settings/perfil-do-agente: nome, tom, segmento, mensagem de
  * transbordo e horário do agente, gravados POR CHAVE.
  *
  * Por que uma rota própria (A156, A170): o PUT /api/settings recebe

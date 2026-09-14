@@ -6,17 +6,17 @@
  *
  * Três coisas saem, e só elas:
  *
- *   1. `## HORÁRIO DE FUNCIONAMENTO` — a seção inteira. Ela foi gravada com
+ *   1. `## HORÁRIO DE FUNCIONAMENTO`: a seção inteira. Ela foi gravada com
  *      o formato que o promptEngine sabia ler e, para quem cadastrou pelo
  *      onboarding, saiu só com a linha inventada "• Domingo: Fechado". A
  *      Antonella abre domingo das 12h às 22h. O horário volta VIVO, montado
  *      no turno a partir das settings (A059).
  *
- *   2. `Data/hora atual: ...` — a linha com o momento do cadastro. Catorze
+ *   2. `Data/hora atual: ...`, a linha com o momento do cadastro. Catorze
  *      agentes carregam uma data de julho e o turno ainda acrescenta o bloco
  *      "# Agora": o modelo recebia duas datas contraditórias (A060).
  *
- *   3. `### Fluxo de Agendamento` — a seção inteira. Mandava confirmar o
+ *   3. `### Fluxo de Agendamento`: a seção inteira. Mandava confirmar o
  *      agendamento e avisar que "um lembrete será enviado 24h e 1h antes".
  *      A ação schedule só pisca uma notificação no painel e não existe envio
  *      de lembrete no produto (A153, A164, A194).

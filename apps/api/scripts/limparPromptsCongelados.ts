@@ -68,7 +68,7 @@ function rodarOffline(entradaPath: string, saidaPath: string): void {
   }
 
   console.log(`\n== MODO OFFLINE (sem banco) ==`);
-  console.log(`Entrada: ${entradaPath} — ${lista.length} prompt(s)\n`);
+  console.log(`Entrada: ${entradaPath}, ${lista.length} prompt(s)\n`);
 
   const saida = limparListaDePrompts(lista);
 
@@ -134,14 +134,14 @@ async function rodarComBanco(APPLY: boolean): Promise<void> {
 
     for (const { agente, r } of afetados) {
       const marca = r.recusa ? `⚠️  RECUSADO (${r.recusa})` : '•';
-      console.log(`  ${marca} ${agente.organization?.name ?? '(sem nome)'} — agente "${agente.name}"`);
+      console.log(`  ${marca} ${agente.organization?.name ?? '(sem nome)'}, agente "${agente.name}"`);
       imprimirRemovidos(r.removidos);
       if (r.recusa) console.log('      nada será gravado neste agente.\n');
       else console.log(`      prompt: ${(agente.systemPrompt || '').length} → ${r.prompt.length} chars\n`);
     }
 
     if (!APPLY) {
-      console.log('— Nada foi alterado. Para gravar de verdade, rode com --apply. —');
+      console.log('Nada foi alterado. Para gravar de verdade, rode com --apply.');
       return;
     }
 

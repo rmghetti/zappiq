@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * tenantLiveProfile — o perfil VIVO do atendimento, montado a cada turno.
+ * tenantLiveProfile: o perfil VIVO do atendimento, montado a cada turno.
  * --------------------------------------------------------------------
  * Por que existe (achados A058, A059, A060, A070, A153, A164, A194):
  *   O tom, o horário e a data do agente foram congelados no prompt no dia

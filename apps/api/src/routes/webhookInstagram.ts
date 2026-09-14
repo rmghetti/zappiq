@@ -244,7 +244,7 @@ export function extractIgMessagingEvents(entry: any): any[] {
 }
 
 /**
- * handleIncomingMessage — espelha a lógica do WhatsApp.
+ * handleIncomingMessage: espelha a lógica do WhatsApp.
  *
  * Exportada para teste (mesmo motivo de extractIgMessagingEvents): o defeito
  * A057 vivia no payload do job, e não havia conversa de Instagram em produção

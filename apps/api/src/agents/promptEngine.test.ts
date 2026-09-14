@@ -108,7 +108,7 @@ describe('getSystemPrompt: conversionUrls do tenant', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════
- * 14/09/2026 (A8) — o que o seed NÃO pode mais gravar.
+ * 14/09/2026 (A8): o que o seed NÃO pode mais gravar.
  * --------------------------------------------------------------------
  * O prompt do seed é gravado uma vez, no cadastro, e nunca mais relido.
  * Tudo que for dado VIVO (tom, horário, data, capacidade de agendamento)

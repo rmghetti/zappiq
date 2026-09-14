@@ -1506,7 +1506,7 @@ export async function resolveSchedulingRuntime(
     }
     return { ativo: true, tipos: nomes, motivo: 'ativo' };
   } catch (err) {
-    logger.warn('[Agent] resolveSchedulingRuntime falhou — agendamento tratado como desligado', {
+    logger.warn('[Agent] resolveSchedulingRuntime falhou: agendamento tratado como desligado', {
       organizationId,
       err: String(err),
     });
