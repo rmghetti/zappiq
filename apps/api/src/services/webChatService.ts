@@ -81,7 +81,31 @@ export const MAX_OUTPUT_TOKENS = 1024;
 const systemPromptCache = new Map<string, { prompt: string; cachedAt: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-async function loadOrgSystemPrompt(organizationId: string): Promise<string> {
+/**
+ * Lançada quando a organização não tem agente comercial vivo com prompt.
+ *
+ * Existe como classe (e não como Error solto) porque quem chama precisa
+ * separar "esta organização não tem agente" de "o banco caiu". Um `catch`
+ * cego confundia as duas coisas e transformava queda de banco em resposta
+ * tranquila de configuração faltando.
+ *
+ * É subclasse de Error, então todo `catch` genérico que já existia segue
+ * funcionando igual (a rota pública do chat do site continua devolvendo 500).
+ */
+export class SystemPromptNaoEncontrado extends Error {}
+
+/**
+ * Prompt do agente que o CHAT DO SITE usa, com o cache de 5 minutos.
+ *
+ * Exportada porque o Raio-X do prompt (/admin/ai-xray) precisa mostrar o
+ * prompt DESTE canal sem chamar o modelo, e uma segunda implementação da
+ * escolha do agente mentiria no dia em que a regra daqui mudasse.
+ *
+ * Lança quando a organização não tem agente comercial vivo com prompt: é o
+ * mesmo erro que o visitante do site provocaria, e quem chama decide o que
+ * fazer com ele.
+ */
+export async function loadOrgSystemPrompt(organizationId: string): Promise<string> {
   const now = Date.now();
   const cached = systemPromptCache.get(organizationId);
   if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
@@ -97,7 +121,9 @@ async function loadOrgSystemPrompt(organizationId: string): Promise<string> {
   );
 
   if (!rows.length || !rows[0].system_prompt) {
-    throw new Error(`webChatService: system_prompt não encontrado pra org ${organizationId}`);
+    throw new SystemPromptNaoEncontrado(
+      `webChatService: system_prompt não encontrado pra org ${organizationId}`,
+    );
   }
 
   systemPromptCache.set(organizationId, { prompt: rows[0].system_prompt, cachedAt: now });
@@ -140,6 +166,41 @@ export interface WebChatResponse {
   provider?: string;
   model?: string;
   latencyMs: number;
+}
+
+/* ── Montagem do system prompt do chat do site ───────────
+ *
+ * Ordem (não mude sem pensar): CORE_AGENT_RULES_V1 é inviolável e vem
+ * primeiro; os FATOS ATUAIS vêm depois dele e antes do prompt seedado em
+ * banco, para poderem corrigir um prompt velho; a instrução de canal vem por
+ * último, porque é ela que diferencia este canal do WhatsApp.
+ *
+ * Os fatos são sobre o PRODUTO ZappIQ (preço, trial, features), então só a
+ * org canônica da Iza os recebe. Outra org embedada (a Vera do CMJ, por
+ * exemplo) usa só o próprio agents.system_prompt, sem esse overlay.
+ *
+ * Função pura e exportada porque o Raio-X do prompt (/admin/ai-xray) precisa
+ * mostrar este texto sem chamar o modelo. Antes a montagem morava no meio de
+ * processWebChatTurn e só existia durante uma chamada de LLM paga.
+ */
+export function buildWebChatSystemPrompt(input: {
+  orgPrompt: string;
+  factsBlock: string;
+  isIzaCanonical: boolean;
+}): string {
+  const { orgPrompt, factsBlock, isIzaCanonical } = input;
+  const canalInstrucoes = isIzaCanonical
+    ? 'Você está respondendo no CHAT IN-PAGE do site zappiq.com.br (não WhatsApp). Visitante anônimo navegando a landing page. Mantenha as mesmas regras, tom e calibração. Sempre que fizer sentido, ofereça mudar pro WhatsApp pra continuar a conversa com histórico salvo (use Markdown link: `[WhatsApp](https://wa.me/5511926160159)`).'
+    : 'Você está respondendo no CHAT do site institucional da empresa (widget embedado, não WhatsApp). Visitante anônimo navegando o site. Mantenha as mesmas regras, tom e calibração de sempre.';
+  return [
+    CORE_AGENT_RULES_V1,
+    factsBlock,
+    orgPrompt,
+    '# CANAL DE COMUNICAÇÃO',
+    canalInstrucoes,
+    '',
+    '**FORMATO DE LINKS NESTE CANAL (CRÍTICO):** o chat in-page renderiza links em formato Markdown `[texto](url)` como clicáveis. URLs em texto plano viram texto comum. SEMPRE use formato Markdown ao oferecer cadastro, demo, ou qualquer URL.',
+  ].filter(Boolean).join('\n\n');
 }
 
 /* ── Sanitização ─────────────────────────────────────── */
@@ -405,18 +466,7 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     loadOrgSystemPrompt(organizationId),
     isIzaCanonical ? getIzaFactsBlock() : Promise.resolve(''),
   ]);
-  const canalInstrucoes = isIzaCanonical
-    ? 'Você está respondendo no CHAT IN-PAGE do site zappiq.com.br (não WhatsApp). Visitante anônimo navegando a landing page. Mantenha as mesmas regras, tom e calibração. Sempre que fizer sentido, ofereça mudar pro WhatsApp pra continuar a conversa com histórico salvo (use Markdown link: `[WhatsApp](https://wa.me/5511926160159)`).'
-    : 'Você está respondendo no CHAT do site institucional da empresa (widget embedado, não WhatsApp). Visitante anônimo navegando o site. Mantenha as mesmas regras, tom e calibração de sempre.';
-  const systemPrompt = [
-    CORE_AGENT_RULES_V1,
-    factsBlock,
-    orgPrompt,
-    '# CANAL DE COMUNICAÇÃO',
-    canalInstrucoes,
-    '',
-    '**FORMATO DE LINKS NESTE CANAL (CRÍTICO):** o chat in-page renderiza links em formato Markdown `[texto](url)` como clicáveis. URLs em texto plano viram texto comum. SEMPRE use formato Markdown ao oferecer cadastro, demo, ou qualquer URL.',
-  ].filter(Boolean).join('\n\n');
+  const systemPrompt = buildWebChatSystemPrompt({ orgPrompt, factsBlock, isIzaCanonical });
 
   // 2. Monta messages: history + novo turno do user
   const messages: LLMMessage[] = [

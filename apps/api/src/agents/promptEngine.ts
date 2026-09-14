@@ -176,7 +176,14 @@ export function renderConversionUrlsBlock(
 ${linhas.join('\n')}`;
 }
 
-function getToneInstructions(tone: string): string {
+/**
+ * Bloco de tom de voz que entra no prompt. Exportado (sem mudança de texto nem
+ * de comportamento) porque o Raio-X do prompt precisa procurar EXATAMENTE este
+ * texto dentro do prompt montado, para dizer se o tom que o cliente configurou
+ * chegou ao agente. Duplicar o mapa no Raio-X criaria uma segunda fonte de
+ * verdade, que é o defeito que o Raio-X existe para encontrar.
+ */
+export function getToneInstructions(tone: string): string {
   const tones: Record<string, string> = {
     friendly: `
 ## TOM DE VOZ — AMIGÁVEL

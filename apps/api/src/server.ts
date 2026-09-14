@@ -76,6 +76,7 @@ import adminClientesRoutes from './routes/adminClientes.js'; // Área Clientes F
 import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-page site usa Iza real
 import webChatWidgetRoutes from './routes/webChatWidget.js'; // widget.js embedável pra sites de clientes (ex.: CMJ)
 import adminIzaFactsRoutes from './routes/adminIzaFacts.js'; // FASE 4 P7+ Admin Camada 2 CRUD
+import adminAiXrayRoutes from './routes/adminAiXray.js'; // Tarefa A3: Raio-X do que a IA recebe, sem chamar o modelo
 import { bootstrapFlowTemplates } from './bootstrap/seedFlowTemplates';
 
 import { initTrialFollowupJob } from './services/trialFollowupService.js'; // FASE 1.B #240 — onboarding D+1/D+3/D+7
@@ -313,6 +314,7 @@ app.use('/api/admin', adminLlmStreamRoutes); // PR #V4-004: /admin/llm-stream-te
 app.use('/api/admin/agent-eval', adminAgentEvalRoutes); // V3 #235: golden set + judge
 app.use('/api/admin/onboarding-journey', adminOnboardingJourneyRoutes); // FASE 1.B #240: trigger + state
 app.use('/api/admin/clientes', adminClientesRoutes); // Área Clientes Fase 2: lista + 360 + financeiro + owner + backfill
+app.use('/api/admin/ai-xray', adminAiXrayRoutes); // Tarefa A3: Raio-X do prompt por canal (SUPERADMIN, sem LLM)
 
 // ── Client-facing Qualidade do Agente (FASE 2.2b #244) ─
 // authMiddleware aplicado dentro da própria route + RLS por organizationId.
