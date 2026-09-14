@@ -28,11 +28,14 @@
  * o mesmo bloco estava copiado em três arquivos, e foi por isso que o cron
  * nunca gravou slackAlertStatus: a cópia dele não tinha esse trecho.
  */
-import { Queue, Worker, type Job } from 'bullmq';
+import { DelayedError, Queue, Worker, type Job } from 'bullmq';
 import { prisma } from '@zappiq/database';
 
 import { queueConnection as connection, IDLE_DRAIN_DELAY_SECONDS } from '../config/queueRedis.js';
 import { logger } from '../utils/logger.js';
+// Conexão ioredis da casa (a mesma do costGuard e do tenantUsage). A trava
+// global vive FORA do BullMQ de propósito: ver adquirirTravaGlobal.
+import redis from '../utils/redis.js';
 import { resolveEvalSet } from '../agents/agentEvalSet.js';
 import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
@@ -491,25 +494,147 @@ export async function sweepStuckEvalRuns(now: Date = new Date()): Promise<number
   return count;
 }
 
+// ─── Trava global entre as máquinas ────────────────────────────────
+//
+// `concurrency: 1` do worker vale por PROCESSO. O fly.toml sobe duas máquinas
+// (min_machines_running = 2), então são dois workers, cada um com a sua
+// concorrência 1: duas execuções simultâneas, dois testes pagos e o 429 do
+// provedor que a concorrência 1 existia para evitar. A trava que vale para as
+// duas máquinas precisa morar no Redis, fora do BullMQ.
+
+/** Chave única da trava. Uma execução de teste por vez em TODA a frota. */
+export const TRAVA_GLOBAL_CHAVE = 'zappiq:agent-eval:lock';
+
+/**
+ * Prazo da trava: o teto da execução mais um minuto de folga.
+ *
+ * Máquina que morre no meio não devolve a trava; é o prazo que a devolve. Ele
+ * precisa passar do teto de 25 minutos, senão venceria com a execução ainda
+ * viva e liberaria uma segunda por cima dela.
+ */
+export const TRAVA_GLOBAL_TTL_MS = EVAL_RUN_TIMEOUT_MS + 60_000;
+
+/** Quanto o job espera antes de tentar de novo, quando a trava está ocupada. */
+export const ESPERA_TRAVA_OCUPADA_MS = 30_000;
+
+/**
+ * Libera só se o valor ainda for o próprio runId. Sem essa comparação, a
+ * execução que já estourou o prazo apagaria a trava de quem entrou depois.
+ */
+const LUA_LIBERA_TRAVA =
+  'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end';
+
+/** O mínimo do cliente Redis que a trava usa. Injetável para o teste. */
+export interface ClienteDeTrava {
+  set(
+    chave: string,
+    valor: string,
+    modoPx: 'PX',
+    prazoMs: number,
+    modoNx: 'NX',
+  ): Promise<string | null>;
+  eval(script: string, numKeys: number, ...args: string[]): Promise<unknown>;
+}
+
+/**
+ * Tenta pegar a trava global para esta execução.
+ *
+ * Fail-soft deliberado: erro no Redis devolve true, ou seja, a execução segue.
+ * A trava existe para não gastar LLM duas vezes, não para bloquear o produto;
+ * com o Redis fora, a alternativa seria não avaliar ninguém. Como a chave não
+ * chegou a ser gravada, a liberação não apaga trava de terceiro: o script
+ * compara o valor antes de apagar.
+ */
+export async function adquirirTravaGlobal(
+  runId: string,
+  cliente: ClienteDeTrava = redis,
+): Promise<boolean> {
+  try {
+    const r = await cliente.set(TRAVA_GLOBAL_CHAVE, runId, 'PX', TRAVA_GLOBAL_TTL_MS, 'NX');
+    return r === 'OK';
+  } catch (err: any) {
+    logger.warn({
+      msg: 'agent_eval_trava_indisponivel',
+      runId,
+      error: String(err?.message || err),
+    });
+    return true;
+  }
+}
+
+/** Devolve a trava, se ela ainda for desta execução. */
+export async function liberarTravaGlobal(
+  runId: string,
+  cliente: ClienteDeTrava = redis,
+): Promise<boolean> {
+  try {
+    const n = await cliente.eval(LUA_LIBERA_TRAVA, 1, TRAVA_GLOBAL_CHAVE, runId);
+    return Number(n) === 1;
+  } catch (err: any) {
+    logger.warn({
+      msg: 'agent_eval_trava_nao_liberada',
+      runId,
+      error: String(err?.message || err),
+    });
+    return false;
+  }
+}
+
+/** O mínimo do job que o processador toca. */
+type JobDeExecucao = Pick<Job<{ runId?: string }>, 'id' | 'data' | 'moveToDelayed'>;
+
+/**
+ * Corpo do processador da fila `agent-eval`.
+ *
+ * Exportado para o teste: é aqui que mora a decisão entre executar e adiar, e
+ * ela não pode depender de um Redis de verdade para ser provada.
+ *
+ * Adiar de dentro do processador tem um protocolo próprio no BullMQ:
+ * `moveToDelayed(quando, token)` e em seguida `throw new DelayedError()`. O
+ * DelayedError avisa o worker de que o job foi movido de propósito, então ele
+ * não conta como falha nem consome a única tentativa.
+ */
+export async function processarExecucaoNaFila(
+  job: JobDeExecucao,
+  token?: string,
+): Promise<void> {
+  const runId = job.data?.runId;
+  if (!runId) {
+    logger.warn({ msg: 'agent_eval_job_sem_runid', jobId: job.id });
+    return;
+  }
+
+  if (!(await adquirirTravaGlobal(runId))) {
+    logger.info({ msg: 'agent_eval_trava_ocupada_job_adiado', runId, jobId: job.id });
+    await job.moveToDelayed(Date.now() + ESPERA_TRAVA_OCUPADA_MS, token);
+    throw new DelayedError();
+  }
+
+  try {
+    await executeRunJob(runId);
+  } finally {
+    await liberarTravaGlobal(runId);
+  }
+}
+
 // ─── Worker ────────────────────────────────────────────────────────
 let worker: Worker | undefined;
 
 export async function initAgentEvalQueue(): Promise<void> {
   worker = new Worker(
     AGENT_EVAL_QUEUE_NAME,
-    async (job: Job<{ runId: string }>) => {
-      const runId = job.data?.runId;
-      if (!runId) {
-        logger.warn({ msg: 'agent_eval_job_sem_runid', jobId: job.id });
-        return;
-      }
-      await executeRunJob(runId);
-    },
+    (job: Job<{ runId: string }>, token?: string) => processarExecucaoNaFila(job, token),
     {
       connection,
       // 1 de propósito: os cenários já são sequenciais e o gargalo é o limite
       // de taxa do provedor. Paralelizar aqui só produziria 429.
+      //
+      // Atenção: isto vale por PROCESSO, e o Fly sobe duas máquinas. Quem
+      // garante uma execução por vez na frota é a trava do Redis, dentro de
+      // processarExecucaoNaFila.
       concurrency: 1,
+      // Protege contra máquina MORTA (o BullMQ renova o lock enquanto o
+      // processador está vivo). O teto de verdade é o relógio em executeRunJob.
       lockDuration: EVAL_RUN_TIMEOUT_MS,
       // Custo do Upstash: worker ocioso gasta cerca de 8 comandos a cada
       // drainDelay, 24/7. Esta é fila de TRABALHO (sem job repetível), então o
