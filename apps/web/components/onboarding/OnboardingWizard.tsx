@@ -114,9 +114,9 @@ export function OnboardingWizard() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const valid = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'text/markdown'].includes(file.type);
+      const valid = ['application/pdf', 'text/plain', 'text/markdown', 'text/csv'].includes(file.type);
       if (!valid) {
-        setError('Formato não aceito. Use PDF, DOCX, TXT ou MD.');
+        setError('Formato não aceito. Use PDF, TXT, MD ou CSV.');
         return;
       }
       if (file.size > 10 * 1024 * 1024) {
@@ -292,12 +292,12 @@ export function OnboardingWizard() {
                   >
                     <Upload size={32} className="mx-auto text-gray-400 mb-2" />
                     <p className="font-medium text-gray-900">Arraste ou clique para upload</p>
-                    <p className="text-xs text-gray-500 mt-1">PDF, DOCX, TXT ou MD · Até 10MB</p>
+                    <p className="text-xs text-gray-500 mt-1">PDF, TXT, MD ou CSV · Até 10MB</p>
                     <input
                       ref={fileInputRef}
                       type="file"
                       onChange={handleFileSelect}
-                      accept=".pdf,.docx,.txt,.md"
+                      accept=".pdf,.txt,.md,.csv"
                       className="hidden"
                     />
                   </div>

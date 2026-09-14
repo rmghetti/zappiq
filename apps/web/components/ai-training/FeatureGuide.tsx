@@ -145,7 +145,7 @@ export const GUIDES: Record<string, GuideContent> = {
     what:
       'Aqui você abastece a IA com material real: contratos, catálogos, tabelas de preço, FAQs, políticas, páginas do seu site. A IA lê tudo isso e passa a responder com base no seu conteúdo, não em suposições.',
     how: [
-      'Suba arquivos (PDF, TXT, DOCX, planilhas) com informações que sua equipe usa no dia a dia.',
+      'Suba arquivos (PDF, TXT, MD ou CSV) com informações que sua equipe usa no dia a dia.',
       'Cole links do seu site (sobre, preços, FAQ). A IA lê a página e aprende com ela.',
       'Ou cole um texto direto, quando a informação não está em arquivo nem em link.',
       'Confira o selo verde "indexado" ao lado de cada item. Se aparecer "não indexado", o conteúdo ainda não chegou à IA.',
@@ -208,6 +208,6 @@ export const GUIDES: Record<string, GuideContent> = {
       'Se a resposta não ficou boa, volte às outras abas, ajuste o conteúdo e teste de novo.',
     ],
     result:
-      'Usa o mesmo motor do atendimento real. O que você vê aqui é fiel ao que o cliente veria no WhatsApp, então dá para validar o treino antes de ir ao ar.',
+      'Usa a mesma montagem de instruções do WhatsApp. A memória da conversa é a desta tela, e o WhatsApp lembra do contato. Serve para conferir o treino antes de ir ao ar.',
   },
 };

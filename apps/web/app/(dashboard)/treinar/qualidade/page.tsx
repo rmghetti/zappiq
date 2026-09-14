@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * /treinar/qualidade — Qualidade da IA (versão CLIENTE) · FASE 2.2b #244
+ * /treinar/qualidade: Qualidade da IA (versão CLIENTE) · FASE 2.2b #244
  *
  * Replica funcionalidade do /admin/agent-quality mas em linguagem
  * executiva e com RLS forçada por org no backend.
@@ -15,7 +15,7 @@
  *   • Sem botão "Testar Slack" (admin-only).
  *   • Cooldown 1×/24h por agente: backend retorna 429 com
  *     `nextAvailableAt`, UI mostra próximo horário disponível.
- *   • Mesmo Apply/Reject/Edit/Revert da FASE 2.2a — audit completo.
+ *   • Mesmo Apply/Reject/Edit/Revert da FASE 2.2a, audit completo.
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -154,7 +154,7 @@ export default function QualidadeIAClientePage() {
             pra ativar a auditoria de qualidade.
           </p>
           <p className="text-amber-800 text-sm mt-2">
-            Não precisa estar com o treinamento 100% — a auditoria avalia o agente como ele
+            Não precisa estar com o treinamento 100%: a auditoria avalia o agente como ele
             está hoje. Quanto mais completo o treino, melhor tende a ser a nota.
           </p>
         </div>
@@ -219,7 +219,7 @@ export default function QualidadeIAClientePage() {
         </div>
       )}
 
-      {/* Cenários que não rodam por falta de treino — troca "você tirou X%" por
+      {/* Cenários que não rodam por falta de treino: troca "você tirou X%" por
           "complete isto pra ser avaliado nisso também" (Onda 2 item 10, isolamento de tenant). */}
       {testScope && testScope.skipped.length > 0 && (
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900">
@@ -319,7 +319,7 @@ export default function QualidadeIAClientePage() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// RunDetailPanel — saúde + cenários reprovados/parciais
+// RunDetailPanel: saúde + cenários reprovados/parciais
 // ════════════════════════════════════════════════════════════════════
 function RunDetailPanel({
   run,
@@ -344,7 +344,7 @@ function RunDetailPanel({
     }
   });
 
-  // ─ Backfill silencioso de sugestões (Fix B — runs antigas) ─────────
+  // ─ Backfill silencioso de sugestões (Fix B, runs antigas) ─────────
   // Runs criadas antes do gate de auto-geração pra parciais (PR #211)
   // não têm suggestedFix pré-gerado. Disparamos serialmente o
   // /generate-suggestion em background pra não exigir clique manual em
@@ -368,7 +368,7 @@ function RunDetailPanel({
         try {
           await clientAgentQualityApi.generateSuggestion(run.id, sc.scenarioId);
         } catch {
-          // Silencia falha individual — segue pro próximo.
+          // Silencia falha individual, segue pro próximo.
         }
         setBackfillStatus({ total: pending.length, done: i + 1 });
       }
@@ -428,15 +428,17 @@ function RunDetailPanel({
           <div className="p-3 bg-indigo-50 border border-indigo-200 rounded flex items-start gap-2.5">
             <span className="text-base leading-none mt-0.5">💡</span>
             <div className="text-sm text-indigo-900">
-              Boa parte da nota vem de quanto seu agente sabe do seu negócio. Completar o
-              treinamento da IA costuma <strong>elevar este resultado</strong>.
+              A nota mede o comportamento do agente em situações comuns de atendimento, com
+              cenários iguais para todos os clientes. Ela <strong>ainda não mede o conteúdo
+              que você cadastrou</strong>. Mesmo assim vale completar o treinamento: é ele que
+              dá ao agente a informação para responder certo.
               <a href="/ai-training" className="underline font-medium ml-1">Completar treinamento →</a>
             </div>
           </div>
         </div>
       )}
 
-      {/* Banner de backfill silencioso (runs antigas — Fix B). */}
+      {/* Banner de backfill silencioso (runs antigas, Fix B). */}
       {backfillStatus && (
         <div className="px-5 pt-4">
           <div className="p-3 bg-blue-50 border border-blue-200 rounded flex items-center gap-3">
@@ -462,7 +464,7 @@ function RunDetailPanel({
         </h3>
         {failedScenarios.length === 0 && !isRunning && (
           <p className="text-sm text-neutral-600">
-            Seu agente passou em todos os cenários testados. Continue acompanhando — rodamos
+            Seu agente passou em todos os cenários testados. Continue acompanhando, rodamos
             uma execução automática por semana.
           </p>
         )}
@@ -483,7 +485,7 @@ function RunDetailPanel({
 }
 
 // ════════════════════════════════════════════════════════════════════
-// KPISmall — cartão executivo
+// KPISmall: cartão executivo
 // ════════════════════════════════════════════════════════════════════
 function KPISmall({
   label,
@@ -509,7 +511,7 @@ function KPISmall({
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ClientFixCard — Apply/Reject/Edit cliente-friendly
+// ClientFixCard: Apply/Reject/Edit cliente-friendly
 // ════════════════════════════════════════════════════════════════════
 function ClientFixCard({
   runId,
@@ -552,7 +554,7 @@ function ClientFixCard({
   async function handleApply() {
     if (
       !confirm(
-        'Aplicar essa correção no comportamento do seu agente? Ela passa a valer imediatamente nas próximas conversas.',
+        'Aplicar essa correção no comportamento do seu agente? Ela passa a valer nas próximas conversas do WhatsApp. No chat do site pode levar até 5 minutos.',
       )
     )
       return;
@@ -679,7 +681,7 @@ function ClientFixCard({
       </summary>
 
       <div className="px-3 pb-3 pt-1 bg-neutral-50">
-        {/* FASE 2.2c (#246): contexto completo da interação testada — pergunta enviada + resposta do agente. */}
+        {/* FASE 2.2c (#246): contexto completo da interação testada: pergunta enviada + resposta do agente. */}
         {(scenario.userMessage || scenario.response) && (
           <div className="mb-3 p-3 bg-white border border-neutral-200 rounded">
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 mb-2 flex items-center gap-1.5">
@@ -711,11 +713,11 @@ function ClientFixCard({
                 <>
                   <strong>Desvio menor detectado.</strong> Em execuções a partir
                   de agora a correção automática já vem pronta. Pra esta execução
-                  antiga, clique abaixo — a sugestão aparece em segundos.
+                  antiga, clique abaixo: a sugestão aparece em segundos.
                 </>
               ) : (
                 <>
-                  <strong>Correção não pôde ser gerada.</strong> Tente novamente — pode ter
+                  <strong>Correção não pôde ser gerada.</strong> Tente novamente, pode ter
                   sido falha transitória da IA.
                 </>
               )}
@@ -764,7 +766,7 @@ function ClientFixCard({
                       <div className="mt-1.5 text-[10px] text-amber-700 italic">
                         ⚠ Texto editado por{' '}
                         {existingDecision.decidedByName || existingDecision.decidedByEmail}
-                        {' '}antes de aplicar — diferente da sugestão original.
+                        {' '}antes de aplicar, diferente da sugestão original.
                       </div>
                     )}
                 </>
@@ -821,10 +823,10 @@ function ClientFixCard({
               >
                 <div className="font-semibold mb-0.5">
                   {retestResult.combined === 'pass'
-                    ? '✓ Re-teste passou — a correção pegou. O score sobe na próxima execução completa.'
+                    ? '✓ Re-teste passou: a correção pegou. Este resultado não fica gravado, o score muda na próxima execução completa.'
                     : retestResult.combined === 'partial'
-                      ? '⚠ Ainda parcial — melhorou, mas não 100%. Edite a sugestão (fortaleça a regra: CAPS, "REGRA INVIOLÁVEL") e re-aplique.'
-                      : '✗ Ainda reprovou — a correção não pegou. Edite a sugestão pra ser mais explícita e re-aplique.'}
+                      ? '⚠ Ainda parcial: melhorou, mas não 100%. Edite a sugestão (fortaleça a regra: CAPS, "REGRA INVIOLÁVEL") e re-aplique.'
+                      : '✗ Ainda reprovou: a correção não pegou. Edite a sugestão pra ser mais explícita e re-aplique.'}
                 </div>
                 <div className="text-[11px] opacity-80">{retestResult.judge.reason}</div>
               </div>
@@ -855,7 +857,7 @@ function ClientFixCard({
                     onClick={handleRetest}
                     disabled={loadingAction !== null}
                     className="flex-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-medium rounded border border-blue-300 disabled:opacity-50"
-                    title="Roda só esse cenário contra o prompt atual pra confirmar que a correção empurrou o score"
+                    title="Roda só esse cenário contra o prompt atual e mostra o resultado aqui. O re-teste ainda não fica gravado no histórico."
                   >
                     {loadingAction === 're-test' ? 'Re-testando…' : '🔄 Re-testar agora'}
                   </button>
@@ -881,7 +883,7 @@ function ClientFixCard({
 }
 
 // ════════════════════════════════════════════════════════════════════
-// ClientGenerateSuggestionButton — FASE 2.2d (#252) versão cliente
+// ClientGenerateSuggestionButton: FASE 2.2d (#252) versão cliente
 // ════════════════════════════════════════════════════════════════════
 function ClientGenerateSuggestionButton({
   runId, scenarioId, onGenerated,
