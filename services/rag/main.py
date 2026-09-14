@@ -38,6 +38,7 @@ from pydantic import BaseModel, Field
 
 import chunking
 import extractors
+import reprocess
 
 # ── OpenTelemetry ──────────────────────────────────────────────────────
 # SDK init precisa rodar antes de qualquer import instrumentado.
@@ -181,6 +182,13 @@ class QueryResult(BaseModel):
 class QueryResponse(BaseModel):
     results: list[QueryResult]
     latency_ms: int
+
+
+class ReprocessRequest(BaseModel):
+    namespace: str
+    # dry_run e o padrao de proposito: escrever no vetor de producao nao pode
+    # ser o comportamento de quem esqueceu um campo.
+    dry_run: bool = True
 
 
 class IngestResponse(BaseModel):
@@ -880,6 +888,30 @@ async def delete_source(namespace: str, source: str):
     deleted = int(result.split()[-1]) if result.startswith("DELETE ") else 0
     logger.info(f"delete_source ns={namespace} source={source} deleted={deleted}")
     return {"namespace": namespace, "source": source, "deleted": deleted}
+
+
+@app.post("/admin/reprocess", tags=["admin"])
+async def admin_reprocess(request: ReprocessRequest):
+    """
+    Reprocessa a base de um namespace: monta o cabecalho de contexto de cada
+    trecho, reembeda e troca o source de titulo para doc-<id do kb_document>.
+
+    Roda atras do X-Service-Secret, como toda rota privada. O padrao e dry_run,
+    que devolve o plano (quantos trechos, quais sources mudam, quais titulos
+    colidem) sem escrever nada. Ver services/rag/reprocess.py.
+    """
+    if not request.namespace.strip():
+        raise HTTPException(status_code=400, detail="namespace vazio")
+    if not state.pool:
+        raise HTTPException(status_code=503, detail="DB pool nao inicializado")
+
+    return await reprocess.executar(
+        pool=state.pool,
+        namespace=request.namespace.strip(),
+        dry_run=request.dry_run,
+        embed=lambda textos, input_type: _embed_batch(textos, input_type=input_type),
+        chunk_hash=_chunk_hash,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
