@@ -268,7 +268,7 @@ export default function AiXrayPage() {
               {turno.motor === 'unico' ? 'motor único' : 'motor de antes'}
             </span>
             <span className="text-gray-500">
-              hash <span className="font-mono text-gray-700">{turno.hash.slice(0, 12)}</span>
+              hash <span className="font-mono text-gray-700">{turno.hash?.slice(0, 12) ?? '...'}</span>
             </span>
             <span className="text-gray-500">
               hash estável{' '}
@@ -278,12 +278,13 @@ export default function AiXrayPage() {
             </span>
           </div>
 
-          {/* Orçamento por bloco (C1a, A063) */}
-          {turno.partes.length > 0 && (
+          {/* Orçamento por bloco (C1a, A063). Guardas porque, na janela em que
+              a Vercel publica antes do Fly, o turno ainda vem sem estes campos. */}
+          {(turno.partes ?? []).length > 0 && (
             <div className="space-y-1">
               <p className="text-xs font-semibold text-gray-600">Orçamento por bloco</p>
               <ul className="flex flex-wrap gap-1.5 text-[11px]">
-                {turno.partes.map((p) => (
+                {(turno.partes ?? []).map((p) => (
                   <li
                     key={p.nome}
                     className={`px-2 py-0.5 rounded border ${
