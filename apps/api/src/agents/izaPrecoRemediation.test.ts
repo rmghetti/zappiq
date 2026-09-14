@@ -324,7 +324,7 @@ describe('avisosDeNumeroSolto', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
- * RODADA 2 — o que a preparação da migração em produção descobriu.
+ * RODADA 2: o que a preparação da migração em produção descobriu.
  *
  * A rodada 1 apagava TODO valor em reais do prompt. Sobre o prompt real isso
  * produziu três danos:

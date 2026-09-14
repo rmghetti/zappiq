@@ -43,7 +43,7 @@
  * O caminho não põe credencial de banco na máquina de ninguém: o prompt sai
  * por SELECT, é transformado offline e volta por UPDATE.
  *
- * PASSO 1 — exportar o prompt e guardar o hash
+ * PASSO 1: exportar o prompt e guardar o hash
  *
  *   SELECT id, name, length(system_prompt) AS chars, md5(system_prompt) AS hash,
  *          system_prompt
@@ -53,7 +53,7 @@
  *   Salve o `system_prompt` em ~/Desktop/iza-prompt-antes.txt. O `hash` prova
  *   que ninguém gravou por cima no meio do caminho.
  *
- * PASSO 2 — transformar offline (sem banco, sem variável de ambiente)
+ * PASSO 2: transformar offline (sem banco, sem variável de ambiente)
  *
  *   cd ~/dev/zappiq/apps/api
  *   npx tsx scripts/removerTabelaDePrecosDaIza.ts \
@@ -63,7 +63,7 @@
  *   O script imprime o que SAIU e o que FICOU, recusa escrever se a validação
  *   reprovar e mostra o md5 do resultado.
  *
- * PASSO 3 — gravar e PROVAR antes do COMMIT
+ * PASSO 3: gravar e PROVAR antes do COMMIT
  *
  *   O `set_config` declara a origem para o gatilho `agents_versiona_prompt`
  *   (senão a escrita entra como 'fora_do_app'). `zappiq.prompt_actor` é o que
@@ -93,7 +93,7 @@
  *     -- igual a 0      -> COMMIT;
  *     COMMIT;
  *
- * PASSO 4 — conferir a versão criada (depois do COMMIT)
+ * PASSO 4: conferir a versão criada (depois do COMMIT)
  *
  *   A coluna do ator chama-se `created_by`; NÃO existe coluna `actor` em
  *   agent_prompt_versions.
