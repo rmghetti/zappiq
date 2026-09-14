@@ -586,7 +586,10 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     }
 
     let ragContext = '';
-    let ragStatus: ragService.RagSearchStatus = 'servico_fora';
+    // Começa em 'sem_resultado', não em 'servico_fora': se a busca lançar antes
+    // de atribuir o status, o prompt vai dizer que a base está indisponível, que
+    // é mais forte do que a verdade. 'sem_resultado' é o lado conservador.
+    let ragStatus: ragService.RagSearchStatus = 'sem_resultado';
     try {
       // Modo Econômico (PR-I): top-k 5 -> 3 encolhe o contexto RAG do turno.
       const busca = await ragService.searchDetailed(
@@ -1064,6 +1067,14 @@ export async function pickTierAndOverride(
 }
 
 // ── Intent Classification ───────────────────────────────
+
+/**
+ * Teto de tokens da classificação de intenção. A resposta é um JSON com a
+ * categoria e a consulta reescrita (no máximo 10 palavras): cabe folgado em 80
+ * tokens. O teto padrão de classify, 30, cortava o JSON no meio da consulta.
+ */
+const CLASSIFY_MAX_TOKENS = 80;
+
 /** Últimas `n` falas da conversa (cliente e agente), já rotuladas e cortadas. */
 function ultimasMensagens(history: HistoryTurn[], n: number): string[] {
   return (history ?? [])
@@ -1150,11 +1161,15 @@ ${blocoHistorico}
 Customer message: "${text}"
 
 Responda SÓ com este JSON, sem mais nada:
-{"intent":"<uma categoria da lista>","consulta":"<a mensagem do cliente reescrita para fazer sentido sozinha, em português, no máximo 15 palavras; use string vazia se ela já se explica sozinha>"}`;
+{"intent":"<uma categoria da lista>","consulta":"<a mensagem do cliente reescrita para fazer sentido sozinha, em português, no máximo 10 palavras; use string vazia se ela já se explica sozinha>"}`;
 
   // V2-018: classify usa Haiku 4.5 forçado via LLMRouter (com fallback automático
   // pra cascade completa se Haiku cair). Audit por turn em llm_call_logs.
-  const bruto = await classify(prompt, ctx);
+  // O teto padrão de classify é 30 tokens, que serve para uma palavra solta. Aqui
+  // a resposta é um JSON com a categoria E a consulta reescrita: em 30 tokens ela
+  // vinha cortada no meio e a leitura devolvia 'other', derrubando o gate de
+  // handoff do "quero falar com um humano". 80 tokens cobrem o JSON inteiro.
+  const bruto = await classify(prompt, ctx, CLASSIFY_MAX_TOKENS);
 
   // cache.set é fail-soft (false em erro). TTL idêntico (300s = 5min).
   await cache.set(cacheKey, bruto, 300);

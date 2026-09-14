@@ -26,6 +26,7 @@
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { llmRouter, type LLMMessage as RouterMessage } from './LLMRouter.js';
+import { logger } from '../../utils/logger.js';
 
 /** Interface mantida estável pra back-compat com agentOrchestrator. */
 export interface LLMMessage {
@@ -79,6 +80,13 @@ export async function chatCompletion(
 }
 
 /**
+ * Teto padrão de uma classificação que devolve só uma palavra (sentimento,
+ * rótulo solto). Quem pede JSON tem de passar o teto próprio: a resposta não
+ * cabe em 30 tokens e vem cortada, sem erro nenhum.
+ */
+const CLASSIFY_MAX_TOKENS_PADRAO = 30;
+
+/**
  * Fast classification call — força Haiku 4.5 (forceProvider).
  * Se Haiku cair (breaker aberto / erro), faz fallback automático pra
  * cascade completa. Custo extra é aceitável pra preservar disponibilidade
@@ -87,28 +95,51 @@ export async function chatCompletion(
 export async function classify(
   prompt: string,
   ctx: LLMContext = {},
+  maxTokens = CLASSIFY_MAX_TOKENS_PADRAO,
 ): Promise<string> {
   try {
     const resp = await llmRouter.complete({
       messages: [{ role: 'user', content: prompt }],
-      maxTokens: 30,
+      maxTokens,
       forceProvider: 'anthropic-haiku',
       operation: 'classify',
       orgId: ctx.orgId ?? null,
       conversationId: ctx.conversationId ?? null,
     });
+    avisarSeCortado(resp.stopReason, maxTokens, ctx);
     return (resp.text ?? '').trim().toLowerCase();
   } catch (err) {
     // Haiku indisponível: tenta cascade completa como fallback.
     const resp = await llmRouter.complete({
       messages: [{ role: 'user', content: prompt }],
-      maxTokens: 30,
+      maxTokens,
       operation: 'classify',
       orgId: ctx.orgId ?? null,
       conversationId: ctx.conversationId ?? null,
     });
+    avisarSeCortado(resp.stopReason, maxTokens, ctx);
     return (resp.text ?? '').trim().toLowerCase();
   }
+}
+
+/**
+ * Resposta cortada pelo teto é defeito silencioso: quem lê o texto recebe um
+ * rótulo pela metade e cai num caminho de leitura tolerante, sem erro nenhum.
+ * Foi assim que o classificador de intenção passou a devolver JSON com 30
+ * tokens de teto e o "quero falar com um humano" parou de disparar o handoff.
+ * O aviso existe para que a próxima vez apareça no log, não só numa auditoria.
+ */
+function avisarSeCortado(
+  stopReason: string | undefined,
+  maxTokens: number,
+  ctx: LLMContext,
+): void {
+  if (stopReason !== 'max_tokens') return;
+  logger.warn('[LLM] classify cortado pelo teto de tokens', {
+    maxTokens,
+    orgId: ctx.orgId ?? null,
+    conversationId: ctx.conversationId ?? null,
+  });
 }
 
 /**

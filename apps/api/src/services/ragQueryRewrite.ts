@@ -144,11 +144,26 @@ export function parseClassifierOutput(raw: string | null | undefined): {
     }
   }
 
+  // JSON cortado no meio (teto de tokens da chamada). O bloco não fecha, então
+  // JSON.parse nem é tentado, mas a categoria já veio inteira: ela é o PRIMEIRO
+  // campo do formato que pedimos. Esta regex lê só ela e não depende do
+  // fechamento. Sem isto, o texto cortado caía na leitura de texto puro e a
+  // categoria vinha colada na chave seguinte, devolvendo 'other' e derrubando o
+  // gate de handoff do "quero falar com um humano".
+  const rotulo = texto.match(/"?intent"?\s*:\s*"?([a-z_]+)/);
+  if (rotulo) {
+    const intent = normalizeIntent(rotulo[1]);
+    if (intent) return { intent, retrievalQuery: null };
+  }
+
   return { intent: normalizeIntent(texto) ?? 'other', retrievalQuery: null };
 }
 
 function normalizeIntent(bruto: string): Intent | null {
-  const limpo = bruto.trim().toLowerCase().replace(/[.!,"'`]/g, '');
+  // A vírgula NÃO entra na remoção: ela é o separador entre a categoria e o
+  // campo seguinte do JSON. Removê-la produzia 'request_humanconsulta', que não
+  // casa com categoria nenhuma.
+  const limpo = bruto.trim().toLowerCase().replace(/[.!"'`]/g, '');
   const exato = INTENTS.find((i) => i === limpo);
   if (exato) return exato;
 

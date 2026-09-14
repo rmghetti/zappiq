@@ -22,7 +22,12 @@ vi.mock('./LLMRouter.js', () => {
   };
 });
 
+vi.mock('../../utils/logger.js', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
 import { chatCompletion, classify, analyzeSentiment } from './langchainClient.js';
+import { logger } from '../../utils/logger.js';
 
 // PR #102 hotfix — top-level await quebra em CommonJS module compilation.
 // Movendo o dynamic import pra beforeAll (async function) resolve o erro
@@ -36,6 +41,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockComplete.mockReset();
+  vi.mocked(logger.warn).mockClear();
 });
 
 describe('chatCompletion', () => {
@@ -152,6 +158,53 @@ describe('classify', () => {
         conversationId: 'conv-z',
       }),
     );
+  });
+
+  // C1 da revisão do PR #365: o classificador de intenção passou a devolver
+  // JSON com a intenção E a consulta reescrita. Em 30 tokens essa resposta não
+  // cabe e vem cortada no meio. Quem precisa de mais espaço pede o teto.
+  it('aceita teto próprio de tokens (o classificador de intenção pede 80)', async () => {
+    mockComplete.mockResolvedValueOnce({
+      text: '{"intent":"pricing","consulta":"preço do curso de fotografia noturna"}',
+      provider: 'anthropic-haiku', model: 'claude-haiku-4-5-20251001', latencyMs: 100, attempt: 1,
+      usage: {},
+    });
+    await classify('prompt longo', { orgId: 'org-1' }, 80);
+    expect(mockComplete).toHaveBeenCalledWith(expect.objectContaining({ maxTokens: 80 }));
+  });
+
+  it('o teto próprio também vale no fallback para a cascade completa', async () => {
+    mockComplete
+      .mockRejectedValueOnce(new Error('Haiku down'))
+      .mockResolvedValueOnce({
+        text: 'pricing',
+        provider: 'anthropic-sonnet', model: 'claude-sonnet-4-6', latencyMs: 800, attempt: 1,
+        usage: {},
+      });
+    await classify('prompt longo', {}, 80);
+    expect(mockComplete.mock.calls[1][0].maxTokens).toBe(80);
+  });
+
+  it('avisa no log quando a resposta foi cortada pelo teto de tokens', async () => {
+    mockComplete.mockResolvedValueOnce({
+      text: '{"intent":"request_human","consulta":"o cliente quer falar',
+      provider: 'anthropic-haiku', model: 'claude-haiku-4-5-20251001', latencyMs: 100, attempt: 1,
+      usage: {}, stopReason: 'max_tokens',
+    });
+    await classify('prompt longo', { orgId: 'org-1' }, 80);
+    expect(logger.warn).toHaveBeenCalled();
+    const [mensagem] = (logger.warn as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(mensagem)).toContain('classify');
+  });
+
+  it('resposta completa NÃO gera aviso de corte', async () => {
+    mockComplete.mockResolvedValueOnce({
+      text: '{"intent":"faq","consulta":""}',
+      provider: 'anthropic-haiku', model: 'claude-haiku-4-5-20251001', latencyMs: 100, attempt: 1,
+      usage: {}, stopReason: 'end_turn',
+    });
+    await classify('prompt', { orgId: 'org-1' }, 80);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });
 

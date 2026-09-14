@@ -143,6 +143,40 @@ describe('parseClassifierOutput (A064: uma chamada só, dois campos)', () => {
   it('JSON com intenção inválida cai na leitura de texto puro', () => {
     expect(parseClassifierOutput('{"intent":"xyz","consulta":"algo"}').intent).toBe('other');
   });
+
+  // C1 da revisão do PR #365. O classificador passou a devolver JSON, mas a
+  // chamada tinha teto de 30 tokens: a resposta era cortada no meio da
+  // `consulta` e ficava sem o `}` final. Sem o bloco fechado, a leitura caía no
+  // caminho de texto puro, onde a remoção da vírgula soldava a categoria na
+  // chave seguinte ("request_humanconsulta") e o resultado virava `other`.
+  // Efeito no ar: "quero falar com um humano" deixava de disparar o handoff e
+  // ainda ficava 5 minutos no cache. Agora a categoria é lida por regex
+  // dedicada, imune ao corte.
+  it('JSON cortado no meio da consulta ainda devolve pricing', () => {
+    const out = parseClassifierOutput(
+      '{"intent":"pricing","consulta":"qual o preço do curso de fotografia',
+    );
+    expect(out.intent).toBe('pricing');
+    expect(out.retrievalQuery).toBeNull();
+  });
+
+  it('JSON cortado no meio da consulta ainda devolve request_human (gate do handoff)', () => {
+    const out = parseClassifierOutput(
+      '{"intent":"request_human","consulta":"o cliente quer falar com um atendente',
+    );
+    expect(out.intent).toBe('request_human');
+    expect(out.retrievalQuery).toBeNull();
+  });
+
+  it('JSON cortado logo depois da categoria também vale', () => {
+    expect(parseClassifierOutput('{"intent":"greeting"').intent).toBe('greeting');
+    expect(parseClassifierOutput('{"intent":"scheduling","consulta":"').intent).toBe('scheduling');
+    expect(parseClassifierOutput('{"intent": "complaint", "cons').intent).toBe('complaint');
+  });
+
+  it('JSON cortado com categoria desconhecida continua virando other', () => {
+    expect(parseClassifierOutput('{"intent":"bananas","consulta":"algo mais').intent).toBe('other');
+  });
 });
 
 describe('buildRetrievalQuery', () => {
