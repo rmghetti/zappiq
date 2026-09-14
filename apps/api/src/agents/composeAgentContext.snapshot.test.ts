@@ -59,6 +59,13 @@ vi.mock('../utils/logger.js', () => ({
 
 import { buildSystemPromptForContact } from './agentOrchestrator.js';
 import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
+import {
+  composeAgentContext,
+  NOMES_DAS_PARTES,
+  type AgentContextInput,
+} from './composeAgentContext.js';
+import { buildLiveProfileBlock } from './tenantLiveProfile.js';
+import { buildTenantLinksBlock } from './tenantConversionUrls.js';
 
 // ── Relógio fixo: o '# Agora' entra no prompt ─────────────────────────
 const AGORA = new Date('2026-09-16T17:00:00Z'); // quarta, 14:00 em São Paulo
@@ -266,4 +273,250 @@ describe('fixtures gravadas com o código de hoje (flag contextoUnico desligada)
 
     expect(hoje).not.toContain('FATOS ATUAIS');
   });
+});
+
+/* ── 2. A função pura, com os mesmos dados, bate com a fixture ─────── */
+
+/**
+ * Traduz os dublês acima na entrada da função pura. É o que o carregador
+ * (agentContextLoader) faz em produção; aqui é feito à mão para a prova não
+ * depender dele.
+ */
+function entradaPura(opts: {
+  org: string;
+  settings: Record<string, any>;
+  agente: { id: string; name: string; systemPrompt: string; role: string };
+  contato: AgentContextInput['contato'];
+  ragContext: string;
+  ragStatus: 'ok' | 'sem_resultado' | 'servico_fora';
+  agendamento: { ativo: boolean; tipos?: string[] } | null;
+  perfilVivo: boolean;
+  izaFacts: string;
+  origem?: AgentContextInput['origem'];
+  instrucaoDeCanal?: string;
+}): AgentContextInput {
+  return {
+    origem: opts.origem ?? 'whatsapp',
+    agente: opts.agente,
+    organizacao: {
+      id: opts.org,
+      nome: opts.settings.businessName ?? '',
+      settings: opts.settings,
+      ehZappIQ: opts.org === ZAPPIQ_ORG_ID,
+    },
+    contato: opts.contato,
+    blocos: {
+      izaFacts: opts.izaFacts,
+      perfilVivo: opts.perfilVivo
+        ? buildLiveProfileBlock(opts.settings, null, { now: AGORA, agendamento: opts.agendamento })
+        : '',
+      links: buildTenantLinksBlock(opts.settings, opts.settings.businessName),
+      rag: opts.ragContext,
+    },
+    agora: AGORA,
+    ragStatus: opts.ragStatus,
+    instrucaoDeCanal: opts.instrucaoDeCanal,
+  };
+}
+
+const AGENTE_VERA = { id: 'agente-vera', name: 'Vera', systemPrompt: PROMPT_DA_VERA, role: 'comercial' };
+const AGENTE_IZA = { id: 'agente-iza', name: 'Iza', systemPrompt: PROMPT_DA_IZA, role: 'comercial' };
+
+const CONTATO_VERA: AgentContextInput['contato'] = {
+  nome: 'João',
+  leadStatus: 'NEW',
+  primeiroContato: false,
+  totalMensagens: 7,
+  telefone: '5511999999999',
+  historicoNoContexto: true,
+};
+
+function lerFixture(nome: string): string {
+  return readFileSync(join(PASTA, `${nome}.txt`), 'utf8');
+}
+
+describe('composeAgentContext (função pura) produz o texto de hoje byte a byte', () => {
+  it('Vera (CMJ), perfil vivo ligado', () => {
+    const saida = composeAgentContext(
+      entradaPura({
+        org: ORG_CMJ,
+        settings: SETTINGS_CMJ,
+        agente: AGENTE_VERA,
+        contato: CONTATO_VERA,
+        ragContext: RAG_CMJ,
+        ragStatus: 'ok',
+        agendamento: AGENDAMENTO_CMJ,
+        perfilVivo: true,
+        izaFacts: '',
+      }),
+    );
+
+    const fixture = lerFixture('contexto-vera-perfil-vivo');
+    expect(saida.systemPrompt).toBe(fixture);
+    expect(saida.hash).toBe(sha256(fixture));
+  });
+
+  it('Vera (CMJ), perfil vivo desligado', () => {
+    const saida = composeAgentContext(
+      entradaPura({
+        org: ORG_CMJ,
+        settings: SETTINGS_CMJ,
+        agente: AGENTE_VERA,
+        contato: CONTATO_VERA,
+        ragContext: RAG_CMJ,
+        ragStatus: 'ok',
+        agendamento: AGENDAMENTO_CMJ,
+        perfilVivo: false,
+        izaFacts: '',
+      }),
+    );
+
+    expect(saida.systemPrompt).toBe(lerFixture('contexto-vera-sem-perfil-vivo'));
+  });
+
+  it('Vera (CMJ), A212 e base fora do ar', () => {
+    const saida = composeAgentContext(
+      entradaPura({
+        org: ORG_CMJ,
+        settings: SETTINGS_CMJ,
+        agente: AGENTE_VERA,
+        contato: { ...CONTATO_VERA, historicoNoContexto: false },
+        ragContext: RAG_CMJ,
+        ragStatus: 'servico_fora',
+        agendamento: AGENDAMENTO_CMJ,
+        perfilVivo: true,
+        izaFacts: '',
+      }),
+    );
+
+    expect(saida.systemPrompt).toBe(lerFixture('contexto-vera-a212-base-fora'));
+  });
+
+  it('Iza (ZappIQ), primeiro contato com iza_facts', () => {
+    const saida = composeAgentContext(
+      entradaPura({
+        org: ZAPPIQ_ORG_ID,
+        settings: SETTINGS_IZA,
+        agente: AGENTE_IZA,
+        contato: {
+          nome: null,
+          leadStatus: 'NEW',
+          primeiroContato: true,
+          totalMensagens: 1,
+          telefone: '5511988887777',
+        },
+        ragContext: '',
+        ragStatus: 'sem_resultado',
+        agendamento: null,
+        perfilVivo: false,
+        izaFacts: FACTS_DA_IZA,
+      }),
+    );
+
+    const fixture = lerFixture('contexto-iza-primeiro-contato');
+    expect(saida.systemPrompt).toBe(fixture);
+    expect(saida.hash).toBe(sha256(fixture));
+  });
+
+  it('os iza_facts não entram em org de cliente, mesmo que alguém os passe', () => {
+    const saida = composeAgentContext(
+      entradaPura({
+        org: ORG_CMJ,
+        settings: SETTINGS_CMJ,
+        agente: AGENTE_VERA,
+        contato: CONTATO_VERA,
+        ragContext: RAG_CMJ,
+        ragStatus: 'ok',
+        agendamento: AGENDAMENTO_CMJ,
+        perfilVivo: true,
+        izaFacts: FACTS_DA_IZA,
+      }),
+    );
+
+    expect(saida.systemPrompt).toBe(lerFixture('contexto-vera-perfil-vivo'));
+    expect(saida.partes.find((p) => p.nome === 'iza_facts')?.chars).toBe(0);
+  });
+
+  it('a instrução de canal entra DEPOIS do CORE e antes de tudo o mais (A076)', () => {
+    const saida = composeAgentContext(
+      entradaPura({
+        org: ORG_CMJ,
+        settings: SETTINGS_CMJ,
+        agente: AGENTE_VERA,
+        contato: CONTATO_VERA,
+        ragContext: RAG_CMJ,
+        ragStatus: 'ok',
+        agendamento: AGENDAMENTO_CMJ,
+        perfilVivo: true,
+        izaFacts: '',
+        instrucaoDeCanal: 'INSTRUÇÃO DO PASSO ATUAL DO FLUXO (Maestro): pergunte o CEP.',
+      }),
+    );
+
+    const texto = saida.systemPrompt;
+    const fimDoCore = texto.indexOf('INSTRUÇÃO DO PASSO ATUAL');
+    expect(fimDoCore).toBeGreaterThan(0);
+    // Tudo que vem antes da instrução é exatamente o CORE.
+    expect(texto.slice(0, fimDoCore - 1)).toBe(lerFixture('contexto-vera-perfil-vivo').split('\n## IDENTIDADE')[0]);
+    // E o prompt do agente vem depois dela.
+    expect(texto.indexOf('## IDENTIDADE')).toBeGreaterThan(fimDoCore);
+  });
+});
+
+/* ── 3. Orçamento por bloco (A063) ─────────────────────────────────── */
+
+describe('orçamento por bloco: partes somadas no máximo 20% acima do total de hoje', () => {
+  const casos: Array<{ nome: string; entrada: AgentContextInput }> = [
+    {
+      nome: 'contexto-vera-perfil-vivo',
+      entrada: entradaPura({
+        org: ORG_CMJ,
+        settings: SETTINGS_CMJ,
+        agente: AGENTE_VERA,
+        contato: CONTATO_VERA,
+        ragContext: RAG_CMJ,
+        ragStatus: 'ok',
+        agendamento: AGENDAMENTO_CMJ,
+        perfilVivo: true,
+        izaFacts: '',
+      }),
+    },
+    {
+      nome: 'contexto-iza-primeiro-contato',
+      entrada: entradaPura({
+        org: ZAPPIQ_ORG_ID,
+        settings: SETTINGS_IZA,
+        agente: AGENTE_IZA,
+        contato: {
+          nome: null,
+          leadStatus: 'NEW',
+          primeiroContato: true,
+          totalMensagens: 1,
+          telefone: '5511988887777',
+        },
+        ragContext: '',
+        ragStatus: 'sem_resultado',
+        agendamento: null,
+        perfilVivo: false,
+        izaFacts: FACTS_DA_IZA,
+      }),
+    },
+  ];
+
+  for (const caso of casos) {
+    it(`${caso.nome}: a soma das partes cabe no orçamento e as partes têm nome fixo`, () => {
+      const saida = composeAgentContext(caso.entrada);
+      const totalDeHoje = lerFixture(caso.nome).length;
+      const soma = saida.partes.reduce((acc, p) => acc + p.chars, 0);
+
+      // A soma exclui só os '\n' de junção, então nunca passa do total; o teto
+      // de 20% é a régua da tarefa, para quem for acrescentar bloco novo.
+      expect(soma).toBeLessThanOrEqual(Math.ceil(totalDeHoje * 1.2));
+      expect(soma).toBeGreaterThan(totalDeHoje * 0.9);
+      expect(saida.partes.map((p) => p.nome)).toEqual([...NOMES_DAS_PARTES]);
+      // O CORE é sempre a maior fatia estável do prompt.
+      expect(saida.partes[0].nome).toBe('core');
+      expect(saida.partes[0].chars).toBeGreaterThan(5000);
+    });
+  }
 });
