@@ -73,6 +73,48 @@ montador real de produção e confere as fatias, o que cobre a regressão.
 
 ---
 
+### 2026-09-14 · Tarefa A4, rodada 2 · O que a primeira varredura deixou passar
+
+**O que mudou:** a revisão do PR #353 achou três páginas públicas que continuavam
+prometendo dados no Brasil, com uma redação que as regras da varredura não pegavam, e uma
+regressão que o próprio PR tinha introduzido nos dossiês de reposicionamento.
+
+- **Residência de dados, três páginas que escaparam.** `/sobre` dizia "operando em
+  infraestrutura brasileira com dados residentes no Brasil"; a prova social da home dizia
+  "seus dados processados no Brasil"; o card 06 da home dizia "Seus dados, no Brasil.
+  Ponto." e "tudo processado e armazenado em servidor brasileiro", com a promessa de que
+  dado só sairia do país com autorização expressa. As três agora dizem o fato: os dados
+  ficam em servidores nos Estados Unidos (banco de dados e processamento de IA), com
+  salvaguardas contratuais para transferência internacional. O selo do card virou
+  "06 · LGPD".
+- **Regressão nos dossiês.** `docs/reposicionamento-landing-2026/README.md` e os dossiês
+  09 e 10 afirmavam, no aviso escrito por este mesmo PR, que "o banco fica no Brasil".
+  Corrigido, e a varredura passou a ler esses três arquivos.
+- **Duas regras novas na varredura**, escritas antes da correção e vistas falhando: uma
+  pega a IDEIA de dado que fica no Brasil em qualquer redação, outra pega o adjetivo
+  ("infraestrutura brasileira", "servidor brasileiro").
+- **Lembrete que não existe.** O questionário de cadastro ainda dizia "A IA pode enviar
+  lembretes de retorno" (duas telas) e "A IA pode listar no lembrete". Viraram o que a IA
+  faz: usar a informação dentro da conversa. Em `/segmentos/servicos-b2b`, o follow-up de
+  proposta deixou de ser um prazo automático e virou o fluxo que a equipe monta no
+  Maestro. A regra de lembrete passou a pegar "de retorno" e "enviar lembrete".
+
+**Impacto na Iza:** reforça a entrada anterior, sem fato novo. A Iza não pode dizer
+"infraestrutura brasileira" nem "servidor brasileiro", que eram as redações que faltavam
+na proibição, e não pode dizer que a IA envia lembrete de retorno. Disparo por prazo só
+existe como nó do Maestro, dentro de um fluxo que alguém da equipe monta e liga.
+
+**Ação no /admin/iza-knowledge (após merge):**
+- [ ] Nenhuma além das já listadas na entrada da rodada 1. Conferir, ao executá-las, que
+      nenhum fact usa as palavras "infraestrutura brasileira" ou "servidor brasileiro".
+
+**Smoke esperado:** "onde ficam meus dados?" → "em servidores nos Estados Unidos, banco de
+dados e processamento de IA, com salvaguardas contratuais para transferência
+internacional". "A IA lembra meu cliente da consulta?" → "não; ela consulta o horário
+livre e cria o compromisso, o aviso continua com a equipe".
+
+---
+
 ### 2026-09-14 · Tarefa A4 · Retirada das promessas que o código não cumpre
 
 **O que mudou:** varredura de honestidade na copy do site, no painel e nos e-mails,
