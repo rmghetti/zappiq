@@ -249,10 +249,15 @@ export async function notifySlackQualityIssue(input: {
   // limiar", inclusive quando o problema era outro, e o limiar deixou de ser
   // o critério.
   const repetidos = input.repetidos ?? [];
-  const motivo =
-    input.criticalFailed > 0
-      ? `${input.criticalFailed} cenário(s) crítico(s) reprovado(s)`
-      : `reprovação repetida em ${repetidos.length} cenário(s): ${repetidos.slice(0, 5).join(', ')}`;
+  let motivo: string;
+  if (input.criticalFailed > 0) {
+    motivo = `${input.criticalFailed} cenário(s) crítico(s) reprovado(s)`;
+  } else if (repetidos.length > 0) {
+    motivo = `reprovação repetida em ${repetidos.length} cenário(s): ${repetidos.slice(0, 5).join(', ')}`;
+  } else {
+    // Chamada direta (diagnóstico do superadmin), fora do caminho do alerta.
+    motivo = 'execução sinalizada para revisão';
+  }
 
   const messageMarkdown = [
     `*${severity} — Qualidade do Agente exige revisão*`,
