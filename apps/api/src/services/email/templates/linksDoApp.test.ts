@@ -8,9 +8,15 @@
  * errado E rota que não existe nem no domínio certo (a fatura está em
  * /billing).
  *
- * Estes testes travam duas coisas: o padrão do APP_URL e a ausência do host
- * fantasma nos templates. A prova de que a rota responde 200 é feita por curl
- * contra o preview no PR, não aqui (teste não faz rede).
+ * Segundo bug (achado na revisão): o padrão do schema estava certo, mas o
+ * fly.toml sobrescrevia APP_URL com https://zappiq-api.fly.dev em produção,
+ * que é a API, não o app. Quem manda em produção é o fly.toml, então ele
+ * entra na varredura junto com os templates.
+ *
+ * Estes testes travam três coisas: o padrão do APP_URL, a ausência do host
+ * fantasma nos templates e o valor de APP_URL no fly.toml. A prova de que a
+ * rota responde 200 é feita por curl contra o preview no PR, não aqui (teste
+ * não faz rede).
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -19,6 +25,9 @@ import { fileURLToPath } from 'node:url';
 import { renderTrialConvertedEmail } from './trialConverted.js';
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
+
+/** Raiz do monorepo: .../apps/api/src/services/email/templates -> 6 níveis acima. */
+const REPO = join(AQUI, '..', '..', '..', '..', '..', '..');
 
 /** Hosts que não servem o app e não podem aparecer em link de e-mail. */
 const HOSTS_MORTOS = ['app.zappiq.com.br', 'zappiq-api.fly.dev'];
@@ -45,6 +54,32 @@ describe('templates de e-mail não apontam para host que não serve o app', () =
       expect(achados, achados.join('\n  ')).toEqual([]);
     });
   }
+});
+
+describe('fly.toml · APP_URL de produção', () => {
+  /* env.APP_URL só monta link: botão da régua de trial (trialFollowupService)
+   * e link do digest no Slack (superadminTrialDigestCron, agentEvalCronService).
+   * Não entra em OAuth, Stripe nem CORS, que usam NEXT_PUBLIC_APP_URL e
+   * CORS_ORIGINS. Por isso apontar para o app é seguro e é o único valor certo:
+   * o cliente que clica tem de cair numa página, não na API. */
+
+  function appUrlDoFly(): string {
+    const fly = readFileSync(join(REPO, 'fly.toml'), 'utf8');
+    const linha = fly.split('\n').find((l) => l.trim().startsWith('APP_URL'));
+    expect(linha, 'fly.toml perdeu a linha APP_URL').toBeTruthy();
+    return linha!.split('=')[1].trim().replace(/"/g, '');
+  }
+
+  it('aponta para o domínio do app, não para a API', () => {
+    expect(appUrlDoFly()).toBe('https://zappiq.com.br');
+  });
+
+  it('nenhum host morto aparece no fly.toml como APP_URL', () => {
+    const valor = appUrlDoFly();
+    for (const host of HOSTS_MORTOS) {
+      expect(valor.includes(host), `${host} voltou ao APP_URL do fly.toml`).toBe(false);
+    }
+  });
 });
 
 describe('trialConverted · link da fatura', () => {
