@@ -235,6 +235,31 @@ describe('detectarConflitos: dado sensível (CR-8)', () => {
     });
     expect(c).toHaveLength(0);
   });
+
+  // Rodada 4 do PR #375: o verbo de pedido e o termo sensível estavam só na
+  // mesma frase, em qualquer ordem. Duas regras legítimas levavam 422 falso,
+  // com o interruptor DESLIGADO (o verificador é guarda de escrita).
+  describe('o pedido tem de ser DO dado sensível, não só estar na mesma frase', () => {
+    it.each([
+      // O termo vem ANTES do verbo, e o que se pede é o e-mail.
+      'Se o cliente esqueceu a senha, pergunte o e-mail cadastrado e envie o link de redefinição.',
+      // O que se pede é o CNPJ; o token é o que o cliente RECEBE.
+      'Para liberar o acesso, solicite o CNPJ da empresa e o token de acesso chega por e-mail.',
+      // O termo pertence ao segundo verbo, que manda ENVIAR, não pedir.
+      'Pergunte o e-mail e envie a senha provisória pelo link seguro.',
+    ])('aceita: %s', (texto) => {
+      expect(detectarConflitos({ texto })).toHaveLength(0);
+    });
+
+    it.each([
+      'Peça a senha do cliente.',
+      'Solicite o número do cartão.',
+      'Peça ao cliente o CPF para localizar o pedido.',
+    ])('recusa: %s', (texto) => {
+      const c = detectarConflitos({ texto });
+      expect(c.map((x) => x.tipo)).toContain('dado_sensivel');
+    });
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════

@@ -406,22 +406,71 @@ const TERMOS_SENSIVEIS = [
   'conta bancaria',
 ];
 
+function escaparRegex(t: string): string {
+  return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Os termos como alternativa de regex. 'rg ' vira `rg\b`: palavra inteira. */
+const TERMO_SENSIVEL = TERMOS_SENSIVEIS.map((t) =>
+  t.endsWith(' ') ? `${escaparRegex(t.trim())}\\b` : escaparRegex(t),
+).join('|');
+
+/** Imperativo de pedido: é o agente sendo MANDADO a pedir. */
+const VERBO_DE_PEDIDO = '(?:peca|solicite|pergunte|exija|colete)';
+
+/**
+ * Um segundo imperativo no meio ("pergunte o e-mail e ENVIE a senha
+ * provisória"): o termo sensível é objeto do segundo verbo, que manda
+ * entregar, não pedir.
+ */
+const OUTRO_IMPERATIVO =
+  '(?:envie|mande|diga|informe|explique|avise|oriente|encaminhe|responda|confirme|' +
+  'passe|gere|redefina|transfira|direcione|ofereca|use|fale)';
+
+/**
+ * O termo como SUJEITO de outra oração ("o token de acesso CHEGA por
+ * e-mail"): ninguém está pedindo o token, é o que o cliente recebe.
+ */
+const VERBO_DE_QUEM_RECEBE =
+  '(?:chega|chegam|chegara|chegarao|e enviad[oa]s?|sera enviad[oa]s?|serao enviad[oa]s?|' +
+  'e gerad[oa]s?|sera gerad[oa]s?|expira|expiram)';
+
+/**
+ * O agente sendo mandado a pedir o dado: o verbo de pedido e, logo depois
+ * (até 25 caracteres, sem ponto, vírgula ou ponto e vírgula no meio), o
+ * termo sensível como objeto do pedido.
+ *
+ * Rodada 4 do PR #375: bastava o verbo e o termo estarem na mesma frase, em
+ * qualquer ordem. "Se o cliente esqueceu a senha, pergunte o e-mail" e
+ * "solicite o CNPJ e o token de acesso chega por e-mail" levavam 422 falso,
+ * com o interruptor desligado.
+ *
+ * Limite conhecido, de propósito: lista separada por vírgula ("peça nome,
+ * CPF e e-mail") passa. O verificador é estreito (só contradição óbvia) e a
+ * regra base CR-8 continua no prompt de todo agente.
+ */
+const MANDA_PEDIR_DADO_SENSIVEL = new RegExp(
+  `\\b${VERBO_DE_PEDIDO}\\b` +
+    `(?:(?!\\b(?:e|ou)\\s+${OUTRO_IMPERATIVO}\\b)[^.,;!?]){0,25}` +
+    `\\b(${TERMO_SENSIVEL})` +
+    `(?![a-z0-9 -]{0,20}\\b${VERBO_DE_QUEM_RECEBE}\\b)`,
+);
+
 function conflitoDeDadoSensivel(texto: string): Conflito | null {
   for (const frase of frases(texto)) {
     if (NEGACOES.test(frase)) continue;
-    const termo = TERMOS_SENSIVEIS.find((t) => frase.includes(t));
-    if (!termo) continue;
     // Só imperativo: é o agente sendo MANDADO a pedir. "Se o cliente pedir
     // para trocar a senha" tem "pedir" e "senha" na mesma frase, e quem
     // pede ali é o cliente.
-    if (!/\b(peca|solicite|pergunte|exija|colete)\b/.test(frase)) continue;
+    const pedido = MANDA_PEDIR_DADO_SENSIVEL.exec(frase);
+    if (!pedido) continue;
     return {
       tipo: 'dado_sensivel',
       explicacao:
         'Esta correção manda o agente pedir um dado sensível pelo WhatsApp, e a regra base do ' +
         'agente (CR-8) proíbe. Para pagamento, use link de checkout seguro; para cadastro, peça ' +
         'e-mail, CNPJ ou nome da empresa.',
-      trecho: termo.trim(),
+      trecho: pedido[1].trim(),
     };
   }
   return null;
