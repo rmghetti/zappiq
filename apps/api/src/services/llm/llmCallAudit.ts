@@ -35,8 +35,15 @@ export interface LLMCallAuditInput {
   provider: string;
   /** Modelo usado (string da API: claude-sonnet-4-6, gpt-4o-mini, etc). */
   model: string;
-  /** Operação: chat (default), classify (intent), sentiment. */
-  operation?: 'chat' | 'classify' | 'sentiment' | 'extract';
+  /**
+   * Operação: chat (default), classify (intent), sentiment, extract, eval.
+   *
+   * 'eval' é o teste da Qualidade do Agente: gasto de BASTIDOR da casa, não
+   * de atendimento. Grava custo com a organização (para o painel por tenant
+   * enxergar), mas fica fora dos dois orçamentos do cliente. Ver
+   * OPERACOES_FORA_DO_ORCAMENTO logo abaixo.
+   */
+  operation?: 'chat' | 'classify' | 'sentiment' | 'extract' | 'eval';
   /** Tokens de input retornados pelo provider. */
   inputTokens?: number | null;
   /** Tokens de output retornados pelo provider. */
@@ -58,6 +65,25 @@ export interface LLMCallAuditInput {
 }
 
 /**
+ * A067 / A209 / A225 — orçamento de ATENDIMENTO x orçamento de BASTIDOR.
+ *
+ * O teto de custo do trial (zappiq:trial_cost_usd) e o acumulador mensal do
+ * disjuntor (recordMonthlyLlmCost, que arma o Modo Econômico) existem para
+ * proteger a margem do ATENDIMENTO REAL. Quando o gasto da casa entra neles,
+ * quem paga é o cliente final: no trial ele passa a receber a frase fixa de
+ * modo limitado; no plano pago o atendimento cai em Modo Econômico por 6 h.
+ *
+ * O teste da Qualidade roda por conta da ZappIQ (cron semanal e botão do
+ * painel), não por conta do cliente. Então 'eval' grava a linha de custo COM
+ * a organização (o painel por tenant precisa enxergar o gasto, que antes ia
+ * com organization_id nulo) e NÃO entra em nenhum dos dois acumuladores.
+ *
+ * Entrar uma operação nova aqui é decisão de produto: significa que a casa
+ * assume aquele gasto. Não adicione sem esse critério.
+ */
+export const OPERACOES_FORA_DO_ORCAMENTO: ReadonlySet<string> = new Set(['eval']);
+
+/**
  * Persiste um registro de chamada LLM. Calcula cost_usd_estimate
  * automaticamente via tabela MODEL_PRICING.
  *
@@ -65,6 +91,8 @@ export interface LLMCallAuditInput {
  */
 export async function logLLMCall(input: LLMCallAuditInput): Promise<void> {
   let cost = 0;
+  // Gasto de bastidor da casa: registra, mas não consome orçamento do cliente.
+  const foraDoOrcamento = OPERACOES_FORA_DO_ORCAMENTO.has(input.operation ?? 'chat');
   try {
     cost = estimateCostUsd(input.model, input.inputTokens, input.outputTokens);
 
@@ -101,7 +129,7 @@ export async function logLLMCall(input: LLMCallAuditInput): Promise<void> {
   // Bloco isolado e fail-soft: falha aqui nunca afeta o audit nem a resposta,
   // e falha no audit acima não impede o acúmulo aqui.
   try {
-    if (input.organizationId && cost > 0) {
+    if (input.organizationId && cost > 0 && !foraDoOrcamento) {
       const capped =
         typeof input.orgIsTrialOrNew === 'boolean'
           ? input.orgIsTrialOrNew
@@ -122,7 +150,7 @@ export async function logLLMCall(input: LLMCallAuditInput): Promise<void> {
   // do breaker. Bloco isolado e fail-soft, independente dos dois acima:
   // falha aqui nunca afeta o audit, o teto de trial nem a resposta.
   try {
-    if (input.organizationId && cost > 0) {
+    if (input.organizationId && cost > 0 && !foraDoOrcamento) {
       await recordMonthlyLlmCost(input.organizationId, cost);
     }
   } catch (err) {
