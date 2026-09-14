@@ -14,13 +14,16 @@
  *      `capiAccessTokenEnc` e revertia o que o servidor tinha gravado depois
  *      que a tela abriu.
  *
- * O contrato novo tem duas metades, e as duas moram aqui para que a rota de
- * settings e a rota do perfil do agente usem exatamente a mesma lista:
+ * O contrato novo tem duas metades, e as duas moram aqui para que quem usar a
+ * lista use exatamente a mesma:
  *   • `rejeitaChavesDoServidor` devolve as chaves proibidas que o corpo tentou
  *     gravar. A rota responde 400 com essa lista, em vez de ignorar em silêncio.
  *   • `mesclarSettingsPorChave` mescla o corpo sobre o que está no banco, no
- *     primeiro nível, e também raso dentro de `surveyAnswers` (o questionário é
- *     salvo seção por seção; substituir o objeto inteiro apagaria as outras).
+ *     primeiro nível, e desce mais um nível nas chaves de `MESCLA_POR_DENTRO`.
+ *
+ * Quem consome hoje: `PUT /api/settings` (routes/settings.ts). Nenhuma outra
+ * rota chama estas funções ainda; o texto antigo prometia a rota do perfil do
+ * agente, que continua com o caminho dela.
  */
 
 /** Chaves proibidas pelo nome exato. */
@@ -72,9 +75,30 @@ export function rejeitaChavesDoServidor(body: unknown): string[] {
 }
 
 /**
+ * Chaves cujo conteúdo o servidor também escreve, e que por isso são mescladas
+ * por dentro (mais um nível), não substituídas:
+ *
+ *   • `surveyAnswers`: a tela do questionário salva uma seção de cada vez.
+ *   • `billing`: a tela de Cobrança manda só `autoOverage`, `hardCeilingBrl` e
+ *     `notifyAtPercent`, mas no mesmo objeto moram `metaCostCapBrl` e
+ *     `metaCapState`, gravados pelo guarda de custo (costGuardService.ts).
+ *     Substituir o objeto inteiro apagava o teto de gasto de mídia e o registro
+ *     de que o teto tinha sido batido.
+ *
+ * Quem criar outra chave de `settings` escrita pelos dois lados precisa
+ * acrescentá-la aqui.
+ */
+export const MESCLA_POR_DENTRO = new Set(['surveyAnswers', 'billing']);
+
+/** Verdadeiro para objeto simples (nem nulo, nem lista). */
+function ehObjetoSimples(valor: unknown): valor is Record<string, unknown> {
+  return !!valor && typeof valor === 'object' && !Array.isArray(valor);
+}
+
+/**
  * Mescla `entrada` sobre `atual` por chave: o que não veio no corpo fica como
- * está no banco. Dentro de `surveyAnswers` a mesclagem também é rasa, porque a
- * tela do questionário salva uma seção de cada vez.
+ * está no banco. Nas chaves de `MESCLA_POR_DENTRO` a mesclagem desce mais um
+ * nível, também raso.
  *
  * Função pura: não muda nenhum dos dois objetos.
  */
@@ -82,20 +106,15 @@ export function mesclarSettingsPorChave(
   atual: unknown,
   entrada: unknown,
 ): Record<string, unknown> {
-  const base: Record<string, unknown> =
-    atual && typeof atual === 'object' && !Array.isArray(atual)
-      ? { ...(atual as Record<string, unknown>) }
-      : {};
-  if (!entrada || typeof entrada !== 'object' || Array.isArray(entrada)) return base;
+  const base: Record<string, unknown> = ehObjetoSimples(atual) ? { ...atual } : {};
+  if (!ehObjetoSimples(entrada)) return base;
 
-  const novo = entrada as Record<string, unknown>;
-  for (const [chave, valor] of Object.entries(novo)) {
-    if (chave === 'surveyAnswers') {
-      const respostasAtuais = base.surveyAnswers;
-      const ehObjeto = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v);
-      base.surveyAnswers =
-        ehObjeto(respostasAtuais) && ehObjeto(valor)
-          ? { ...(respostasAtuais as Record<string, unknown>), ...(valor as Record<string, unknown>) }
+  for (const [chave, valor] of Object.entries(entrada)) {
+    if (MESCLA_POR_DENTRO.has(chave)) {
+      const dentroAtual = base[chave];
+      base[chave] =
+        ehObjetoSimples(dentroAtual) && ehObjetoSimples(valor)
+          ? { ...dentroAtual, ...valor }
           : valor;
       continue;
     }

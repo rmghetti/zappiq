@@ -120,6 +120,15 @@ function settingsDeVerdade() {
     flags: { consolidarBaloes: true },
     capiAccessTokenEnc: 'cifrado:abc',
     businessHoursConfig: { seg: '09:00-18:00' },
+    // Dentro de `billing` convivem o que a tela edita e o que o guarda de custo
+    // (costGuardService.ts) grava sozinho.
+    billing: {
+      autoOverage: false,
+      hardCeilingBrl: null,
+      notifyAtPercent: 80,
+      metaCostCapBrl: 500,
+      metaCapState: { hitAt: '2026-09-10T12:00:00.000Z', capBrl: 500, acknowledged: false },
+    },
     surveyAnswers: {
       identidade_empresa: 'Consultoria jurídica em São Paulo',
       oferta_principal: 'Assessoria mensal',
@@ -207,6 +216,34 @@ describe('PUT /api/settings — merge por chave (A156)', () => {
     expect(dadosGravados.settings.surveyAnswers).toEqual({
       identidade_empresa: 'Consultoria jurídica em São Paulo',
       oferta_principal: 'Assessoria trimestral',
+    });
+  });
+
+  it('gravar cobrança pela tela preserva o que o guarda de custo escreveu (P3)', async () => {
+    // A tela de Cobrança manda só os três campos que ela edita. O merge raso do
+    // primeiro nível trocava `billing` inteiro, e sumiam `metaCostCapBrl` (o
+    // teto que o cliente definiu) e `metaCapState` (o registro de que o teto foi
+    // batido). Sem o teto, o guarda voltava a liberar gasto de mídia.
+    const handler = pegaHandler('put', '/');
+    const res = fazRes();
+    await handler(
+      {
+        organizationId: 'org-1',
+        body: {
+          settings: { billing: { autoOverage: true, hardCeilingBrl: 300, notifyAtPercent: 90 } },
+        },
+      },
+      res,
+      vi.fn(),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(dadosGravados.settings.billing).toEqual({
+      autoOverage: true,
+      hardCeilingBrl: 300,
+      notifyAtPercent: 90,
+      metaCostCapBrl: 500,
+      metaCapState: { hitAt: '2026-09-10T12:00:00.000Z', capBrl: 500, acknowledged: false },
     });
   });
 
