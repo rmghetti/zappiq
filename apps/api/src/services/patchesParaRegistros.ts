@@ -344,3 +344,109 @@ export function validarPromptLimpo(
 
   return { ok: motivos.length === 0, motivos };
 }
+
+/* ── CLI do script: os argumentos, decididos ANTES de tocar no banco ── */
+
+/**
+ * O que o script vai fazer.
+ *
+ * Rodada 4 do PR #375: a leitura dos argumentos era feita dentro do `main`
+ * do script, e dois caminhos perigosos passavam por ela. `--help` caía no
+ * modo com banco (com DATABASE_URL no ambiente, rodava DRY-RUN em todos os
+ * agentes) e `--apply` sem `--agent` gravava em TODOS os agentes com patch
+ * colado. Aqui a decisão é pura e testada; o script só obedece.
+ */
+export type ComandoDaMigracao =
+  | { modo: 'ajuda' }
+  | { modo: 'offline'; entrada: string; saida: string }
+  | { modo: 'banco'; aplicar: boolean; agentId?: string }
+  | { modo: 'recusado'; motivo: string };
+
+/** Texto do `--help`. Sem travessão: vai para o terminal de quem opera. */
+export const USO_DA_MIGRACAO = [
+  'Uso (DATABASE_URL vem do AMBIENTE, nunca como argumento):',
+  '',
+  '  # modo OFFLINE, sem banco: lê um arquivo e escreve o prompt limpo',
+  '  npx tsx scripts/migrarPatchesParaRegistros.ts --in prompt.txt --out limpo.txt',
+  '',
+  '  # modo com banco, só olhando (todos os agentes, ou um só com --agent)',
+  '  npx tsx scripts/migrarPatchesParaRegistros.ts --dry-run [--agent <id>]',
+  '',
+  '  # gravando: limpa o prompt por publishPrompt e cria os registros.',
+  '  # Um agente por vez: --apply sem --agent é recusado.',
+  '  npx tsx scripts/migrarPatchesParaRegistros.ts --apply --agent <id>',
+  '',
+  '  --help, -h   mostra este texto e sai sem tocar no banco',
+].join('\n');
+
+const ARGUMENTOS_SOLTOS = new Set(['--help', '-h', '--dry-run', '--apply']);
+const ARGUMENTOS_COM_VALOR = new Set(['--agent', '--in', '--out']);
+
+/** Lê os argumentos do script. Pura: não lê ambiente, não abre arquivo, não conecta. */
+export function lerArgumentosDaMigracao(argv: readonly string[]): ComandoDaMigracao {
+  const args = [...(argv ?? [])];
+
+  // Pedir ajuda nunca grava nem lê o banco, seja qual for o resto da linha.
+  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+    return { modo: 'ajuda' };
+  }
+
+  const valores: Record<string, string> = {};
+  const soltos = new Set<string>();
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (ARGUMENTOS_SOLTOS.has(a)) {
+      soltos.add(a);
+      continue;
+    }
+    if (ARGUMENTOS_COM_VALOR.has(a)) {
+      const valor = args[i + 1];
+      if (!valor || valor.startsWith('-')) {
+        return { modo: 'recusado', motivo: `${a} precisa de um valor logo depois dele.` };
+      }
+      valores[a] = valor;
+      i++;
+      continue;
+    }
+    return {
+      modo: 'recusado',
+      motivo: `argumento desconhecido: ${a}. Nada foi feito.`,
+    };
+  }
+
+  const temIn = '--in' in valores;
+  const temOut = '--out' in valores;
+  if (temIn || temOut) {
+    if (!temIn || !temOut) {
+      return { modo: 'recusado', motivo: 'o modo offline precisa de --in e --out juntos.' };
+    }
+    if (soltos.has('--apply') || soltos.has('--dry-run') || '--agent' in valores) {
+      return {
+        modo: 'recusado',
+        motivo: 'o modo offline (--in/--out) não se mistura com --dry-run, --apply ou --agent.',
+      };
+    }
+    return { modo: 'offline', entrada: valores['--in'], saida: valores['--out'] };
+  }
+
+  const aplicar = soltos.has('--apply');
+  if (aplicar && soltos.has('--dry-run')) {
+    return { modo: 'recusado', motivo: 'escolha --dry-run OU --apply, não os dois.' };
+  }
+  if (!aplicar && !soltos.has('--dry-run')) {
+    // Só --agent, sem dizer o modo: conservador, não adivinha.
+    return { modo: 'recusado', motivo: 'diga o modo: --dry-run (só olha) ou --apply (grava).' };
+  }
+
+  const agentId = valores['--agent'];
+  if (aplicar && !agentId) {
+    return {
+      modo: 'recusado',
+      motivo:
+        '--apply exige --agent <id>. Gravar em todos os agentes de uma vez não é permitido: ' +
+        'rode o --dry-run, escolha o agente e aplique um por vez.',
+    };
+  }
+
+  return agentId ? { modo: 'banco', aplicar, agentId } : { modo: 'banco', aplicar };
+}

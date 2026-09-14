@@ -44,11 +44,16 @@
  *   # (a) um agente só
  *   npx tsx scripts/migrarPatchesParaRegistros.ts --dry-run --agent <id>
  *
- *   # (a) gravando: limpa o prompt por publishPrompt e cria os registros
+ *   # (a) gravando: limpa o prompt por publishPrompt e cria os registros.
+ *   #     Um agente por vez: --apply sem --agent é RECUSADO (exit 1) antes
+ *   #     de conectar.
  *   npx tsx scripts/migrarPatchesParaRegistros.ts --apply --agent <id>
  *
  *   # (b) modo OFFLINE, sem banco: lê um arquivo e escreve o prompt limpo
  *   npx tsx scripts/migrarPatchesParaRegistros.ts --in prompt.txt --out limpo.txt
+ *
+ *   # --help (ou sem argumento nenhum): mostra o uso e sai com 0, sem
+ *   # tocar no banco. Argumento desconhecido é recusado.
  *
  * ══════════════════════════════════════════════════════════════════════════
  * ROTEIRO DE APLICAÇÃO EM PRODUÇÃO (sem credencial de banco na máquina de
@@ -143,6 +148,8 @@ import {
   planejarRegistros,
   validarPromptLimpo,
   contarCaracteres,
+  lerArgumentosDaMigracao,
+  USO_DA_MIGRACAO,
   type RegistroPlanejado,
 } from '../src/services/patchesParaRegistros.js';
 
@@ -257,6 +264,12 @@ function modoOffline(entrada: string, saida: string): void {
 
 /** Modo (a): lê os agentes do banco e, com --apply, grava. */
 async function modoBanco(apply: boolean, agentIdFiltro?: string): Promise<void> {
+  // Segunda trava, para quem chamar esta função sem passar pelo main.
+  if (apply && !agentIdFiltro) {
+    console.error('❌ Recusado: --apply exige --agent <id>. Nada foi feito.');
+    process.exitCode = 1;
+    return;
+  }
   if (!process.env.DATABASE_URL) {
     console.error(
       '❌ DATABASE_URL não está no ambiente. Use o modo --in/--out ou rode pelo .command.',
@@ -350,17 +363,25 @@ async function modoBanco(apply: boolean, agentIdFiltro?: string): Promise<void> 
 }
 
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const entrada = args[args.indexOf('--in') + 1];
-  const saida = args[args.indexOf('--out') + 1];
+  // A decisão sai de uma função pura e testada, ANTES de qualquer import de
+  // banco: `--help` não conecta, e `--apply` sem `--agent` é recusado aqui.
+  const comando = lerArgumentosDaMigracao(process.argv.slice(2));
 
-  if (args.includes('--in') && args.includes('--out') && entrada && saida) {
-    modoOffline(entrada, saida);
+  if (comando.modo === 'ajuda') {
+    console.log(USO_DA_MIGRACAO);
     return;
   }
-
-  const agente = args.includes('--agent') ? args[args.indexOf('--agent') + 1] : undefined;
-  await modoBanco(args.includes('--apply'), agente);
+  if (comando.modo === 'recusado') {
+    console.error(`❌ Recusado: ${comando.motivo}\n`);
+    console.error(USO_DA_MIGRACAO);
+    process.exitCode = 1;
+    return;
+  }
+  if (comando.modo === 'offline') {
+    modoOffline(comando.entrada, comando.saida);
+    return;
+  }
+  await modoBanco(comando.aplicar, comando.agentId);
 }
 
 main().catch((err) => {

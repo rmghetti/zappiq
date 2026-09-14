@@ -19,6 +19,8 @@ import {
   planejarRegistros,
   validarPromptLimpo,
   contarCaracteres,
+  lerArgumentosDaMigracao,
+  USO_DA_MIGRACAO,
 } from './patchesParaRegistros.js';
 import {
   PROMPT_COM_PATCHES_MANUAIS,
@@ -266,5 +268,84 @@ describe('contarCaracteres: o mesmo número que o length() do Postgres', () => {
     const astrais = [...texto].filter((c) => c.codePointAt(0)! > 0xffff).length;
     expect(astrais).toBe(3);
     expect(texto.length - contarCaracteres(texto)).toBe(3);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// Rodada 4 do PR #375: os argumentos do script, numa função pura.
+//
+// Dois defeitos de segurança do CLI: `--help` caía no modo com banco e, com
+// DATABASE_URL no ambiente, rodava DRY-RUN em todos os agentes; e `--apply`
+// sem `--agent` aplicava em TODOS os agentes com patch colado. A decisão sai
+// daqui ANTES de qualquer import de banco.
+// ════════════════════════════════════════════════════════════════════
+describe('lerArgumentosDaMigracao: o que o script vai fazer, antes de conectar', () => {
+  it('--help e -h só mostram o uso', () => {
+    expect(lerArgumentosDaMigracao(['--help'])).toEqual({ modo: 'ajuda' });
+    expect(lerArgumentosDaMigracao(['-h'])).toEqual({ modo: 'ajuda' });
+    // Mesmo acompanhado de --apply: pedir ajuda nunca grava.
+    expect(lerArgumentosDaMigracao(['--apply', '--help'])).toEqual({ modo: 'ajuda' });
+  });
+
+  it('sem argumento nenhum, mostra o uso em vez de ler o banco', () => {
+    expect(lerArgumentosDaMigracao([])).toEqual({ modo: 'ajuda' });
+  });
+
+  it('--apply sem --agent é recusado com frase clara', () => {
+    const r = lerArgumentosDaMigracao(['--apply']);
+    expect(r.modo).toBe('recusado');
+    if (r.modo === 'recusado') expect(r.motivo).toMatch(/--apply exige --agent <id>/);
+  });
+
+  it('--agent sem o id também é recusado', () => {
+    expect(lerArgumentosDaMigracao(['--apply', '--agent']).modo).toBe('recusado');
+    expect(lerArgumentosDaMigracao(['--agent', '--apply']).modo).toBe('recusado');
+  });
+
+  it('--apply com --agent grava só naquele agente', () => {
+    expect(lerArgumentosDaMigracao(['--apply', '--agent', 'agent-1'])).toEqual({
+      modo: 'banco',
+      aplicar: true,
+      agentId: 'agent-1',
+    });
+  });
+
+  it('--dry-run lê o banco sem gravar, com ou sem agente', () => {
+    expect(lerArgumentosDaMigracao(['--dry-run'])).toEqual({ modo: 'banco', aplicar: false });
+    expect(lerArgumentosDaMigracao(['--dry-run', '--agent', 'agent-1'])).toEqual({
+      modo: 'banco',
+      aplicar: false,
+      agentId: 'agent-1',
+    });
+  });
+
+  it('--dry-run e --apply juntos é contradição: recusado', () => {
+    expect(lerArgumentosDaMigracao(['--dry-run', '--apply', '--agent', 'a']).modo).toBe('recusado');
+  });
+
+  it('--in e --out: modo offline, sem banco', () => {
+    expect(lerArgumentosDaMigracao(['--in', 'antes.txt', '--out', 'depois.txt'])).toEqual({
+      modo: 'offline',
+      entrada: 'antes.txt',
+      saida: 'depois.txt',
+    });
+  });
+
+  it('--in sem --out (ou o contrário) é recusado, e não cai no modo com banco', () => {
+    expect(lerArgumentosDaMigracao(['--in', 'antes.txt']).modo).toBe('recusado');
+    expect(lerArgumentosDaMigracao(['--out', 'depois.txt']).modo).toBe('recusado');
+  });
+
+  it('argumento desconhecido é recusado (um erro de digitação não roda nada)', () => {
+    const r = lerArgumentosDaMigracao(['--aply', '--agent', 'agent-1']);
+    expect(r.modo).toBe('recusado');
+    if (r.modo === 'recusado') expect(r.motivo).toContain('--aply');
+  });
+
+  it('o uso explica os três modos e a trava do --apply', () => {
+    expect(USO_DA_MIGRACAO).toContain('--dry-run');
+    expect(USO_DA_MIGRACAO).toContain('--apply --agent <id>');
+    expect(USO_DA_MIGRACAO).toContain('--in');
+    expect(USO_DA_MIGRACAO).not.toContain('—');
   });
 });
