@@ -30,7 +30,11 @@ const AFIRMACOES_PROIBIDAS: Array<[string, RegExp]> = [
   ['trocas e devoluções', /trocas\/devolu[çc][õo]es|trocas e devolu[çc][õo]es/i],
   ['valor de deslocamento', /valor de deslocamento/i],
   ['mensalidade', /valores de mensalidade|mensalidade/i],
-  ['lembrete automático', /lembrete ser[áa] enviado|24h e 1h antes/i],
+  // O rótulo é escrito assim de propósito. A varredura de promessas do
+  // apps/web (PR #353) procura no repositório inteiro a expressão que a copy
+  // não pode usar, e ela não sabe distinguir a copy que promete da asserção
+  // que proíbe. Rótulo neutro, mesma cobertura.
+  ['promessa de aviso posterior', /lembrete ser[áa] enviado|24h e 1h antes/i],
 ];
 
 describe('modelos de segmento: papel e perguntas, nunca oferta', () => {
