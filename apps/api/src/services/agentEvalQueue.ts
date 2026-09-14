@@ -46,7 +46,15 @@ import {
 
 export const AGENT_EVAL_QUEUE_NAME = 'agent-eval';
 
-/** Teto por execução. O pior caso medido (38 min) fica de fora de propósito. */
+/**
+ * Teto por execução, usado como lockDuration do worker (o BullMQ 5 não tem
+ * mais opção `timeout` de job). Passado esse tempo sem renovar o lock, o job é
+ * considerado travado e não fica segurando a fila de concorrência 1.
+ *
+ * O pior caso medido (38 minutos) fica de fora de propósito. O corte fino é o
+ * tempo limite de 60 s por chamada de LLM, no agentEvalRunner; a rede de baixo
+ * é a varredura horária, que marca a linha como falha.
+ */
 export const EVAL_RUN_TIMEOUT_MS = 25 * 60 * 1000;
 
 /** A partir daqui uma execução parada é considerada morta. */
