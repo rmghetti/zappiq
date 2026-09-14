@@ -1080,8 +1080,8 @@ router.post(
           decisionId: original.id,
         });
         res.status(409).json({
-          error: 'prompt_mudou',
-          message: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+          error: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+          code: 'prompt_mudou',
         });
         return;
       }
@@ -1137,8 +1137,8 @@ router.post(
     } catch (err: any) {
       if (err instanceof PromptChangedError) {
         res.status(409).json({
-          error: 'prompt_mudou',
-          message: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+          error: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+          code: 'prompt_mudou',
         });
         return;
       }

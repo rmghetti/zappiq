@@ -122,7 +122,10 @@ describe('POST /fix-decisions/:decisionId/revert (admin)', () => {
     );
 
     expect(res.statusCode).toBe(409);
-    expect(res.body.error).toBe('prompt_mudou');
+    // A frase legível vai em `error` (é o que o front mostra); o código
+    // estável, para o programa decidir, vai em `code`.
+    expect(res.body.error).toContain('histórico de versões');
+    expect(res.body.code).toBe('prompt_mudou');
     expect(prismaMock.agent.update).not.toHaveBeenCalled();
     expect(prismaMock.agentEvalFixDecision.create).not.toHaveBeenCalled();
   });

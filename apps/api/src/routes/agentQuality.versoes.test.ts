@@ -244,8 +244,10 @@ describe('POST /fix-decisions/:decisionId/revert', () => {
     );
 
     expect(res.statusCode).toBe(409);
-    expect(res.body.error).toBe('prompt_mudou');
-    expect(res.body.message).toContain('histórico de versões');
+    // O front mostra errorData.error na tela: ali tem de estar a frase em
+    // português, não o código. O código viaja em `code`, para o programa.
+    expect(res.body.error).toContain('histórico de versões');
+    expect(res.body.code).toBe('prompt_mudou');
     // Nada foi gravado.
     expect(prismaMock.agent.update).not.toHaveBeenCalled();
     expect(prismaMock.agentEvalFixDecision.create).not.toHaveBeenCalled();

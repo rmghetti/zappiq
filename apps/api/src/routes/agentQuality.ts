@@ -929,10 +929,12 @@ router.post('/fix-decisions/:decisionId/revert', async (req: Request, res: Respo
         agentId: original.agentId,
         decisionId: original.id,
       });
+      // A frase legível vai em `error`: é o campo que o front mostra na
+      // tela (apps/web/lib/api.ts). O código estável fica em `code`, para
+      // o programa decidir o que fazer.
       res.status(409).json({
-        error: 'prompt_mudou',
-        message:
-          'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+        error: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+        code: 'prompt_mudou',
       });
       return;
     }
@@ -986,8 +988,8 @@ router.post('/fix-decisions/:decisionId/revert', async (req: Request, res: Respo
   } catch (err: any) {
     if (err instanceof PromptChangedError) {
       res.status(409).json({
-        error: 'prompt_mudou',
-        message: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+        error: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+        code: 'prompt_mudou',
       });
       return;
     }
