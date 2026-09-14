@@ -113,6 +113,13 @@ export function montarBlocoDeRegras(regras: RegraDoAgente[]): string {
 
   // Passou do teto: ficam as MAIS RECENTES. A lista chega em ordem de
   // criação, então cortamos pela frente.
+  //
+  // O corte e o teto da rota contam a mesma coisa: regras ATIVAS DAQUELE
+  // AGENTE. Era o descasamento apontado na revisão, e ele sumiu quando os
+  // dois montadores de prompt passaram a carregar por agentId (PI-3). Se um
+  // dia a lista voltar a chegar por organização, este corte volta a mentir:
+  // a rota deixaria aprovar a 25a regra do agente e o bloco mostraria só as
+  // 25 mais recentes da empresa inteira.
   const noTeto =
     ativas.length > TETO_DE_REGRAS_ATIVAS ? ativas.slice(-TETO_DE_REGRAS_ATIVAS) : ativas;
 
@@ -193,6 +200,9 @@ export function resumirRegrasParaSugeridor(regras: RegraDoAgente[]): string {
 export type TipoDeConflito =
   | 'desconto_acima_do_teto'
   | 'nome_em_toda_mensagem'
+  | 'nome_nunca_perguntado'
+  | 'idioma_fora_do_portugues'
+  | 'parceria_oficial_inventada'
   | 'dado_sensivel'
   | 'contradiz_o_gabarito'
   | 'contradiz_regra_ativa';
@@ -301,6 +311,87 @@ function conflitoDeNome(texto: string): Conflito | null {
       'em momentos-chave.',
     trecho: texto.slice(0, 120),
   };
+}
+
+/* ── Família nova: proibir a pergunta do nome (CR-5) ──────────────── */
+
+/**
+ * O CR-5 não manda perguntar o nome sempre: manda perguntar UMA vez quando
+ * não se sabe, e NUNCA perguntar de novo depois. As duas metades cabem numa
+ * regra do dono, e só a primeira é conflito.
+ *
+ * Esta ressalva separa "nunca pergunte o nome" (contradiz o CR-5) de "não
+ * pergunte o nome de novo" (é o que o CR-5 exige, e está escrito assim no
+ * prompt de cliente hoje). Sem ela, a família recusaria a regra certa.
+ */
+const RESSALVA_DE_REPETICAO =
+  /\b(de novo|novamente|outra vez|duas vezes|repetidamente|ja (informado|informou|registrado|fornecido|disse|deu)|ja tiver|ja estiver|ja foi|se ja|toda (mensagem|resposta))\b/;
+
+/** "nunca/não" + verbo de pedir + "nome", tudo na mesma frase. */
+const PROIBE_PERGUNTAR_NOME =
+  /\b(nunca|jamais|nao|proibido)\b[^.]{0,40}\b(pergunt|peca|solicit)[^.]{0,20}\bnome\b/;
+
+function conflitoDeNomeNuncaPerguntado(texto: string): Conflito | null {
+  for (const frase of frases(texto)) {
+    if (!PROIBE_PERGUNTAR_NOME.test(frase)) continue;
+    if (RESSALVA_DE_REPETICAO.test(frase)) continue;
+    return {
+      tipo: 'nome_nunca_perguntado',
+      explicacao:
+        'Esta correção proíbe o agente de perguntar o nome do cliente, e a regra base do agente ' +
+        '(CR-5) manda perguntar uma vez, no primeiro contato, quando o nome ainda não é ' +
+        'conhecido. Com as duas no ar, o agente fica dividido e o erro volta. Se o que você quer ' +
+        'é que ele não repita a pergunta, escreva "não pergunte o nome de novo quando o cliente ' +
+        'já tiver informado".',
+      trecho: frase.slice(0, 120),
+    };
+  }
+  return null;
+}
+
+/* ── Família nova: responder fora do português (CR-6) ─────────────── */
+
+const RESPONDER_EM_OUTRO_IDIOMA = /\bresponda\b[^.]{0,30}\b(ingles|espanhol|frances)\b/;
+
+function conflitoDeIdioma(texto: string): Conflito | null {
+  for (const frase of frases(texto)) {
+    // "NUNCA responda em inglês" é o oposto: reforça o CR-6, não o contraria.
+    if (NEGACOES.test(frase)) continue;
+    if (!RESPONDER_EM_OUTRO_IDIOMA.test(frase)) continue;
+    return {
+      tipo: 'idioma_fora_do_portugues',
+      explicacao:
+        'Esta correção manda o agente responder em outro idioma, e a regra base do agente ' +
+        '(CR-6) fixa português do Brasil em todo atendimento. Com as duas no ar, o agente troca ' +
+        'de idioma no meio da conversa. Se você atende em outro idioma de verdade, isso é ' +
+        'configuração do agente, não correção de um caso de teste: fale com o suporte.',
+      trecho: frase.slice(0, 120),
+    };
+  }
+  return null;
+}
+
+/* ── Família nova: parceria oficial inventada (CR-7) ──────────────── */
+
+const ALEGA_PARCERIA_OFICIAL =
+  /\b(parceir[oa]s?|representantes?|revend[a-zç]*|certificad[oa]s?|autorizad[oa]s?)\s+oficia(l|is)\b/;
+
+function conflitoDeParceriaOficial(texto: string): Conflito | null {
+  for (const frase of frases(texto)) {
+    // "NUNCA diga que somos parceiros oficiais" é o reforço do CR-7.
+    if (NEGACOES.test(frase)) continue;
+    if (!ALEGA_PARCERIA_OFICIAL.test(frase)) continue;
+    return {
+      tipo: 'parceria_oficial_inventada',
+      explicacao:
+        'Esta correção manda o agente afirmar uma parceria ou certificação oficial, e a regra ' +
+        'base do agente (CR-7) proíbe inventar condição comercial. Se a parceria existe mesmo, o ' +
+        'lugar dela é a base de conhecimento do agente, com a fonte: aí ele responde com ' +
+        'segurança e a informação vale para todos os canais.',
+      trecho: frase.slice(0, 120),
+    };
+  }
+  return null;
 }
 
 const TERMOS_SENSIVEIS = [
@@ -465,6 +556,12 @@ export interface EntradaDaVerificacao {
  * produção hoje. Um verificador ansioso barraria correção legítima, e o
  * dono deixaria de confiar na tela. Cada família tem guarda de negação,
  * porque "NUNCA dê mais de 20% de desconto" é o oposto de "dê 20%".
+ *
+ * Oito famílias, uma por regra base que as correções de produção
+ * atropelaram: desconto acima do teto (CR-7), nome em toda mensagem (CR-6),
+ * proibir a pergunta do nome (CR-5), responder fora do português (CR-6),
+ * parceria oficial inventada (CR-7), dado sensível (CR-8), contradição com o
+ * gabarito do cenário (A217) e contradição com regra já ativa (A078).
  */
 export function detectarConflitos(entrada: EntradaDaVerificacao): Conflito[] {
   const texto = limparTextoDaRegra(entrada.texto ?? '');
@@ -473,6 +570,9 @@ export function detectarConflitos(entrada: EntradaDaVerificacao): Conflito[] {
   const achados = [
     conflitoDeDesconto(texto),
     conflitoDeNome(texto),
+    conflitoDeNomeNuncaPerguntado(texto),
+    conflitoDeIdioma(texto),
+    conflitoDeParceriaOficial(texto),
     conflitoDeDadoSensivel(texto),
     conflitoComGabarito(texto, entrada.expectedBehavior),
     conflitoComRegraAtiva(texto, entrada.regrasAtivas ?? [], entrada.cenarioDaRegraNova),

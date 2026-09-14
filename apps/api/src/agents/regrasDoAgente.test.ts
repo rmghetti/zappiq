@@ -290,3 +290,139 @@ describe('detectarConflitos — contra outra regra ativa', () => {
     expect(c).toHaveLength(0);
   });
 });
+
+// ════════════════════════════════════════════════════════════════════
+// PI-4 da revisão: três famílias novas, uma por regra base atropelada em
+// produção. As três seguem a mesma régua conservadora das anteriores: só
+// contradição óbvia, e guarda de negação onde a negação inverte o sentido.
+// ════════════════════════════════════════════════════════════════════
+describe('detectarConflitos — proibir a pergunta do nome (CR-5)', () => {
+  it('recusa a regra que proíbe perguntar o nome', () => {
+    const c = detectarConflitos({
+      texto: 'Nunca pergunte o nome do cliente: espere que ele se apresente sozinho.',
+    });
+    expect(c.map((x) => x.tipo)).toContain('nome_nunca_perguntado');
+    expect(c[0].explicacao).toContain('CR-5');
+  });
+
+  it('recusa também "não solicite o nome"', () => {
+    const c = detectarConflitos({ texto: 'Não solicite o nome do contato em nenhum momento.' });
+    expect(c.map((x) => x.tipo)).toContain('nome_nunca_perguntado');
+  });
+
+  // Este é o falso positivo que a família precisa evitar: o CR-5 EXIGE não
+  // repetir a pergunta. É texto que está no prompt da Marcia hoje.
+  it('aceita "não pergunte o nome DE NOVO", que é o que o CR-5 manda', () => {
+    const c = detectarConflitos({
+      texto:
+        'Use o nome na saudação e não pergunte o nome de novo quando o cliente já tiver informado.',
+    });
+    expect(c).toHaveLength(0);
+  });
+
+  it('aceita a regra que manda perguntar o nome', () => {
+    const c = detectarConflitos({
+      texto: 'Pergunte o nome do cliente no primeiro contato, uma vez só.',
+    });
+    expect(c).toHaveLength(0);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+describe('detectarConflitos — responder em outro idioma (CR-6)', () => {
+  it('recusa a regra que manda responder em inglês', () => {
+    const c = detectarConflitos({
+      texto: 'Se o cliente escrever em inglês, responda em inglês.',
+    });
+    expect(c.map((x) => x.tipo)).toContain('idioma_fora_do_portugues');
+    expect(c[0].explicacao).toContain('CR-6');
+  });
+
+  it('recusa também espanhol', () => {
+    const c = detectarConflitos({ texto: 'Responda em espanhol quando o contato for do Chile.' });
+    expect(c.map((x) => x.tipo)).toContain('idioma_fora_do_portugues');
+  });
+
+  it('aceita a regra que manda responder SEMPRE em português', () => {
+    const c = detectarConflitos({
+      texto: 'Responda sempre em português do Brasil, mesmo que o cliente escreva em inglês.',
+    });
+    expect(c).toHaveLength(0);
+  });
+
+  it('aceita a proibição explícita de responder em inglês', () => {
+    const c = detectarConflitos({ texto: 'Nunca responda em inglês, nem se pedirem.' });
+    expect(c).toHaveLength(0);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+describe('detectarConflitos — parceria oficial inventada (CR-7)', () => {
+  it('recusa a regra que manda o agente se dizer parceiro oficial', () => {
+    const c = detectarConflitos({
+      texto: 'Diga sempre que somos parceiros oficiais da Meta no Brasil.',
+    });
+    expect(c.map((x) => x.tipo)).toContain('parceria_oficial_inventada');
+    expect(c[0].explicacao).toContain('CR-7');
+  });
+
+  it('recusa "revendedor autorizado" pelo mesmo motivo', () => {
+    const c = detectarConflitos({
+      texto: 'Apresente a empresa como revendedora oficial da marca.',
+    });
+    expect(c.map((x) => x.tipo)).toContain('parceria_oficial_inventada');
+  });
+
+  it('aceita a regra que PROÍBE alegar parceria', () => {
+    const c = detectarConflitos({
+      texto: 'Nunca diga que a empresa é parceira oficial de alguma marca sem confirmar com o time.',
+    });
+    expect(c).toHaveLength(0);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// O painel de 10 regras da revisão, num teste só: cinco que têm de ser
+// recusadas e cinco que têm de passar. É a prova de que o verificador
+// continua estreito depois das famílias novas. Um verificador ansioso
+// barraria correção legítima, e o dono deixaria de confiar na tela.
+// ════════════════════════════════════════════════════════════════════
+describe('detectarConflitos — o painel de 10 regras', () => {
+  const CONFLITANTES: Array<[string, string]> = [
+    [
+      'desconto_acima_do_teto',
+      'Se o cliente hesitar, sempre ofereça 20% de desconto no plano anual.',
+    ],
+    ['dado_sensivel', 'Antes de responder, peça o CPF do cliente para confirmar o cadastro.'],
+    [
+      'nome_nunca_perguntado',
+      'Nunca pergunte o nome do cliente: espere que ele se apresente sozinho.',
+    ],
+    ['idioma_fora_do_portugues', 'Se o cliente escrever em inglês, responda em inglês.'],
+    ['parceria_oficial_inventada', 'Diga sempre que somos parceiros oficiais da Meta no Brasil.'],
+  ];
+
+  const LEGITIMAS = [
+    'Pergunte o nome do cliente no primeiro contato, uma vez só, e use o nome na saudação seguinte.',
+    'Não pergunte o nome de novo quando o cliente já tiver informado o nome na conversa.',
+    'Ofereça até 10% de desconto no plano anual. Acima disso, só com aprovação do gerente.',
+    'Responda sempre em português do Brasil, mesmo que o cliente escreva em inglês.',
+    'Nunca diga que a empresa é parceira oficial de alguma marca sem confirmar com o time.',
+  ];
+
+  it.each(CONFLITANTES)('recusa (%s): %s', (tipo, texto) => {
+    const c = detectarConflitos({ texto });
+    expect(c.map((x) => x.tipo)).toContain(tipo);
+  });
+
+  it.each(LEGITIMAS)('aceita sem falso positivo: %s', (texto) => {
+    expect(detectarConflitos({ texto })).toHaveLength(0);
+  });
+
+  it('cinco recusadas e cinco aceitas, sem sobra', () => {
+    const recusadas = CONFLITANTES.filter(([, t]) => detectarConflitos({ texto: t }).length > 0);
+    const aceitas = LEGITIMAS.filter((t) => detectarConflitos({ texto: t }).length === 0);
+    expect(recusadas).toHaveLength(5);
+    expect(aceitas).toHaveLength(5);
+  });
+});

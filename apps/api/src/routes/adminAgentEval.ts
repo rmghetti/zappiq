@@ -790,7 +790,29 @@ router.post(
         return;
       }
 
-      // Aplica patch no system_prompt
+      // ─── ATENÇÃO: esta porta IGNORA `regrasComoRegistros` de propósito ──
+      //
+      // A porta do cliente (agentQuality.ts) olha o interruptor da
+      // organização: com ele ligado, aprovar cria um REGISTRO em agent_rules
+      // e o system_prompt não é tocado. Aqui, não: o superadmin continua
+      // colando o texto dentro do prompt, sempre.
+      //
+      // É deliberado. Esta rota é a saída de emergência da casa, e ela
+      // precisa funcionar mesmo com o interruptor desligado, com a tabela
+      // indisponível ou com o serviço de regras quebrado. Trocar o
+      // comportamento dela pelo do cliente tiraria justamente a rota que
+      // conserta o cliente quando o caminho novo falha.
+      //
+      // O PREÇO: numa organização COM a flag ligada, aplicar por aqui
+      // DUPLICA a regra. Ela entra colada no prompt por este caminho e
+      // continua sendo montada no bloco "# Regras aprovadas pelo dono" pelo
+      // outro. O agente recebe a mesma ordem duas vezes, e desfazer pela
+      // tela do cliente tira só a do bloco.
+      //
+      // REGRA DE OPERAÇÃO: com a flag ligada na organização X, não aplique
+      // correção pela tela de admin daquele agente. Use a tela do cliente.
+      // Se precisar mesmo usar esta porta, desligue a flag da organização
+      // antes e migre as regras ativas dela depois.
       const currentPrompt = run.agent.systemPrompt || '';
       const result = applyPatch({
         currentPrompt,

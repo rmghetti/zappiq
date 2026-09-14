@@ -58,6 +58,26 @@ export interface ResumoDoReteste {
  * "Parcial" não conta como aprovação: é a mesma conta da nota, onde parcial
  * vale zero. Contá-la aqui como meia vitória faria a tela dizer que a
  * correção pegou enquanto o placar semanal diz o contrário.
+ *
+ * POR QUE 2 DE 3, E NÃO 3 DE 3 NEM 1 DE 3
+ *
+ * O agente responde a temperatura 0,3: a MESMA pergunta, contra o MESMO
+ * prompt, dá respostas diferentes. Medido nos clientes, o desvio de um
+ * cenário entre execuções seguidas fica na casa de 8 pontos, e cenário que
+ * passa 31 de 31 convive com cenário que oscila.
+ *
+ * Com isso, cada régua erra de um jeito:
+ *   • 1 de 3 (qualquer reprovação condena) transforma o ruído próprio do
+ *     agente em veredito. Foi o defeito da versão de uma amostra só: o dono
+ *     desfazia uma correção que estava funcionando.
+ *   • 3 de 3 (só condena no unânime) é o erro espelhado: uma sorte em três
+ *     esconde a correção que não pegou, e o dono acha que resolveu.
+ *   • 2 de 3 é a maioria simples. Precisa que o desvio se repita para virar
+ *     veredito, e deixa explicitamente indefinido o caso de uma de cada
+ *     (com a frase dizendo isso, em vez de fingir certeza).
+ *
+ * Três amostras é o teto do que dá para cobrar de um clique: são seis
+ * chamadas ao modelo. Aumentar o número aperta a estatística e a conta junto.
  */
 export function consolidarReteste(amostras: AmostraDoReteste[]): ResumoDoReteste {
   const lista = amostras ?? [];

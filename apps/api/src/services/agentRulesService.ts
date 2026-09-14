@@ -73,12 +73,15 @@ export class TetoDeRegrasError extends Error {
 export interface FiltroDeRegras {
   organizationId: string;
   /**
-   * Opcional. O montador do prompt filtra só por ORGANIZAÇÃO, e não por
-   * agente, porque o carregador do chat do site devolve o texto do prompt e
-   * não o id do agente. Na prática as 15 organizações têm um agente
-   * comercial vivo cada, então dá no mesmo; a coluna agent_id existe para
-   * quando isso deixar de ser verdade. A tela e as rotas de escrita, essas,
-   * sempre passam o agente.
+   * Opcional, mas os dois montadores de prompt passam (PI-3): o WhatsApp
+   * (agentOrchestrator) e o chat do site (webChatService). A regra é do
+   * AGENTE, e não da organização: com o filtro só por organização, bastava a
+   * primeira empresa ligar um segundo agente (suporte, por exemplo) para as
+   * regras do comercial entrarem no prompt dele.
+   *
+   * Continua opcional porque existe um caminho sem agente: a organização sem
+   * Agent semeado, que cai no fallback do promptEngine. Ali a organização é o
+   * melhor recorte disponível. As rotas de escrita sempre passam o agente.
    */
   agentId?: string | null;
   /** Padrão 'ativa'. A tela do dono pede o histórico também. */

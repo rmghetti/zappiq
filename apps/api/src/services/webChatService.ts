@@ -136,6 +136,35 @@ export async function loadOrgSystemPrompt(organizationId: string): Promise<strin
   return rows[0].system_prompt;
 }
 
+/**
+ * O id do agente cujo prompt o chat do site está usando.
+ *
+ * `loadOrgSystemPrompt` acima traz só o TEXTO, por SQL cru e com cache. Para
+ * carregar as regras do agente certo (PI-3) falta o id, e ele tem de sair do
+ * MESMO agente: mesma role, mesmo status e a mesma ordem (o mais antigo).
+ * Uma ordem diferente aqui casaria o texto de um agente com as regras de
+ * outro, que é pior do que não filtrar.
+ *
+ * Fail-soft: sem agente, ou com o banco fora, devolve null e o bloco volta a
+ * ser o da organização. A resposta ao visitante nunca trava por isto.
+ */
+async function idDoAgenteComercial(organizationId: string): Promise<string | null> {
+  try {
+    const agente = await prisma.agent.findFirst({
+      where: { organizationId, role: 'comercial', status: 'live' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    return agente?.id ?? null;
+  } catch (err) {
+    logger.warn('[webChat] não achei o agente para filtrar as regras (seguindo por organização)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 /* ── Webchat por org: flag de opt-in em organizations.settings ──────────
  * Sem coluna nova: settings já é o padrão pra flags aditivas por org
  * (mesmo esquema de requireImpulso/requireMira). Default false — nenhuma
@@ -594,7 +623,14 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   // C3: regras aprovadas pelo dono. Lidas a cada turno (sem o cache de 5
   // minutos do prompt), então a correção aprovada vale já na mensagem
   // seguinte no chat do site. Fail-soft: o serviço já devolve '' em erro.
-  const regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId);
+  //
+  // O id do agente entra junto porque a regra é do AGENTE (PI-3). Hoje cada
+  // organização tem um agente comercial vivo, então filtrar só por
+  // organização dava no mesmo; basta a primeira ligar um agente de suporte
+  // para as regras do comercial vazarem para ele.
+  const regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
+    agentId: await idDoAgenteComercial(organizationId),
+  });
 
   const systemPrompt = buildWebChatSystemPrompt({
     orgPrompt,

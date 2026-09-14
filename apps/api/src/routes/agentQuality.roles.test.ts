@@ -197,9 +197,12 @@ describe('portão de papel na Qualidade do Agente (A115)', () => {
   });
 });
 
-describe('cota diária de 20 por organização (A115)', () => {
-  it('a 21ª chamada de re-test no mesmo dia recebe 429 em português', async () => {
-    for (let i = 1; i <= 20; i++) {
+describe('cota diária por organização (A115)', () => {
+  // O re-teste tem cota PRÓPRIA, de 7, e não as 20 padrão (PC-2 da revisão do
+  // PR #375): cada clique custa 3 conversas com o agente mais 3 avaliações,
+  // então 7 cliques já são 42 chamadas ao modelo em um dia, numa empresa só.
+  it('a 8ª chamada de re-test no mesmo dia recebe 429 em português', async () => {
+    for (let i = 1; i <= 7; i++) {
       const { res } = await rodaRota('post', RE_TEST, pedido('ADMIN'));
       expect(res.statusCode, `chamada ${i} não deveria ser barrada`).not.toBe(429);
     }
@@ -207,10 +210,11 @@ describe('cota diária de 20 por organização (A115)', () => {
     expect(res.statusCode).toBe(429);
     expect(alcancouOHandler).toBe(false);
     expect(String(res.body?.error || '')).toMatch(/hoje|limite|amanhã/i);
+    expect(String(res.body?.error || '')).toContain('7');
   });
 
   it('a cota é por organização e por rota, na chave do dia', async () => {
-    for (let i = 1; i <= 21; i++) await rodaRota('post', RE_TEST, pedido('ADMIN'));
+    for (let i = 1; i <= 8; i++) await rodaRota('post', RE_TEST, pedido('ADMIN'));
     const dia = new Date().toISOString().slice(0, 10);
     expect([...contadores.keys()]).toContain(`zappiq:quota:org-1:re-test:${dia}`);
     // Outra organização começa do zero.

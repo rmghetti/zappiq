@@ -77,7 +77,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
   vi.setSystemTime(AGORA_UTC);
-  agentFindFirst.mockResolvedValue({ systemPrompt: PROMPT_DO_AGENTE, name: 'Vera' });
+  agentFindFirst.mockResolvedValue({
+    id: 'agente-vivo-1',
+    systemPrompt: PROMPT_DO_AGENTE,
+    name: 'Vera',
+  });
   messageCount.mockResolvedValue(7);
   isFlagOn.mockResolvedValue(false);
   blocoDeRegras.mockResolvedValue('');
@@ -126,10 +130,24 @@ describe('interruptor LIGADO', () => {
     expect(prompt.indexOf(CORE_AGENT_RULES_V1)).toBeLessThan(prompt.indexOf(BLOCO));
   });
 
-  it('a organização é quem decide: o bloco vem do serviço, por organização', async () => {
+  // PI-3 da revisão: o bloco é do AGENTE, não da organização inteira.
+  //
+  // Hoje cada organização tem um agente comercial vivo, então filtrar por
+  // organização dava no mesmo. Basta a segunda ligar um agente de suporte
+  // para as regras do comercial vazarem para ele. O id já estava sendo
+  // lido nesta função: faltava passar adiante.
+  it('o bloco é pedido para o AGENTE deste canal, não só para a organização', async () => {
     blocoDeRegras.mockResolvedValue(BLOCO);
     await buildSystemPromptForContact(ENTRADA);
-    expect(blocoDeRegras).toHaveBeenCalledWith(ORG);
+    expect(blocoDeRegras).toHaveBeenCalledWith(ORG, { agentId: 'agente-vivo-1' });
+  });
+
+  it('organização sem agente semeado cai no fallback e pede sem agente', async () => {
+    agentFindFirst.mockResolvedValue(null);
+    blocoDeRegras.mockResolvedValue(BLOCO);
+    const prompt = await buildSystemPromptForContact(ENTRADA);
+    expect(blocoDeRegras).toHaveBeenCalledWith(ORG, { agentId: null });
+    expect(prompt).toContain(BLOCO);
   });
 
   it('falha ao montar o bloco não derruba a resposta ao cliente', async () => {
