@@ -23,6 +23,7 @@ import {
   avisosDeNumeroSolto,
   MOTIVO_IDENTIDADE,
   MOTIVO_TAMANHO,
+  MOTIVO_NUMERO_PERTO_DE_PLANO,
 } from './izaPrecoRemediation.js';
 
 const PROMPT_COM_TABELA = `# Iza — ZappIQ (system prompt v7.6)
@@ -190,6 +191,89 @@ describe('validarPromptResultante', () => {
     expect(sujo).toContain('R$ 997');
     expect(v.ok).toBe(false);
     expect(v.motivos.join(' ')).toContain('R$');
+  });
+});
+
+/*
+ * A substituição de "R$ <valor>" não fecha o buraco do número escrito SEM
+ * cifrão: "997,00" e "997/mês" atravessavam inteiros, e a prova de produção
+ * (`system_prompt LIKE '%997%'` = 0) falharia em silêncio. Agora número de 3
+ * ou 4 dígitos perto de nome de plano RECUSA a gravação, com a exceção das
+ * cotas do catálogo, que são legítimas ("Scale 80.000 mensagens").
+ */
+describe('validarPromptResultante: número solto perto de nome de plano', () => {
+  const BASE = '# Iza\n\nVocê é a Iza da ZappIQ. Pergunte o volume antes de recomendar. Nunca invente preço, SLA ou prazo. Quando o lead pedir humano, aceite na hora.';
+
+  it('recusa "997,00" sem cifrão encostado no nome do plano', () => {
+    const v = validarPromptResultante(BASE, `${BASE}\n\nO Scale sai por 997,00 no mês.`);
+
+    expect(v.ok).toBe(false);
+    expect(v.motivos.some((m) => m.includes(MOTIVO_NUMERO_PERTO_DE_PLANO))).toBe(true);
+    expect(v.motivos.join(' ')).toContain('997');
+  });
+
+  it('recusa "997/mês" sem cifrão', () => {
+    const v = validarPromptResultante(BASE, `${BASE}\n\nScale: 997/mês, cobre com folga.`);
+
+    expect(v.ok).toBe(false);
+    expect(v.motivos.some((m) => m.includes(MOTIVO_NUMERO_PERTO_DE_PLANO))).toBe(true);
+  });
+
+  it('recusa o preço do plano de entrada escrito solto', () => {
+    const v = validarPromptResultante(BASE, `${BASE}\n\nO Lite fica em 247 por mês.`);
+
+    expect(v.ok).toBe(false);
+    expect(v.motivos.some((m) => m.includes(MOTIVO_NUMERO_PERTO_DE_PLANO))).toBe(true);
+  });
+
+  it('aceita cota do catálogo colada no nome do plano', () => {
+    const cotas = `${BASE}\n\nO Scale tem 80.000 mensagens e o Lite tem 1.500. O Growth tem 8.000.`;
+    const v = validarPromptResultante(BASE, cotas);
+
+    expect(v.motivos.filter((m) => m.includes(MOTIVO_NUMERO_PERTO_DE_PLANO))).toEqual([]);
+    expect(v.ok).toBe(true);
+  });
+
+  it('aceita número de 3 dígitos longe de qualquer nome de plano', () => {
+    const longe = `${BASE}\n\nO protocolo de atendimento tem 480 caracteres no máximo, sempre.`;
+    const v = validarPromptResultante(BASE, longe);
+
+    expect(v.ok).toBe(true);
+  });
+
+  it('aceita número de 5 dígitos perto do plano (não é forma de preço)', () => {
+    const v = validarPromptResultante(BASE, `${BASE}\n\nO Scale aguenta 120000 eventos por hora.`);
+
+    expect(v.ok).toBe(true);
+  });
+
+  it('aprova a saída da transformação sobre o prompt real (a regra nova não atrapalha)', () => {
+    const r = removerTabelaDePrecos(PROMPT_COM_TABELA);
+    const v = validarPromptResultante(PROMPT_COM_TABELA, r.prompt);
+
+    expect(v.ok).toBe(true);
+  });
+});
+
+describe('VALOR_EM_REAIS não pode comer o ponto final da frase', () => {
+  it('"R$ 997." vira ponteiro e o ponto final continua lá', () => {
+    const r = removerTabelaDePrecos('# Iza\n\nO Scale sai por R$ 997. Pergunte o volume.');
+
+    expect(r.prompt).toContain(']. Pergunte o volume.');
+    expect(r.valoresEmReaisSubstituidos).toEqual(['R$ 997']);
+  });
+
+  it('valor com milhar e centavos sai inteiro, sem sobra', () => {
+    const r = removerTabelaDePrecos('Custa R$ 1.497,00. E o anual, R$ 1.197,60.');
+
+    expect(r.prompt).not.toMatch(/[0-9]/);
+    expect(r.valoresEmReaisSubstituidos).toEqual(['R$ 1.497,00', 'R$ 1.197,60']);
+  });
+
+  it('valor com um decimal só também sai inteiro', () => {
+    const r = removerTabelaDePrecos('A faixa de voz começa em R$ 79,9 no mês.');
+
+    expect(r.prompt).not.toMatch(/[0-9]/);
   });
 });
 

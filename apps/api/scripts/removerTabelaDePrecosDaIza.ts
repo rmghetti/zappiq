@@ -14,7 +14,10 @@
  *   - DRY-RUN é o padrão. Sem --apply não escreve nada.
  *   - Só mexe no agente da org da ZappIQ (ZAPPIQ_ORG_ID), nunca em cliente.
  *   - Recusa gravar se o resultado perder o marcador de identidade, ficar com
- *     menos de 60% do tamanho ou ainda tiver valor em reais.
+ *     menos de 60% do tamanho, ainda tiver valor em reais, ou sobrar número de
+ *     3 ou 4 dígitos perto de um nome de plano ("Scale 997", "997,00",
+ *     "997/mês"), que é o preço velho escrito sem cifrão. Cota do catálogo
+ *     ("Scale 80.000 mensagens") passa.
  *   - Grava por publishPrompt com source 'migracao', então o gatilho do
  *     Postgres cria a versão em agent_prompt_versions.
  *   - Idempotente: rodar de novo não muda nada.
