@@ -944,7 +944,7 @@ export interface XrayResposta {
 }
 
 class AiXrayApi {
-  /** POST /api/admin/ai-xray — monta o prompt de cada turno, sem gastar LLM. */
+  /** POST /api/admin/ai-xray: monta o prompt de cada turno, sem gastar LLM. */
   run(input: {
     organizationId: string;
     canal: XrayCanal;
