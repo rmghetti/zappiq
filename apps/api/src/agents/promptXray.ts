@@ -134,7 +134,10 @@ export interface EntradaDasChecagens {
 function normalizar(texto: unknown): string {
   return String(texto ?? '')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    // Faixa dos acentos combinantes (U+0300 a U+036F), por escape: escrita
+    // com os caracteres literais ela fica invisível no editor e some num
+    // salvamento desatento.
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
@@ -236,14 +239,39 @@ export function runChecks(entrada: EntradaDasChecagens): ChecagemXray[] {
   ];
 }
 
+/**
+ * Os únicos tons que o montador do prompt entende (promptEngine.getToneInstructions).
+ * Qualquer outro valor cai no amigável por dentro, em silêncio.
+ */
+const TONS_RECONHECIDOS = ['friendly', 'formal', 'technical'];
+
+const ROTULO_TOM = 'O tom de voz configurado chegou ao prompt';
+
 function checarTom(prompt: string, settings: Record<string, any>): ChecagemXray {
-  const tom = texto(settings.tone) || 'friendly';
+  const configurado = texto(settings.tone);
+  const tom = configurado || 'friendly';
+
+  // getToneInstructions devolve o bloco AMIGÁVEL para qualquer valor fora dos
+  // três reconhecidos. Sem este corte a checagem ficaria verde comparando o
+  // prompt com o bloco amigável, justamente no caso em que o tom escolhido
+  // pelo cliente foi jogado fora. Falso positivo é pior do que não checar.
+  if (configurado && !TONS_RECONHECIDOS.includes(configurado)) {
+    return {
+      id: 'tom_no_prompt',
+      rotulo: ROTULO_TOM,
+      ok: false,
+      detalhe: `Tom configurado nas configurações: "${configurado}". Esse valor não é reconhecido pelo montador do prompt, que só entende ${TONS_RECONHECIDOS.map(
+        (t) => `"${t}"`,
+      ).join(', ')}. A produção caiu no tom amigável, então o agente responde num tom que ninguém escolheu.`,
+    };
+  }
+
   // Primeira linha não vazia do bloco: é o cabeçalho do tom, curto e único.
   const trecho = getToneInstructions(tom).split('\n').find((l) => l.trim()) || '';
   const ok = Boolean(trecho) && prompt.includes(trecho);
   return {
     id: 'tom_no_prompt',
-    rotulo: 'O tom de voz configurado chegou ao prompt',
+    rotulo: ROTULO_TOM,
     ok,
     detalhe: `Tom configurado nas configurações: "${tom}". Trecho procurado no prompt: "${trecho.trim()}".${
       ok ? '' : ' Não encontrado: o agente está respondendo com outro tom.'

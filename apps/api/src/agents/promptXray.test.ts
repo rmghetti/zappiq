@@ -175,6 +175,43 @@ describe('runChecks: tom_no_prompt', () => {
     expect(c.detalhe).toContain('formal');
     expect(c.detalhe).toContain('## TOM DE VOZ — FORMAL');
   });
+
+  // getToneInstructions devolve o bloco amigável para QUALQUER valor fora dos
+  // três reconhecidos. Sem esta checagem o Raio-X ficava verde num tom que a
+  // produção jogou fora, que é o pior resultado possível: falso positivo.
+  it('VERMELHO quando o tom configurado não é reconhecido pelo montador', () => {
+    const c = checar({
+      settings: { tone: 'profissional' },
+      prompt: 'qualquer coisa\n## TOM DE VOZ — AMIGÁVEL\nUse linguagem próxima',
+    })('tom_no_prompt');
+
+    expect(c.ok).toBe(false);
+    expect(c.detalhe).toContain('profissional');
+    expect(c.detalhe).toContain('não é reconhecido');
+    expect(c.detalhe).toContain('amigável');
+  });
+
+  it('VERDE nos três tons reconhecidos quando o bloco correspondente está no prompt', () => {
+    const blocos: Array<[string, string]> = [
+      ['friendly', '## TOM DE VOZ — AMIGÁVEL'],
+      ['formal', '## TOM DE VOZ — FORMAL'],
+      ['technical', '## TOM DE VOZ — TÉCNICO'],
+    ];
+
+    for (const [tone, cabecalho] of blocos) {
+      const c = checar({ settings: { tone }, prompt: `abre\n${cabecalho}\nfecha` })('tom_no_prompt');
+      expect(c.ok, tone).toBe(true);
+    }
+  });
+
+  it('sem tom configurado, vale o amigável, que é o que a produção usa', () => {
+    const c = checar({
+      settings: {},
+      prompt: 'abre\n## TOM DE VOZ — AMIGÁVEL\nfecha',
+    })('tom_no_prompt');
+
+    expect(c.ok).toBe(true);
+  });
 });
 
 describe('runChecks: horario_confere', () => {
