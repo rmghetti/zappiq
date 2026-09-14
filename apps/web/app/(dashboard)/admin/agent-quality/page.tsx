@@ -263,7 +263,7 @@ export default function AgentQualityPage() {
   // FASE 2.1 fix: tendência só faz sentido entre runs do MESMO tamanho.
   // Comparar 25 cenários vs 3 cenários produz delta falso. Agora pegamos
   // a próxima run anterior que rodou o mesmo `totalScenarios`. Se não
-  // existe, tendência fica vazia ('—' no UI).
+  // existe, a tendência aparece como 'sem variação' na tela.
   const previousRun =
     latestRun
       ? completedRuns.slice(1).find((r) => r.totalScenarios === latestRun.totalScenarios) || null
@@ -390,7 +390,7 @@ export default function AgentQualityPage() {
               <div className="mt-4 bg-white border border-sky-200 rounded p-3">
                 <div className="text-sm text-neutral-800">
                   <strong>{regravacaoResumo.agentName || 'Agente'}</strong>: a nota passaria de{' '}
-                  <strong>{regravacaoResumo.notaAntiga ?? '—'}</strong> para{' '}
+                  <strong>{regravacaoResumo.notaAntiga ?? 'sem nota'}</strong> para{' '}
                   <strong>{regravacaoResumo.notaRegravada}</strong>.{' '}
                   {regravacaoResumo.reprovacoesDoGabarito} reprovação(ões) eram do gabarito.
                 </div>
@@ -475,7 +475,7 @@ export default function AgentQualityPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
             label="Última execução"
-            value={latestRun ? `${latestRun.scorePercent}%` : '—'}
+            value={latestRun ? `${latestRun.scorePercent}%` : 'sem nota'}
             sub={
               latestRun
                 ? new Date(latestRun.startedAt).toLocaleString('pt-BR')
@@ -488,7 +488,7 @@ export default function AgentQualityPage() {
           />
           <KPICard
             label="Tendência"
-            value={trend === 0 ? '—' : `${trend > 0 ? '+' : ''}${trend} pp`}
+            value={trend === 0 ? 'sem variação' : `${trend > 0 ? '+' : ''}${trend} pp`}
             sub="vs. execução anterior"
             icon={
               trend >= 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />
@@ -497,7 +497,7 @@ export default function AgentQualityPage() {
           />
           <KPICard
             label="Falhas críticas (última)"
-            value={String(latestRun?.criticalFailed ?? '—')}
+            value={String(latestRun?.criticalFailed ?? 'sem dado')}
             sub={
               latestRun?.criticalFailed === 0
                 ? 'Cenários P0 protegidos'
@@ -697,7 +697,7 @@ export default function AgentQualityPage() {
                           {run.scorePercent}%
                         </span>
                       ) : (
-                        '—'
+                        'sem nota'
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-mono">
@@ -710,11 +710,11 @@ export default function AgentQualityPage() {
                           {run.criticalFailed}
                         </span>
                       ) : (
-                        '—'
+                        'sem dado'
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-neutral-600">
-                      {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '—'}
+                      {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : 'sem dado'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -747,7 +747,7 @@ export default function AgentQualityPage() {
               <div className="sticky top-0 bg-white p-4 border-b border-neutral-200 flex items-center justify-between">
                 <h3 className="font-semibold text-neutral-900">
                   Detalhes da execução
-                  {selectedRun ? ` · ${selectedRun.scorePercent ?? '—'}%` : ''}
+                  {selectedRun ? ` · ${selectedRun.scorePercent ?? 'sem nota'}` : ''}
                 </h3>
                 <button
                   onClick={() => {
@@ -765,10 +765,17 @@ export default function AgentQualityPage() {
                 {selectedRun && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      <KPISmall label="Pontuação" value={`${selectedRun.scorePercent ?? '—'}%`} />
+                      <KPISmall
+                        label="Pontuação"
+                        value={
+                          selectedRun.scorePercent == null
+                            ? 'sem nota'
+                            : `${selectedRun.scorePercent}%`
+                        }
+                      />
                       <KPISmall
                         label="Falhas críticas"
-                        value={String(selectedRun.criticalFailed ?? '—')}
+                        value={String(selectedRun.criticalFailed ?? 'sem dado')}
                       />
                       <KPISmall
                         label="Aprovados"
@@ -779,7 +786,7 @@ export default function AgentQualityPage() {
                         value={
                           selectedRun.durationMs
                             ? `${(selectedRun.durationMs / 1000).toFixed(1)}s`
-                            : '—'
+                            : 'sem dado'
                         }
                       />
                     </div>

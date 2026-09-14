@@ -81,6 +81,24 @@ export const ERRO_TEMPO_LIMITE = 'tempo limite: execução em running há mais d
 export const ERRO_TETO_EXECUCAO = 'tempo limite da execução (25 min)';
 
 /**
+ * A171 — portão dos 20%.
+ *
+ * O cenário que quebra já sai do denominador da nota. Faltava o outro lado: a
+ * execução em que a MAIORIA quebrou não é uma nota baixa, é uma execução que
+ * não aconteceu. Em 15/06 uma execução com 25 de 25 respostas vazias foi
+ * gravada com nota zero, alertou o Slack e virou correção aplicada no prompt
+ * da Iza, com o sugeridor inventando a causa a partir de resposta vazia.
+ *
+ * Acima de 20% de cenários sem resposta válida, a linha vira 'failed' com
+ * este motivo. Não há nota para gravar nem nota para alertar.
+ */
+export const ERRO_FALHA_TECNICA_DO_PROVEDOR =
+  'falha técnica do provedor: mais de 20% dos cenários sem resposta válida';
+
+/** Acima disto a execução não é avaliável. */
+export const TETO_DE_ERROS_TECNICOS = 0.2;
+
+/**
  * slackAlertStatus de execução que terminou em FALHA: não houve resultado
  * para avaliar, então não houve alerta a mandar. Gravar isto (em vez de
  * deixar nulo) mantém verdadeira a regra "slackAlertStatus é sempre gravado
@@ -261,29 +279,69 @@ interface SaidaDaExecucao {
  * 'completed' por cima da falha que o cliente já viu na tela. O mesmo filtro
  * protege a linha que a varredura horária encerrou.
  */
-async function gravarConclusao(runId: string, saida: SaidaDaExecucao): Promise<boolean> {
+/**
+ * O que a gravação da conclusão decidiu:
+ *   'gravou'        — virou nota, o alerta segue o caminho normal;
+ *   'falha_tecnica' — o portão dos 20% fechou: linha 'failed', sem alerta;
+ *   'ignorada'      — a linha já tinha saído de 'running'.
+ */
+type ResultadoDaGravacao = 'gravou' | 'falha_tecnica' | 'ignorada';
+
+/** A171 — a execução foi avaliável, ou o provedor derrubou a maior parte? */
+export function passouDoTetoDeErros(erros: number, totalScenarios: number): boolean {
+  if (!Number.isFinite(totalScenarios) || totalScenarios <= 0) return false;
+  return erros / totalScenarios > TETO_DE_ERROS_TECNICOS;
+}
+
+async function gravarConclusao(
+  runId: string,
+  saida: SaidaDaExecucao,
+  totalScenarios: number,
+): Promise<ResultadoDaGravacao> {
+  const falhaTecnica = passouDoTetoDeErros(saida.summary.erros, totalScenarios);
   try {
     const { count } = await prisma.agentEvalRun.updateMany({
       where: { id: runId, status: 'running' },
-      data: {
-        status: 'completed',
-        ...saida.summary,
-        // A régua com que esta execução foi medida. Sem isto, comparar a nota
-        // de agosto com a de setembro é comparar duas réguas sem saber.
-        harnessVersion: HARNESS_VERSION,
-        results: saida.results as any,
-        completedAt: new Date(),
-        durationMs: saida.durationMs,
-      },
+      data: falhaTecnica
+        ? {
+            // A171: sem nota nenhuma no lugar. Gravar scorePercent aqui seria
+            // exatamente o número que o portão existe para não publicar.
+            status: 'failed',
+            error: ERRO_FALHA_TECNICA_DO_PROVEDOR,
+            slackAlertStatus: ALERTA_NAO_ENVIADO,
+            harnessVersion: HARNESS_VERSION,
+            results: saida.results as any,
+            completedAt: new Date(),
+            durationMs: saida.durationMs,
+          }
+        : {
+            status: 'completed',
+            ...saida.summary,
+            // A régua com que esta execução foi medida. Sem isto, comparar a
+            // nota de agosto com a de setembro é comparar duas réguas sem saber.
+            harnessVersion: HARNESS_VERSION,
+            results: saida.results as any,
+            completedAt: new Date(),
+            durationMs: saida.durationMs,
+          },
     });
-    return count > 0;
+    if (count === 0) return 'ignorada';
+    if (falhaTecnica) {
+      logger.warn({
+        msg: 'agent_eval_run_falha_tecnica_do_provedor',
+        runId,
+        erros: saida.summary.erros,
+        totalScenarios,
+      });
+    }
+    return falhaTecnica ? 'falha_tecnica' : 'gravou';
   } catch (err: any) {
     logger.error({
       msg: 'agent_eval_run_conclusao_nao_gravada',
       runId,
       error: String(err?.message || err),
     });
-    return false;
+    return 'ignorada';
   }
 }
 
@@ -431,15 +489,25 @@ export async function executeRunJob(runId: string): Promise<void> {
       scenarios,
       { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' },
       profile,
-    ).then(async (saida) => ({ saida, gravou: await gravarConclusao(runId, saida) }));
+    ).then(async (saida) => ({
+      saida,
+      gravacao: await gravarConclusao(runId, saida, scenarios.length),
+    }));
 
-    const { saida, gravou } = await comTetoDeExecucao(execucao, EVAL_RUN_TIMEOUT_MS);
+    const { saida, gravacao } = await comTetoDeExecucao(execucao, EVAL_RUN_TIMEOUT_MS);
 
-    if (!gravou) {
+    if (gravacao === 'ignorada') {
       // A linha saiu de 'running' enquanto o teste rodava (varredura horária,
       // por exemplo). O resultado é descartado de propósito: a tela do cliente
       // já mostrou outra coisa, e alertar agora seria alerta de execução morta.
       logger.warn({ msg: 'agent_eval_run_conclusao_ignorada', runId, agentId: agent.id });
+      return;
+    }
+
+    if (gravacao === 'falha_tecnica') {
+      // A171: não houve nota. Alertar aqui seria alertar um número medido em
+      // um punhado de cenários que sobraram. slackAlertStatus já foi gravado
+      // como 'not_sent' na própria conclusão.
       return;
     }
 
@@ -526,8 +594,15 @@ async function alertarSePreciso(input: {
   }
 
   try {
+    // A052 — a lista tem de bater com a CONTAGEM. criticalFailed conta o
+    // crítico 'fail' e também o crítico 'partial' (parcial vale zero na nota),
+    // mas a lista só mostrava 'fail': o alerta dizia "3 críticos reprovados" e
+    // listava um. Quem abre o Slack não tinha como saber quais eram os outros.
+    // Falha técnica ('erro') fica fora dos dois lados.
     const topFails = results
-      .filter((r) => r.combined === 'fail')
+      .filter(
+        (r) => r.combined === 'fail' || (r.severity === 'critical' && r.combined === 'partial'),
+      )
       .map((r) => ({
         scenarioId: r.scenarioId,
         category: r.category,

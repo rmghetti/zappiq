@@ -42,6 +42,11 @@ import {
   textoDoAvisoDeRegravacao,
 } from './_lib/regravacao';
 import { regraTerminaEmFraseCompleta, AVISO_SUGESTAO_INCOMPLETA } from './_lib/sugestao';
+import {
+  naoFoiAvaliadaPorFalhaTecnica,
+  ROTULO_NAO_AVALIADA,
+  TEXTO_FALHA_TECNICA,
+} from './_lib/execucao';
 
 const TRIGGER_LABELS: Record<string, string> = {
   cron: 'Semanal automático',
@@ -288,9 +293,11 @@ export default function QualidadeIAClientePage() {
                       >
                         {run.status === 'running' || run.status === 'pending'
                           ? '⟳ Em execução'
-                          : run.status === 'failed'
-                            ? 'Falhou'
-                            : labels.label}
+                          : naoFoiAvaliadaPorFalhaTecnica(run)
+                            ? ROTULO_NAO_AVALIADA
+                            : run.status === 'failed'
+                              ? 'Falhou'
+                              : labels.label}
                       </span>
                       <span className="text-[10px] text-neutral-500">
                         {TRIGGER_LABELS[run.triggeredBy] || run.triggeredBy}
@@ -362,6 +369,9 @@ function RunDetailPanel({
   const health = classifyQuality(run.scorePercent);
   const labels = QUALITY_LABELS[health];
   const isRunning = run.status === 'pending' || run.status === 'running';
+  // A171: o provedor derrubou a maior parte dos cenários. Isto não é nota do
+  // agente, e a tela não pode deixar ninguém ler como se fosse.
+  const falhaTecnica = naoFoiAvaliadaPorFalhaTecnica(run);
 
   // Mapa rápido scenarioId → última decisão
   const decisionsByScenario = new Map<string, AgentEvalFixDecision>();
@@ -416,8 +426,14 @@ function RunDetailPanel({
               <SaibaMais featureKey="qualidade.saude-score" />
             </div>
             <div className="flex items-center gap-3 flex-wrap">
-              <span className={`text-3xl font-bold ${labels.color}`}>{labels.label}</span>
-              {run.scorePercent != null && (
+              <span
+                className={`text-3xl font-bold ${
+                  falhaTecnica ? 'text-neutral-600' : labels.color
+                }`}
+              >
+                {falhaTecnica ? ROTULO_NAO_AVALIADA : labels.label}
+              </span>
+              {!falhaTecnica && run.scorePercent != null && (
                 <span className="text-xs text-neutral-500">
                   ({run.scorePercent.toFixed(0)}% dos cenários aprovados)
                 </span>
@@ -448,8 +464,13 @@ function RunDetailPanel({
             <div className="text-xs text-blue-600 italic">⟳ Aguarde, finalizando análise…</div>
           )}
         </div>
+        {falhaTecnica && (
+          <div className="mt-4 p-3 bg-neutral-100 border border-neutral-300 rounded text-sm text-neutral-800">
+            {TEXTO_FALHA_TECNICA}
+          </div>
+        )}
         {/* KPIs simplificados */}
-        {!isRunning && run.totalScenarios > 0 && (
+        {!isRunning && !falhaTecnica && run.totalScenarios > 0 && (
           <div className="mt-4">
             <div className="flex items-center gap-1.5 mb-2">
               <SaibaMais featureKey="qualidade.kpis-cenarios" />

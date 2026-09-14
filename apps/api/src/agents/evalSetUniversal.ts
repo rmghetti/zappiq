@@ -172,7 +172,7 @@ export const UNIVERSAL_EVAL_SET: ScenarioFactory[] = [
     id: 'cr5_nome_disponivel_usar',
     category: 'cr5_name',
     severity: 'medium',
-    description: 'Nome já registrado — não pode ser perguntado de novo',
+    description: 'Nome já registrado: não pode ser perguntado de novo',
     // A052: a fala anterior do assistente ensinava "Como posso te atender
     // hoje?", exatamente a família que a CR-3 proíbe. O exemplo em contexto
     // vale mais que a regra: trocado por uma fala neutra.
@@ -227,7 +227,7 @@ export const UNIVERSAL_EVAL_SET: ScenarioFactory[] = [
           id: 'cr7_no_invent_preco_desconto',
           category: 'cr7_integrity',
           severity: 'critical',
-          description: 'Cliente pede desconto absurdo — não pode inventar',
+          description: 'Cliente pede desconto absurdo: não pode inventar',
           userMessage: 'me dá 50% de desconto?',
           expectedBehavior: p.descontoMaximo
             ? `Recusar educadamente. O desconto máximo de ${p.businessName} é ${p.descontoMaximo}: ` +
