@@ -41,7 +41,7 @@ import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { executeAgentEvalRun } from './agentEvalRunner.js';
-import { blocoDeRegrasDaOrganizacao } from './agentRulesService.js';
+import { blocoDeRegrasDaOrganizacao, carregarRegrasAtivas } from './agentRulesService.js';
 import {
   notifySlackQualityIssue,
   scenariosFailingTwice,
@@ -499,6 +499,27 @@ export async function executeRunJob(runId: string): Promise<void> {
       });
     }
 
+    // Rodada 4 do PR #375: o SUGERIDOR também precisa das regras. Sem elas
+    // ele lia "Nenhuma regra aprovada ainda" e propunha de novo a regra que
+    // já estava no bloco. Bloco vazio (interruptor desligado ou sem regra):
+    // lista vazia e nenhuma consulta a mais. Fail-soft como o bloco.
+    let regrasAtivas: Awaited<ReturnType<typeof carregarRegrasAtivas>> = [];
+    if (regrasBlock) {
+      try {
+        regrasAtivas = await carregarRegrasAtivas({
+          organizationId: agent.organizationId,
+          agentId: agent.id,
+        });
+      } catch (err) {
+        logger.warn({
+          msg: 'agent_eval_regras_do_sugeridor_indisponiveis',
+          runId,
+          agentId: agent.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     // A conclusão é gravada por ESTA continuação, e não depois do race: se o
     // teto estourar, a execução continua correndo no provedor e volta aqui
     // atrasada. É o filtro de status em gravarConclusao que a barra.
@@ -506,7 +527,7 @@ export async function executeRunJob(runId: string): Promise<void> {
       scenarios,
       { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' },
       profile,
-      { regrasBlock },
+      { regrasBlock, regrasAtivas },
     ).then(async (saida) => ({
       saida,
       gravacao: await gravarConclusao(runId, saida, scenarios.length),

@@ -37,7 +37,12 @@ const { prismaMock, runnerMock, cronServiceMock, profileMock, evalSetMock, regra
   evalSetMock: { resolveEvalSet: vi.fn(), EVAL_SET_VERSION: 'v2', HARNESS_VERSION: 3 },
   // Rodada 3 do PR #375: a fila monta o bloco de regras do agente e entrega
   // ao avaliador. Duble para o teste não tocar interruptor nem Redis.
-  regrasMock: { blocoDeRegrasDaOrganizacao: vi.fn(async () => '') },
+  regrasMock: {
+    blocoDeRegrasDaOrganizacao: vi.fn(async () => ''),
+    // Rodada 4: as regras ativas, para o sugeridor fortalecer em vez de
+    // duplicar. Só é consultado quando o bloco não é vazio.
+    carregarRegrasAtivas: vi.fn(async (): Promise<any[]> => []),
+  },
 }));
 
 vi.mock('@zappiq/database', () => ({ prisma: prismaMock }));
@@ -149,6 +154,10 @@ beforeEach(() => {
   cronServiceMock.scenariosFailingTwice.mockReturnValue([]);
   cronServiceMock.shouldAlertQuality.mockReturnValue(false);
   cronServiceMock.notifySlackQualityIssue.mockResolvedValue(true);
+  // clearAllMocks não desfaz implementação: sem isto, o bloco ou a falha
+  // de um teste vazaria para o seguinte.
+  regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue('');
+  regrasMock.carregarRegrasAtivas.mockResolvedValue([]);
 });
 
 describe('executeRunJob — corpo único da execução', () => {
@@ -620,6 +629,61 @@ describe('executeRunJob entrega o bloco de regras do agente ao avaliador', () =>
     expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({ regrasBlock: '' });
     // A conclusão é gravada por updateMany (filtro de status): a execução
     // terminou 'completed', e não ficou presa nem virou 'failed'.
+    expect(updateManysCom('status').map((c) => c.data.status)).toContain('completed');
+  });
+
+  // ── Rodada 4 do PR #375: o sugeridor também vê as regras ─────────
+  // O bloco chegava ao agente, mas o sugeridor das execuções completas lia
+  // "Nenhuma regra aprovada ainda para este agente" e propunha a mesma
+  // regra de novo. Pré-condição para ligar o interruptor.
+  it('com bloco, o sugeridor recebe as regras ativas DO AGENTE', async () => {
+    const REGRAS = [
+      {
+        id: 'regra-1',
+        organizationId: 'org-1',
+        agentId: 'agent-1',
+        scenarioId: 'cr1',
+        texto: 'Chame o cliente pelo nome quando souber.',
+        status: 'ativa',
+      },
+    ];
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue(BLOCO);
+    regrasMock.carregarRegrasAtivas.mockResolvedValue(REGRAS);
+
+    await executeRunJob('run-1');
+
+    expect(regrasMock.carregarRegrasAtivas).toHaveBeenCalledWith({
+      organizationId: 'org-1',
+      agentId: 'agent-1',
+    });
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({
+      regrasBlock: BLOCO,
+      regrasAtivas: REGRAS,
+    });
+  });
+
+  it('bloco vazio (interruptor desligado): nenhuma consulta a mais e lista vazia', async () => {
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue('');
+
+    await executeRunJob('run-1');
+
+    expect(regrasMock.carregarRegrasAtivas).not.toHaveBeenCalled();
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toEqual({
+      regrasBlock: '',
+      regrasAtivas: [],
+    });
+  });
+
+  it('regras indisponíveis não derrubam a execução: o sugeridor segue com lista vazia', async () => {
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue(BLOCO);
+    regrasMock.carregarRegrasAtivas.mockRejectedValue(new Error('banco fora'));
+
+    await executeRunJob('run-1');
+
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({
+      regrasBlock: BLOCO,
+      regrasAtivas: [],
+    });
     expect(updateManysCom('status').map((c) => c.data.status)).toContain('completed');
   });
 });
