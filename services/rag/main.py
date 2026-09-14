@@ -18,6 +18,7 @@ Decisoes chave:
 """
 
 import asyncio
+import dataclasses
 import hashlib
 import hmac
 import json
@@ -561,10 +562,14 @@ async def _knn_search(
     if not state.pool:
         raise HTTPException(status_code=503, detail="DB pool nao inicializado")
 
-    config = retrieval.config_from_env()
     corte = retrieval.resolve_min_similarity(
         requested=min_similarity, floor=retrieval.min_similarity_floor()
     )
+    # O corte decidido aqui entra NA config que vai ao rerank. Antes ele so
+    # valia num pre-filtro e o rerank re-aplicava o cfg.min_similarity lido do
+    # env do proprio servico: o piso efetivo virava o maior dos dois e baixar o
+    # corte por env na API (o rollback previsto) nao surtia efeito.
+    config = dataclasses.replace(retrieval.config_from_env(), min_similarity=corte)
 
     async with state.pool.acquire() as conn:
         rows = await conn.fetch(
@@ -602,11 +607,7 @@ async def _knn_search(
         for row in rows
     ]
 
-    escolhidos = retrieval.rerank(
-        [c for c in candidatos if c.similarity >= corte],
-        top_k=top_k,
-        config=config,
-    )
+    escolhidos = retrieval.rerank(candidatos, top_k=top_k, config=config)
 
     return [
         QueryResult(

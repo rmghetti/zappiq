@@ -93,9 +93,11 @@ class RetrievalConfig:
     """
     Todos os numeros sao ajustaveis por env, sem deploy de codigo.
 
-    min_similarity      Piso absoluto. Quem manda e a API (env RAG_MIN_SIMILARITY
-                        do apps/api, que vai no corpo do /query); aqui fica o
-                        valor usado quando o chamador nao pede nada.
+    min_similarity      Corte absoluto. Quem manda e a API (env RAG_MIN_SIMILARITY
+                        do apps/api, que vai no corpo do /query e substitui este
+                        valor no _knn_search); aqui fica so o ponto de partida,
+                        para quem chama o rerank sem passar config. O servico
+                        ainda tem o FLOOR (RAG_MIN_SIMILARITY_FLOOR), que aperta.
     relative_cutoff     Descarta candidato abaixo de (melhor similaridade x este
                         fator). 0 desliga. E o corte que faz 'oi' voltar vazio:
                         quando nada casa, o melhor resultado tambem e fraco e a
@@ -109,7 +111,7 @@ class RetrievalConfig:
                         considerados o mesmo conteudo (A013).
     """
 
-    min_similarity: float = 0.35
+    min_similarity: float = 0.30
     relative_cutoff: float = 0.60
     max_per_source: int = 2
     qa_bonus: float = 0.03

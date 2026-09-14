@@ -418,8 +418,22 @@ def test_config_from_env_le_os_cortes(monkeypatch):
     assert cfg.max_per_source == 3
 
 
-def test_piso_do_servico_nunca_afrouxa_o_pedido_da_api():
-    """A API e a dona do corte; o piso do servico so aperta, nunca solta."""
-    assert retrieval.resolve_min_similarity(requested=0.35, floor=0.0) == 0.35
+def test_resolve_min_similarity_devolve_o_maior_dos_dois():
+    """
+    A conta pura: a API e a dona do corte e o FLOOR do servico so aperta.
+    Que o _knn_search de fato use este valor no rerank (e nao o env do proprio
+    servico por cima) e provado na rota, em tests/test_query_route.py.
+    """
+    assert retrieval.resolve_min_similarity(requested=0.30, floor=0.0) == 0.30
     assert retrieval.resolve_min_similarity(requested=0.25, floor=0.40) == 0.40
     assert retrieval.resolve_min_similarity(requested=0.50, floor=0.40) == 0.50
+
+
+def test_corte_absoluto_padrao_e_a_entrada_conservadora():
+    """
+    0,30 e a ENTRADA, nao a meta. A mediana medida do ruido real e 0,375, acima
+    de 0,35: quem separa relevante de irrelevante e o corte RELATIVO. Entrar em
+    0,30 erra para o lado de trazer um trecho a mais, que custa contexto; entrar
+    alto demais custa a resposta certa do cliente com pouco conteudo.
+    """
+    assert retrieval.RetrievalConfig().min_similarity == 0.30

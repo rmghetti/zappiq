@@ -30,7 +30,9 @@ Contador no Redis, uma chave por organização:
 zappiq:rag:version:org_<id>
 ```
 
-Incrementado por QUALQUER escrita de treino: upload de arquivo, texto colado, URL, Q&A criado, editado, desativado ou apagado, questionário reingerido, identidade, configuração de agendamento. Na prática, toda chamada de `ingestDocument` e de `deleteDocument` sobe a versão.
+Incrementado por QUALQUER escrita de treino: upload de arquivo, texto colado, URL, Q&A criado, editado, desativado ou apagado, questionário reingerido, configuração de agendamento. Na prática, toda chamada de `ingestDocument` e de `deleteDocument` sobe a versão, e só elas.
+
+Identidade do agente (nome, tom, persona) NÃO sobe a versão: ela vive no prompt do sistema, não em `rag_chunks`, e não passa por `ingestDocument`. Editar a identidade vale na mensagem seguinte por outro caminho, sem tocar no cache da busca.
 
 Como a versão faz parte da chave, subir o contador invalida o cache inteiro daquela organização na hora. Sem Redis, a leitura devolve 0 e o cache passa a valer só por mensagem: comportamento degradado, nunca quebrado.
 
@@ -48,6 +50,8 @@ Limite conhecido: "e o prazo?" tem substantivo do domínio, então a regra 3 nã
 
 A chave do cache do classificador leva o contexto quando a mensagem é curta. Sem isso, "sim" de uma conversa sobre preço reaproveitaria a reescrita de outra conversa sobre horário.
 
+A chamada do classificador tem teto de 80 tokens, não os 30 de uma classificação de palavra solta. O JSON com categoria e consulta não cabe em 30: ele voltava cortado no meio da consulta, a leitura caía no caminho de texto puro e a categoria vinha colada na chave seguinte, virando `other`. O efeito era mudo e caro: "quero falar com um humano" parava de disparar o handoff e o resultado errado ficava 5 minutos no cache. A consulta reescrita tem teto de 10 palavras, e a leitura da categoria não depende mais do JSON fechar.
+
 ## 4. Ranking (`services/rag/retrieval.py`)
 
 O KNN do pgvector busca `min(top_k * 4, 60)` candidatos. Depois, nesta ordem:
@@ -63,7 +67,8 @@ O bônus é ADITIVO e pequeno. Antes era multiplicativo (1,20 para `qa-*`, 1,15 
 
 | env | default | o que faz |
 |---|---|---|
-| `RAG_MIN_SIMILARITY` (apps/api) | 0,35 | piso enviado ao serviço no corpo do `/query` |
+| `RAG_MIN_SIMILARITY` (apps/api) | 0,30 | o corte de verdade: vai no corpo do `/query` e é o que o serviço usa |
+| `RAG_MIN_SIMILARITY` (rag) | 0,30 | só o valor de partida da config; o `/query` substitui por quem chega da API |
 | `RAG_MIN_SIMILARITY_FLOOR` (rag) | 0,0 | piso do próprio serviço; só aperta, nunca solta |
 | `RAG_RELATIVE_CUTOFF` | 0,60 | corte relativo ao melhor resultado; 0 desliga |
 | `RAG_MAX_PER_SOURCE` | 2 | teto de trechos por fonte |
@@ -74,7 +79,13 @@ O bônus é ADITIVO e pequeno. Antes era multiplicativo (1,20 para `qa-*`, 1,15 
 | `RAG_NEAR_DUPLICATE` | 0,92 | Jaccard a partir do qual dois trechos são o mesmo |
 | `RAG_SINGLE_CHUNK_MAX_TOKENS` | 6000 | acima disso, nem o Q&A escapa do fatiamento |
 
-### Por que 0,35 e não 0,25 nem 0,50
+### Quem manda no corte
+
+A API. O `min_similarity` que vai no corpo do `/query` é o valor que o serviço usa no re-rank, e não existe um segundo piso escondido por dentro. O serviço tem UM controle próprio, o `RAG_MIN_SIMILARITY_FLOOR`, que só aperta e nasce desligado (0,0).
+
+Isso importa para o rollback: baixar o corte por `fly secrets set` na API tem efeito imediato, sem tocar no serviço Python. Antes não tinha: o re-rank re-aplicava o `RAG_MIN_SIMILARITY` do próprio serviço por cima, o piso efetivo era o maior dos dois e o ajuste pela API não aparecia em lugar nenhum.
+
+### Por que a entrada é 0,30 e 0,35 é meta
 
 Medição feita sobre os vetores REAIS de produção (`text-embedding-3-small`, 1536 dimensões), não sobre estimativa:
 
@@ -82,7 +93,16 @@ Medição feita sobre os vetores REAIS de produção (`text-embedding-3-small`, 
 - Q&A da MACHIA contra trechos do CMJ, 7.372 pares: mediana 0,366; 6,5% abaixo de 0,25.
 - Dentro do próprio namespace do CMJ, 4.246 pares: mediana 0,450, p05 0,234.
 
-O piso de 0,25 rejeitava menos de 7% do que já se sabia ser lixo. Subir para a faixa de 0,45 a 0,50 rejeitaria junto metade do conteúdo do próprio cliente, porque as duas distribuições se sobrepõem. 0,35 fica acima da mediana do ruído e bem abaixo da mediana do conteúdo da casa; o que separa relevante de irrelevante de verdade é o corte RELATIVO, que não depende da escala do modelo.
+O piso de 0,25 rejeitava menos de 7% do que já se sabia ser lixo. Subir para a faixa de 0,45 a 0,50 rejeitaria junto metade do conteúdo do próprio cliente, porque as duas distribuições se sobrepõem.
+
+Repare no número que decide: a mediana do ruído medido é 0,375, ACIMA de 0,35. Um corte absoluto de 0,35 não chega a filtrar metade do lixo que já se sabia ser lixo. Quem separa relevante de irrelevante de verdade é o corte RELATIVO de 0,60, que não depende da escala do modelo. O corte absoluto é a rede de baixo, não a peneira.
+
+Daí a assimetria, e daí a entrada em 0,30:
+
+- Cortar de menos custa um trecho a mais no prompt. É barato, e o corte relativo derruba esse trecho assim que aparece um resultado bom.
+- Cortar de mais custa a resposta certa do cliente que tem pouco conteúdo treinado. Numa base pequena, o melhor resultado legítimo pode ficar na casa de 0,32, e com 0,35 ele simplesmente não existe.
+
+0,35 fica como META, não como entrada. Ela sobe quando o `recall_eval.py` (seção 5) confirmar 90% ou mais nos DOIS namespaces reais, CMJ e MACHIA, rodando com 0,35. Enquanto essa medida não existir, o valor que entra no ar é 0,30, que é o lado que erra para o cliente.
 
 Quando o provedor de embedding mudar, este número muda com ele. Refaça a medida (seção 5) antes de mexer.
 
@@ -102,4 +122,11 @@ python services/rag/scripts/recall_eval.py --namespace org_cmr4x0zmn007msdhtqn6l
 python services/rag/scripts/recall_eval.py --namespace org_cmrktle9g002epphvb02qbe1r   # MACHIA
 ```
 
-Cada pergunta gera um embedding pago, por isso o script não roda no CI. Meta combinada: 90% ou mais nas duas organizações. O script sai com código 1 quando fica abaixo da meta, então serve como passo de runbook.
+O corte padrão do script é o 0,30 que está no ar. Para decidir se a meta de 0,35 pode virar entrada, rode a mesma linha com `--min-similarity 0.35` nos dois namespaces e compare:
+
+```bash
+python services/rag/scripts/recall_eval.py --namespace org_cmr4x0zmn007msdhtqn6lfkia --min-similarity 0.35
+python services/rag/scripts/recall_eval.py --namespace org_cmrktle9g002epphvb02qbe1r --min-similarity 0.35
+```
+
+Cada pergunta gera um embedding pago, por isso o script não roda no CI. Meta combinada: 90% ou mais nas duas organizações. O script sai com código 1 quando fica abaixo da meta, então serve como passo de runbook. Só depois dessa medida, nos DOIS namespaces, o corte de entrada sobe de 0,30 para 0,35.

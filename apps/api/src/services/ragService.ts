@@ -83,7 +83,7 @@ export function buildQueryRequest(
       // O 0,25 original não filtrava nada: medido nos vetores REAIS de produção
       // (A022), conteúdo de outra empresa tinha mediana 0,375 e só 3,7% ficava
       // abaixo de 0,25. O default vive em config/env.ts e é ajustável por env.
-      min_similarity: Number(env.RAG_MIN_SIMILARITY ?? 0.35),
+      min_similarity: Number(env.RAG_MIN_SIMILARITY ?? 0.30),
     },
   };
 }
@@ -244,7 +244,7 @@ export async function searchDetailed(
   query: string,
   topK = 5,
 ): Promise<RagSearchOutcome> {
-  const minSimilarity = Number(env.RAG_MIN_SIMILARITY ?? 0.35);
+  const minSimilarity = Number(env.RAG_MIN_SIMILARITY ?? 0.30);
   const configVersion = await readConfigVersion(organizationId);
   const cacheKey = buildCacheKey({
     organizationId,
@@ -273,7 +273,8 @@ export async function searchDetailed(
     // busca paga porque só o resultado cheio entrava no cache.
     await cache.set(cacheKey, JSON.stringify({ context, sources, status }), CACHE_TTL_SECONDS);
 
-    logger.info('[RAG] busca concluída', {
+    // debug, não info: é uma linha por turno de TODA conversa de TODA org.
+    logger.debug('[RAG] busca concluída', {
       organizationId,
       status,
       topK,

@@ -181,6 +181,82 @@ def test_query_sem_nada_acima_do_corte_devolve_lista_vazia(monkeypatch, sem_embe
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Quem manda no corte e a API (I1 da revisao do PR #365)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_query_respeita_o_corte_que_a_api_pediu(monkeypatch, sem_embedding):
+    """
+    O _knn_search ja aplicava o corte pedido pela API, mas entregava ao rerank
+    uma config lida do env do PROPRIO servico, e o rerank re-aplicava o
+    cfg.min_similarity dele por cima. O piso efetivo virava o maior dos dois, e
+    baixar o corte por env na API (o rollback previsto) nao tinha efeito
+    nenhum. Este teste exercita a rota inteira, nao a funcao pura.
+    """
+    rows = [_row("a", "resposta sobre garantia estendida", "faq.pdf", 0, 0.30, "h1")]
+    client, _ = _client(monkeypatch, rows)
+
+    resp = client.post(
+        "/query",
+        json={
+            "query": "garantia",
+            "namespace": "org_x",
+            "top_k": 5,
+            "min_similarity": 0.25,
+        },
+    )
+    assert resp.status_code == 200
+    assert [r["id"] for r in resp.json()["results"]] == ["a"]
+
+
+def test_query_o_piso_do_servico_aperta_o_corte_da_api(monkeypatch, sem_embedding):
+    """O FLOOR do servico continua valendo: ele so aperta, nunca solta."""
+    monkeypatch.setenv("RAG_MIN_SIMILARITY_FLOOR", "0.40")
+    rows = [
+        _row(
+            "forte", "trecho claramente do assunto perguntado", "faq.pdf", 1, 0.50, "h2"
+        ),
+        _row("fraco", "trecho de similaridade media", "faq.pdf", 0, 0.30, "h1"),
+    ]
+    client, _ = _client(monkeypatch, rows)
+
+    resp = client.post(
+        "/query",
+        json={
+            "query": "garantia",
+            "namespace": "org_x",
+            "top_k": 5,
+            "min_similarity": 0.25,
+        },
+    )
+    assert resp.status_code == 200
+    assert [r["id"] for r in resp.json()["results"]] == ["forte"]
+
+
+def test_query_o_env_do_servico_nao_manda_mais_no_corte(monkeypatch, sem_embedding):
+    """
+    RAG_MIN_SIMILARITY no servico e so o valor de partida da config. Quem decide
+    o corte e a API, pelo corpo do /query. Antes este env apertava tudo por
+    dentro do rerank, sem aparecer em lugar nenhum.
+    """
+    monkeypatch.setenv("RAG_MIN_SIMILARITY", "0.80")
+    rows = [_row("a", "resposta sobre garantia estendida", "faq.pdf", 0, 0.40, "h1")]
+    client, _ = _client(monkeypatch, rows)
+
+    resp = client.post(
+        "/query",
+        json={
+            "query": "garantia",
+            "namespace": "org_x",
+            "top_k": 5,
+            "min_similarity": 0.30,
+        },
+    )
+    assert resp.status_code == 200
+    assert [r["id"] for r in resp.json()["results"]] == ["a"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # /ingest com trecho unico (A011)
 # ─────────────────────────────────────────────────────────────────────────────
 

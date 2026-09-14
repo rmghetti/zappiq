@@ -140,12 +140,19 @@ const envSchema = z.object({
   // RAG Service
   RAG_SERVICE_URL: z.string().default('http://localhost:8001'),
   RAG_SERVICE_SECRET: z.string().optional(),
-  // Piso de similaridade do retrieval (0..1). Abaixo disso o chunk não entra no prompt.
-  // 0,35 e não mais 0,25: medido nos vetores REAIS de produção (A022, embedding
+  // Corte absoluto de similaridade do retrieval (0..1). Abaixo disso o trecho não
+  // entra no prompt. Quem manda é esta variável: ela vai no corpo do /query e o
+  // serviço Python usa o valor recebido, sem re-aplicar um piso próprio.
+  // 0,30 e não mais 0,25: medido nos vetores REAIS de produção (A022, embedding
   // text-embedding-3-small), conteúdo de OUTRA empresa tinha mediana 0,375 e só
   // 3,7% ficava abaixo de 0,25, ou seja, o piso antigo não filtrava nada e toda
-  // mensagem (inclusive "oi") levava 5 trechos ao prompt. Ver docs/architecture/busca.md.
-  RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.35),
+  // mensagem (inclusive "oi") levava 5 trechos ao prompt.
+  // 0,30 é a ENTRADA, não a meta: a assimetria pesa contra apertar de cara.
+  // Cortar de menos custa um trecho a mais no prompt; cortar de mais custa a
+  // resposta certa do cliente com pouco conteúdo. A meta de 0,35 só sobe depois
+  // que o recall_eval.py confirmar a meta nos dois namespaces reais (CMJ e
+  // MACHIA). Ver docs/architecture/busca.md.
+  RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.30),
 
   // Agendamento — OAuth do Google Calendar (cada cliente conecta a agenda dele).
   // Um único app ZappIQ; muitos clientes autorizam a própria conta.

@@ -161,7 +161,12 @@ def main() -> int:
     parser.add_argument("--namespace", required=True, help="org_<id> da organizacao")
     parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     parser.add_argument("--limit", type=int, default=200, help="maximo de Q&A medidos")
-    parser.add_argument("--min-similarity", type=float, default=0.35)
+    parser.add_argument(
+        "--min-similarity",
+        type=float,
+        default=0.30,
+        help="Corte absoluto. 0,30 e o que esta no ar; use 0.35 para medir a meta.",
+    )
     parser.add_argument("--meta", type=float, default=DEFAULT_META)
     parser.add_argument("--rag-url", default=None, help="default: RAG_SERVICE_URL")
     return asyncio.run(run(parser.parse_args()))
