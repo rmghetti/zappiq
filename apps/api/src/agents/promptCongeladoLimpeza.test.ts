@@ -193,3 +193,45 @@ describe('modo offline: a mesma função aplicada a uma lista exportada', () => 
     expect(saida[0].system_prompt).toContain('Domingo: Fechado');
   });
 });
+
+describe('seção repetida: a limpeza tira TODAS as ocorrências', () => {
+  // Prompt editado à mão pelo cliente pode ter a mesma seção duas vezes (é
+  // o que acontece quando alguém cola um trecho do seed por cima). Tirar só
+  // a primeira deixava a promessa de lembrete viva no prompt gravado, e a
+  // segunda passada do script dizia "nada a limpar".
+  const DUAS_VEZES = `## IDENTIDADE
+Você é Vera, atendente da CMJ. Este parágrafo existe para o resultado ficar
+acima do piso de 60% do tamanho original, que é a trava de gravação.
+Ele repete a ideia de propósito, para o texto ter corpo suficiente.
+Mais uma linha de conteúdo do cliente, que não pode sair daqui.
+Mais outra linha de conteúdo do cliente, que também não pode sair daqui.
+
+### Fluxo de Agendamento
+Quando o cliente quiser agendar:
+6. Informe que um lembrete será enviado 24h e 1h antes.
+
+## ESPECIALIZAÇÃO
+Atendimento comercial.
+
+### Fluxo de Agendamento
+Quando o cliente quiser agendar (colado de novo):
+6. Informe que um lembrete será enviado 24h e 1h antes.
+
+Lembre-se: você representa a CMJ.`;
+
+  it('nenhuma das duas seções sobra, e as duas aparecem na auditoria', () => {
+    const r = limparPromptCongelado(DUAS_VEZES);
+
+    expect(r.recusa).toBeNull();
+    expect(r.prompt).not.toContain('Fluxo de Agendamento');
+    expect(r.prompt).not.toContain('lembrete será enviado');
+    expect(r.removidos).toHaveLength(2);
+    expect(r.prompt).toContain('## ESPECIALIZAÇÃO');
+    expect(r.prompt).toContain('Lembre-se: você representa a CMJ.');
+  });
+
+  it('continua idempotente com a seção repetida', () => {
+    const r = limparPromptCongelado(DUAS_VEZES);
+    expect(limparPromptCongelado(r.prompt).mudou).toBe(false);
+  });
+});

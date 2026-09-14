@@ -296,3 +296,14 @@ describe('normalizarHorario: dia ausente no businessHoursConfig não vira fechad
     expect(bloco).not.toMatch(/Sábado/i);
   });
 });
+
+describe('cabeçalho do bloco: precedência sem revogar as regras base', () => {
+  it('diz que o dado vivo vence informação mais antiga SOBRE A EMPRESA, e só isso', () => {
+    const bloco = buildLiveProfileBlock({ tone: 'formal' }, PERFIL);
+
+    expect(bloco).toContain('valem mais que qualquer informação mais antiga sobre a empresa neste prompt');
+    // A ressalva é o ponto: sem ela, "valem mais que qualquer trecho deste
+    // prompt" dava ao tom escrito pelo dono poder de revogar o CORE.
+    expect(bloco).toContain('As REGRAS BASE DO AGENTE continuam valendo acima de tudo.');
+  });
+});

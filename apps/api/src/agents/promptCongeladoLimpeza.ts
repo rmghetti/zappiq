@@ -62,14 +62,29 @@ function recuarSobreVazio(texto: string, inicio: number): number {
   return i === 0 ? 0 : i + 1;
 }
 
-function removerSecao(texto: string, titulo: RegExp): { texto: string; removido: string | null } {
-  const m = texto.match(titulo);
-  if (!m || m.index === undefined) return { texto, removido: null };
+/**
+ * Tira TODAS as ocorrências da seção, não só a primeira.
+ *
+ * Prompt editado à mão repete seção: é o que acontece quando alguém cola um
+ * trecho do seed por cima do texto. Com `if` no lugar do `while`, a segunda
+ * cópia da promessa de lembrete ficava viva no prompt gravado e a rodada
+ * seguinte do script dizia "nada a limpar".
+ */
+function removerSecao(texto: string, titulo: RegExp): { texto: string; removidos: string[] } {
+  const removidos: string[] = [];
+  let atual = texto;
 
-  const fim = fimDaSecao(texto, m.index + m[0].length);
-  const inicio = recuarSobreVazio(texto, m.index);
-  const removido = texto.slice(inicio, fim);
-  return { texto: texto.slice(0, inicio) + texto.slice(fim), removido };
+  while (true) {
+    const m = atual.match(titulo);
+    if (!m || m.index === undefined) break;
+
+    const fim = fimDaSecao(atual, m.index + m[0].length);
+    const inicio = recuarSobreVazio(atual, m.index);
+    removidos.push(atual.slice(inicio, fim));
+    atual = atual.slice(0, inicio) + atual.slice(fim);
+  }
+
+  return { texto: atual, removidos };
 }
 
 function removerLinhaDeData(texto: string): { texto: string; removido: string | null } {
@@ -96,7 +111,7 @@ export function limparPromptCongelado(promptOriginal: string): LimpezaResultado 
   ]) {
     const r = removerSecao(texto, titulo);
     texto = r.texto;
-    if (r.removido) removidos.push(r.removido.trim());
+    for (const trecho of r.removidos) removidos.push(trecho.trim());
   }
 
   const data = removerLinhaDeData(texto);

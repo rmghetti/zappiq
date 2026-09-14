@@ -379,13 +379,3 @@ não estiver lá, diga que vai confirmar com a equipe.
 `,
   },
 };
-
-export function getAvailableNiches() {
-  return Object.keys(NICHE_PROMPTS)
-    .filter((k) => k !== 'generic')
-    .map((key) => ({
-      key,
-      label: NICHE_PROMPTS[key].label,
-      icon: NICHE_PROMPTS[key].icon,
-    }));
-}

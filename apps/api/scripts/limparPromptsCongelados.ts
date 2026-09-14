@@ -110,7 +110,11 @@ async function rodarComBanco(APPLY: boolean): Promise<void> {
     console.log(`\nBanco: ${mascararHost(process.env.DATABASE_URL)}`);
     console.log(APPLY ? 'Modo: APLICAR (vai escrever)\n' : 'Modo: DRY-RUN (não escreve nada)\n');
 
+    // Mesmo recorte do SQL do roteiro de produção: só o agente VIVO. Versão
+    // arquivada não vai para conversa nenhuma, e reescrevê-la só sujaria o
+    // histórico de versões com uma migração que ninguém pediu.
     const agents = await prisma.agent.findMany({
+      where: { status: 'live' },
       select: {
         id: true,
         name: true,
@@ -124,7 +128,7 @@ async function rodarComBanco(APPLY: boolean): Promise<void> {
       .map((a) => ({ agente: a, r: limparPromptCongelado(a.systemPrompt || '') }))
       .filter((x) => x.r.mudou);
 
-    console.log(`Agents no banco: ${agents.length}`);
+    console.log(`Agents vivos no banco (status = 'live'): ${agents.length}`);
     console.log(`Prompts com texto congelado: ${afetados.length}\n`);
 
     if (afetados.length === 0) {

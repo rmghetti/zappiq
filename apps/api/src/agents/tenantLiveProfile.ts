@@ -351,7 +351,7 @@ export function buildLiveProfileBlock(
   // nada: é ela que impede a IA de inventar dia e hora de funcionamento.
   const cabecalho = [
     '# Como você atende nesta empresa',
-    'Estas informações vêm do que o dono do negócio preencheu e valem mais que qualquer trecho mais antigo deste prompt.',
+    'Estas informações vêm do que o dono do negócio preencheu e valem mais que qualquer informação mais antiga sobre a empresa neste prompt. As REGRAS BASE DO AGENTE continuam valendo acima de tudo.',
   ];
 
   const bloco = [...cabecalho, ...linhas].join('\n');
