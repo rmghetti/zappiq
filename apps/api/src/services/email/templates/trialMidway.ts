@@ -13,7 +13,7 @@
  *     daysRemaining: 11,
  *     aiReadinessScore: 72,
  *     savings: 18000,
- *     ctaUrl: 'https://app.zappiq.com.br/billing?coupon=TRIAL14',
+ *     ctaUrl: 'https://zappiq.com.br/billing?coupon=TRIAL14',
  *   });
  */
 
@@ -61,9 +61,11 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
   // Só mostra o bloco de economia se houver um número real > 0.
   const savings = typeof input.savings === 'number' && input.savings > 0 ? input.savings : 0;
 
-  // Subject dinâmico — só afirma "pronta" quando temos score real ≥ 60.
+  // Subject dinâmico: só cita o número quando temos score real. O placar mede
+  // formulário preenchido, não teste de comportamento, então ele não diz
+  // "pronta", diz o quanto do treino foi feito.
   const subject = scoreReady
-    ? 'Sua IA já está pronta. Hora de converter antes do cupom expirar'
+    ? `Seu treino já chegou a ${aiReadinessScore}%. Hora de converter antes do cupom expirar`
     : `Faltam ${daysRemaining} dias. Veja o que sua IA já aprendeu`;
 
   // Contexto do readiness score (só usado quando hasScore)
@@ -85,14 +87,14 @@ export function renderTrialMidwayEmail(input: TrialMidwayEmailInput): RenderedEm
 
   const nextSteps = scoreReady
     ? [
-        'Revisar os templates de resposta (Settings > AI Behavior)',
+        'Revisar o tom e as mensagens do agente (Treinar IA, aba Identidade)',
         'Testar com dados reais (envie uma mensagem pelo seu número)',
         'Se tiver dúvidas de integrações, responda este e-mail',
       ]
     : [
         'Subir mais documentos de origem (não é só sobre quantidade)',
         'Responder as próximas perguntas do survey de contexto',
-        'Revisar as sugestões automáticas (Settings > Suggestions)',
+        'Revisar as correções sugeridas (Qualidade da IA)',
       ];
 
   const html = `<!doctype html>

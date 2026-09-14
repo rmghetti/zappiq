@@ -118,7 +118,7 @@ export const PLAN_CONFIG: Record<PlanId, PlanConfig> = {
       support: 'email',
     },
     bullets: [
-      'TRIAL 14 DIAS GRATIS — apos isso R\$ 247,00/mes',
+      'TRIAL 14 DIAS GRÁTIS: depois disso R\$ 247,00/mês',
       'Anual: R\$ 197,60/mes (economiza 20%)',
       '1 atendente humano',
       '1.500 mensagens de IA/mes',

@@ -108,12 +108,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.3,
     },
     {
-      url: `${baseUrl}/observabilidade`,
-      lastModified: today,
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
       url: `${baseUrl}/lgpd`,
       lastModified: today,
       changeFrequency: 'yearly',

@@ -53,7 +53,7 @@ const TECHNICAL_MEASURES = [
   { icon: Lock, title: 'Criptografia end-to-end', desc: 'AES-256 em repouso, TLS 1.3 em trânsito. Chaves gerenciadas em KMS.' },
   { icon: Eye, title: 'Auditoria completa', desc: 'Log de todos os acessos a dados pessoais, retido por até 5 anos no Enterprise.' },
   { icon: Key, title: 'Controle de acesso granular', desc: 'RBAC por função, MFA obrigatório para administradores, SSO no Enterprise.' },
-  { icon: Server, title: 'Servidores no Brasil', desc: 'Infraestrutura em São Paulo (região gru). Dados não saem do território nacional.' },
+  { icon: Server, title: 'Onde os dados ficam', desc: 'Os dados ficam em servidores nos Estados Unidos (banco de dados e processamento de IA), com salvaguardas contratuais para transferência internacional. Lista completa em /legal/subprocessadores.' },
   { icon: Shield, title: 'Isolamento multi-tenant', desc: 'Row-Level Security no banco + namespace isolation no motor de busca.' },
   { icon: Clock, title: 'Retenção configurável', desc: 'Políticas por tipo de dado. Tiers hot/warm/cold/delete documentados em ADR.' },
 ];

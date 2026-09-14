@@ -39,7 +39,7 @@ const STEPS = [
     icon: Upload,
     title: 'Upload de contratos e documentos',
     description:
-      'PDFs, planilhas, FAQs, contratos, políticas, catálogos. Sua IA responde com base no SEU acervo, sem alucinação e sem limite de uploads.',
+      'FAQs, contratos, políticas e catálogos em PDF, TXT, MD ou CSV. Sua IA responde com base no SEU acervo, e não em suposição.',
     deliverable: 'Base de conhecimento vetorizada automaticamente',
     points: '+25 pontos no AI Readiness',
   },

@@ -51,7 +51,15 @@ export interface SegmentPageData {
   heroSubtitle: string;
   pains: SegmentPain[];
   solutions: SegmentSolution[];
-  testimonial: SegmentTestimonial;
+  /** Depoimento real e autorizado. Sem autorização assinada, use `capacidade`. */
+  testimonial?: SegmentTestimonial;
+  /**
+   * Descrição de capacidade: o que a plataforma faz, em uma cena concreta.
+   * Não leva aspas, nome, estrelas nem iniciais, porque não é fala de
+   * ninguém. Existe para a página não ficar com um depoimento inventado no
+   * lugar de um depoimento que ainda não temos.
+   */
+  capacidade?: string;
   /** Exemplos de material self-service, se omitido, a seção não aparece. */
   trainingExamples?: SegmentTrainingExample[];
   /** Headline da seção self-service, fallback padrão se omitido. */
@@ -209,23 +217,37 @@ export function SegmentTemplate({ data }: { data: SegmentPageData }) {
       </section>
 
       {/* Depoimento, PLACEHOLDER: substituir por depoimento real */}
-      <section className="py-16 bg-white">
-        <div className="max-w-3xl mx-auto px-6">
-          <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-            <div className="flex justify-center gap-0.5 mb-4">
-              {[...Array(5)].map((_, i) => <Star key={i} size={16} className="text-yellow-400 fill-yellow-400" />)}
-            </div>
-            <p className="text-lg text-gray-700 leading-relaxed mb-6 italic">&ldquo;{data.testimonial.text}&rdquo;</p>
-            <div className="flex items-center justify-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-xs font-bold">{data.testimonial.initials}</div>
-              <div className="text-left">
-                <p className="text-sm font-semibold text-gray-900">{data.testimonial.name}</p>
-                <p className="text-xs text-gray-400">{data.testimonial.role}, {data.testimonial.company}</p>
+      {data.testimonial && (
+        <section className="py-16 bg-white">
+          <div className="max-w-3xl mx-auto px-6">
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
+              <div className="flex justify-center gap-0.5 mb-4">
+                {[...Array(5)].map((_, i) => <Star key={i} size={16} className="text-yellow-400 fill-yellow-400" />)}
+              </div>
+              <p className="text-lg text-gray-700 leading-relaxed mb-6 italic">&ldquo;{data.testimonial.text}&rdquo;</p>
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-xs font-bold">{data.testimonial.initials}</div>
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-gray-900">{data.testimonial.name}</p>
+                  <p className="text-xs text-gray-400">{data.testimonial.role}, {data.testimonial.company}</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
+
+      {/* Capacidade: o que a plataforma faz. Sem aspas e sem nome, porque
+          não é depoimento de ninguém. */}
+      {!data.testimonial && data.capacidade && (
+        <section className="py-16 bg-white">
+          <div className="max-w-3xl mx-auto px-6">
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
+              <p className="text-lg text-gray-700 leading-relaxed">{data.capacidade}</p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* CTA Final */}
       <section className="py-20 bg-[#1A1A2E]">

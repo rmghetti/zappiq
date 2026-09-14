@@ -28,8 +28,8 @@ export function PrelaunchCompare() {
             <div className={`${s.revealCardLabel} ${s.revealCardLabelFeat}`}>─ Com ZappIQ</div>
             <h3 className={s.revealCardH3}>A Iza atende 24/7. 1 humano cuida do que importa. R$ 197 a partir.</h3>
             <p className={s.revealCardP}>
-              Resposta em 30 segundos, conversão 60% maior no mesmo volume. Setup zero. Dados no Brasil. LGPD
-              resolvida. Sem fidelidade.
+              Resposta em 30 segundos, conversão 60% maior no mesmo volume. Setup zero. LGPD com DPA e
+              encarregado de dados. Sem fidelidade.
             </p>
           </article>
         </div>

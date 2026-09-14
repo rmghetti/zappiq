@@ -71,6 +71,158 @@ nada. O prompt gerado é byte a byte o mesmo de antes.
 **Smoke esperado:** nenhum. O teste `promptXray.test.ts` monta o prompt pelo
 montador real de produção e confere as fatias, o que cobre a regressão.
 
+---
+
+### 2026-09-14 · Tarefa A4, rodada 2 · O que a primeira varredura deixou passar
+
+**O que mudou:** a revisão do PR #353 achou três páginas públicas que continuavam
+prometendo dados no Brasil, com uma redação que as regras da varredura não pegavam, e uma
+regressão que o próprio PR tinha introduzido nos dossiês de reposicionamento.
+
+- **Residência de dados, três páginas que escaparam.** `/sobre` dizia "operando em
+  infraestrutura brasileira com dados residentes no Brasil"; a prova social da home dizia
+  "seus dados processados no Brasil"; o card 06 da home dizia "Seus dados, no Brasil.
+  Ponto." e "tudo processado e armazenado em servidor brasileiro", com a promessa de que
+  dado só sairia do país com autorização expressa. As três agora dizem o fato: os dados
+  ficam em servidores nos Estados Unidos (banco de dados e processamento de IA), com
+  salvaguardas contratuais para transferência internacional. O selo do card virou
+  "06 · LGPD".
+- **Regressão nos dossiês.** `docs/reposicionamento-landing-2026/README.md` e os dossiês
+  09 e 10 afirmavam, no aviso escrito por este mesmo PR, que "o banco fica no Brasil".
+  Corrigido, e a varredura passou a ler esses três arquivos.
+- **Duas regras novas na varredura**, escritas antes da correção e vistas falhando: uma
+  pega a IDEIA de dado que fica no Brasil em qualquer redação, outra pega o adjetivo
+  ("infraestrutura brasileira", "servidor brasileiro").
+- **Lembrete que não existe.** O questionário de cadastro ainda dizia "A IA pode enviar
+  lembretes de retorno" (duas telas) e "A IA pode listar no lembrete". Viraram o que a IA
+  faz: usar a informação dentro da conversa. Em `/segmentos/servicos-b2b`, o follow-up de
+  proposta deixou de ser um prazo automático e virou o fluxo que a equipe monta no
+  Maestro. A regra de lembrete passou a pegar "de retorno" e "enviar lembrete".
+
+**Impacto na Iza:** reforça a entrada anterior, sem fato novo. A Iza não pode dizer
+"infraestrutura brasileira" nem "servidor brasileiro", que eram as redações que faltavam
+na proibição, e não pode dizer que a IA envia lembrete de retorno. Disparo por prazo só
+existe como nó do Maestro, dentro de um fluxo que alguém da equipe monta e liga.
+
+**Ação no /admin/iza-knowledge (após merge):**
+- [ ] Nenhuma além das já listadas na entrada da rodada 1. Conferir, ao executá-las, que
+      nenhum fact usa as palavras "infraestrutura brasileira" ou "servidor brasileiro".
+
+**Smoke esperado:** "onde ficam meus dados?" → "em servidores nos Estados Unidos, banco de
+dados e processamento de IA, com salvaguardas contratuais para transferência
+internacional". "A IA lembra meu cliente da consulta?" → "não; ela consulta o horário
+livre e cria o compromisso, o aviso continua com a equipe".
+
+---
+
+### 2026-09-14 · Tarefa A4 · Retirada das promessas que o código não cumpre
+
+**O que mudou:** varredura de honestidade na copy do site, no painel e nos e-mails,
+tirando frase por frase o que a auditoria provou falso. Na landing:
+
+- **Residência de dados (ERRO DE FATO, corrigido na revisão).** O site dizia que os dados
+  não saem do território nacional e, numa primeira correção, que o banco ficava no Brasil.
+  As duas coisas são falsas. O banco de produção é o projeto Supabase
+  `hwdeezdxyphvxikvgjyf`, região **us-east-1, Estados Unidos**, verificado na API de
+  gerenciamento do Supabase em 14/09/2026, e o processamento de IA também roda nos Estados
+  Unidos, em todas as conversas. A frase padrão passa a ser: os dados ficam em servidores
+  nos Estados Unidos (banco de dados e processamento de IA), com salvaguardas contratuais
+  para transferência internacional. Corrigidos: Hero, aviso rotativo da home, selo de
+  confiança, rodapé da landing, faixa do pré-lançamento, comparação de pré-lançamento,
+  FAQ da home, FAQ de conexão, wizard do diagnóstico, /lgpd, /legal/privacidade,
+  /legal/enderecos-comerciais e
+  /legal/subprocessadores (inclusive as linhas de AWS e Supabase na tabela, que diziam
+  sa-east-1). Onde a ressalva não cabia num item de benefício (Hero, aviso rotativo, selo,
+  pré-lançamento), o item virou "LGPD com DPA e encarregado de dados" e a íntegra ficou nas
+  páginas legais.
+- **Links de e-mail em produção.** `APP_URL` no `fly.toml` apontava para
+  `https://zappiq-api.fly.dev`, a API. Todo botão da régua de trial e o link do digest de
+  superadmin levavam o cliente para um host sem página. Passa a ser
+  `https://zappiq.com.br`. OAuth, Stripe e CORS não usam essa variável.
+- **Autocorreção.** Saem "se corrige sozinha", "aprende com os próprios erros", "detecta
+  as alucinações do seu agente" e "cada correção aprovada vira conhecimento". O que
+  existe é uma bateria semanal de cenários simulados que aponta o desvio e escreve a
+  correção; nada entra no agente sem o clique de aprovar.
+- **Formatos da base de conhecimento.** Saem "planilhas" e DOCX. A ingestão lê PDF, TXT,
+  MD e CSV; Word e Excel voltavam 415. Sai também "sem limite de uploads".
+- **Agenda.** Saem lembrete, confirmação automática, remarcação pela IA e os números de
+  no-show, dos cartões de segmento, de /segmentos/saude, /cases, /vendedor-digital e
+  /diagnostico. A IA consulta o horário livre e cria o compromisso, só isso.
+- **Páginas despublicadas.** /roadmap, /observabilidade e /como-funciona-survey passam a
+  redirecionar permanentemente para a home e saem do menu, do rodapé, do bloco de planos
+  e do sitemap.
+- **Voz.** O gabarito da Iza (`evalSetZappIQ.ts`) deixa de mandar afirmar voz "treinada
+  nativamente": todo áudio sai pelo fallback, com voz adaptada do inglês. Deixa também de
+  mandar creditar "tecnologia proprietária ZappIQ", porque a síntese é de terceiro. Em
+  /voz, no card de voz da home e no FAQ da home saem os nomes de fornecedor da copy
+  visível (o próprio gabarito proíbe citá-los), e sai a promessa de áudio 24h antes do
+  evento: não existe disparo programado. O nome da EMPRESA continua nas páginas legais,
+  que é obrigação de LGPD; o que sai é o nome do modelo, que só entrega o fornecedor.
+- **Lembretes automáticos.** Saem de /cases, /segmentos/educacao, dos cartões de segmento e
+  da lista do CRM as promessas de lembrete de vencimento, de aula, de vacina e de
+  documento, com os números de falta apoiados nelas. O que existe é campanha disparada pela
+  equipe e tarefa com prazo no quadro.
+- **Depoimento inventado.** /segmentos/saude tinha uma cena entre aspas que ninguém disse.
+  Vira descrição de capacidade, sem aspas, sem nome e sem estrelas.
+
+**Impacto na Iza:** a Iza NÃO pode mais dizer que os dados ficam no Brasil, nem que o banco
+fica no Brasil, nem que nada sai do território nacional. Passa a dizer: os dados ficam em
+servidores nos Estados Unidos, banco de dados e processamento de IA, com salvaguardas
+contratuais para transferência internacional, DPA padrão e encarregado de dados, e a lista
+completa em /legal/subprocessadores. NÃO pode prometer lembrete automático de nenhum tipo
+(vencimento, aula, consulta, vacina, documento) nem áudio disparado antes do evento: a
+agenda consulta o horário livre e cria o compromisso, avisar o cliente continua com a
+equipe. NÃO pode citar fornecedor de voz nem afirmar tecnologia própria de voz: fala só
+"voz em português brasileiro". NÃO pode prometer Word, Excel nem "planilhas" na base de
+conhecimento. NÃO pode dizer que a plataforma se corrige sozinha. E não deve mandar o
+cliente para /roadmap, /observabilidade ou /como-funciona-survey, que agora redirecionam.
+
+**Ação no /admin/iza-knowledge (obrigatória, os facts contradizem o site agora):**
+
+- [ ] UPDATE `kb_upload`: tirar DOCX e site da lista. Formatos aceitos hoje: PDF, TXT, MD
+      e CSV, mais link de página e texto colado.
+- [ ] UPDATE `self_healing`: tirar "plataforma aprende", "loop fechado" e "única no
+      mundo". Redação factual: a bateria semanal aponta o desvio e sugere a correção,
+      que só vale depois de aprovada por uma pessoa.
+- [ ] UPDATE `instagram_direct`: sair de "em operação real" enquanto não houver nenhuma
+      conversa de Instagram na base.
+- [ ] UPDATE `chat_site`: tirar "mesma cascade LLM do WhatsApp".
+- [ ] UPDATE `como_funciona`: o link para /como-funciona-survey agora redireciona;
+      apontar para /#precos ou para o cadastro.
+- [ ] UPDATE `feat_voz_outbound`: tirar "treinada nativamente em português brasileiro",
+      tirar o nome do fornecedor de voz e tirar "tecnologia proprietária". Redação
+      factual: voz em português brasileiro.
+- [ ] UPDATE de qualquer fact que afirme dados no Brasil, banco no Brasil ou residência em
+      território nacional. Redação factual: os dados ficam em servidores nos Estados Unidos
+      (banco de dados e processamento de IA), com salvaguardas contratuais para
+      transferência internacional.
+- [ ] UPDATE de qualquer fact que prometa lembrete automático (vencimento, aula, consulta,
+      vacina, documento) ou áudio antes do evento. A agenda consulta o horário e cria o
+      compromisso; o aviso ao cliente continua com a equipe.
+- [ ] LIMPAR o prompt gravado dos agentes (`agents.system_prompt`), não só os facts. A
+      migração `20260427_agent_model` semeou a instrução "para questões sobre Voz
+      Padrão/Premium, comunicar status 'em desenvolvimento, disponível em julho/2026' e
+      linkar /roadmap". A rota /roadmap agora redireciona, e a data já passou, então essa
+      instrução tem de sair do `agents.system_prompt` de cada organização. A limpeza é
+      feita pelo script da tarefa A9, não por UPDATE manual no /admin.
+
+**Smoke esperado no chat da Iza:**
+
+- "Posso subir um Word ou uma planilha?" -> "Hoje leio PDF, TXT, MD e CSV", sem prometer
+  Word nem Excel.
+- "A IA se corrige sozinha?" -> "Eu aponto o desvio e escrevo a correção, quem aprova é
+  você", sem "aprende" e sem "única no mundo".
+- "Meus dados ficam no Brasil?" -> "Os dados ficam em servidores nos Estados Unidos, banco
+  de dados e processamento de IA, com salvaguardas contratuais para a transferência
+  internacional", sem afirmar Brasil em lugar nenhum.
+- "A IA lembra meu cliente do vencimento?" -> "Não mando lembrete sozinha; a campanha quem
+  dispara é a sua equipe."
+- "Qual a tecnologia da voz de vocês?" -> "Voz em português brasileiro", sem citar
+  fornecedor e sem dizer que é tecnologia própria.
+- "Quando sai a Voz Premium?" -> resposta sem prometer data e sem mandar para /roadmap.
+- "A IA confirma e lembra a consulta?" -> "Eu marco o horário na agenda; confirmar e
+  lembrar continua com a sua equipe."
+
 ### 2026-08-20 · PR #343 · Bandeira nova "por atendimento" + kit Outubro sem Susto
 
 **O que mudou:** toda a copy do site trocou a bandeira "mensalidade fixa sem cobrança por conversa" pela nova: "Mensalidade fixa por atendimento: cada conversa que a Iza cuida conta um, com mensagens à vontade dentro dela. A tarifa do WhatsApp vai a custo, na sua conta, com medidor e teto. Zero markup, zero setup, zero surpresa." Fair use de 12 respostas por atendimento aparece em linha visível. A página /novidades-meta virou o kit "Outubro sem susto" (calculadora da tarifa Meta de 01/10, referência R$ 0,035 por resposta, tabela final até 01/09) e nasceu /legal/subprocessadores. Decisões D1/D2 do plano Resposta Meta, aprovadas pelo fundador em 20/08.

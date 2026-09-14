@@ -23,7 +23,9 @@
  *
  * Segurança:
  *   Todas as rotas exigem auth + tenant scoping. Upload limita tamanho
- *   (20MB) e tipos (pdf, txt, md, docx, csv).
+ *   (20MB) e tipos: PDF, TXT, MD e CSV, que é o que a ingestão consegue ler.
+ *   O filtro aceita por mime OU por extensão, porque o navegador rotula .csv
+ *   como Excel no Windows e .md como octet-stream ou vazio.
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
@@ -46,6 +48,7 @@ import {
   isEditableDocument,
   planTextDocRagSync,
   normalizeQaUpdate,
+  isUploadAllowed,
 } from './aiTraining.text.util.js';
 import {
   appointmentTypeSchema,
@@ -94,17 +97,9 @@ async function logTraining(
 }
 
 // ── Multer config ───────────────────────────────────────
-const ALLOWED_MIMES = new Set([
-  'application/pdf',
-  'text/plain',
-  'text/markdown',
-  'text/csv',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-]);
-
+// A lista de formatos vive em aiTraining.text.util.ts, com teste: é ela que
+// mantém a tela, o accept do input e o filtro dizendo a mesma coisa. Word e
+// Excel saíram dela: o indexador responde 415 e nenhum documento é criado.
 // O limite vive em config/upload.ts, porque o errorHandler precisa do MESMO
 // número para escrever a mensagem de 413 que o cliente lê.
 const upload = multer({
@@ -114,7 +109,10 @@ const upload = multer({
   // Antes era um Error cru, que virava 500 "Internal Server Error" e fazia o
   // cliente achar que a plataforma tinha caído.
   fileFilter: (_req, file, cb) => {
-    if (ALLOWED_MIMES.has(file.mimetype)) return cb(null, true);
+    if (isUploadAllowed(file.mimetype, file.originalname)) return cb(null, true);
+    // UnsupportedFileTypeError já traz statusCode 415 e a mensagem em
+    // português, sem ecoar o mimetype: o valor não é do cliente, é do
+    // navegador, e mostrá-lo só confunde quem mandou o arquivo certo.
     cb(new UnsupportedFileTypeError());
   },
 });

@@ -288,7 +288,7 @@ export function DiagnosticoWizard() {
           </div>
 
           <p className="text-center text-[12.5px] text-muted mt-5">
-            Seus dados ficam no Brasil e são usados apenas para gerar o relatório e falar sobre o resultado.
+            Seus dados são usados apenas para gerar o relatório e falar sobre o resultado.
           </p>
         </div>
       </div>

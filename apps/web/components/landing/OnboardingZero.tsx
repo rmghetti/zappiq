@@ -8,8 +8,7 @@
  * g→b→p no card ZappIQ, bloco âncora humana preservado.
  * ══════════════════════════════════════════════════════════════════════════ */
 
-import Link from 'next/link';
-import { X, Check, ArrowRight, Sparkles } from 'lucide-react';
+import { X, Check, Sparkles } from 'lucide-react';
 
 const MERCADO = [
   'Reunião de kickoff com consultor (R$ 1.500)',
@@ -21,7 +20,7 @@ const MERCADO = [
 
 const ZAPPIQ = [
   'Formulário guiado de 30 a 90 minutos, você mesmo faz',
-  'Você mesmo sobe seus documentos (PDF, planilha, site)',
+  'Você mesmo sobe seus documentos (PDF, TXT, MD, CSV ou link do site)',
   'A Iza é calibrada automaticamente no painel',
   'Score de prontidão de 0 a 100, você vê em tempo real',
   'Em minutos você está atendendo cliente no WhatsApp',
@@ -97,15 +96,6 @@ export function OnboardingZero() {
               ))}
             </ul>
           </div>
-        </div>
-
-        <div className="mt-10 text-center">
-          <Link
-            href="/como-funciona-survey"
-            className="inline-flex items-center gap-1.5 text-[14px] font-medium text-accent hover:underline"
-          >
-            Ver como o survey funciona em detalhes <ArrowRight size={14} />
-          </Link>
         </div>
 
         {/* Âncora humana: card claro */}

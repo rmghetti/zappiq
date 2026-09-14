@@ -8,8 +8,8 @@
 import { describe, it, expect } from 'vitest';
 import { renderTrialWhatsappNudgeEmail } from './trialWhatsappNudge.js';
 
-const CONNECT = 'https://app.zappiq.com.br/settings?utm_campaign=trial_w7#canais';
-const DEMO = 'https://app.zappiq.com.br/ai-training?utm_campaign=trial_w7';
+const CONNECT = 'https://zappiq.com.br/settings?utm_campaign=trial_w7#canais';
+const DEMO = 'https://zappiq.com.br/ai-training?utm_campaign=trial_w7';
 
 describe('trialWhatsappNudge (W7)', () => {
   it('traz o CTA de conectar o canal E o link da demo no navegador', () => {

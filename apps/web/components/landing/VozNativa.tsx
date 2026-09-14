@@ -4,7 +4,7 @@
  * VozNativa: Design V4 (PR #73 · pricing real v4 LIVE no Stripe)
  * --------------------------------------------------------------------------
  * Inbound (Whisper STT) incluso em todos os planos. R$ 0.
- * Outbound (TTS Neural2-C pt-BR) em 6 pacotes. Aqui a home mostra 3 destaque
+ * Outbound (voz em português brasileiro) em 6 pacotes. Aqui a home mostra 3 destaque
  *   (Voice 200, 400 highlight, 1500). CTA pra /voz pra ver os 6.
  * ══════════════════════════════════════════════════════════════════════════ */
 
@@ -128,7 +128,7 @@ export function VozNativa() {
                 <Mic size={22} />
                 <div>
                   <h3 className="text-[20px] font-medium leading-tight tracking-tight">Sua IA responde em áudio</h3>
-                  <p className="text-[12px] text-white/85">6 pacotes · pt-BR Neural2-C</p>
+                  <p className="text-[12px] text-white/85">6 pacotes · voz em português brasileiro</p>
                 </div>
               </div>
               <span className="text-[11px] font-semibold bg-white/15 backdrop-blur px-2.5 py-1 rounded-full">

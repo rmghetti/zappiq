@@ -13,7 +13,7 @@
  *
  * Nesse exato momento, mostramos:
  *   • Celebração do marco (visual limpo, sem confete exagerado)
- *   • SavingsCalculator embutido (dashboard variant) — com o número da
+ *   • SavingsCalculator embutido (dashboard variant), com o número da
  *     economia calculado contra a baseline do concorrente
  *   • CTA "Antecipar conversão com 14% off" → /billing?coupon=EARLY14
  *
@@ -28,7 +28,7 @@
  *
  * Flag de persistência:
  *   localStorage key `zappiq_readiness_milestone_60_fired_at` com valor
- *   ISO date. TTL infinito — o nudge só pode disparar UMA vez por tenant
+ *   ISO date. TTL infinito: o nudge só pode disparar UMA vez por tenant
  *   na vida. Se quiser re-disparar (teste), limpar manualmente ou passar
  *   ?resetReadinessNudge=1 na URL (handleado abaixo).
  * ═══════════════════════════════════════════════════════════════════════ */
@@ -41,7 +41,7 @@ const STORAGE_KEY = 'zappiq_readiness_milestone_60_fired_at';
 const THRESHOLD = 60;
 
 /* ------------------------------------------------------------------ */
-/* Hook público — permite que qualquer página que já tenha o readiness */
+/* Hook público: permite que qualquer página que já tenha o readiness */
 /* dispare o nudge sem duplicar lógica.                                */
 /* ------------------------------------------------------------------ */
 export function useReadinessMilestone(score: number | null | undefined): {
@@ -129,12 +129,12 @@ export default function ReadinessMilestoneNudge({
             id="readiness-nudge-title"
             className="text-2xl md:text-3xl font-extrabold font-display leading-tight"
           >
-            Sua IA acaba de ficar pronta para atender de verdade.
+            Seu treino chegou a {score}%.
           </h2>
           <p className="text-white/90 mt-2 text-sm md:text-base leading-relaxed">
-            Você treinou sozinho, sem consultor, sem setup pago. E já está
-            acima do threshold de "Pronta" — a partir daqui todo conversation
-            vira pipeline.
+            Você treinou sozinho, sem consultor, sem setup pago. O placar mede o
+            quanto você já cadastrou: para saber como o agente responde de fato,
+            rode a bateria em Qualidade da IA.
           </p>
 
           <div className="flex items-center gap-2 mt-4 text-sm">
@@ -160,7 +160,7 @@ export default function ReadinessMilestoneNudge({
             ctaHref={ctaHref}
             ctaLabel={`Antecipar conversão com ${coupon} →`}
             onCtaClick={() => {
-              // Mantém o modal fechado após o click — o next/link navega.
+              // Mantém o modal fechado após o click, o next/link navega.
               close();
             }}
           />
@@ -168,7 +168,7 @@ export default function ReadinessMilestoneNudge({
           <p className="text-xs text-gray-500 mt-4 leading-relaxed">
             Cupom válido por 72h a partir deste marco. Sem permanência, sem
             setup fee, cancelamento em 1 clique. Se preferir continuar no
-            trial até o dia 21, sem problema — o botão acima vai continuar
+            trial até o dia 21, sem problema, o botão acima vai continuar
             válido até o vencimento do cupom.
           </p>
         </div>

@@ -36,10 +36,10 @@ export const qualidadeContent: SaibaMaisContent[] = [
     comoImplementar: [
       'Veja o card no topo da tela de Qualidade da IA, logo depois de escolher o agente.',
       'Se estiver em "Atenção" ou "Crítico", desça até "Comportamentos para revisar" pra ver o que causou a nota baixa.',
-      'Complete o treinamento da IA em /ai-training: boa parte da nota vem do quanto o agente sabe sobre o seu negócio.',
+      'Leia a nota pelo que ela mede: o comportamento do agente em situações comuns de atendimento, com cenários iguais para todos os clientes. Ela ainda não mede o conteúdo que você cadastrou no treinamento.',
     ],
     exemploResultado:
-      'Numa clínica de estética, o agente está com nota "Crítico" (62%) porque ainda não tinha informação suficiente sobre os procedimentos oferecidos. Depois que a dona completa o treinamento com a tabela de preços e as políticas de agendamento, a nota sobe pra "Bom" (94%) na execução seguinte.',
+      'Numa clínica de estética, o agente aparece em "Crítico" (62%) porque reprovou em cenários de transbordo para humano e de cliente insatisfeito. A dona abre "Comportamentos para revisar", aplica as correções desses dois cenários e acompanha a nota na execução seguinte.',
     relacionados: ['qualidade.overview', 'qualidade.kpis-cenarios'],
   },
   {
@@ -81,17 +81,17 @@ export const qualidadeContent: SaibaMaisContent[] = [
     titulo: 'Aplicar correção',
     clientSafe: true,
     oQueE:
-      'É o botão que grava a correção sugerida direto nas instruções do agente. Depois de confirmar, o ajuste passa a valer imediatamente nas próximas conversas com clientes reais.',
+      'É o botão que grava a correção sugerida direto nas instruções do agente. Depois de confirmar, o ajuste passa a valer nas próximas conversas do WhatsApp. No chat do site pode levar até 5 minutos, porque as instruções ficam em cache.',
     paraQueServe:
       'Serve pra corrigir o comportamento do agente rápido, sem precisar mexer em nenhuma configuração técnica.',
     comoImplementar: [
       'Leia a correção sugerida e, se quiser, escreva uma observação sobre por que está aplicando.',
       'Clique em "Aplicar correção" e confirme na caixa que aparece.',
-      'Depois de aplicada, clique em "Re-testar agora" pra conferir se a correção pegou antes da próxima execução completa.',
+      'Depois de aplicada, clique em "Re-testar agora": ele roda o cenário uma vez e mostra o resultado na hora. Esse resultado ainda não fica gravado no histórico, quem atualiza a nota é a próxima execução completa.',
       'Se algo sair diferente do esperado, use "Reverter aplicação" pra voltar o agente ao comportamento de antes.',
     ],
     exemploResultado:
-      'Numa academia, o dono aplica a correção pra um cenário de cancelamento de plano. Ele clica em "Re-testar agora" e vê que o cenário passou a aprovar. Na execução semanal seguinte, a nota geral do agente sobe 6 pontos percentuais.',
+      'Numa academia, o dono aplica a correção pra um cenário de cancelamento de plano. Ele clica em "Re-testar agora" e vê ali que o cenário passou. Como esse re-teste não fica gravado, ele confere o efeito na nota na execução da semana seguinte.',
     relacionados: ['qualidade.correcao-sugerida', 'qualidade.editar-correcao'],
   },
   {

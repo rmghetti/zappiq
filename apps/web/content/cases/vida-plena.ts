@@ -1,13 +1,13 @@
 /**
  * ============================================================================
- * Case canônico — Clínica Vida Plena
+ * Case canônico: Clínica Vida Plena
  * ============================================================================
  * Fonte ÚNICA de verdade para o case "Vida Plena" no site ZappIQ.
  *
  * Home, /cases, /segmentos/saude e qualquer outro componente DEVEM importar
  * daqui. Nunca hardcodar número, nome ou métrica do case em componente.
  *
- * Estado atual: PENDING (autorização LGPD em andamento — BLOCKER B-01).
+ * Estado atual: PENDING (autorização LGPD em andamento, BLOCKER B-01).
  * Enquanto PENDING, `displayName` vira genérico e métricas viram "médias de
  * clientes beta em Saúde".
  *
@@ -39,14 +39,12 @@ export interface VidaPlenaCase {
 
   // ─── Métricas canônicas (verificadas pelo cliente) ─────────────────────
   metrics: {
-    responseRate: number;                 // %  — taxa de resposta dentro de 2min
+    responseRate: number;                 // %, taxa de resposta dentro de 2min
     avgResponseMinutes: number;           // minutos
-    appointmentsUplift: number;           // %  — uplift em agendamentos vs baseline
-    noShowBefore: number;                 // % (taxa no-show antes ZappIQ)
-    noShowAfter: number;                  // % (taxa no-show depois ZappIQ)
-    csatScore: number;                    // 0–5
-    leadsUplift: number;                  // % — uplift em leads qualificados
-    humanHandoffRate: number;             // % — % de conversas que chegam em humano
+    appointmentsUplift: number;           // %, uplift em agendamentos vs baseline
+    csatScore: number;                    // 0 a 5
+    leadsUplift: number;                  // %, uplift em leads qualificados
+    humanHandoffRate: number;             // %, conversas que chegam em humano
     verified: boolean;                    // true quando cliente validou os números
   };
 
@@ -81,13 +79,14 @@ export const VIDA_PLENA: VidaPlenaCase = {
   logoPath: null,
 
   // TODO-V2-010: números verificados pelo cliente. Manter este objeto como
-  // FONTE ÚNICA. Zero ocorrência de '45%', '250%', '8%', '4.9' fora daqui.
+  // FONTE ÚNICA. Zero ocorrência de '45%', '250%', '4.9' fora daqui.
+  // 14/09/2026: as métricas de no-show saíram. Não existe lembrete nem
+  // confirmação automática, e a base de produção nunca registrou um
+  // agendamento: não havia o que medir.
   metrics: {
     responseRate: 99.2,
     avgResponseMinutes: 3,
     appointmentsUplift: 45,
-    noShowBefore: 28,
-    noShowAfter: 8,
     csatScore: 4.9,
     leadsUplift: 250,
     humanHandoffRate: 28,
@@ -96,7 +95,7 @@ export const VIDA_PLENA: VidaPlenaCase = {
 
   testimonial: {
     quote:
-      'A IA virou a recepção 24/7. Minha secretária ganhou 4h por dia para cuidar de quem chega na clínica — não de quem manda WhatsApp.',
+      'A IA virou a recepção 24/7. Minha secretária ganhou 4h por dia para cuidar de quem chega na clínica, não de quem manda WhatsApp.',
     verifiedByEmail: false,
   },
 
@@ -105,7 +104,7 @@ export const VIDA_PLENA: VidaPlenaCase = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────
-// Helpers de renderização — usar SEMPRE estes nas views
+// Helpers de renderização: usar SEMPRE estes nas views
 // ─────────────────────────────────────────────────────────────────────────
 
 /** Se autorizado, retorna nome real; senão, retorna placeholder respeitoso. */
@@ -130,7 +129,6 @@ export function getHighlightMetrics(c: VidaPlenaCase = VIDA_PLENA) {
     { label: 'Taxa de resposta', value: `${c.metrics.responseRate}%`, verified: c.metrics.verified },
     { label: 'Tempo médio de resposta', value: `${c.metrics.avgResponseMinutes} min`, verified: c.metrics.verified },
     { label: 'Uplift em agendamentos', value: `+${c.metrics.appointmentsUplift}%`, verified: c.metrics.verified },
-    { label: 'No-show (antes → depois)', value: `${c.metrics.noShowBefore}% → ${c.metrics.noShowAfter}%`, verified: c.metrics.verified },
     { label: 'CSAT', value: c.metrics.csatScore.toFixed(1), verified: c.metrics.verified },
   ];
 }

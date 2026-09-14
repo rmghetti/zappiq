@@ -7,7 +7,7 @@
  * 3 caminhos de onboarding, tutorial passo-a-passo, FAQ específico, vídeo
  * institucional, CTAs duplos (cadastro + agendar onboarding).
  *
- * Conteúdo extraído de ZappIQ_Guia_WhatsApp_Cloud_API_v1.docx.
+ * Conteúdo extraído do guia interno ZappIQ_Guia_WhatsApp_Cloud_API_v1.
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState } from 'react';
@@ -140,7 +140,7 @@ const FAQ_WHATSAPP = [
   },
   {
     q: 'Os dados ficam seguros?',
-    a: 'Sim. Servidores no Brasil (AWS São Paulo), criptografia TLS 1.3 em trânsito, AES-256 em repouso. Conformidade LGPD com DPA padrão. Sem reuso para treinar modelos. ISO 27001 em processo de certificação.',
+    a: 'Sim. Criptografia TLS 1.3 em trânsito, AES-256 em repouso. Os dados ficam em servidores nos Estados Unidos (banco de dados e processamento de IA), com salvaguardas contratuais para transferência internacional; a lista de subprocessadores está em /legal/subprocessadores. Conformidade LGPD com DPA padrão e encarregado de dados. Sem reuso para treinar modelos. ISO 27001 em processo de certificação.',
   },
 ];
 

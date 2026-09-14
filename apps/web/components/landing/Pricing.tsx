@@ -56,7 +56,7 @@ const PRICING_ADDONS: PricingAddon[] = [
 ];
 
 // V2-020 (Sprint 0 Blocker 6): seletor de Voz removido até julho/2026.
-// Backend (Whisper STT + TTS) está em roadmap. Ver /roadmap pra timeline.
+// Backend (Whisper STT + TTS) ainda não está no ar.
 // Quando voltar (Q3): re-introduzir VOICE_OUTBOUND e toggle abaixo.
 
 export function Pricing() {
@@ -332,12 +332,6 @@ export function Pricing() {
               e comparativo anônimo com o seu setor. Exporta pro Power BI ou Looker.{' '}
               <strong className="text-ink">Já vem incluso no Scale e no Enterprise.</strong>
             </p>
-            <Link
-              href="/observabilidade"
-              className="text-[13px] font-medium text-accent hover:underline inline-flex items-center gap-1"
-            >
-              Conhecer o Radar 360° Pro →
-            </Link>
           </div>
         </div>
 

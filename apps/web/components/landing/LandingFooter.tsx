@@ -25,7 +25,7 @@ const COLUMNS = [
       { label: 'Automações visuais', href: '/#plataforma-autonoma' },
       { label: 'Copiloto para atendentes', href: '/#plataforma-autonoma' },
       { label: 'Conformidade LGPD', href: '/#plataforma-autonoma' },
-      { label: 'Radar 360° Pro (add-on)', href: '/observabilidade' },
+      { label: 'Radar 360° Pro (add-on)', href: '/#precos' },
     ],
   },
   {
@@ -57,7 +57,6 @@ const COLUMNS = [
       { label: 'API Reference', href: 'https://docs.zappiq.com.br/api' },
       { label: 'Comparativo', href: '/comparativo' },
       { label: 'Demo interativo', href: '/demo' },
-      { label: 'Como funciona o Survey', href: '/como-funciona-survey' },
       { label: 'Selo ZappIQ', href: '/selo' },
       { label: 'Status da plataforma', href: 'https://status.zappiq.com.br' },
     ],
@@ -82,7 +81,7 @@ const COLUMNS = [
 const SECURITY_BADGES = [
   { icon: Shield, label: 'LGPD no núcleo do produto' },
   { icon: Lock, label: 'Dados criptografados ponta a ponta' },
-  { icon: Server, label: 'Servidores 100% no Brasil' },
+  { icon: Server, label: 'DPA padrão e encarregado de dados' },
   { icon: Activity, label: 'Monitoramento contínuo da plataforma' },
   { icon: Radar, label: 'Dashboards que viram decisão (Radar 360° Pro)' },
 ];

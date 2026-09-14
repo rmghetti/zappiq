@@ -104,12 +104,12 @@ export function SurveyIntroModal({ onClose }: { onClose: () => void }) {
           </p>
         </Bloco>
 
-        <Bloco icon={<Coffee size={16} />} titulo="Vá no seu ritmo">
+        <Bloco icon={<Coffee size={16} />} titulo="Reserve um tempo seguido">
           <p>
-            Você não precisa terminar tudo de uma vez. Dá pra avançar as telas, pular perguntas e voltar
-            quando quiser: tudo fica salvo automaticamente. Preencha o que der agora e deixe o resto para
-            depois. O importante é ir avançando aos poucos. Sua IA aprende conforme você preenche, não
-            precisa estar perfeita no primeiro dia.
+            Dá pra avançar as telas e pular as perguntas que não se aplicam. Só não feche a aba antes de
+            terminar: as respostas ainda não ficam salvas até o envio do cadastro. Responda o que der,
+            finalize, e complete o resto depois na aba <strong>Treinar IA</strong> do painel, onde cada
+            resposta é gravada sozinha. Sua IA não precisa estar perfeita no primeiro dia.
           </p>
         </Bloco>
 
@@ -133,19 +133,19 @@ export function SurveyIntroModal({ onClose }: { onClose: () => void }) {
           </p>
         </Bloco>
 
-        <Bloco icon={<RefreshCw size={16} />} titulo="Sua IA se corrige sozinha">
+        <Bloco icon={<RefreshCw size={16} />} titulo="Sua IA mostra o que precisa corrigir">
           <p>
-            Um dos maiores diferenciais do ZappIQ: toda semana a plataforma audita as respostas da sua IA,
-            encontra desvios ou erros sozinha e sugere a correção. Você só aprova, edita ou recusa, e ela
-            aprende com a sua decisão. Do erro até a correção são poucos minutos, sem precisar retreinar
-            nada nem chamar consultor.
+            Quando o seu agente estiver publicado, toda semana a plataforma roda uma bateria de
+            cenários de atendimento nele, aponta onde ele saiu do esperado e escreve a correção
+            sugerida. Você aprova, edita ou recusa: nada entra no comportamento do agente sem o seu
+            clique. Não precisa retreinar nada nem chamar consultor.
           </p>
         </Bloco>
 
         <div className="border-t border-gray-100 bg-gray-50 px-6 py-5 rounded-b-2xl">
           <p className="text-sm text-gray-600 mb-4">
-            Preencha o quanto der agora. O resto você completa quando tiver um tempinho, sua IA agradece
-            cada resposta.
+            Preencha o quanto der agora e finalize o cadastro. O resto você completa na aba Treinar IA,
+            onde cada resposta é gravada conforme você escreve.
           </p>
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <button
@@ -154,14 +154,6 @@ export function SurveyIntroModal({ onClose }: { onClose: () => void }) {
             >
               Entendi, vamos começar <ArrowRight size={16} />
             </button>
-            <a
-              href="/como-funciona-survey"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-gray-500 hover:text-gray-700 transition-colors underline underline-offset-2"
-            >
-              Quero entender tudo em detalhe antes
-            </a>
           </div>
         </div>
       </div>

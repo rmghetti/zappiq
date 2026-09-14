@@ -1619,7 +1619,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
       },
       {
         id: 'ope_lembretes',
-        label: 'Quando enviar lembretes de agendamento?',
+        label: 'Quando a sua equipe costuma avisar o cliente do agendamento?',
         type: 'multiselect',
         options: [
           '24 horas antes',
@@ -1627,10 +1627,10 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
           '2 horas antes',
           '1 hora antes',
           'No dia, pela manhã',
-          'Não enviar lembretes',
+          'Não avisamos antes',
         ],
         required: false,
-        helpText: 'Lembretes reduzem no-show em até 80%. A IA envia automaticamente nos momentos configurados.',
+        helpText: 'Guarde aqui a sua política de lembrete. Hoje a IA usa essa informação para explicar a regra na conversa; o envio automático do lembrete ainda não existe.',
         category: 'confirmação',
       },
       {
@@ -1639,7 +1639,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
         type: 'textarea',
         placeholder: 'Ex: RG e carteirinha do convênio. Exames de sangue recentes. Raio-X panorâmica. Chegar 15min antes para ficha.',
         required: false,
-        helpText: 'A IA pode listar no lembrete: "Lembre-se de trazer: RG, convênio e exames recentes".',
+        helpText: 'A IA pode listar isso na confirmação do agendamento: "Lembre-se de trazer: RG, convênio e exames recentes".',
         category: 'preparo',
       },
       {
@@ -1964,7 +1964,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
           'Varia muito',
         ],
         required: false,
-        helpText: 'A IA pode enviar lembretes de retorno baseados na frequência: "Já faz 6 meses desde sua última limpeza!".',
+        helpText: 'Guarde a frequência aqui: a IA usa para responder quando o cliente pergunta sobre retorno. O envio automático do lembrete ainda não existe.',
         category: 'recorrencia',
       },
       {

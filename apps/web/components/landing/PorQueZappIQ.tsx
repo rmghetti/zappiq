@@ -5,7 +5,7 @@
  * --------------------------------------------------------------------------
  * Substitui a grade chata 4×2 por bento assimétrico com mini-visuais
  * dentro de cada card. Mantém as 8 razões V3.2 (Cloud API Meta, IA Claude,
- * LGPD, Observabilidade, Onboarding zero, Infra BR, Preço previsível,
+ * LGPD, Observabilidade, Onboarding zero, residência de dados, Preço previsível,
  * Voz nativa) mas reordenadas por peso visual.
  *
  * Layout:
@@ -180,23 +180,23 @@ export function PorQueZappIQ() {
           </div>
         </div>
 
-        {/* Row 3: Infra BR (médio) + Preço + Voz (duas colunas) */}
+        {/* Row 3: LGPD e residência de dados (médio) + Preço + Voz (duas colunas) */}
         <div className="grid lg:grid-cols-5 gap-5">
-          {/* Infra Brasil */}
+          {/* LGPD e residência de dados */}
           <div className="lg:col-span-2 card-soft p-7">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-9 h-9 rounded-[10px] bg-[#F2F0EA] border border-line flex items-center justify-center">
                 <Server size={16} className="text-ink" />
               </div>
-              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">06 · Dados BR</span>
+              <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-accent">06 · LGPD</span>
             </div>
             <h3 className="text-[18px] font-medium text-ink leading-tight tracking-tight mb-2">
-              Seus dados, no Brasil. Ponto.
+              Seus dados, com DPA e encarregado.
             </h3>
             <p className="text-[13px] text-muted leading-relaxed">
-              Tudo processado e armazenado em servidor brasileiro. Rápido pro seu cliente
-              e dentro da LGPD por padrão. Se algum dado precisar sair do país, só com sua
-              autorização expressa.
+              Os dados ficam em servidores nos Estados Unidos (banco de dados e processamento
+              de IA), com salvaguardas contratuais para transferência internacional. A lista de
+              subprocessadores é pública, com a região de cada um.
             </p>
           </div>
 

@@ -52,7 +52,12 @@ type = "http"
 
 [env]
 ANTHROPIC_MODEL = "claude-sonnet-4-6"
-APP_URL = "https://zappiq-api.fly.dev"
+# APP_URL monta link para o CLIENTE clicar (botão da régua de trial, link do
+# digest no Slack). Tem de ser o app, não a API: até 14/09/2026 estava em
+# zappiq-api.fly.dev e todo botão levava para um host sem página. OAuth,
+# Stripe e CORS não usam esta variável, usam NEXT_PUBLIC_APP_URL e
+# CORS_ORIGINS. Travado em apps/api/src/services/email/templates/linksDoApp.test.ts.
+APP_URL = "https://zappiq.com.br"
 CORS_ORIGINS = "https://zappiq.vercel.app,https://zappiq.com.br,https://www.zappiq.com.br"
 FRONTEND_URL = "https://zappiq.vercel.app"
 JWT_EXPIRES_IN = "15m"

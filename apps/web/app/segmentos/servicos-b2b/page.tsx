@@ -26,7 +26,7 @@ const data: SegmentPageData = {
   ],
   solutions: [
     { icon: 'Brain', title: 'Qualificação com IA', desc: 'O Pulse AI faz perguntas de qualificação (BANT) e prioriza leads com maior chance de conversão.' },
-    { icon: 'Workflow', title: 'Fluxos automatizados', desc: 'Crie sequências de follow-up automáticas: proposta enviada → lembrete 3 dias → oferta especial.' },
+    { icon: 'Workflow', title: 'Fluxos de follow-up no Maestro', desc: 'Sua equipe desenha a sequência da proposta no Maestro e decide o que acontece a cada resposta. Nada sai antes de alguém montar e ligar o fluxo.' },
     { icon: 'Users', title: 'CRM integrado', desc: 'Todos os contatos e conversas em um CRM visual. Tags, estágios do funil e histórico completo.' },
     { icon: 'BarChart3', title: 'Pipeline de vendas', desc: 'Visualize o funil completo: leads → qualificados → proposta → fechamento. Métricas em tempo real.' },
   ],

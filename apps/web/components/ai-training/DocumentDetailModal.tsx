@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * DocumentDetailModal — abre um item da base de conhecimento na íntegra.
+ * DocumentDetailModal: abre um item da base de conhecimento na íntegra.
  *
  * Texto colado: mostra o conteúdo inteiro e permite editar título e texto.
- * Salvar → PUT /api/ai-training/documents/:id, que reindexa a base de
+ * Salvar dispara PUT /api/ai-training/documents/:id, que reindexa a base de
  * conhecimento (RAG) do cliente sob o novo título e limpa os trechos do antigo.
  *
  * Arquivo e URL: só leitura. O conteúdo deles vem da fonte (o PDF enviado, a
@@ -31,11 +31,19 @@ interface DocumentDetail {
 
 interface Props {
   documentId: string | null; // null = fechado
+  /**
+   * Quantos trechos deste item existem de fato no motor de busca. Vem da
+   * listagem, que já conta. Sem isso o modal dizia a TODO arquivo e a TODA URL
+   * que o conteúdo estava indexado, inclusive para os que têm zero trecho e
+   * aparecem na lista com o selo "não indexado": o modal contradizia o selo.
+   */
+  /** Número de trechos no vector store. Ausente ou null = não sabemos. */
+  ragChunks?: number | null;
   onClose: () => void;
   onSaved: () => void; // recarrega a lista + readiness na página
 }
 
-export function DocumentDetailModal({ documentId, onClose, onSaved }: Props) {
+export function DocumentDetailModal({ documentId, ragChunks, onClose, onSaved }: Props) {
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -106,6 +114,14 @@ export function DocumentDetailModal({ documentId, onClose, onSaved }: Props) {
       setDeleting(false);
     }
   }
+
+  /**
+   * `ragChunks` vem da lista, não do detalhe: se o item sumiu da lista ou a
+   * lista ainda não carregou, chega undefined (e null se a API devolver o
+   * campo vazio). Undefined não é "indexado": até 14/09/2026 caía no mesmo
+   * ramo do valor positivo e a tela afirmava indexação sem ter olhado nada.
+   */
+  const indexacaoDesconhecida = typeof ragChunks !== 'number';
 
   const kindLabel =
     doc?.sourceType === 'url' ? 'URL' : doc?.sourceType === 'text' ? 'Texto colado' : 'Arquivo';
@@ -216,15 +232,50 @@ export function DocumentDetailModal({ documentId, onClose, onSaved }: Props) {
                   </p>
                 </div>
               ) : (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-6 text-center">
-                  <KindIcon size={22} className="mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">
-                    O conteúdo deste {kindLabel.toLowerCase()} está indexado na base da IA, não
-                    guardamos uma cópia aqui.
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Para corrigir a informação, remova o item e envie a versão nova.
-                  </p>
+                <div
+                  className={`border rounded-lg px-4 py-6 text-center ${
+                    ragChunks === 0 ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'
+                  }`}
+                >
+                  <KindIcon
+                    size={22}
+                    className={`mx-auto mb-2 ${ragChunks === 0 ? 'text-amber-500' : 'text-gray-400'}`}
+                  />
+                  {ragChunks === 0 ? (
+                    <>
+                      <p className="text-sm text-amber-900">
+                        A IA não conseguiu ler este {kindLabel.toLowerCase()}. Ele aparece na sua
+                        lista, mas o conteúdo não chegou à base, então ela não usa nada daqui para
+                        responder.
+                      </p>
+                      <p className="text-xs text-amber-800 mt-1">
+                        Remova o item e envie de novo. Se for um PDF digitalizado, converta antes
+                        para um PDF com texto selecionável, TXT, MD ou CSV.
+                      </p>
+                    </>
+                  ) : indexacaoDesconhecida ? (
+                    <>
+                      <p className="text-sm text-gray-600">
+                        Situação da indexação indisponível. Não guardamos uma cópia do conteúdo
+                        deste {kindLabel.toLowerCase()} aqui, e desta tela não dá para dizer se
+                        ele chegou à base da IA.
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        A lista da base mostra a etiqueta de indexação de cada item. Para corrigir
+                        a informação, remova o item e envie a versão nova.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-600">
+                        O conteúdo deste {kindLabel.toLowerCase()} está indexado na base da IA, não
+                        guardamos uma cópia aqui.
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Para corrigir a informação, remova o item e envie a versão nova.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
             </>

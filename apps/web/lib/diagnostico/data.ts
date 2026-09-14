@@ -50,7 +50,7 @@ export const QUESTIONS: Question[] = [
       { value: 'vender', label: 'Vender e qualificar mais leads' },
       { value: 'campanhas', label: 'Recuperar e reativar clientes com campanhas' },
       { value: 'crm', label: 'Organizar o CRM e o funil de vendas' },
-      { value: 'agenda', label: 'Encher a agenda e reduzir no-show' },
+      { value: 'agenda', label: 'Encher a agenda sem ida e volta manual' },
       { value: 'medir', label: 'Medir e controlar a operação' },
       { value: 'custo', label: 'Reduzir o custo de atendimento' },
     ],
@@ -305,8 +305,8 @@ export const PRODUTOS: Record<string, ProdutoInfo> = {
   agenda: {
     id: 'agenda',
     nome: 'Agenda',
-    caracteristica: 'A IA marca, remarca e cancela dentro da conversa, checando o horário real, sem alucinar agenda.',
-    casoUso: 'Em {seg}, a agenda enche sozinha e o no-show cai, sem ida e volta manual para marcar horário.',
+    caracteristica: 'A IA consulta o horário livre de verdade e marca o compromisso dentro da conversa. Remarcar e cancelar seguem com a sua equipe.',
+    casoUso: 'Em {seg}, o cliente sai da conversa com o horário marcado, a qualquer hora, sem ida e volta manual.',
   },
   maestro: {
     id: 'maestro',

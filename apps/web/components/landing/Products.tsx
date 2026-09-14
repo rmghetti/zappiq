@@ -326,7 +326,7 @@ const PRODUCTS = [
       'Ficha completa do contato com timeline de todas as interações via WhatsApp',
       'Funil de vendas Kanban visual com drag-and-drop e stages personalizáveis',
       'Lead scoring automático baseado em comportamento e engajamento na conversa',
-      'Follow-ups programados com lembretes automáticos para a equipe',
+      'Follow-up vira tarefa com prazo e responsável, no quadro da equipe',
       'Importação em massa via CSV e exportação para Excel/Google Sheets',
       'Integração com HubSpot, RD Station e Pipedrive via API',
     ],

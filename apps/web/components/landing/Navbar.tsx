@@ -30,7 +30,7 @@ const PRODUCTS = [
   { icon: Inbox,       name: 'Central de conversas',    desc: 'Todas as mensagens num só inbox',              href: '#plataforma-autonoma' },
   { icon: Brain,       name: 'Iza · IA 24/7',           desc: 'Agente inteligente que atende em texto e voz',  href: '#iza' },
   { icon: Megaphone,   name: 'Campanhas WhatsApp',      desc: 'Disparos em massa com templates aprovados',     href: '#plataforma-autonoma' },
-  { icon: BarChart3,   name: 'Dashboard gerencial',     desc: 'Métricas, previsão e alertas do seu negócio',   href: '/observabilidade' },
+  { icon: BarChart3,   name: 'Dashboard gerencial',     desc: 'Métricas, previsão e alertas do seu negócio',   href: '#plataforma-autonoma' },
   { icon: Users,       name: 'CRM no WhatsApp',         desc: 'Histórico do cliente em um só lugar',           href: '#plataforma-autonoma' },
   { icon: Workflow,    name: 'Automações visuais',      desc: 'Arraste e conecte, sem programar',             href: '#maestro' },
   { icon: Headphones,  name: 'Copiloto para atendentes', desc: 'A IA sugere respostas em tempo real',          href: '#agent-quality' },

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * AI Training — Dashboard (/(dashboard)/ai-training)
+ * AI Training: Dashboard (/(dashboard)/ai-training)
  *
  * Página onde o cliente EXECUTA o self-service training narrado na landing.
  * Espelha o layout da seção SelfServiceTraining para reforçar continuidade
@@ -164,7 +164,7 @@ export default function AITrainingPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTabState] = useState<TabKey>('survey');
 
-  // setTab também escreve o hash na URL — assim o estado é compartilhável e o
+  // setTab também escreve o hash na URL, assim o estado é compartilhável e o
   // botão voltar do navegador funciona entre abas.
   const setTab = useCallback((next: TabKey) => {
     setTabState(next);
@@ -267,7 +267,7 @@ export default function AITrainingPage() {
         </button>
       )}
 
-      {/* Readiness Card — breakdown e próximas ações são deep-links clicáveis */}
+      {/* Readiness Card: breakdown e próximas ações são deep-links clicáveis */}
       <div data-tour="ait-readiness">
         {readiness && <ReadinessCard readiness={readiness} onNavigate={navigate} />}
       </div>
@@ -294,7 +294,7 @@ export default function AITrainingPage() {
         </TabButton>
       </div>
 
-      {/* Tab panels — cada aba abre com o descritivo da função (FeatureGuide) */}
+      {/* Tab panels: cada aba abre com o descritivo da função (FeatureGuide) */}
       {tab === 'survey' && (
         <div className="space-y-4">
           <FeatureGuide content={GUIDES.survey} />
@@ -332,7 +332,7 @@ export default function AITrainingPage() {
         </div>
       )}
 
-      {/* Milestone nudge — dispara uma vez quando score cruza 60 */}
+      {/* Milestone nudge: dispara uma vez quando score cruza 60 */}
       <ReadinessMilestoneNudge score={readiness?.score} />
     </div>
   );
@@ -342,7 +342,7 @@ export default function AITrainingPage() {
 // Readiness Card
 // ═════════════════════════════════════════════════════════
 // Mapeia cada chunk do breakdown e cada próxima ação para o destino correto.
-// Para WhatsApp não há aba interna — manda pra /settings na aba whatsapp.
+// Para WhatsApp não há aba interna, manda pra /settings na aba whatsapp.
 const BREAKDOWN_TARGET: Record<keyof Readiness['breakdown'], TabKey | string> = {
   survey: 'survey',
   identity: 'identity',
@@ -469,7 +469,7 @@ function BreakdownRow({
       type="button"
       onClick={onClick}
       className="w-full text-left group rounded-md -mx-1 px-1 py-0.5 hover:bg-gray-50 transition-colors cursor-pointer"
-      title={full ? `${label} — completo` : `Completar: ${label}`}
+      title={full ? `${label}: completo` : `Completar: ${label}`}
     >
       <div className="flex justify-between text-xs mb-1">
         <span className="text-gray-700 group-hover:text-primary-700 flex items-center gap-1">
@@ -564,7 +564,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
       try {
         await api.post('/api/ai-training/documents/url', { url: urls[i] });
         ok++;
-        await loadDocs(); // feedback incremental — cada URL aparece na lista
+        await loadDocs(); // feedback incremental: cada URL aparece na lista
       } catch {
         failed.push(urls[i]);
       }
@@ -628,7 +628,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.txt,.md,.csv,.docx,.doc,.xlsx,.xls"
+            accept=".pdf,.txt,.md,.csv"
             className="hidden"
             onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
           />
@@ -636,7 +636,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
           <p className="text-sm font-medium text-gray-900 mb-1">
             Suba contratos, FAQs, políticas, catálogos
           </p>
-          <p className="text-xs text-gray-500 mb-3">PDF, TXT, MD, CSV, DOCX, XLSX — até 20MB cada</p>
+          <p className="text-xs text-gray-500 mb-3">PDF, TXT, MD ou CSV, até 20 MB cada</p>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
@@ -677,7 +677,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
         </div>
       </div>
 
-      {/* Colar texto direto — quando a informação não está em arquivo nem em link */}
+      {/* Colar texto direto: quando a informação não está em arquivo nem em link */}
       <div className="bg-white border border-gray-200 rounded-xl p-6">
         <div className="flex items-center gap-2 mb-2">
           <ClipboardPaste size={18} className="text-primary-500" />
@@ -769,6 +769,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
 
       <DocumentDetailModal
         documentId={openDocId}
+        ragChunks={docs.find((d) => d.id === openDocId)?.ragChunks}
         onClose={() => setOpenDocId(null)}
         onSaved={async () => {
           await loadDocs();
@@ -776,7 +777,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
         }}
       />
 
-      {/* Histórico de treinamento — log inalterável (audit) de tudo que treina a IA */}
+      {/* Histórico de treinamento: log inalterável (audit) de tudo que treina a IA */}
       <TrainingHistory />
     </div>
   );
@@ -845,7 +846,7 @@ function TrainingHistory() {
                   <p className="text-sm text-gray-900">
                     <span className="font-medium">{ACTION_LABEL[a.action] || a.action}</span>
                     {a.details?.summary && (
-                      <span className="text-gray-600"> — {a.details.summary}</span>
+                      <span className="text-gray-600">: {a.details.summary}</span>
                     )}
                   </p>
                   <p className="text-xs text-gray-400 mt-0.5">
@@ -861,7 +862,7 @@ function TrainingHistory() {
               onClick={() => setExpanded((v) => !v)}
               className="w-full px-4 py-2.5 text-xs font-medium text-primary-600 hover:bg-primary-50/40 border-t border-gray-100 transition-colors"
             >
-              {expanded ? 'Mostrar menos' : `Ver todos os ${items.length} eventos`}
+              {expanded ? 'Mostrar menos' : `Ver os ${items.length} eventos mais recentes`}
             </button>
           )}
         </>
@@ -961,7 +962,7 @@ function QAPanel({ onChange }: { onChange: () => void }) {
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Resposta exata que a IA deve dar. Seja específico — horários, valores, política."
+            placeholder="Resposta exata que a IA deve dar. Seja específico: horários, valores, política."
             rows={3}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-primary-500 focus:outline-none resize-none"
           />
@@ -1092,12 +1093,12 @@ function IdentityPanel({ onChange }: { onChange: () => void }) {
           setForm((f) => ({
             ...f,
             ...data.identity,
-            // businessHours pode vir parcial/ausente — mescla sobre o default.
+            // businessHours pode vir parcial/ausente, mescla sobre o default.
             businessHours: { ...f.businessHours, ...(data.identity.businessHours || {}) },
           }));
         }
       } catch {
-        /* sem identidade ainda — começa com defaults */
+        /* sem identidade ainda, começa com defaults */
       }
     })();
   }, []);
@@ -1229,7 +1230,7 @@ function IdentityPanel({ onChange }: { onChange: () => void }) {
 // ─────────────────────────────────────────────────────────
 // O dono do negócio testa o treino ANTES de conectar o WhatsApp: digita uma
 // mensagem, ela roda pela MESMA IA da org (prompt do Agent + retrieval RAG
-// real) e volta a resposta — sem WhatsApp e sem criar conversa/contato reais.
+// real) e volta a resposta, sem WhatsApp e sem criar conversa/contato reais.
 // O badge "usou seus documentos" mostra que o RAG está sendo consultado.
 // ═════════════════════════════════════════════════════════
 interface PlaygroundSource {
@@ -1261,7 +1262,7 @@ function PlaygroundPanel() {
     setError(null);
     setInput('');
     // Histórico da sessão de teste (só role+content, últimos 20 turnos) pra IA ter
-    // memória entre turnos. Snapshot ANTES de adicionar o turno atual — a mensagem
+    // memória entre turnos. Snapshot ANTES de adicionar o turno atual, a mensagem
     // corrente vai separada em `message`, não pode entrar duplicada no history.
     const history = turns.slice(-20).map((t) => ({ role: t.role, content: t.text }));
     setTurns((prev) => [...prev, { role: 'user', text: message }]);
@@ -1337,7 +1338,7 @@ function PlaygroundPanel() {
                       }`}
                     >
                       <BookOpen size={11} />
-                      {t.usedContext ? 'Usou seus documentos' : 'Sem contexto dos seus documentos'}
+                      {t.usedContext ? 'Encontrei no seu treino' : 'Não encontrei nada no seu treino'}
                     </span>
                     {t.usedContext && t.sources && t.sources.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
