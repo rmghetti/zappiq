@@ -14,6 +14,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const escritas: Array<{ tabela: string; op: 'insert' | 'update'; payload: any }> = [];
 let linhaExistente: { id: string; plan_chosen: string | null } | null = null;
 let oauthUrl: string | null = 'https://accounts.google.com/o/oauth2/v2/auth?state=abc';
+/**
+ * Erro que o supabase-js DEVOLVE (não lança). Foi assim que a gravação com
+ * `status: 'pending_oauth'` morreu calada por um mês: a constraint real
+ * recusava a linha e ninguém olhava o `error` da resposta.
+ */
+let erroDoBanco: { message: string; code?: string } | null = null;
 
 function fakeFrom(tabela: string) {
   const api: any = {
@@ -22,11 +28,11 @@ function fakeFrom(tabela: string) {
     maybeSingle: async () => ({ data: linhaExistente, error: null }),
     insert: async (payload: any) => {
       escritas.push({ tabela, op: 'insert', payload });
-      return { error: null };
+      return { error: erroDoBanco };
     },
     update: (payload: any) => {
       escritas.push({ tabela, op: 'update', payload });
-      return { eq: async () => ({ error: null }) };
+      return { eq: async () => ({ error: erroDoBanco }) };
     },
   };
   return api;
@@ -58,6 +64,7 @@ async function chamar(body: Record<string, unknown>) {
 beforeEach(() => {
   escritas.length = 0;
   linhaExistente = null;
+  erroDoBanco = null;
   oauthUrl = 'https://accounts.google.com/o/oauth2/v2/auth?state=abc';
   process.env.SUPABASE_URL = 'https://exemplo.supabase.co';
   process.env.SUPABASE_ANON_KEY = 'anon-de-teste';
@@ -128,6 +135,90 @@ describe('POST /api/signup/google: plano gravado antes do redirecionamento', () 
       expect((await res.json()).url).toContain('accounts.google.com');
     } finally {
       escritas.push = original;
+    }
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * C1 da revisão do PR #374.
+ *
+ * Dois defeitos no mesmo trecho:
+ *
+ *   1. a linha nascia com `status: 'pending_oauth'`, valor que a
+ *      constraint `signups_status_check` de produção NÃO aceita. O INSERT
+ *      seria recusado pelo banco e a rede número 1 nunca existiu de fato;
+ *   2. nem o insert nem o update olhavam o `error` da resposta do
+ *      supabase-js, que devolve o erro em vez de lançar. A falha saía
+ *      calada, e o único sintoma era a conta nascer no plano errado.
+ *
+ * O status real é 'pending_email', que é o que a tabela aceita. A intenção
+ * ("veio do OAuth, ainda não voltou") vive em `meta.source`, que é JSONB e
+ * não tem constraint.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('POST /api/signup/google: o status gravado é um que o banco aceita', () => {
+  it('grava pending_email, nunca pending_oauth', async () => {
+    await chamar({ plan: 'IZA_LITE', email: 'lead@exemplo.com.br' });
+    const gravacao = escritas.find((e) => e.tabela === 'signups');
+    expect(gravacao!.payload.status).toBe('pending_email');
+    expect(gravacao!.payload.status).not.toBe('pending_oauth');
+  });
+
+  it('a intenção do OAuth fica em meta, que não tem constraint', async () => {
+    await chamar({ plan: 'IZA_LITE', email: 'lead@exemplo.com.br' });
+    const gravacao = escritas.find((e) => e.tabela === 'signups');
+    expect(gravacao!.payload.meta).toEqual({ source: 'oauth_google_intent' });
+  });
+});
+
+describe('POST /api/signup/google: erro devolvido pelo banco não passa calado', () => {
+  it('insert recusado pelo banco vira log de erro', async () => {
+    const espiao = vi.spyOn(console, 'error').mockImplementation(() => {});
+    erroDoBanco = { message: 'new row violates check constraint', code: '23514' };
+    try {
+      const res = await chamar({ plan: 'IZA_LITE', email: 'lead@exemplo.com.br' });
+      expect(res.status).toBe(200); // o lead entra mesmo assim
+      expect(espiao).toHaveBeenCalled();
+      const texto = espiao.mock.calls.map((c) => JSON.stringify(c)).join(' ');
+      expect(texto).toContain('check constraint');
+    } finally {
+      espiao.mockRestore();
+    }
+  });
+
+  it('update recusado pelo banco vira log de erro', async () => {
+    const espiao = vi.spyOn(console, 'error').mockImplementation(() => {});
+    linhaExistente = { id: 'sig-1', plan_chosen: 'GROWTH' };
+    erroDoBanco = { message: 'permission denied for table signups', code: '42501' };
+    try {
+      await chamar({ plan: 'SCALE', email: 'lead@exemplo.com.br' });
+      expect(espiao).toHaveBeenCalled();
+      const texto = espiao.mock.calls.map((c) => JSON.stringify(c)).join(' ');
+      expect(texto).toContain('permission denied');
+    } finally {
+      espiao.mockRestore();
+    }
+  });
+
+  it('o log NÃO carrega o e-mail do lead (o erro é de infra, não de pessoa)', async () => {
+    const espiao = vi.spyOn(console, 'error').mockImplementation(() => {});
+    erroDoBanco = { message: 'new row violates check constraint', code: '23514' };
+    try {
+      await chamar({ plan: 'IZA_LITE', email: 'lead@exemplo.com.br' });
+      const texto = espiao.mock.calls.map((c) => JSON.stringify(c)).join(' ');
+      expect(texto).not.toContain('lead@exemplo.com.br');
+      expect(texto).not.toContain('exemplo.com.br');
+    } finally {
+      espiao.mockRestore();
+    }
+  });
+
+  it('gravação sem erro não loga nada', async () => {
+    const espiao = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await chamar({ plan: 'IZA_LITE', email: 'lead@exemplo.com.br' });
+      expect(espiao).not.toHaveBeenCalled();
+    } finally {
+      espiao.mockRestore();
     }
   });
 });

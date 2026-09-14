@@ -50,6 +50,26 @@ function normalizarEmail(raw: unknown): string | null {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
+/**
+ * O supabase-js DEVOLVE o erro, não lança. Sem olhar este campo, uma linha
+ * recusada pelo banco (constraint, RLS, privilégio) sai daqui como sucesso e
+ * o único sintoma aparece dias depois, na conta nascida no plano errado.
+ *
+ * O log leva o motivo e NÃO leva o e-mail: o que quebrou é a gravação, não a
+ * pessoa, e endereço de lead não tem por que circular em log de aplicação.
+ */
+function registrarFalhaDaGravacao(
+  operacao: 'insert' | 'update',
+  error: { message?: string; code?: string } | null | undefined,
+): void {
+  if (!error) return;
+  console.error('[signup/google] gravar plano antes do redirect falhou', {
+    operacao,
+    code: error.code ?? null,
+    message: error.message ?? 'erro sem mensagem',
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as { plan: PlanId; email?: string; name?: string };
@@ -81,21 +101,29 @@ export async function POST(req: Request) {
 
         const agora = new Date().toISOString();
         if (existing?.id) {
-          await sbAdmin
+          const { error } = await sbAdmin
             .from('signups')
             .update({ plan_chosen: plan, updated_at: agora })
             .eq('id', existing.id);
+          registrarFalhaDaGravacao('update', error);
         } else {
           const nome = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : '';
-          await sbAdmin.from('signups').insert({
+          const { error } = await sbAdmin.from('signups').insert({
             email,
             name: nome || email.split('@')[0],
             plan_chosen: plan,
-            // Estado próprio: o lead escolheu o plano e foi para o Google,
-            // mas ainda não voltou. O callback é quem confirma.
-            status: 'pending_oauth',
+            // O status é o que a tabela ACEITA, e só isso.
+            //
+            // Esta linha já nasceu uma vez como 'pending_oauth', um estado
+            // que descrevia bem a situação (o lead foi para o Google e não
+            // voltou) e que a constraint `signups_status_check` de produção
+            // recusa. O INSERT morria no banco e a rede número 1 nunca
+            // existiu. O que a coluna aceita é o catálogo dela; a intenção
+            // vive em `meta`, que é JSONB e não tem constraint.
+            status: 'pending_email',
             meta: { source: 'oauth_google_intent' },
           });
+          registrarFalhaDaGravacao('insert', error);
         }
       } catch (err) {
         console.error('[signup/google] grava plano antes do redirect falhou:', err);
