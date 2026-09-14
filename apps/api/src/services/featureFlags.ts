@@ -25,12 +25,13 @@ import { logger } from '../utils/logger.js';
 /** Nomes válidos de interruptor. Trocar aqui quebra o compilador, de propósito. */
 export type FlagName =
   | 'perfilVivo'
-  | 'compositorUnico'
   | 'guardaComercial'
   | 'ragNoChatDoSite'
   | 'evalNoTier'
   | 'treinarSomenteAdmin'
-  | 'regrasComoRegistros';
+  | 'regrasComoRegistros'
+  | 'contextoUnico'
+  | 'modeloPorPolitica';
 
 export interface FlagDef {
   /** O que muda quando liga. Em português: isto aparece na tela do admin. */
@@ -50,11 +51,6 @@ export const FLAGS: Record<FlagName, FlagDef> = {
       'O perfil do agente passa a ser lido do que o cliente preencheu, e não do texto congelado no prompt.',
     removeBy: '2026-12-31',
   },
-  compositorUnico: {
-    descricao:
-      'Um único compositor monta o prompt que vai para o modelo, no lugar dos caminhos paralelos de hoje.',
-    removeBy: '2027-03-31',
-  },
   guardaComercial: {
     descricao:
       'Guarda que barra promessa comercial inventada na resposta do agente antes de ela sair.',
@@ -67,7 +63,7 @@ export const FLAGS: Record<FlagName, FlagDef> = {
   },
   evalNoTier: {
     descricao:
-      'A avaliação de qualidade passa a respeitar a faixa do plano (quantas execuções e com qual modelo).',
+      'A avaliação de qualidade passa a respeitar a faixa do plano (quantas execuções e com qual modelo). Ainda sem leitor no código: só passa a valer com a tarefa C2.',
     removeBy: '2027-03-31',
   },
   treinarSomenteAdmin: {
@@ -79,6 +75,16 @@ export const FLAGS: Record<FlagName, FlagDef> = {
     descricao:
       'As correções aprovadas viram registros com uma regra por cenário, montadas num bloco do prompt, em vez de texto colado dentro dele.',
     removeBy: '2027-06-30',
+  },
+  contextoUnico: {
+    descricao:
+      'WhatsApp, Instagram, chat do site, Testar minha IA, retomada do Maestro e Qualidade montam o prompt pelo mesmo motor de contexto (composeAgentContext).',
+    removeBy: '2026-12-31',
+  },
+  modeloPorPolitica: {
+    descricao:
+      'Modelo e ferramentas do turno decididos por resolveTurnPolicy, a mesma regra para todos os canais.',
+    removeBy: '2026-12-31',
   },
 };
 

@@ -1000,9 +1000,25 @@ export interface XrayChecagem {
   detalhe: string;
 }
 
+/** C1a: orçamento por bloco do contexto (nome fixo + caracteres). */
+export interface XrayParte {
+  nome: string;
+  chars: number;
+}
+
 export interface XrayTurno {
   mensagem: string;
   prompt_chars: number;
+  // Os quatro campos do C1a são opcionais de propósito: na janela em que a
+  // Vercel publica antes do Fly, a API ainda responde turnos sem eles e a
+  // tela não pode quebrar.
+  /** sha256 do prompt inteiro deste turno. */
+  hash?: string;
+  /** sha256 dos blocos estáveis do tenant. Só com o motor único; null no de antes. */
+  hash_estavel?: string | null;
+  partes?: XrayParte[];
+  /** 'unico' = motor único de contexto (interruptor contextoUnico); 'antes' = o caminho antigo do canal. */
+  motor?: 'unico' | 'antes';
   fatias: XrayFatia[];
   fontes: XrayFonte[];
   checagens: XrayChecagem[];

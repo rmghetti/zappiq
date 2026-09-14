@@ -51,6 +51,8 @@ import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 // V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
 // Q1: computeReverifyVerdict exportado pra teste unitário puro.
 import { executeAgentEvalRun, computeReverifyVerdict } from '../services/agentEvalRunner.js';
+// C1a (A036): contexto de produção no teste, atrás do interruptor contextoUnico.
+import { criarMontadorDeContextoDoEval } from '../services/agentEvalContext.js';
 import {
   enqueueEvalRun,
   enqueueRegrade,
@@ -254,14 +256,14 @@ router.post(
       }
 
       logger.info(`[agentEval] sync run iniciado agentId=${agentId} scenarios=${scenarios.length}`);
-      const { results, durationMs, summary } = await executeAgentEvalRun(
-        scenarios,
-        agent,
-        profile,
+      const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile, {
         // Rodada 3 do PR #375: mede o agente COM as regras aprovadas pelo
         // dono. Rodada 4: e o sugeridor sabe quais regras já existem.
-        await contextoDeRegrasFailSoft(agent.organizationId, agent.id),
-      );
+        ...(await contextoDeRegrasFailSoft(agent.organizationId, agent.id)),
+        // C1a: o contexto de produção, atrás de contextoUnico. Rodada 2 do PR
+        // #377: no mesmo objeto; o montador recebe o bloco lido acima.
+        montarContexto: criarMontadorDeContextoDoEval(agent, agent.organizationId),
+      });
 
       res.json({
         version: EVAL_SET_VERSION,
@@ -953,18 +955,24 @@ router.post(
             priorResult?.combined ?? null;
 
           // Re-run com o prompt recém-aplicado (1 LLM call)
+          const agenteDoReteste = {
+            id: run.agentId,
+            name: run.agent.name,
+            systemPrompt: result.promptAfter,
+          };
           const { results: rerunResults } = await executeAgentEvalRun(
             [scenarioDef],
-            {
-              id: run.agentId,
-              name: run.agent.name,
-              systemPrompt: result.promptAfter,
-            },
+            agenteDoReteste,
             profile,
-            // Rodada 3 do PR #375: o re-verify mede o prompt novo COM as
-            // regras aprovadas, como o orquestrador vai montar. Rodada 4: e o
-            // sugeridor sabe quais regras já existem.
-            await contextoDeRegrasFailSoft(run.agent.organizationId, run.agentId),
+            {
+              // Rodada 3 do PR #375: o re-verify mede o prompt novo COM as
+              // regras aprovadas, como o orquestrador vai montar. Rodada 4: e o
+              // sugeridor sabe quais regras já existem.
+              ...(await contextoDeRegrasFailSoft(run.agent.organizationId, run.agentId)),
+              // C1a: contexto de produção, atrás de contextoUnico (rodada 2
+              // do PR #377: no mesmo objeto das regras).
+              montarContexto: criarMontadorDeContextoDoEval(agenteDoReteste, run.agent.organizationId),
+            },
           );
           // A171: 'erro' é falha técnica do re-teste. computeReverifyVerdict
           // já trata: improved só quando o resultado novo é 'pass'.

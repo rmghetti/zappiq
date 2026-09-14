@@ -682,9 +682,12 @@ describe('executeRunJob entrega o bloco de regras do agente ao avaliador', () =>
     await executeRunJob('run-1');
 
     expect(regrasMock.carregarRegrasAtivas).not.toHaveBeenCalled();
+    // Rodada 2 do PR #377: o montador do motor único vai no MESMO objeto das
+    // regras (um parâmetro só). As regras continuam exatamente estas.
     expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toEqual({
       regrasBlock: '',
       regrasAtivas: [],
+      montarContexto: expect.any(Function),
     });
   });
 

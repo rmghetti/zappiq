@@ -236,9 +236,12 @@ describe('POST /run (síncrono): o superadmin mede o agente COM as regras aprova
 
     expect(res.statusCode).toBe(200);
     expect(regrasMock.carregarRegrasAtivas).not.toHaveBeenCalled();
+    // Rodada 2 do PR #377: o montador do motor único vai no MESMO objeto das
+    // regras (um parâmetro só). As regras continuam exatamente estas.
     expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toEqual({
       regrasBlock: '',
       regrasAtivas: [],
+      montarContexto: expect.any(Function),
     });
   });
 
@@ -346,9 +349,11 @@ describe('apply-fix do superadmin: o re-verify mede o prompt novo COM as regras'
     expect(res.statusCode).toBe(200);
     // A única leitura é a do verificador de conflito, antes de aplicar.
     expect(regrasMock.carregarRegrasAtivas).toHaveBeenCalledTimes(1);
+    // Rodada 2 do PR #377: o montador do motor único vai no MESMO objeto.
     expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toEqual({
       regrasBlock: '',
       regrasAtivas: [],
+      montarContexto: expect.any(Function),
     });
   });
 });

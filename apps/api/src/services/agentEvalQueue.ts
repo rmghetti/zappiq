@@ -41,6 +41,8 @@ import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { executeAgentEvalRun } from './agentEvalRunner.js';
+// C1a (A036): contexto de produção no teste, atrás do interruptor contextoUnico.
+import { criarMontadorDeContextoDoEval } from './agentEvalContext.js';
 import { blocoDeRegrasDaOrganizacao, carregarRegrasAtivas } from './agentRulesService.js';
 import {
   notifySlackQualityIssue,
@@ -523,12 +525,17 @@ export async function executeRunJob(runId: string): Promise<void> {
     // A conclusão é gravada por ESTA continuação, e não depois do race: se o
     // teto estourar, a execução continua correndo no provedor e volta aqui
     // atrasada. É o filtro de status em gravarConclusao que a barra.
-    const execucao = executeAgentEvalRun(
-      scenarios,
-      { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' },
-      profile,
-      { regrasBlock, regrasAtivas },
-    ).then(async (saida) => ({
+    //
+    // Rodada 2 do PR #377: um objeto só para o avaliador. As regras (bloco e
+    // lista, lidos UMA vez acima) e o montador do motor único vão juntos; com
+    // `contextoUnico` ligado, o montador põe o MESMO bloco no contexto de
+    // cada cenário, sem ler de novo.
+    const agenteDaRun = { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' };
+    const execucao = executeAgentEvalRun(scenarios, agenteDaRun, profile, {
+      regrasBlock,
+      regrasAtivas,
+      montarContexto: criarMontadorDeContextoDoEval(agenteDaRun, agent.organizationId),
+    }).then(async (saida) => ({
       saida,
       gravacao: await gravarConclusao(runId, saida, scenarios.length),
     }));

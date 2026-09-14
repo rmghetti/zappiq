@@ -76,7 +76,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   agentFindFirst.mockResolvedValue({ id: 'agente-comercial-1' });
   blocoDeRegras.mockResolvedValue('');
-  isFlagOn.mockResolvedValue(true);
+  // Só o interruptor deste arquivo (rodada 2 do PR #377): `true` para todos
+  // ligaria também o motor único (contextoUnico), que tem teste próprio.
+  isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'regrasComoRegistros');
 });
 
 describe('com o interruptor regrasComoRegistros DESLIGADO', () => {

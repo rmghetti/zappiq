@@ -53,9 +53,10 @@ vi.mock('../services/agentRulesService.js', () => ({
   blocoDeRegrasDaOrganizacao: vi.fn().mockResolvedValue(''),
 }));
 
-// O perfil vivo (A8) também consulta o interruptor por organização. Sem este
-// duble, a montagem esperava o Redis recusar a conexão (mais de 4 s num
-// teste). Desligado é o que o teste já via com o Redis fora.
+// Interruptores sempre desligados, sem Redis: a casca lê dois por turno
+// (contextoUnico e perfilVivo) e, sem este dublê, cada leitura espera o
+// cache real responder. Este arquivo prova o vazamento de marca, não o
+// interruptor.
 vi.mock('../services/featureFlags.js', () => ({
   isFlagOn: vi.fn().mockResolvedValue(false),
 }));

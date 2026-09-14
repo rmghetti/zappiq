@@ -44,7 +44,16 @@ import {
   marcarSincronizacaoPendente,
 } from '../services/surveyReingest.js';
 import { logAuditEvent } from '../services/auditService.js';
-import { buildSystemPromptForContact, pickTierAndOverride } from '../agents/agentOrchestrator.js';
+import {
+  buildAgentContextForContact,
+  pickTierAndOverride,
+  resolveSchedulingRuntime,
+  toolsDaPolitica,
+} from '../agents/agentOrchestrator.js';
+// C1a (Passo 12): o Testar minha IA passa pelo mesmo motor de contexto e pela
+// mesma política de modelo do WhatsApp, atrás dos interruptores.
+import { flagLigada } from '../agents/agentContextLoader.js';
+import { isZappIQOrg } from '../config/zappiqOrg.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
 // Rede de crise (P62): vale também no Testar minha IA, porque o dono precisa
 // ver o que o cliente final dele veria.
@@ -197,25 +206,59 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
       status: ragStatus,
     } = await ragService.searchDetailed(orgId, message, 5);
 
+    // C1a: com qualquer um dos dois interruptores ligado, o estado REAL do
+    // agendamento entra no teste como entra no WhatsApp (tipo ativo E direito
+    // ao recurso), e não só o interruptor das settings (A072). Desligados,
+    // nada é consultado a mais.
+    const [contextoUnico, modeloPorPolitica] = await Promise.all([
+      flagLigada(orgId, 'contextoUnico'),
+      flagLigada(orgId, 'modeloPorPolitica'),
+    ]);
+    const agendamento =
+      contextoUnico || modeloPorPolitica ? await resolveSchedulingRuntime(orgId, orgSettings) : null;
+    const turnosDaSessao = history?.length ?? 0;
+
     // 2. System prompt idêntico ao de produção. contactId sintético → sem DB write.
-    const systemPrompt = await buildSystemPromptForContact({
+    //    Com o motor único (A072): a memória é a da SESSÃO de teste. Primeiro
+    //    contato só no primeiro turno; a contagem de mensagens é a de turnos
+    //    enviados. Sem o motor, o contato sintético não existe no banco e o
+    //    prompt cai no "primeiro contato" em todo turno, como antes.
+    const contexto = await buildAgentContextForContact({
+      origem: 'playground',
       organizationId: orgId,
       contactId: `playground:${orgId}`,
       orgSettings,
       ragContext,
       ragStatus,
+      agendamento: agendamento ?? undefined,
+      contato: {
+        nome: null,
+        leadStatus: 'NEW',
+        primeiroContato: turnosDaSessao === 0,
+        totalMensagens: turnosDaSessao + 1,
+      },
+      temHistoricoNoContexto: turnosDaSessao > 0,
     });
+    const systemPrompt = contexto.systemPrompt;
 
-    // 3. Mesmo roteamento de tier/provider do bot real.
-    const { tier, forceProvider } = await pickTierAndOverride(orgId);
+    // 3. Mesmo roteamento de tier/provider do bot real. Com modeloPorPolitica
+    //    ligado, a política do turno vem junto (canal 'playground').
+    const { tier, forceProvider, politica } = await pickTierAndOverride(orgId, {
+      canal: 'playground',
+      agendamentoAtivo: agendamento?.ativo ?? false,
+    });
 
     // Agendamento no playground: só a tool de CONSULTA (read-only) — o teste
     // mostra a IA oferecendo horários reais, mas NÃO cria agendamentos de
     // verdade (create_appointment fica fora pra não poluir a agenda com testes).
+    // Com a política ligada, quem decide é resolveTurnPolicy (canal
+    // 'playground' devolve só check_availability, e só com o agendamento de pé).
     const schedulingOn = Boolean(orgSettings?.scheduling?.enabled) && !orgSettings?.scheduling?.optOut;
-    const playgroundTools = schedulingOn
-      ? getToolsForContext({ hasScheduling: true }).filter((t) => t.name === 'check_availability')
-      : undefined;
+    const playgroundTools = politica
+      ? toolsDaPolitica(politica, isZappIQOrg(orgId))
+      : schedulingOn
+        ? getToolsForContext({ hasScheduling: true }).filter((t) => t.name === 'check_availability')
+        : undefined;
 
     // 4. Mesmo turno da Iza (pre-filter + classify + cascade). O histórico da
     // sessão de teste dá memória entre turnos (o cliente pergunta o nome, o dono
@@ -257,7 +300,9 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     }
 
     await logTraining(req, 'kb.playground.test', 'ai_playground', undefined,
-      `Teste de IA executado (${result.usedContext ? 'com' : 'sem'} contexto RAG)`);
+      `Teste de IA executado (${result.usedContext ? 'com' : 'sem'} contexto RAG)`,
+      // Rastro do contexto (C1a): o hash liga o teste ao Raio-X e ao WhatsApp.
+      { after: { contextoHash: contexto.hash, viaContextoUnico: contexto.viaContextoUnico } });
 
     res.json(result);
   } catch (err) {

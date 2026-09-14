@@ -106,7 +106,10 @@ describe('chat do site com o interruptor DESLIGADO', () => {
 
 describe('chat do site com o interruptor LIGADO', () => {
   beforeEach(() => {
-    isFlagOn.mockResolvedValue(true);
+    // Só o `perfilVivo`. O motor único (`contextoUnico`, C1a) tem teste
+    // próprio em webChatService.contextoUnico.test.ts, com os dublês que ele
+    // precisa (Agent, contato, contagem de mensagens).
+    isFlagOn.mockImplementation(async (_org: string, flag: string) => flag === 'perfilVivo');
   });
 
   it('recebe o bloco vivo com horário e identidade do cliente', async () => {

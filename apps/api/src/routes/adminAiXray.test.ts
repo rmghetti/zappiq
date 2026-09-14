@@ -435,7 +435,7 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
   });
 
   it('com o interruptor LIGADO, o bloco vivo aparece no WhatsApp E no site', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
 
     for (const canal of ['whatsapp', 'site']) {
       const res = await chamar({ ...corpoValido, canal });
@@ -443,6 +443,8 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
 
       expect(res.statusCode, canal).toBe(200);
       expect(prompt, canal).toContain(CABECALHO_VIVO);
+      // Só perfilVivo ligada: é o caminho de antes que mostra o bloco vivo.
+      expect(res.body.turnos[0].motor, canal).toBe('antes');
       // O horário do cadastro, já normalizado pelo bloco vivo.
       expect(prompt, canal).toContain('Segunda a sexta: 09:00 às 18:00');
       expect(prompt, canal).toContain('Você é Antonella, de Cantina da Nona.');
@@ -450,7 +452,7 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
   });
 
   it('com o interruptor LIGADO, a saudação do dono entra no primeiro turno do site (A068)', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
 
     const res = await chamar({
       ...corpoValido,
@@ -470,7 +472,7 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
   });
 
   it('a checagem horario_confere fica VERDE nos dois canais com o interruptor ligado', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
 
     for (const canal of ['whatsapp', 'site']) {
       const res = await chamar({ ...corpoValido, canal });
@@ -510,7 +512,9 @@ describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
   });
 
   it('com o interruptor LIGADO, o bloco aparece no WhatsApp E no site', async () => {
-    isFlagOn.mockResolvedValue(true);
+    // Só o interruptor deste caso (rodada 2 do PR #377): `true` para todos
+    // ligaria também o motor único, que tem teste próprio mais abaixo.
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'regrasComoRegistros');
     agentRuleFindMany.mockResolvedValue([REGRA]);
 
     for (const canal of ['whatsapp', 'site']) {
@@ -526,7 +530,9 @@ describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
   // do canal de Qualidade mostrava, corretamente, que o teste media o agente
   // SEM a regra aprovada. Agora o canal monta com o bloco do agente testado.
   it('com o interruptor LIGADO, o teste de Qualidade também recebe o bloco, do agente testado', async () => {
-    isFlagOn.mockResolvedValue(true);
+    // Só o interruptor deste caso (rodada 2 do PR #377): `true` para todos
+    // ligaria também o motor único, que tem teste próprio mais abaixo.
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'regrasComoRegistros');
     agentRuleFindMany.mockResolvedValue([REGRA]);
 
     const res = await chamar({ ...corpoValido, canal: 'qualidade' });
@@ -551,7 +557,9 @@ describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
   // (webChatService.idDoAgenteComercial). Com dois agentes vivos, o Raio-X
   // mostraria as regras do outro. Agora os dois usam o MESMO seletor.
   it('com o interruptor LIGADO, o canal site filtra as regras pelo agente comercial, como o chat', async () => {
-    isFlagOn.mockResolvedValue(true);
+    // Só o interruptor deste caso (rodada 2 do PR #377): `true` para todos
+    // ligaria também o motor único, que tem teste próprio mais abaixo.
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'regrasComoRegistros');
     agentRuleFindMany.mockResolvedValue([REGRA]);
     orgFindUnique.mockResolvedValue({ id: 'org-site-agente', name: 'Cantina', settings: SETTINGS_DA_ORG });
 
@@ -591,11 +599,41 @@ describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
     expect(promptDoTurno(res)).not.toContain('# Regras aprovadas pelo dono');
     expect(agentRuleFindMany).not.toHaveBeenCalled();
   });
+
+  // Rodada 2 do PR #377: com o motor único ligado, as regras chegam pelo
+  // `regrasDoCliente` do compositor. Antes desta rodada o slot existia e
+  // ninguém o preenchia: a organização com os DOIS interruptores perdia as
+  // regras em todos os canais.
+  it('com contextoUnico E regrasComoRegistros ligados, WhatsApp, site e Qualidade mostram o bloco pelo motor único', async () => {
+    isFlagOn.mockImplementation(
+      async (_o: string, f: string) => f === 'contextoUnico' || f === 'regrasComoRegistros',
+    );
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+
+    const hashes: Record<string, string> = {};
+    for (const canal of ['whatsapp', 'site', 'qualidade']) {
+      agentRuleFindMany.mockClear();
+      const res = await chamar({ ...corpoValido, canal });
+      const turno = res.body.turnos[0];
+      expect(res.statusCode, canal).toBe(200);
+      expect(turno.motor, canal).toBe('unico');
+      const prompt = promptDoTurno(res);
+      expect(prompt, canal).toContain('# Regras aprovadas pelo dono');
+      expect(prompt, canal).toContain('1. Chame o cliente pelo nome quando souber.');
+      expect(turno.partes.find((p: any) => p.nome === 'regras_do_cliente').chars, canal).toBeGreaterThan(0);
+      // Uma leitura por turno, do agente do canal (a1), nunca só da organização.
+      expect(agentRuleFindMany, canal).toHaveBeenCalledTimes(1);
+      expect(agentRuleFindMany.mock.calls[0][0].where, canal).toMatchObject({ organizationId: 'org-1', agentId: 'a1' });
+      hashes[canal] = turno.hash_estavel;
+    }
+    // As regras entram no hash estável, e WhatsApp e site continuam iguais.
+    expect(hashes.site).toBe(hashes.whatsapp);
+  });
 });
 
 describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => {
   it('resolve o agendamento e mostra a linha honesta quando não há tipo ativo', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
     orgFindUnique.mockResolvedValue({
       id: 'org-1',
       name: 'Cantina da Nona',
@@ -612,7 +650,7 @@ describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => 
   });
 
   it('com tipo ativo e direito ao recurso, o prompt lista o que dá para marcar', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
     orgFindUnique.mockResolvedValue({
       id: 'org-1',
       name: 'Cantina da Nona',
@@ -627,7 +665,7 @@ describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => 
   });
 
   it('o primeiro turno diz que o histórico NÃO está no contexto (A212)', async () => {
-    isFlagOn.mockResolvedValue(true);
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'perfilVivo');
     // Contato antigo: o contador do CONTATO já passou de 1, mas o Raio-X
     // começa sem uma linha de histórico no contexto. É o achado A212: a
     // conversa fecha sozinha em 72 h e quem volta abre outra, então o
@@ -647,5 +685,98 @@ describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => 
     expect(promptDoTurno(res, 0)).toContain('o que foi conversado antes NÃO está aqui');
     // Terceira mensagem: agora o histórico está no contexto de verdade.
     expect(promptDoTurno(res, 1)).toContain('Primeiro contato? NÃO (já tem histórico');
+  });
+});
+
+/* ── 8. Hash, partes e motor por turno (C1a) ──────────────────────────── */
+/*
+ * O Raio-X passa a dizer QUE motor montou o prompt de cada canal, o hash do
+ * prompt inteiro e o hash estável do tenant (só os blocos que não mudam com
+ * a mensagem, a base nem o relógio). Com o interruptor contextoUnico ligado,
+ * o WhatsApp e o site têm de mostrar o MESMO hash estável: é a prova, para o
+ * fundador, de que os dois canais atendem pelo mesmo agente.
+ */
+
+describe('POST /api/admin/ai-xray: hash, partes e motor por turno', () => {
+  const ligar = (ativas: string[]) =>
+    isFlagOn.mockImplementation(async (_org: string, flag: string) => ativas.includes(flag));
+
+  it('com tudo desligado, cada turno tem hash e partes, e o motor é o de antes', async () => {
+    for (const canal of ['whatsapp', 'site', 'qualidade']) {
+      const res = await chamar({ ...corpoValido, canal });
+      const turno = res.body.turnos[0];
+      expect(turno.motor, canal).toBe('antes');
+      expect(turno.hash, canal).toMatch(/^[0-9a-f]{64}$/);
+      expect(turno.hash_estavel, canal).toBeNull();
+      expect(turno.partes.length, canal).toBeGreaterThan(0);
+      expect(turno.partes[0], canal).toMatchObject({ nome: 'Regras base (CORE)' });
+    }
+  });
+
+  it('com contextoUnico ligado, WhatsApp e site mostram o MESMO hash estável', async () => {
+    ligar(['contextoUnico', 'perfilVivo']);
+
+    const wa = await chamar({ ...corpoValido, canal: 'whatsapp' });
+    const site = await chamar({ ...corpoValido, canal: 'site' });
+
+    expect(wa.body.turnos[0].motor).toBe('unico');
+    expect(site.body.turnos[0].motor).toBe('unico');
+    expect(wa.body.turnos[0].hash_estavel).toMatch(/^[0-9a-f]{64}$/);
+    expect(site.body.turnos[0].hash_estavel).toBe(wa.body.turnos[0].hash_estavel);
+    // O hash inteiro difere de propósito: o site tem a instrução de canal.
+    expect(site.body.turnos[0].hash).not.toBe(wa.body.turnos[0].hash);
+    expect(site.body.turnos[0].partes.find((p: any) => p.nome === 'instrucao_de_canal').chars).toBeGreaterThan(0);
+    expect(wa.body.turnos[0].partes.find((p: any) => p.nome === 'instrucao_de_canal').chars).toBe(0);
+  });
+
+  it('com contextoUnico ligado, o site NÃO consulta a base sem ragNoChatDoSite, e consulta com ele', async () => {
+    ligar(['contextoUnico']);
+    let res = await chamar({ ...corpoValido, canal: 'site' });
+    expect(searchWithSources).not.toHaveBeenCalled();
+    expect(res.body.turnos[0].fontes).toEqual([]);
+    expect(res.body.turnos[0].motor).toBe('unico');
+    // O site pelo motor único não passa pelo carregador com cache.
+    expect(queryRawUnsafe).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    ligar(['contextoUnico', 'ragNoChatDoSite']);
+    orgFindUnique.mockResolvedValue({ id: 'org-1', name: 'Cantina da Nona', settings: SETTINGS_DA_ORG });
+    agentFindFirst.mockResolvedValue({ id: 'a1', name: 'Antonella', systemPrompt: PROMPT_DO_AGENTE });
+    qaFindMany.mockResolvedValue([]);
+    searchWithSources.mockResolvedValue({
+      context: 'Trecho da base: o rodízio custa R$ 89.',
+      sources: [{ source: 'cardapio.pdf', similarity: 0.61, snippet: 'rodízio R$ 89' }],
+    });
+    res = await chamar({ ...corpoValido, canal: 'site' });
+    expect(searchWithSources).toHaveBeenCalledWith('org-1', 'vocês abrem domingo?', 5);
+    expect(res.body.turnos[0].fontes).toEqual([{ source: 'cardapio.pdf', similarity: 0.61 }]);
+    expect(promptDoTurno(res)).toContain('Trecho da base: o rodízio custa R$ 89.');
+  });
+
+  it('com contextoUnico ligado, a Qualidade consulta a base e monta com o contato mock e a data fixa (A036)', async () => {
+    ligar(['contextoUnico']);
+
+    const res = await chamar({ ...corpoValido, canal: 'qualidade' });
+
+    expect(searchWithSources).toHaveBeenCalledWith('org-1', 'vocês abrem domingo?', 5);
+    const turno = res.body.turnos[0];
+    expect(turno.motor).toBe('unico');
+    const base = turno.checagens.find((c: any) => c.id === 'base_consultada');
+    expect(base.ok).toBe(true);
+    const prompt = promptDoTurno(res);
+    expect(prompt).toContain('Nome registrado: Rod');
+    expect(prompt).toContain('# Agora\n14/09/2026, 12:00:00');
+    expect(prompt).toContain('### Links oficiais de Cantina da Nona');
+  });
+
+  it('a instrução de canal do site fica DEPOIS do CORE com o motor único (A076)', async () => {
+    ligar(['contextoUnico']);
+
+    const res = await chamar({ ...corpoValido, canal: 'site' });
+
+    const prompt = promptDoTurno(res);
+    const canal = prompt.indexOf('# CANAL DE COMUNICAÇÃO');
+    expect(canal).toBeGreaterThan(0);
+    expect(prompt.indexOf(PROMPT_DO_AGENTE)).toBeGreaterThan(canal);
   });
 });

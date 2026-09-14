@@ -38,8 +38,45 @@ import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
 // cru e julgava a resposta dobrada, com as tags dentro.
 import { extractProductionReplyText } from '../agents/replyText.js';
 import { regraTerminaEmFraseCompleta } from './agentPromptPatcher.js';
+import type { RagSearchStatus } from './ragService.js';
+import type { ParteDoContexto } from '../agents/composeAgentContext.js';
 
 // ─── Tipos públicos ─────────────────────────────────────────────────
+
+/**
+ * C1a (Passo 12, A036): o contexto de um cenário montado pelo motor único
+ * (CORE, prompt, perfil vivo, links, cliente, saudação, base e data fixa).
+ * Quem monta é services/agentEvalContext.ts; o runner só recebe.
+ */
+export interface ContextoDoCenario {
+  systemPrompt: string;
+  /** sha256 do systemPrompt, gravado no resultado para o Raio-X. */
+  hash: string;
+  partes: ParteDoContexto[];
+  /** Estado da busca na base da organização testada. */
+  ragStatus: RagSearchStatus;
+}
+
+/**
+ * O que o runner entrega ao montador além do cenário. Rodada 2 do PR #377:
+ * o bloco "# Regras aprovadas pelo dono" que quem chamou o avaliador JÁ leu
+ * (uma vez por execução, em ContextoDoSugeridor.regrasBlock). O montador usa
+ * este texto, e não lê de novo por cenário.
+ */
+export interface ExtrasDoMontador {
+  regrasBlock: string;
+}
+
+/**
+ * Montador injetado por quem chama o runner. null = interruptor
+ * `contextoUnico` desligado: o cenário usa o prompt de antes
+ * (buildEvalSystemPrompt). O runner NÃO importa banco, base nem interruptor
+ * por causa disto, e continua testável com dublês.
+ */
+export type MontadorDeContexto = (
+  scenario: EvalScenario,
+  extras?: ExtrasDoMontador,
+) => Promise<ContextoDoCenario | null>;
 
 export interface ScenarioResult {
   scenarioId: string;
@@ -81,6 +118,14 @@ export interface ScenarioResult {
   combined: 'pass' | 'partial' | 'fail' | 'erro';
   /** Motivo legível da falha técnica, em português. Só quando combined='erro'. */
   falhaTecnica?: string;
+  /**
+   * C1a (A036): estado da base da organização no turno testado. Só existe
+   * quando o cenário rodou pelo motor único. 'servico_fora' diz que a base
+   * caiu; não é o mesmo que "não há base".
+   */
+  ragStatus?: RagSearchStatus;
+  /** C1a: sha256 do prompt que o agente testado recebeu. Liga o teste ao Raio-X. */
+  promptHash?: string;
   /**
    * Nível 1 auto-suggest (FASE 2.1 hotfix, 2026-05-13):
    * Quando combined=fail/partial, runner dispara Sonnet pra propor 1-3 patches
@@ -516,6 +561,15 @@ export interface ContextoDoSugeridor {
    * ausente, o prompt é byte a byte o de antes.
    */
   regrasBlock?: string;
+  /**
+   * C1a (Passo 12, A036): o montador do contexto de produção. Rodada 2 do PR
+   * #377: mora no MESMO objeto das regras, e não num quarto parâmetro, porque
+   * os dois PRs tinham acrescentado um cada. Presente e com o interruptor
+   * `contextoUnico` da organização ligado, o cenário roda com o contexto do
+   * motor único, e o bloco de regras entra nele pelo `regrasBlock` acima.
+   * Ausente, null ou devolvendo null: o prompt de antes (buildEvalSystemPrompt).
+   */
+  montarContexto?: MontadorDeContexto | null;
 }
 
 export async function suggestFix(
@@ -794,7 +848,32 @@ async function runScenario(
   profile: JudgeProfile,
   contexto: ContextoDoSugeridor = {},
 ): Promise<ScenarioResult> {
-  const systemPrompt = buildEvalSystemPrompt(agent, scenario, contexto.regrasBlock);
+  // C1a: o contexto de produção quando o montador existe e o interruptor da
+  // organização está ligado. Erro no montador não derruba o cenário: cai no
+  // prompt de antes, com registro, porque o teste ainda vale como era.
+  //
+  // Rodada 2 do PR #377: o bloco de regras do chamador vai ao montador (o
+  // compositor o põe depois do perfil vivo) e ao prompt de antes (depois do
+  // system_prompt). É o MESMO texto nos dois ramos, lido uma vez só.
+  const regrasBlock = contexto.regrasBlock ?? '';
+  let doCenario: ContextoDoCenario | null = null;
+  if (contexto.montarContexto) {
+    try {
+      doCenario = await contexto.montarContexto(scenario, { regrasBlock });
+    } catch (err: any) {
+      logger.warn('[agentEvalRunner] montador de contexto falhou: cenário com o prompt de antes', {
+        scenarioId: scenario.id,
+        err: err?.message,
+      });
+      doCenario = null;
+    }
+  }
+  const systemPrompt = doCenario
+    ? doCenario.systemPrompt
+    : buildEvalSystemPrompt(agent, scenario, contexto.regrasBlock);
+  const rastroDoContexto = doCenario
+    ? { ragStatus: doCenario.ragStatus, promptHash: doCenario.hash }
+    : {};
 
   const messages = (scenario.history || []).map((h) => ({
     role: h.role,
@@ -874,6 +953,7 @@ async function runScenario(
     return resultadoComErro(scenario, falha, {
       responseLatencyMs,
       responseTokens: { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens },
+      ...rastroDoContexto,
     });
   }
 
@@ -906,6 +986,7 @@ async function runScenario(
       responseLatencyMs,
       responseTokens: { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens },
       deterministic: { passed: deterministicPassed, failedPatterns, missingPatterns },
+      ...rastroDoContexto,
     });
   }
 
@@ -954,6 +1035,7 @@ async function runScenario(
     },
     judge,
     combined,
+    ...rastroDoContexto,
   };
 }
 
@@ -1033,7 +1115,8 @@ export async function executeAgentEvalRun(
   /**
    * A043: as regras já aprovadas e o bloco vivo, para o sugeridor fortalecer
    * a regra existente em vez de escrever a sexta versão dela. Quem chama é
-   * quem tem banco; o avaliador não vai buscar sozinho.
+   * quem tem banco; o avaliador não vai buscar sozinho. C1a: e o montador do
+   * contexto de produção (`montarContexto`), no mesmo objeto.
    */
   contexto: ContextoDoSugeridor = {},
 ): Promise<{ results: ScenarioResult[]; durationMs: number; summary: RunSummary }> {

@@ -38,10 +38,9 @@ vi.mock('../services/agentRulesService.js', () => ({
   blocoDeRegrasDaOrganizacao: vi.fn().mockResolvedValue(''),
 }));
 
-// O perfil vivo (A8) também consulta o interruptor por organização, dentro do
-// montador real. Sem este duble, cada montagem esperava o Redis recusar a
-// conexão e o primeiro teste do arquivo levava mais de 7 s. Desligado é o
-// que o teste já via com o Redis fora (isFlagOn devolve false no erro).
+// Interruptores sempre desligados, sem Redis: a casca lê dois por turno
+// (contextoUnico e perfilVivo) e, sem este dublê, cada leitura espera o
+// cache real responder. O fatiamento aqui é do caminho de antes.
 vi.mock('../services/featureFlags.js', () => ({
   isFlagOn: vi.fn().mockResolvedValue(false),
 }));

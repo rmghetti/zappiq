@@ -48,6 +48,9 @@ import {
 } from '../agents/tenantAgentProfile.js';
 import { assertNoForeignBrand, ForeignBrandLeakError } from '../agents/tenantIsolationGuard.js';
 import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
+// C1a (A036): o cenário roda com o contexto de produção quando o
+// interruptor contextoUnico da organização está ligado.
+import { criarMontadorDeContextoDoEval } from '../services/agentEvalContext.js';
 import { enqueueEvalRun, resolveScenariosForRun } from '../services/agentEvalQueue.js';
 import {
   applyPatch,
@@ -1069,20 +1072,28 @@ router.post(
         });
       }
 
+      // C1a (A036): o cenário roda com o contexto de produção quando o
+      // interruptor contextoUnico da organização está ligado. Um montador para
+      // as três amostras: o interruptor e as settings são lidos uma vez só, e
+      // o bloco de regras entra pelo `regrasBlock` lido acima (rodada 2 do PR
+      // #377), sem nova leitura por amostra.
+      const agenteDoReteste = {
+        id: run.agentId,
+        name: run.agent.name,
+        systemPrompt: run.agent.systemPrompt || '',
+      };
+      const montarContexto = criarMontadorDeContextoDoEval(agenteDoReteste, orgId);
+
       const amostras: AmostraDoReteste[] = [];
       for (let i = 1; i <= AMOSTRAS_DO_RETESTE; i++) {
         const { results } = await executeAgentEvalRun(
           [scenario],
-          {
-            id: run.agentId,
-            name: run.agent.name,
-            systemPrompt: run.agent.systemPrompt || '',
-          },
+          agenteDoReteste,
           profile,
           // O re-teste lê o veredito e joga o resto fora. Sem esta marca, cada
           // amostra reprovada pedia uma sugestão nova (às vezes duas) que
           // ninguém ia ver: o clique custava até 15 chamadas em vez de 9.
-          { pularSugestao: true, regrasBlock },
+          { pularSugestao: true, regrasBlock, montarContexto },
         );
         const r = results[0];
         amostras.push({
