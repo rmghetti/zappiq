@@ -1,8 +1,8 @@
 /* ══════════════════════════════════════════════════════════════════════
- * izaFactsService — a seção de preços da Iza sai do catálogo, não do banco.
+ * izaFactsService: a seção de preços da Iza sai do catálogo, não do banco.
  * --------------------------------------------------------------------
  * Achado A229: o prompt da Iza oferecia o Scale a R$ 997 (preço de antes do
- * Pricing V4, de 27/05) e planos que já estavam descontinhados, enquanto a
+ * Pricing V4, de 27/05) e planos que já estavam descontinuados, enquanto a
  * seção `pricing` de `iza_facts` tinha ZERO fatos. Duas fontes de verdade
  * para preço, e a errada era a que falava com o lead.
  *
