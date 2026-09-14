@@ -34,11 +34,30 @@ const janelaSchema = z
  * Formato ÚNICO de horário (o mesmo tipo BusinessHoursConfig que o Maestro
  * já avalia com isOpen). Dia sem expediente é `null` explícito, e não um dia
  * ausente: ausência é "não informado", que tem outro significado para a IA.
+ *
+ * Por isso os SETE dias são obrigatórios. O bloco vivo trata dia ausente como
+ * "não informado" e deixa o dia fora da frase, de propósito (achado A059): é
+ * o que impede a IA de afirmar "Domingo: fechado" para quem abre no domingo.
+ * Se esta rota aceitasse meia semana, o cliente salvaria a tela inteira
+ * achando que declarou tudo, e a IA continuaria sem resposta para os outros
+ * dias. Declarar é dizer os sete, com `null` onde fecha.
  */
+const diasDaSemanaSchema = z
+  .object({
+    '0': janelaSchema.nullable(),
+    '1': janelaSchema.nullable(),
+    '2': janelaSchema.nullable(),
+    '3': janelaSchema.nullable(),
+    '4': janelaSchema.nullable(),
+    '5': janelaSchema.nullable(),
+    '6': janelaSchema.nullable(),
+  })
+  .strict();
+
 export const businessHoursConfigSchema = z
   .object({
     timezone: z.string().min(1).max(64),
-    days: z.record(z.enum(['0', '1', '2', '3', '4', '5', '6']), janelaSchema.nullable()),
+    days: diasDaSemanaSchema,
   })
   .strict();
 

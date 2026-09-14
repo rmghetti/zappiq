@@ -221,3 +221,78 @@ describe('buildLiveProfileBlock: o que a IA recebe', () => {
     expect(bloco).not.toContain('—');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// A059 de novo, agora pelo formato estruturado (revisão do PR #368)
+// ---------------------------------------------------------------------
+// O bug A059 era "ausência de dado vira afirmação de fechado". Ele estava
+// curado no formato do painel e no do cadastro, mas voltava pelo
+// businessHoursConfig: dia sem chave em `days` virava "fechado" na frase.
+// Dia AUSENTE é "não informado"; dia declarado `null` é "fechado". As duas
+// coisas têm significados diferentes para a IA e para o cliente final.
+// ─────────────────────────────────────────────────────────────────────
+
+describe('normalizarHorario: dia ausente no businessHoursConfig não vira fechado', () => {
+  it('dia sem chave em days fica FORA da frase', () => {
+    const r = normalizarHorario({
+      businessHoursConfig: {
+        timezone: 'America/Sao_Paulo',
+        days: {
+          1: { open: '09:00', close: '18:00' },
+          2: { open: '09:00', close: '18:00' },
+          3: { open: '09:00', close: '18:00' },
+          4: { open: '09:00', close: '18:00' },
+          5: { open: '09:00', close: '18:00' },
+        },
+      },
+    });
+
+    expect(r.formato).toBe('config');
+    expect(r.texto).toContain('Segunda a sexta: 09:00 às 18:00');
+    expect(r.texto).not.toMatch(/Domingo/i);
+    expect(r.texto).not.toMatch(/Sábado/i);
+    expect(r.texto).not.toMatch(/fechado/i);
+  });
+
+  it('dia declarado null continua dizendo fechado: ali o dono afirmou', () => {
+    const r = normalizarHorario({
+      businessHoursConfig: {
+        timezone: 'America/Sao_Paulo',
+        days: { 0: null, 1: { open: '09:00', close: '18:00' } },
+      },
+    });
+
+    expect(r.texto).toContain('Domingo: fechado');
+    expect(r.texto).not.toMatch(/Sábado/i);
+  });
+
+  it('config sem nenhum dia declarado cai em "não informado", não em fechado', () => {
+    const bloco = buildLiveProfileBlock(
+      { businessHoursConfig: { timezone: 'America/Sao_Paulo', days: {} } },
+      PERFIL,
+      { now: new Date('2026-09-14T15:00:00Z') },
+    );
+
+    expect(bloco).toContain(TEXTO_HORARIO_AUSENTE);
+    expect(bloco).not.toMatch(/fechado/i);
+    // Sem horário para valer, nem "Agora: fechado" pode sair: seria a mesma
+    // afirmação inventada, só que por outro caminho.
+    expect(bloco).not.toContain('- Agora:');
+  });
+
+  it('o bloco vivo não inventa sábado nem domingo quando o dono só declarou a semana', () => {
+    const bloco = buildLiveProfileBlock(
+      {
+        businessHoursConfig: {
+          timezone: 'America/Sao_Paulo',
+          days: { 1: { open: '08:00', close: '17:00' }, 2: { open: '08:00', close: '17:00' } },
+        },
+      },
+      PERFIL,
+    );
+
+    expect(bloco).toContain('Segunda e Terça: 08:00 às 17:00');
+    expect(bloco).not.toMatch(/Domingo/i);
+    expect(bloco).not.toMatch(/Sábado/i);
+  });
+});

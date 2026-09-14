@@ -130,13 +130,33 @@ function lerConfig(valor: unknown): BusinessHoursConfig | null {
   return valor as BusinessHoursConfig;
 }
 
-function horarioDoConfig(config: BusinessHoursConfig): string {
+/**
+ * Dia AUSENTE e dia `null` querem dizer coisas diferentes, e confundir os
+ * dois é o achado A059 voltando pela porta dos fundos:
+ *
+ *   • chave ausente  = o dono não informou. NÃO entra na frase. Afirmar
+ *     "Domingo: fechado" aqui é a IA recusar atendimento num dia em que o
+ *     negócio pode estar aberto, que é exatamente o defeito original.
+ *   • chave com null = o dono declarou que fecha. Entra como "fechado".
+ *
+ * Sem nenhum dia declarado, devolve null: quem chama cai no texto de
+ * ausência, nunca num dia fechado inventado.
+ */
+function horarioDoConfig(config: BusinessHoursConfig): string | null {
+  const dias = (config.days ?? {}) as Record<string, any>;
+  const temChave = (dia: number) =>
+    Object.prototype.hasOwnProperty.call(dias, dia) ||
+    Object.prototype.hasOwnProperty.call(dias, String(dia));
+
   const porDia = new Map<number, string>();
   for (const dia of ORDEM_SEMANA) {
-    const janela = (config.days as any)?.[dia] ?? (config.days as any)?.[String(dia)];
+    if (!temChave(dia)) continue;
+    const janela = dias[dia] ?? dias[String(dia)];
     if (janela && janela.open && janela.close) porDia.set(dia, `${janela.open} às ${janela.close}`);
     else porDia.set(dia, 'fechado');
   }
+  if (porDia.size === 0) return null;
+
   const linhas = agruparDias(porDia);
   const fuso = textoNaoVazio((config as any).timezone);
   const sufixo = fuso && fuso !== 'America/Sao_Paulo' ? ` (fuso ${fuso})` : '';
@@ -190,6 +210,7 @@ export function normalizarHorario(
   if (config) {
     return { config, texto: horarioDoConfig(config), formato: 'config' };
   }
+
 
   const hours = s.businessHours;
   if (hours && typeof hours === 'object') {
@@ -300,7 +321,9 @@ export function buildLiveProfileBlock(
     `- Horário de atendimento humano: ${horario.texto ? limitar(horario.texto, MAX_HORARIO) : TEXTO_HORARIO_AUSENTE}`,
   );
 
-  if (horario.config && opts.now) {
+  // "Agora" só sai com horário de verdade: sem dia declarado, dizer
+  // "Agora: fechado" seria a mesma afirmação inventada por outro caminho.
+  if (horario.config && horario.texto && opts.now) {
     linhas.push(`- Agora: ${isOpen(horario.config, opts.now) ? 'aberto' : 'fechado'}`);
   }
 

@@ -14,13 +14,22 @@ import {
   mergePerfilDoAgente,
 } from './settings.perfilDoAgente.js';
 
+/** Semana inteira, com os sete dias declarados. Fechado é `null` explícito. */
+function diasCompletos(parcial: Record<string, any> = {}): Record<string, any> {
+  const base: Record<string, any> = { '0': null, '1': null, '2': null, '3': null, '4': null, '5': null, '6': null };
+  return { ...base, ...parcial };
+}
+
 const HORARIO = {
   timezone: 'America/Sao_Paulo',
-  days: {
-    '0': null,
+  days: diasCompletos({
     '1': { open: '09:00', close: '18:00' },
+    '2': { open: '09:00', close: '18:00' },
+    '3': { open: '09:00', close: '18:00' },
+    '4': { open: '09:00', close: '18:00' },
+    '5': { open: '09:00', close: '18:00' },
     '6': { open: '09:00', close: '13:00' },
-  },
+  }),
 };
 
 describe('perfilDoAgenteSchema: só o perfil do agente entra', () => {
@@ -74,7 +83,10 @@ describe('businessHoursConfigSchema: formato único, com fuso', () => {
 
   it('REJEITA hora fora do formato HH:mm', () => {
     for (const janela of [{ open: '9h', close: '18h' }, { open: '25:00', close: '26:00' }, { open: '09:00' }]) {
-      const r = businessHoursConfigSchema.safeParse({ timezone: 'America/Sao_Paulo', days: { '1': janela } });
+      const r = businessHoursConfigSchema.safeParse({
+        timezone: 'America/Sao_Paulo',
+        days: diasCompletos({ '1': janela }),
+      });
       expect(r.success, JSON.stringify(janela)).toBe(false);
     }
   });
@@ -82,13 +94,45 @@ describe('businessHoursConfigSchema: formato único, com fuso', () => {
   it('REJEITA dia fora de 0 a 6', () => {
     const r = businessHoursConfigSchema.safeParse({
       timezone: 'America/Sao_Paulo',
-      days: { '7': { open: '09:00', close: '18:00' } },
+      days: { ...diasCompletos(), '7': { open: '09:00', close: '18:00' } },
     });
     expect(r.success).toBe(false);
   });
 
   it('dia fechado é null explícito, e isso passa', () => {
-    const r = businessHoursConfigSchema.safeParse({ timezone: 'America/Sao_Paulo', days: { '0': null } });
+    const r = businessHoursConfigSchema.safeParse({
+      timezone: 'America/Sao_Paulo',
+      days: diasCompletos(),
+    });
+    expect(r.success).toBe(true);
+  });
+
+  // A059 pela porta dos fundos: no bloco vivo, dia AUSENTE quer dizer "não
+  // informado" e dia `null` quer dizer "fechado". Gravar meia semana por esta
+  // rota deixaria a IA sem saber o que dizer dos outros dias, e o formato não
+  // tem como distinguir "esqueci" de "fecho". Por isso os sete são exigidos.
+  it('REJEITA semana incompleta: dia ausente não é dia fechado', () => {
+    for (const faltando of ['0', '3', '6']) {
+      const days = diasCompletos({ '1': { open: '09:00', close: '18:00' } });
+      delete days[faltando];
+      const r = businessHoursConfigSchema.safeParse({ timezone: 'America/Sao_Paulo', days });
+      expect(r.success, `sem o dia ${faltando}`).toBe(false);
+    }
+  });
+
+  it('REJEITA days vazio', () => {
+    const r = businessHoursConfigSchema.safeParse({ timezone: 'America/Sao_Paulo', days: {} });
+    expect(r.success).toBe(false);
+  });
+
+  it('aceita a semana inteira declarada, que é o contrato novo', () => {
+    const r = businessHoursConfigSchema.safeParse({
+      timezone: 'America/Sao_Paulo',
+      days: diasCompletos({
+        '1': { open: '08:00', close: '17:00' },
+        '2': { open: '08:00', close: '17:00' },
+      }),
+    });
     expect(r.success).toBe(true);
   });
 });
