@@ -22,6 +22,15 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { llmRouter, type LLMTier } from '../services/llm/LLMRouter.js';
 import { loadBusinessContext } from './flowGenerator.js';
+// C1a (Passo 12, A076): com o interruptor `contextoUnico`, a retomada usa o
+// MESMO motor de contexto do WhatsApp: persona inteira (sem o corte de 4.000
+// caracteres), CORE, perfil vivo, links e saudação, com a instrução da
+// retomada DEPOIS do CORE. Desligado, o caminho leve de antes segue igual.
+import {
+  flagLigada,
+  montarContextoDoTurno,
+  carregarPoliticaDoTurno,
+} from './agentContextLoader.js';
 
 /** Mesma janela de histórico do orchestrator (últimos 20 turnos). */
 export const MAX_HISTORY_MESSAGES = 20;
@@ -48,6 +57,20 @@ export interface AiResumePromptContext {
  * O histórico é truncado às últimas MAX_HISTORY_MESSAGES mensagens e
  * rotulado Cliente/Agente (o modelo não vê direction cru do banco).
  */
+/**
+ * A instrução da retomada: o que diferencia este turno de um turno normal.
+ * Uma definição só, usada pelo caminho leve (no fim do system) e pelo motor
+ * único (depois do CORE, A076).
+ */
+export function buildAiResumeInstruction(): string {
+  return [
+    '# Sua tarefa agora',
+    'Você é o agente da empresa retomando proativamente a conversa no WhatsApp — o cliente NÃO acabou de mandar mensagem; é você quem está voltando ao assunto.',
+    'Escreva UMA mensagem curta (máx ~500 caracteres), em pt-BR, natural e no tom da empresa, sem assinatura, sem prefixos e sem se desculpar pelo tempo passado.',
+    'Siga a instrução do passo do fluxo informada pelo usuário. Devolva SOMENTE o texto da mensagem.',
+  ].join('\n');
+}
+
 export function buildAiResumePrompt(ctx: AiResumePromptContext): { system: string; user: string } {
   const persona = (ctx.personaPrompt || '').trim().slice(0, MAX_PERSONA_CHARS);
 
@@ -56,10 +79,7 @@ export function buildAiResumePrompt(ctx: AiResumePromptContext): { system: strin
     '# Contexto do negócio',
     ctx.brief,
     '',
-    '# Sua tarefa agora',
-    'Você é o agente da empresa retomando proativamente a conversa no WhatsApp — o cliente NÃO acabou de mandar mensagem; é você quem está voltando ao assunto.',
-    'Escreva UMA mensagem curta (máx ~500 caracteres), em pt-BR, natural e no tom da empresa, sem assinatura, sem prefixos e sem se desculpar pelo tempo passado.',
-    'Siga a instrução do passo do fluxo informada pelo usuário. Devolva SOMENTE o texto da mensagem.',
+    buildAiResumeInstruction(),
   ].filter(Boolean).join('\n');
 
   const recent = ctx.history.slice(-MAX_HISTORY_MESSAGES);
@@ -129,14 +149,61 @@ export async function generateAiResumeReply(
       content: m.content,
     }));
 
-    const { system, user } = buildAiResumePrompt({
+    const leve = buildAiResumePrompt({
       brief: ctx.brief,
       personaPrompt: agent?.systemPrompt ?? null,
       history,
       aiPrompt,
     });
+    const user = leve.user;
 
-    const tier = VALID_TIERS.includes(ctx.plan as LLMTier) ? (ctx.plan as LLMTier) : undefined;
+    // C1a: o system pelo motor único, quando ligado. Sem Agent vivo, o
+    // carregador devolve null e a retomada segue no caminho leve.
+    let system = leve.system;
+    const [contextoUnico, modeloPorPolitica] = await Promise.all([
+      flagLigada(organizationId, 'contextoUnico'),
+      flagLigada(organizationId, 'modeloPorPolitica'),
+    ]);
+    if (contextoUnico) {
+      const [conversa, org] = await Promise.all([
+        prisma.conversation.findUnique({
+          where: { id: conversationId },
+          select: { contactId: true, contact: { select: { phone: true } } },
+        }),
+        prisma.organization.findUnique({
+          where: { id: organizationId },
+          select: { settings: true },
+        }),
+      ]);
+      const contexto = await montarContextoDoTurno({
+        origem: 'maestro_retomada',
+        organizationId,
+        orgSettings: (org?.settings as Record<string, any>) ?? {},
+        contactId: conversa?.contactId ?? undefined,
+        contactPhone: conversa?.contact?.phone ?? null,
+        // Não há mensagem do cliente para buscar na base: a retomada fala do
+        // que o passo do fluxo manda, com a persona inteira.
+        ragContext: '',
+        ragStatus: 'sem_resultado',
+        temHistoricoNoContexto: history.length > 0,
+        instrucaoDeCanal: buildAiResumeInstruction(),
+      });
+      if (contexto) {
+        system = contexto.systemPrompt;
+        logger.info('[FlowAiResume] contexto pelo motor único', {
+          organizationId,
+          conversationId,
+          hash: contexto.hash,
+          chars: system.length,
+        });
+      }
+    }
+
+    const tier = modeloPorPolitica
+      ? (await carregarPoliticaDoTurno(organizationId, { canal: 'maestro_retomada', agendamentoAtivo: false })).tier
+      : VALID_TIERS.includes(ctx.plan as LLMTier)
+        ? (ctx.plan as LLMTier)
+        : undefined;
     const resp = await llmRouter.complete({
       system,
       messages: [{ role: 'user', content: user }],
