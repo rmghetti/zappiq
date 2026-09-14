@@ -7,7 +7,12 @@
  * ============================================================================
  */
 import { describe, it, expect } from 'vitest';
-import { tituloDoVeredito, rotuloDaAmostra, textoDoCusto } from './reteste';
+import {
+  tituloDoVeredito,
+  rotuloDaAmostra,
+  textoDoCusto,
+  avisoDeCustoNaTela,
+} from './reteste';
 
 describe('tituloDoVeredito', () => {
   it('não promete nem condena no resultado misto', () => {
@@ -37,5 +42,30 @@ describe('textoDoCusto', () => {
 
   it('não usa travessão', () => {
     expect(textoDoCusto(3)).not.toContain('—');
+  });
+
+  it('conta as avaliações também: cada tentativa é uma conversa mais um juiz', () => {
+    expect(textoDoCusto(3)).toContain('3 avaliações da IA');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * PC-2 da revisão: o preço fica NA TELA, não escondido no tooltip.
+ * --------------------------------------------------------------------
+ * O custo estava só no atributo `title` do botão. Em toque não existe
+ * tooltip, então quem clica no celular nunca via o preço. E a cota diária
+ * de 7 cliques por empresa precisa estar escrita, senão o 429 chega sem
+ * explicação nenhuma.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('avisoDeCustoNaTela', () => {
+  it('diz o preço do clique e o limite do dia, curto', () => {
+    const t = avisoDeCustoNaTela(3, 7);
+    expect(t).toContain('3 conversas de teste');
+    expect(t).toContain('3 avaliações da IA');
+    expect(t).toContain('7 por dia');
+  });
+
+  it('não usa travessão', () => {
+    expect(avisoDeCustoNaTela(3, 7)).not.toContain('—');
   });
 });

@@ -50,7 +50,14 @@ import {
   TEXTO_FALHA_TECNICA,
 } from './_lib/execucao';
 // A049: o texto do re-teste com 3 amostras, testado fora do componente.
-import { tituloDoVeredito, rotuloDaAmostra, textoDoCusto } from './_lib/reteste';
+import {
+  tituloDoVeredito,
+  rotuloDaAmostra,
+  textoDoCusto,
+  avisoDeCustoNaTela,
+  AMOSTRAS_DO_RETESTE,
+  COTA_DIARIA_DE_RETESTE,
+} from './_lib/reteste';
 
 const TRIGGER_LABELS: Record<string, string> = {
   client_retest: 'Re-teste de uma correção',
@@ -814,10 +821,17 @@ function ClientFixCard({
         return;
       }
       // FASE 2.2c (#246): trata DUPLICATE_PATCH com mensagem orientativa.
+      //
+      // A frase antiga mandava escrever em CAPS e começar com "REGRA
+      // INVIOLÁVEL". Ensinava errado: o servidor tira esse prefixo e a
+      // numeração antes de gravar (limparTextoDaRegra), então o dono
+      // digitava um enfeite que sumia. O que fortalece a regra é ela ser
+      // específica e trazer um exemplo da frase certa.
       if (err?.details?.error === 'DUPLICATE_PATCH' || err?.status === 409) {
         setActionError(
           err?.details?.message ||
-            'Esta correção já existe no agente. Edite antes de aplicar (use CAPS, "REGRA INVIOLÁVEL", PROIBIDO) pra fortalecer a regra.',
+            'Esta correção já existe no agente. Edite antes de aplicar: diga em que situação a ' +
+              'regra vale e dê um exemplo da frase certa.',
         );
         setEditing(true);
       } else {
@@ -1132,7 +1146,7 @@ function ClientFixCard({
                     onClick={handleRetest}
                     disabled={loadingAction !== null}
                     className="flex-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-medium rounded border border-blue-300 disabled:opacity-50"
-                    title={textoDoCusto(3)}
+                    title={textoDoCusto(AMOSTRAS_DO_RETESTE)}
                   >
                     {loadingAction === 're-test'
                       ? 'Re-testando (3 tentativas)…'
@@ -1152,6 +1166,15 @@ function ClientFixCard({
                 </div>
               )}
             </div>
+
+            {/* O preço do clique fica visível, e não só no tooltip do botão:
+                em celular não existe tooltip, e o dono clicava sem saber o
+                que ia gastar nem que existe limite por dia. */}
+            {podeAgir && decisionMade && existingDecision.decision === 'applied' && (
+              <div className="mt-1.5 text-[10px] text-neutral-500">
+                {avisoDeCustoNaTela(AMOSTRAS_DO_RETESTE, COTA_DIARIA_DE_RETESTE)}
+              </div>
+            )}
           </div>
         )}
       </div>

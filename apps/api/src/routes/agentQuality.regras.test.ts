@@ -24,6 +24,7 @@ const prismaMock: any = {
   agent: { findFirst: vi.fn() },
   agentEvalRun: { findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn() },
   agentEvalFixDecision: { findFirst: vi.fn(), create: vi.fn() },
+  agentPromptVersion: { findFirst: vi.fn() },
   agentRule: { findMany: vi.fn(), findFirst: vi.fn() },
   evalRegrade: { findMany: vi.fn() },
   user: { findUnique: vi.fn() },
@@ -39,8 +40,17 @@ vi.mock('../middleware/auth.js', () => ({
   authMiddleware: (_req: any, _res: any, next: any) => next(),
   requireRole: () => (_req: any, _res: any, next: any) => next(),
 }));
+// A cota é registrada na montagem do router, não a cada chamada. O registro
+// vai para uma lista própria: `vi.clearAllMocks()` do beforeEach apagaria a
+// chamada, que acontece uma vez só, no import.
+const { cotasRegistradas } = vi.hoisted(() => ({
+  cotasRegistradas: [] as Array<{ rota: string; limite?: number }>,
+}));
 vi.mock('../middleware/cotaDiaria.js', () => ({
-  cotaDiaria: () => (_req: any, _res: any, next: any) => next(),
+  cotaDiaria: (rota: string, limite?: number) => {
+    cotasRegistradas.push({ rota, limite });
+    return (_req: any, _res: any, next: any) => next();
+  },
 }));
 
 const CENARIO = {
@@ -212,6 +222,7 @@ beforeEach(() => {
     role: 'ADMIN',
   });
   prismaMock.agentRule.findMany.mockResolvedValue([]);
+  prismaMock.agentPromptVersion.findFirst.mockResolvedValue({ version: 12 });
 });
 
 const APPLY = '/runs/:runId/scenarios/:scenarioId/apply-fix';
@@ -345,6 +356,22 @@ describe('apply-fix — interruptor LIGADO: a correção vira registro (A081)', 
     expect(res.statusCode).toBe(422);
     expect(res.body.error).toBe('teto_de_regras');
   });
+
+  // ── PI-6: a regra guarda contra qual versão do prompt ela nasceu ──
+  it('a regra nasce carimbada com a versão corrente do prompt', async () => {
+    const res = makeRes();
+    await getHandler('post', APPLY)({ ...USER, params: paramsApply, body: {} }, res);
+    expect(res.statusCode).toBe(200);
+    expect(regrasMock.aplicarRegraDoCenario.mock.calls[0][0].versaoDoPromptDeOrigem).toBe(12);
+  });
+
+  it('agente sem versão registrada ainda aprova a regra', async () => {
+    prismaMock.agentPromptVersion.findFirst.mockResolvedValue(null);
+    const res = makeRes();
+    await getHandler('post', APPLY)({ ...USER, params: paramsApply, body: {} }, res);
+    expect(res.statusCode).toBe(200);
+    expect(regrasMock.aplicarRegraDoCenario.mock.calls[0][0].versaoDoPromptDeOrigem).toBeNull();
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -444,6 +471,64 @@ describe('POST /fix-decisions/:id/revert — quando a correção virou regra', (
     expect(prismaMock.agentEvalFixDecision.create).toHaveBeenCalledTimes(1);
     expect(prismaMock.agentEvalFixDecision.create.mock.calls[0][0].data.decision).toBe('reverted');
   });
+
+  // ── PI-2: desfazer o que já não está no ar ────────────────────────
+  // A busca da regra filtrava por status = 'ativa'. Uma correção já
+  // substituída por outra do mesmo cenário devolvia null, caía no caminho do
+  // prompt, achava o hash igual (esse caminho nunca mexeu no prompt) e
+  // respondia 200 com "revertida" sem desativar nada. O dono via sucesso e a
+  // regra continuava valendo.
+  const DECISAO_APLICADA = {
+    id: 'dec-1',
+    runId: 'run-1',
+    scenarioId: 'cr5_nome_disponivel_usar',
+    agentId: 'agent-1',
+    decision: 'applied',
+    promptBefore: 'prompt antigo',
+    promptAfter: 'prompt antigo',
+    originalSuggestion: SUGESTAO,
+  };
+
+  it('regra já SUBSTITUÍDA por outra: 409, e nada é gravado', async () => {
+    prismaMock.agentEvalFixDecision.findFirst.mockResolvedValue(DECISAO_APLICADA);
+    regrasMock.regraDaDecisao.mockResolvedValue({
+      id: 'regra-1',
+      scenarioId: 'cr5_nome_disponivel_usar',
+      status: 'substituida',
+    });
+
+    const res = makeRes();
+    await getHandler('post', '/fix-decisions/:decisionId/revert')(
+      { ...USER, params: { decisionId: 'dec-1' }, body: {} },
+      res,
+    );
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.code).toBe('regra_nao_ativa');
+    expect(res.body.error).toMatch(/substituída/i);
+    expect(regrasMock.reverterRegra).not.toHaveBeenCalled();
+    expect(prismaMock.agentEvalFixDecision.create).not.toHaveBeenCalled();
+  });
+
+  it('regra já DESFEITA: 409 com a frase própria', async () => {
+    prismaMock.agentEvalFixDecision.findFirst.mockResolvedValue(DECISAO_APLICADA);
+    regrasMock.regraDaDecisao.mockResolvedValue({
+      id: 'regra-1',
+      scenarioId: 'cr5_nome_disponivel_usar',
+      status: 'revertida',
+    });
+
+    const res = makeRes();
+    await getHandler('post', '/fix-decisions/:decisionId/revert')(
+      { ...USER, params: { decisionId: 'dec-1' }, body: {} },
+      res,
+    );
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.code).toBe('regra_nao_ativa');
+    expect(res.body.error).toMatch(/já foi desfeita/i);
+    expect(regrasMock.reverterRegra).not.toHaveBeenCalled();
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -527,6 +612,51 @@ describe('re-test — 3 amostras gravadas (A049)', () => {
     await getHandler('post', RETEST)({ ...USER, params: paramsApply, body: {} }, res);
     expect(res.statusCode).toBe(200);
     expect(res.body.amostras).toHaveLength(3);
+  });
+
+  // ── PC-2: o clique custa 6 chamadas, não 12 ──────────────────────
+  it('não pede sugestão nova em nenhuma das 3 amostras', async () => {
+    respostas('fail', 'fail', 'fail');
+    const res = makeRes();
+    await getHandler('post', RETEST)({ ...USER, params: paramsApply, body: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    for (const chamada of runnerMock.executeAgentEvalRun.mock.calls) {
+      expect(chamada[3]).toMatchObject({ pularSugestao: true });
+    }
+  });
+
+  it('a cota do re-teste é 7 por dia, e não a padrão de 20', () => {
+    expect(cotasRegistradas).toContainEqual({ rota: 're-test', limite: 7 });
+  });
+
+  it('a explicação do custo fala das 3 conversas e dos 3 juízes', async () => {
+    respostas('pass', 'pass', 'pass');
+    const res = makeRes();
+    await getHandler('post', RETEST)({ ...USER, params: paramsApply, body: {} }, res);
+    expect(res.body.custo.explicacao).toMatch(/3 conversas de teste e 3 avaliações/i);
+  });
+
+  // ── PI-6: contra qual versão do prompt o agente foi medido ───────
+  it('grava a versão do prompt vigente na execução do re-teste', async () => {
+    respostas('pass', 'pass', 'pass');
+    const res = makeRes();
+    await getHandler('post', RETEST)({ ...USER, params: paramsApply, body: {} }, res);
+
+    const data = prismaMock.agentEvalRun.create.mock.calls[0][0].data;
+    expect(data.promptVersion).toBe(12);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('agente sem versão registrada ainda grava a execução', async () => {
+    respostas('pass', 'pass', 'pass');
+    prismaMock.agentPromptVersion.findFirst.mockResolvedValue(null);
+    const res = makeRes();
+    await getHandler('post', RETEST)({ ...USER, params: paramsApply, body: {} }, res);
+
+    const data = prismaMock.agentEvalRun.create.mock.calls[0][0].data;
+    expect(data.promptVersion).toBeNull();
+    expect(res.statusCode).toBe(200);
   });
 });
 

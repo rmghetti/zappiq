@@ -283,12 +283,27 @@ export async function reverterRegra(
   return revertida as RegraGravada;
 }
 
-/** A regra ativa que veio de uma decisão de correção, se existir. */
+/**
+ * A regra que veio de uma decisão de correção, em QUALQUER status.
+ *
+ * Sem filtro de status de propósito. A consulta filtrava por 'ativa', e uma
+ * correção já substituída por outra do mesmo cenário devolvia null: a rota de
+ * desfazer então caía no caminho do prompt, encontrava o hash igual (esse
+ * caminho nunca mexeu no prompt) e respondia 200 dizendo "revertida", sem ter
+ * desativado nada. O dono via sucesso e a regra continuava no ar.
+ *
+ * Quem chama precisa do fato inteiro ("existe, e está assim") para responder
+ * certo: ativa se desfaz, substituída ou já desfeita vira 409 com a frase que
+ * explica o que aconteceu.
+ */
 export async function regraDaDecisao(
   decisionId: string,
   db: AgentRulesDb = dbPadrao(),
 ): Promise<RegraGravada | null> {
   if (!decisionId) return null;
-  const r = await db.agentRule.findFirst({ where: { decisionId, status: 'ativa' } });
+  const r = await db.agentRule.findFirst({
+    where: { decisionId },
+    orderBy: { createdAt: 'desc' },
+  });
   return (r as RegraGravada) ?? null;
 }

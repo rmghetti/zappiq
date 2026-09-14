@@ -496,6 +496,16 @@ export interface ContextoDoSugeridor {
   regrasAtivas?: RegraDoAgente[];
   /** Bloco vivo do turno (tom, horário, agendamento), quando disponível. */
   blocoVivo?: string | null;
+  /**
+   * Quem chamou já sabe que vai jogar a sugestão fora: não peça nenhuma.
+   *
+   * É o caso do re-teste. Ele roda o mesmo cenário três vezes só para ler o
+   * veredito, e cada amostra reprovada chamava o sugeridor por baixo, com a
+   * sugestão sendo descartada em seguida. Um clique custava de 9 a 12
+   * chamadas ao modelo em vez das 6 que a tela declara (e o sugeridor ainda
+   * pede DUAS quando a primeira resposta volta cortada).
+   */
+  pularSugestao?: boolean;
 }
 
 export async function suggestFix(
@@ -507,6 +517,10 @@ export async function suggestFix(
   profile: JudgeProfile,
   contexto: ContextoDoSugeridor = {},
 ): Promise<ScenarioResult['suggestedFix']> {
+  // A guarda fica AQUI, e não em quem chama, porque quem chama é o runner
+  // interno: bastava alguém esquecer o if para a conta voltar a dobrar.
+  if (contexto.pularSugestao) return undefined;
+
   const primeira = await pedirPatch(
     scenarioId,
     expectedBehavior,

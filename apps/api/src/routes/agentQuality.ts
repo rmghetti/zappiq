@@ -153,6 +153,36 @@ async function loadRunScoped(runId: string, orgId: string) {
   return run;
 }
 
+/**
+ * A versão do prompt que está valendo para este agente agora.
+ *
+ * Serve às duas pontas do rastro: a regra aprovada guarda em qual versão ela
+ * nasceu (agent_rules.versao_do_prompt_de_origem) e a execução do re-teste
+ * guarda contra qual versão ela mediu (agent_eval_runs.prompt_version). Sem
+ * isso, "a correção pegou" é uma frase sem data: ninguém consegue dizer
+ * depois se o agente que passou era o mesmo agente que tinha reprovado.
+ *
+ * Fail-soft: agente sem histórico de versão (ou banco de mau humor) devolve
+ * null, e as duas gravações seguem sem o carimbo. O rastro é bom de ter, não
+ * é motivo para recusar a correção que o dono aprovou.
+ */
+async function versaoCorrenteDoPrompt(agentId: string): Promise<number | null> {
+  try {
+    const ultima = await prisma.agentPromptVersion.findFirst({
+      where: { agentId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    });
+    return ultima?.version ?? null;
+  } catch (err: any) {
+    logger.warn('[agentQuality] não consegui ler a versão do prompt (seguindo sem o carimbo)', {
+      agentId,
+      err: err?.message,
+    });
+    return null;
+  }
+}
+
 function findSuggestionInResults(
   results: any,
   scenarioId: string,
@@ -814,6 +844,9 @@ router.post(
 
       if (comoRegistro) {
         const texto = limparTextoDaRegra(diffToApply);
+        // Em qual versão do prompt esta regra nasceu. É a outra ponta do
+        // rastro que o re-teste grava em agent_eval_runs.prompt_version.
+        const versaoDeOrigem = await versaoCorrenteDoPrompt(run.agentId);
         const saida = await prisma.$transaction(async (tx) => {
           const criada = await tx.agentEvalFixDecision.create({
             data: {
@@ -846,6 +879,7 @@ router.post(
               origem: finalDiff ? 'editada' : 'sugestao_ia',
               decisionId: criada.id,
               createdBy: actor.email,
+              versaoDoPromptDeOrigem: versaoDeOrigem,
             },
             tx as any,
           );
@@ -967,12 +1001,24 @@ router.post(
 // (que já tem o fix aplicado) e devolve pass/partial/fail + diagnóstico.
 // Objetivo: feedback imediato pra o usuário ver se a correção empurrou o
 // score em direção a 90%+. Se não passou, ele edita e re-aplica.
-// Custo: ~1 chat + 1 judge Sonnet por clique (~$0.01-0.05).
+//
+// CUSTO: 3 chats + 3 juízes por clique. São três amostras do mesmo cenário
+// (A049), e cada amostra é uma conversa com o agente mais uma avaliação em
+// Sonnet. O comentário antigo falava de "1 chat + 1 judge", da época em que
+// o re-teste rodava uma vez só.
+//
+// O que NÃO entra nessa conta: a sugestão nova. O sugeridor era chamado por
+// baixo em toda amostra reprovada e a sugestão era descartada, o que levava
+// o clique a 9 ou 12 chamadas. Agora o contexto vai com `pularSugestao`.
+//
+// Cota de 7 por dia, por organização, em vez das 20 padrão: 7 cliques já são
+// 42 chamadas ao modelo, e quem precisa de mais do que isso num dia não está
+// re-testando, está tentando a sorte.
 // ════════════════════════════════════════════════════════════════════
 router.post(
   '/runs/:runId/scenarios/:scenarioId/re-test',
   requireRole('ADMIN', 'SUPERADMIN'),
-  cotaDiaria('re-test'),
+  cotaDiaria('re-test', 7),
   async (req: Request, res: Response) => {
     const orgId = req.user!.organizationId;
     const { runId, scenarioId } = req.params;
@@ -1003,6 +1049,10 @@ router.post(
             systemPrompt: run.agent.systemPrompt || '',
           },
           profile,
+          // O re-teste lê o veredito e joga o resto fora. Sem esta marca, cada
+          // amostra reprovada pedia uma sugestão nova (às vezes duas) que
+          // ninguém ia ver: o clique custava 12 chamadas em vez de 6.
+          { pularSugestao: true },
         );
         const r = results[0];
         amostras.push({
@@ -1023,6 +1073,11 @@ router.post(
         select: { id: true },
       });
 
+      // E contra QUAL texto o agente foi medido. Sem isto, "a correção pegou"
+      // fica solto: o dono aprova a regra na terça, edita o prompt na quarta,
+      // re-testa na quinta, e a linha não diz qual das duas versões respondeu.
+      const versaoVigente = await versaoCorrenteDoPrompt(run.agentId);
+
       // Gravar é importante, mas não pode segurar a resposta: o re-teste já
       // rodou e o dono já pagou as três chamadas.
       let runDoReteste: string | null = null;
@@ -1036,6 +1091,7 @@ router.post(
             harnessVersion: HARNESS_VERSION,
             triggeredBy: 'client_retest',
             fixDecisionId: decisao?.id ?? null,
+            promptVersion: versaoVigente,
             scenarioFilter: { scenarios: [scenarioId] } as any,
             totalScenarios: amostras.length,
             passed: resumo.aprovadas,
@@ -1077,10 +1133,16 @@ router.post(
         veredito: resumo.veredito,
         resumo,
         severity: scenario.severity,
-        // O dono vê o que custou: são três chamadas ao modelo, não uma.
+        promptVersion: versaoVigente,
+        // O dono vê o que custou, com o número certo: cada amostra é uma
+        // conversa com o agente MAIS uma avaliação. Três amostras são seis
+        // chamadas ao modelo, não três.
         custo: {
           chamadasDeLlm: AMOSTRAS_DO_RETESTE,
-          explicacao: `Este re-teste roda o cenário ${AMOSTRAS_DO_RETESTE} vezes para não confundir sorte com correção.`,
+          explicacao:
+            `Este re-teste roda o cenário ${AMOSTRAS_DO_RETESTE} vezes para não confundir sorte ` +
+            `com correção: ${AMOSTRAS_DO_RETESTE} conversas de teste e ${AMOSTRAS_DO_RETESTE} ` +
+            'avaliações da IA.',
         },
       });
     } catch (err: any) {
@@ -1189,6 +1251,31 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
     // regra, e o prompt não é tocado (A083). Sem isto, desfazer uma
     // correção de terça apagaria tudo o que entrou depois de terça.
     const regraViva = await regraDaDecisao(original.id);
+
+    // A regra existe mas já saiu do ar. Antes isto respondia 200 sem fazer
+    // nada: a busca filtrava por 'ativa', devolvia null, e o fluxo caía no
+    // caminho do prompt, onde o hash bate (esse caminho nunca mexeu no
+    // prompt) e uma decisão 'reverted' era gravada por cima de uma regra que
+    // ninguém desativou. O dono lia "correção desfeita" e o agente seguia
+    // com ela.
+    if (regraViva && regraViva.status !== 'ativa') {
+      const frase =
+        regraViva.status === 'substituida'
+          ? 'Esta correção já foi substituída por uma mais nova do mesmo caso de teste. ' +
+            'Desfaça a que está valendo agora, na lista de regras aprovadas.'
+          : 'Esta correção já foi desfeita antes. Não há nada para desfazer aqui.';
+      logger.warn('[agentQuality] revert recusado: a regra não está mais ativa', {
+        orgId,
+        decisionId: original.id,
+        ruleId: regraViva.id,
+        status: regraViva.status,
+      });
+      // A frase legível vai em `error` (é o que a tela mostra) e o código
+      // estável em `code`, mesmo contrato do 'prompt_mudou' logo abaixo.
+      res.status(409).json({ error: frase, code: 'regra_nao_ativa', status: regraViva.status });
+      return;
+    }
+
     if (regraViva) {
       const revertida = await prisma.$transaction(async (tx) => {
         const criada = await tx.agentEvalFixDecision.create({

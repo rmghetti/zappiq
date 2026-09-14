@@ -38,6 +38,7 @@ const {
   blocoDeRegrasDaOrganizacao,
   aplicarRegraDoCenario,
   reverterRegra,
+  regraDaDecisao,
   TETO_DE_REGRAS_ATIVAS,
 } = await import('./agentRulesService.js');
 
@@ -291,5 +292,35 @@ describe('reverterRegra — cirúrgico (A083)', () => {
     await reverterRegra({ ruleId: 'regra-7', organizationId: 'org-1' });
     const where = prismaMock.agentRule.findFirst.mock.calls[0][0].where;
     expect(where.status).toBe('ativa');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * PI-2 da revisão: a regra da decisão é procurada em QUALQUER status.
+ * --------------------------------------------------------------------
+ * A busca filtrava por status = 'ativa'. Uma correção já substituída por
+ * outra do mesmo cenário devolvia null, e a rota de desfazer caía no
+ * caminho do prompt, onde nada tinha mudado: 200, sem desativar nada. Quem
+ * chama precisa do fato ("existe, e está assim") para dar a resposta certa.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('regraDaDecisao — acha a regra mesmo fora de ativa (PI-2)', () => {
+  it('não filtra por status na consulta', async () => {
+    prismaMock.agentRule.findFirst.mockResolvedValue(linha({ status: 'substituida' }));
+    const out = await regraDaDecisao('dec-1');
+
+    const where = prismaMock.agentRule.findFirst.mock.calls[0][0].where;
+    expect(where.decisionId).toBe('dec-1');
+    expect(where.status).toBeUndefined();
+    expect(out?.status).toBe('substituida');
+  });
+
+  it('decisão sem regra nenhuma continua devolvendo null', async () => {
+    prismaMock.agentRule.findFirst.mockResolvedValue(null);
+    expect(await regraDaDecisao('dec-9')).toBeNull();
+  });
+
+  it('id vazio não vai ao banco', async () => {
+    expect(await regraDaDecisao('')).toBeNull();
+    expect(prismaMock.agentRule.findFirst).not.toHaveBeenCalled();
   });
 });

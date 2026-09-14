@@ -132,3 +132,27 @@ describe('suggestFix recebe as regras JÁ ativas (A043)', () => {
     expect(out?.patches).toHaveLength(1);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * PC-2 da revisão: quem não vai usar a sugestão não paga por ela.
+ * --------------------------------------------------------------------
+ * O re-teste roda o mesmo cenário três vezes e joga fora tudo menos o
+ * veredito. Toda amostra reprovada chamava o sugeridor assim mesmo, e cada
+ * chamada dessas é um Sonnet inteiro (duas, quando a primeira volta
+ * cortada). Um clique custava de 9 a 12 chamadas em vez das 6 declaradas.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('pularSugestao: o re-teste não paga pelo sugeridor', () => {
+  it('com pularSugestao, nenhuma chamada ao modelo acontece', async () => {
+    const out = await suggestFix('cr1', 'esperado', 'resposta', 'motivo', 'prompt', PERFIL, {
+      pularSugestao: true,
+    });
+    expect(completeMock).not.toHaveBeenCalled();
+    expect(out).toBeUndefined();
+  });
+
+  it('sem a marca, a sugestão continua sendo pedida', async () => {
+    const out = await suggestFix('cr1', 'esperado', 'resposta', 'motivo', 'prompt', PERFIL, {});
+    expect(completeMock).toHaveBeenCalledTimes(1);
+    expect(out?.patches).toHaveLength(1);
+  });
+});

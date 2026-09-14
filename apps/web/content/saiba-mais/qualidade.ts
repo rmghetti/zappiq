@@ -122,11 +122,11 @@ export const qualidadeContent: SaibaMaisContent[] = [
       'Serve pra ajustar a correção quando a sugestão da IA está no caminho certo mas não do jeito exato que você quer, ou pra fortalecer uma regra que já foi aplicada antes e não pegou.',
     comoImplementar: [
       'Clique em "Editar antes de aplicar", dentro do bloco da correção sugerida.',
-      'Reescreva o texto na caixa. Regras mais fortes costumam usar letras maiúsculas e palavras como "REGRA INVIOLÁVEL" ou "PROIBIDO" pra deixar claro que a IA não deve abrir exceção.',
+      'Reescreva o texto na caixa. Regra boa é regra específica: diga o que a IA deve fazer, em que situação, e dê um exemplo da frase certa. Não precisa escrever em letras maiúsculas nem numerar a regra, porque o sistema já cuida disso na hora de gravar.',
       'Clique em "Aplicar correção" pra gravar o texto editado, ou em "Voltar à sugestão original" pra descartar a edição.',
     ],
     exemploResultado:
-      'Numa clínica veterinária, uma correção já aplicada antes não impediu o agente de prometer prazo de exame errado. O dono edita o texto, troca por "PROIBIDO informar prazo de exame sem confirmar com a recepção" em letras maiúsculas, aplica de novo e o cenário passa a aprovar no re-teste.',
+      'Numa clínica veterinária, uma correção já aplicada antes não impediu o agente de prometer prazo de exame errado. O dono edita o texto e troca por algo mais direto: "Nunca informe prazo de exame sem confirmar com a recepção. Se perguntarem, responda que vai checar e retorna." Aplica de novo e o cenário passa a aprovar no re-teste.',
     relacionados: ['qualidade.correcao-sugerida', 'qualidade.aplicar-correcao'],
   },
   {
