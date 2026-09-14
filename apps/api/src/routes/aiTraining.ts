@@ -23,7 +23,9 @@
  *
  * Segurança:
  *   Todas as rotas exigem auth + tenant scoping. Upload limita tamanho
- *   (20MB) e tipos (pdf, txt, md, docx, csv).
+ *   (20MB) e tipos: PDF, TXT, MD e CSV, que é o que a ingestão consegue ler.
+ *   O filtro aceita por mime OU por extensão, porque o navegador rotula .csv
+ *   como Excel no Windows e .md como octet-stream ou vazio.
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
@@ -46,7 +48,7 @@ import {
   isEditableDocument,
   planTextDocRagSync,
   normalizeQaUpdate,
-  isUploadMimeAllowed,
+  isUploadAllowed,
 } from './aiTraining.text.util.js';
 import {
   appointmentTypeSchema,
@@ -107,7 +109,10 @@ const upload = multer({
   // Antes era um Error cru, que virava 500 "Internal Server Error" e fazia o
   // cliente achar que a plataforma tinha caído.
   fileFilter: (_req, file, cb) => {
-    if (isUploadMimeAllowed(file.mimetype)) return cb(null, true);
+    if (isUploadAllowed(file.mimetype, file.originalname)) return cb(null, true);
+    // UnsupportedFileTypeError já traz statusCode 415 e a mensagem em
+    // português, sem ecoar o mimetype: o valor não é do cliente, é do
+    // navegador, e mostrá-lo só confunde quem mandou o arquivo certo.
     cb(new UnsupportedFileTypeError());
   },
 });
