@@ -30,8 +30,36 @@ import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
 // cru e julgava a resposta dobrada, com as tags dentro.
 import { extractProductionReplyText } from '../agents/replyText.js';
 import { regraTerminaEmFraseCompleta } from './agentPromptPatcher.js';
+import type { RagSearchStatus } from './ragService.js';
+import type { ParteDoContexto } from '../agents/composeAgentContext.js';
 
 // ─── Tipos públicos ─────────────────────────────────────────────────
+
+/**
+ * C1a (Passo 12, A036): o contexto de um cenário montado pelo motor único
+ * (CORE, prompt, perfil vivo, links, cliente, saudação, base e data fixa).
+ * Quem monta é services/agentEvalContext.ts; o runner só recebe.
+ */
+export interface ContextoDoCenario {
+  systemPrompt: string;
+  /** sha256 do systemPrompt, gravado no resultado para o Raio-X. */
+  hash: string;
+  partes: ParteDoContexto[];
+  /** Estado da busca na base da organização testada. */
+  ragStatus: RagSearchStatus;
+}
+
+/**
+ * Montador injetado por quem chama o runner. null = interruptor
+ * `contextoUnico` desligado: o cenário usa o prompt de antes
+ * (buildEvalSystemPrompt). O runner NÃO importa banco, base nem interruptor
+ * por causa disto, e continua testável com dublês.
+ */
+export type MontadorDeContexto = (scenario: EvalScenario) => Promise<ContextoDoCenario | null>;
+
+export interface ExecuteAgentEvalRunOpts {
+  montarContexto?: MontadorDeContexto | null;
+}
 
 export interface ScenarioResult {
   scenarioId: string;
@@ -73,6 +101,14 @@ export interface ScenarioResult {
   combined: 'pass' | 'partial' | 'fail' | 'erro';
   /** Motivo legível da falha técnica, em português. Só quando combined='erro'. */
   falhaTecnica?: string;
+  /**
+   * C1a (A036): estado da base da organização no turno testado. Só existe
+   * quando o cenário rodou pelo motor único. 'servico_fora' diz que a base
+   * caiu; não é o mesmo que "não há base".
+   */
+  ragStatus?: RagSearchStatus;
+  /** C1a: sha256 do prompt que o agente testado recebeu. Liga o teste ao Raio-X. */
+  promptHash?: string;
   /**
    * Nível 1 auto-suggest (FASE 2.1 hotfix, 2026-05-13):
    * Quando combined=fail/partial, runner dispara Sonnet pra propor 1-3 patches
@@ -713,8 +749,27 @@ async function runScenario(
   scenario: EvalScenario,
   agent: { id: string; systemPrompt: string | null; name: string },
   profile: JudgeProfile,
+  montarContexto?: MontadorDeContexto | null,
 ): Promise<ScenarioResult> {
-  const systemPrompt = buildEvalSystemPrompt(agent, scenario);
+  // C1a: o contexto de produção quando o montador existe e o interruptor da
+  // organização está ligado. Erro no montador não derruba o cenário: cai no
+  // prompt de antes, com registro, porque o teste ainda vale como era.
+  let contexto: ContextoDoCenario | null = null;
+  if (montarContexto) {
+    try {
+      contexto = await montarContexto(scenario);
+    } catch (err: any) {
+      logger.warn('[agentEvalRunner] montador de contexto falhou: cenário com o prompt de antes', {
+        scenarioId: scenario.id,
+        err: err?.message,
+      });
+      contexto = null;
+    }
+  }
+  const systemPrompt = contexto ? contexto.systemPrompt : buildEvalSystemPrompt(agent, scenario);
+  const rastroDoContexto = contexto
+    ? { ragStatus: contexto.ragStatus, promptHash: contexto.hash }
+    : {};
 
   const messages = (scenario.history || []).map((h) => ({
     role: h.role,
@@ -794,6 +849,7 @@ async function runScenario(
     return resultadoComErro(scenario, falha, {
       responseLatencyMs,
       responseTokens: { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens },
+      ...rastroDoContexto,
     });
   }
 
@@ -826,6 +882,7 @@ async function runScenario(
       responseLatencyMs,
       responseTokens: { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens },
       deterministic: { passed: deterministicPassed, failedPatterns, missingPatterns },
+      ...rastroDoContexto,
     });
   }
 
@@ -873,6 +930,7 @@ async function runScenario(
     },
     judge,
     combined,
+    ...rastroDoContexto,
   };
 }
 
@@ -949,6 +1007,7 @@ export async function executeAgentEvalRun(
   scenarios: EvalScenario[],
   agent: { id: string; name: string; systemPrompt: string | null },
   profile: JudgeProfile,
+  opts: ExecuteAgentEvalRunOpts = {},
 ): Promise<{ results: ScenarioResult[]; durationMs: number; summary: RunSummary }> {
   const t0 = Date.now();
   const results: ScenarioResult[] = [];
@@ -957,7 +1016,7 @@ export async function executeAgentEvalRun(
     if (!isFirst) await sleep(THROTTLE_BETWEEN_SCENARIOS_MS);
     isFirst = false;
     try {
-      const r = await runScenario(s, agent, profile);
+      const r = await runScenario(s, agent, profile, opts.montarContexto);
       results.push(r);
     } catch (err: any) {
       // A171: cenário que quebra é FALHA TÉCNICA, não reprovação. Eram 90

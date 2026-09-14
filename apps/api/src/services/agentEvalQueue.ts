@@ -41,6 +41,8 @@ import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { executeAgentEvalRun } from './agentEvalRunner.js';
+// C1a (A036): contexto de produção no teste, atrás do interruptor contextoUnico.
+import { criarMontadorDeContextoDoEval } from './agentEvalContext.js';
 import {
   notifySlackQualityIssue,
   scenariosFailingTwice,
@@ -485,11 +487,10 @@ export async function executeRunJob(runId: string): Promise<void> {
     // A conclusão é gravada por ESTA continuação, e não depois do race: se o
     // teto estourar, a execução continua correndo no provedor e volta aqui
     // atrasada. É o filtro de status em gravarConclusao que a barra.
-    const execucao = executeAgentEvalRun(
-      scenarios,
-      { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' },
-      profile,
-    ).then(async (saida) => ({
+    const agenteDaRun = { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' };
+    const execucao = executeAgentEvalRun(scenarios, agenteDaRun, profile, {
+      montarContexto: criarMontadorDeContextoDoEval(agenteDaRun, agent.organizationId),
+    }).then(async (saida) => ({
       saida,
       gravacao: await gravarConclusao(runId, saida, scenarios.length),
     }));

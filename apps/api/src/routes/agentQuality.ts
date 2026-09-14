@@ -43,6 +43,9 @@ import {
 } from '../agents/tenantAgentProfile.js';
 import { assertNoForeignBrand, ForeignBrandLeakError } from '../agents/tenantIsolationGuard.js';
 import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
+// C1a (A036): o cenário roda com o contexto de produção quando o
+// interruptor contextoUnico da organização está ligado.
+import { criarMontadorDeContextoDoEval } from '../services/agentEvalContext.js';
 import { enqueueEvalRun, resolveScenariosForRun } from '../services/agentEvalQueue.js';
 import {
   applyPatch,
@@ -840,15 +843,14 @@ router.post(
         res.status(404).json({ error: 'cenário não encontrado no set atual' });
         return;
       }
-      const { results } = await executeAgentEvalRun(
-        [scenario],
-        {
-          id: run.agentId,
-          name: run.agent.name,
-          systemPrompt: run.agent.systemPrompt || '',
-        },
-        profile,
-      );
+      const agenteDoReteste = {
+        id: run.agentId,
+        name: run.agent.name,
+        systemPrompt: run.agent.systemPrompt || '',
+      };
+      const { results } = await executeAgentEvalRun([scenario], agenteDoReteste, profile, {
+        montarContexto: criarMontadorDeContextoDoEval(agenteDoReteste, orgId),
+      });
       const result = results[0];
       logger.info({
         msg: 'agent_quality_scenario_retested',

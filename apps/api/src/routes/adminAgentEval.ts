@@ -51,6 +51,8 @@ import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 // V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
 // Q1: computeReverifyVerdict exportado pra teste unitário puro.
 import { executeAgentEvalRun, computeReverifyVerdict } from '../services/agentEvalRunner.js';
+// C1a (A036): contexto de produção no teste, atrás do interruptor contextoUnico.
+import { criarMontadorDeContextoDoEval } from '../services/agentEvalContext.js';
 import {
   enqueueEvalRun,
   enqueueRegrade,
@@ -198,7 +200,9 @@ router.post(
       }
 
       logger.info(`[agentEval] sync run iniciado agentId=${agentId} scenarios=${scenarios.length}`);
-      const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile);
+      const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile, {
+        montarContexto: criarMontadorDeContextoDoEval(agent, agent.organizationId),
+      });
 
       res.json({
         version: EVAL_SET_VERSION,
@@ -828,14 +832,16 @@ router.post(
             priorResult?.combined ?? null;
 
           // Re-run com o prompt recém-aplicado (1 LLM call)
+          const agenteDoReteste = {
+            id: run.agentId,
+            name: run.agent.name,
+            systemPrompt: result.promptAfter,
+          };
           const { results: rerunResults } = await executeAgentEvalRun(
             [scenarioDef],
-            {
-              id: run.agentId,
-              name: run.agent.name,
-              systemPrompt: result.promptAfter,
-            },
+            agenteDoReteste,
             profile,
+            { montarContexto: criarMontadorDeContextoDoEval(agenteDoReteste, run.agent.organizationId) },
           );
           // A171: 'erro' é falha técnica do re-teste. computeReverifyVerdict
           // já trata: improved só quando o resultado novo é 'pass'.
