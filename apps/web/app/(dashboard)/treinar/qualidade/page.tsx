@@ -803,6 +803,16 @@ function ClientFixCard({
       setActionSuccess('✓ Correção aplicada com sucesso');
       setTimeout(onAfterAction, 1200);
     } catch (err: any) {
+      // C3 (A078, A217): a correção bate de frente com uma regra base da
+      // plataforma, com o próprio teste deste caso ou com outra regra já
+      // aprovada. O servidor manda a frase pronta em português; mostrar
+      // `err.message` aqui exibiria o código técnico ("regra_conflitante").
+      if (err?.details?.error === 'regra_conflitante' || err?.details?.error === 'teto_de_regras') {
+        setActionError(err.details.message);
+        setEditing(err.details.error === 'regra_conflitante');
+        setLoadingAction(null);
+        return;
+      }
       // FASE 2.2c (#246): trata DUPLICATE_PATCH com mensagem orientativa.
       if (err?.details?.error === 'DUPLICATE_PATCH' || err?.status === 409) {
         setActionError(
