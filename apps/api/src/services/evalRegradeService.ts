@@ -290,38 +290,44 @@ export async function regradeRun(
     .filter((g) => g && typeof g.scenarioId === 'string')
     .map((g) => regradeResult(g, porId.get(g.scenarioId) ?? null));
 
-  if (!opts.dryRun) {
-    for (const l of leituras) {
-      await db.evalRegrade.upsert({
-        where: {
-          runId_scenarioId_harnessVersion: {
-            runId,
-            scenarioId: l.scenarioId,
-            harnessVersion: HARNESS_VERSION,
+  if (!opts.dryRun && leituras.length > 0) {
+    // Ou entram todas as linhas desta execução, ou nenhuma. Antes era um laço
+    // de upserts soltos: uma queda no meio deixava a execução com metade dos
+    // cenários regravados, e resumirRegravacao lia essa metade como se fosse a
+    // nota recalculada inteira.
+    await db.$transaction(
+      leituras.map((l) =>
+        db.evalRegrade.upsert({
+          where: {
+            runId_scenarioId_harnessVersion: {
+              runId,
+              scenarioId: l.scenarioId,
+              harnessVersion: HARNESS_VERSION,
+            },
           },
-        },
-        create: {
-          runId,
-          agentId: run.agentId,
-          scenarioId: l.scenarioId,
-          severity: l.severity,
-          vereditoAntigo: l.vereditoAntigo,
-          vereditoNovo: l.vereditoNovo,
-          motivo: l.motivo,
-          harnessVersion: HARNESS_VERSION,
-          discordante: l.discordante,
-          comJuiz: false,
-        },
-        update: {
-          severity: l.severity,
-          vereditoAntigo: l.vereditoAntigo,
-          vereditoNovo: l.vereditoNovo,
-          motivo: l.motivo,
-          discordante: l.discordante,
-          comJuiz: false,
-        },
-      });
-    }
+          create: {
+            runId,
+            agentId: run.agentId,
+            scenarioId: l.scenarioId,
+            severity: l.severity,
+            vereditoAntigo: l.vereditoAntigo,
+            vereditoNovo: l.vereditoNovo,
+            motivo: l.motivo,
+            harnessVersion: HARNESS_VERSION,
+            discordante: l.discordante,
+            comJuiz: false,
+          },
+          update: {
+            severity: l.severity,
+            vereditoAntigo: l.vereditoAntigo,
+            vereditoNovo: l.vereditoNovo,
+            motivo: l.motivo,
+            discordante: l.discordante,
+            comJuiz: false,
+          },
+        }),
+      ),
+    );
     logger.info({
       msg: 'eval_regrade_gravada',
       runId,
@@ -415,25 +421,50 @@ export async function resumirRegravacao(
  * nota delas nunca foi sobre o negócio do cliente, e recalcular daria vida a
  * um número que o produto já decidiu esconder.
  */
+/**
+ * Quantas execuções um clique do botão regrava.
+ *
+ * Era 200. Uma regravação de 200 execuções não cabe no teto de 25 minutos da
+ * fila, e quem clicava não tinha como saber onde parou. Com 50, o botão pode
+ * ser clicado de novo e a resposta diz quantas ainda faltam.
+ */
+export const TETO_DE_REGRAVACAO = 50;
+
+/** O filtro do que é regravável. Um só, usado pelos dois ramos e pela contagem. */
+function filtroDeRegravacao(filtro: { organizationId?: string; runIds?: string[] }) {
+  return {
+    status: 'completed',
+    evalSetVersion: 'v2',
+    results: { not: null as any },
+    ...(filtro.runIds && filtro.runIds.length > 0 ? { id: { in: filtro.runIds } } : {}),
+    ...(filtro.organizationId ? { agent: { organizationId: filtro.organizationId } } : {}),
+  };
+}
+
 export async function execucoesParaRegravar(
   filtro: { organizationId?: string; runIds?: string[]; limite?: number },
   opts: { db?: any } = {},
 ): Promise<string[]> {
   const db = opts.db ?? prisma;
-  if (filtro.runIds && filtro.runIds.length > 0) return filtro.runIds.slice(0, 500);
 
+  // Revisão do PR: o ramo de lista devolvia os ids crus, sem passar pelo
+  // filtro. Um id de execução 'invalidated' (as 26 do gabarito contaminado) ou
+  // de outro gabarito entrava na regravação e ganhava uma nota recalculada que
+  // o produto já tinha decidido esconder.
   const linhas = await db.agentEvalRun.findMany({
-    where: {
-      status: 'completed',
-      evalSetVersion: 'v2',
-      results: { not: null as any },
-      ...(filtro.organizationId
-        ? { agent: { organizationId: filtro.organizationId } }
-        : {}),
-    },
+    where: filtroDeRegravacao(filtro),
     orderBy: { startedAt: 'desc' },
-    take: Math.min(filtro.limite ?? 200, 500),
+    take: Math.min(filtro.limite ?? TETO_DE_REGRAVACAO, TETO_DE_REGRAVACAO),
     select: { id: true },
   });
   return linhas.map((l: any) => l.id);
+}
+
+/** Total elegível, para a resposta dizer quantas faltam depois deste clique. */
+export async function contarExecucoesParaRegravar(
+  filtro: { organizationId?: string; runIds?: string[] },
+  opts: { db?: any } = {},
+): Promise<number> {
+  const db = opts.db ?? prisma;
+  return db.agentEvalRun.count({ where: filtroDeRegravacao(filtro) });
 }

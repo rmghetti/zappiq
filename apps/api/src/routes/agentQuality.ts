@@ -512,7 +512,22 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
     // ─── P61: a nota recalculada, quando existir ──────────────────
     // Nunca confundida com execução nova: vem num campo próprio, com o
     // rótulo "recalculada" na tela.
-    const regravacao = await resumirRegravacao(run.id).catch(() => null);
+    //
+    // Revisão do PR: o aviso fala de "sua última execução". Numa execução
+    // antiga aberta pelo histórico, a mesma frase dava a entender que a nota
+    // de hoje tinha mudado. A consulta extra só acontece quando existe
+    // regravação para mostrar.
+    let regravacao = await resumirRegravacao(run.id).catch(() => null);
+    if (regravacao) {
+      const ultimaConcluida = await prisma.agentEvalRun
+        .findFirst({
+          where: { agentId: run.agentId, status: 'completed' },
+          orderBy: { startedAt: 'desc' },
+          select: { id: true },
+        })
+        .catch(() => null);
+      if (ultimaConcluida?.id !== run.id) regravacao = null;
+    }
 
     // ─── P56: estado em vez de número, para quem não é técnico ────
     const ruido = await carregarRuidoDoAgente(run.agentId);

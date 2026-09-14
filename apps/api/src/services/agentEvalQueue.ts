@@ -823,7 +823,26 @@ export async function processarExecucaoNaFila(
 
   try {
     if (ehRegravacao) {
-      await processarRegravacao(job.data?.runIds ?? [], job.data?.dryRun === true);
+      // Revisão do PR: a regravação segura a MESMA trava global do teste pago.
+      // Sem teto, um banco lento com 200 execuções na lista deixava todos os
+      // clientes sem conseguir rodar o teste de qualidade deles, por tempo
+      // indeterminado. O teto aborta e o `finally` devolve a trava.
+      try {
+        await comTetoDeExecucao(
+          processarRegravacao(job.data?.runIds ?? [], job.data?.dryRun === true),
+          EVAL_RUN_TIMEOUT_MS,
+        );
+      } catch (err: any) {
+        logger.error({
+          msg:
+            err instanceof EvalRunTimeoutError
+              ? 'agent_eval_regrade_teto_estourado'
+              : 'agent_eval_regrade_falhou',
+          jobId: job.id,
+          execucoes: job.data?.runIds?.length ?? 0,
+          error: String(err?.message || err),
+        });
+      }
     } else {
       await executeRunJob(donoDaTrava);
     }

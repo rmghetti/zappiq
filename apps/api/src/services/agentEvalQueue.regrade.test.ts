@@ -41,8 +41,13 @@ vi.mock('../agents/tenantAgentProfile.js', () => profileMock);
 vi.mock('../agents/agentEvalSet.js', () => evalSetMock);
 vi.mock('./evalRegradeService.js', () => regradeMock);
 
-const { processarExecucaoNaFila, enqueueRegrade, getAgentEvalQueue, TRAVA_GLOBAL_CHAVE } =
-  await import('./agentEvalQueue.js');
+const {
+  processarExecucaoNaFila,
+  enqueueRegrade,
+  getAgentEvalQueue,
+  TRAVA_GLOBAL_CHAVE,
+  EVAL_RUN_TIMEOUT_MS,
+} = await import('./agentEvalQueue.js');
 
 /** Trava falsa: registra quem pegou e libera de verdade. */
 function travaFalsa() {
@@ -143,5 +148,44 @@ describe('enqueueRegrade', () => {
   it('a fila é a mesma do teste da Qualidade', () => {
     // Só o nome: abrir conexão de verdade não é trabalho de teste.
     expect(typeof getAgentEvalQueue).toBe('function');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Revisão do PR: a regravação também tem teto de tempo.
+ * --------------------------------------------------------------------
+ * A execução paga tinha teto de 25 minutos; a regravação, nenhum. Com 200
+ * execuções na lista, um banco lento segurava a trava global por tempo
+ * indeterminado e NENHUM cliente conseguia rodar o teste de qualidade dele,
+ * porque a trava é a mesma. O teto aborta e a trava volta.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('a regravação tem o mesmo teto de 25 minutos e devolve a trava', () => {
+  it('estourado o teto, o job termina e a trava é liberada', async () => {
+    vi.useFakeTimers();
+    try {
+      const trava = travaFalsa();
+      // Uma regravação que nunca volta: é o banco pendurado.
+      regradeMock.regradeRun.mockImplementation(() => new Promise(() => {}));
+      const job: any = { id: 'regrade-1', data: { tipo: 'regrade', runIds: ['run-1'] } };
+
+      const promessa = processarExecucaoNaFila(job, 'token', trava.cliente as any);
+      await vi.advanceTimersByTimeAsync(EVAL_RUN_TIMEOUT_MS + 1000);
+      await promessa;
+
+      // O ponto todo: a trava global voltou para os outros clientes.
+      expect(trava.dono()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('dentro do teto, a regravação termina normalmente', async () => {
+    const trava = travaFalsa();
+    const job: any = { id: 'regrade-1', data: { tipo: 'regrade', runIds: ['run-1', 'run-2'] } };
+
+    await processarExecucaoNaFila(job, 'token', trava.cliente as any);
+
+    expect(regradeMock.regradeRun).toHaveBeenCalledTimes(2);
+    expect(trava.dono()).toBeNull();
   });
 });

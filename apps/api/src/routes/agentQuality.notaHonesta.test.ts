@@ -416,3 +416,103 @@ describe('P61 — o aviso da regravação chega à tela do cliente', () => {
     });
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Revisão do PR: o aviso da nota recalculada é da ÚLTIMA execução.
+ * --------------------------------------------------------------------
+ * "Recalculando sua última execução, a nota passaria de 74 para 86" é uma
+ * frase sobre a última execução. Abrindo uma execução de agosto no
+ * histórico, o cliente lia a mesma frase sobre um número velho, e entendia
+ * que a nota de hoje tinha mudado.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('o aviso da regravação só sai na última execução concluída', () => {
+  function runAntiga() {
+    return {
+      id: 'run-de-agosto',
+      agentId: 'agent-1',
+      status: 'completed',
+      results: [],
+      scorePercent: 74,
+      startedAt: new Date('2026-08-01T12:00:00Z'),
+      agent: { id: 'agent-1', name: 'Vera', organizationId: 'org-1' },
+      fixDecisions: [],
+    };
+  }
+
+  const RESUMO = {
+    runId: 'run-de-agosto',
+    notaAntiga: 74,
+    notaRegravada: 86,
+    reprovacoesDoGabarito: 4,
+    continuamReprovados: ['cr8_no_pede_cpf'],
+    porCenario: [],
+  };
+
+  it('execução antiga do histórico não carrega o aviso', async () => {
+    regradeMock.resumirRegravacao.mockResolvedValue(RESUMO);
+    prismaMock.agentEvalRun.findFirst
+      .mockResolvedValueOnce(runAntiga()) // a execução pedida
+      .mockResolvedValueOnce({ id: 'run-de-setembro' }) // a última concluída é outra
+      .mockResolvedValueOnce(null); // anterior
+    const res = makeRes();
+
+    await getHandler('get', '/runs/:id')(
+      { user: { organizationId: 'org-1' }, params: { id: 'run-de-agosto' }, query: {} },
+      res,
+    );
+
+    expect(res.body.regravacao).toBeNull();
+  });
+
+  it('a última concluída carrega o aviso normalmente', async () => {
+    regradeMock.resumirRegravacao.mockResolvedValue(RESUMO);
+    prismaMock.agentEvalRun.findFirst
+      .mockResolvedValueOnce(runAntiga())
+      .mockResolvedValueOnce({ id: 'run-de-agosto' }) // é ela mesma
+      .mockResolvedValueOnce(null);
+    const res = makeRes();
+
+    await getHandler('get', '/runs/:id')(
+      { user: { organizationId: 'org-1' }, params: { id: 'run-de-agosto' }, query: {} },
+      res,
+    );
+
+    expect(res.body.regravacao).toMatchObject({ notaAntiga: 74, notaRegravada: 86 });
+  });
+
+  it('a busca da última concluída é do mesmo agente e ignora invalidada', async () => {
+    regradeMock.resumirRegravacao.mockResolvedValue(RESUMO);
+    prismaMock.agentEvalRun.findFirst
+      .mockResolvedValueOnce(runAntiga())
+      .mockResolvedValueOnce({ id: 'run-de-agosto' })
+      .mockResolvedValueOnce(null);
+    const res = makeRes();
+
+    await getHandler('get', '/runs/:id')(
+      { user: { organizationId: 'org-1' }, params: { id: 'run-de-agosto' }, query: {} },
+      res,
+    );
+
+    const chamada = prismaMock.agentEvalRun.findFirst.mock.calls[1][0];
+    expect(chamada.where).toMatchObject({ agentId: 'agent-1', status: 'completed' });
+    expect(chamada.orderBy).toEqual({ startedAt: 'desc' });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('sem regravação, não gasta consulta nenhuma procurando a última', async () => {
+    regradeMock.resumirRegravacao.mockResolvedValue(null);
+    prismaMock.agentEvalRun.findFirst
+      .mockResolvedValueOnce(runAntiga())
+      .mockResolvedValueOnce(null);
+    const res = makeRes();
+
+    await getHandler('get', '/runs/:id')(
+      { user: { organizationId: 'org-1' }, params: { id: 'run-de-agosto' }, query: {} },
+      res,
+    );
+
+    // 1 para a execução pedida, 1 para a anterior (estado leigo). Mais nenhuma.
+    expect(prismaMock.agentEvalRun.findFirst).toHaveBeenCalledTimes(2);
+    expect(res.body.regravacao).toBeNull();
+  });
+});

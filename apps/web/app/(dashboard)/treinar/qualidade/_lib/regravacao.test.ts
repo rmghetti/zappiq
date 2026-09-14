@@ -55,8 +55,19 @@ describe('precisaMostrarAviso', () => {
     expect(precisaMostrarAviso(null)).toBe(false);
   });
 
-  it('com a nota igual, ainda mostra: o que mudou foi o método', () => {
-    expect(precisaMostrarAviso({ ...REGRAVACAO, notaRegravada: 74 })).toBe(true);
+  // Revisão do PR: a frase promete que "a nota passaria de 74 para 74". Quem
+  // lê isso não aprende nada e fica achando que perdeu alguma coisa. Sem
+  // diferença, o aviso não tem o que avisar.
+  it('com a nota igual, fica em silêncio', () => {
+    expect(precisaMostrarAviso({ ...REGRAVACAO, notaRegravada: 74 })).toBe(false);
+  });
+
+  it('nota antiga ausente ainda mostra: não há igualdade a comparar', () => {
+    expect(precisaMostrarAviso({ ...REGRAVACAO, notaAntiga: null })).toBe(true);
+  });
+
+  it('um ponto de diferença já é diferença', () => {
+    expect(precisaMostrarAviso({ ...REGRAVACAO, notaRegravada: 75 })).toBe(true);
   });
 
   it('com nota diferente, mostra', () => {

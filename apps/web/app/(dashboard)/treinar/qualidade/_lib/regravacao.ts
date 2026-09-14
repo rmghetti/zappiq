@@ -69,9 +69,18 @@ export const ROTULOS_DE_ESTADO: Record<
   },
 };
 
-/** Há aviso a mostrar? Só quando a execução foi mesmo recalculada. */
+/**
+ * Há aviso a mostrar?
+ *
+ * Só quando a execução foi mesmo recalculada E o número mudou. A frase do
+ * aviso é "a nota passaria de X para Y": com X igual a Y ela não diz nada e
+ * ainda faz o cliente procurar uma mudança que não existe. Nota antiga
+ * ausente continua mostrando, porque aí não há igualdade a comparar.
+ */
 export function precisaMostrarAviso(regravacao: RegravacaoResumo | null | undefined): boolean {
-  return !!regravacao;
+  if (!regravacao) return false;
+  if (regravacao.notaAntiga == null) return true;
+  return regravacao.notaAntiga !== regravacao.notaRegravada;
 }
 
 /**

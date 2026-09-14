@@ -41,7 +41,9 @@ vi.mock('../services/agentEvalQueue.js', () => filaMock);
 
 const regradeMock = {
   execucoesParaRegravar: vi.fn(async () => ['run-1', 'run-2']),
+  contarExecucoesParaRegravar: vi.fn(async () => 2),
   resumirRegravacao: vi.fn(),
+  TETO_DE_REGRAVACAO: 50,
 };
 vi.mock('../services/evalRegradeService.js', () => regradeMock);
 
@@ -94,6 +96,7 @@ function makeRes() {
 beforeEach(() => {
   vi.clearAllMocks();
   regradeMock.execucoesParaRegravar.mockResolvedValue(['run-1', 'run-2']);
+  regradeMock.contarExecucoesParaRegravar.mockResolvedValue(2);
   filaMock.enqueueRegrade.mockResolvedValue('regrade-123');
 });
 
@@ -182,5 +185,57 @@ describe('GET /regrade/:runId — o resumo que o fundador lê', () => {
     await getHandler('get', '/regrade/:runId')({ params: { runId: 'run-x' } }, res);
     expect(res.statusCode).toBe(404);
     expect(String(res.body.error)).toMatch(/regravação/i);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Revisão do PR: o clique regrava 50 por vez e diz quantas faltam.
+ * --------------------------------------------------------------------
+ * Com teto de 200 execuções a regravação não cabia nos 25 minutos da fila, e
+ * o fundador não tinha como saber onde parou. Agora o botão pode ser clicado
+ * de novo e a resposta diz o que sobrou.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('POST /regrade — a resposta diz quantas ainda faltam', () => {
+  it('com mais elegíveis do que o teto, informa o restante', async () => {
+    regradeMock.execucoesParaRegravar.mockResolvedValue(['run-1', 'run-2']);
+    regradeMock.contarExecucoesParaRegravar.mockResolvedValue(137);
+    const res = makeRes();
+
+    await getHandler('post', '/regrade')(
+      { user: { userId: 'u1' }, body: { dryRun: false } },
+      res,
+    );
+
+    expect(res.statusCode).toBe(202);
+    expect(res.body.execucoes).toBe(2);
+    expect(res.body.totalElegiveis).toBe(137);
+    expect(res.body.faltam).toBe(135);
+    expect(res.body.message).toMatch(/135/);
+    expect(res.body.message).not.toContain('—');
+  });
+
+  it('quando não sobra nada, não promete um segundo clique', async () => {
+    regradeMock.execucoesParaRegravar.mockResolvedValue(['run-1', 'run-2']);
+    regradeMock.contarExecucoesParaRegravar.mockResolvedValue(2);
+    const res = makeRes();
+
+    await getHandler('post', '/regrade')({ user: { userId: 'u1' }, body: {} }, res);
+
+    expect(res.body.faltam).toBe(0);
+    expect(res.body.message).not.toMatch(/clique de novo/i);
+  });
+
+  it('a contagem usa o MESMO filtro do que foi enfileirado', async () => {
+    const res = makeRes();
+
+    await getHandler('post', '/regrade')(
+      { user: { userId: 'u1' }, body: { organizationId: 'org-1', runIds: ['run-9'] } },
+      res,
+    );
+
+    expect(regradeMock.contarExecucoesParaRegravar).toHaveBeenCalledWith({
+      organizationId: 'org-1',
+      runIds: ['run-9'],
+    });
   });
 });

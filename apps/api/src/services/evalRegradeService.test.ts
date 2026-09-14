@@ -14,6 +14,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const prismaMock: any = {
   agentEvalRun: { findUnique: vi.fn(), findMany: vi.fn() },
   evalRegrade: { upsert: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
+  // A regravação de uma execução grava N linhas. Ou entram todas, ou nenhuma:
+  // meia regravação produz uma nota recalculada sobre metade dos cenários.
+  $transaction: vi.fn(async (ops: any) =>
+    typeof ops === 'function' ? ops(prismaMock) : Promise.all(ops),
+  ),
 };
 
 vi.mock('@zappiq/database', () => ({ prisma: prismaMock, Prisma: {} }));
@@ -42,7 +47,14 @@ vi.mock('../agents/tenantAgentProfile.js', () => ({
   })),
 }));
 
-const { regradeResult, regradeRun, resumirRegravacao } = await import('./evalRegradeService.js');
+const {
+  regradeResult,
+  regradeRun,
+  resumirRegravacao,
+  execucoesParaRegravar,
+  contarExecucoesParaRegravar,
+  TETO_DE_REGRAVACAO,
+} = await import('./evalRegradeService.js');
 const { resolveEvalSet } = await import('../agents/agentEvalSet.js');
 
 const PERFIL: any = {
@@ -328,5 +340,129 @@ describe('resumirRegravacao — o que o fundador lê na tela', () => {
     });
     prismaMock.evalRegrade.findMany.mockResolvedValue([]);
     expect(await resumirRegravacao('run-1')).toBeNull();
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Revisão do PR: os upserts de UMA execução entram juntos ou não entram.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('regradeRun grava a execução inteira numa transação', () => {
+  const RESULTS_TX = [
+    gravado(),
+    gravado({ scenarioId: 'cr8_no_pede_cpf', severity: 'critical', combined: 'fail' }),
+  ];
+
+  function runGravadaTx() {
+    return {
+      id: 'run-tx',
+      agentId: 'agente-1',
+      status: 'completed',
+      evalSetVersion: 'v2',
+      scorePercent: 50,
+      results: RESULTS_TX,
+      startedAt: new Date('2026-09-01T10:00:00Z'),
+      agent: { id: 'agente-1', name: 'Vera', organizationId: 'org-1' },
+    };
+  }
+
+  it('abre uma transação só, com um upsert por cenário dentro', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravadaTx());
+
+    await regradeRun('run-tx');
+
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+    expect(prismaMock.evalRegrade.upsert).toHaveBeenCalledTimes(2);
+  });
+
+  it('dryRun não abre transação nenhuma', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravadaTx());
+
+    await regradeRun('run-tx', { dryRun: true });
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('execução sem cenário nenhum não abre transação vazia', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue({
+      ...runGravadaTx(),
+      results: [],
+    });
+
+    await regradeRun('run-tx');
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Revisão do PR: o ramo runIds também é filtrado, e o teto virou 50.
+ * --------------------------------------------------------------------
+ * O ramo de lista devolvia os ids crus. Um id de execução 'invalidated' (as
+ * 26 do gabarito contaminado) ou de outro gabarito passava direto e ganhava
+ * uma nota recalculada que o produto decidiu esconder.
+ *
+ * E o teto de 200 execuções por clique é uma regravação longa demais para o
+ * teto de 25 minutos. Com 50, o botão do admin pode ser clicado de novo e a
+ * resposta diz quantas faltam.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('execucoesParaRegravar', () => {
+  beforeEach(() => {
+    prismaMock.agentEvalRun.findMany.mockResolvedValue([{ id: 'r1' }, { id: 'r2' }]);
+  });
+
+  it('o ramo runIds passa pelo MESMO filtro da varredura', async () => {
+    prismaMock.agentEvalRun.findMany.mockResolvedValue([{ id: 'r1' }]);
+
+    const ids = await execucoesParaRegravar({ runIds: ['r1', 'invalidada', 'v1'] });
+
+    const where = prismaMock.agentEvalRun.findMany.mock.calls[0][0].where;
+    expect(where.id).toEqual({ in: ['r1', 'invalidada', 'v1'] });
+    expect(where.status).toBe('completed');
+    expect(where.evalSetVersion).toBe('v2');
+    // Só sobrou o que o banco devolveu: o id invalidado não passa.
+    expect(ids).toEqual(['r1']);
+  });
+
+  it('o teto padrão é 50, não 200', async () => {
+    expect(TETO_DE_REGRAVACAO).toBe(50);
+
+    await execucoesParaRegravar({});
+
+    expect(prismaMock.agentEvalRun.findMany.mock.calls[0][0].take).toBe(50);
+  });
+
+  it('o teto vale também para o ramo runIds', async () => {
+    await execucoesParaRegravar({ runIds: Array.from({ length: 300 }, (_, i) => `r${i}`) });
+
+    expect(prismaMock.agentEvalRun.findMany.mock.calls[0][0].take).toBe(50);
+  });
+
+  it('limite pedido acima do teto é aparado', async () => {
+    await execucoesParaRegravar({ limite: 999 });
+
+    expect(prismaMock.agentEvalRun.findMany.mock.calls[0][0].take).toBe(50);
+  });
+
+  it('lista vazia não vira varredura do banco inteiro', async () => {
+    const ids = await execucoesParaRegravar({ runIds: [] });
+    // Sem ids, cai na varredura normal (é o comportamento de antes).
+    expect(ids).toEqual(['r1', 'r2']);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Quantas ainda faltam depois deste clique.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('contarExecucoesParaRegravar', () => {
+  it('conta com o mesmo filtro, sem trazer as linhas', async () => {
+    prismaMock.agentEvalRun.count = vi.fn(async () => 137);
+
+    const total = await contarExecucoesParaRegravar({ organizationId: 'org-1' });
+
+    expect(total).toBe(137);
+    const where = prismaMock.agentEvalRun.count.mock.calls[0][0].where;
+    expect(where.status).toBe('completed');
+    expect(where.evalSetVersion).toBe('v2');
+    expect(where.agent).toEqual({ organizationId: 'org-1' });
   });
 });

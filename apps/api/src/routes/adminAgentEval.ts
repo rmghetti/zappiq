@@ -57,7 +57,11 @@ import {
   resolveScenariosForRun,
 } from '../services/agentEvalQueue.js';
 // P61 — regravar a nota sobre as respostas já gravadas, sem chamar LLM.
-import { execucoesParaRegravar, resumirRegravacao } from '../services/evalRegradeService.js';
+import {
+  execucoesParaRegravar,
+  contarExecucoesParaRegravar,
+  resumirRegravacao,
+} from '../services/evalRegradeService.js';
 // P56 — piso de ruído do agente. No admin a faixa aparece com número; na tela
 // do cliente, só o estado derivado dela.
 import { carregarRuidoDoAgente } from '../services/evalRuidoService.js';
@@ -1139,23 +1143,39 @@ router.post(
 
       const jobId = await enqueueRegrade({ runIds: elegiveis, dryRun });
 
+      // Revisão do PR: o clique regrava um lote (TETO_DE_REGRAVACAO) e a
+      // resposta diz o que sobrou. Sem isto, quem clicava não sabia se tinha
+      // recalculado tudo ou só a primeira página.
+      const totalElegiveis = await contarExecucoesParaRegravar({ organizationId, runIds }).catch(
+        () => elegiveis.length,
+      );
+      const faltam = Math.max(0, totalElegiveis - elegiveis.length);
+
       logger.info({
         msg: 'agent_eval_regrade_pedida',
         jobId,
         execucoes: elegiveis.length,
+        faltam,
         dryRun,
         organizationId: organizationId ?? null,
         pedidaPor: req.user?.userId ?? null,
       });
 
+      const base = dryRun
+        ? 'Prévia em andamento: nada será gravado. Abra o resumo de uma execução para ver o efeito.'
+        : 'Recálculo em andamento. O resumo por execução fica disponível em seguida.';
+
       res.status(202).json({
         jobId,
         execucoes: elegiveis.length,
+        totalElegiveis,
+        faltam,
         dryRun,
         runIds: elegiveis.slice(0, 50),
-        message: dryRun
-          ? 'Prévia em andamento: nada será gravado. Abra o resumo de uma execução para ver o efeito.'
-          : 'Recálculo em andamento. O resumo por execução fica disponível em seguida.',
+        message:
+          faltam > 0
+            ? `${base} Ficaram ${faltam} execuções de fora deste lote: clique de novo para seguir.`
+            : base,
         resumoUrl: '/api/admin/agent-eval/regrade/<runId>',
       });
     } catch (err: any) {
