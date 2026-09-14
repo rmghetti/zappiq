@@ -243,9 +243,15 @@ export function extractIgMessagingEvents(entry: any): any[] {
   return [...fromMessaging, ...fromChanges];
 }
 
-// ── handleIncomingMessage — espelha lógica do WhatsApp ──
-async function handleIncomingMessage(
-  org: { id: string; instagramAccessToken: string | null },
+/**
+ * handleIncomingMessage — espelha a lógica do WhatsApp.
+ *
+ * Exportada para teste (mesmo motivo de extractIgMessagingEvents): o defeito
+ * A057 vivia no payload do job, e não havia conversa de Instagram em produção
+ * para exercitá-lo de outro jeito.
+ */
+export async function handleIncomingMessage(
+  org: { id: string; instagramAccessToken: string | null; settings?: unknown },
   event: any,
 ): Promise<void> {
   const orgId = org.id;
@@ -380,7 +386,12 @@ async function handleIncomingMessage(
       instagramScopedId: igsid,
       // Preenche externalMessageId em vez de whatsappMessageId
       externalMessageId: messageId,
-      orgSettings: {},
+      // A057: isto era `{}`. O orquestrador lê daqui a saudação, o nome do
+      // negócio, os links oficiais, a mensagem de transbordo e o estado do
+      // agendamento. Com o objeto vazio, o Direct respondia sem nada disso e
+      // o transbordo saía com o texto padrão da ZappIQ para o cliente final
+      // do CLIENTE. Agora é o mesmo do webhook do WhatsApp.
+      orgSettings: (org.settings as any) || {},
       mediaId: mediaUrl, // IG já entrega URL direta (não ID como WA)
     },
     {

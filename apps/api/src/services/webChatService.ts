@@ -46,6 +46,11 @@ import { getIzaFactsBlock } from './izaFactsService.js';
 import { logger } from '../utils/logger.js';
 import { cache } from './cloud/index.js';
 import { getIo } from '../utils/socketRegistry.js';
+// Perfil vivo (A8): módulo PURO, de propósito. O chat do site precisa do mesmo
+// bloco e da mesma saudação do WhatsApp e não pode carregar o orquestrador
+// inteiro (fila, socket, WhatsApp) só para isso.
+import { buildLiveProfileBlock, buildGreetingBlock } from '../agents/tenantLiveProfile.js';
+import { isFlagOn } from './featureFlags.js';
 
 /* ── Cleanup helpers (duplicados de agentOrchestrator pra evitar circular dep
  *    — alinhar com PR #71 caso o original mude). ──────────────────────── */
@@ -187,6 +192,15 @@ export function buildWebChatSystemPrompt(input: {
   orgPrompt: string;
   factsBlock: string;
   isIzaCanonical: boolean;
+  /**
+   * Perfil vivo e saudação (A8). Opcionais: o Raio-X pode montar o prompt sem
+   * eles, e a organização sem o interruptor `perfilVivo` recebe string vazia,
+   * que o filter(Boolean) descarta. Ficam AQUI, no montador único, e não no
+   * handler, porque uma segunda montagem mentiria no dia em que a ordem dos
+   * blocos mudasse.
+   */
+  perfilVivoBlock?: string;
+  saudacaoBlock?: string;
 }): string {
   const { orgPrompt, factsBlock, isIzaCanonical } = input;
   const canalInstrucoes = isIzaCanonical
@@ -196,6 +210,10 @@ export function buildWebChatSystemPrompt(input: {
     CORE_AGENT_RULES_V1,
     factsBlock,
     orgPrompt,
+    // Depois do prompt gravado, pelo mesmo motivo do WhatsApp: o dado vivo
+    // vence o tom e o horário congelados no cadastro.
+    input.perfilVivoBlock || '',
+    input.saudacaoBlock || '',
     '# CANAL DE COMUNICAÇÃO',
     canalInstrucoes,
     '',
@@ -466,7 +484,39 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     loadOrgSystemPrompt(organizationId),
     isIzaCanonical ? getIzaFactsBlock() : Promise.resolve(''),
   ]);
-  const systemPrompt = buildWebChatSystemPrompt({ orgPrompt, factsBlock, isIzaCanonical });
+  // Perfil vivo (A8, A068): o widget montava CORE + prompt gravado + canal, e
+  // mais nada. Sem saudação configurada, sem horário, sem identidade viva: o
+  // dono editava o Treinar IA e o chat do site seguia com o texto do dia do
+  // cadastro. Atrás do interruptor `perfilVivo`, e fail-soft em tudo: erro
+  // aqui nunca segura a resposta pública do visitante.
+  let perfilVivoBlock = '';
+  let saudacaoBlock = '';
+  try {
+    if (await isFlagOn(organizationId, 'perfilVivo')) {
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { settings: true },
+      });
+      const orgSettings = (org?.settings as Record<string, any>) ?? {};
+      perfilVivoBlock = buildLiveProfileBlock(orgSettings, null, { now: new Date() });
+      // Primeiro turno da sessão = histórico vazio. O widget manda o histórico
+      // inteiro a cada POST, então isto é fiel ao que o visitante viu.
+      saudacaoBlock = buildGreetingBlock(history.length === 0, orgSettings.greetingMessage);
+    }
+  } catch (err) {
+    logger.warn('[webChat] perfil vivo indisponível neste turno (segue sem ele)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  const systemPrompt = buildWebChatSystemPrompt({
+    orgPrompt,
+    factsBlock,
+    isIzaCanonical,
+    perfilVivoBlock,
+    saudacaoBlock,
+  });
 
   // 2. Monta messages: history + novo turno do user
   const messages: LLMMessage[] = [
