@@ -29,6 +29,7 @@ import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
 // A088: a MESMA extração que o WhatsApp usa. Antes o avaliador lia resp.text
 // cru e julgava a resposta dobrada, com as tags dentro.
 import { extractProductionReplyText } from '../agents/replyText.js';
+import { regraTerminaEmFraseCompleta } from './agentPromptPatcher.js';
 
 // ─── Tipos públicos ─────────────────────────────────────────────────
 
@@ -431,6 +432,11 @@ em formato fraco e bullets soltos):
 5. Patches CIRÚRGICOS (1 regra por patch). Confiança 0-100: quão certo está
    que o patch resolve E não regride.
 
+6. TAMANHO (A188): cada "diff" tem no máximo 500 caracteres, contando os
+   dois exemplos. Escreva a regra INTEIRA dentro desse limite e termine com
+   ponto final. NUNCA pare no meio de uma palavra, de uma frase ou logo
+   depois de "Exemplo INCORRETO:". Se não couber, encurte os exemplos.
+
 Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
 {"summary": "1 linha executiva", "patches": [{"where": "INVIOLÁVEIS — novo item #N | REGRA INVIOLÁVEL #X — fortalecer", "diff": "+ **REGRA INVIOLÁVEL #N — TÍTULO:** ... Exemplo CORRETO: ... Exemplo INCORRETO: ..."}], "confidence": 0-100}`;
 }
@@ -438,6 +444,30 @@ Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
 // FASE 2.2d (#252): exportado pra ser chamado on-demand pelo endpoint
 // generate-suggestion (usuário pede sugestão pra cenário partial que não
 // teve uma gerada automaticamente — sugestões automáticas só ocorrem em fail).
+/**
+ * A188 — teto de guarda do patch, agora em fronteira de frase.
+ *
+ * O corte cego em 600 caracteres produziu 170 de 324 sugestões com exatamente
+ * 600 caracteres e cinco fragmentos vivos dentro de agents.system_prompt. O
+ * teto continua existindo (o texto vai para o banco e para o prompt do
+ * cliente), mas é folgado e cai na última pontuação, nunca no meio da palavra.
+ */
+const TETO_DO_PATCH = 1200;
+
+function cortarEmFronteiraDeFrase(texto: string, teto = TETO_DO_PATCH): string {
+  const t = String(texto ?? '');
+  if (t.length <= teto) return t;
+  const recorte = t.slice(0, teto);
+  const ultimaPontuacao = Math.max(
+    recorte.lastIndexOf('.'),
+    recorte.lastIndexOf('!'),
+    recorte.lastIndexOf('?'),
+  );
+  // Sem pontuação nenhuma no recorte, devolve o recorte cru: a trava de
+  // escrita (regraTerminaEmFraseCompleta) recusa o Aplicar e o cliente vê.
+  return ultimaPontuacao > 0 ? recorte.slice(0, ultimaPontuacao + 1) : recorte;
+}
+
 export async function suggestFix(
   scenarioId: string,
   expectedBehavior: string,
@@ -446,8 +476,50 @@ export async function suggestFix(
   systemPromptExcerpt: string,
   profile: JudgeProfile,
 ): Promise<ScenarioResult['suggestedFix']> {
+  const primeira = await pedirPatch(
+    scenarioId,
+    expectedBehavior,
+    agentResponse,
+    judgeReason,
+    systemPromptExcerpt,
+    profile,
+  );
+
+  // A188: a regra cortada no meio nunca deveria chegar à tela. Uma segunda
+  // tentativa custa uma chamada e resolve a maioria dos cortes medidos.
+  const inteira = (s: ScenarioResult['suggestedFix']) =>
+    !s || s.patches.every((p) => regraTerminaEmFraseCompleta(p.diff));
+  if (inteira(primeira)) return primeira;
+
+  logger.warn('[agentEvalRunner] sugestão veio cortada, pedindo de novo', { scenarioId });
+  const segunda = await pedirPatch(
+    scenarioId,
+    expectedBehavior,
+    agentResponse,
+    judgeReason,
+    systemPromptExcerpt,
+    profile,
+    true,
+  );
+  return segunda ?? primeira;
+}
+
+async function pedirPatch(
+  scenarioId: string,
+  expectedBehavior: string,
+  agentResponse: string,
+  judgeReason: string,
+  systemPromptExcerpt: string,
+  profile: JudgeProfile,
+  segundaTentativa = false,
+): Promise<ScenarioResult['suggestedFix']> {
   try {
-    const userPrompt = `### Cenário: ${scenarioId}
+    const aviso = segundaTentativa
+      ? `\n\n### ATENÇÃO
+A resposta anterior parou no meio de uma frase. Reescreva o patch INTEIRO,
+com no máximo 500 caracteres por "diff", terminando com ponto final.\n`
+      : '';
+    const userPrompt = `### Cenário: ${scenarioId}${aviso}
 
 ### Comportamento esperado
 ${expectedBehavior}
@@ -468,7 +540,10 @@ ${systemPromptExcerpt.slice(0, 2000)}
         llmRouter.complete({
           system: buildSuggestSystem(profile),
           messages: [{ role: 'user', content: userPrompt }],
-          maxTokens: 600,
+          // A188: 600 tokens não cabiam "regra + exemplo CORRETO + exemplo
+          // INCORRETO". O pedido limita o texto em 500 caracteres; o teto de
+          // tokens fica folgado para o modelo fechar a frase.
+          maxTokens: 900,
           temperature: 0.2,
           ...auditDoEval(profile),
         }),
@@ -493,7 +568,8 @@ ${systemPromptExcerpt.slice(0, 2000)}
     if (parsed && Array.isArray(parsed.patches)) {
       const patches = parsed.patches.slice(0, 3).map((p: any) => ({
         where: String(p.where || '').slice(0, 100),
-        diff: String(p.diff || '').slice(0, 600),
+        // A188: era slice(0, 600) em silêncio, no meio da palavra.
+        diff: cortarEmFronteiraDeFrase(String(p.diff || '')),
       }));
 
       // REDE FINAL: o LLM pode inventar a marca mesmo com a regra de isolamento
