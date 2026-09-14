@@ -70,7 +70,12 @@ import { notifySlackQualityIssue } from '../services/agentEvalCronService.js';
 import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services/slackNotifier.js';
 // FASE 2.2a (#243): aplicação cirúrgica de patches no system_prompt.
 // FASE 2.2c (#246): DuplicatePatchError pra rejeitar sugestão IA repetida.
-import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
+// A188: a mesma régua de "a regra fecha a frase?" que a porta do cliente usa.
+import {
+  applyPatch,
+  DuplicatePatchError,
+  regraTerminaEmFraseCompleta,
+} from '../services/agentPromptPatcher.js';
 // FASE 2.2d (#252): on-demand suggestion pra cenários partial
 import { suggestFix } from '../services/agentEvalRunner.js';
 // A083: toda escrita no prompt declara a origem e vira versão; reverter só
@@ -688,6 +693,28 @@ router.post(
       const firstPatch = suggestion.patches[0];
       const diffToApply = finalDiff || firstPatch.diff;
       const whereHint = firstPatch.where || '';
+
+      // ─── A188: REGRA CORTADA NÃO ENTRA NO PROMPT VIVO ─────────────
+      // A trava nasceu na porta do cliente, mas é por aqui que os fragmentos
+      // truncados chegaram aos prompts da Iza e da Marcia: o superadmin
+      // escreve no systemPrompt de qualquer cliente. O sugeridor corta o
+      // patch em 600 caracteres sem avisar, muitas vezes no meio da palavra.
+      // Vale também para o texto editado no admin, que chega pelo corpo.
+      if (!regraTerminaEmFraseCompleta(diffToApply)) {
+        logger.warn('[agentEval] apply-fix BLOQUEADO: regra cortada no meio', {
+          agentId: run.agentId,
+          scenarioId,
+          fim: diffToApply.slice(-40),
+        });
+        res.status(422).json({
+          error: 'regra_incompleta',
+          message:
+            'Esta correção está cortada no meio: o texto termina sem fechar a frase. ' +
+            'Edite a sugestão até ela terminar com ponto final e aplique de novo.',
+          fim: diffToApply.slice(-60),
+        });
+        return;
+      }
 
       // ─── REDE FINAL DO ISOLAMENTO DE TENANT ───────────────────────
       // Mesma trava do agentQuality.ts, e aqui ela pesa mais: o superadmin é da

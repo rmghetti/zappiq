@@ -40,7 +40,10 @@ const FALLBACK_MARKER_PREFIX = '# PATCH MANUAL';
  * Texto que para no meio de uma palavra, numa vírgula ou nos dois pontos do
  * "Exemplo CORRETO:" não entra no prompt vivo.
  *
- * Pura, sem I/O: as duas rotas de aplicar (cliente e superadmin) chamam esta.
+ * Pura, sem I/O. As duas rotas que escrevem no systemPrompt chamam esta antes
+ * de gravar: routes/agentQuality.ts (cliente) e routes/adminAgentEval.ts
+ * (superadmin). As telas repetem a régua só para esconder o botão antes do
+ * clique; quem recusa de verdade são as rotas.
  */
 export function regraTerminaEmFraseCompleta(texto: string): boolean {
   const t = String(texto ?? '').trim();

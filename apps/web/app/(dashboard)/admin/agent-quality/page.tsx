@@ -47,6 +47,11 @@ import {
   type AgentEvalRunDetailScenario,
   type RegradeResumo,
 } from '../../../../lib/adminApi';
+// A188: a mesma régua da tela do cliente, sem uma terceira cópia.
+import {
+  regraTerminaEmFraseCompleta,
+  AVISO_SUGESTAO_INCOMPLETA,
+} from '../../treinar/qualidade/_lib/sugestao';
 
 const REFRESH_INTERVAL_MS = 60_000;
 const SCORE_THRESHOLD = 90;
@@ -1057,6 +1062,9 @@ function FixSuggestionCard({
 
   const hasSuggestion = !!scenario.suggestedFix && scenario.suggestedFix.patches.length > 0;
   const decisionMade = existingDecision !== null;
+  // A188: é o texto que SERÁ gravado que precisa estar inteiro, e ele muda
+  // enquanto o admin edita. Por isso olha o editedDiff, não a sugestão crua.
+  const sugestaoInteira = regraTerminaEmFraseCompleta(editedDiff);
 
   async function handleApply() {
     if (!confirm('Aplicar essa sugestão no system_prompt do agente? Essa ação altera o comportamento da IA imediatamente.')) {
@@ -1323,17 +1331,27 @@ function FixSuggestionCard({
               </div>
             )}
 
+            {/* A188: a régua da API roda aqui também, antes do clique. Sem
+                isso o admin clicava e recebia um 422 técnico de volta. */}
+            {!decisionMade && !sugestaoInteira && (
+              <div className="mt-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded p-2">
+                ⚠ {AVISO_SUGESTAO_INCOMPLETA}
+              </div>
+            )}
+
             {/* Botões de ação */}
             <div className="flex gap-2 mt-3">
               {!decisionMade ? (
                 <>
-                  <button
-                    onClick={handleApply}
-                    disabled={loadingAction !== null}
-                    className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loadingAction === 'apply' ? 'Aplicando…' : '✓ Aplicar Sugestão'}
-                  </button>
+                  {sugestaoInteira && (
+                    <button
+                      onClick={handleApply}
+                      disabled={loadingAction !== null}
+                      className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loadingAction === 'apply' ? 'Aplicando…' : '✓ Aplicar Sugestão'}
+                    </button>
+                  )}
                   <button
                     onClick={handleReject}
                     disabled={loadingAction !== null}
