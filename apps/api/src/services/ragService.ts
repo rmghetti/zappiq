@@ -6,6 +6,8 @@ import { logger } from '../utils/logger.js';
 // Comportamento idêntico (RedisCacheProvider wrappa o mesmo ioredis), mas agora
 // passa por ICache — habilita troca de backend via env CLOUD_CACHE_PROVIDER.
 import { cache } from './cloud/index.js';
+// A016: resolve o nome, recusa endereço interno e revalida cada redirecionamento.
+import { buscarUrlPublica, UrlNaoPublicaError } from './urlSegura.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Contrato REAL do serviço Python (services/rag/main.py)
@@ -485,40 +487,13 @@ export async function ingestDocument(
   return res.json();
 }
 
-/**
- * Recusa endereço interno (SSRF).
- *
- * Todas as recusas saem como RagRequestError 422. Antes era `new Error` cru:
- * a rota não reconhecia o erro, `falhaDeIngestao` devolvia 503 e o cliente lia
- * "Tente de novo em alguns minutos" para um endereço que nunca vai funcionar,
- * por mais que ele tente. A frase agora diz a verdade e o que fazer.
- */
-function assertPublicUrl(url: string): void {
-  const recusar = (): never => {
-    throw new RagRequestError(422, MENSAGEM_URL_NAO_PUBLICA);
-  };
-
-  let parsed: URL;
-  try { parsed = new URL(url); } catch { return recusar(); }
-
-  if (!['http:', 'https:'].includes(parsed.protocol)) return recusar();
-
-  const hostname = parsed.hostname.toLowerCase();
-  const blocked = [
-    'localhost', '127.0.0.1', '0.0.0.0', '[::1]',
-    '169.254.169.254',   // cloud metadata
-    'metadata.google.internal',
-  ];
-  if (blocked.includes(hostname)) return recusar();
-
-  // Block RFC 1918 private ranges
-  const parts = hostname.split('.').map(Number);
-  if (parts.length === 4 && parts.every(p => !isNaN(p))) {
-    if (parts[0] === 10) return recusar();
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return recusar();
-    if (parts[0] === 192 && parts[1] === 168) return recusar();
-  }
-}
+// A016: a checagem de destino interno e o download com revalidação de cada
+// redirecionamento moram em services/urlSegura.ts. O `assertPublicUrl` daqui
+// morreu: ele olhava só o texto do endereço escrito na URL, contra uma lista
+// curta de nomes e três faixas IPv4, então passava qualquer domínio comum
+// apontando para a rede interna, qualquer IPv6 e qualquer redirecionamento.
+// A frase que o cliente lê continua sendo MENSAGEM_URL_NAO_PUBLICA, traduzida
+// no `catch` do ingestUrl.
 
 /**
  * Ingestão a partir de uma URL pública.
@@ -623,7 +598,6 @@ export async function ingestUrl(
   url: string,
   opcoes: { source?: string; titulo?: string } = {},
 ) {
-  assertPublicUrl(url);
   // Antes de gastar uma requisição: perfil de rede social não entrega conteúdo
   // a quem não está logado, e o menu de navegação que volta ia para o vetor
   // com selo verde de indexado (achado A012).
@@ -631,14 +605,18 @@ export async function ingestUrl(
 
   let resp;
   try {
-    resp = await axios.get(url, {
-      responseType: 'arraybuffer',
-      timeout: 30_000,
-      maxContentLength: 20 * 1024 * 1024, // alinhado ao MAX_UPLOAD_MB do serviço
-      // Sem User-Agent, muito site devolve página de bloqueio em vez do texto.
-      headers: { 'User-Agent': 'ZappIQ-Crawler/1.0 (+https://zappiq.com.br)' },
+    resp = await buscarUrlPublica(url, {
+      timeoutMs: 30_000,
+      maxBytes: 20 * 1024 * 1024, // alinhado ao MAX_UPLOAD_MB do serviço
     });
   } catch (err: any) {
+    // Destino interno tem frase própria: dizer "não consegui ler a página"
+    // para um endereço que nunca vai funcionar manda o cliente tentar de novo
+    // para sempre.
+    if (err instanceof UrlNaoPublicaError) {
+      logger.warn(`[RAG] URL recusada pelo portão de destino (${url}): ${err.message}`);
+      throw new RagRequestError(422, MENSAGEM_URL_NAO_PUBLICA);
+    }
     logger.warn(`[RAG] leitura da URL falhou (${url}): ${err?.message}`);
     throw new RagRequestError(422, MENSAGEM_PAGINA_ILEGIVEL);
   }
