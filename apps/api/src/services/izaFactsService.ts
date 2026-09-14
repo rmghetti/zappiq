@@ -378,7 +378,7 @@ export const renderBlockParaTeste = renderBlock;
 
 /**
  * Retorna o bloco "# FATOS ATUAIS" formatado pra injeção no system prompt.
- * Cache 60s — não bombardeia o DB.
+ * Cache de 60 segundos, para não bombardear o banco.
  *
  * Em erro de banco, devolve o último bloco bom e, se nem isso existir, o bloco
  * montado SEM fato nenhum, que já traz a seção de preços inteira: ela vem do
@@ -399,7 +399,7 @@ export async function getIzaFactsBlock(): Promise<string> {
     return cachedBlock;
   } catch (err) {
     logger.warn(
-      '[izaFacts] Falha ao carregar facts do DB — devolvendo o último bloco bom, ou só a seção de preços do catálogo',
+      '[izaFacts] Falha ao carregar facts do banco. Devolvendo o último bloco bom, ou só a seção de preços do catálogo.',
       { err, temCache: cachedBlock !== null },
     );
     return cachedBlock ?? renderBlock([]);
