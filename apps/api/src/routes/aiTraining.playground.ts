@@ -11,8 +11,7 @@
  */
 import { z } from 'zod';
 import type { RagSource } from '../services/ragService.js';
-import { stripStructuredTags, stripLeakedPrefixes } from '../agents/agentOrchestrator.js';
-import { applyVozHumanaFilter } from '../agents/vozHumanaFilter.js';
+import { extractProductionReplyText } from '../agents/replyText.js';
 
 /**
  * Contrato de entrada: a mensagem do dono do negócio + o histórico da conversa
@@ -57,15 +56,9 @@ export interface PlaygroundReply {
  * devolvia as duas cópias. Agora usa a mesma lógica dos dois caminhos vivos.
  */
 export function cleanPlaygroundReply(rawLlmText: string): string {
-  const raw = rawLlmText ?? '';
-  // Se houver <reply>…</reply>, prioriza esse conteúdo (mesma lógica de
-  // parseAgentResponse/webChatService) — colapsa a duplicação prosa+tag.
-  const replyMatch = raw.match(/<reply>([\s\S]*?)<\/reply>/i);
-  let candidate = replyMatch ? replyMatch[1] : raw;
-  candidate = stripStructuredTags(candidate);
-  candidate = stripLeakedPrefixes(candidate);
-  candidate = applyVozHumanaFilter(candidate);
-  return candidate.trim();
+  // A088: uma definição só, em agents/replyText.ts, compartilhada com o
+  // WhatsApp e com o avaliador da Qualidade.
+  return extractProductionReplyText(rawLlmText);
 }
 
 /**
