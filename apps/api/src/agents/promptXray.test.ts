@@ -40,6 +40,7 @@ const { buildSystemPromptForContact } = await import('./agentOrchestrator.js');
 const { getSystemPrompt } = await import('./promptEngine.js');
 const { ZAPPIQ_ORG_ID } = await import('../config/zappiqOrg.js');
 const { sliceBySections, runChecks } = await import('./promptXray.js');
+const { buildLiveProfileBlock } = await import('./tenantLiveProfile.js');
 
 // ─────────────────────────────────────────────────────────────────────
 // Fatiamento sobre o prompt REAL de produção
@@ -505,5 +506,137 @@ describe('runChecks: contrato da lista', () => {
       expect(c.rotulo.length, c.id).toBeGreaterThan(3);
       expect(c.detalhe.length, c.id).toBeGreaterThan(3);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// O bloco VIVO e as checagens (correção da revisão do PR #368)
+// ---------------------------------------------------------------------
+// Com o interruptor `perfilVivo` ligado, o horário e o tom que a IA recebe
+// deixam de ser o texto cru das settings e passam a ser o texto NORMALIZADO
+// pelo bloco vivo ("11:30-23:00" vira "11:30 às 23:00", o tom vira uma
+// linha). O Raio-X procurava só o texto cru, então ele pintava de vermelho
+// justamente a organização em que a correção funcionou.
+//
+// Os quatro formatos abaixo são os que existem HOJE em produção, medidos no
+// banco. Eles ficam aqui como fixture: nenhum teste toca no banco.
+// ─────────────────────────────────────────────────────────────────────
+
+const HORARIOS_REAIS_DE_PRODUCAO: Array<[string, Record<string, any>]> = [
+  // Texto livre, com "9h" em vez de "09:00" e um espaço sobrando no sábado.
+  ['CMJ', { weekdays: '9h às 17h', saturday: 'fechado ', sunday: 'fechado', holidays: 'fechado' }],
+  [
+    'MACHIA',
+    { weekdays: '09:00 às 18:00', saturday: '09:00 às 13:00', sunday: 'Fechado', holidays: 'Fechado' },
+  ],
+  [
+    'Iza',
+    {
+      weekdays: '09:00 às 18:00',
+      saturday: '09:00 às 13:00',
+      sunday: '09:00 às 13:00',
+      holidays: '09:00 às 13:00',
+    },
+  ],
+  // Formato do cadastro, em português, com a faixa escrita com hífen.
+  [
+    'Antonella',
+    {
+      Segunda: '11:30-23:00',
+      'Terça': '11:30-23:00',
+      Quarta: '11:30-23:00',
+      Quinta: '11:30-23:00',
+      Sexta: '11:30-23:59',
+      'Sábado': '11:30-23:59',
+      Domingo: '12:00-22:00',
+    },
+  ],
+];
+
+describe('runChecks: horario_confere com o bloco vivo no prompt', () => {
+  it.each(HORARIOS_REAIS_DE_PRODUCAO)(
+    'VERDE em %s, o formato real de produção, quando o prompt traz o bloco vivo',
+    (_nome, businessHours) => {
+      const settings = { tone: 'friendly', businessHours };
+      const prompt = ['## IDENTIDADE', 'Você é a atendente.', buildLiveProfileBlock(settings)].join(
+        '\n\n',
+      );
+
+      const c = checar({ settings, prompt })('horario_confere');
+
+      expect(c.ok).toBe(true);
+    },
+  );
+
+  it('o detalhe diz que achou pelo texto normalizado quando o cru não está no prompt', () => {
+    const settings = { businessHours: { Segunda: '11:30-23:00', Domingo: '12:00-22:00' } };
+    const prompt = buildLiveProfileBlock(settings);
+
+    const c = checar({ settings, prompt })('horario_confere');
+
+    expect(c.ok).toBe(true);
+    // O cru NÃO está lá: é justamente esse o ponto.
+    expect(prompt).not.toContain('11:30-23:00');
+    expect(c.detalhe).toContain('11:30 às 23:00');
+  });
+
+  it('continua VERMELHO quando o horário não aparece de jeito nenhum', () => {
+    const settings = { businessHours: { Segunda: '11:30-23:00' } };
+
+    const c = checar({ settings, prompt: '## IDENTIDADE\nVocê é a atendente.' })('horario_confere');
+
+    expect(c.ok).toBe(false);
+    expect(c.detalhe).toContain('11:30-23:00');
+  });
+
+  it('"Domingo: Fechado" congelado no prompt continua VERMELHO, mesmo com o bloco vivo certo', () => {
+    const settings = { businessHours: { Segunda: '11:30-23:00', Domingo: '12:00-22:00' } };
+    const prompt = ['## HORÁRIO DE FUNCIONAMENTO', '• Domingo: Fechado', buildLiveProfileBlock(settings)].join(
+      '\n',
+    );
+
+    const c = checar({ settings, prompt })('horario_confere');
+
+    expect(c.ok).toBe(false);
+    expect(c.detalhe).toContain('Domingo: Fechado');
+  });
+});
+
+describe('runChecks: tom_no_prompt com o bloco vivo no prompt', () => {
+  it('VERDE com a linha do bloco vivo, sem o cabeçalho do seed', () => {
+    const settings = { tone: 'friendly' };
+    const prompt = ['## IDENTIDADE', 'Você é a atendente.', buildLiveProfileBlock(settings)].join('\n\n');
+
+    const c = checar({ settings, prompt })('tom_no_prompt');
+
+    expect(prompt).not.toContain('## TOM DE VOZ');
+    expect(c.ok).toBe(true);
+    expect(c.detalhe).toContain('Tom de voz:');
+  });
+
+  it('VERDE nos quatro tons do bloco vivo, inclusive "professional", que o seed não conhece', () => {
+    for (const tone of ['friendly', 'formal', 'technical', 'professional']) {
+      const settings = { tone };
+      const c = checar({ settings, prompt: buildLiveProfileBlock(settings) })('tom_no_prompt');
+      expect(c.ok, tone).toBe(true);
+    }
+  });
+
+  it('VERDE com tom escrito pelo dono (texto livre) quando o bloco vivo o carrega', () => {
+    const settings = { tone: 'acolhedor, sem gíria, chamando o cliente pelo primeiro nome' };
+
+    const c = checar({ settings, prompt: buildLiveProfileBlock(settings) })('tom_no_prompt');
+
+    expect(c.ok).toBe(true);
+  });
+
+  it('tom livre SEM o bloco vivo continua VERMELHO: o seed joga esse valor fora', () => {
+    const c = checar({
+      settings: { tone: 'acolhedor, sem gíria' },
+      prompt: '## IDENTIDADE\n## TOM DE VOZ — AMIGÁVEL\nUse linguagem próxima',
+    })('tom_no_prompt');
+
+    expect(c.ok).toBe(false);
+    expect(c.detalhe).toContain('não é reconhecido');
   });
 });

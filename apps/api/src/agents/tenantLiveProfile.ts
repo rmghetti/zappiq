@@ -204,7 +204,7 @@ export function normalizarHorario(
 }
 
 /** Uma linha por tom. O texto longo do enum ficou no promptEngine (fallback). */
-const TOM_EM_UMA_LINHA: Record<string, string> = {
+export const TOM_EM_UMA_LINHA: Record<string, string> = {
   friendly:
     'amigável. Linguagem próxima e informal, mas profissional. Pode usar "você" e emoji ocasional.',
   formal:
@@ -222,6 +222,24 @@ function linhaDeTom(tone: unknown): string | null {
   if (conhecido) return conhecido;
   // Tom escrito pelo cliente (questionário). Vale como ele escreveu.
   return limitar(t, MAX_TOM);
+}
+
+/** Prefixo da linha de tom dentro do bloco vivo. */
+export const PREFIXO_TOM_VIVO = '- Tom de voz: ';
+
+/**
+ * A linha EXATA de tom que o bloco vivo escreve no prompt, ou null quando não
+ * há tom configurado.
+ *
+ * Exportada para o Raio-X (promptXray.checarTom) poder procurar o texto de
+ * verdade, em vez de procurar o cabeçalho antigo do seed. Sem isto, a
+ * checagem do tom ficava vermelha justamente na organização em que o bloco
+ * vivo funcionou.
+ */
+export function linhaDeTomDoPerfilVivo(tone: unknown): string | null {
+  const tom = linhaDeTom(tone);
+  if (!tom) return null;
+  return `${PREFIXO_TOM_VIVO}${limitar(tom, MAX_TOM)}`;
 }
 
 export interface LiveProfileAgendamento {
@@ -274,8 +292,8 @@ export function buildLiveProfileBlock(
     linhas.push(`- Você atende em nome de ${limitar(businessName, MAX_NEGOCIO)}.`);
   }
 
-  const tom = linhaDeTom(s.tone);
-  if (tom) linhas.push(`- Tom de voz: ${limitar(tom, MAX_TOM)}`);
+  const tom = linhaDeTomDoPerfilVivo(s.tone);
+  if (tom) linhas.push(tom);
 
   const horario = normalizarHorario(s);
   linhas.push(
