@@ -75,7 +75,7 @@ export function PrelaunchHero() {
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M2 7l3 3 7-7" />
                 </svg>
-                Dados 100% no Brasil
+                LGPD com DPA e encarregado
               </span>
             </div>
           </div>

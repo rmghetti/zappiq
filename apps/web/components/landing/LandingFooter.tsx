@@ -81,7 +81,7 @@ const COLUMNS = [
 const SECURITY_BADGES = [
   { icon: Shield, label: 'LGPD no núcleo do produto' },
   { icon: Lock, label: 'Dados criptografados ponta a ponta' },
-  { icon: Server, label: 'Servidores 100% no Brasil' },
+  { icon: Server, label: 'DPA padrão e encarregado de dados' },
   { icon: Activity, label: 'Monitoramento contínuo da plataforma' },
   { icon: Radar, label: 'Dashboards que viram decisão (Radar 360° Pro)' },
 ];

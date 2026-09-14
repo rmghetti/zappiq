@@ -86,8 +86,9 @@ tirando frase por frase o que a auditoria provou falso. Na landing:
   Unidos, em todas as conversas. A frase padrão passa a ser: os dados ficam em servidores
   nos Estados Unidos (banco de dados e processamento de IA), com salvaguardas contratuais
   para transferência internacional. Corrigidos: Hero, aviso rotativo da home, selo de
-  confiança, comparação de pré-lançamento, FAQ da home, FAQ de conexão, wizard do
-  diagnóstico, /lgpd, /legal/privacidade, /legal/enderecos-comerciais e
+  confiança, rodapé da landing, faixa do pré-lançamento, comparação de pré-lançamento,
+  FAQ da home, FAQ de conexão, wizard do diagnóstico, /lgpd, /legal/privacidade,
+  /legal/enderecos-comerciais e
   /legal/subprocessadores (inclusive as linhas de AWS e Supabase na tabela, que diziam
   sa-east-1). Onde a ressalva não cabia num item de benefício (Hero, aviso rotativo, selo,
   pré-lançamento), o item virou "LGPD com DPA e encarregado de dados" e a íntegra ficou nas

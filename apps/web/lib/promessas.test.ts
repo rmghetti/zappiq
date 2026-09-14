@@ -84,6 +84,12 @@ const REGRAS: Regra[] = [
     padrao: /(?<!prote[çc][ãa]o de )dados (prim[áa]rios )?no Brasil/i,
   },
   {
+    nome: 'residência de dados: servidores no Brasil',
+    motivo:
+      'Mesma correção, pela terceira redação que a copy usava: selo de rodapé e faixa do pré-lançamento diziam "servidores 100% no Brasil". A API roda em gru, mas ela não guarda dado; quem guarda é o banco, que está em us-east-1.',
+    padrao: /servidor(es)?[^\n]{0,20}no Brasil|100% no Brasil/i,
+  },
+  {
     nome: '"se corrige sozinha"',
     motivo:
       'A Qualidade da IA sugere a correção e espera o clique de aprovar. Nada é aplicado sem uma pessoa decidir.',
