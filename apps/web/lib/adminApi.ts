@@ -416,7 +416,7 @@ export interface AgentEvalRunDetail extends AgentEvalRunRow {
   results?: AgentEvalRunDetailScenario[];
   agent?: { id: string; name: string; organizationId: string };
   fixDecisions?: AgentEvalFixDecision[];
-  // FASE 2.2a — instrumentação Slack.
+  // FASE 2.2a: instrumentação Slack.
   // 'not_sent' = a execução terminou em falha, então não houve o que alertar.
   slackAlertStatus?: 'skipped' | 'sent' | 'failed' | 'not_sent' | null;
   slackAlertError?: string | null;

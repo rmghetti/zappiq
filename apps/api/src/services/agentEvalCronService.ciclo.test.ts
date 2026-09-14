@@ -1,5 +1,5 @@
 /**
- * agentEvalCronService.ciclo.test.ts — duplicidade e teto por organização
+ * agentEvalCronService.ciclo.test.ts: duplicidade e teto por organização
  * ============================================================================
  * Dois defeitos que a revisão do PR apontou:
  *
@@ -162,7 +162,7 @@ describe('o ciclo do cron enfileira, não executa em linha', () => {
   });
 });
 
-describe('podeAgendarAvaliacao — teto por organização', () => {
+describe('podeAgendarAvaliacao: teto por organização', () => {
   it('barra organização com execução pendente viva', async () => {
     bancoComMemoria([
       { id: 'run-viva', organizationId: 'org-a', status: 'pending', startedAt: AGORA },

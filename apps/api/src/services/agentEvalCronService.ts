@@ -320,7 +320,7 @@ const SELECT_ORG_ELEGIBILIDADE = {
  *
  * Fail-soft DE VERDADE: erro de consulta responde true (desconhecido, portanto
  * elegível). O try/catch daqui não bastava, porque countRagChunksByNamespace
- * engolia o próprio erro e devolvia 0/0 — indistinguível de "não tem base".
+ * engolia o próprio erro e devolvia 0/0, indistinguível de "não tem base".
  * O cliente que treinou a IA era pulado em silêncio por uma falha de banco.
  * Por isso a contagem vem da variante que devolve null em erro.
  */

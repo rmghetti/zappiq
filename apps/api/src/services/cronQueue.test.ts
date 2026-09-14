@@ -102,7 +102,7 @@ describe('fila cron — registro consolidado', () => {
  * continuaria rodando todo dia, e duas vezes no domingo, com o custo de LLM
  * que a mudança existe para cortar.
  */
-describe('fila cron — agendamento obsoleto sai do Redis', () => {
+describe('fila cron: agendamento obsoleto sai do Redis', () => {
   /** Fila falsa: só o par de métodos que a limpeza usa. */
   function filaCom(
     agendamentos: Array<{ key: string; name?: string; pattern?: string } | undefined>,

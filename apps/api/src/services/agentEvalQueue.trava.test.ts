@@ -1,5 +1,5 @@
 /**
- * agentEvalQueue.trava.test.ts — concorrência 1 vale por PROCESSO
+ * agentEvalQueue.trava.test.ts: concorrência 1 vale por PROCESSO
  * ============================================================================
  * A fila `agent-eval` foi criada com `concurrency: 1` e o comentário dizia que
  * isso impede duas execuções ao mesmo tempo. Não impede: `min_machines_running
@@ -119,7 +119,7 @@ beforeEach(() => {
   cronServiceMock.shouldAlertQuality.mockReturnValue(false);
 });
 
-describe('trava global — SET NX PX numa chave só', () => {
+describe('trava global: SET NX PX numa chave só', () => {
   it('a chave e o prazo são os combinados', async () => {
     expect(TRAVA_GLOBAL_CHAVE).toBe('zappiq:agent-eval:lock');
     // O prazo cobre o teto da execução com folga de 1 minuto: trava que
