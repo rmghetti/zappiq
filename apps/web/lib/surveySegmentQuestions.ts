@@ -1101,7 +1101,7 @@ export const SEGMENT_SURVEYS: Record<string, SurveyBlock[]> = {
           id: 'salao_frequencia_visita',
           label: 'Qual a frequência média de visita das clientes?',
           type: 'select',
-          helpText: 'A IA pode usar essa informação para enviar lembretes de retorno no momento certo.',
+          helpText: 'A IA usa essa informação para orientar a cliente sobre o intervalo de retorno na conversa.',
           options: ['Semanal', 'Quinzenal', 'Mensal', 'A cada 2-3 meses', 'Muito variável'],
         },
         {

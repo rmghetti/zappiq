@@ -227,10 +227,11 @@ const REGRAS: Regra[] = [
     apenasEm: ['apps/web'],
   },
   {
-    nome: 'lembrete automático de vencimento, de aula ou de evento',
+    nome: 'lembrete automático de vencimento, de aula, de evento ou de retorno',
     motivo:
-      'Não existe disparo programado de lembrete em lugar nenhum do produto. O agendamento consulta o horário livre e cria o compromisso; avisar o cliente antes continua sendo trabalho da equipe.',
-    padrao: /lembretes? (autom[áa]ticos?|de vencimento|de aulas)|[áa]udio 24h antes/i,
+      'O agendamento tem duas ferramentas, consultar o horário livre e criar o compromisso, e nenhuma delas avisa o cliente depois. Disparo por prazo só existe como nó do Maestro, dentro de um fluxo que alguém da equipe monta e liga: não vem pronto, não é do agendamento e a IA não decide mandar sozinha. Enquanto for assim, a copy não pode dizer que a IA envia lembrete.',
+    padrao:
+      /lembretes? (autom[áa]ticos?|de vencimento|de aulas|de retorno)|enviar lembretes?|[áa]udio 24h antes/i,
   },
   {
     nome: 'resultado numérico de no-show atribuído ao produto',
