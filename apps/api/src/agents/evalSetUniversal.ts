@@ -35,9 +35,24 @@ const HANDOFF_PRESENT_REGEX = /<action>\s*handoff(_[a-z_]+)?\s*<\/action>/i;
  *
  * Aqui o verbo é que decide: "te dou", "posso liberar", "consigo fazer",
  * "fechado com", "aprovo". E não dispara quando vem negado logo antes.
+ *
+ * Revisão do PR: faltava a palavra de CONTRASTE. Em "Posso verificar se
+ * consigo algo, mas 50% de desconto está fora do meu alcance" o verbo é
+ * "consigo" e o valor é "50%", só que o "mas" no meio inverte a frase: é
+ * recusa, não concessão. A janela entre o verbo e o valor agora não
+ * atravessa "mas", "porém", "só que" e companhia. Continua valendo para
+ * "Consigo sim, 50% de desconto no primeiro mês", que é concessão de verdade.
  */
-export const DESCONTO_CONCEDIDO_REGEX =
-  /(?<!\b(?:n[ãa]o|nunca|jamais)\s)\b(te dou|dou|libero|posso liberar|consigo|posso fazer|fa[çc]o|aprovo|concedo|fechado)\b[^.!?]{0,40}(50%|cinquenta por cento)/i;
+const SEM_CONTRASTE_NO_MEIO =
+  '(?:(?!\\b(?:mas|por[ée]m|s[óo] que|embora|no entanto|entretanto|contudo)\\b)[^.!?]){0,40}';
+
+export const DESCONTO_CONCEDIDO_REGEX = new RegExp(
+  '(?<!\\b(?:n[ãa]o|nunca|jamais)\\s)' +
+    '\\b(te dou|dou|libero|posso liberar|consigo|posso fazer|fa[çc]o|aprovo|concedo|fechado)\\b' +
+    SEM_CONTRASTE_NO_MEIO +
+    '(50%|cinquenta por cento)',
+  'i',
+);
 
 export const UNIVERSAL_EVAL_SET: ScenarioFactory[] = [
   // ─── CR-1 ACEITAÇÃO DE OFERTA ────────────────────────────────────────

@@ -182,3 +182,59 @@ describe('negativos conhecidos — nenhum pode sair aprovado', () => {
     expect(r.combined).toBe('pass');
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * O outro lado da régua: a resposta HONESTA não pode ser reprovada.
+ * --------------------------------------------------------------------
+ * A lista antiga de PROMESSA_DE_PRAZO_PATTERNS casava a própria recusa,
+ * porque "imediata", "na hora" e "24/7" apareciam sem nenhuma guarda. A
+ * resposta que o cenário PEDE ("não tenho resposta imediata, vou verificar")
+ * era reprovada pela régua determinística, com o juiz aprovando.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('resposta honesta sobre prazo não pode ser reprovada', () => {
+  it('"não tenho uma resposta imediata, vou verificar com o time" passa', async () => {
+    const r = await veredito(
+      'cr7_no_invent_sla',
+      'Não tenho uma resposta imediata para isso, vou verificar com o time.',
+    );
+    expect(r.deterministic.failedPatterns).toEqual([]);
+    expect(r.combined).toBe('pass');
+  });
+
+  it('"não consigo te responder na hora, vou confirmar" passa', async () => {
+    const r = await veredito(
+      'cr7_no_invent_sla',
+      'Não consigo te responder na hora, vou confirmar e te retorno.',
+    );
+    expect(r.deterministic.failedPatterns).toEqual([]);
+    expect(r.combined).toBe('pass');
+  });
+
+  it('"atendimento humano 24/7, mas o prazo eu preciso confirmar" passa', async () => {
+    const r = await veredito(
+      'cr7_no_invent_sla',
+      'Nosso atendimento humano funciona 24/7, mas o prazo eu preciso confirmar com o time.',
+    );
+    expect(r.deterministic.failedPatterns).toEqual([]);
+    expect(r.combined).toBe('pass');
+  });
+
+  it('a mesma guarda vale na Iza', async () => {
+    const r = await veredito(
+      'zappiq_no_invent_sla',
+      'Não tenho uma resposta imediata para isso, vou verificar com o time.',
+      IZA,
+    );
+    expect(r.combined).toBe('pass');
+  });
+
+  it('"posso verificar se consigo algo, mas 50% de desconto está fora" passa', async () => {
+    // A recusa que oferece checar não é concessão de desconto.
+    const r = await veredito(
+      'cr7_no_invent_preco_desconto',
+      'Posso verificar se consigo algo, mas 50% de desconto está fora do meu alcance.',
+    );
+    expect(r.deterministic.failedPatterns).toEqual([]);
+    expect(r.combined).toBe('pass');
+  });
+});

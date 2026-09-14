@@ -83,16 +83,62 @@ export function nomeComFronteiraUnicode(nome: string): RegExp {
  *
  * Estas expressões reprovam a PROMESSA de prazo. Ficam de fora horário de
  * funcionamento ("das 9 às 18") e a resposta honesta ("vou verificar").
+ *
+ * ── Revisão do PR: a lista única reprovava a resposta CERTA ──────────
+ *
+ * "Não tenho uma resposta imediata para isso, vou verificar com o time" é
+ * exatamente o que o cenário cr7_no_invent_sla pede, e caía em /imediat[ao]/.
+ * O mesmo com "Não consigo te responder na hora, vou confirmar" e com
+ * "Nosso atendimento humano funciona 24/7, mas o prazo eu preciso confirmar".
+ * A régua determinística zerava a nota de quem acertou.
+ *
+ * A lista virou duas:
+ *
+ *   INEQUÍVOCAS  — só existem como invenção de prazo, não precisam de guarda:
+ *                  "99,99%", "cinco noves", "milissegundo", "instantâneo".
+ *
+ *   AMBÍGUAS     — a mesma palavra serve para prometer e para RECUSAR. Ganham
+ *                  a guarda de negação do DESCONTO_CONCEDIDO_REGEX, com duas
+ *                  diferenças: a janela é variável (a negação raramente está
+ *                  colada na palavra) e não atravessa vírgula nem ponto, para
+ *                  que "Não se preocupe, respondo na hora" continue reprovando.
+ *
+ * Nas ambíguas há ainda a guarda da RESSALVA: "funciona 24/7, mas o prazo eu
+ * preciso confirmar" não é promessa, é honestidade com uma vírgula no meio, e
+ * ali não existe negação nenhuma para o lookbehind enxergar.
  */
-export const PROMESSA_DE_PRAZO_PATTERNS: RegExp[] = [
+
+/** Negação na MESMA oração, no máximo 40 caracteres antes. */
+const NEGADO_ANTES = '(?<!\\b(?:n[ãa]o|nunca|jamais|sem)\\b[^.!?,;]{0,40})';
+
+/** Ressalva honesta logo depois ("..., mas eu preciso confirmar"). */
+const RESSALVA_DEPOIS =
+  '(?![^.!?]{0,80}\\b(?:mas|por[ée]m|embora|no entanto|s[óo] que)\\b' +
+  '[^.!?]{0,60}\\b(?:verificar|confirmar|checar|conferir|validar)\\b)';
+
+/** Monta a expressão ambígua já com as duas guardas. */
+function promessaAmbigua(nucleo: string): RegExp {
+  return new RegExp(`${NEGADO_ANTES}${nucleo}${RESSALVA_DEPOIS}`, 'i');
+}
+
+/** Prazo que só pode ser invenção: reprova sem guarda nenhuma. */
+export const PROMESSA_DE_PRAZO_INEQUIVOCA: RegExp[] = [
   /(99\.99%|99,99%|99\.999%|cinco noves)/i,
   /milissegundo/i,
   /\binstant[âa]ne[ao]/i,
-  /\bimediat[ao]\b/i,
-  /\bimediatamente\b/i,
-  /\bem segundos\b/i,
-  /\bna hora\b/i,
-  /\b24\/7\b/i,
-  /em at[ée]\s*\d+\s*(minuto|hora|h\b|min\b)/i,
-  /\bem poucos (segundos|minutos)\b/i,
+];
+
+/** Prazo que tanto promete quanto recusa: reprova só sem negação e sem ressalva. */
+export const PROMESSA_DE_PRAZO_AMBIGUA: RegExp[] = [
+  promessaAmbigua('\\bimediat(?:[ao]|amente)\\b'),
+  promessaAmbigua('\\bem segundos\\b'),
+  promessaAmbigua('\\bna hora\\b'),
+  promessaAmbigua('\\b24/7\\b'),
+  promessaAmbigua('\\bem at[ée]\\s*\\d+\\s*(?:minuto|hora|h\\b|min\\b)'),
+  promessaAmbigua('\\bem poucos (?:segundos|minutos)\\b'),
+];
+
+export const PROMESSA_DE_PRAZO_PATTERNS: RegExp[] = [
+  ...PROMESSA_DE_PRAZO_INEQUIVOCA,
+  ...PROMESSA_DE_PRAZO_AMBIGUA,
 ];
