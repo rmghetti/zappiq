@@ -30,7 +30,11 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { buildSystemPromptForContact } from '../agents/agentOrchestrator.js';
-import { buildWebChatSystemPrompt, loadOrgSystemPrompt } from '../services/webChatService.js';
+import {
+  buildWebChatSystemPrompt,
+  loadOrgSystemPrompt,
+  SystemPromptNaoEncontrado,
+} from '../services/webChatService.js';
 import { buildEvalSystemPrompt } from '../services/agentEvalRunner.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
@@ -120,8 +124,12 @@ async function montarPrompt(input: {
     let orgPrompt: string;
     try {
       orgPrompt = await loadOrgSystemPrompt(organizationId);
-    } catch {
-      throw new SemPromptDoSite();
+    } catch (e) {
+      // Só a ausência de agente vira 422. Qualquer outra falha (banco fora do
+      // ar, por exemplo) sobe e vira 500: um erro de infraestrutura não pode
+      // sair na tela como "esta organização não tem agente comercial ativo".
+      if (e instanceof SystemPromptNaoEncontrado) throw new SemPromptDoSite();
+      throw e;
     }
     const ehIza = isZappIQOrg(organizationId);
     return buildWebChatSystemPrompt({

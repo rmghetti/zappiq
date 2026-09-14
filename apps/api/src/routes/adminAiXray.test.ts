@@ -1,5 +1,5 @@
 /**
- * POST /api/admin/ai-xray — Raio-X do que a IA recebe.
+ * POST /api/admin/ai-xray: Raio-X do que a IA recebe.
  * ============================================================================
  * Tarefa A3. O que este teste precisa provar:
  *
@@ -165,7 +165,7 @@ const corpoValido = {
 
 /* ── 1. Portão de papel ───────────────────────────────────────────────── */
 
-describe('POST /api/admin/ai-xray — quem pode entrar', () => {
+describe('POST /api/admin/ai-xray: quem pode entrar', () => {
   it('403 para quem não é SUPERADMIN', async () => {
     usuarioAtual = { userId: 'u2', organizationId: 'org-1', role: 'ADMIN' };
 
@@ -192,7 +192,7 @@ describe('POST /api/admin/ai-xray — quem pode entrar', () => {
 
 /* ── 2. Validação do corpo ────────────────────────────────────────────── */
 
-describe('POST /api/admin/ai-xray — validação do corpo', () => {
+describe('POST /api/admin/ai-xray: validação do corpo', () => {
   it('400 com 26 mensagens', async () => {
     const messages = Array.from({ length: 26 }, (_, i) => ({ role: 'user', content: `msg ${i}` }));
 
@@ -234,7 +234,7 @@ describe('POST /api/admin/ai-xray — validação do corpo', () => {
 
 /* ── 3. Nunca chama o modelo ──────────────────────────────────────────── */
 
-describe('POST /api/admin/ai-xray — não gasta LLM', () => {
+describe('POST /api/admin/ai-xray: não gasta LLM', () => {
   it('nenhum canal chama o modelo', async () => {
     for (const canal of ['whatsapp', 'instagram', 'site', 'playground', 'qualidade']) {
       const res = await chamar({ ...corpoValido, canal });
@@ -248,7 +248,7 @@ describe('POST /api/admin/ai-xray — não gasta LLM', () => {
 
 /* ── 4. O que cada canal monta ────────────────────────────────────────── */
 
-describe('POST /api/admin/ai-xray — o prompt de cada canal', () => {
+describe('POST /api/admin/ai-xray: o prompt de cada canal', () => {
   it('WhatsApp consulta a base e devolve fatias, fontes e checagens', async () => {
     const res = await chamar(corpoValido);
 
@@ -315,7 +315,7 @@ describe('POST /api/admin/ai-xray — o prompt de cada canal', () => {
 
 /* ── 5. O canal site usa o carregador do próprio chat do site ─────────── */
 
-describe('POST /api/admin/ai-xray — o canal site não reimplementa a escolha do prompt', () => {
+describe('POST /api/admin/ai-xray: o canal site não reimplementa a escolha do prompt', () => {
   it('carrega o prompt por webChatService.loadOrgSystemPrompt, não por agent.findFirst', async () => {
     // Org nova de propósito: loadOrgSystemPrompt guarda o prompt em memória
     // por 5 minutos, então uma org já usada em outro teste não bateria no SQL.
@@ -359,6 +359,18 @@ describe('POST /api/admin/ai-xray — o canal site não reimplementa a escolha d
     const res = await chamar({ ...corpoValido, canal: 'site' });
 
     expect(res.statusCode).toBe(500);
+  });
+
+  it('banco fora do ar na busca do agente do site dá 500, não 422 de sem_prompt', async () => {
+    // Org nova de propósito: o cache de 5 minutos do loadOrgSystemPrompt
+    // devolveria o prompt de um teste anterior e a consulta nem aconteceria.
+    orgFindUnique.mockResolvedValue({ id: 'org-site-caiu', name: 'Cantina', settings: SETTINGS_DA_ORG });
+    queryRawUnsafe.mockRejectedValue(new Error('banco fora do ar'));
+
+    const res = await chamar({ ...corpoValido, organizationId: 'org-site-caiu', canal: 'site' });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body.error).not.toBe('sem_prompt');
   });
 });
 

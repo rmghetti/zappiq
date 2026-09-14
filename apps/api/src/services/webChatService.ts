@@ -82,6 +82,19 @@ const systemPromptCache = new Map<string, { prompt: string; cachedAt: number }>(
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
+ * Lançada quando a organização não tem agente comercial vivo com prompt.
+ *
+ * Existe como classe (e não como Error solto) porque quem chama precisa
+ * separar "esta organização não tem agente" de "o banco caiu". Um `catch`
+ * cego confundia as duas coisas e transformava queda de banco em resposta
+ * tranquila de configuração faltando.
+ *
+ * É subclasse de Error, então todo `catch` genérico que já existia segue
+ * funcionando igual (a rota pública do chat do site continua devolvendo 500).
+ */
+export class SystemPromptNaoEncontrado extends Error {}
+
+/**
  * Prompt do agente que o CHAT DO SITE usa, com o cache de 5 minutos.
  *
  * Exportada porque o Raio-X do prompt (/admin/ai-xray) precisa mostrar o
@@ -108,7 +121,9 @@ export async function loadOrgSystemPrompt(organizationId: string): Promise<strin
   );
 
   if (!rows.length || !rows[0].system_prompt) {
-    throw new Error(`webChatService: system_prompt não encontrado pra org ${organizationId}`);
+    throw new SystemPromptNaoEncontrado(
+      `webChatService: system_prompt não encontrado pra org ${organizationId}`,
+    );
   }
 
   systemPromptCache.set(organizationId, { prompt: rows[0].system_prompt, cachedAt: now });
