@@ -69,7 +69,9 @@ beforeEach(() => {
       confidence: 80,
       reason: 'não conduziu',
       summary: 'ajuste',
-      patches: [{ where: 'A', diff: '+ conduza a conversa' }],
+      // A188: a regra fecha a frase de propósito. Sem o ponto final, o
+      // sugeridor pede o patch de novo e a contagem de chamadas muda.
+      patches: [{ where: 'A', diff: '+ conduza a conversa.' }],
     }),
     usage: { inputTokens: 10, outputTokens: 5 },
   });
