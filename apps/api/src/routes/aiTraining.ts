@@ -38,7 +38,8 @@ import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
 import { computeAIReadiness, refreshAIReadiness } from '../services/aiReadinessService.js';
-import { buildKnowledgeBase, surveyDocFilename, countAnsweredQuestions } from '../services/knowledgeBaseBuilder.js';
+import { countAnsweredQuestions } from '../services/knowledgeBaseBuilder.js';
+import { agendarReingestaoDoQuestionario } from '../services/surveyReingest.js';
 import { logAuditEvent } from '../services/auditService.js';
 import { buildSystemPromptForContact, pickTierAndOverride } from '../agents/agentOrchestrator.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
@@ -1010,14 +1011,20 @@ router.get('/survey', async (req: Request, res: Response, next: NextFunction) =>
       niche: settings.niche || 'geral',
       segmento: settings.segmento || settings.niche || 'geral',
       subsegmentos: Array.isArray(settings.subsegmentos) ? settings.subsegmentos : [],
+      // Estado da última sincronização com a IA (A008). Sem isto, a tela
+      // dizia 'salvo automaticamente' mesmo quando a ingestão falhava.
+      surveySync: settings.surveySync ?? null,
     });
   } catch (err) {
     next(err);
   }
 });
 
-// PUT /api/ai-training/survey — salva o conjunto completo de respostas +
-// re-ingere o documento de conhecimento no RAG + loga.
+// PUT /api/ai-training/survey — salva o conjunto completo de respostas e
+// AGENDA a reingestão. A ingestão não acontece mais aqui dentro: o autosave
+// da tela dispara a cada 1,5 s e cada requisição reembedava o questionário
+// inteiro, sem trava, com duas ingestões podendo terminar fora de ordem
+// (A007, A118). Agora um job por organização junta a rajada e lê do banco.
 const surveySchema = z.object({ surveyAnswers: z.record(z.any()) });
 router.put('/survey', validate(surveySchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -1031,32 +1038,23 @@ router.put('/survey', validate(surveySchema), async (req: Request, res: Response
     const settings = (org?.settings as any) || {};
     const before = settings.surveyAnswers || {};
 
-    const niche = settings.niche || 'geral';
-    const currentFilename = surveyDocFilename(niche);
-    // Se o niche mudou desde o último save, o filename muda junto — o doc
-    // antigo viraria órfão no RAG (a IA leria a qualificação desatualizada).
-    const previousFilename: string | undefined = settings.surveyDocFilename;
-
-    const merged = { ...settings, surveyAnswers, surveyDocFilename: currentFilename };
+    // 'pendente' já no salvamento: a tela precisa poder dizer "a IA ainda
+    // não recebeu" em vez de "salvo automaticamente" (A008). Os sources
+    // anteriores ficam registrados porque são eles que a IA tem AGORA.
+    const surveySync = {
+      status: 'pendente' as const,
+      at: new Date().toISOString(),
+      sources: Array.isArray(settings.surveySync?.sources) ? settings.surveySync.sources : undefined,
+    };
+    const merged = { ...settings, surveyAnswers, surveySync };
     await prisma.organization.update({ where: { id: orgId }, data: { settings: merged } });
 
-    // Re-ingere o doc de conhecimento (filename estável → substitui versão anterior)
-    const businessName = settings.businessName || org?.name || 'Empresa';
-    const kb = buildKnowledgeBase({ businessName, niche, surveyAnswers });
-    await ragService
-      .ingestDocument(orgId, {
-        filename: currentFilename,
-        content: Buffer.from(kb),
-        mimeType: 'text/plain',
-        metadata: { titulo: 'Questionário de qualificação' },
-      })
-      .catch((err: any) => logger.warn(`[AITraining] RAG re-sync survey falhou: ${err.message}`));
-
-    if (previousFilename && previousFilename !== currentFilename) {
-      await ragService
-        .deleteDocument(orgId, previousFilename)
-        .catch((err: any) => logger.warn(`[AITraining] RAG remove survey antigo falhou: ${err.message}`));
-    }
+    // Agenda (ou reagenda) a reingestão. Falha aqui não derruba o salvamento:
+    // a resposta do cliente já está gravada, e o estado fica 'pendente'.
+    const agendamento = await agendarReingestaoDoQuestionario(orgId).catch((err: any) => {
+      logger.warn(`[AITraining] agendar reingestão do questionário falhou: ${err?.message}`);
+      return null;
+    });
 
     const answeredCount = countAnsweredQuestions(surveyAnswers);
     await logTraining(req, 'kb.survey.update', 'survey', undefined,
@@ -1064,7 +1062,13 @@ router.put('/survey', validate(surveySchema), async (req: Request, res: Response
       { before: { answered: countAnsweredQuestions(before) }, after: { answered: answeredCount } });
 
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
-    res.json({ surveyAnswers, answeredCount, readiness });
+    res.json({
+      surveyAnswers,
+      answeredCount,
+      readiness,
+      surveySync,
+      reingestaoAgendada: Boolean(agendamento),
+    });
   } catch (err) {
     next(err);
   }

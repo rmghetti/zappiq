@@ -18,3 +18,4 @@ export * from './metaRateCard.js';
 // para a API poder ler o TEXTO de cada pergunta (achado A023).
 export * from './surveyTypes.js';
 export * from './surveySegmentQuestions.js';
+export * from './surveyDestino.js';

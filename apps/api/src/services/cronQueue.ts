@@ -34,6 +34,10 @@ import { runCostGuardCycle } from './costGuardService.js';
 import { runMiraMirrors } from './mira/cnpjMirrorSync.js';
 import { runMiraReleasesCycle } from './mira/releasesCron.js';
 import { runRetentionCycle } from './retentionService.js';
+import {
+  NOME_DO_JOB_DE_REINGESTAO,
+  executarReingestaoDoQuestionario,
+} from './surveyReingest.js';
 import { runDigest } from './superadminTrialDigestCron.js';
 import { runTenantUsageCycle } from './tenantUsageService.js';
 import { runTrialExpirationCycle } from './trialExpirationCron.js';
@@ -56,6 +60,25 @@ export interface CronJobDefinition {
   pattern: string;
   run: () => Promise<unknown>;
 }
+
+/**
+ * Jobs SOB DEMANDA que moram nesta fila.
+ *
+ * Não têm horário: são enfileirados por uma ação do cliente, com atraso e
+ * id fixo, para juntar uma rajada de salvamentos numa execução só. A fila
+ * é esta porque ela já existe, já tem um worker por máquina e o BullMQ já
+ * garante que só uma máquina pega cada job. Criar fila nova para isto foi
+ * exatamente o que produziu 3,1 milhões de comandos por dia no Redis.
+ *
+ * O handler recebe os dados do job. Ele NÃO deve confiar neles para montar
+ * conteúdo: quem executa lê do banco.
+ */
+export const JOBS_SOB_DEMANDA: Record<string, (dados: any) => Promise<unknown>> = {
+  [NOME_DO_JOB_DE_REINGESTAO]: async (dados: { organizationId?: string }) => {
+    if (!dados?.organizationId) return { ignorado: true };
+    return executarReingestaoDoQuestionario(dados.organizationId);
+  },
+};
 
 /**
  * Horários preservados exatamente como estavam nas filas antigas. O
@@ -270,6 +293,16 @@ export async function initCronQueue(): Promise<void> {
   cronWorker = new Worker(
     'cron',
     async (job: Job) => {
+      // Job sob demanda (reingestão do questionário, por exemplo) vem antes:
+      // ele não está no registro de rotinas e não tem horário.
+      const sobDemanda = JOBS_SOB_DEMANDA[job.name];
+      if (sobDemanda) {
+        logger.info({ msg: 'cron_job_sob_demanda_start', name: job.name, jobId: job.id });
+        const saida = await sobDemanda(job.data);
+        logger.info({ msg: 'cron_job_sob_demanda_done', name: job.name, jobId: job.id });
+        return saida;
+      }
+
       const definition = CRON_JOBS.find((c) => c.name === job.name);
       if (!definition) {
         // Job de uma versão anterior do registro. Falhar alto é pior que
