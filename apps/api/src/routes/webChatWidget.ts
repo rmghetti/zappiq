@@ -52,7 +52,11 @@ const WIDGET_JS = String.raw`
       localStorage.setItem(STORAGE_SESSION, fresh);
       return fresh;
     } catch (e) {
-      return 'anon-' + Date.now();
+      /* Sem localStorage (janela anônima, cookies de terceiro bloqueados) o
+       * visitante perde a continuidade da conversa entre recargas. O relógio
+       * como identificador era pior: colidia entre dois visitantes no mesmo
+       * milissegundo e era adivinhável por quem soubesse o horário. */
+      return 'anon-' + uid();
     }
   }
 
