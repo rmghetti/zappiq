@@ -59,7 +59,7 @@
  * ROTEIRO DE APLICAÇÃO EM PRODUÇÃO (sem credencial de banco na máquina de
  * ninguém: o prompt sai por SELECT, é transformado offline e volta por UPDATE)
  *
- * PASSO 1: exportar o prompt e guardar o hash
+ * PASSO 1: exportar o prompt
  *
  *   SELECT id, name, organization_id, length(system_prompt) AS chars,
  *          md5(system_prompt) AS hash, system_prompt
@@ -67,7 +67,8 @@
  *    WHERE system_prompt LIKE '%# PATCH MANUAL%'
  *       OR system_prompt LIKE '%REGRA INVIOLÁVEL%';
  *
- *   Salve o system_prompt de cada agente em ~/Desktop/<nome>-antes.txt.
+ *   Salve o system_prompt de cada agente em ~/Desktop/<nome>-antes.txt e
+ *   anote o id, a organization_id e o hash.
  *
  * PASSO 2: transformar offline (sem banco, sem variável de ambiente)
  *
@@ -76,11 +77,18 @@
  *     --in  ~/Desktop/marcia-antes.txt \
  *     --out ~/Desktop/marcia-depois.txt
  *
- *   O script imprime cada bloco encontrado, o status que ele teria
- *   (ativa/substituida) e o motivo, e o INSERT pronto de cada regra. Recusa
- *   escrever se a validação reprovar.
+ *   O script imprime o md5 da ENTRADA (o md5 do arquivo exportado, byte a
+ *   byte), cada bloco encontrado, o status que ele teria (ativa/substituida)
+ *   e o motivo, o tamanho, o md5 do resultado e o INSERT pronto de cada
+ *   regra. Recusa escrever se a validação reprovar.
  *
- * PASSO 3: gravar e PROVAR antes do COMMIT
+ *   Confira: o md5 da entrada tem de ser IGUAL ao hash do passo 1. Diferente
+ *   quer dizer que o arquivo salvo não é o prompt vivo inteiro (a cópia
+ *   perdeu uma linha, ganhou uma quebra no fim, trocou aspas): refaça o
+ *   passo 1. De qualquer jeito, a trava do UPDATE abaixo usa o md5 da
+ *   entrada, e não o do SELECT, justamente para barrar esse caso.
+ *
+ * PASSO 3: gravar, ligar o interruptor e PROVAR, tudo antes do COMMIT
  *
  *   O set_config declara a origem para o gatilho `agents_versiona_prompt`
  *   (senão a escrita entra como 'fora_do_app'). O dollar-quoting
@@ -96,8 +104,10 @@
  *        SET system_prompt = $prompt$<conteúdo de marcia-depois.txt>$prompt$,
  *            updated_at = now()
  *      WHERE id = '<id do passo 1>'
- *        AND md5(system_prompt) = '<hash do passo 1>';
- *     -- 0 linhas = alguém gravou no meio do caminho: ROLLBACK e refaça do passo 1.
+ *        AND md5(system_prompt) = '<md5 da entrada que o script imprimiu no passo 2>';
+ *     -- 0 linhas = o arquivo exportado não é o prompt vivo (cópia cortada ou
+ *     -- alterada) ou alguém gravou no meio do caminho: ROLLBACK e refaça do
+ *     -- passo 1.
  *
  *     -- As regras, na ordem que o script imprimir (uma linha por bloco):
  *     INSERT INTO agent_rules
@@ -106,7 +116,23 @@
  *       ('<org>', '<agent>', 'cr5_nome_disponivel_usar',
  *        $texto$...$texto$, 'manual', 'ativa', NULL, 'migracao');
  *
- *     -- PROVA, ainda dentro da transação. As QUATRO têm de dar certo:
+ *     -- O interruptor da organização, NA MESMA transação. Ligar antes da
+ *     -- migração faria o agente receber a regra duas vezes (no texto colado
+ *     -- e no bloco); ligar depois do COMMIT deixaria o agente SEM as
+ *     -- correções no intervalo (o texto colado já saiu e o bloco ainda não
+ *     -- entra). O prazo é o do registro (FLAGS.regrasComoRegistros.removeBy
+ *     -- em src/services/featureFlags.ts), o mesmo que a rota admin grava.
+ *     INSERT INTO org_feature_flags
+ *       (organization_id, flag, enabled, remove_by, updated_by)
+ *     VALUES
+ *       ('<org>', 'regrasComoRegistros', true, '2027-06-30', 'migrarPatchesParaRegistros')
+ *     ON CONFLICT (organization_id, flag) DO UPDATE
+ *        SET enabled = true,
+ *            remove_by = EXCLUDED.remove_by,
+ *            updated_by = EXCLUDED.updated_by,
+ *            updated_at = now();
+ *
+ *     -- PROVA, ainda dentro da transação. As CINCO têm de dar certo:
  *     SELECT count(*) FROM agents
  *      WHERE id = '<agent>' AND system_prompt LIKE '%# PATCH MANUAL%';   -- 0
  *     SELECT count(*) FROM agents
@@ -124,21 +150,84 @@
  *     -- e o segundo conta BYTES (os acentos valem 2), e os dois dariam um
  *     -- número maior sem o prompt estar errado.
  *     SELECT length(system_prompt), md5(system_prompt) FROM agents
- *      WHERE id = '<agent>';        -- iguais ao Y e ao md5 impressos
+ *      WHERE id = '<agent>';        -- iguais ao Y e ao md5 do resultado impressos
+ *     -- 5a prova: o interruptor ficou ligado junto.
+ *     SELECT enabled FROM org_feature_flags
+ *      WHERE organization_id = '<org>' AND flag = 'regrasComoRegistros';  -- true
  *     -- qualquer divergência -> ROLLBACK;
  *     COMMIT;
  *
- * PASSO 4: conferir a versão criada (depois do COMMIT)
+ *   Cache de 30 s: a API guarda o valor de cada interruptor por 30 segundos
+ *   (FLAG_CACHE_TTL_SECONDS em src/services/featureFlags.ts), e gravar pelo
+ *   SQL não limpa esse cache (só a rota admin limpa). Por até 30 s depois do
+ *   COMMIT, um processo da API ainda pode ler a flag desligada e montar o
+ *   prompt sem o texto colado e sem o bloco. Rode no horário de menos
+ *   conversa. No chat do site o texto gravado tem cache próprio de 5
+ *   minutos: nesse intervalo a regra pode aparecer duas vezes (no texto
+ *   antigo e no bloco), o que não tira correção nenhuma.
+ *
+ * PASSO 4: conferir depois do COMMIT (e depois dos 30 s)
  *
  *     SELECT version, source, created_by, hash, created_at
  *       FROM agent_prompt_versions
  *      WHERE agent_id = '<agent>' ORDER BY version DESC LIMIT 3;
+ *     -- a de cima: source 'migracao', hash = md5 do resultado do passo 2;
+ *     -- a de baixo dela: hash = md5 da entrada do passo 2 (é a que o
+ *     -- DESFAZER restaura).
  *
- * PASSO 5: só então ligar o interruptor da organização
+ *   E no Raio-X da IA (admin), o prompt do agente mostra o bloco
+ *   "# Regras aprovadas pelo dono" com as regras ativas.
  *
- *   O bloco "# Regras aprovadas pelo dono" só entra no prompt com
- *   `regrasComoRegistros` ligado. Ligar ANTES da migração faria o agente
- *   receber a regra duas vezes (no texto colado e no bloco).
+ * DESFAZER (numa transação só: prompt, regras e interruptor voltam juntos)
+ *
+ *   A flag é da ORGANIZAÇÃO. Se ela tiver outro agente já migrado, desfaça
+ *   os dois na mesma transação. Regra que o dono aprovou DEPOIS da migração
+ *   também sai do ar com a flag desligada; confira antes:
+ *     SELECT id, scenario_id, created_by FROM agent_rules
+ *      WHERE organization_id = '<org>' AND status = 'ativa'
+ *        AND created_by <> 'migracao';
+ *
+ *     BEGIN;
+ *     SELECT set_config('zappiq.prompt_source', 'migracao', true);
+ *     SELECT set_config('zappiq.prompt_actor', 'migrarPatchesParaRegistros:desfazer', true);
+ *
+ *     -- O prompt de antes, tirado da versão que o gatilho gravou.
+ *     UPDATE agents
+ *        SET system_prompt = (
+ *              SELECT v.system_prompt FROM agent_prompt_versions v
+ *               WHERE v.agent_id = '<agent>'
+ *                 AND v.hash = '<md5 da entrada do passo 2>'
+ *               ORDER BY v.version DESC LIMIT 1),
+ *            updated_at = now()
+ *      WHERE id = '<agent>'
+ *        AND md5(system_prompt) = '<md5 do resultado do passo 2>'
+ *        AND EXISTS (SELECT 1 FROM agent_prompt_versions v
+ *                     WHERE v.agent_id = '<agent>'
+ *                       AND v.hash = '<md5 da entrada do passo 2>');
+ *     -- 0 linhas = o prompt mudou depois da migração (alguém gravou por
+ *     -- cima): ROLLBACK e decida à mão.
+ *
+ *     -- As regras que a migração criou saem de 'ativa'. Nada é apagado.
+ *     UPDATE agent_rules
+ *        SET status = 'revertida', motivo = 'migracao_desfeita', updated_at = now()
+ *      WHERE agent_id = '<agent>' AND created_by = 'migracao' AND status = 'ativa';
+ *
+ *     UPDATE org_feature_flags
+ *        SET enabled = false,
+ *            updated_by = 'migrarPatchesParaRegistros:desfazer',
+ *            updated_at = now()
+ *      WHERE organization_id = '<org>' AND flag = 'regrasComoRegistros';
+ *
+ *     -- PROVA antes do COMMIT:
+ *     SELECT md5(system_prompt) FROM agents WHERE id = '<agent>';
+ *       -- igual ao md5 da entrada do passo 2
+ *     SELECT count(*) FROM agent_rules
+ *      WHERE agent_id = '<agent>' AND created_by = 'migracao' AND status = 'ativa';  -- 0
+ *     SELECT enabled FROM org_feature_flags
+ *      WHERE organization_id = '<org>' AND flag = 'regrasComoRegistros';          -- false
+ *     COMMIT;
+ *
+ *   O mesmo cache de 30 s vale aqui, no sentido contrário.
  * ══════════════════════════════════════════════════════════════════════════
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -241,9 +330,10 @@ function modoOffline(entrada: string, saida: string): void {
 
   console.log(`\n== OFFLINE (sem banco) ==`);
   console.log(`  entrada: ${entrada}`);
-  // O md5 da ENTRADA é o que a cláusula `AND md5(system_prompt) = '...'` do
-  // passo 3 confere: se o arquivo exportado não for mais o prompt vivo, o
-  // UPDATE casa 0 linhas em vez de gravar por cima do trabalho de outro.
+  // O md5 da ENTRADA é o que a trava `AND md5(system_prompt) = '...'` do
+  // passo 3 confere: se o arquivo exportado não for o prompt vivo inteiro
+  // (cópia cortada ou alterada) ou se alguém gravou depois do SELECT, o
+  // UPDATE casa 0 linhas em vez de gravar por cima.
   console.log(`  md5 da entrada: ${md5(antes)}`);
   imprimirPlano(antes, promptLimpo, plano);
 
@@ -259,7 +349,8 @@ function modoOffline(entrada: string, saida: string): void {
   console.log(`\n✅ Prompt limpo escrito em: ${saida}`);
   console.log(`   md5 do resultado: ${md5(promptLimpo)}`);
   imprimirInserts(plano, '<organization_id>', '<agent_id>');
-  console.log('\n   Grave em produção pelo SQL do cabeçalho, com set_config e dollar-quoting.');
+  console.log('\n   Grave em produção pelo SQL do cabeçalho (passo 3): set_config, dollar-quoting,');
+  console.log('   o md5 da entrada na trava do UPDATE e o interruptor na mesma transação.');
 }
 
 /** Modo (a): lê os agentes do banco e, com --apply, grava. */
