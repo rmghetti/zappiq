@@ -179,6 +179,16 @@ export async function publishPrompt(
       select: { version: true, hash: true },
     });
 
+    if (!ultima) {
+      // O gatilho do Postgres é quem numera. Se não achamos versão nenhuma
+      // depois de gravar, ele não está mais lá (DROP, restore de dump sem
+      // ele, migração revertida) e o histórico parou de existir em silêncio.
+      logger.warn('[promptVersionService] o gatilho não gravou versão para esta escrita', {
+        agentId,
+        source,
+      });
+    }
+
     return {
       version: ultima?.version ?? 0,
       hash: ultima?.hash ?? hashPrompt(systemPrompt),

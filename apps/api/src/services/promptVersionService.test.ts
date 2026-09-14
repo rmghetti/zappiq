@@ -24,6 +24,7 @@ const {
   PromptChangedError,
   PROMPT_SOURCES,
 } = await import('./promptVersionService.js');
+const { logger } = await import('../utils/logger.js');
 
 /**
  * Banco falso com a ordem das operações registrada. Imita o gatilho do
@@ -254,5 +255,38 @@ describe('setPromptContext', () => {
     expect(tx.estado.contexto.source).toBe('seed');
     expect(tx.estado.contexto.decision).toBe('');
     expect(tx.estado.contexto.actor).toBe('');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * O gatilho não gravou versão: isso é um defeito no banco, não um detalhe.
+ * --------------------------------------------------------------------
+ * Se o gatilho `agents_versiona_prompt` sumir (DROP acidental, restore de
+ * dump sem ele, migração revertida), publishPrompt continua gravando o
+ * prompt e devolvendo version 0, calado. O histórico para de existir e
+ * ninguém fica sabendo. O aviso é o que deixa rastro no log.
+ * ════════════════════════════════════════════════════════════════════ */
+describe('quando o gatilho não cria a versão', () => {
+  it('avisa no log com o agente e a origem antes de devolver version 0', async () => {
+    vi.clearAllMocks();
+    const db: any = {
+      $executeRaw: vi.fn(async () => 1),
+      agent: {
+        findUnique: vi.fn(async () => ({ systemPrompt: 'qualquer' })),
+        update: vi.fn(async () => ({})),
+      },
+      // O gatilho não está lá: nenhuma linha de versão foi criada.
+      agentPromptVersion: { findFirst: vi.fn(async () => null) },
+    };
+
+    const out = await publishPrompt(
+      { agentId: 'ag-sem-gatilho', systemPrompt: 'texto novo', source: 'manual' },
+      db,
+    );
+
+    expect(out.version).toBe(0);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const [, dados] = (logger.warn as any).mock.calls[0];
+    expect(dados).toMatchObject({ agentId: 'ag-sem-gatilho', source: 'manual' });
   });
 });

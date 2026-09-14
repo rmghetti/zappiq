@@ -1,5 +1,5 @@
 -- ═════════════════════════════════════════════════════════════════
--- 20260914000010: interruptores por organização e versões do prompt
+-- 20260914000030: interruptores por organização e versões do prompt
 -- ─────────────────────────────────────────────────────────────────
 -- POR QUE ESTA MIGRAÇÃO EXISTE
 --

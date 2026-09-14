@@ -1,5 +1,5 @@
 /**
- * /api/admin/organizations/:id/flags — interruptores por organização.
+ * /api/admin/organizations/:id/flags: interruptores por organização.
  *
  * SUPERADMIN-only (authMiddleware + requireRole aplicados aqui dentro, no
  * mesmo desenho de adminOrganizations.ts: a guarda mora no próprio router,
