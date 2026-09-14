@@ -122,7 +122,7 @@ export const qualidadeContent: SaibaMaisContent[] = [
       'Serve pra ajustar a correção quando a sugestão da IA está no caminho certo mas não do jeito exato que você quer, ou pra fortalecer uma regra que já foi aplicada antes e não pegou.',
     comoImplementar: [
       'Clique em "Editar antes de aplicar", dentro do bloco da correção sugerida.',
-      'Reescreva o texto na caixa. Regra boa é regra específica: diga o que a IA deve fazer, em que situação, e dê um exemplo da frase certa. Não precisa escrever em letras maiúsculas nem numerar a regra, porque o sistema já cuida disso na hora de gravar.',
+      'Reescreva o texto na caixa. Regra boa é regra específica: diga o que a IA deve fazer, em que situação, e dê um exemplo da frase certa. Não precisa escrever em letras maiúsculas nem numerar a regra.',
       'Clique em "Aplicar correção" pra gravar o texto editado, ou em "Voltar à sugestão original" pra descartar a edição.',
     ],
     exemploResultado:
