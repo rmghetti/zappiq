@@ -180,6 +180,39 @@ describe('carregarRuidoDoAgente', () => {
     expect(r.n).toBe(3);
   });
 
+  // Rodada 3 do PR #375. O re-teste do cliente nasce 'completed' com nota
+  // nula e a régua atual: ocupava vaga no `take: 20` e contava no mínimo
+  // para o piso, que então "existia" com uma nota só e nunca caía para o
+  // histórico da régua anterior.
+  it('o re-teste (nota nula) não ocupa vaga nem conta para o mínimo do piso', async () => {
+    prismaMock.agentPromptVersion.findFirst.mockResolvedValue(null);
+    const linhas = [
+      { scorePercent: null, triggeredBy: 'client_retest', harnessVersion: HARNESS_VERSION },
+      { scorePercent: null, triggeredBy: 'client_retest', harnessVersion: HARNESS_VERSION },
+      { scorePercent: 80, triggeredBy: 'cron', harnessVersion: HARNESS_VERSION },
+      { scorePercent: 80, triggeredBy: 'cron', harnessVersion: HARNESS_VERSION - 1 },
+      { scorePercent: 72, triggeredBy: 'cron', harnessVersion: HARNESS_VERSION - 1 },
+      { scorePercent: 88, triggeredBy: 'cron', harnessVersion: HARNESS_VERSION - 1 },
+    ];
+    // O banco falso honra os filtros: sem eles no `where`, o re-teste vem.
+    prismaMock.agentEvalRun.findMany.mockImplementation(async ({ where }: any) =>
+      linhas
+        .filter((l) => where.harnessVersion === undefined || l.harnessVersion === where.harnessVersion)
+        .filter((l) => !(where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not))
+        .filter((l) => !(where?.scorePercent && 'not' in where.scorePercent && where.scorePercent.not === null && l.scorePercent === null))
+        .map((l) => ({ scorePercent: l.scorePercent })),
+    );
+
+    const r = await carregarRuidoDoAgente('agente-1');
+
+    // Só UMA execução de verdade na régua atual: cai para o histórico inteiro.
+    expect(prismaMock.agentEvalRun.findMany).toHaveBeenCalledTimes(2);
+    expect(r.n).toBe(4);
+    const where = prismaMock.agentEvalRun.findMany.mock.calls[0][0].where;
+    expect(where.triggeredBy).toEqual({ not: 'client_retest' });
+    expect(where.scorePercent).toEqual({ not: null });
+  });
+
   it('com execuções bastantes na régua atual, não consulta de novo', async () => {
     prismaMock.agentPromptVersion.findFirst.mockResolvedValue(null);
     prismaMock.agentEvalRun.findMany.mockResolvedValue([

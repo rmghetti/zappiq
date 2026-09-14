@@ -50,6 +50,8 @@ import { getIo } from '../utils/socketRegistry.js';
 // bloco e da mesma saudação do WhatsApp e não pode carregar o orquestrador
 // inteiro (fila, socket, WhatsApp) só para isso.
 import { buildLiveProfileBlock, buildGreetingBlock } from '../agents/tenantLiveProfile.js';
+// C3: correção aprovada pelo dono é registro (agent_rules), montado em bloco.
+import { blocoDeRegrasDaOrganizacao } from './agentRulesService.js';
 import { isFlagOn } from './featureFlags.js';
 // A088: a MESMA limpeza do WhatsApp, do playground e do avaliador. Antes eram
 // cópias locais aqui, com um aviso de "alinhar caso o original mude" que
@@ -134,6 +136,39 @@ export async function loadOrgSystemPrompt(organizationId: string): Promise<strin
   return rows[0].system_prompt;
 }
 
+/**
+ * O id do agente cujo prompt o chat do site está usando.
+ *
+ * `loadOrgSystemPrompt` acima traz só o TEXTO, por SQL cru e com cache. Para
+ * carregar as regras do agente certo (PI-3) falta o id, e ele tem de sair do
+ * MESMO agente: mesma role, mesmo status e a mesma ordem (o mais antigo).
+ * Uma ordem diferente aqui casaria o texto de um agente com as regras de
+ * outro, que é pior do que não filtrar.
+ *
+ * Fail-soft: sem agente, ou com o banco fora, devolve null e o bloco volta a
+ * ser o da organização. A resposta ao visitante nunca trava por isto.
+ *
+ * Exportada porque o Raio-X do canal site (adminAiXray) tem de escolher o
+ * MESMO agente que o chat: com dois agentes vivos, um seletor diferente ali
+ * mostraria as regras do outro.
+ */
+export async function idDoAgenteComercial(organizationId: string): Promise<string | null> {
+  try {
+    const agente = await prisma.agent.findFirst({
+      where: { organizationId, role: 'comercial', status: 'live' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    return agente?.id ?? null;
+  } catch (err) {
+    logger.warn('[webChat] não achei o agente para filtrar as regras (seguindo por organização)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 /* ── Webchat por org: flag de opt-in em organizations.settings ──────────
  * Sem coluna nova: settings já é o padrão pra flags aditivas por org
  * (mesmo esquema de requireImpulso/requireMira). Default false — nenhuma
@@ -208,6 +243,18 @@ export function buildWebChatSystemPrompt(input: {
    */
   perfilVivoBlock?: string;
   saudacaoBlock?: string;
+  /**
+   * C3: as correções que o dono aprovou, montadas em bloco a partir de
+   * agent_rules. Vazio sem o interruptor `regrasComoRegistros`.
+   *
+   * Entra AQUI e não no handler pelo mesmo motivo dos outros: a montagem é
+   * uma só, então o Raio-X mostra o mesmo texto que o visitante recebe.
+   *
+   * De quebra, resolve o A089 para este caminho: o prompt gravado tem cache
+   * de 5 minutos por processo, mas as regras são lidas a cada turno, então a
+   * correção aprovada vale na mensagem seguinte.
+   */
+  regrasBlock?: string;
 }): string {
   const { orgPrompt, factsBlock, isIzaCanonical } = input;
   const canalInstrucoes = isIzaCanonical
@@ -220,6 +267,7 @@ export function buildWebChatSystemPrompt(input: {
     // Depois do prompt gravado, pelo mesmo motivo do WhatsApp: o dado vivo
     // vence o tom e o horário congelados no cadastro.
     input.perfilVivoBlock || '',
+    input.regrasBlock || '',
     input.saudacaoBlock || '',
     '# CANAL DE COMUNICAÇÃO',
     canalInstrucoes,
@@ -576,11 +624,40 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     });
   }
 
+  // C3: regras aprovadas pelo dono. Lidas a cada turno (sem o cache de 5
+  // minutos do prompt), então a correção aprovada vale já na mensagem
+  // seguinte no chat do site. Fail-soft: o serviço já devolve '' em erro.
+  //
+  // O id do agente entra junto porque a regra é do AGENTE (PI-3). Hoje cada
+  // organização tem um agente comercial vivo, então filtrar só por
+  // organização dava no mesmo; basta a primeira ligar um agente de suporte
+  // para as regras do comercial vazarem para ele.
+  //
+  // O interruptor é conferido AQUI, e não só lá dentro, para a busca do
+  // agente nem acontecer com ele desligado. O serviço também confere (é ele
+  // quem decide se lê as regras), mas a segunda leitura sai do cache. Com o
+  // interruptor off, a organização não paga consulta nenhuma por turno, que
+  // é a promessa feita no resto deste PR.
+  let regrasBlock = '';
+  try {
+    if (await isFlagOn(organizationId, 'regrasComoRegistros')) {
+      regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
+        agentId: await idDoAgenteComercial(organizationId),
+      });
+    }
+  } catch (err) {
+    logger.warn('[webChat] bloco de regras indisponível neste turno (segue sem ele)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const systemPrompt = buildWebChatSystemPrompt({
     orgPrompt,
     factsBlock,
     isIzaCanonical,
     perfilVivoBlock,
+    regrasBlock,
     saudacaoBlock,
   });
 

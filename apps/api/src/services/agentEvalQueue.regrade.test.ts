@@ -36,6 +36,12 @@ vi.mock('../utils/logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock('./agentEvalRunner.js', () => runnerMock);
+// Rodada 3 do PR #375: a fila monta o bloco de regras antes de avaliar. O
+// duble evita interruptor e Redis neste teste, que não é sobre isso.
+vi.mock('./agentRulesService.js', () => ({
+  blocoDeRegrasDaOrganizacao: vi.fn(async () => ''),
+  carregarRegrasAtivas: vi.fn(async () => []),
+}));
 vi.mock('./agentEvalCronService.js', () => cronServiceMock);
 vi.mock('../agents/tenantAgentProfile.js', () => profileMock);
 vi.mock('../agents/agentEvalSet.js', () => evalSetMock);

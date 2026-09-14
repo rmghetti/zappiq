@@ -68,3 +68,17 @@ describe('registro de Saiba mais', () => {
     for (const k of usados) expect(SAIBA_MAIS[k], `link morto: JSX usa "${k}"`).toBeTruthy();
   });
 });
+
+describe('Saiba mais da Qualidade não promete o que depende de interruptor', () => {
+  // Rodada 4 do PR #375: "o sistema já cuida disso na hora de gravar" só é
+  // verdade com `regrasComoRegistros` ligado, e o interruptor nasce
+  // desligado. Com ele desligado, a correção é colada no prompt como veio.
+  it('qualidade.editar-correcao não diz que o sistema arruma a regra ao gravar', () => {
+    const c = SAIBA_MAIS['qualidade.editar-correcao'];
+    const textos = [c.oQueE, c.paraQueServe, ...c.comoImplementar, c.exemploResultado].join(' ');
+    expect(textos).not.toMatch(/sistema já cuida/i);
+    expect(textos).not.toMatch(/na hora de gravar/i);
+    // A orientação útil continua: não precisa numerar.
+    expect(textos).toMatch(/nem numerar a regra\./);
+  });
+});

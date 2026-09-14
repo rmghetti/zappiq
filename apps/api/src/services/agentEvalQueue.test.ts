@@ -18,7 +18,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { prismaMock, runnerMock, cronServiceMock, profileMock, evalSetMock } = vi.hoisted(() => ({
+const { prismaMock, runnerMock, cronServiceMock, profileMock, evalSetMock, regrasMock } = vi.hoisted(() => ({
   prismaMock: {
     agentEvalRun: {
       findUnique: vi.fn(),
@@ -35,9 +35,18 @@ const { prismaMock, runnerMock, cronServiceMock, profileMock, evalSetMock } = vi
   },
   profileMock: { resolveTenantAgentProfile: vi.fn() },
   evalSetMock: { resolveEvalSet: vi.fn(), EVAL_SET_VERSION: 'v2', HARNESS_VERSION: 3 },
+  // Rodada 3 do PR #375: a fila monta o bloco de regras do agente e entrega
+  // ao avaliador. Duble para o teste não tocar interruptor nem Redis.
+  regrasMock: {
+    blocoDeRegrasDaOrganizacao: vi.fn(async () => ''),
+    // Rodada 4: as regras ativas, para o sugeridor fortalecer em vez de
+    // duplicar. Só é consultado quando o bloco não é vazio.
+    carregarRegrasAtivas: vi.fn(async (): Promise<any[]> => []),
+  },
 }));
 
 vi.mock('@zappiq/database', () => ({ prisma: prismaMock }));
+vi.mock('./agentRulesService.js', () => regrasMock);
 vi.mock('../utils/logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -45,6 +54,24 @@ vi.mock('./agentEvalRunner.js', () => runnerMock);
 vi.mock('./agentEvalCronService.js', () => cronServiceMock);
 vi.mock('../agents/tenantAgentProfile.js', () => profileMock);
 vi.mock('../agents/agentEvalSet.js', () => evalSetMock);
+// Rodada 4 do PR #375: um teste abaixo carrega o agentEvalCronService REAL
+// (as regras do alerta de reprovação repetida). A contagem de trechos do RAG
+// que ele importa puxaria o ragService e o cache; aqui ela não é usada.
+vi.mock('./aiReadinessService.js', () => ({ countRagChunksByNamespaceOrNull: vi.fn() }));
+// A fila é preguiçosa, mas os testes do enqueueEvalRun a criam de verdade
+// (getAgentEvalQueue) e o BullMQ abria conexão com o Redis em segundo plano.
+// O erro de conexão aparecia no meio dos testes seguintes. Fila falsa: os
+// testes só espiam o `add`.
+vi.mock('bullmq', () => ({
+  Queue: class {
+    add = vi.fn();
+    on = vi.fn();
+  },
+  Worker: class {
+    on = vi.fn();
+  },
+  DelayedError: class extends Error {},
+}));
 
 const {
   executeRunJob,
@@ -141,6 +168,10 @@ beforeEach(() => {
   cronServiceMock.scenariosFailingTwice.mockReturnValue([]);
   cronServiceMock.shouldAlertQuality.mockReturnValue(false);
   cronServiceMock.notifySlackQualityIssue.mockResolvedValue(true);
+  // clearAllMocks não desfaz implementação: sem isto, o bloco ou a falha
+  // de um teste vazaria para o seguinte.
+  regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue('');
+  regrasMock.carregarRegrasAtivas.mockResolvedValue([]);
 });
 
 describe('executeRunJob — corpo único da execução', () => {
@@ -565,5 +596,188 @@ describe('topFails do Slack bate com a contagem de críticos', () => {
     expect(ids).not.toContain('cr3'); // parcial não crítico segue fora
     expect(ids).not.toContain('cr4'); // aprovado
     expect(ids).not.toContain('cr5'); // falha técnica não é reprovação
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Rodada 3 do PR #375: a execução completa (cron e botão do cliente) mede o
+ * agente COM as regras aprovadas. Sem isto, depois da migração dos patches a
+ * nota da organização migrada cai e nunca mais reflete as regras.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('executeRunJob entrega o bloco de regras do agente ao avaliador', () => {
+  const BLOCO = '# Regras aprovadas pelo dono\n1. Chame o cliente pelo nome quando souber.';
+
+  beforeEach(() => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runPendente());
+    prismaMock.agentEvalRun.update.mockResolvedValue({});
+    prismaMock.agentEvalRun.updateMany.mockResolvedValue({ count: 1 });
+    profileMock.resolveTenantAgentProfile.mockResolvedValue({ organizationId: 'org-1' });
+    evalSetMock.resolveEvalSet.mockReturnValue(CENARIOS);
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results: [],
+      durationMs: 10,
+      summary: RESUMO_LIMPO,
+    });
+    cronServiceMock.shouldAlertQuality.mockReturnValue(false);
+    cronServiceMock.scenariosFailingTwice.mockResolvedValue([]);
+  });
+
+  it('monta o bloco pela organização E pelo agente da execução', async () => {
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue(BLOCO);
+
+    await executeRunJob('run-1');
+
+    expect(regrasMock.blocoDeRegrasDaOrganizacao).toHaveBeenCalledWith('org-1', {
+      agentId: 'agent-1',
+    });
+    expect(runnerMock.executeAgentEvalRun).toHaveBeenCalledTimes(1);
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({ regrasBlock: BLOCO });
+  });
+
+  it('bloco indisponível não derruba a execução: segue sem ele', async () => {
+    regrasMock.blocoDeRegrasDaOrganizacao.mockRejectedValue(new Error('banco fora'));
+
+    await executeRunJob('run-1');
+
+    expect(runnerMock.executeAgentEvalRun).toHaveBeenCalledTimes(1);
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({ regrasBlock: '' });
+    // A conclusão é gravada por updateMany (filtro de status): a execução
+    // terminou 'completed', e não ficou presa nem virou 'failed'.
+    expect(updateManysCom('status').map((c) => c.data.status)).toContain('completed');
+  });
+
+  // ── Rodada 4 do PR #375: o sugeridor também vê as regras ─────────
+  // O bloco chegava ao agente, mas o sugeridor das execuções completas lia
+  // "Nenhuma regra aprovada ainda para este agente" e propunha a mesma
+  // regra de novo. Pré-condição para ligar o interruptor.
+  it('com bloco, o sugeridor recebe as regras ativas DO AGENTE', async () => {
+    const REGRAS = [
+      {
+        id: 'regra-1',
+        organizationId: 'org-1',
+        agentId: 'agent-1',
+        scenarioId: 'cr1',
+        texto: 'Chame o cliente pelo nome quando souber.',
+        status: 'ativa',
+      },
+    ];
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue(BLOCO);
+    regrasMock.carregarRegrasAtivas.mockResolvedValue(REGRAS);
+
+    await executeRunJob('run-1');
+
+    expect(regrasMock.carregarRegrasAtivas).toHaveBeenCalledWith({
+      organizationId: 'org-1',
+      agentId: 'agent-1',
+    });
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({
+      regrasBlock: BLOCO,
+      regrasAtivas: REGRAS,
+    });
+  });
+
+  it('bloco vazio (interruptor desligado): nenhuma consulta a mais e lista vazia', async () => {
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue('');
+
+    await executeRunJob('run-1');
+
+    expect(regrasMock.carregarRegrasAtivas).not.toHaveBeenCalled();
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toEqual({
+      regrasBlock: '',
+      regrasAtivas: [],
+    });
+  });
+
+  it('regras indisponíveis não derrubam a execução: o sugeridor segue com lista vazia', async () => {
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue(BLOCO);
+    regrasMock.carregarRegrasAtivas.mockRejectedValue(new Error('banco fora'));
+
+    await executeRunJob('run-1');
+
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({
+      regrasBlock: BLOCO,
+      regrasAtivas: [],
+    });
+    expect(updateManysCom('status').map((c) => c.data.status)).toContain('completed');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Rodada 4 do PR #375: o alerta de "reprovou duas vezes" compara com a
+ * execução concluída anterior. O re-teste do cliente também nasce
+ * 'completed', e as amostras dele não têm scenarioId: um re-teste entre
+ * duas semanais virava a "anterior", a comparação dava vazio e o alerta do
+ * cenário que reprovou nas duas semanais ficava 'skipped'. Vale com a flag
+ * desligada.
+ *
+ * As regras de comparação são as REAIS (scenariosFailingTwice e
+ * shouldAlertQuality do agentEvalCronService), não o duble: o teste prova
+ * o alerta, não só a consulta.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('alerta de reprovação repetida: o re-teste do meio não é a execução anterior', () => {
+  const SEMANAL_ANTERIOR = {
+    id: 'run-semanal-1',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'cron',
+    startedAt: new Date('2026-09-07T04:30:00Z'),
+    results: [
+      { scenarioId: 'cr1', combined: 'fail' },
+      { scenarioId: 'cr2', combined: 'pass' },
+    ],
+  };
+  const RETESTE_NO_MEIO = {
+    id: 'run-reteste',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'client_retest',
+    startedAt: new Date('2026-09-10T15:00:00Z'),
+    results: [
+      { amostra: 1, combined: 'pass', resposta: 'oi', motivoDoJuiz: 'ok' },
+      { amostra: 2, combined: 'pass', resposta: 'oi', motivoDoJuiz: 'ok' },
+      { amostra: 3, combined: 'fail', resposta: 'oi', motivoDoJuiz: 'não' },
+    ],
+  };
+
+  beforeEach(async () => {
+    const real = await vi.importActual<typeof import('./agentEvalCronService.js')>(
+      './agentEvalCronService.js',
+    );
+    cronServiceMock.scenariosFailingTwice.mockImplementation(real.scenariosFailingTwice);
+    cronServiceMock.shouldAlertQuality.mockImplementation(real.shouldAlertQuality);
+
+    const linhas = [SEMANAL_ANTERIOR, RETESTE_NO_MEIO];
+    // O banco falso honra o `where`: sem o filtro, o re-teste (mais novo) vem.
+    prismaMock.agentEvalRun.findFirst.mockImplementation(async ({ where }: any) => {
+      const [primeira] = linhas
+        .filter((l) => l.agentId === where.agentId && l.status === where.status)
+        .filter((l) => !(where?.id?.not && l.id === where.id.not))
+        .filter((l) => !(where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not))
+        .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+      return primeira ? { results: primeira.results } : null;
+    });
+
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(
+      runPendente({ id: 'run-semanal-2', triggeredBy: 'cron' }),
+    );
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results: [
+        { scenarioId: 'cr1', combined: 'fail', severity: 'high', category: 'cr1_acceptance' },
+        { scenarioId: 'cr2', combined: 'pass', severity: 'critical', category: 'cr2_handoff' },
+      ],
+      durationMs: 10,
+      summary: { passed: 1, partial: 0, failed: 1, criticalFailed: 0, erros: 0, scorePercent: 50 },
+    });
+  });
+
+  it('a semanal que reprova X de novo alerta, com X na lista de repetidos', async () => {
+    await executeRunJob('run-semanal-2');
+
+    expect(ultimoUpdate('slackAlertStatus')).toMatchObject({ slackAlertStatus: 'sent' });
+    expect(cronServiceMock.scenariosFailingTwice).toHaveReturnedWith(['cr1']);
+    expect(cronServiceMock.notifySlackQualityIssue).toHaveBeenCalledTimes(1);
+    expect(cronServiceMock.notifySlackQualityIssue.mock.calls[0][0].repetidos).toEqual(['cr1']);
+    const where = prismaMock.agentEvalRun.findFirst.mock.calls[0][0].where;
+    expect(where.triggeredBy).toEqual({ not: 'client_retest' });
   });
 });

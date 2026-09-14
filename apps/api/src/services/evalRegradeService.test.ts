@@ -448,6 +448,25 @@ describe('execucoesParaRegravar', () => {
     // Sem ids, cai na varredura normal (é o comportamento de antes).
     expect(ids).toEqual(['r1', 'r2']);
   });
+
+  // Rodada 3 do PR #375. O re-teste do cliente nasce 'completed', v2, com 3
+  // amostras sem scenarioId e nota nula: passava pelo filtro, ocupava vaga
+  // do lote de 50 e entrava na contagem do que "ainda falta".
+  it('o re-teste do cliente NÃO é selecionado para regravação', async () => {
+    const linhas = [
+      { id: 'r1', triggeredBy: 'cron' },
+      { id: 'r-reteste', triggeredBy: 'client_retest' },
+    ];
+    prismaMock.agentEvalRun.findMany.mockImplementation(async ({ where }: any) =>
+      linhas
+        .filter((l) => !(where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not))
+        .map((l) => ({ id: l.id })),
+    );
+
+    const ids = await execucoesParaRegravar({ organizationId: 'org-1' });
+
+    expect(ids).toEqual(['r1']);
+  });
 });
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -464,5 +483,7 @@ describe('contarExecucoesParaRegravar', () => {
     expect(where.status).toBe('completed');
     expect(where.evalSetVersion).toBe('v2');
     expect(where.agent).toEqual({ organizationId: 'org-1' });
+    // Rodada 3 do PR #375: o re-teste do cliente não conta como "falta".
+    expect(where.triggeredBy).toEqual({ not: 'client_retest' });
   });
 });

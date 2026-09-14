@@ -420,6 +420,10 @@ export async function podeAgendarAvaliacao(
       status: 'completed',
       startedAt: { gte: inicioDoDiaUtc(now) },
       agent: { organizationId },
+      // Rodada 3 do PR #375: o re-teste do cliente nasce 'completed' com 3
+      // amostras de UM cenário. Não é avaliação do dia: um re-teste entre
+      // 00:00 e 04:50 UTC fazia a organização perder a avaliação do dia.
+      triggeredBy: { not: 'client_retest' },
     },
     take: 1,
   });
@@ -615,7 +619,10 @@ export async function runAgentEvalOnChangeCycle(
       // TODO: quando agent_prompt_versions existir, versão nova de prompt
       // também deve acionar este ciclo (hoje só audit_logs).
       const ultima = await prisma.agentEvalRun.findFirst({
-        where: { agentId: agent.id, status: 'completed' },
+        // Rodada 3 do PR #375: o re-teste do cliente também é 'completed'.
+        // Sem excluí-lo, qualquer re-teste avançava o "desde" e escondia as
+        // mudanças de base feitas depois da última execução de verdade.
+        where: { agentId: agent.id, status: 'completed', triggeredBy: { not: 'client_retest' } },
         orderBy: { startedAt: 'desc' },
         select: { completedAt: true, startedAt: true },
       });

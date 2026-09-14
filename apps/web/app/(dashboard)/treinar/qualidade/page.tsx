@@ -27,6 +27,8 @@ import {
   podeAgirNaQualidade,
   type ClientAgentLite,
   type TestScope,
+  type RegraDoAgente,
+  type ResultadoDoReteste,
 } from '@/lib/clientAgentQualityApi';
 import { useAuthStore } from '@/stores/authStore';
 import type {
@@ -47,8 +49,18 @@ import {
   ROTULO_NAO_AVALIADA,
   TEXTO_FALHA_TECNICA,
 } from './_lib/execucao';
+// A049: o texto do re-teste com 3 amostras, testado fora do componente.
+import {
+  tituloDoVeredito,
+  rotuloDaAmostra,
+  textoDoCusto,
+  avisoDeCustoNaTela,
+  AMOSTRAS_DO_RETESTE,
+  COTA_DIARIA_DE_RETESTE,
+} from './_lib/reteste';
 
 const TRIGGER_LABELS: Record<string, string> = {
+  client_retest: 'Re-teste de uma correção',
   cron: 'Semanal automático',
   manual: 'Manual (admin)',
   client_manual: 'Manual (você)',
@@ -558,6 +570,9 @@ function RunDetailPanel({
         </div>
       )}
 
+      {/* P08: as regras que o dono já aprovou, com desfazer por regra. */}
+      <RegrasAprovadasPanel agentId={run.agentId} podeAgir={podeAgir} />
+
       {/* Lista de cenários com problema + sugestão IA */}
       <div className="p-5">
         <h3 className="text-sm font-semibold text-neutral-900 mb-3 flex items-center gap-1.5">
@@ -618,6 +633,124 @@ function KPISmall({
 // ════════════════════════════════════════════════════════════════════
 // ClientFixCard: Apply/Reject/Edit cliente-friendly
 // ════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════
+// RegrasAprovadasPanel (P08, A083)
+// ─────────────────────────────────────────────────────────────────
+// A correção aprovada deixou de ser texto colado dentro do prompt e virou
+// registro: uma regra ativa por cenário. Antes, o que o dono tinha aprovado
+// sumia dentro de um prompt de milhares de caracteres, e desfazer significava
+// voltar o prompt inteiro para o texto de antes (apagando o que veio depois).
+// Aqui ele vê o que está valendo e desfaz UMA regra.
+// ════════════════════════════════════════════════════════════════════
+const ORIGEM_DA_REGRA: Record<string, string> = {
+  sugestao_ia: 'sugerida pela IA',
+  editada: 'editada por você',
+  manual: 'escrita por você',
+};
+
+function RegrasAprovadasPanel({ agentId, podeAgir }: { agentId: string; podeAgir: boolean }) {
+  const [regras, setRegras] = useState<RegraDoAgente[] | null>(null);
+  const [teto, setTeto] = useState<number>(0);
+  const [restantes, setRestantes] = useState<number>(0);
+  const [erro, setErro] = useState<string | null>(null);
+  const [desfazendo, setDesfazendo] = useState<string | null>(null);
+
+  const carregar = useCallback(async () => {
+    if (!agentId) return;
+    try {
+      const r = await clientAgentQualityApi.getRules(agentId);
+      setRegras(r.regras);
+      setTeto(r.teto);
+      setRestantes(r.restantes);
+      setErro(null);
+    } catch {
+      // A lista de regras é informação a mais nesta tela: se ela não vier,
+      // o resto da página continua servindo. Nada de erro vermelho por isso.
+      setRegras([]);
+    }
+  }, [agentId]);
+
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
+
+  async function desfazer(regra: RegraDoAgente) {
+    if (
+      !confirm(
+        'Desfazer esta regra? Só ela sai do comportamento do agente. As outras regras aprovadas continuam valendo.',
+      )
+    )
+      return;
+    setDesfazendo(regra.id);
+    setErro(null);
+    try {
+      await clientAgentQualityApi.revertRule(regra.id);
+      await carregar();
+    } catch (err: any) {
+      setErro(err?.message || 'Não deu para desfazer a regra agora.');
+    } finally {
+      setDesfazendo(null);
+    }
+  }
+
+  if (!regras || regras.length === 0) return null;
+
+  return (
+    <div className="px-5 py-4 border-t border-neutral-200 bg-neutral-50/60">
+      <h3 className="text-sm font-semibold text-neutral-900 mb-1">
+        Regras aprovadas por você ({regras.length})
+      </h3>
+      <p className="text-xs text-neutral-600 mb-3">
+        São as correções que você aprovou. Valem em toda conversa do agente. Aprovar de novo o
+        mesmo caso substitui a regra daquele caso, e desfazer aqui tira só a regra escolhida.
+        {teto > 0 && restantes <= 5 && (
+          <span className="text-amber-800">
+            {' '}
+            Cabem mais {restantes} de {teto}: junte regras parecidas antes de aprovar outras.
+          </span>
+        )}
+      </p>
+
+      {erro && (
+        <div className="mb-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
+          {erro}
+        </div>
+      )}
+
+      <ul className="space-y-2">
+        {regras.map((regra) => (
+          <li
+            key={regra.id}
+            className="bg-white border border-neutral-200 rounded p-2.5 flex gap-3 items-start"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] text-neutral-500 mb-0.5">
+                {regra.scenarioId
+                  ? friendlyScenarioLabel(regra.scenarioId, regra.cenarioLegivel)
+                  : regra.cenarioLegivel}
+                {' · '}
+                {ORIGEM_DA_REGRA[regra.origem] || regra.origem}
+              </div>
+              <div className="text-xs text-neutral-800 whitespace-pre-wrap break-words">
+                {regra.texto}
+              </div>
+            </div>
+            {podeAgir && (
+              <button
+                onClick={() => desfazer(regra)}
+                disabled={desfazendo !== null}
+                className="shrink-0 px-2.5 py-1 text-[11px] font-medium rounded border border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-800 disabled:opacity-50"
+              >
+                {desfazendo === regra.id ? 'Desfazendo…' : '↺ Desfazer'}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ClientFixCard({
   runId,
   podeAgir,
@@ -639,12 +772,10 @@ function ClientFixCard({
   const [loadingAction, setLoadingAction] = useState<'apply' | 'reject' | 'revert' | 're-test' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  // Re-teste pós-Apply (loop curto rumo a 90%+): o usuário clica e a gente roda
-  // SÓ esse cenário contra o systemPrompt atual pra ver se a correção pegou.
-  const [retestResult, setRetestResult] = useState<{
-    combined: 'pass' | 'partial' | 'fail' | 'erro';
-    judge: { passed: boolean | null; reason: string };
-  } | null>(null);
+  // Re-teste pós-Apply. A049: roda o MESMO cenário 3 vezes contra o prompt
+  // atual e GRAVA a execução. Uma amostra só não separava correção que pegou
+  // de sorte do modelo, e nada ficava registrado para comparar depois.
+  const [retestResult, setRetestResult] = useState<ResultadoDoReteste | null>(null);
 
   useEffect(() => {
     setEditedDiff(initialDiff);
@@ -679,11 +810,28 @@ function ClientFixCard({
       setActionSuccess('✓ Correção aplicada com sucesso');
       setTimeout(onAfterAction, 1200);
     } catch (err: any) {
+      // C3 (A078, A217): a correção bate de frente com uma regra base da
+      // plataforma, com o próprio teste deste caso ou com outra regra já
+      // aprovada. O servidor manda a frase pronta em português; mostrar
+      // `err.message` aqui exibiria o código técnico ("regra_conflitante").
+      if (err?.details?.error === 'regra_conflitante' || err?.details?.error === 'teto_de_regras') {
+        setActionError(err.details.message);
+        setEditing(err.details.error === 'regra_conflitante');
+        setLoadingAction(null);
+        return;
+      }
       // FASE 2.2c (#246): trata DUPLICATE_PATCH com mensagem orientativa.
+      //
+      // A frase antiga mandava escrever em CAPS e começar com "REGRA
+      // INVIOLÁVEL". Ensinava errado: o servidor tira esse prefixo e a
+      // numeração antes de gravar (limparTextoDaRegra), então o dono
+      // digitava um enfeite que sumia. O que fortalece a regra é ela ser
+      // específica e trazer um exemplo da frase certa.
       if (err?.details?.error === 'DUPLICATE_PATCH' || err?.status === 409) {
         setActionError(
           err?.details?.message ||
-            'Esta correção já existe no agente. Edite antes de aplicar (use CAPS, "REGRA INVIOLÁVEL", PROIBIDO) pra fortalecer a regra.',
+            'Esta correção já existe no agente. Edite antes de aplicar: diga em que situação a ' +
+              'regra vale e dê um exemplo da frase certa.',
         );
         setEditing(true);
       } else {
@@ -718,7 +866,7 @@ function ClientFixCard({
     setRetestResult(null);
     try {
       const r = await clientAgentQualityApi.reTestScenario(runId, scenario.scenarioId);
-      setRetestResult({ combined: r.combined, judge: r.judge });
+      setRetestResult(r);
     } catch (err: any) {
       setActionError(err?.message || 'Erro ao re-testar cenário');
     } finally {
@@ -922,25 +1070,40 @@ function ClientFixCard({
               </div>
             )}
 
-            {/* Resultado do Re-teste pós-Apply (loop curto rumo a 90%+). */}
+            {/* Re-teste com 3 amostras (A049): o veredito e cada tentativa. */}
             {retestResult && (
               <div
                 className={`mt-2 text-xs rounded p-2 border ${
-                  retestResult.combined === 'pass'
+                  retestResult.veredito === 'funcionou'
                     ? 'text-green-800 bg-green-50 border-green-200'
-                    : retestResult.combined === 'partial'
-                      ? 'text-amber-900 bg-amber-50 border-amber-200'
-                      : 'text-red-800 bg-red-50 border-red-200'
+                    : retestResult.veredito === 'nao_funcionou'
+                      ? 'text-red-800 bg-red-50 border-red-200'
+                      : 'text-amber-900 bg-amber-50 border-amber-200'
                 }`}
               >
-                <div className="font-semibold mb-0.5">
-                  {retestResult.combined === 'pass'
-                    ? '✓ Re-teste passou: a correção pegou. Este resultado não fica gravado, o score muda na próxima execução completa.'
-                    : retestResult.combined === 'partial'
-                      ? '⚠ Ainda parcial: melhorou, mas não 100%. Edite a sugestão (fortaleça a regra: CAPS, "REGRA INVIOLÁVEL") e re-aplique.'
-                      : '✗ Ainda reprovou: a correção não pegou. Edite a sugestão pra ser mais explícita e re-aplique.'}
+                <div className="font-semibold mb-1">
+                  {tituloDoVeredito(retestResult.veredito)}
                 </div>
-                <div className="text-[11px] opacity-80">{retestResult.judge.reason}</div>
+                <div className="mb-1.5">{retestResult.resumo.explicacao}</div>
+
+                {/* Uma linha por tentativa: o dono vê o que aconteceu em cada
+                    uma, e não só o número final. */}
+                <ul className="space-y-1">
+                  {retestResult.amostras.map((a) => (
+                    <li key={a.amostra} className="flex gap-1.5 items-start">
+                      <span className="font-mono opacity-70">#{a.amostra}</span>
+                      <span className="font-semibold">{rotuloDaAmostra(a.combined)}</span>
+                      <span className="opacity-80 flex-1 min-w-0">{a.motivoDoJuiz}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="text-[11px] opacity-70 mt-1.5">
+                  {retestResult.runId
+                    ? 'Este re-teste ficou gravado no histórico do agente.'
+                    : 'Este re-teste rodou, mas não ficou gravado no histórico.'}{' '}
+                  O placar da semana muda na próxima execução completa.
+                </div>
               </div>
             )}
 
@@ -983,9 +1146,11 @@ function ClientFixCard({
                     onClick={handleRetest}
                     disabled={loadingAction !== null}
                     className="flex-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-medium rounded border border-blue-300 disabled:opacity-50"
-                    title="Roda só esse cenário contra o prompt atual e mostra o resultado aqui. O re-teste ainda não fica gravado no histórico."
+                    title={textoDoCusto(AMOSTRAS_DO_RETESTE)}
                   >
-                    {loadingAction === 're-test' ? 'Re-testando…' : '🔄 Re-testar agora'}
+                    {loadingAction === 're-test'
+                      ? 'Re-testando (3 tentativas)…'
+                      : '🔄 Re-testar 3 vezes'}
                   </button>
                   <button
                     onClick={handleRevert}
@@ -1001,6 +1166,15 @@ function ClientFixCard({
                 </div>
               )}
             </div>
+
+            {/* O preço do clique fica visível, e não só no tooltip do botão:
+                em celular não existe tooltip, e o dono clicava sem saber o
+                que ia gastar nem que existe limite por dia. */}
+            {podeAgir && decisionMade && existingDecision.decision === 'applied' && (
+              <div className="mt-1.5 text-[10px] text-neutral-500">
+                {avisoDeCustoNaTela(AMOSTRAS_DO_RETESTE, COTA_DIARIA_DE_RETESTE)}
+              </div>
+            )}
           </div>
         )}
       </div>

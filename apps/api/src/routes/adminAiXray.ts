@@ -34,10 +34,12 @@ import {
   resolveSchedulingRuntime,
 } from '../agents/agentOrchestrator.js';
 import { buildLiveProfileBlock, buildGreetingBlock } from '../agents/tenantLiveProfile.js';
+import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
 import { isFlagOn } from '../services/featureFlags.js';
 import {
   buildWebChatSystemPrompt,
   loadOrgSystemPrompt,
+  idDoAgenteComercial,
   SystemPromptNaoEncontrado,
 } from '../services/webChatService.js';
 import { buildEvalSystemPrompt } from '../services/agentEvalRunner.js';
@@ -159,11 +161,27 @@ async function montarPrompt(input: {
       saudacaoBlock = buildGreetingBlock(historico.length === 0, settings.greetingMessage);
     }
 
+    // C3: as regras aprovadas pelo dono. Mesmo caminho do visitante, então
+    // quem liga o interruptor e vem conferir aqui vê o bloco que o chat do
+    // site está recebendo, e não o prompt de antes.
+    //
+    // Rodada 3 do PR #375: por AGENTE, com o mesmo seletor do chat do site
+    // (idDoAgenteComercial). Montar só por organização mostraria, com dois
+    // agentes vivos, as regras do outro. O interruptor é conferido antes,
+    // como no chat, para o canal desligado nem procurar o agente.
+    let regrasBlock = '';
+    if (await isFlagOn(organizationId, 'regrasComoRegistros')) {
+      regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
+        agentId: await idDoAgenteComercial(organizationId),
+      });
+    }
+
     return buildWebChatSystemPrompt({
       orgPrompt,
       factsBlock: ehIza ? await getIzaFactsBlock() : '',
       isIzaCanonical: ehIza,
       perfilVivoBlock,
+      regrasBlock,
       saudacaoBlock,
     });
   }
@@ -173,6 +191,9 @@ async function montarPrompt(input: {
   return buildEvalSystemPrompt(
     { systemPrompt: agente?.systemPrompt ?? null },
     { id: 'xray', userMessage: mensagem, history: historico },
+    // Rodada 3 do PR #375: o avaliador passou a receber o bloco de regras do
+    // agente testado. O Raio-X mostra o mesmo prompt que o teste envia.
+    await blocoDeRegrasDaOrganizacao(organizationId, { agentId: agente?.id ?? null }),
   );
 }
 
