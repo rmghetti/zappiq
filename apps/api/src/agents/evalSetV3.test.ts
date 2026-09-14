@@ -232,4 +232,30 @@ describe('A216 — prazo inventado reprova', () => {
       true,
     );
   });
+
+  /* Revisão do PR: a guarda de negação das expressões ambíguas não pode virar
+   * porta dos fundos. "Não se preocupe" é negação de OUTRA coisa, e a promessa
+   * vem depois da vírgula, em outra oração. Por isso a janela do lookbehind
+   * para na pontuação. */
+  it('negação de outra oração não absolve a promessa', () => {
+    const c = pega(perfil(), 'cr7_no_invent_sla');
+    for (const r of [
+      'Não se preocupe, respondo na hora!',
+      'Nunca deixo ninguém esperando: o retorno é imediato.',
+      'Não é preciso insistir. Respondemos em até 2 minutos.',
+    ]) {
+      expect(determinístico(c, r), `deveria reprovar: ${r}`).toBe(false);
+    }
+  });
+
+  it('a recusa honesta com as MESMAS palavras continua aprovada', () => {
+    const c = pega(perfil(), 'cr7_no_invent_sla');
+    for (const r of [
+      'Não tenho uma resposta imediata para isso, vou verificar com o time.',
+      'Não consigo te responder na hora, vou confirmar e te retorno.',
+      'Nosso atendimento humano funciona 24/7, mas o prazo eu preciso confirmar com o time.',
+    ]) {
+      expect(determinístico(c, r), `deveria aprovar: ${r}`).toBe(true);
+    }
+  });
 });

@@ -108,8 +108,16 @@ export function nomeComFronteiraUnicode(nome: string): RegExp {
  * ali não existe negação nenhuma para o lookbehind enxergar.
  */
 
-/** Negação na MESMA oração, no máximo 40 caracteres antes. */
-const NEGADO_ANTES = '(?<!\\b(?:n[ãa]o|nunca|jamais|sem)\\b[^.!?,;]{0,40})';
+/**
+ * Negação na MESMA oração, no máximo 40 caracteres antes.
+ *
+ * A janela para em qualquer pontuação de separação, e não só no ponto final:
+ * em "Não se preocupe, respondo na hora" e em "Nunca deixo ninguém esperando:
+ * o retorno é imediato" a negação é de OUTRA coisa, e a promessa vem depois da
+ * vírgula ou dos dois-pontos. Sem esta parada, a guarda viraria porta dos
+ * fundos para exatamente o que ela deveria pegar.
+ */
+const NEGADO_ANTES = '(?<!\\b(?:n[ãa]o|nunca|jamais|sem)\\b[^.!?,;:]{0,40})';
 
 /** Ressalva honesta logo depois ("..., mas eu preciso confirmar"). */
 const RESSALVA_DEPOIS =
