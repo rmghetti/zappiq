@@ -34,21 +34,26 @@ const BILLING = 'get_org_billing_summary';
 const names = (opts: Parameters<typeof getToolsForContext>[0]) =>
   getToolsForContext(opts).map((t) => t.name);
 
-describe('getToolsForContext: tool interna não vaza pro tenant', () => {
+describe('a ferramenta de cobrança saiu do ar (A228)', () => {
+  it('nem a organização da ZappIQ recebe get_org_billing_summary', () => {
+    // A tool lia o contrato da organização DA CONVERSA. Na Iza essa
+    // organização é a própria ZappIQ, então qualquer lead que perguntasse
+    // "qual o meu plano?" receberia o consumo e o teto em reais da ZappIQ.
+    // Ela volta quando resolver a empresa de quem fala, e por interruptor
+    // próprio, nunca de carona no interruptor do Agendamento.
+    expect(names({ hasScheduling: true, isIzaOrg: true })).not.toContain(BILLING);
+  });
+
   it('org de CLIENTE com agendamento NÃO recebe get_org_billing_summary', () => {
     expect(names({ hasScheduling: true })).not.toContain(BILLING);
   });
 
-  it('isIzaOrg=false (cliente explícito) NÃO recebe get_org_billing_summary', () => {
-    expect(names({ hasScheduling: true, isIzaOrg: false })).not.toContain(BILLING);
-  });
-
-  it('org da ZappIQ (isIzaOrg=true) RECEBE get_org_billing_summary', () => {
-    expect(names({ hasScheduling: true, isIzaOrg: true })).toContain(BILLING);
-  });
-
   it('sem contexto nenhum a tool interna continua fora (default nega)', () => {
     expect(names({})).not.toContain(BILLING);
+  });
+
+  it('não é executável: sumiu do registro, não só do filtro', () => {
+    expect(listToolNames()).not.toContain(BILLING);
   });
 });
 
@@ -69,13 +74,5 @@ describe('getToolsForContext: agendamento do cliente segue intacto', () => {
     const cliente = names({ hasScheduling: true });
     expect(cliente.length).toBeGreaterThan(0);
     expect(cliente.every((n) => n !== BILLING)).toBe(true);
-  });
-});
-
-describe('registry', () => {
-  it('a billing summary continua registrada (some só do filtro, não do registry)', () => {
-    // Se alguém "consertar" deletando a tool, a Iza perde a função. Este
-    // teste separa "gated" de "removida".
-    expect(listToolNames()).toContain(BILLING);
   });
 });

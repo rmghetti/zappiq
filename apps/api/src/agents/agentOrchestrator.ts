@@ -619,6 +619,12 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // - lead/trial (leadStatus in NEW/CONTACTED/QUALIFIED/UNQUALIFIED) → role='comercial'
     // - customer (leadStatus = CONVERTED)                              → role='suporte'
     // Fallback pro promptEngine antigo se Agent não existir (orgs sem seed).
+    // Estado REAL do agendamento, resolvido UMA vez por turno e usado nos dois
+    // lugares que precisam concordar: o que a IA lê no prompt e as ferramentas
+    // que ela recebe. Antes, o prompt prometia agendamento e a ferramenta não
+    // existia (ou o contrário). Ver resolveSchedulingRuntime.
+    const agendamento = await resolveSchedulingRuntime(organizationId, orgSettings);
+
     let systemPrompt = await buildSystemPromptForContact({
       organizationId,
       contactId,
@@ -626,6 +632,10 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       orgSettings,
       ragContext,
       ragStatus,
+      agendamento,
+      // A212: o histórico enviado ao modelo é só desta conversa. Contato que
+      // volta depois de 72 h abre conversa nova e chega aqui sem passado.
+      temHistoricoNoContexto: historyMessages.length > 1,
     });
 
     // Maestro (#280): se viemos de um nó-IA, injeta a instrução do passo NO TOPO
@@ -729,9 +739,11 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // Per-org override via organizations.settings.llm_routing (#133):
     //   { forceProvider: "anthropic-sonnet" | ... } → bypassa tier-based
     //   { useDefaultCascade: true }                 → cascade default (Iza)
-    // Agendamento: só oferece as tools de booking quando a org ativou (não
-    // opt-out). Sem isso o turn segue idêntico (zero mudança pra quem não usa).
-    const schedulingOn = Boolean(orgSettings?.scheduling?.enabled) && !orgSettings?.scheduling?.optOut;
+    // Agendamento: as ferramentas de marcação só entram quando o agendamento
+    // está REALMENTE de pé (não optou por sair, tem direito ao recurso e tem
+    // tipo ativo). O CMJ tinha o interruptor ligado com zero tipos e pagava
+    // Sonnet em todo turno (A066, A165) para dizer que não agenda.
+    const schedulingOn = agendamento.ativo;
     const turnTools = schedulingOn
       ? getToolsForContext({ hasScheduling: true, isIzaOrg: isZappIQOrg(organizationId) })
       : undefined;
@@ -1446,6 +1458,62 @@ async function resolveWaCreds(organizationId: string): Promise<waService.WaCreds
 }
 
 // ═══════════════════════════════════════════════════════════════════
+/**
+ * O agendamento está REALMENTE de pé nesta organização?
+ *
+ * Até 14/09/2026 o produto acreditava num único campo, `scheduling.enabled`,
+ * e ele mentia dos dois lados (A165):
+ *   • o CMJ tem `enabled: true` com ZERO tipos cadastrados, então todo turno
+ *     levava as ferramentas de agendamento (e ia para Sonnet, A066) só para
+ *     a IA responder que a empresa não agenda;
+ *   • quem cadastra tipo nenhum interruptor liga, e a IA ficava sem
+ *     ferramenta para consultar horário.
+ *
+ * Ligado agora é o cruzamento de três coisas verdadeiras: o dono não optou
+ * por sair, a organização tem direito ao recurso (plano ou add-on) e existe
+ * pelo menos um tipo ativo. Qualquer erro devolve DESLIGADO: prometer
+ * agendamento que não existe é o defeito que estamos consertando.
+ */
+export async function resolveSchedulingRuntime(
+  organizationId: string,
+  orgSettings: any,
+): Promise<{ ativo: boolean; tipos: string[]; motivo: string }> {
+  const scheduling = orgSettings?.scheduling ?? null;
+  if (scheduling?.optOut) return { ativo: false, tipos: [], motivo: 'optou_por_sair' };
+  if (!scheduling?.enabled) return { ativo: false, tipos: [], motivo: 'nao_ligado' };
+
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { plan: true, settings: true },
+    });
+    const addons = Array.isArray((org?.settings as any)?.addons)
+      ? ((org!.settings as any).addons as string[])
+      : [];
+    const acesso = resolveSchedulingAccess((org?.plan as PlanId) || 'IZA_LITE', addons);
+    if (!acesso.entitled) return { ativo: false, tipos: [], motivo: 'sem_direito' };
+
+    const tipos = await (prisma as any).appointmentType.findMany({
+      where: { organizationId, active: true },
+      select: { name: true },
+      take: 20,
+    });
+    const nomes: string[] = (tipos ?? [])
+      .map((t: any) => String(t?.name ?? '').trim())
+      .filter(Boolean);
+    if (!nomes.length && (!tipos || tipos.length === 0)) {
+      return { ativo: false, tipos: [], motivo: 'sem_tipo_ativo' };
+    }
+    return { ativo: true, tipos: nomes, motivo: 'ativo' };
+  } catch (err) {
+    logger.warn('[Agent] resolveSchedulingRuntime falhou — agendamento tratado como desligado', {
+      organizationId,
+      err: String(err),
+    });
+    return { ativo: false, tipos: [], motivo: 'erro' };
+  }
+}
+
 // V2-021 (Sprint 0 §11.3) · Persona dual via Agent table
 // ─────────────────────────────────────────────────────────────────
 // Decisão de persona:

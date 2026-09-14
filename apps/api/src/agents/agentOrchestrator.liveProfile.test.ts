@@ -19,6 +19,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const agentFindFirst = vi.fn();
 const messageCount = vi.fn();
 const isFlagOn = vi.fn();
+const orgFindUnique = vi.fn();
+const tipoFindMany = vi.fn();
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -31,6 +33,8 @@ vi.mock('@zappiq/database', () => ({
     },
     message: { count: (...args: any[]) => messageCount(...args) },
     agent: { findFirst: (...args: any[]) => agentFindFirst(...args) },
+    organization: { findUnique: (...args: any[]) => orgFindUnique(...args) },
+    appointmentType: { findMany: (...args: any[]) => tipoFindMany(...args) },
   },
 }));
 
@@ -47,7 +51,7 @@ vi.mock('../utils/logger.js', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { buildSystemPromptForContact } from './agentOrchestrator.js';
+import { buildSystemPromptForContact, resolveSchedulingRuntime } from './agentOrchestrator.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 import { TEXTO_HORARIO_AUSENTE } from './tenantLiveProfile.js';
 
@@ -202,6 +206,61 @@ describe('interruptor perfilVivo LIGADO: o bloco entra no lugar combinado', () =
       agendamento: { ativo: true, tipos: ['Avaliação'] },
     });
     expect(prompt).toContain('Agendamento: disponível para: Avaliação');
+  });
+});
+
+describe('agendamento ligado é tipo ativo E direito ao recurso (A066, A165)', () => {
+  beforeEach(() => {
+    orgFindUnique.mockResolvedValue({ plan: 'GROWTH', settings: { scheduling: { enabled: true } } });
+    tipoFindMany.mockResolvedValue([{ name: 'Avaliação' }, { name: 'Retorno' }]);
+  });
+
+  it('interruptor ligado, plano com direito e tipo ativo: agendamento ativo', async () => {
+    const r = await resolveSchedulingRuntime(ORG, { scheduling: { enabled: true } });
+    expect(r.ativo).toBe(true);
+    expect(r.tipos).toEqual(['Avaliação', 'Retorno']);
+  });
+
+  it('o caso do CMJ: interruptor ligado e ZERO tipos cadastrados NÃO liga', async () => {
+    // Em produção o CMJ tem scheduling.enabled=true e nenhum appointment_type:
+    // todo turno ia para Sonnet só para responder que não faz agendamento.
+    tipoFindMany.mockResolvedValue([]);
+    const r = await resolveSchedulingRuntime(ORG, { scheduling: { enabled: true } });
+    expect(r.ativo).toBe(false);
+    expect(r.motivo).toBe('sem_tipo_ativo');
+  });
+
+  it('tipo cadastrado mas plano sem direito ao recurso: não liga', async () => {
+    orgFindUnique.mockResolvedValue({ plan: 'IZA_LITE', settings: {} });
+    const r = await resolveSchedulingRuntime(ORG, { scheduling: { enabled: true } });
+    expect(r.ativo).toBe(false);
+    expect(r.motivo).toBe('sem_direito');
+  });
+
+  it('add-on comprado no plano Lite dá direito', async () => {
+    orgFindUnique.mockResolvedValue({ plan: 'IZA_LITE', settings: { addons: ['SCHEDULING_AGENT'] } });
+    const r = await resolveSchedulingRuntime(ORG, { scheduling: { enabled: true } });
+    expect(r.ativo).toBe(true);
+  });
+
+  it('optOut do dono desliga, mesmo com tipo e direito', async () => {
+    const r = await resolveSchedulingRuntime(ORG, { scheduling: { enabled: true, optOut: true } });
+    expect(r.ativo).toBe(false);
+    expect(r.motivo).toBe('optou_por_sair');
+  });
+
+  it('organização que nunca mexeu no agendamento: desligado, sem consultar tipo', async () => {
+    tipoFindMany.mockClear();
+    const r = await resolveSchedulingRuntime(ORG, {});
+    expect(r.ativo).toBe(false);
+    expect(r.motivo).toBe('nao_ligado');
+    expect(tipoFindMany).not.toHaveBeenCalled();
+  });
+
+  it('erro de banco não liga agendamento por acidente', async () => {
+    tipoFindMany.mockRejectedValue(new Error('banco fora'));
+    const r = await resolveSchedulingRuntime(ORG, { scheduling: { enabled: true } });
+    expect(r.ativo).toBe(false);
   });
 });
 

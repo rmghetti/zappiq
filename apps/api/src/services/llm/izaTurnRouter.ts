@@ -217,6 +217,14 @@ export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> 
   // Gemini não suporta tools. Quando há tools (ex.: agendamento), preferimos um
   // provider tool-capable (Sonnet, com fallback pra OpenAI que também suporta).
   // Sem tools, mantém exatamente o routing anterior.
+  //
+  // Contrato com quem chama (A066, A165, 14/09/2026): só mande `tools` quando o
+  // recurso estiver REALMENTE de pé. O CMJ tinha o interruptor do Agendamento
+  // ligado com zero tipos cadastrados, então todo turno chegava aqui com tools
+  // e ia para Sonnet, anulando o tier do plano, o trial e o Modo Econômico:
+  // 246 de 249 conversas em Sonnet para dizer que a empresa não agenda. Quem
+  // resolve isso é resolveSchedulingRuntime, no agentOrchestrator. Lista vazia
+  // aqui é tratada como "sem tools", e o teste tranca isso.
   const toolPrefer: LLMProviderId | undefined = hasTools && !hardForce ? 'anthropic-sonnet' : softPrefer;
   const useTier = hardForce || toolPrefer ? undefined : req.tier;
 
