@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * featureFlags — interruptor de comportamento novo, por organização.
+ * featureFlags: interruptor de comportamento novo, por organização.
  * --------------------------------------------------------------------
  * Por que existe: fundir na main publica a API e o web na hora. Sem um
  * interruptor, todo comportamento novo estreia ligado para os 100% dos
@@ -207,7 +207,7 @@ export async function setFlag(
     organizationId,
     flag,
     enabled,
-    actor: actor ?? '—',
+    actor: actor ?? 'sem autor',
   });
 
   return { organizationId, flag, enabled };

@@ -13,8 +13,8 @@
  * O caminho certo é publishPrompt().
  *
  * Duas exceções, de propósito:
- *   • promptVersionService.ts — é a porta;
- *   • agentProvisioningService.ts — o seed do agente novo, que precisa do
+ *   • promptVersionService.ts, que é a porta;
+ *   • agentProvisioningService.ts, o seed do agente novo, que precisa do
  *     create com o prompt inicial (e declara a origem 'seed' antes).
  *
  * Arquivos de teste ficam de fora: lá `agent.update` aparece em banco falso

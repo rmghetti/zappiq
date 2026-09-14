@@ -5,7 +5,7 @@
  * que existia no agente naquele momento. Tudo o que veio depois (outra
  * correção, a troca de nome, a edição do cliente) era apagado em silêncio.
  * Caso real: o prompt da Vera tem 6.506 chars e o promptBefore de uma decisão
- * de 16/07 tem 3.978 — reverter apagaria a seção do curso.
+ * de 16/07 tem 3.978: reverter apagaria a seção do curso.
  *
  * Agora: o revert compara o prompt atual com o promptAfter da decisão. Se
  * divergiu, responde 409 e manda o cliente usar o histórico de versões.

@@ -4,7 +4,7 @@
  * Este é o ÚNICO caminho do produto que pode reescrever Agent.systemPrompt.
  * As regras que não podem quebrar, testadas com um banco falso:
  *   1. o contexto da versão (origem, decisão, autor) é gravado ANTES do
- *      update, na mesma transação — é ele que o gatilho do Postgres lê;
+ *      update, na mesma transação, porque é ele que o gatilho do Postgres lê;
  *   2. expectedHash divergente lança PromptChangedError e NÃO grava nada;
  *   3. o hash calculado aqui é o mesmo md5 que o Postgres calcula;
  *   4. origem inválida é recusada antes de qualquer escrita.

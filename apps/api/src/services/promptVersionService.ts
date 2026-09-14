@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * promptVersionService — a única porta para reescrever Agent.systemPrompt.
+ * promptVersionService: a única porta para reescrever Agent.systemPrompt.
  * --------------------------------------------------------------------
  * Achado A083: reverter uma correção restaurava o texto de antes SEM olhar
  * o que existia no agente naquele momento. Tudo que veio depois (outra

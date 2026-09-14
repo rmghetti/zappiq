@@ -1,5 +1,5 @@
 -- ═════════════════════════════════════════════════════════════════
--- 20260914000010 — interruptores por organização e versões do prompt
+-- 20260914000010: interruptores por organização e versões do prompt
 -- ─────────────────────────────────────────────────────────────────
 -- POR QUE ESTA MIGRAÇÃO EXISTE
 --
@@ -16,7 +16,7 @@
 --    correção restaurava o texto de antes sem olhar o que existia no agente
 --    naquele momento, apagando tudo o que veio depois (caso real: o prompt
 --    da Vera tem 6.506 chars e o promptBefore de uma decisão de 16/07 tem
---    3.978 — reverter hoje apagaria a seção do curso).
+--    3.978, e reverter hoje apagaria a seção do curso).
 --
 --    A numeração fica no BANCO, não na aplicação, de propósito: escrita
 --    feita fora do produto (psql, script, migração) também vira versão,

@@ -50,7 +50,7 @@ import {
 import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
 // A083: quem grava o prompt declara a origem da mudança e o histórico vira
 // versão no banco. Reverter passa a exigir que o prompt ainda seja o que a
-// correção deixou — senão apagaria tudo o que veio depois.
+// correção deixou. Se mudou, apagaria tudo o que veio depois.
 import {
   publishPrompt,
   hashPrompt,
@@ -167,7 +167,7 @@ router.get('/agents', async (req: Request, res: Response) => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-// GET /agents/:agentId/versions — histórico do prompt (sem o texto)
+// GET /agents/:agentId/versions: histórico do prompt (sem o texto)
 // ─────────────────────────────────────────────────────────────────
 // A lista serve para o cliente enxergar o que mudou, quando e por quem.
 // O texto fica fora de propósito: prompt de cliente tem milhares de chars
@@ -220,7 +220,7 @@ router.get('/agents/:agentId/versions', async (req: Request, res: Response) => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-// GET /agents/:agentId/versions/:version — uma versão, com o texto
+// GET /agents/:agentId/versions/:version: uma versão, com o texto
 // ════════════════════════════════════════════════════════════════════
 router.get('/agents/:agentId/versions/:version', async (req: Request, res: Response) => {
   const orgId = req.user!.organizationId;

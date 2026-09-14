@@ -1375,7 +1375,7 @@ model Agent {
 }
 
 // ═══════════════════════════════════════════════════════════
-// OrgFeatureFlag — interruptor de comportamento novo, por organização.
+// OrgFeatureFlag: interruptor de comportamento novo, por organização.
 // -----------------------------------------------------------
 // Fundir na main publica a API e o web na hora. Todo comportamento novo
 // nasce DESLIGADO e cada organização é ligada de propósito pela rota
@@ -1400,7 +1400,7 @@ model OrgFeatureFlag {
 }
 
 // ═══════════════════════════════════════════════════════════
-// AgentPromptVersion — histórico do system_prompt do agente.
+// AgentPromptVersion: histórico do system_prompt do agente.
 // -----------------------------------------------------------
 // Achado A083: o prompt era sobrescrito em cinco lugares diferentes, sem
 // rastro, e reverter apagava tudo que veio depois. Agora toda escrita em
