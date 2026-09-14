@@ -78,12 +78,22 @@ jobs:
       - name: Test Web (Vitest)
         run: pnpm --filter @zappiq/web test
 
-      # Exceções aceitas ficam em osv-scanner.toml e espelhadas em
+      # Não existe `pnpm audit` aqui de propósito.
+      #
+      # Este job é o caminho do hotfix: quando a API está fora do ar, o conserto
+      # passa por ele. Auditoria de dependência é um portão de PRAZO, não de
+      # correção: uma advisory de terceiro publicada hoje de manhã deixaria o
+      # passo vermelho e bloquearia um hotfix que não tem nada a ver com ela,
+      # sem que ninguém possa corrigir a dependência no meio do incêndio.
+      #
+      # O portão de produção aqui é o que fala sobre ESTE código: lint, tipo,
+      # teste e build. A auditoria de dependência mora no ci.yml (`pnpm audit
+      # --prod --audit-level=high`, `pip-audit --strict` e o osv-scanner), que
+      # roda na PR e barra a ENTRADA da dependência nova, que é onde a decisão
+      # cabe. Exceções aceitas ficam em osv-scanner.toml e espelhadas em
       # pnpm.auditConfig.ignoreGhsas no package.json da raiz, cada uma com
-      # motivo, dono e prazo. Nunca em `|| true`.
-      - name: Audit dependencies for known vulnerabilities
-        run: pnpm audit --prod --audit-level=high
-
+      # motivo, dono e prazo (teste
+      # apps/api/src/config/excecoesDeAuditoria.test.ts, que roda logo acima).
       - name: Build all packages
         run: pnpm run build
 
