@@ -147,8 +147,12 @@ export async function loadOrgSystemPrompt(organizationId: string): Promise<strin
  *
  * Fail-soft: sem agente, ou com o banco fora, devolve null e o bloco volta a
  * ser o da organização. A resposta ao visitante nunca trava por isto.
+ *
+ * Exportada porque o Raio-X do canal site (adminAiXray) tem de escolher o
+ * MESMO agente que o chat: com dois agentes vivos, um seletor diferente ali
+ * mostraria as regras do outro.
  */
-async function idDoAgenteComercial(organizationId: string): Promise<string | null> {
+export async function idDoAgenteComercial(organizationId: string): Promise<string | null> {
   try {
     const agente = await prisma.agent.findFirst({
       where: { organizationId, role: 'comercial', status: 'live' },

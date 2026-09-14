@@ -533,6 +533,42 @@ describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
     });
   });
 
+  // Rodada 3 do PR #375 (item 4). O canal site montava o bloco por
+  // organização, sem agentId, enquanto o chat do site monta por agente
+  // (webChatService.idDoAgenteComercial). Com dois agentes vivos, o Raio-X
+  // mostraria as regras do outro. Agora os dois usam o MESMO seletor.
+  it('com o interruptor LIGADO, o canal site filtra as regras pelo agente comercial, como o chat', async () => {
+    isFlagOn.mockResolvedValue(true);
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+    orgFindUnique.mockResolvedValue({ id: 'org-site-agente', name: 'Cantina', settings: SETTINGS_DA_ORG });
+
+    const res = await chamar({ ...corpoValido, organizationId: 'org-site-agente', canal: 'site' });
+
+    expect(res.statusCode).toBe(200);
+    expect(promptDoTurno(res)).toContain('1. Chame o cliente pelo nome quando souber.');
+    // O seletor do chat do site: comercial, vivo, o mais antigo.
+    expect(agentFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: 'org-site-agente', role: 'comercial', status: 'live' },
+        orderBy: { createdAt: 'asc' },
+      }),
+    );
+    expect(agentRuleFindMany.mock.calls[0][0].where).toMatchObject({
+      organizationId: 'org-site-agente',
+      agentId: 'a1',
+    });
+  });
+
+  it('com o interruptor DESLIGADO, o canal site nem procura o agente para as regras', async () => {
+    orgFindUnique.mockResolvedValue({ id: 'org-site-off', name: 'Cantina', settings: SETTINGS_DA_ORG });
+
+    const res = await chamar({ ...corpoValido, organizationId: 'org-site-off', canal: 'site' });
+
+    expect(res.statusCode).toBe(200);
+    expect(agentFindFirst).not.toHaveBeenCalled();
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
+  });
+
   it('com o interruptor DESLIGADO, o teste de Qualidade fica byte a byte como hoje', async () => {
     agentRuleFindMany.mockResolvedValue([REGRA]);
 

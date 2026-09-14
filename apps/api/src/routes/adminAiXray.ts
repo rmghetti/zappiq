@@ -39,6 +39,7 @@ import { isFlagOn } from '../services/featureFlags.js';
 import {
   buildWebChatSystemPrompt,
   loadOrgSystemPrompt,
+  idDoAgenteComercial,
   SystemPromptNaoEncontrado,
 } from '../services/webChatService.js';
 import { buildEvalSystemPrompt } from '../services/agentEvalRunner.js';
@@ -163,7 +164,17 @@ async function montarPrompt(input: {
     // C3: as regras aprovadas pelo dono. Mesmo caminho do visitante, então
     // quem liga o interruptor e vem conferir aqui vê o bloco que o chat do
     // site está recebendo, e não o prompt de antes.
-    const regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId);
+    //
+    // Rodada 3 do PR #375: por AGENTE, com o mesmo seletor do chat do site
+    // (idDoAgenteComercial). Montar só por organização mostraria, com dois
+    // agentes vivos, as regras do outro. O interruptor é conferido antes,
+    // como no chat, para o canal desligado nem procurar o agente.
+    let regrasBlock = '';
+    if (await isFlagOn(organizationId, 'regrasComoRegistros')) {
+      regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
+        agentId: await idDoAgenteComercial(organizationId),
+      });
+    }
 
     return buildWebChatSystemPrompt({
       orgPrompt,
