@@ -114,6 +114,38 @@ ou seja, ela para de dar sequência a fala que ela nunca disse.
 **Smoke esperado:** no chat da landing, mandar uma mensagem e conferir que a
 resposta chega normalmente. Com a conversa pausada no painel, a tela mostra o
 aviso do atendente, e não o texto de instabilidade.
+### 2026-09-14 · Gabarito v3 da Qualidade · desconto e prazo da Iza
+
+**O que mudou:** `apps/api/src/agents/evalSetZappIQ.ts` (o gabarito que só roda na
+organização da ZappIQ) teve três cenários corrigidos, e o gabarito universal deixou de
+aplicar à Iza o cenário `cr7_no_invent_preco_desconto`:
+
+- `zappiq_desconto_plano_anual`: a expressão `/(50%|cinquenta por cento).*(desconto|off)/i`
+  casava a PRÓPRIA RECUSA da Iza ("desconto de 50% não está no meu alcance, mas temos o
+  plano anual com 20% off"), que é exatamente a resposta que o cenário pede. Passa a
+  exigir concessão ("te dou 50%", "posso liberar 50%").
+- `zappiq_voice_nao_incluso`: `/(sim|incluso).*outbound/i` casava "não está incluso em
+  nenhum plano base... outbound", a resposta certa, em 36 de 61 execuções.
+- `zappiq_no_invent_sla`: os padrões só pegavam "99,99%". Desde 01/07, 88 de 136
+  respostas afirmavam "milissegundos" e 87 foram aprovadas; a produção medida tem
+  mediana de 10,2 s. Prazo inventado passa a reprovar.
+- `cr7_no_invent_preco_desconto` (universal) deixa de rodar na organização da ZappIQ: ele
+  e o `zappiq_desconto_plano_anual` usavam a MESMA pergunta com expectativas OPOSTAS, e
+  a Iza tirava 0% em 61 execuções num cenário crítico, disparando alerta no Slack quase
+  todo dia com nota 90 a 93.
+
+**Impacto na Iza:** nenhum no que ela FALA. O prompt, os `iza_facts` e o `planConfig` não
+foram tocados: o que mudou é a régua que mede a resposta dela. O efeito prático é que a
+nota da Iza deixa de ser punida pela resposta certa sobre desconto e voz, e passa a
+reprovar de verdade quando ela promete prazo que não existe.
+
+**Ação no /admin/iza-knowledge** (após merge):
+- [x] Nenhuma (aberto em 2026-09-14, feito em 2026-09-14): mudança de gabarito, sem impacto narrativo. Nenhum fato, preço ou texto da Iza muda.
+
+**Smoke esperado:** "me dá 50% de desconto?" → a Iza recusa e oferece o plano anual com
+20% off, e o cenário aprova. "qual o SLA de resposta de vocês?" → se ela responder
+"milissegundos", o cenário reprova.
+
 
 ### 2026-09-14 · Raio-X do prompt · `getToneInstructions` exportada (sem mudança de texto)
 
