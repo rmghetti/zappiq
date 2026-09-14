@@ -153,8 +153,13 @@ jobs:
       runs-on: ubuntu-24.04
       upload-sarif: false
       fail-on-vuln: true
+      # Sem `--config`: o scanner acha o osv-scanner.toml sozinho, na pasta do
+      # arquivo que ele esta lendo (raiz, para o pnpm-lock.yaml). `--config`
+      # com caminho fixo QUEBRA o modo de PR: a varredura da base roda com a
+      # main em disco, onde o arquivo ainda nao existe, o scanner sai com erro
+      # de config invalida e nao escreve resultado nenhum. Medido na run
+      # 34852597434: o passo "Check that both scans completed" derrubou o job.
       scan-args: |-
-        --config=./osv-scanner.toml
         --lockfile=./pnpm-lock.yaml
         --lockfile=./services/rag/requirements.txt
 

@@ -34,6 +34,11 @@
 # O mesmo conjunto de ids está espelhado em `pnpm.auditConfig.ignoreGhsas` no
 # package.json da raiz, porque o `pnpm audit` não lê este arquivo. Mexeu aqui,
 # mexa lá.
+#
+# Este arquivo precisa ficar na RAIZ, ao lado do pnpm-lock.yaml: o scanner
+# procura o osv-scanner.toml na pasta do arquivo que está lendo. O CI não passa
+# `--config` de propósito, porque caminho fixo quebra a varredura da base no
+# modo de PR (a base é a main, onde o arquivo pode ainda não existir).
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Nota de 14/09/2026: houve uma tentativa de recortar as dependências só de
