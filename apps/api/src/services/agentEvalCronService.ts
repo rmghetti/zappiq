@@ -71,7 +71,7 @@ import { enqueueEvalRun } from './agentEvalQueue.js';
 // As duas auditorias automáticas são SEMANAIS: a da Iza no domingo, a dos
 // clientes na segunda. A da Iza era diária e custava sozinha cerca de USD
 // 1,25 por dia sem detectar nada que o ciclo semanal não detecte.
-import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
+import { ZAPPIQ_ORG_ID, isZappIQOrg } from '../config/zappiqOrg.js';
 
 // Escopo do ciclo semanal: 'iza' = só a organização da Iza (domingo);
 // 'clients' = todas as demais com agente 'live' (segunda).
@@ -89,6 +89,12 @@ export type CronScope = 'iza' | 'clients';
 export type MotivoInelegivel = 'staging' | 'paywall' | 'sem_base';
 
 export interface EvalEligibilityInput extends AccessInput {
+  /**
+   * Id da organização avaliada. Serve ao carve-out da conta da casa
+   * (ver passaNoPaywall). Obrigatório de propósito: se fosse opcional, um
+   * chamador que esquecesse de passar jogaria a Iza no paywall em silêncio.
+   */
+  organizationId: string;
   /** Nome da organização. */
   name: string;
   /** Slug da organização. */
@@ -117,16 +123,51 @@ export const MOTIVO_INELEGIVEL_TEXTO: Record<MotivoInelegivel, string> = {
 const MARCA_STAGING = 'staging';
 
 /**
- * Decide se o cron pode avaliar esta organização. Pura e determinística
- * (injete `now` para congelar o relógio).
+ * A organização passa no portão do paywall, para efeito do ciclo pago?
  *
- * O critério de conta vencida é o MESMO das rotas de paywall: delega a
+ * Regra geral: o critério é o MESMO das rotas de paywall. Delega a
  * computeAccessState e corta só o bloqueio duro. Quem está em carência
  * (soft) ou inadimplente (past_due) continua com acesso ao produto, então
  * continua sendo avaliado.
  *
  * `role` nunca é passado: aqui avaliamos a conta de TERCEIRO, e um
  * superadmin olhando não pode transformar conta vencida em elegível.
+ *
+ * CARVE-OUT DA CASA. A organização da própria ZappIQ (a que hospeda a Iza)
+ * nunca cai no paywall. Ela não é cliente self-serve: a casa não assina o
+ * próprio produto, então vive no banco com trial vencido, paidAt nulo e
+ * nenhuma assinatura Stripe. Medido em produção em 14/09/2026: trialEndsAt
+ * em 05/09/2026, sem carência, estágio TRIAL_EXPIRED. Sem esta linha o
+ * paywall sai 'hard' e o ciclo de domingo (agent-eval-iza) pularia a própria
+ * Iza, em silêncio, até alguém reparar na falta do relatório.
+ *
+ * É a MESMA razão do carve-out de `role === 'SUPERADMIN'` em
+ * accountAccess.ts, com uma diferença: lá existe um usuário autenticado e
+ * dá para olhar o papel dele. O cron não tem usuário e não tem papel, então
+ * o carve-out precisa ser pelo dono da conta. O id nunca é comparado na mão:
+ * vem de isZappIQOrg (config/zappiqOrg.ts), a fonte única.
+ *
+ * O carve-out vale SÓ para o paywall. As outras regras continuam valendo
+ * para a casa: marca STAGING no nome e ausência de base continuam excluindo.
+ */
+function passaNoPaywall(org: EvalEligibilityInput): boolean {
+  if (isZappIQOrg(org.organizationId)) {
+    return true;
+  }
+
+  const { paywall } = computeAccessState({
+    ...org,
+    role: null,
+  });
+  return paywall !== 'hard';
+}
+
+/**
+ * Decide se o cron pode avaliar esta organização. Pura e determinística
+ * (injete `now` para congelar o relógio).
+ *
+ * Ordem dos cortes: marca de teste, paywall, base cadastrada. O motivo
+ * devolvido é o do primeiro corte, e vai inteiro para o log do ciclo.
  */
 export function isEvalEligible(org: EvalEligibilityInput): EvalEligibility {
   const marcaTeste = `${org.name ?? ''} ${org.slug ?? ''}`.toLowerCase();
@@ -134,11 +175,7 @@ export function isEvalEligible(org: EvalEligibilityInput): EvalEligibility {
     return { elegivel: false, motivo: 'staging' };
   }
 
-  const { paywall } = computeAccessState({
-    ...org,
-    role: null,
-  });
-  if (paywall === 'hard') {
+  if (!passaNoPaywall(org)) {
     return { elegivel: false, motivo: 'paywall' };
   }
 
@@ -432,6 +469,7 @@ export async function runAgentEvalCronCycle(
       const org = agent.organization;
       const elegibilidade = isEvalEligible({
         ...org,
+        organizationId: agent.organizationId,
         temBase: await temBaseCadastrada(agent.organizationId),
       });
 
@@ -600,6 +638,7 @@ export async function runAgentEvalOnChangeCycle(
       // 3. A organização ainda precisa ser elegível (mesma porta do semanal).
       const elegibilidade = isEvalEligible({
         ...agent.organization,
+        organizationId: agent.organizationId,
         temBase: await temBaseCadastrada(agent.organizationId),
       });
       if (!elegibilidade.elegivel) {
