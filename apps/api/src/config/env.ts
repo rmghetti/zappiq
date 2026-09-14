@@ -141,7 +141,11 @@ const envSchema = z.object({
   RAG_SERVICE_URL: z.string().default('http://localhost:8001'),
   RAG_SERVICE_SECRET: z.string().optional(),
   // Piso de similaridade do retrieval (0..1). Abaixo disso o chunk não entra no prompt.
-  RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.25),
+  // 0,35 e não mais 0,25: medido nos vetores REAIS de produção (A022, embedding
+  // text-embedding-3-small), conteúdo de OUTRA empresa tinha mediana 0,375 e só
+  // 3,7% ficava abaixo de 0,25, ou seja, o piso antigo não filtrava nada e toda
+  // mensagem (inclusive "oi") levava 5 trechos ao prompt. Ver docs/architecture/busca.md.
+  RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.35),
 
   // Agendamento — OAuth do Google Calendar (cada cliente conecta a agenda dele).
   // Um único app ZappIQ; muitos clientes autorizam a própria conta.
