@@ -1633,7 +1633,6 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
   journeyNote?: string;
   onExpandFull?: () => void;
 }) {
-  const [origSettings, setOrigSettings] = useState<Record<string, any>>({});
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
@@ -1652,7 +1651,6 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
       try {
         const res = await api.get<{ success: boolean; data: any }>('/api/settings');
         const st = (res?.data?.settings as any) || {};
-        setOrigSettings(st);
         map = (st.consolidatedMap as ConsolidatedMapData) || {};
       } catch { /* fail-soft */ }
       if (cancel) return;
@@ -1710,7 +1708,8 @@ function ConsolidatedMapInner({ flows, onBack, onEditFlow, inline, onArchitect, 
       const positions: Record<string,{x:number;y:number}> = {};
       nodes.forEach((n) => { positions[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) }; });
       const cleanEdges = edges.map((e) => ({ id:e.id, source:e.source, target:e.target, label:e.label, data:e.data || {}, style:e.style, animated:true }));
-      await api.put('/api/settings', { settings: { ...origSettings, consolidatedMap: { positions, edges: cleanEdges } } });
+      // A156: manda só o mapa; o servidor mescla por chave e preserva o resto.
+      await api.put('/api/settings', { settings: { consolidatedMap: { positions, edges: cleanEdges } } });
       setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2500);
     } catch { /* noop */ } finally { setSaving(false); }
   }
@@ -2141,8 +2140,8 @@ export default function FlowsPage() {
       // Salva o mapa (posições vazias → auto-layout). Preserva o resto do settings.
       journeyProgress.mark({ percent: 99, nextPercent: 100, etaMs: 700, label: 'Salvando o mapa da operação' });
       try {
-        const st = (await api.get<{ success: boolean; data: any }>('/api/settings'))?.data?.settings || {};
-        await api.put('/api/settings', { settings: { ...st, consolidatedMap: { positions: {}, edges: mapEdges } } });
+        // A156: manda só o mapa; o servidor mescla por chave e preserva o resto.
+        await api.put('/api/settings', { settings: { consolidatedMap: { positions: {}, edges: mapEdges } } });
       } catch { /* fail-soft: fluxos já criados, mapa cai no default */ }
       await journeyProgress.finish();
       setJourneyNote(`${data.summary || ''} ${data.note || ''}`.trim());
