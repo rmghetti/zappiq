@@ -1722,7 +1722,9 @@ export async function buildSystemPromptForContact(input: {
       ragStatus === 'servico_fora' ? 'base de conhecimento indisponível neste momento' : ragContext,
     currentDateTime: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
   });
-  return [CORE_AGENT_RULES_V1, factsBlock, fallback, '', clienteBlock, saudacaoBlock]
+  // O bloco vivo também entra no fallback (re-revisão do PR #368): sem ele,
+  // uma organização sem Agent semeado ficaria sem 'Agora', transbordo e agendamento.
+  return [CORE_AGENT_RULES_V1, factsBlock, fallback, perfilVivoBlock, '', clienteBlock, saudacaoBlock]
     .filter(Boolean)
     .join('\n');
 }

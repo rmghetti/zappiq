@@ -88,12 +88,18 @@ function removerSecao(texto: string, titulo: RegExp): { texto: string; removidos
 }
 
 function removerLinhaDeData(texto: string): { texto: string; removido: string | null } {
-  const m = texto.match(/^Data\/hora atual:.*$/m);
-  if (!m || m.index === undefined) return { texto, removido: null };
-  const fimDaLinha = m.index + m[0].length;
-  // Come também a quebra de linha da própria linha, para não sobrar um vão.
-  const fim = texto[fimDaLinha] === '\n' ? fimDaLinha + 1 : fimDaLinha;
-  return { texto: texto.slice(0, m.index) + texto.slice(fim), removido: m[0] };
+  // `while`, como em removerSecao: prompt editado à mão pode repetir a linha.
+  const removidas: string[] = [];
+  while (true) {
+    const m = texto.match(/^Data\/hora atual:.*$/m);
+    if (!m || m.index === undefined) break;
+    const fimDaLinha = m.index + m[0].length;
+    // Come também a quebra de linha da própria linha, para não sobrar um vão.
+    const fim = texto[fimDaLinha] === '\n' ? fimDaLinha + 1 : fimDaLinha;
+    texto = texto.slice(0, m.index) + texto.slice(fim);
+    removidas.push(m[0]);
+  }
+  return { texto, removido: removidas.length ? removidas.join(' | ') : null };
 }
 
 /**
