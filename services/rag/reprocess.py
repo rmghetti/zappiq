@@ -54,6 +54,11 @@ class Fonte:
     trechos: int
 
 
+# Motivo de fonte que e a versao ANTERIOR de um documento que ja tem trechos
+# no source novo. Ver _planejar_fonte e _reprocessar_fonte.
+MOTIVO_LEGADO_DUPLICADO = "legado_de_doc_ja_migrado"
+
+
 @dataclass
 class PlanoFonte:
     source: str
@@ -63,7 +68,9 @@ class PlanoFonte:
     motivo: str
     pergunta: str | None = None
     # Documentos que dividiam este source e ficam sem trechos depois da troca.
-    colisao: list[str] = field(default_factory=list)
+    # Cada item traz id, titulo e criado_em: sem isso o operador nao tem como
+    # saber QUAL documento vai aparecer vazio para o cliente.
+    colisao: list[dict] = field(default_factory=list)
 
     def como_json(self) -> dict:
         return {
@@ -113,11 +120,22 @@ def planejar(
     for documento in documentos:
         por_legado.setdefault(source_legado(documento), []).append(documento)
     por_id = {documento.id: documento for documento in documentos}
+    # Sources que ja existem no vetor. Serve para descobrir o caso em que o
+    # documento tem trechos nos DOIS lugares (ver MOTIVO_LEGADO_DUPLICADO).
+    existentes = {fonte.source for fonte in fontes}
 
     plano: list[PlanoFonte] = []
     for fonte in sorted(fontes, key=lambda f: f.source):
-        plano.append(_planejar_fonte(fonte, por_legado, por_id, perguntas))
+        plano.append(_planejar_fonte(fonte, por_legado, por_id, perguntas, existentes))
     return plano
+
+
+def _identificar(documento: Documento) -> dict:
+    return {
+        "id": documento.id,
+        "titulo": documento.titulo,
+        "criado_em": documento.criado_em.isoformat() if documento.criado_em else None,
+    }
 
 
 def _planejar_fonte(
@@ -125,6 +143,7 @@ def _planejar_fonte(
     por_legado: dict[str, list[Documento]],
     por_id: dict[str, Documento],
     perguntas: dict[str, str],
+    existentes: set[str],
 ) -> PlanoFonte:
     source = fonte.source
 
@@ -167,13 +186,31 @@ def _planejar_fonte(
         reverse=True,
     )
     vencedor = ordenados[0]
+    novo_source = f"doc-{vencedor.id}"
+
+    # O documento ja tem trechos no source novo E ainda tem os trechos da
+    # versao anterior gravados sob o titulo. Acontece quando o cliente reenviou
+    # o documento depois do deploy da API e antes do reprocessamento. Renomear
+    # o legado para doc-<id> esbarraria na chave unica (namespace, chunk_hash)
+    # ou, quando o texto mudou e o hash nao colide, deixaria DUAS versoes do
+    # mesmo documento respondendo ao cliente ao mesmo tempo.
+    if novo_source in existentes:
+        return PlanoFonte(
+            source=source,
+            novo_source=novo_source,
+            titulo=vencedor.titulo,
+            trechos=fonte.trechos,
+            motivo=MOTIVO_LEGADO_DUPLICADO,
+            colisao=[_identificar(d) for d in ordenados[1:]],
+        )
+
     return PlanoFonte(
         source=source,
-        novo_source=f"doc-{vencedor.id}",
+        novo_source=novo_source,
         titulo=vencedor.titulo,
         trechos=fonte.trechos,
         motivo="documento",
-        colisao=[d.id for d in ordenados[1:]],
+        colisao=[_identificar(d) for d in ordenados[1:]],
     )
 
 
@@ -182,6 +219,46 @@ def montar_trechos_do_plano(
 ) -> list[chunking.Trecho]:
     """Aplica o cabecalho de contexto aos textos ja gravados no vetor."""
     return chunking.montar_trechos(textos, item.titulo, pergunta=item.pergunta)
+
+
+def _metadata_como_dict(bruto) -> dict:
+    if isinstance(bruto, str):
+        try:
+            bruto = json.loads(bruto)
+        except ValueError:
+            return {}
+    return bruto if isinstance(bruto, dict) else {}
+
+
+def ja_reprocessada(namespace: str, item: PlanoFonte, linhas, chunk_hash) -> bool:
+    """
+    Diz se esta fonte ja esta do jeito que o reprocessamento a deixaria.
+
+    Reembedar custa dinheiro por trecho, e rodar de novo (por organizacao, por
+    retentativa, por susto) reembedava tudo outra vez, inclusive as fontes "ja
+    migrado" e as de Q&A, que nao mudam nada. O criterio e duplo de proposito:
+    o cabecalho precisa ja estar gravado no metadata E o hash recalculado
+    precisa bater com o gravado. O hash inclui namespace, source, indice,
+    cabecalho e texto, entao ele so bate quando as cinco coisas ja estao no
+    lugar final. Basta um trecho fora para a fonte inteira ser reprocessada.
+    """
+    if not linhas:
+        return False
+
+    trechos = montar_trechos_do_plano(item, [linha["text"] for linha in linhas])
+    for linha, trecho in zip(linhas, trechos):
+        if not _metadata_como_dict(linha["metadata"]).get("header"):
+            return False
+        esperado = chunk_hash(
+            namespace,
+            item.novo_source,
+            int(linha["chunk_idx"]),
+            trecho.texto,
+            trecho.cabecalho,
+        )
+        if esperado != linha["chunk_hash"]:
+            return False
+    return True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -207,7 +284,7 @@ _SQL_QA = """
 """
 
 _SQL_TRECHOS = """
-    SELECT id::text AS id, chunk_idx, text, metadata
+    SELECT id::text AS id, chunk_idx, text, metadata, chunk_hash
       FROM rag_chunks
      WHERE namespace = $1 AND source = $2
      ORDER BY chunk_idx
@@ -217,6 +294,22 @@ _SQL_ATUALIZA = """
     UPDATE rag_chunks
        SET source = $2, chunk_hash = $3, embedding = $4, metadata = $5::jsonb
      WHERE id = $1::uuid
+"""
+
+# O UNICO apagar deste modulo, e de proposito.
+#
+# A regra da casa em migracao de dado e nunca apagar: o texto original dos
+# trechos nao existe em lugar nenhum fora do vetor, e um erro aqui nao tem
+# desfazer. A excecao e o caso MOTIVO_LEGADO_DUPLICADO, em que as linhas
+# apagadas sao a versao ANTERIOR de um documento que ja tem a versao atual
+# gravada sob doc-<id>. Nada de unico se perde: o que sai e conteudo velho do
+# MESMO documento, que continuaria competindo com a versao nova na busca. Sem
+# isso, a alternativa seria violar a chave unica (namespace, chunk_hash) ou
+# deixar as duas versoes no ar. O dry-run mostra o caso antes de qualquer
+# escrita, com o motivo proprio.
+_SQL_APAGA_LEGADO = """
+    DELETE FROM rag_chunks
+     WHERE namespace = $1 AND source = $2
 """
 
 
@@ -291,20 +384,19 @@ async def executar(
             "total_fontes": len(plano),
             "total_trechos": sum(item.trechos for item in plano),
             "fontes": [item.como_json() for item in plano],
+            # Documentos que perdem os trechos por dividirem titulo com outro.
+            # Consolidado aqui porque e dele que sai a marcacao no kb_document.
+            "perdedores": [perdedor for item in plano for perdedor in item.colisao],
             "trechos_reprocessados": 0,
+            "trechos_apagados": 0,
+            "pulados": [],
             "fontes_com_erro": [],
         }
-        if dry_run:
-            logger.info(
-                f"reprocess (dry-run) ns={namespace} fontes={len(plano)} "
-                f"trechos={resultado['total_trechos']}"
-            )
-            return resultado
 
         for item in plano:
             try:
-                resultado["trechos_reprocessados"] += await _reprocessar_fonte(
-                    conn, namespace, item, embed, chunk_hash
+                await _passar_pela_fonte(
+                    conn, namespace, item, dry_run, embed, chunk_hash, resultado
                 )
             except Exception as exc:
                 logger.error(f"reprocess falhou em source={item.source}: {exc}")
@@ -313,34 +405,72 @@ async def executar(
                 )
 
     logger.info(
-        f"reprocess ns={namespace} fontes={len(plano)} "
-        f"trechos={resultado['trechos_reprocessados']} "
+        f"reprocess{' (dry-run)' if dry_run else ''} ns={namespace} "
+        f"fontes={len(plano)} trechos={resultado['trechos_reprocessados']} "
+        f"pulados={len(resultado['pulados'])} "
+        f"apagados={resultado['trechos_apagados']} "
         f"erros={len(resultado['fontes_com_erro'])}"
     )
     return resultado
 
 
-async def _reprocessar_fonte(
-    conn, namespace: str, item: PlanoFonte, embed, chunk_hash
-) -> int:
+async def _passar_pela_fonte(
+    conn, namespace: str, item: PlanoFonte, dry_run: bool, embed, chunk_hash, resultado
+) -> None:
+    """
+    Decide o que acontece com uma fonte e, fora do dry-run, faz.
+
+    A leitura dos trechos acontece nos dois modos de proposito: sem ela o
+    dry-run nao teria como dizer quais fontes seriam puladas, e o operador
+    aprovaria um plano com custo de embedding que nao existe. Ler e barato
+    perto de reembedar; escrever continua sendo so fora do dry-run.
+    """
     linhas = await conn.fetch(_SQL_TRECHOS, namespace, item.source)
     if not linhas:
-        return 0
+        return
 
+    if item.motivo == MOTIVO_LEGADO_DUPLICADO:
+        resultado["trechos_apagados"] += (
+            len(linhas) if dry_run else await _apagar_legado(conn, namespace, item)
+        )
+        return
+
+    if ja_reprocessada(namespace, item, linhas, chunk_hash):
+        resultado["pulados"].append(item.source)
+        return
+
+    if dry_run:
+        return
+
+    resultado["trechos_reprocessados"] += await _reprocessar_fonte(
+        conn, namespace, item, linhas, embed, chunk_hash
+    )
+
+
+async def _apagar_legado(conn, namespace: str, item: PlanoFonte) -> int:
+    """Ver o comentario de _SQL_APAGA_LEGADO: e a unica escrita destrutiva."""
+    async with conn.transaction():
+        retorno = await conn.execute(_SQL_APAGA_LEGADO, namespace, item.source)
+    apagados = (
+        int(str(retorno).split()[-1]) if str(retorno).startswith("DELETE ") else 0
+    )
+    logger.info(
+        f"reprocess apagou o legado de doc ja migrado ns={namespace} "
+        f"source={item.source} destino={item.novo_source} linhas={apagados}"
+    )
+    return apagados
+
+
+async def _reprocessar_fonte(
+    conn, namespace: str, item: PlanoFonte, linhas, embed, chunk_hash
+) -> int:
     textos = [linha["text"] for linha in linhas]
     trechos = montar_trechos_do_plano(item, textos)
     vetores = await embed([t.embed for t in trechos], input_type="document")
 
     atualizacoes = []
     for linha, trecho, vetor in zip(linhas, trechos, vetores):
-        antiga = linha["metadata"]
-        if isinstance(antiga, str):
-            try:
-                antiga = json.loads(antiga)
-            except ValueError:
-                antiga = {}
-        if not isinstance(antiga, dict):
-            antiga = {}
+        antiga = _metadata_como_dict(linha["metadata"])
 
         atualizacoes.append(
             (

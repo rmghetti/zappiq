@@ -98,3 +98,101 @@ def test_ready_sem_pool_continua_not_ready(monkeypatch):
     client = TestClient(main.app)
 
     assert client.get("/ready").json()["status"] == "not_ready"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Capacidades anunciadas: o que este serviço sabe extrair
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_ready_anuncia_os_extratores_que_este_servico_tem(com_coluna, monkeypatch):
+    """
+    A API decide o que mandar para o /ingest olhando esta lista. Sem ela, a
+    API nova contra o RAG velho mandaria HTML cru, e o RAG velho gravaria a
+    página inteira (script, menu e rodapé) no vetor, com selo verde na tela.
+    """
+    monkeypatch.setattr(main, "EMBEDDING_DIM", 1536)
+    client = com_coluna("vector(1536)")
+
+    corpo = client.get("/ready").json()
+
+    assert corpo["extratores"] == ["pdf", "docx", "xlsx", "html", "texto"]
+
+
+def test_extratores_aparecem_mesmo_com_o_servico_not_ready(monkeypatch):
+    """
+    A capacidade é do código, não do estado do banco. Uma máquina sem pool
+    ainda sabe dizer o que sabe ler, e a API precisa dessa resposta para
+    escolher o caminho.
+    """
+    monkeypatch.setattr(main.state, "pool", None)
+    client = TestClient(main.app)
+
+    corpo = client.get("/ready").json()
+
+    assert corpo["status"] == "not_ready"
+    assert "html" in corpo["extratores"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cache da dimensão da coluna
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class ConexaoQueConta(FakeConnection):
+    def __init__(self, tipo_da_coluna: str | None = "vector(1536)") -> None:
+        super().__init__(tipo_da_coluna)
+        self.consultas = 0
+
+    async def fetchval(self, sql: str, *args):
+        self.consultas += 1
+        return await super().fetchval(sql, *args)
+
+
+def test_dimensao_da_coluna_e_lida_uma_vez_so(monkeypatch):
+    """O Fly bate no /ready a cada 15s: ler o catálogo toda vez é desperdício."""
+    conexao = ConexaoQueConta("vector(1536)")
+    monkeypatch.setattr(main.state, "pool", FakePool(conexao))
+    monkeypatch.setattr(main, "EMBEDDING_PROVIDER", "openai")
+    monkeypatch.setattr(main, "OPENAI_API_KEY", "chave-de-teste")
+    monkeypatch.setattr(main, "EMBEDDING_DIM", 1536)
+    client = TestClient(main.app)
+
+    primeira = client.get("/ready").json()
+    segunda = client.get("/ready").json()
+
+    assert primeira["checks"]["embedding"]["coluna_dim"] == 1536
+    assert segunda["checks"]["embedding"]["coluna_dim"] == 1536
+    assert conexao.consultas == 1
+
+
+def test_erro_na_leitura_do_catalogo_nao_vira_cache(monkeypatch):
+    """Tabela ainda não criada não pode congelar o serviço em 'não sei'."""
+    conexao = ConexaoQueConta(RuntimeError("relation rag_chunks does not exist"))
+    monkeypatch.setattr(main.state, "pool", FakePool(conexao))
+    monkeypatch.setattr(main, "EMBEDDING_PROVIDER", "openai")
+    monkeypatch.setattr(main, "OPENAI_API_KEY", "chave-de-teste")
+    monkeypatch.setattr(main, "EMBEDDING_DIM", 1536)
+    client = TestClient(main.app)
+
+    client.get("/ready")
+    client.get("/ready")
+
+    assert conexao.consultas == 2
+
+
+def test_ready_responde_200_mesmo_quando_nao_esta_pronto(com_coluna, monkeypatch):
+    """
+    Documenta a verdade, para ninguém contar com o que não acontece: o corpo
+    diz not_ready, mas o status HTTP continua 200, então o health check do Fly
+    considera a máquina saudável e NÃO a tira de rotação. Quem barra um deploy
+    com dimensão divergente é o smoke do fly-deploy.yml, que lê este corpo.
+    Mudar o status HTTP mexe na disponibilidade e é decisão à parte.
+    """
+    monkeypatch.setattr(main, "EMBEDDING_DIM", 1024)
+    client = com_coluna("vector(1536)")
+
+    resposta = client.get("/ready")
+
+    assert resposta.status_code == 200
+    assert resposta.json()["status"] == "not_ready"

@@ -272,3 +272,42 @@ def test_erro_inesperado_sai_como_json(monkeypatch):
     assert resposta.status_code == 500
     assert resposta.headers["content-type"].startswith("application/json")
     assert resposta.json()["error"] == "internal_server_error"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Titulo detectado na pagina volta para a API (a lista mostrava a URL crua)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PAGINA_COM_TITULO = """
+<html><head><title>Conselho do Futuro | CMJ</title></head><body>
+<article><h1>Conselho do Futuro</h1>
+<p>O programa Conselho do Futuro forma conselheiros para empresas familiares
+brasileiras que precisam profissionalizar a governanca antes da sucessao.</p>
+<p>Sao doze encontros mensais, com mentoria individual e um trabalho final
+apresentado ao conselho da propria empresa do participante.</p>
+</article></body></html>
+"""
+
+
+def test_ingest_de_pagina_devolve_o_titulo_detectado(client, gravados):
+    resposta = _subir(
+        client,
+        "cmj.com.br/cursos",
+        _PAGINA_COM_TITULO.encode(),
+        "text/html",
+        source="doc-ck1",
+        source_url="https://cmj.com.br/cursos",
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["titulo_detectado"] == "Conselho do Futuro | CMJ"
+
+
+def test_arquivo_comum_nao_devolve_titulo_detectado(client, gravados):
+    """Só página tem <title>. Para PDF e Word o campo sai nulo."""
+    resposta = _subir(
+        client, "politica.txt", b"a" * 300, "text/plain", source="doc-ck2"
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["titulo_detectado"] is None

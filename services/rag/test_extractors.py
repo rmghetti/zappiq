@@ -299,3 +299,48 @@ def test_ingestao_de_html_tambem_recusa_rede_social():
 
     assert erro.value.status_code == 422
     assert "Redes sociais" in erro.value.detail
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Titulo da pagina: "https://cmj.com.br/cursos" nao diz nada na lista
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_titulo_da_pagina_sai_da_tag_title():
+    assert extractors.titulo_da_pagina(_PAGINA.encode()) == "Cursos"
+
+
+def test_titulo_da_pagina_decodifica_entidade_e_corta_espaco():
+    pagina = b"<html><head><title>  Cursos &amp; Mentoria \n </title></head><body>x</body></html>"
+
+    assert extractors.titulo_da_pagina(pagina) == "Cursos & Mentoria"
+
+
+def test_pagina_sem_title_nao_inventa_titulo():
+    assert extractors.titulo_da_pagina(b"<html><body><p>oi</p></body></html>") is None
+
+
+def test_title_vazio_conta_como_ausente():
+    assert (
+        extractors.titulo_da_pagina(b"<html><head><title>   </title></head></html>")
+        is None
+    )
+
+
+def test_lixo_binario_nao_derruba_a_leitura_do_titulo():
+    assert extractors.titulo_da_pagina(b"\x00\x01\x02\x03") is None
+
+
+def test_titulo_muito_longo_e_cortado():
+    longo = "A" * 400
+    pagina = f"<html><head><title>{longo}</title></head></html>".encode()
+
+    detectado = extractors.titulo_da_pagina(pagina)
+
+    assert detectado is not None
+    assert len(detectado) <= extractors.TITULO_MAX_CARACTERES
+
+
+def test_formatos_suportados_e_a_lista_que_o_ready_anuncia():
+    """Contrato com a API: ela decide o que enviar olhando esta lista."""
+    assert extractors.FORMATOS_SUPORTADOS == ("pdf", "docx", "xlsx", "html", "texto")

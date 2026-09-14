@@ -95,6 +95,13 @@ _EXTENSOES = {
     ".htm": "html",
 }
 
+# O que este servico sabe extrair. E a lista que o /ready anuncia e que a API
+# consulta antes de decidir o que mandar: com "html" aqui, a API manda a pagina
+# crua e o Readability roda deste lado; sem "html" (RAG de uma versao anterior),
+# a API limpa o HTML antes de enviar. Sem esse combinado, a API nova contra o
+# RAG velho gravaria script, menu e rodape no vetor.
+FORMATOS_SUPORTADOS = ("pdf", "docx", "xlsx", "html", "texto")
+
 _MIMES = {
     "application/pdf": "pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
@@ -234,6 +241,32 @@ def _extrair_html(data: bytes) -> str:
     if len(re.sub(r"\s", "", limpo)) < MINIMO_CARACTERES_PAGINA:
         raise HTTPException(status_code=422, detail=MENSAGEM_PAGINA_CURTA)
     return limpo
+
+
+# Titulo de pagina mais longo que isto e frase de marketing, nao nome. O corte
+# vale para a lista da tela, onde o titulo precisa caber numa linha.
+TITULO_MAX_CARACTERES = 120
+
+
+def titulo_da_pagina(data: bytes) -> str | None:
+    """
+    O texto da tag <title>, quando a pagina tem uma.
+
+    Serve para a lista do Treinar IA: "https://cmj.com.br/cursos/graduacao" nao
+    diz ao dono do negocio qual pagina e aquela, e "Cursos | CMJ" diz. Devolve
+    None quando nao ha titulo util, e quem chama decide o que usar no lugar.
+    """
+    from lxml import html as lxml_html
+
+    try:
+        arvore = lxml_html.fromstring(data.decode("utf-8", errors="replace"))
+        encontrados = arvore.xpath("//title//text()")
+    except Exception:
+        return None
+
+    bruto = " ".join(str(parte) for parte in encontrados)
+    limpo = re.sub(r"\s+", " ", bruto).strip()
+    return limpo[:TITULO_MAX_CARACTERES].strip() or None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

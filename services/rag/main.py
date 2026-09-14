@@ -197,6 +197,9 @@ class IngestResponse(BaseModel):
     chunks_ingested: int
     tokens_embedded: int
     latency_ms: int
+    # Titulo da tag <title>, so quando o conteudo era uma pagina. A API usa
+    # para trocar o titulo do documento, que ate aqui era a URL crua na lista.
+    titulo_detectado: str | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -207,6 +210,12 @@ class IngestResponse(BaseModel):
 class AppState:
     pool: asyncpg.Pool | None = None
     tokenizer: tiktoken.Encoding | None = None
+    # Dimensao declarada em rag_chunks.embedding. Ela so muda com migracao, e o
+    # Fly bate no /ready a cada 15 segundos: ler o catalogo em toda batida gasta
+    # conexao do pool a troco de nada. Guardada apos a primeira leitura BEM
+    # SUCEDIDA; erro nao vira cache, senao uma tabela ainda nao criada
+    # congelaria o servico em "nao sei" ate o proximo deploy.
+    dimensao_da_coluna: int | None = None
 
 
 state = AppState()
@@ -625,7 +634,11 @@ async def _dimensao_da_coluna_embedding() -> tuple[int | None, str | None]:
     """
     Le a dimensao declarada em rag_chunks.embedding pelo catalogo do Postgres.
     Devolve (dimensao, erro): so um dos dois vem preenchido.
+
+    Cacheada em state depois do primeiro acerto (ver AppState.dimensao_da_coluna).
     """
+    if state.dimensao_da_coluna is not None:
+        return state.dimensao_da_coluna, None
     if not state.pool:
         return None, "pool nao inicializado"
     try:
@@ -645,7 +658,8 @@ async def _dimensao_da_coluna_embedding() -> tuple[int | None, str | None]:
     casou = _TIPO_VECTOR.search(str(tipo or ""))
     if not casou:
         return None, f"tipo inesperado na coluna embedding: {tipo}"
-    return int(casou.group(1)), None
+    state.dimensao_da_coluna = int(casou.group(1))
+    return state.dimensao_da_coluna, None
 
 
 @app.get("/ready", tags=["health"])
@@ -681,7 +695,14 @@ async def ready():
     # Dimensao configurada contra dimensao da coluna (achado A018). Producao
     # embeda em 1536 e a coluna e vector(1536), mas o fly.toml do repositorio
     # fixa 1024: um deploy que fizesse valer o arquivo quebraria toda ingestao
-    # e toda busca, em silencio. Aqui o servico se recusa a ficar pronto.
+    # e toda busca, em silencio.
+    #
+    # ATENCAO ao que isto NAO faz: o corpo passa a dizer not_ready, mas a
+    # resposta continua sendo HTTP 200. O health check do Fly olha o status
+    # HTTP, entao ele segue achando a maquina saudavel e NAO a tira de rotacao.
+    # Quem barra o deploy e o smoke do .github/workflows/fly-deploy.yml, que le
+    # estes dois campos do corpo e derruba o job quando divergem. Trocar o
+    # status HTTP mudaria a disponibilidade do servico e e decisao a parte.
     coluna_dim, coluna_erro = await _dimensao_da_coluna_embedding()
     checks["embedding"]["coluna_dim"] = coluna_dim
     if coluna_erro:
@@ -698,6 +719,11 @@ async def ready():
     return {
         "status": "ready" if ok else "not_ready",
         "service": "zappiq-rag",
+        # Capacidade de codigo, nao de estado: sai mesmo com o servico
+        # not_ready, porque e por ela que a API descobre com qual versao do RAG
+        # esta falando. Sem o campo (RAG anterior a este deploy), a API assume
+        # que nao ha "html" e limpa a pagina antes de enviar.
+        "extratores": list(extractors.FORMATOS_SUPORTADOS),
         "checks": checks,
     }
 
@@ -803,6 +829,8 @@ async def ingest(
         meta.setdefault("source_url", source_url)
 
     # Extract
+    formato = extractors.detectar_formato(file.content_type, file.filename or "")
+    titulo_detectado = extractors.titulo_da_pagina(data) if formato == "html" else None
     text = extractors.extrair_texto(
         file.content_type, file.filename or "", data, source_url=source_url
     )
@@ -864,6 +892,7 @@ async def ingest(
         chunks_ingested=len(chunks),
         tokens_embedded=tokens,
         latency_ms=latency,
+        titulo_detectado=titulo_detectado,
     )
 
 
