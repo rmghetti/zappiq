@@ -151,11 +151,16 @@ export function buildSurveyKnowledgeBlocks({
   surveyAnswers,
 }: SurveyKnowledgeInput): BlocoDoQuestionario[] {
   const porSecao = new Map<string, { titulo: string; linhas: string[]; respostas: number }>();
+  // A mesma pergunta pode aparecer em dois ramos do JSON (uma resposta que
+  // ficou no bloco global e outra no bloco do segmento). Vale a primeira:
+  // repetir a pergunta no documento só ensina o modelo a ver contradição.
+  const jaEscritas = new Set<string>();
 
   for (const { id, valor } of achatarRespostas(surveyAnswers)) {
     const pergunta = PERGUNTA_POR_ID.get(id);
     if (!pergunta) continue;
     if (destinoDaPergunta(id)?.destino !== 'base') continue;
+    if (jaEscritas.has(id)) continue;
 
     const texto = valorEmTexto(valor);
     if (!texto) continue;
@@ -165,6 +170,7 @@ export function buildSurveyKnowledgeBlocks({
       linhas: [],
       respostas: 0,
     };
+    jaEscritas.add(id);
     secao.linhas.push(`Pergunta: ${pergunta.label}`, `Resposta: ${texto}`, '');
     secao.respostas += 1;
     porSecao.set(pergunta.secaoId, secao);

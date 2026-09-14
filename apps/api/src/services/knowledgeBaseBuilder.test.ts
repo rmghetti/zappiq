@@ -163,3 +163,20 @@ describe('documento do questionário por seção', () => {
     expect(countAnsweredQuestions(RESPOSTAS_REAIS)).toBe(11);
   });
 });
+
+describe('mesma pergunta em dois ramos do JSON', () => {
+  it('escreve a resposta uma vez só', () => {
+    const blocos = buildSurveyKnowledgeBlocks({
+      businessName: 'X',
+      niche: 'geral',
+      surveyAnswers: {
+        identidade_empresa: { pre_tabela_precos: 'Primeira resposta' },
+        segmento: { pre_tabela_precos: 'Resposta repetida' },
+      },
+    });
+    const texto = blocos.map((b) => b.texto).join('\n');
+    expect(texto).toContain('Primeira resposta');
+    expect(texto).not.toContain('Resposta repetida');
+    expect(texto.match(/Pergunta: Se aplicável/g)?.length).toBe(1);
+  });
+});
