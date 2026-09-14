@@ -10,9 +10,14 @@
  * remoção. Se este teste falhar, ou a rotina saiu do registro ou o horário
  * mudou: as duas coisas precisam ser intencionais.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { CRON_JOBS, LEGACY_CRON_QUEUES } from './cronQueue.js';
+import {
+  CRON_JOBS,
+  LEGACY_CRON_QUEUES,
+  removeObsoleteCronSchedulers,
+  type RegistroDeAgendamentos,
+} from './cronQueue.js';
 
 /**
  * name → pattern esperado. As 11 primeiras vieram das filas ANTIGAS, com o
@@ -83,5 +88,82 @@ describe('fila cron — registro consolidado', () => {
         'superadmin-trial-digest',
       ]),
     );
+  });
+});
+
+/**
+ * A chave do agendamento no BullMQ 5.71.1 é o md5 de
+ * `nome:jobId:endDate:tz:padrão` (repeat.js, getRepeatConcatOptions). Mudar só
+ * o padrão de uma rotina muda a chave, então `cronQueue.add` NÃO substitui o
+ * agendamento antigo: cria um SEGUNDO ao lado dele.
+ *
+ * Foi exatamente o que este PR fez com a auditoria da Iza, que passou de
+ * `30 4 * * *` (diária) para `30 4 * * 0` (domingo). Sem esta limpeza a Iza
+ * continuaria rodando todo dia, e duas vezes no domingo, com o custo de LLM
+ * que a mudança existe para cortar.
+ */
+describe('fila cron — agendamento obsoleto sai do Redis', () => {
+  /** Fila falsa: só o par de métodos que a limpeza usa. */
+  function filaCom(
+    agendamentos: Array<{ key: string; name?: string; pattern?: string } | undefined>,
+  ): RegistroDeAgendamentos & { removeJobScheduler: ReturnType<typeof vi.fn> } {
+    return {
+      getJobSchedulers: vi.fn().mockResolvedValue(agendamentos),
+      removeJobScheduler: vi.fn().mockResolvedValue(true),
+    };
+  }
+
+  it('remove o repetível antigo quando o padrão da rotina muda', async () => {
+    const fila = filaCom([
+      { key: 'md5-antigo', name: 'agent-eval-iza', pattern: '30 4 * * *' }, // era diária
+      { key: 'md5-novo', name: 'agent-eval-iza', pattern: '30 4 * * 0' }, // virou semanal
+    ]);
+
+    const removidos = await removeObsoleteCronSchedulers(fila);
+
+    expect(removidos).toBe(1);
+    expect(fila.removeJobScheduler).toHaveBeenCalledTimes(1);
+    expect(fila.removeJobScheduler).toHaveBeenCalledWith('md5-antigo');
+  });
+
+  it('preserva todo agendamento que ainda corresponde ao registro', async () => {
+    const fila = filaCom(
+      CRON_JOBS.map((job, i) => ({ key: `md5-${i}`, name: job.name, pattern: job.pattern })),
+    );
+
+    const removidos = await removeObsoleteCronSchedulers(fila);
+
+    expect(removidos).toBe(0);
+    expect(fila.removeJobScheduler).not.toHaveBeenCalled();
+  });
+
+  it('remove agendamento de rotina que saiu do registro', async () => {
+    const fila = filaCom([{ key: 'md5-orfa', name: 'rotina-que-nao-existe-mais', pattern: '0 5 * * *' }]);
+
+    expect(await removeObsoleteCronSchedulers(fila)).toBe(1);
+    expect(fila.removeJobScheduler).toHaveBeenCalledWith('md5-orfa');
+  });
+
+  it('é idempotente: rodar de novo, sem obsoleto, não remove nada', async () => {
+    // As duas máquinas do Fly rodam isto no boot, uma depois da outra.
+    const fila = filaCom([{ key: 'md5-novo', name: 'agent-eval-iza', pattern: '30 4 * * 0' }]);
+
+    expect(await removeObsoleteCronSchedulers(fila)).toBe(0);
+    expect(await removeObsoleteCronSchedulers(fila)).toBe(0);
+  });
+
+  it('falha no Redis não derruba a subida do cron', async () => {
+    const fila: RegistroDeAgendamentos = {
+      getJobSchedulers: vi.fn().mockRejectedValue(new Error('Redis fora do ar')),
+      removeJobScheduler: vi.fn(),
+    };
+
+    await expect(removeObsoleteCronSchedulers(fila)).resolves.toBe(0);
+  });
+
+  it('tolera entrada sem dados (hash do agendamento sumiu do Redis)', async () => {
+    const fila = filaCom([undefined, { key: 'md5-orfa', name: 'sumiu', pattern: '0 5 * * *' }]);
+
+    expect(await removeObsoleteCronSchedulers(fila)).toBe(1);
   });
 });

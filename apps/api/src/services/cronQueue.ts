@@ -202,6 +202,66 @@ export async function removeLegacyCronSchedulers(): Promise<number> {
   return removed;
 }
 
+/** Um agendamento como o BullMQ devolve. Só o que a limpeza precisa ler. */
+export interface AgendamentoRegistrado {
+  key: string;
+  name?: string | null;
+  pattern?: string | null;
+}
+
+/** O par de métodos da fila que a limpeza usa. Injetável para o teste. */
+export interface RegistroDeAgendamentos {
+  getJobSchedulers(): Promise<Array<AgendamentoRegistrado | undefined>>;
+  removeJobScheduler(key: string): Promise<unknown>;
+}
+
+/**
+ * Remove agendamento da PRÓPRIA fila `cron` que não corresponde mais ao
+ * registro de CRON_JOBS.
+ *
+ * Por que isto é obrigatório: no BullMQ 5.71.1 a chave do agendamento é o md5
+ * de `nome:jobId:endDate:tz:padrão` (classes/repeat.js, getRepeatConcatOptions).
+ * Mudar só o PADRÃO de uma rotina muda a chave, então `cronQueue.add` não
+ * substitui o agendamento antigo: cria um SEGUNDO ao lado dele, e o worker
+ * passa a receber os dois disparos.
+ *
+ * Foi o caso da auditoria da Iza, que saiu de `30 4 * * *` (diária) para
+ * `30 4 * * 0` (domingo): sem esta limpeza ela continuaria rodando todo dia,
+ * e duas vezes no domingo, com o custo de LLM que a mudança existe para cortar.
+ *
+ * A comparação é por (nome, padrão), não por nome: é o par que forma a chave.
+ * Idempotente de propósito, porque as duas máquinas do Fly rodam isto no boot.
+ * Fail-soft: erro aqui é logado e o registro das rotinas segue.
+ */
+export async function removeObsoleteCronSchedulers(
+  fila: RegistroDeAgendamentos = cronQueue,
+): Promise<number> {
+  const esperado = new Set(CRON_JOBS.map((job) => `${job.name}|${job.pattern}`));
+  let removidos = 0;
+
+  try {
+    for (const agendamento of await fila.getJobSchedulers()) {
+      if (!agendamento?.key) continue;
+      if (esperado.has(`${agendamento.name ?? ''}|${agendamento.pattern ?? ''}`)) continue;
+
+      await fila.removeJobScheduler(agendamento.key);
+      removidos += 1;
+      logger.info({
+        msg: 'cron_scheduler_obsoleto_removido',
+        name: agendamento.name,
+        pattern: agendamento.pattern,
+      });
+    }
+  } catch (err) {
+    logger.error({
+      msg: 'cron_scheduler_obsoleto_limpeza_falhou',
+      error: String((err as Error)?.message ?? err),
+    });
+  }
+
+  return removidos;
+}
+
 let cronWorker: Worker | undefined;
 
 export async function initCronQueue(): Promise<void> {
@@ -247,6 +307,9 @@ export async function initCronQueue(): Promise<void> {
   });
 
   await removeLegacyCronSchedulers();
+  // Antes do laço de registro: o `add` abaixo NÃO substitui o agendamento de
+  // uma rotina que mudou de padrão, cria outro ao lado. Ver a função.
+  await removeObsoleteCronSchedulers();
 
   for (const { name, pattern } of CRON_JOBS) {
     await cronQueue.add(name, {}, { repeat: { pattern }, jobId: `cron:${name}` });
