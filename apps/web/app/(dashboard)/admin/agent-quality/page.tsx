@@ -45,6 +45,7 @@ import {
   type AgentEvalRunDetail,
   type AgentEvalFixDecision,
   type AgentEvalRunDetailScenario,
+  type RegradeResumo,
 } from '../../../../lib/adminApi';
 
 const REFRESH_INTERVAL_MS = 60_000;
@@ -131,6 +132,54 @@ export default function AgentQualityPage() {
       .catch(() => setLatestDetail(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runs]);
+
+  // ── P61: recalcular as notas com o gabarito v3 ───────────────────
+  // Sempre em duas etapas. A prévia (dryRun) não grava nada, e é ela que dá
+  // ao fundador o número antes de decidir. Só depois vem o recálculo que
+  // grava em eval_regrades. Nenhuma das duas chama o agente ou o juiz: a
+  // releitura é sobre respostas JÁ gravadas, então custa zero.
+  const [regravando, setRegravando] = useState(false);
+  const [regravacaoPedido, setRegravacaoPedido] = useState<{
+    dryRun: boolean;
+    execucoes: number;
+    message: string;
+  } | null>(null);
+  const [regravacaoResumo, setRegravacaoResumo] = useState<RegradeResumo | null>(null);
+  const [regravacaoErro, setRegravacaoErro] = useState<string | null>(null);
+
+  const recalcularNotas = async (dryRun: boolean) => {
+    setRegravando(true);
+    setRegravacaoErro(null);
+    setRegravacaoResumo(null);
+    try {
+      // Sem organização no filtro: o servidor pega as execuções concluídas
+      // com gabarito v2 e resultados gravados, da mais recente para trás.
+      const pedido = await agentQualityApi.pedirRegravacao({ dryRun });
+      setRegravacaoPedido({
+        dryRun: pedido.dryRun,
+        execucoes: pedido.execucoes,
+        message: pedido.message,
+      });
+    } catch (err: any) {
+      setRegravacaoErro(err?.message || 'Erro ao pedir o recálculo');
+    } finally {
+      setRegravando(false);
+    }
+  };
+
+  /** Lê o resumo da execução concluída mais recente, depois do recálculo. */
+  const verResumoDaRegravacao = async () => {
+    const ultima = runs.find((r) => r.status === 'completed');
+    if (!ultima) return;
+    setRegravacaoErro(null);
+    try {
+      setRegravacaoResumo(await agentQualityApi.getRegravacao(ultima.id));
+    } catch (err: any) {
+      setRegravacaoErro(
+        err?.message || 'Esta execução ainda não foi recalculada. Rode o recálculo primeiro.',
+      );
+    }
+  };
 
   const testSlack = async () => {
     setSlackTesting(true);
@@ -282,6 +331,14 @@ export default function AgentQualityPage() {
               {slackTesting ? 'Testando…' : 'Testar Slack'}
             </button>
             <button
+              onClick={() => recalcularNotas(true)}
+              disabled={regravando}
+              title="Relê as execuções já gravadas com o gabarito v3. Não chama o agente nem o juiz: custo zero."
+              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-sky-50 text-sky-800 rounded-lg text-sm font-medium transition-colors border border-sky-200 shadow-sm disabled:opacity-50"
+            >
+              {regravando ? 'Recalculando…' : 'Recalcular notas (gabarito v3)'}
+            </button>
+            <button
               onClick={testRealAlert}
               disabled={slackTesting}
               title="Dispara alerta REAL (mesma payload que o cron usa). Se /test-slack chega mas esse não, é a payload."
@@ -291,6 +348,84 @@ export default function AgentQualityPage() {
             </button>
           </div>
         </div>
+
+        {/* ── P61: prévia e resumo do recálculo ────────────────────── */}
+        {(regravacaoPedido || regravacaoErro) && (
+          <div className="rounded-lg p-4 border bg-sky-50 border-sky-200 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-sky-900 bg-sky-200 px-2 py-0.5 rounded">
+                Nota recalculada
+              </span>
+              <span className="text-xs text-sky-900">
+                releitura das respostas já gravadas, sem chamar o agente nem o juiz
+              </span>
+            </div>
+            {regravacaoErro && <p className="text-sm text-red-800">{regravacaoErro}</p>}
+            {regravacaoPedido && (
+              <>
+                <p className="text-sm text-sky-900">
+                  {regravacaoPedido.dryRun ? 'Prévia' : 'Recálculo'} de{' '}
+                  {regravacaoPedido.execucoes} execução(ões). {regravacaoPedido.message}
+                </p>
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  <button
+                    onClick={verResumoDaRegravacao}
+                    className="px-3 py-1.5 text-xs font-medium rounded border border-sky-300 bg-white text-sky-900 hover:bg-sky-100"
+                  >
+                    Ver o resumo da última execução
+                  </button>
+                  {regravacaoPedido.dryRun && (
+                    <button
+                      onClick={() => recalcularNotas(false)}
+                      disabled={regravando}
+                      className="px-3 py-1.5 text-xs font-medium rounded bg-sky-700 text-white hover:bg-sky-800 disabled:opacity-50"
+                    >
+                      Confirmar e gravar o recálculo
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+            {regravacaoResumo && (
+              <div className="mt-4 bg-white border border-sky-200 rounded p-3">
+                <div className="text-sm text-neutral-800">
+                  <strong>{regravacaoResumo.agentName || 'Agente'}</strong>: a nota passaria de{' '}
+                  <strong>{regravacaoResumo.notaAntiga ?? '—'}</strong> para{' '}
+                  <strong>{regravacaoResumo.notaRegravada}</strong>.{' '}
+                  {regravacaoResumo.reprovacoesDoGabarito} reprovação(ões) eram do gabarito.
+                </div>
+                {typeof regravacaoResumo.discordantes === 'number' && (
+                  <div className="text-xs text-neutral-600 mt-1">
+                    {regravacaoResumo.discordantes} cenário(s) em que a regra nova e o avaliador da
+                    época discordam: é o lote de rotulagem da calibração.
+                  </div>
+                )}
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-neutral-500 border-b border-neutral-200">
+                        <th className="py-1 pr-3">Cenário</th>
+                        <th className="py-1 pr-3">Antes</th>
+                        <th className="py-1 pr-3">Depois</th>
+                        <th className="py-1">Motivo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {regravacaoResumo.porCenario.map((c) => (
+                        <tr key={c.scenarioId} className="border-b border-neutral-100 align-top">
+                          <td className="py-1 pr-3 font-mono">{c.scenarioId}</td>
+                          <td className="py-1 pr-3">{c.vereditoAntigo}</td>
+                          <td className="py-1 pr-3 font-medium">{c.vereditoNovo}</td>
+                          <td className="py-1 text-neutral-600">{c.motivo}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Feedback do teste Slack */}
         {slackResult && (

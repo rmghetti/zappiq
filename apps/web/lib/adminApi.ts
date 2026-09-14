@@ -377,6 +377,42 @@ export interface AgentEvalRunRow {
 export interface AgentEvalRunsResponse {
   total: number;
   runs: AgentEvalRunRow[];
+  /** P56 — piso de ruído do agente consultado. Só vem com agentId no filtro. */
+  ruido?: { desvio: number; n: number } | null;
+}
+
+/** P61 — leitura de UM cenário pela régua nova, sobre a resposta já gravada. */
+export interface RegradeCenario {
+  scenarioId: string;
+  severity: string;
+  vereditoAntigo: 'pass' | 'partial' | 'fail' | 'erro';
+  vereditoNovo: 'pass' | 'partial' | 'fail' | 'erro' | 'fora_do_gabarito';
+  motivo: string;
+  culpaDoGabarito?: boolean;
+  discordante?: boolean;
+}
+
+/** P61 — resumo da nota recalculada de uma execução. */
+export interface RegradeResumo {
+  runId: string;
+  agentName?: string;
+  startedAt?: string;
+  harnessVersion?: number;
+  notaAntiga: number | null;
+  notaRegravada: number;
+  totalCenarios?: number;
+  reprovacoesDoGabarito: number;
+  continuamReprovados: string[];
+  discordantes?: number;
+  porCenario: RegradeCenario[];
+}
+
+export interface RegradePedidoResposta {
+  jobId: string;
+  execucoes: number;
+  dryRun: boolean;
+  runIds: string[];
+  message: string;
 }
 
 export interface AgentEvalRunDetailScenario {
@@ -422,6 +458,8 @@ export interface AgentEvalFixDecision {
 }
 
 export interface AgentEvalRunDetail extends AgentEvalRunRow {
+  /** P61 — resumo da nota recalculada desta execução, quando existir. */
+  regravacao?: RegradeResumo | null;
   hasResults: boolean;
   results?: AgentEvalRunDetailScenario[];
   agent?: { id: string; name: string; organizationId: string };
@@ -465,6 +503,28 @@ class AgentQualityApi {
   async getRunDetail(runId: string, includeResults: boolean = true): Promise<AgentEvalRunDetail> {
     return api.get<AgentEvalRunDetail>(
       `/api/admin/agent-eval/runs/${encodeURIComponent(runId)}${includeResults ? '?includeResults=true' : ''}`,
+    );
+  }
+
+  /**
+   * POST /api/admin/agent-eval/regrade — P61.
+   *
+   * Relê as execuções já gravadas com o gabarito atual. Não chama o agente
+   * nem o juiz: custo zero. `dryRun` é o padrão do servidor, e a tela sempre
+   * faz a prévia antes de gravar.
+   */
+  async pedirRegravacao(opts: {
+    organizationId?: string;
+    runIds?: string[];
+    dryRun: boolean;
+  }): Promise<RegradePedidoResposta> {
+    return api.post<RegradePedidoResposta>('/api/admin/agent-eval/regrade', opts);
+  }
+
+  /** GET /api/admin/agent-eval/regrade/:runId — resumo da nota recalculada. */
+  async getRegravacao(runId: string): Promise<RegradeResumo> {
+    return api.get<RegradeResumo>(
+      `/api/admin/agent-eval/regrade/${encodeURIComponent(runId)}`,
     );
   }
 

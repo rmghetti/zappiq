@@ -15,6 +15,20 @@ import type {
   AgentEvalRunDetail,
   AgentEvalFixDecision,
 } from './adminApi';
+import type {
+  RegravacaoResumo,
+  EstadoResposta,
+} from '@/app/(dashboard)/treinar/qualidade/_lib/regravacao';
+
+/**
+ * P61 e P56: o detalhe da execução traz, além dela mesma, o resumo da nota
+ * RECALCULADA (quando existir) e o estado em linguagem de dono de negócio.
+ * A faixa numérica do ruído fica no admin, de propósito.
+ */
+export interface ClientRunDetail extends Omit<AgentEvalRunDetail, 'regravacao'> {
+  regravacao?: RegravacaoResumo | null;
+  estado?: EstadoResposta | null;
+}
 
 /**
  * Papéis que executam ação na Qualidade da IA.
@@ -90,8 +104,8 @@ class ClientAgentQualityApi {
   }
 
   /** GET /api/agent-quality/runs/:id?includeResults=true */
-  async getRunDetail(runId: string, includeResults: boolean = true): Promise<AgentEvalRunDetail> {
-    return api.get<AgentEvalRunDetail>(
+  async getRunDetail(runId: string, includeResults: boolean = true): Promise<ClientRunDetail> {
+    return api.get<ClientRunDetail>(
       `/api/agent-quality/runs/${encodeURIComponent(runId)}${includeResults ? '?includeResults=true' : ''}`,
     );
   }
