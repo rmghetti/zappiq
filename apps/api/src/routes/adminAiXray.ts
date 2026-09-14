@@ -105,15 +105,18 @@ async function montarPrompt(input: {
 }): Promise<string> {
   const { canal, organizationId, settings, ragContext, mensagem, historico } = input;
 
-  // WhatsApp e playground: caminho de produção, com as settings da org.
-  // Instagram: MESMA função, com settings vazias. É o que a produção faz hoje
-  // (webhookInstagram enfileira orgSettings: {}). Quando isso for corrigido,
-  // o Raio-X passa a mostrar a correção sem tocar em nada aqui.
+  // WhatsApp, Instagram e playground: caminho de produção, com as settings da
+  // organização.
+  //
+  // O Instagram rodava aqui com settings VAZIAS, de propósito, porque era o
+  // que a produção fazia (webhookInstagram enfileirava `orgSettings: {}`, o
+  // achado A057). O defeito foi corrigido em 14/09/2026: o webhook passa as
+  // settings reais, como o do WhatsApp sempre fez. O Raio-X acompanha.
   if (canal === 'whatsapp' || canal === 'playground' || canal === 'instagram') {
     return buildSystemPromptForContact({
       organizationId,
       contactId: `xray:${organizationId}`,
-      orgSettings: canal === 'instagram' ? {} : settings,
+      orgSettings: settings,
       ragContext,
     });
   }

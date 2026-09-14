@@ -85,6 +85,13 @@ vi.mock('../services/izaFactsService.js', () => ({
   invalidateIzaFactsCache: vi.fn(),
 }));
 
+// O perfil vivo (A8) consulta o interruptor por organização dentro do
+// buildSystemPromptForContact. Sem este mock, o Raio-X tentaria abrir conexão
+// com o Redis no meio de um teste que não pode tocar em infraestrutura.
+vi.mock('../services/featureFlags.js', () => ({
+  isFlagOn: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -277,19 +284,18 @@ describe('POST /api/admin/ai-xray: o prompt de cada canal', () => {
     }
   });
 
-  it('o Instagram roda com as configurações vazias, então a saudação do cliente some (achado A057)', async () => {
+  it('o Instagram agora roda com as configurações do cliente, igual ao WhatsApp (A057 corrigido)', async () => {
+    // Este caso nasceu reproduzindo o defeito: o webhook do Instagram
+    // enfileirava orgSettings vazio e a saudação configurada sumia no Direct.
+    // Corrigido em 14/09/2026 (tarefa A8). O Raio-X mostra a correção.
     const noWhatsapp = await chamar({ ...corpoValido, canal: 'whatsapp' });
     const noInstagram = await chamar({ ...corpoValido, canal: 'instagram' });
 
-    const saudacaoWhatsapp = noWhatsapp.body.turnos[0].checagens.find(
-      (c: any) => c.id === 'saudacao_no_primeiro_contato',
-    );
-    const saudacaoInstagram = noInstagram.body.turnos[0].checagens.find(
-      (c: any) => c.id === 'saudacao_no_primeiro_contato',
-    );
+    const saudacao = (res: any) =>
+      res.body.turnos[0].checagens.find((c: any) => c.id === 'saudacao_no_primeiro_contato');
 
-    expect(saudacaoWhatsapp.ok).toBe(true);
-    expect(saudacaoInstagram.ok).toBe(false);
+    expect(saudacao(noWhatsapp).ok).toBe(true);
+    expect(saudacao(noInstagram).ok).toBe(true);
   });
 
   it('só as mensagens do cliente viram turno; as do agente entram no histórico', async () => {
