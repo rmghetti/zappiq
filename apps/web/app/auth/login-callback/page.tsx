@@ -22,6 +22,8 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+// A213: o rascunho do cadastro sai do navegador quando o cliente entra.
+import { armazenamentoDoNavegador, limparRascunho } from '../../../lib/onboardingDraft';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -113,6 +115,8 @@ function LoginCallbackInner() {
       if (exchange.refreshToken) {
         localStorage.setItem('zappiq_refresh_token', exchange.refreshToken);
       }
+      const storage = armazenamentoDoNavegador();
+      if (storage) limparRascunho(storage);
 
       router.replace('/dashboard');
     } catch (err: unknown) {

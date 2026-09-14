@@ -10,11 +10,24 @@
  * - Google OAuth NÃO cria row antes; callback precisa criar com defaults
  *
  * Por isso fazemos SELECT + INSERT/UPDATE em vez de UPDATE direto.
+ *
+ * A242 (14/09/2026): aqui o callback só CONFIRMA.
+ *   Quem grava o plano escolhido é /api/signup/google, antes do
+ *   redirecionamento. Este handler nunca sobrescreve um plan_chosen que já
+ *   existe: era assim que a escolha do Lite virava GROWTH.
+ *   Quando não há linha nenhuma (lead que clicou no Google sem digitar
+ *   e-mail), a escolha é recuperada do cookie e, só depois, do parâmetro da
+ *   URL. O último recurso é o plano de ENTRADA, não um plano mais caro.
  */
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isSelfSignupPlan, type PlanId } from '@zappiq/shared';
+import {
+  COOKIE_PLANO_ESCOLHIDO,
+  planoDoCookie,
+  resolverPlanoDoOAuth,
+} from '../../../lib/signupPlanCookie';
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -57,7 +70,9 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (existing) {
-      // Magic Link path: row já existe, só atualiza confirmação
+      // A linha já existe (Magic Link, ou o intent gravado em
+      // /api/signup/google). Este handler SÓ confirma: plan_chosen não
+      // entra no UPDATE de propósito, para nunca apagar a escolha do lead.
       await sbAdmin
         .from('signups')
         .update({
@@ -68,8 +83,9 @@ export async function GET(req: Request) {
         })
         .eq('id', existing.id);
     } else {
-      // Google OAuth path: row não existe, cria com defaults
-      const plan: PlanId = isSelfSignupPlan(planParam) ? planParam : 'GROWTH';
+      // Google OAuth sem e-mail digitado no formulário: a linha não existe.
+      // A escolha vem do cookie que nós gravamos; a URL é a terceira rede.
+      const plan: PlanId = resolverPlanoDoOAuth(planoDoCookie(req), planParam);
 
       const meta = data.user.user_metadata || {};
       const name =
@@ -117,5 +133,9 @@ export async function GET(req: Request) {
     redirectUrl.searchParams.set('name', fullName);
   }
 
-  return NextResponse.redirect(redirectUrl);
+  const resposta = NextResponse.redirect(redirectUrl);
+  // O cookie já cumpriu o papel dele. Deixá-lo vivo faria um cadastro
+  // seguinte, na mesma máquina, herdar o plano de quem passou antes.
+  resposta.cookies.set(COOKIE_PLANO_ESCOLHIDO, '', { path: '/', maxAge: 0 });
+  return resposta;
 }

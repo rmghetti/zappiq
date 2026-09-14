@@ -22,6 +22,14 @@ import {
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
 import { syncContactToCrm } from '../services/crmAutomationService.js'; // CRM Onda 1 — IA preenche o pipeline
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
+// Rede de crise e transbordo do pré-filtro (P62, A251, A232).
+import {
+  acionarRedeDeCrise,
+  acionarTransbordoDeCompliance,
+  acrescentarAcolhimento,
+  type CanalDoTurno,
+} from '../services/llm/crisisSafetyNet.js';
+import { detectarSinalDeCrise } from '../services/llm/blockedVerticalFilter.js';
 import { getToolsForContext } from '../services/llm/tools.js';
 import { isZappIQOrg, ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 import { extractConversionUrls, buildTenantLinksBlock } from './tenantConversionUrls.js';
@@ -126,6 +134,73 @@ export async function deliverAgentReply(input: {
     });
   }
   return sendReplyText({ organizationId, conversationId, content: text });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Rede de crise nas SAÍDAS ANTECIPADAS do turno (P62, I3 da revisão)
+ * --------------------------------------------------------------------
+ * A rede montada em 14/09/2026 só cobria o caminho que passa pelo
+ * routeIzaTurn. O turno tem seis saídas que terminam antes dele:
+ *
+ *   - fluxo do Maestro resolvido sem IA (scheduled, await_input, end);
+ *   - rate limit de respostas do trial, que sai calado;
+ *   - cap de custo do trial, que responde uma mensagem fixa;
+ *   - quota do plano estourada em modo enforce, que também sai calada;
+ *   - caminho agêntico do Maestro, que já respondeu.
+ *
+ * Em todas elas um pedido de socorro era respondido sem o CVV, e em três
+ * delas com silêncio: a pessoa escrevia pedindo ajuda e a plataforma não
+ * respondia nada porque a organização passou do limite do plano. Limite
+ * comercial não pode calar pedido de socorro.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Fecha uma saída antecipada atendendo ao sinal de crise.
+ *
+ * `jaRespondeu` diz se aquele caminho já mandou alguma coisa para o cliente
+ * neste turno. Quando já mandou (a linha do CVV foi acrescentada ao texto
+ * antes do envio), aqui só roda a rede: pausar a IA, avisar o dono e
+ * registrar. Quando não mandou nada, a linha do CVV vai sozinha, porque
+ * silêncio é a pior resposta possível para quem escreveu aquilo.
+ *
+ * Fail-soft inteiro: nada aqui pode transformar um pedido de ajuda em erro.
+ */
+async function fecharSaidaAntecipadaComAcolhimento(params: {
+  organizationId: string;
+  conversationId: string;
+  canal: CanalDoTurno;
+  regra: string;
+  jaRespondeu: boolean;
+}): Promise<void> {
+  const { organizationId, conversationId, canal, regra, jaRespondeu } = params;
+
+  if (!jaRespondeu) {
+    const texto = acrescentarAcolhimento('', { comTransbordo: true });
+    try {
+      await deliverAgentReply({ organizationId, conversationId, text: texto });
+      await prisma.message.create({
+        data: {
+          direction: 'OUTBOUND',
+          type: 'TEXT',
+          content: texto,
+          status: 'SENT',
+          conversationId,
+          isFromBot: true,
+          aiConfidence: 1.0, // determinística: regex, sem LLM
+        },
+      });
+    } catch (err) {
+      logger.error('[Agent] acolhimento em saída antecipada falhou (fail-soft)', {
+        err: String(err),
+        organizationId,
+        conversationId,
+      });
+    }
+  }
+
+  await acionarRedeDeCrise({ organizationId, conversationId, canal, regra }).catch((err) =>
+    logger.error('[Agent] rede de crise falhou (fail-soft)', { err: String(err) }),
+  );
 }
 
 /**
@@ -341,6 +416,18 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       return;
     }
 
+    // ── 2.7. Sinal de crise do turno (P62) ──────────────────────────
+    // Calculado UMA vez, aqui, porque é o primeiro ponto em que o texto
+    // está resolvido: o áudio já virou transcrição e o que não é texto já
+    // saiu pelas guardas acima. Daqui para baixo, toda saída antecipada
+    // consulta este valor antes de encerrar o turno.
+    //
+    // A detecção é regex local, sem custo e sem rede. O caminho normal
+    // (routeIzaTurn) refaz a mesma checagem por conta própria, e a
+    // duplicação é de propósito: o router é usado por outros canais.
+    const sinalDeCriseDoTurno = detectarSinalDeCrise(messageContent);
+    const canalDoTurno: CanalDoTurno = channel === 'instagram' ? 'instagram' : 'whatsapp';
+
     // ── 2.6. Opt-out de marketing (LGPD / política Meta) — FEATURE 5a.5 ──
     // Obrigação legal + proteção do número contra ban: se o cliente mandou
     // SAIR/PARAR/STOP/CANCELAR/DESCADASTRAR (palavra isolada), descadastra o
@@ -437,11 +524,24 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       });
       if (flowStep.next === 'scheduled') {
         // Timer já foi persistido/enfileirado pelo flowRuntime. Turno resolvido.
+        // O fluxo do dono não sabe nada de crise: a linha do CVV entra aqui.
+        if (sinalDeCriseDoTurno.crise) {
+          await fecharSaidaAntecipadaComAcolhimento({
+            organizationId, conversationId, canal: canalDoTurno,
+            regra: sinalDeCriseDoTurno.regra, jaRespondeu: false,
+          });
+        }
         return;
       }
       if (flowStep.next !== 'ai') {
         // await_input (aguardando próxima msg) ou end (fluxo terminou) →
         // turno resolvido deterministicamente, sem chamar LLM.
+        if (sinalDeCriseDoTurno.crise) {
+          await fecharSaidaAntecipadaComAcolhimento({
+            organizationId, conversationId, canal: canalDoTurno,
+            regra: sinalDeCriseDoTurno.regra, jaRespondeu: false,
+          });
+        }
         return;
       }
       flowAiPrompt = flowStep.aiPrompt;
@@ -461,6 +561,17 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
     // ── 5. Check for handoff request ────────────────────
     if (intent === 'request_human') {
+      // Rede de crise (re-revisão do PR #374): quem pede uma pessoa depois
+      // de dizer que não aguenta mais recebe a linha do CVV ANTES do "vou te
+      // conectar". O handoff já pausa a IA e chama alguém; o que ele não faz
+      // é avisar o dono do sinal nem deixar registro, e é isso que a rede
+      // acrescenta.
+      if (sinalDeCriseDoTurno.crise) {
+        await fecharSaidaAntecipadaComAcolhimento({
+          organizationId, conversationId, canal: canalDoTurno,
+          regra: sinalDeCriseDoTurno.regra, jaRespondeu: false,
+        });
+      }
       await handleHandoff(organizationId, conversationId, contactPhone, contactId, orgSettings, io);
       return;
     }
@@ -505,11 +616,24 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       });
     }
     if (trialSilencioso) {
+      // A IA sairia calada por rate limit. Com sinal de crise, não sai: o
+      // limite existe para conter custo, não para calar quem pede ajuda.
+      if (sinalDeCriseDoTurno.crise) {
+        await fecharSaidaAntecipadaComAcolhimento({
+          organizationId, conversationId, canal: canalDoTurno,
+          regra: sinalDeCriseDoTurno.regra, jaRespondeu: false,
+        });
+      }
       return;
     }
     if (trialDegradado) {
-      const degradedReply =
+      const textoFixo =
         'Estou em modo limitado neste período de teste; um humano continua te atendendo.';
+      // A linha do CVV entra ANTES do envio, para o cliente receber uma
+      // mensagem só em vez de duas seguidas.
+      const degradedReply = sinalDeCriseDoTurno.crise
+        ? acrescentarAcolhimento(textoFixo, { comTransbordo: true })
+        : textoFixo;
       await deliverAgentReply({ organizationId, conversationId, text: degradedReply });
       await prisma.message.create({
         data: {
@@ -533,6 +657,12 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
           },
         });
       }
+      if (sinalDeCriseDoTurno.crise) {
+        await fecharSaidaAntecipadaComAcolhimento({
+          organizationId, conversationId, canal: canalDoTurno,
+          regra: sinalDeCriseDoTurno.regra, jaRespondeu: true,
+        });
+      }
       return;
     }
 
@@ -548,6 +678,16 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         `[Agent] Resposta pausada por quota (enforce) org=${organizationId} ${quota.current}/${quota.limit} plan=${quota.planId}`,
         { contactPhone },
       );
+      // O caso mais duro dos seis: a pessoa escreve pedindo ajuda e a
+      // plataforma não responde nada porque a organização passou do limite
+      // do plano. A quota continua barrando o LLM; o que não pode é o
+      // silêncio. A linha do CVV sai, e uma pessoa é chamada.
+      if (sinalDeCriseDoTurno.crise) {
+        await fecharSaidaAntecipadaComAcolhimento({
+          organizationId, conversationId, canal: canalDoTurno,
+          regra: sinalDeCriseDoTurno.regra, jaRespondeu: false,
+        });
+      }
       return;
     }
 
@@ -699,9 +839,16 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
           });
           // Envia a resposta agêntica pelo mesmo caminho do path normal (sendReplyText +
           // prisma.message.create), sem TTS (loop agêntico é text-only por design):
-          const agenticReplyText = agentResult.text
+          const agenticTextoLimpo = agentResult.text
             ? stripLeakedPrefixes(stripStructuredTags(agentResult.text))
             : '';
+          // O loop agêntico responde por fora do routeIzaTurn, então a linha
+          // do CVV tem de entrar aqui. Acrescentada ao texto limpo, nunca no
+          // lugar dele: em crise, uma parede é pior do que uma resposta.
+          const agenticReplyText =
+            agenticTextoLimpo && sinalDeCriseDoTurno.crise
+              ? acrescentarAcolhimento(agenticTextoLimpo, { comTransbordo: true })
+              : agenticTextoLimpo;
           if (agenticReplyText) {
             await sendReplyText({ organizationId, conversationId, content: agenticReplyText });
             await prisma.message.create({
@@ -720,6 +867,12 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
               io.to(`org:${organizationId}`).emit('new_message', {
                 conversationId,
                 message: { content: agenticReplyText, direction: 'OUTBOUND', isFromBot: true, createdAt: new Date().toISOString() },
+              });
+            }
+            if (sinalDeCriseDoTurno.crise) {
+              await fecharSaidaAntecipadaComAcolhimento({
+                organizationId, conversationId, canal: canalDoTurno,
+                regra: sinalDeCriseDoTurno.regra, jaRespondeu: true,
               });
             }
             return;
@@ -799,6 +952,20 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
           aiConfidence: 1.0, // resposta determinística (regex match)
         },
       });
+      // A251 e A232: na conta de um cliente, quem escreve é o cliente final
+      // dele. A camada compliance deixou de recusar e passou a transbordar,
+      // com registro e aviso ao dono. A recusa segue existindo só no nosso
+      // funil (política comercial da ZappIQ), e lá também vira registro.
+      if (turnResult.action === 'transbordo') {
+        await acionarTransbordoDeCompliance({
+          organizationId,
+          conversationId,
+          canal: canalDoTurno,
+          regra: turnResult.vertical,
+        }).catch((err) =>
+          logger.warn('[Agent] transbordo de compliance falhou (fail-soft)', { err: String(err) }),
+        );
+      }
       return;
     }
 
@@ -812,6 +979,15 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // ── 10. Parse structured response ───────────────────
     const llmResponse = { text: turnResult.response.text };
     const parsed = parseAgentResponse(llmResponse.text);
+
+    // ── 10.5. Rede de crise (P62) ───────────────────────
+    // A resposta do agente NÃO é substituída: a linha do CVV é acrescentada
+    // ao texto já limpo (depois do parse, senão ela cairia fora de <reply>).
+    // Só o texto é tocado aqui; a pausa, o aviso ao dono e o registro vêm
+    // depois do envio, para não atrasar a resposta de quem pediu ajuda.
+    if (turnResult.crise) {
+      parsed.replyText = acrescentarAcolhimento(parsed.replyText, { comTransbordo: true });
+    }
 
     // ── 11. Execute actions ─────────────────────────────
     if (parsed.action) {
@@ -931,6 +1107,20 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
             : {}),
         },
       });
+    }
+
+    // ── 12.5. Crise: a IA para e uma pessoa assume ──────
+    // Depois do envio, de propósito: a linha do CVV já saiu para o cliente
+    // final, e nada aqui pode segurar aquela mensagem. Fail-soft por dentro.
+    if (turnResult.crise) {
+      await acionarRedeDeCrise({
+        organizationId,
+        conversationId,
+        canal: canalDoTurno,
+        regra: turnResult.crise.regra,
+      }).catch((err) =>
+        logger.error('[Agent] rede de crise falhou (fail-soft)', { err: String(err) }),
+      );
     }
 
     // ── 13. Real-time dashboard push ────────────────────

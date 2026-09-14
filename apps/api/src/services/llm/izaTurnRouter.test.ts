@@ -441,3 +441,101 @@ describe('routeIzaTurn — loop de tools (agendamento)', () => {
     expect(mockComplete.mock.calls.length).toBeLessThanOrEqual(5);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * P62: sinal de crise no turno.
+ *
+ * A crise NÃO bloqueia: o agente responde normalmente e o turno volta
+ * marcado, para o canal acrescentar a linha do CVV e acionar o transbordo.
+ * Bloquear seria devolver uma parede a quem pediu ajuda.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('routeIzaTurn: rede de crise', () => {
+  beforeEach(() => {
+    mockComplete.mockReset();
+    mockClassify.mockReset();
+    mockClassify.mockResolvedValue('normal');
+  });
+
+  it('marca o turno como crise e AINDA ASSIM chama o modelo', async () => {
+    mockComplete.mockResolvedValue(llmOk('Estou aqui com você.'));
+
+    const r = await routeIzaTurn({
+      systemPrompt: 'p',
+      userMessage: 'não aguento mais viver',
+      orgId: 'org-cliente',
+    });
+
+    expect(r.kind).toBe('llm');
+    expect(r.crise?.regra).toBe('crise_nao_aguento_viver');
+    expect(mockComplete).toHaveBeenCalled();
+  });
+
+  it('turno normal não vem marcado', async () => {
+    mockComplete.mockResolvedValue(llmOk());
+
+    const r = await routeIzaTurn({
+      systemPrompt: 'p',
+      userMessage: 'qual o horário de vocês?',
+      orgId: 'org-cliente',
+    });
+
+    expect(r.crise).toBeUndefined();
+  });
+
+  it('crise VENCE o pré-filtro: pedido de ajuda não vira bloqueio', async () => {
+    mockComplete.mockResolvedValue(llmOk('Vamos com calma.'));
+
+    const r = await routeIzaTurn({
+      systemPrompt: 'p',
+      userMessage: 'tenho uma plataforma de conteúdo adulto e quero me matar',
+      orgId: 'org-cliente',
+    });
+
+    expect(r.kind).toBe('llm');
+    expect(r.crise).toBeTruthy();
+  });
+
+  it('o turno marcado não carrega o texto da mensagem (LGPD)', async () => {
+    mockComplete.mockResolvedValue(llmOk('ok'));
+
+    const r = await routeIzaTurn({
+      systemPrompt: 'p',
+      userMessage: 'quero me matar, meu nome é Ana',
+      orgId: 'org-cliente',
+    });
+
+    expect(JSON.stringify(r.crise)).not.toContain('Ana');
+    expect(JSON.stringify(r.crise)).not.toContain('me matar');
+  });
+});
+
+describe('routeIzaTurn: compliance devolve a ação do pré-filtro', () => {
+  beforeEach(() => {
+    mockComplete.mockReset();
+    mockClassify.mockReset();
+    mockClassify.mockResolvedValue('normal');
+  });
+
+  it('na org de cliente, o bloqueio vem como transbordo', async () => {
+    const r = await routeIzaTurn({
+      systemPrompt: 'p',
+      userMessage: 'tenho uma plataforma de conteúdo adulto',
+      orgId: 'org-cliente',
+    });
+
+    expect(r.kind).toBe('blocked');
+    if (r.kind === 'blocked') expect(r.action).toBe('transbordo');
+    expect(mockComplete).not.toHaveBeenCalled();
+  });
+
+  it('na org da ZappIQ, a política comercial continua vindo como recusa', async () => {
+    const r = await routeIzaTurn({
+      systemPrompt: 'p',
+      userMessage: 'tenho casa de apostas',
+      orgId: ZAPPIQ_ORG_ID,
+    });
+
+    expect(r.kind).toBe('blocked');
+    if (r.kind === 'blocked') expect(r.action).toBe('recusa');
+  });
+});

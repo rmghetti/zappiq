@@ -46,6 +46,12 @@ import {
 import { logAuditEvent } from '../services/auditService.js';
 import { buildSystemPromptForContact, pickTierAndOverride } from '../agents/agentOrchestrator.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
+// Rede de crise (P62): vale também no Testar minha IA, porque o dono precisa
+// ver o que o cliente final dele veria.
+import {
+  acionarRedeDeCrise,
+  acrescentarAcolhimento,
+} from '../services/llm/crisisSafetyNet.js';
 import { testMessageSchema, buildPlaygroundResult } from './aiTraining.playground.js';
 import {
   textDocSchema,
@@ -231,6 +237,24 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     const rawText = turn.kind === 'blocked' ? turn.response : turn.response.text;
 
     const result = buildPlaygroundResult({ rawLlmText: rawText, sources });
+
+    // P62: rede de crise no playground.
+    // A linha do CVV entra DEPOIS da limpeza das tags, no texto que a tela
+    // mostra. `comTransbordo: false` de propósito: aqui não existe fila de
+    // atendimento, e prometer uma pessoa seria inventar recurso (CR-7).
+    // Registramos o evento sem conversa (não há conversa real) só para o
+    // dono conseguir consultar que a regra disparou no teste dele.
+    if (turn.kind === 'llm' && turn.crise) {
+      result.reply = acrescentarAcolhimento(result.reply, { comTransbordo: false });
+      await acionarRedeDeCrise({
+        organizationId: orgId,
+        conversationId: null,
+        canal: 'playground',
+        regra: turn.crise.regra,
+      }).catch((err) =>
+        logger.warn('[AITraining] registro da rede de crise falhou', { err: String(err) }),
+      );
+    }
 
     await logTraining(req, 'kb.playground.test', 'ai_playground', undefined,
       `Teste de IA executado (${result.usedContext ? 'com' : 'sem'} contexto RAG)`);

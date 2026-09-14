@@ -305,10 +305,18 @@ export function Cadastro() {
     track('signup_oauth_started', { provider: 'google', plan: form.plan });
 
     try {
+      // A242: manda também o que o lead já digitou. Com o e-mail, a rota
+      // grava o plano escolhido em `signups` ANTES do redirecionamento e o
+      // callback do Google só confirma. Sem e-mail, a escolha viaja no
+      // cookie que a rota devolve.
       const res = await fetch('/api/signup/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: form.plan }),
+        body: JSON.stringify({
+          plan: form.plan,
+          email: form.email.trim().toLowerCase() || undefined,
+          name: form.name.trim() || undefined,
+        }),
       });
       const j = await res.json();
       if (j.url) window.location.href = j.url;

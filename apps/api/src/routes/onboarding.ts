@@ -2,6 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { prisma } from '@zappiq/database';
+// Catálogo único do cadastro (A242): a mesma lista que a CHECK da tabela
+// `signups` deriva na migração 20260914000060.
+import { normalizarPlanoDoSignup } from '@zappiq/shared';
 import { validate } from '../middleware/validate.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { signToken, signRefreshToken } from '../utils/token.js';
@@ -287,12 +290,14 @@ export function orgTrialSeedAtSignup(): {
  * Normaliza um plano declarado no signup (signups.plan_chosen, texto livre)
  * para um PlanType válido do Prisma. Retorna null se não reconhecer.
  * Pura e testável — usada pelo fix do §0.6.
+ *
+ * A242 (14/09/2026): a lista era escrita à mão AQUI e não tinha IZA_LITE, o
+ * plano que a tela de cadastro pré-seleciona desde 27/05. Todo lead que
+ * mantinha o padrão virava STARTER, plano descontinuado. Agora a lista vem
+ * do catálogo único (packages/shared), o mesmo que a CHECK do banco deriva.
  */
 export function normalizePlanChosen(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const v = String(raw).trim().toUpperCase();
-  const valid = new Set(['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE']);
-  return valid.has(v) ? v : null;
+  return normalizarPlanoDoSignup(raw);
 }
 
 /**
