@@ -37,7 +37,8 @@ interface Props {
    * que o conteúdo estava indexado, inclusive para os que têm zero trecho e
    * aparecem na lista com o selo "não indexado": o modal contradizia o selo.
    */
-  ragChunks?: number;
+  /** Número de trechos no vector store. Ausente ou null = não sabemos. */
+  ragChunks?: number | null;
   onClose: () => void;
   onSaved: () => void; // recarrega a lista + readiness na página
 }
@@ -113,6 +114,14 @@ export function DocumentDetailModal({ documentId, ragChunks, onClose, onSaved }:
       setDeleting(false);
     }
   }
+
+  /**
+   * `ragChunks` vem da lista, não do detalhe: se o item sumiu da lista ou a
+   * lista ainda não carregou, chega undefined (e null se a API devolver o
+   * campo vazio). Undefined não é "indexado": até 14/09/2026 caía no mesmo
+   * ramo do valor positivo e a tela afirmava indexação sem ter olhado nada.
+   */
+  const indexacaoDesconhecida = typeof ragChunks !== 'number';
 
   const kindLabel =
     doc?.sourceType === 'url' ? 'URL' : doc?.sourceType === 'text' ? 'Texto colado' : 'Arquivo';
@@ -242,6 +251,18 @@ export function DocumentDetailModal({ documentId, ragChunks, onClose, onSaved }:
                       <p className="text-xs text-amber-800 mt-1">
                         Remova o item e envie de novo. Se for um PDF digitalizado, converta antes
                         para um PDF com texto selecionável, TXT, MD ou CSV.
+                      </p>
+                    </>
+                  ) : indexacaoDesconhecida ? (
+                    <>
+                      <p className="text-sm text-gray-600">
+                        Situação da indexação indisponível. Não guardamos uma cópia do conteúdo
+                        deste {kindLabel.toLowerCase()} aqui, e desta tela não dá para dizer se
+                        ele chegou à base da IA.
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        A lista da base mostra a etiqueta de indexação de cada item. Para corrigir
+                        a informação, remova o item e envie a versão nova.
                       </p>
                     </>
                   ) : (

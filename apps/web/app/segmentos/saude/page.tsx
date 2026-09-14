@@ -1,6 +1,5 @@
 import { SegmentTemplate } from '../../../components/landing/SegmentTemplate';
 import type { SegmentPageData } from '../../../components/landing/SegmentTemplate';
-import { getAuthorDisplay, getCaseName } from '../../../content/cases';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -31,15 +30,11 @@ const data: SegmentPageData = {
     { icon: 'MessageCircle', title: 'Agenda que a recepção enxerga', desc: 'Cada compromisso marcado pela IA cai na agenda do painel, com nome, horário e o que o paciente pediu.' },
     { icon: 'BarChart3', title: 'Dashboard de métricas', desc: 'Visualize volume de conversas, tempo de resposta e os agendamentos que a IA criou.' },
   ],
-  /* Depoimento pelo módulo canônico (content/cases): enquanto a autorização
-   * LGPD não chega, sai sem nome real e etiquetado como ilustrativo. */
-  testimonial: {
-    name: getAuthorDisplay(),
-    role: 'clínica de Saúde',
-    company: getCaseName(),
-    initials: 'ZQ',
-    text: 'O paciente manda mensagem às onze da noite e sai da conversa com o horário marcado. Minha recepcionista chega de manhã com a agenda pronta, em vez de uma fila de mensagens sem resposta.',
-  },
+  /* Sem depoimento: nenhuma clínica autorizou a própria fala até aqui, e
+   * cena inventada entre aspas é depoimento falso, mesmo sem nome real. Fica
+   * a descrição da capacidade, que a plataforma cumpre. */
+  capacidade:
+    'Um paciente manda mensagem às onze da noite e sai da conversa com o horário marcado. A recepção abre o dia com a agenda pronta.',
 };
 
 export default function SaudePage() {

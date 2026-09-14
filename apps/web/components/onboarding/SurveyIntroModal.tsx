@@ -135,10 +135,10 @@ export function SurveyIntroModal({ onClose }: { onClose: () => void }) {
 
         <Bloco icon={<RefreshCw size={16} />} titulo="Sua IA mostra o que precisa corrigir">
           <p>
-            Toda semana a plataforma roda uma bateria de cenários de atendimento no seu agente, aponta
-            onde ele saiu do esperado e escreve a correção sugerida. Você aprova, edita ou recusa: nada
-            entra no comportamento do agente sem o seu clique. Não precisa retreinar nada nem chamar
-            consultor.
+            Quando o seu agente estiver publicado, toda semana a plataforma roda uma bateria de
+            cenários de atendimento nele, aponta onde ele saiu do esperado e escreve a correção
+            sugerida. Você aprova, edita ou recusa: nada entra no comportamento do agente sem o seu
+            clique. Não precisa retreinar nada nem chamar consultor.
           </p>
         </Bloco>
 

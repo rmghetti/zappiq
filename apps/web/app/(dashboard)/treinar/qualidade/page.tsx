@@ -155,7 +155,8 @@ export default function QualidadeIAClientePage() {
           </p>
           <p className="text-amber-800 text-sm mt-2">
             Não precisa estar com o treinamento 100%: a auditoria avalia o agente como ele
-            está hoje. Quanto mais completo o treino, melhor tende a ser a nota.
+            está hoje. A nota mede o comportamento em situações comuns de atendimento; ela
+            ainda não mede o conteúdo que você cadastrou.
           </p>
         </div>
       </div>
