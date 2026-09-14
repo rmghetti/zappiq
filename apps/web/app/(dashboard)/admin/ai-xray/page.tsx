@@ -100,7 +100,8 @@ export default function AiXrayPage() {
       setResultado(res);
       setAbertas({});
     } catch (err: any) {
-      setErro(err?.message || 'Não foi possível montar o Raio-X');
+      // O 422 de organização sem agente traz a frase legível em `message`.
+      setErro(err?.details?.message || err?.message || 'Não foi possível montar o Raio-X');
       setResultado(null);
     } finally {
       setCarregando(false);
@@ -207,6 +208,25 @@ export default function AiXrayPage() {
           </div>
         </div>
       )}
+
+      {/* O que o Raio-X simplifica. Fica sempre visível, acima do resultado,
+          porque são as três diferenças que levariam alguém a ler um verde ou um
+          vermelho daqui como se fosse a produção inteira. */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+        <AlertCircle size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
+        <div className="text-xs text-amber-900 space-y-1">
+          <p className="font-semibold">Leia com estas três ressalvas</p>
+          <p>
+            No WhatsApp o contato é sintético: todo turno aparece como primeiro contato, e a
+            saudação configurada entra em todos.
+          </p>
+          <p>
+            A busca na base usa sempre 5 trechos e sem cache; no WhatsApp em Modo Econômico a
+            produção usa 3.
+          </p>
+          <p>No canal Qualidade o agente é o comercial ativo mais recente da organização.</p>
+        </div>
+      </div>
 
       {/* Resultado */}
       {resultado?.turnos.map((turno, idx) => (
