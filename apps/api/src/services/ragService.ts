@@ -608,6 +608,8 @@ export async function ingestUrl(
     resp = await buscarUrlPublica(url, {
       timeoutMs: 30_000,
       maxBytes: 20 * 1024 * 1024, // alinhado ao MAX_UPLOAD_MB do serviço
+      // Sem User-Agent, muito site devolve página de bloqueio em vez do texto.
+      headers: { 'User-Agent': 'ZappIQ-Crawler/1.0 (+https://zappiq.com.br)' },
     });
   } catch (err: any) {
     // Destino interno tem frase própria: dizer "não consegui ler a página"

@@ -219,6 +219,26 @@ describe('conciliação com o PR #366: rede social, User-Agent e frases (A016 + 
     expect(axiosGet).not.toHaveBeenCalled();
   });
 
+  it('o pedido sai com o User-Agent da ZappIQ em todos os saltos', async () => {
+    dns['site.exemplo.com.br'] = [{ address: '93.184.216.34', family: 4 }];
+    dns['cdn.exemplo.com.br'] = [{ address: '93.184.216.35', family: 4 }];
+    respostas['https://site.exemplo.com.br/doc'] = redirecionaPara(
+      'https://cdn.exemplo.com.br/doc.txt',
+    );
+    respostas['https://cdn.exemplo.com.br/doc.txt'] = paginaOk('conteúdo público');
+
+    await ingestUrl('org-1', 'https://site.exemplo.com.br/doc');
+
+    // O cabeçalho é do #366 e tem de sobreviver ao portão novo, inclusive no
+    // salto de redirecionamento, que o axios não dá mais sozinho.
+    expect(axiosGet).toHaveBeenCalledTimes(2);
+    for (const chamada of axiosGet.mock.calls) {
+      expect((chamada[1] as any).headers['User-Agent']).toBe(
+        'ZappIQ-Crawler/1.0 (+https://zappiq.com.br)',
+      );
+    }
+  });
+
   it('erro de rede vira "não consegui ler a página", não "endereço não é público"', async () => {
     dns['site.exemplo.com.br'] = [{ address: '93.184.216.34', family: 4 }];
     // Nenhuma resposta cadastrada: o axios falso lança erro comum de rede.
