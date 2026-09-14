@@ -403,7 +403,11 @@ export async function runAgentEvalCronCycle(scope: CronScope): Promise<CronCycle
 
       // Corpo único: o mesmo que o worker da fila roda para as rotas. Aqui é
       // chamado em linha de propósito, porque o ciclo já roda dentro do worker
-      // da fila `cron` e as contagens abaixo precisam do resultado.
+      // da fila `cron`; enfileirar só adicionaria um salto e um modo de falha.
+      //
+      // executeRunJob nunca lança: erro da execução vira status 'failed' na
+      // própria linha. Então agentsProcessed conta execuções DISPARADAS, e
+      // agentsFailed conta falha em montar a execução (perfil, gabarito, linha).
       await executeRunJob(run.id);
       agentsProcessed++;
     } catch (err: any) {
