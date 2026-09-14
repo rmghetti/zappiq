@@ -13,7 +13,7 @@
  *     daysRemaining: 11,
  *     aiReadinessScore: 72,
  *     savings: 18000,
- *     ctaUrl: 'https://app.zappiq.com.br/billing?coupon=TRIAL14',
+ *     ctaUrl: 'https://zappiq.com.br/billing?coupon=TRIAL14',
  *   });
  */
 

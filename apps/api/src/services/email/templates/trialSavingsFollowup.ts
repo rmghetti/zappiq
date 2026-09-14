@@ -18,7 +18,7 @@
  *     competitorSetupBrl: 8000,
  *     competitorMonthlyBrl: 1500,
  *     aiReadinessScore: 72,
- *     ctaUrl: 'https://app.zappiq.com.br/billing?coupon=TRIAL14',
+ *     ctaUrl: 'https://zappiq.com.br/billing?coupon=TRIAL14',
  *   });
  *
  *   await emailProvider.send({ to, subject, html, text });

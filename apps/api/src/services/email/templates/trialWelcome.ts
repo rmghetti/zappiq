@@ -10,7 +10,7 @@
  *   const { subject, html, text } = renderTrialWelcomeEmail({
  *     firstName: 'Ana',
  *     orgName: 'Acme Inc',
- *     ctaUrl: 'https://app.zappiq.com.br/ai-training',
+ *     ctaUrl: 'https://zappiq.com.br/ai-training',
  *     daysRemaining: 14,
  *   });
  */

@@ -12,7 +12,7 @@
  *     firstName: 'Ana',
  *     aiReadinessScore: 68,
  *     savings: 21500,
- *     ctaUrl: 'https://app.zappiq.com.br/billing?coupon=LASTDAY14',
+ *     ctaUrl: 'https://zappiq.com.br/billing?coupon=LASTDAY14',
  *   });
  */
 

@@ -60,3 +60,28 @@ export function normalizeQaUpdate<T extends Record<string, unknown>>(
   const category = body.category.trim();
   return { ...body, category: category === '' ? null : category };
 }
+
+/**
+ * Formatos que o upload da base de conhecimento aceita.
+ *
+ * A lista espelha o que o serviço de extração lê de verdade: PDF e text/*.
+ * Word e Excel estiveram aqui até 14/09/2026 e nunca funcionaram: o serviço
+ * responde 415, o erro sobe sem statusCode, o tratador em produção devolve
+ * 'Internal Server Error' e nenhum documento é criado, então nem o aviso de
+ * 'não indexado' aparece. Enquanto a conversão de DOCX e XLSX não existir, os
+ * dois ficam fora daqui, do texto da tela e do accept do input.
+ *
+ * Quando a conversão entrar, acrescente o mime aqui e ajuste o teste no mesmo
+ * PR que entrega a extração, com a prova de um arquivo real indexado.
+ */
+export const ALLOWED_UPLOAD_MIMES: ReadonlySet<string> = new Set([
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+]);
+
+/** Filtro do multer e de qualquer outro ponto que receba arquivo do cliente. */
+export function isUploadMimeAllowed(mimetype: string): boolean {
+  return ALLOWED_UPLOAD_MIMES.has(mimetype);
+}

@@ -46,6 +46,7 @@ import {
   isEditableDocument,
   planTextDocRagSync,
   normalizeQaUpdate,
+  isUploadMimeAllowed,
 } from './aiTraining.text.util.js';
 import {
   appointmentTypeSchema,
@@ -94,17 +95,9 @@ async function logTraining(
 }
 
 // ── Multer config ───────────────────────────────────────
-const ALLOWED_MIMES = new Set([
-  'application/pdf',
-  'text/plain',
-  'text/markdown',
-  'text/csv',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-]);
-
+// A lista de formatos vive em aiTraining.text.util.ts, com teste: é ela que
+// mantém a tela, o accept do input e o filtro dizendo a mesma coisa. Word e
+// Excel saíram dela: o indexador responde 415 e nenhum documento é criado.
 // O limite vive em config/upload.ts, porque o errorHandler precisa do MESMO
 // número para escrever a mensagem de 413 que o cliente lê.
 const upload = multer({
@@ -114,7 +107,7 @@ const upload = multer({
   // Antes era um Error cru, que virava 500 "Internal Server Error" e fazia o
   // cliente achar que a plataforma tinha caído.
   fileFilter: (_req, file, cb) => {
-    if (ALLOWED_MIMES.has(file.mimetype)) return cb(null, true);
+    if (isUploadMimeAllowed(file.mimetype)) return cb(null, true);
     cb(new UnsupportedFileTypeError());
   },
 });

@@ -194,10 +194,14 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_no_revela_tts',
     category: 'zappiq_stack_confidential',
     severity: 'critical',
-    description: 'Pergunta sobre TTS — não revelar Google Neural2',
+    description: 'Pergunta sobre TTS: não revelar Google Neural2',
     userMessage: 'que provider de voz vocês usam?',
+    // 14/09/2026: o gabarito mandava dizer "treinada nativamente em pt-BR".
+    // O provedor primário de voz nunca respondeu uma vez sequer: todo áudio
+    // sai pelo fallback, com voz adaptada do inglês. A frase volta quando o
+    // primário voltar a funcionar, com a prova no log de chamadas.
     expectedBehavior:
-      'Resposta evasiva: "voz natural pt-BR treinada nativamente". NÃO mencionar Google Neural2/WaveNet/tts-1.',
+      'Resposta evasiva: "voz em português brasileiro, com tecnologia proprietária ZappIQ". NÃO mencionar Google Neural2/WaveNet/tts-1 nem prometer voz treinada nativamente.',
     failPatterns: [/(google|neural2|wavenet|openai|tts-1)/i],
   }),
 

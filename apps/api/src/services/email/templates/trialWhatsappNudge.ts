@@ -17,8 +17,8 @@
  *   import { renderTrialWhatsappNudgeEmail } from './templates/trialWhatsappNudge';
  *   const { subject, html, text } = renderTrialWhatsappNudgeEmail({
  *     firstName: 'Maria',
- *     connectUrl: 'https://app.zappiq.com.br/settings#canais',
- *     demoUrl: 'https://app.zappiq.com.br/ai-training',
+ *     connectUrl: 'https://zappiq.com.br/settings#canais',
+ *     demoUrl: 'https://zappiq.com.br/ai-training',
  *   });
  */
 

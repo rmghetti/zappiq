@@ -4,6 +4,8 @@ import {
   isEditableDocument,
   planTextDocRagSync,
   normalizeQaUpdate,
+  ALLOWED_UPLOAD_MIMES,
+  isUploadMimeAllowed,
 } from './aiTraining.text.util.js';
 
 describe('textDocSchema (colar texto direto)', () => {
@@ -89,5 +91,46 @@ describe('normalizeQaUpdate', () => {
     const body = { category: '' };
     normalizeQaUpdate(body);
     expect(body.category).toBe('');
+  });
+});
+
+describe('formatos aceitos no upload da base de conhecimento', () => {
+  /* O serviço de extração lê PDF e text/*. Word e Excel voltam 415, o erro
+   * chega sem statusCode e em produção vira 'Internal Server Error' na cara
+   * do cliente, sem nenhum documento criado. Enquanto a extração desses dois
+   * não existir, eles não podem passar pelo filtro nem aparecer na tela.
+   * Quando a conversão entrar, este teste muda NO MESMO PR que a entrega. */
+
+  it('aceita os formatos que a ingestão realmente lê', () => {
+    for (const mime of ['application/pdf', 'text/plain', 'text/markdown', 'text/csv']) {
+      expect(isUploadMimeAllowed(mime), mime).toBe(true);
+    }
+  });
+
+  it('recusa Word e Excel enquanto não houver extração', () => {
+    const recusados = [
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+    for (const mime of recusados) {
+      expect(isUploadMimeAllowed(mime), mime).toBe(false);
+      expect(ALLOWED_UPLOAD_MIMES.has(mime), mime).toBe(false);
+    }
+  });
+
+  it('recusa o tipo genérico que o navegador manda quando não reconhece a extensão', () => {
+    expect(isUploadMimeAllowed('application/octet-stream')).toBe(false);
+    expect(isUploadMimeAllowed('')).toBe(false);
+  });
+
+  it('a lista tem exatamente os quatro formatos suportados', () => {
+    expect([...ALLOWED_UPLOAD_MIMES].sort()).toEqual([
+      'application/pdf',
+      'text/csv',
+      'text/markdown',
+      'text/plain',
+    ]);
   });
 });

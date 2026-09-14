@@ -122,7 +122,7 @@ export function renderTrialConvertedEmail(input: TrialConvertedEmailInput): Rend
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:32px;">
                   <tr>
                     <td align="center">
-                      <a href="https://app.zappiq.com.br/settings/billing" style="display:inline-block;padding:14px 28px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;box-shadow:0 4px 10px rgba(79,70,229,.35);">
+                      <a href="https://zappiq.com.br/billing" style="display:inline-block;padding:14px 28px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px;box-shadow:0 4px 10px rgba(79,70,229,.35);">
                         Ver fatura e adicionar pagamento →
                       </a>
                     </td>
@@ -179,7 +179,7 @@ export function renderTrialConvertedEmail(input: TrialConvertedEmailInput): Rend
     '3. Agendar onboarding (opcional)',
     'Se quiser suporte especializado, responda este e-mail.',
     '',
-    'Fatura: https://app.zappiq.com.br/settings/billing',
+    'Fatura: https://zappiq.com.br/billing',
     '',
     'Obrigado por escolher ZappIQ. Vamos crescer junto.',
     '',

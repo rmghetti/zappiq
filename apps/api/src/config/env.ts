@@ -16,7 +16,11 @@ const envSchema = z.object({
   DIRECT_URL: z.string().optional(),
 
   // App URLs
-  APP_URL: z.string().default('https://app.zappiq.com.br'),
+  // Base pública do APP WEB (Next na Vercel). O host app.zappiq.com.br nunca
+  // serviu o app: não resolve HTTPS e as rotas não existem lá. Todo link de
+  // e-mail e de alerta é montado a partir daqui, então o padrão tem de ser o
+  // domínio que responde. Ver apps/api/src/services/email/templates/linksDoApp.test.ts.
+  APP_URL: z.string().default('https://zappiq.com.br'),
   FRONTEND_URL: z.string().default('http://localhost:3003'),
   CORS_ORIGINS: z.string().default('http://localhost:3003,http://localhost:3000'),
   // Base pública da PRÓPRIA API — usada pra montar a Callback URL de webhook
