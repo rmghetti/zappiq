@@ -52,82 +52,86 @@
 # Exceções abertas em 14/09/2026
 # ═══════════════════════════════════════════════════════════════════════════
 
-# ── next 14.2.18 (apps/web) ────────────────────────────────────────────────
+# ── next 14.2.35 (apps/web) ────────────────────────────────────────────────
 # Dono: Rodrigo (MACHIA).
-# Motivo: a correção completa é o next 15.5.24, ou seja, uma major. O apps/web
-#   roda na Vercel, que aplica mitigação de borda em parte destes alertas, e o
-#   salto de major mexe em App Router, em build e em todas as páginas. Não cabe
-#   no PR da rede de segurança do Treinar IA sem risco de derrubar a landing.
-# O que fecha: PR próprio de upgrade do Next, com preview verificado página a
-#   página. Meio do caminho barato e já identificado: o 14.2.35 fecha
-#   GHSA-f82v-jwr5-mffw (crítico), GHSA-mwv6-3258-q52c e GHSA-5j59-xgg2-r9c4
-#   sem sair da minor.
+#
+# Em 14/09/2026 o apps/web subiu de 14.2.18 para 14.2.35, um salto de patch
+# dentro da minor. Ele fechou três alertas, que por isso SAÍRAM desta lista:
+# GHSA-f82v-jwr5-mffw (crítico, a CVE-2025-29927 do middleware),
+# GHSA-mwv6-3258-q52c e GHSA-5j59-xgg2-r9c4.
+#
+# O que sobra só fecha no next 15.x, ou seja, uma major que mexe em App Router,
+# em build e em todas as páginas. Não cabe no PR da rede de segurança do
+# Treinar IA sem risco de derrubar a landing.
+#
+# Fatos MEDIDOS no apps/web em 14/09/2026. Cada exceção abaixo aponta para um
+# deles, e a medição tem de ser refeita antes de renovar qualquer prazo:
+#   a) não existe middleware.ts nem middleware.js em apps/web (busca por
+#      `find apps/web -name "middleware.*"` voltou vazia). Ou seja, a família de
+#      alertas de middleware não tem superfície aqui, e a CVE-2025-29927 nunca
+#      foi explorável neste app, mesmo antes do patch.
+#   b) não existe apps/web/pages: o app é todo App Router, e o next.config.js
+#      não configura i18n.
+#   c) nenhum arquivo de apps/web tem a diretiva 'use server': não há Server
+#      Action no código.
+#   d) o apps/web roda na Vercel, em Linux. Não existe servidor Windows nesta
+#      conta, então alerta específico de Windows não se aplica.
+#   e) o único rewrite do next.config.js aponta para host FIXO
+#      (zappiq-api.fly.dev/api/integrations/*); nada do destino vem do pedido.
+#
+# O que fecha: PR próprio de upgrade do Next para a 15.x, com preview
+#   verificado página a página.
 # Prazo: 14/10/2026.
 
 [[IgnoredVulns]]
 id = "GHSA-2xp9-vwfh-vxw4"
 ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção só no 15.5.24 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next com preview verificado."
-
-[[IgnoredVulns]]
-id = "GHSA-f82v-jwr5-mffw"
-ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção no 14.2.25, dentro da minor. Dono: Rodrigo. É o primeiro a fechar no PR de upgrade do Next."
+reason = "next 14.2.35 no apps/web: execução remota pela API de otimização de imagem com AVIF. Correção só no 15.5.24 (major). Mitigação medida: images.remotePatterns limita as origens a **.zappiq.com.br, **.supabase.co e **.r2.cloudflarestorage.com. Risco residual aceito por 30 dias. Dono: Rodrigo. Fecha com o PR de upgrade do Next."
 
 [[IgnoredVulns]]
 id = "GHSA-p293-qw3h-jr36"
 ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção só no 15.5.24 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next com preview verificado."
+reason = "next 14.2.35 no apps/web: o alerta é execução remota em servidor hospedado no WINDOWS. O apps/web roda na Vercel, em Linux (fato d), então não se aplica. Correção só no 15.5.24 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
 
 [[IgnoredVulns]]
 id = "GHSA-36qx-fr4f-26g5"
 ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
-
-[[IgnoredVulns]]
-id = "GHSA-5j59-xgg2-r9c4"
-ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção no 14.2.35, dentro da minor. Dono: Rodrigo. Fecha no PR de upgrade do Next."
+reason = "next 14.2.35 no apps/web: desvio de middleware em app de Pages Router com i18n. O apps/web não tem middleware (fato a), não tem pasta pages nem i18n (fato b), então não se aplica. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
 
 [[IgnoredVulns]]
 id = "GHSA-89xv-2m56-2m9x"
 ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+reason = "next 14.2.35 no apps/web: falsificação de requisição do servidor em Server Action rodando em servidor próprio. Não há Server Action no código (fato c) e o deploy é na Vercel (fato d), então não se aplica. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
 
 [[IgnoredVulns]]
 id = "GHSA-8h8q-6873-q5fj"
 ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+reason = "next 14.2.35 no apps/web: negação de serviço por Server Component. Sem mitigação medida: o app é App Router e tem a superfície. É indisponibilidade, não vazamento nem execução, e o risco residual está aceito por 30 dias. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
 
 [[IgnoredVulns]]
 id = "GHSA-c4j6-fc7j-m34r"
 ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+reason = "next 14.2.35 no apps/web: falsificação de requisição em app que trata upgrade de WebSocket no servidor Next. O apps/web não trata upgrade nenhum: o WebSocket do dashboard fala com o apps/api, no Fly. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
 
 [[IgnoredVulns]]
 id = "GHSA-h25m-26qc-wcjf"
 ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção só no 15.0.8 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+reason = "next 14.2.35 no apps/web: negação de serviço na desserialização de requisição de React Server Component. Sem mitigação medida. É indisponibilidade, e o risco residual está aceito por 30 dias. Correção só no 15.0.8 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
 
 [[IgnoredVulns]]
 id = "GHSA-m99w-x7hq-7vfj"
 ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
-
-[[IgnoredVulns]]
-id = "GHSA-mwv6-3258-q52c"
-ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção no 14.2.34, dentro da minor. Dono: Rodrigo. Fecha no PR de upgrade do Next."
+reason = "next 14.2.35 no apps/web: negação de serviço no App Router via Server Action. Não há Server Action no código (fato c), então não se aplica. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
 
 [[IgnoredVulns]]
 id = "GHSA-p9j2-gv94-2wf4"
 ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+reason = "next 14.2.35 no apps/web: falsificação de requisição em rewrite cujo host de destino é controlado pelo atacante. O único rewrite aponta para host fixo (fato e), então não se aplica. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
 
 [[IgnoredVulns]]
 id = "GHSA-q4gf-8mx6-v5v3"
 ignoreUntil = 2026-10-14T00:00:00Z
-reason = "next 14.2.18 no apps/web. Correção só no 15.5.15 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+reason = "next 14.2.35 no apps/web: negação de serviço por Server Component. Sem mitigação medida, mesma leitura do GHSA-8h8q-6873-q5fj. Correção só no 15.5.15 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
 
 # ── OpenTelemetry no apps/api ──────────────────────────────────────────────
 # Dono: Rodrigo (MACHIA).
