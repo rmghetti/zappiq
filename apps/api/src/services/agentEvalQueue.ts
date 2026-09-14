@@ -36,7 +36,7 @@ import { logger } from '../utils/logger.js';
 // Conexão ioredis da casa (a mesma do costGuard e do tenantUsage). A trava
 // global vive FORA do BullMQ de propósito: ver adquirirTravaGlobal.
 import redis from '../utils/redis.js';
-import { resolveEvalSet } from '../agents/agentEvalSet.js';
+import { resolveEvalSet, HARNESS_VERSION } from '../agents/agentEvalSet.js';
 import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
@@ -213,6 +213,8 @@ interface SaidaDaExecucao {
     partial: number;
     failed: number;
     criticalFailed: number;
+    /** A171 — cenários que não puderam ser avaliados, fora do denominador. */
+    erros: number;
     scorePercent: number;
   };
 }
@@ -233,6 +235,9 @@ async function gravarConclusao(runId: string, saida: SaidaDaExecucao): Promise<b
       data: {
         status: 'completed',
         ...saida.summary,
+        // A régua com que esta execução foi medida. Sem isto, comparar a nota
+        // de agosto com a de setembro é comparar duas réguas sem saber.
+        harnessVersion: HARNESS_VERSION,
         results: saida.results as any,
         completedAt: new Date(),
         durationMs: saida.durationMs,
@@ -302,6 +307,7 @@ async function fecharCorridaComOTeto(
         partial: true,
         failed: true,
         criticalFailed: true,
+        erros: true,
         scorePercent: true,
         durationMs: true,
         totalScenarios: true,
@@ -325,6 +331,7 @@ async function fecharCorridaComOTeto(
       partial: linha.partial ?? 0,
       failed: linha.failed ?? 0,
       criticalFailed: linha.criticalFailed ?? 0,
+      erros: linha.erros ?? 0,
       scorePercent: linha.scorePercent ?? 0,
     },
     durationMs: linha.durationMs ?? 0,
@@ -458,6 +465,7 @@ async function alertarSePreciso(input: {
     partial: number;
     failed: number;
     criticalFailed: number;
+    erros: number;
     scorePercent: number;
   };
   durationMs: number;

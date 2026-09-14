@@ -241,12 +241,18 @@ export async function executeFlowSimulation(input: {
       const r = await runOnePersona(graph, persona, {
         customerSays: async (p, history) => personaSay(p, history, organizationId),
         botReplies: async (aiPrompt, history, p) => botReply(aiPrompt, history, p, organizationId),
-        judge: async (p, history) =>
-          runJudge(
+        judge: async (p, history) => {
+          // A050: runJudge passou a devolver `passed: null` quando a saída do
+          // juiz é ilegível (indeterminado). Aqui o contrato da simulação
+          // continua booleano: indeterminado é tratado como não aprovado, que
+          // é exatamente o que acontecia antes desta mudança.
+          const v = await runJudge(
             `Atender bem um cliente cujo objetivo é: ${p.intent} (dor: ${p.painPoint}). O bot deve ser útil, claro e conduzir a conversa.`,
             lastBot(history),
             profile,
-          ),
+          );
+          return { ...v, passed: v.passed === true };
+        },
         buildCtx: () => DEFAULT_CTX,
         maxTurns: 6,
       });

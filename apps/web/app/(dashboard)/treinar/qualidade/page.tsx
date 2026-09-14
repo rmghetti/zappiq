@@ -553,8 +553,8 @@ function ClientFixCard({
   // Re-teste pós-Apply (loop curto rumo a 90%+): o usuário clica e a gente roda
   // SÓ esse cenário contra o systemPrompt atual pra ver se a correção pegou.
   const [retestResult, setRetestResult] = useState<{
-    combined: 'pass' | 'partial' | 'fail';
-    judge: { passed: boolean; reason: string };
+    combined: 'pass' | 'partial' | 'fail' | 'erro';
+    judge: { passed: boolean | null; reason: string };
   } | null>(null);
 
   useEffect(() => {

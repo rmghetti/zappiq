@@ -26,6 +26,9 @@ import { logger } from '../utils/logger.js';
 import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
 import type { EvalScenario } from '../agents/agentEvalSet.js';
 import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
+// A088: a MESMA extração que o WhatsApp usa. Antes o avaliador lia resp.text
+// cru e julgava a resposta dobrada, com as tags dentro.
+import { extractProductionReplyText } from '../agents/replyText.js';
 
 // ─── Tipos públicos ─────────────────────────────────────────────────
 
@@ -49,11 +52,26 @@ export interface ScenarioResult {
     missingPatterns: string[];
   };
   judge: {
-    passed: boolean;
+    /**
+     * A050 — null = INDETERMINADO. A leitura do juiz falhava quando o JSON
+     * vinha cortado ou com cerca de código, e `passed: false` entrava na nota
+     * como se o juiz tivesse reprovado. Saída ilegível agora não reprova
+     * ninguém: quem decide é a regra determinística.
+     */
+    passed: boolean | null;
     confidence: number; // 0-1
     reason: string;
   };
-  combined: 'pass' | 'partial' | 'fail';
+  /**
+   * A171 — 'erro' é falha TÉCNICA do teste (provedor fora, tempo limite,
+   * resposta vazia ou cortada, provedor diferente do pedido). Fica fora da
+   * nota, não conta como crítico e nunca gera sugestão. Antes virava 'fail'
+   * com nota 0: em 16/06 uma correção nascida de 25 respostas vazias foi
+   * aplicada no prompt da Iza e continua lá.
+   */
+  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  /** Motivo legível da falha técnica, em português. Só quando combined='erro'. */
+  falhaTecnica?: string;
   /**
    * Nível 1 auto-suggest (FASE 2.1 hotfix, 2026-05-13):
    * Quando combined=fail/partial, runner dispara Sonnet pra propor 1-3 patches
@@ -75,6 +93,8 @@ export interface RunSummary {
   partial: number;
   failed: number;
   criticalFailed: number;
+  /** A171 — cenários que não puderam ser avaliados. Fora do denominador. */
+  erros: number;
   scorePercent: number;
 }
 
@@ -232,15 +252,87 @@ function auditDoEval(profile: JudgeProfile): { orgId: string | null; operation: 
  * era fixada em 'eval' aqui dentro, a simulação do cliente passava a gravar
  * custo de bastidor e escapava dos dois orçamentos sem ninguém decidir isso.
  */
+/**
+ * A050 — teto de saída do juiz.
+ *
+ * Com 200 tokens, o motivo longo cortava o JSON no meio e o parse falhava.
+ * O resultado virava `passed: false` com o texto "Judge response unparseable":
+ * 9 vezes desde 20/07, uma delas começando com {"passed": true, "confidence":
+ * 62 — ou seja, o agente tinha sido aprovado e virou reprovado.
+ */
+export const MAX_TOKENS_DO_JUIZ = 500;
+
+/**
+ * Lê o JSON do juiz com tolerância. Devolve null quando nada aproveitável saiu.
+ *
+ * Aceita, nesta ordem: o texto inteiro; o conteúdo de uma cerca de código; o
+ * primeiro objeto `{...}` balanceado do texto; e, por último, o objeto cortado
+ * no meio (fecha as chaves que faltam e tenta de novo). Este último caso é o
+ * do corte por limite de tokens, que é justamente o que o A050 descreve.
+ */
+export function lerRespostaDoJuiz(raw: string): Record<string, any> | null {
+  const texto = String(raw ?? '').trim();
+  if (!texto) return null;
+
+  const tentativas: string[] = [texto];
+
+  // Cerca de código, com ou sem a linguagem declarada.
+  const cerca = texto.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (cerca) tentativas.push(cerca[1].trim());
+
+  // Primeiro objeto balanceado do texto. Uma varredura só, contando chaves
+  // fora de string, porque /\{[\s\S]*\}/ pega do primeiro ao ÚLTIMO fecha.
+  for (const candidato of [texto, cerca?.[1] ?? '']) {
+    const inicio = candidato.indexOf('{');
+    if (inicio === -1) continue;
+    let nivel = 0;
+    let emString = false;
+    let escapado = false;
+    for (let i = inicio; i < candidato.length; i++) {
+      const c = candidato[i];
+      if (emString) {
+        if (escapado) escapado = false;
+        else if (c === '\\') escapado = true;
+        else if (c === '"') emString = false;
+        continue;
+      }
+      if (c === '"') emString = true;
+      else if (c === '{') nivel++;
+      else if (c === '}') {
+        nivel--;
+        if (nivel === 0) {
+          tentativas.push(candidato.slice(inicio, i + 1));
+          break;
+        }
+      }
+    }
+    // Cortado no meio: fecha a string aberta e as chaves que faltam.
+    if (nivel > 0) {
+      const restante = candidato.slice(inicio);
+      tentativas.push(restante + (emString ? '"' : '') + '}'.repeat(nivel));
+    }
+  }
+
+  for (const t of tentativas) {
+    if (!t) continue;
+    try {
+      const obj = JSON.parse(t);
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) return obj;
+    } catch {
+      /* próxima tentativa */
+    }
+  }
+  return null;
+}
+
 export async function runJudge(
   expectedBehavior: string,
   agentResponse: string,
   profile: JudgeProfile,
   opts: { operation?: LLMOperation } = {},
-): Promise<{ passed: boolean; confidence: number; reason: string }> {
+): Promise<{ passed: boolean | null; confidence: number; reason: string }> {
   const operation = opts.operation ?? 'classify';
-  try {
-    const userPrompt = `### Comportamento esperado
+  const userPrompt = `### Comportamento esperado
 ${expectedBehavior}
 
 ### Resposta real do agente
@@ -248,46 +340,41 @@ ${agentResponse}
 
 ### Avaliação (JSON)`;
 
-    const judge = await withRetry(() =>
-      comTempoLimite(() =>
-        llmRouter.complete({
-          system: buildJudgeSystem(profile),
-          messages: [{ role: 'user', content: userPrompt }],
-          maxTokens: 200,
-          temperature: 0,
-          orgId: profile.organizationId ?? null,
-          operation,
-        }),
-      ),
-    );
+  // A171: erro de chamada NÃO vira mais reprovação silenciosa. Sobe para quem
+  // chamou, que decide entre marcar o cenário como falha técnica (o caminho do
+  // teste da Qualidade) ou tratar do próprio jeito (a simulação do Maestro).
+  const judge = await withRetry(() =>
+    comTempoLimite(() =>
+      llmRouter.complete({
+        system: buildJudgeSystem(profile),
+        messages: [{ role: 'user', content: userPrompt }],
+        maxTokens: MAX_TOKENS_DO_JUIZ,
+        temperature: 0,
+        orgId: profile.organizationId ?? null,
+        operation,
+      }),
+    ),
+  );
 
-    const raw = judge.text.trim();
-    let parsed: any = null;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          parsed = JSON.parse(match[0]);
-        } catch {
-          /* ignore */
-        }
-      }
-    }
+  const raw = String(judge.text ?? '').trim();
+  const parsed = lerRespostaDoJuiz(raw);
 
-    if (parsed && typeof parsed.passed === 'boolean') {
-      return {
-        passed: parsed.passed,
-        confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 50)) / 100,
-        reason: String(parsed.reason || '').slice(0, 500),
-      };
-    }
-    return { passed: false, confidence: 0, reason: `Judge response unparseable: ${raw.slice(0, 100)}` };
-  } catch (err: any) {
-    logger.warn('[agentEvalRunner] judge falhou', { err: err?.message });
-    return { passed: false, confidence: 0, reason: `Judge error: ${err?.message || 'unknown'}` };
+  if (parsed && typeof parsed.passed === 'boolean') {
+    return {
+      passed: parsed.passed,
+      confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 50)) / 100,
+      reason: String(parsed.reason || '').slice(0, 500),
+    };
   }
+
+  // Campo faltando ou saída ilegível: INDETERMINADO. Antes isto valia
+  // reprovação, e a nota do cliente caía por defeito do avaliador.
+  logger.warn('[agentEvalRunner] juiz indeterminado', { trecho: raw.slice(0, 120) });
+  return {
+    passed: null,
+    confidence: 0,
+    reason: 'Avaliação indeterminada: o avaliador não devolveu um veredito legível.',
+  };
 }
 
 // ─── Sugestão automática (Nível 1) ─────────────────────────────────
@@ -467,18 +554,83 @@ export function buildEvalSystemPrompt(
   // e quebrava esses cenários (falso fail). Solução: se scenarioId contém
   // 'nome_ausente', mock omite o nome.
   const nameMockEnabled = !scenario.id.includes('nome_ausente');
+  const primeiroContato = !scenario.history?.length;
 
+  // A052: as duas linhas abaixo divergiam da produção (agentOrchestrator),
+  // que escreve o que FAZER, não só o estado. O agente testado recebia
+  // "Nome registrado: (não informado)" e "Primeiro contato? NÃO" secos,
+  // enquanto o agente de produção recebe a instrução junto. Medir um prompt
+  // que ninguém usa é medir outra coisa.
   return [
     CORE_AGENT_RULES_V1,
     agent.systemPrompt || '(agente sem system_prompt customizado — só CORE rules)',
     '',
     '# Cliente atual (eval test mock)',
-    nameMockEnabled ? 'Nome registrado: Rod' : 'Nome registrado: (não informado)',
+    nameMockEnabled
+      ? 'Nome registrado: Rod'
+      : 'Nome registrado: (ainda não capturado, peça no primeiro turno conforme REGRA 9)',
     'Telefone: +5511999999999',
     'Status do lead: NEW',
     'Mensagens trocadas até agora: ' + ((scenario.history?.length || 0) + 1),
-    'Primeiro contato? ' + (!scenario.history?.length ? 'SIM' : 'NÃO'),
+    'Primeiro contato? ' +
+      (primeiroContato
+        ? 'SIM'
+        : 'NÃO (já tem histórico, não pergunte nome de novo, use o que está acima)'),
   ].join('\n');
+}
+
+/**
+ * A171 — o que é FALHA TÉCNICA do teste, não erro do agente.
+ *
+ * Função pura e exportada porque a regravação (P61) precisa aplicar a mesma
+ * régua sobre resultados já gravados, sem chamar nada.
+ *
+ * Devolve o motivo em português, ou null quando a resposta é avaliável.
+ */
+export function detectarFalhaTecnica(input: {
+  response: string;
+  stopReason?: string | null;
+  providerPedido?: string | null;
+  providerUsado?: string | null;
+}): string | null {
+  const texto = String(input.response ?? '').trim();
+  if (texto.length === 0) {
+    return 'O agente devolveu resposta vazia: não há o que avaliar.';
+  }
+  if (input.stopReason === 'max_tokens') {
+    return 'A resposta foi cortada no limite de tokens: não há resposta completa para avaliar.';
+  }
+  if (
+    input.providerPedido &&
+    input.providerUsado &&
+    input.providerPedido !== input.providerUsado
+  ) {
+    return `A resposta veio de um provedor diferente do pedido (${input.providerUsado} no lugar de ${input.providerPedido}): o teste mediria outro modelo.`;
+  }
+  return null;
+}
+
+/** Resultado de cenário que não pôde ser avaliado. Fora da nota, sem sugestão. */
+function resultadoComErro(
+  scenario: EvalScenario,
+  motivo: string,
+  extra: Partial<ScenarioResult> = {},
+): ScenarioResult {
+  return {
+    scenarioId: scenario.id,
+    category: scenario.category,
+    severity: scenario.severity,
+    description: scenario.description,
+    userMessage: scenario.userMessage,
+    response: '',
+    responseLatencyMs: 0,
+    responseTokens: {},
+    deterministic: { passed: false, failedPatterns: [], missingPatterns: [] },
+    judge: { passed: null, confidence: 0, reason: motivo },
+    combined: 'erro',
+    falhaTecnica: motivo,
+    ...extra,
+  };
 }
 
 async function runScenario(
@@ -544,7 +696,30 @@ async function runScenario(
   );
   const responseLatencyMs = Date.now() - t0;
 
-  const response = resp.text;
+  // A088: a mesma extração da produção. O cliente final lê o conteúdo de
+  // <reply>; o avaliador lia o texto cru, com a resposta dobrada e as tags.
+  const response = extractProductionReplyText(resp.text);
+
+  // A171: falha técnica sai da nota AQUI, antes do juiz e antes do sugeridor.
+  // Gastar juiz e sugestão sobre uma resposta vazia foi o que produziu, em
+  // 16/06, uma correção aplicada no prompt da Iza a partir de 25 respostas
+  // vazias, com o sugeridor inventando a causa.
+  const falha = detectarFalhaTecnica({
+    response,
+    stopReason: resp.stopReason,
+    providerPedido: preferProvider ?? null,
+    providerUsado: resp.provider ?? null,
+  });
+  if (falha) {
+    logger.warn('[agentEvalRunner] cenário sem resposta avaliável', {
+      scenarioId: scenario.id,
+      motivo: falha,
+    });
+    return resultadoComErro(scenario, falha, {
+      responseLatencyMs,
+      responseTokens: { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens },
+    });
+  }
 
   const passPatterns = scenario.passPatterns || [];
   const failPatterns = scenario.failPatterns || [];
@@ -560,12 +735,29 @@ async function runScenario(
 
   // 'eval' explícito: aqui o juiz é gasto de bastidor da casa. O padrão da
   // função é 'classify', que é o que a simulação do Maestro precisa.
-  const judge = await runJudge(scenario.expectedBehavior, response, profile, {
-    operation: 'eval',
-  });
+  //
+  // A171: chamada do juiz que quebra é falha TÉCNICA do teste, não erro do
+  // agente. Antes virava reprovação com o texto "Judge error: ..." indo parar
+  // na tela do cliente, em inglês.
+  let judge: { passed: boolean | null; confidence: number; reason: string };
+  try {
+    judge = await runJudge(scenario.expectedBehavior, response, profile, { operation: 'eval' });
+  } catch (err: any) {
+    const motivo = `O avaliador não respondeu a tempo (${String(err?.message || 'falha na chamada')}).`;
+    logger.warn('[agentEvalRunner] juiz falhou', { scenarioId: scenario.id, err: err?.message });
+    return resultadoComErro(scenario, motivo, {
+      response,
+      responseLatencyMs,
+      responseTokens: { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens },
+      deterministic: { passed: deterministicPassed, failedPatterns, missingPatterns },
+    });
+  }
 
+  // A050: juiz INDETERMINADO não reprova. Quem decide, nesse caso, é a regra
+  // determinística sozinha. Antes o indeterminado entrava como reprovação.
   let combined: 'pass' | 'partial' | 'fail';
-  if (deterministicPassed && judge.passed) combined = 'pass';
+  if (judge.passed === null) combined = deterministicPassed ? 'pass' : 'fail';
+  else if (deterministicPassed && judge.passed) combined = 'pass';
   else if (!deterministicPassed && !judge.passed) combined = 'fail';
   else combined = 'partial';
 
@@ -614,15 +806,31 @@ export function computeSummary(results: ScenarioResult[]): RunSummary {
   const passed = results.filter((r) => r.combined === 'pass').length;
   const partial = results.filter((r) => r.combined === 'partial').length;
   const failed = results.filter((r) => r.combined === 'fail').length;
+  const erros = results.filter((r) => r.combined === 'erro').length;
+
+  // A245: o indicador "Críticos" contava só 'fail', e 'fail' exige que a regra
+  // automática E o juiz reprovem juntos. Qualquer divergência virava 'Parcial'.
+  // Medido nos clientes: 138 desvios críticos rotulados Parcial, 1 reprovado,
+  // e o indicador "Críticos" marcando 0 em 26 de 28 execuções.
+  //
+  // Agora todo cenário crítico que NÃO passou conta como crítico. Falha
+  // técnica fica de fora: ela não diz nada sobre o agente.
   const criticalFailed = results.filter(
-    (r) => r.combined === 'fail' && r.severity === 'critical',
+    (r) => r.severity === 'critical' && r.combined !== 'pass' && r.combined !== 'erro',
   ).length;
+
+  // A171: o denominador é o que foi possível avaliar. Contar cenário quebrado
+  // como reprovação derrubava a nota por defeito do provedor: em 15/06, 25
+  // respostas vazias deram nota 0.
+  const avaliaveis = results.length - erros;
+
   return {
     passed,
     partial,
     failed,
     criticalFailed,
-    scorePercent: results.length > 0 ? Math.round((passed / results.length) * 100) : 0,
+    erros,
+    scorePercent: avaliaveis > 0 ? Math.round((passed / avaliaveis) * 100) : 0,
   };
 }
 
@@ -640,8 +848,8 @@ export function computeSummary(results: ScenarioResult[]): RunSummary {
  * @returns { scenarioId, before, after, improved } — improved = after === 'pass'.
  */
 export function computeReverifyVerdict(
-  before: 'pass' | 'partial' | 'fail' | null,
-  afterResult: 'pass' | 'partial' | 'fail',
+  before: 'pass' | 'partial' | 'fail' | 'erro' | null,
+  afterResult: 'pass' | 'partial' | 'fail' | 'erro',
 ): { before: typeof before; after: typeof afterResult; improved: boolean } {
   return {
     before,
@@ -676,20 +884,16 @@ export async function executeAgentEvalRun(
       const r = await runScenario(s, agent, profile);
       results.push(r);
     } catch (err: any) {
+      // A171: cenário que quebra é FALHA TÉCNICA, não reprovação. Eram 90
+      // cenários "Scenario crashed" contados na nota, 32 deles com sugestão
+      // gerada por cima de resposta vazia.
       logger.warn(`[agentEvalRunner] scenario ${s.id} falhou`, { err: err?.message });
-      results.push({
-        scenarioId: s.id,
-        category: s.category,
-        severity: s.severity,
-        description: s.description,
-        userMessage: s.userMessage,
-        response: '',
-        responseLatencyMs: 0,
-        responseTokens: {},
-        deterministic: { passed: false, failedPatterns: [], missingPatterns: [] },
-        judge: { passed: false, confidence: 0, reason: `Scenario crashed: ${err?.message}` },
-        combined: 'fail',
-      });
+      results.push(
+        resultadoComErro(
+          s,
+          `O teste deste cenário não completou (${String(err?.message || 'falha desconhecida')}).`,
+        ),
+      );
     }
   }
   const durationMs = Date.now() - t0;

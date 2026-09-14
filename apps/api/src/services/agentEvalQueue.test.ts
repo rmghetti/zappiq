@@ -34,7 +34,7 @@ const { prismaMock, runnerMock, cronServiceMock, profileMock, evalSetMock } = vi
     scenariosFailingTwice: vi.fn(),
   },
   profileMock: { resolveTenantAgentProfile: vi.fn() },
-  evalSetMock: { resolveEvalSet: vi.fn(), EVAL_SET_VERSION: 'v2' },
+  evalSetMock: { resolveEvalSet: vi.fn(), EVAL_SET_VERSION: 'v2', HARNESS_VERSION: 3 },
 }));
 
 vi.mock('@zappiq/database', () => ({ prisma: prismaMock }));
@@ -63,7 +63,14 @@ const CENARIOS = [
   { id: 'cr2', category: 'cr2_handoff', severity: 'critical' },
 ];
 
-const RESUMO_LIMPO = { passed: 2, partial: 0, failed: 0, criticalFailed: 0, scorePercent: 100 };
+const RESUMO_LIMPO = {
+  passed: 2,
+  partial: 0,
+  failed: 0,
+  criticalFailed: 0,
+  erros: 0,
+  scorePercent: 100,
+};
 
 function runPendente(overrides: Record<string, unknown> = {}) {
   return {
@@ -150,7 +157,11 @@ describe('executeRunJob — corpo único da execução', () => {
       status: 'completed',
       scorePercent: 100,
       passed: 2,
+      erros: 0,
       durationMs: 12_345,
+      // A régua com que esta execução foi medida. Sem isso, comparar a nota
+      // de agosto com a de setembro é comparar duas réguas sem saber.
+      harnessVersion: 3,
     });
     expect(conclusao.data.completedAt).toBeInstanceOf(Date);
   });

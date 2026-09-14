@@ -360,7 +360,13 @@ export interface AgentEvalRunRow {
   partial: number | null;
   failed: number | null;
   criticalFailed: number | null;
+  /** A171 — cenários que não puderam ser avaliados (falha técnica), fora da nota. */
+  erros?: number | null;
   scorePercent: number | null;
+  /** Versão do arnês que mediu. 3 = régua de 14/09/2026. */
+  harnessVersion?: number | null;
+  /** P56 — piso de ruído do agente: quanto a nota oscila com prompt constante. */
+  ruido?: { desvio: number; n: number } | null;
   startedAt: string;
   completedAt: string | null;
   durationMs: number | null;
@@ -381,9 +387,13 @@ export interface AgentEvalRunDetailScenario {
   /** FASE 2.2c (#246): mensagem enviada ao agente — contexto completo na UI. Opcional pra runs antigas. */
   userMessage?: string;
   response: string;
-  combined: 'pass' | 'partial' | 'fail';
+  /** A171 — 'erro' é falha TÉCNICA do teste: fica fora da nota e sem sugestão. */
+  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  /** Motivo legível da falha técnica, quando combined='erro'. */
+  falhaTecnica?: string;
   deterministic: { passed: boolean; failedPatterns: string[]; missingPatterns: string[] };
-  judge: { passed: boolean; confidence: number; reason: string };
+  /** A050 — passed null = avaliação indeterminada (não é reprovação). */
+  judge: { passed: boolean | null; confidence: number; reason: string };
   /** Nível 1 auto-suggest — gerado quando combined='fail'. */
   suggestedFix?: {
     summary: string;

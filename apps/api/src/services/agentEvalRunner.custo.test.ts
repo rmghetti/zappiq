@@ -136,7 +136,7 @@ describe('chamada de LLM pendurada não trava a execução', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('corta em 60 s e registra o cenário como reprovado', async () => {
+  it('corta em 60 s e registra o cenário como FALHA TÉCNICA, fora da nota', async () => {
     // Chamada do agente nunca resolve: é o caso real de 207 s observado.
     completeMock.mockImplementation(() => new Promise(() => {}));
 
@@ -145,9 +145,14 @@ describe('chamada de LLM pendurada não trava a execução', () => {
     const { results, summary } = await promessa;
 
     expect(results).toHaveLength(1);
-    expect(results[0].combined).toBe('fail');
-    expect(results[0].judge.reason).toMatch(/tempo limite da chamada de LLM/i);
-    expect(summary.failed).toBe(1);
+    // A171 (14/09/2026): antes isto virava 'fail' e entrava na nota. Tempo
+    // limite do provedor não é erro do agente: vira 'erro', fica fora do
+    // denominador e não gera sugestão.
+    expect(results[0].combined).toBe('erro');
+    expect(results[0].falhaTecnica).toMatch(/tempo limite da chamada de LLM/i);
+    expect(results[0].suggestedFix).toBeUndefined();
+    expect(summary.failed).toBe(0);
+    expect(summary.erros).toBe(1);
   });
 
   it('a classificação de intenção pendurada também é cortada em 60 s', async () => {

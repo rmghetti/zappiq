@@ -143,8 +143,8 @@ class ClientAgentQualityApi {
   ): Promise<{
     ok: boolean;
     scenarioId: string;
-    combined: 'pass' | 'partial' | 'fail';
-    judge: { passed: boolean; reason: string };
+    combined: 'pass' | 'partial' | 'fail' | 'erro';
+    judge: { passed: boolean | null; reason: string };
     severity: string;
     response: string;
   }> {

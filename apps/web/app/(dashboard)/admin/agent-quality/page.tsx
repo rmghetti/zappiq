@@ -820,11 +820,18 @@ function ResultBadge({
   combined,
   severity,
 }: {
-  combined: 'pass' | 'partial' | 'fail';
+  combined: 'pass' | 'partial' | 'fail' | 'erro';
   severity: string;
 }) {
   const combinedLabel =
-    combined === 'pass' ? 'Aprovado' : combined === 'partial' ? 'Parcial' : 'Reprovado';
+    combined === 'pass'
+      ? 'Aprovado'
+      : combined === 'partial'
+        ? 'Parcial'
+        : // A171: falha técnica do teste não é erro do agente.
+          combined === 'erro'
+          ? 'Não avaliado'
+          : 'Reprovado';
   const severityLabel =
     severity === 'critical' ? 'crítica' : severity === 'high' ? 'alta' : 'média';
   const color =
@@ -832,7 +839,9 @@ function ResultBadge({
       ? 'bg-green-100 text-green-800 border-green-200'
       : combined === 'partial'
         ? 'bg-orange-100 text-orange-800 border-orange-200'
-        : 'bg-red-100 text-red-800 border-red-200';
+        : combined === 'erro'
+          ? 'bg-neutral-100 text-neutral-700 border-neutral-300'
+          : 'bg-red-100 text-red-800 border-red-200';
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-medium border ${color}`}>
       {combinedLabel} · {severityLabel}
@@ -1216,7 +1225,7 @@ function GenerateSuggestionButton({
 }: {
   runId: string;
   scenarioId: string;
-  combined: 'pass' | 'partial' | 'fail';
+  combined: 'pass' | 'partial' | 'fail' | 'erro';
   onGenerated: () => void;
 }) {
   const [loading, setLoading] = useState(false);

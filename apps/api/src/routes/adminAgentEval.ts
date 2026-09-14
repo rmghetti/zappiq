@@ -763,8 +763,8 @@ router.post(
       // Fail-soft: erro no re-verify NÃO falha o apply (fix já persistido).
       let reverify: {
         scenarioId: string;
-        before: 'pass' | 'partial' | 'fail' | null;
-        after: 'pass' | 'partial' | 'fail';
+        before: 'pass' | 'partial' | 'fail' | 'erro' | null;
+        after: 'pass' | 'partial' | 'fail' | 'erro';
         improved: boolean;
       } | { error: true } | null = null;
 
@@ -776,7 +776,7 @@ router.post(
           const priorResult = Array.isArray(run.results)
             ? (run.results as any[]).find((r: any) => r.scenarioId === scenarioId)
             : null;
-          const before: 'pass' | 'partial' | 'fail' | null =
+          const before: 'pass' | 'partial' | 'fail' | 'erro' | null =
             priorResult?.combined ?? null;
 
           // Re-run com o prompt recém-aplicado (1 LLM call)
@@ -789,7 +789,9 @@ router.post(
             },
             profile,
           );
-          const afterCombined = rerunResults[0]?.combined ?? 'fail';
+          // A171: 'erro' é falha técnica do re-teste. computeReverifyVerdict
+          // já trata: improved só quando o resultado novo é 'pass'.
+          const afterCombined = rerunResults[0]?.combined ?? 'erro';
           const verdict = computeReverifyVerdict(before, afterCombined);
 
           reverify = { scenarioId, ...verdict };
