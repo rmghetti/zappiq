@@ -31,7 +31,7 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { prisma } from '@zappiq/database';
 
-import { queueConnection as connection } from '../config/queueRedis.js';
+import { queueConnection as connection, IDLE_DRAIN_DELAY_SECONDS } from '../config/queueRedis.js';
 import { logger } from '../utils/logger.js';
 import { resolveEvalSet } from '../agents/agentEvalSet.js';
 import type { EvalScenario } from '../agents/evalScenarioTypes.js';
@@ -396,6 +396,12 @@ export async function initAgentEvalQueue(): Promise<void> {
       // de taxa do provedor. Paralelizar aqui só produziria 429.
       concurrency: 1,
       lockDuration: EVAL_RUN_TIMEOUT_MS,
+      // Custo do Upstash: worker ocioso gasta cerca de 8 comandos a cada
+      // drainDelay, 24/7. Esta é fila de TRABALHO (sem job repetível), então o
+      // drainDelay longo vale aqui, ao contrário da fila `cron`. Sem isto, a
+      // fila nova reintroduziria parte do gasto que a consolidação cortou.
+      // `Queue.add` destrava o bloqueio na hora, então nenhum teste atrasa.
+      drainDelay: IDLE_DRAIN_DELAY_SECONDS,
     },
   );
 
