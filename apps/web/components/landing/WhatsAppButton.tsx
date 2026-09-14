@@ -94,6 +94,11 @@ async function callIzaBackend(
       throw new Error(`HTTP ${res.status}`);
     }
     const body = await res.json();
+    // A190: um atendente assumiu a conversa. Sem resposta do robô, e sem cara
+    // de erro: o visitante precisa saber que alguém vai responder.
+    if (body?.paused === true) {
+      return 'Um atendente da equipe vai responder por aqui em instantes.';
+    }
     if (!body?.reply || typeof body.reply !== 'string') {
       throw new Error('reply ausente');
     }
