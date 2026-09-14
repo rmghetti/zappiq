@@ -30,17 +30,33 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import {
-  buildSystemPromptForContact,
+  buildAgentContextForContact,
   resolveSchedulingRuntime,
 } from '../agents/agentOrchestrator.js';
 import { buildLiveProfileBlock, buildGreetingBlock } from '../agents/tenantLiveProfile.js';
 import { isFlagOn } from '../services/featureFlags.js';
+// C1a (Passo 12): o Raio-X mostra o hash e as partes do contexto de cada
+// canal. Com o interruptor `contextoUnico` da organização ligado, o site e
+// a Qualidade passam a ser montados pelo MESMO motor do WhatsApp, e o
+// hash estável (só os blocos do tenant) tem de bater entre os canais.
+import {
+  flagLigada,
+  montarContextoDoTurno,
+  type ContatoDoTurno,
+} from '../agents/agentContextLoader.js';
+import { hashDoContexto, type ParteDoContexto } from '../agents/composeAgentContext.js';
 import {
   buildWebChatSystemPrompt,
   loadOrgSystemPrompt,
+  montarContextoDoChatDoSite,
   SystemPromptNaoEncontrado,
 } from '../services/webChatService.js';
 import { buildEvalSystemPrompt } from '../services/agentEvalRunner.js';
+import {
+  contatoDoCenario,
+  DATA_FIXA_DO_EVAL,
+  PROMPT_AUSENTE,
+} from '../services/agentEvalContext.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
 import * as ragService from '../services/ragService.js';
@@ -100,6 +116,38 @@ async function carregarAgenteDaQualidade(organizationId: string) {
  */
 class SemPromptDoSite extends Error {}
 
+/** O que o Raio-X mostra de cada turno, além das fatias e das checagens. */
+interface PromptMontado {
+  prompt: string;
+  /** sha256 do prompt inteiro. Existe nos dois motores. */
+  hash: string;
+  /** sha256 dos blocos estáveis do tenant. Só no motor único. */
+  hashEstavel: string | null;
+  /** Orçamento por bloco. No motor de antes, derivado das fatias. */
+  partes: ParteDoContexto[];
+  /** Que motor montou este prompt. */
+  motor: 'unico' | 'antes';
+}
+
+/** Partes derivadas das fatias, para o motor de antes ter orçamento também. */
+function partesDasFatias(prompt: string): ParteDoContexto[] {
+  return sliceBySections(prompt).map((f) => ({ nome: f.titulo, chars: f.chars }));
+}
+
+function montadoPeloDeAntes(prompt: string): PromptMontado {
+  return { prompt, hash: hashDoContexto(prompt), hashEstavel: null, partes: partesDasFatias(prompt), motor: 'antes' };
+}
+
+/** O contato da sessão de teste, o mesmo do Testar minha IA e do site (A072). */
+function contatoDaSessao(historico: Mensagem[]): ContatoDoTurno {
+  return {
+    nome: null,
+    leadStatus: 'NEW',
+    primeiroContato: historico.length === 0,
+    totalMensagens: historico.length + 1,
+  };
+}
+
 async function montarPrompt(input: {
   canal: Canal;
   organizationId: string;
@@ -107,8 +155,13 @@ async function montarPrompt(input: {
   ragContext: string;
   mensagem: string;
   historico: Mensagem[];
-}): Promise<string> {
-  const { canal, organizationId, settings, ragContext, mensagem, historico } = input;
+  /** Interruptores lidos uma vez por pedido. */
+  flags: { contextoUnico: boolean; perfilVivo: boolean; ragNoChatDoSite: boolean };
+  /** Um instante só para o pedido inteiro: o hash estável precisa bater entre canais. */
+  agora: Date;
+}): Promise<PromptMontado> {
+  const { canal, organizationId, settings, ragContext, mensagem, historico, flags, agora } = input;
+  const ragStatus: ragService.RagSearchStatus = ragContext ? 'ok' : 'sem_resultado';
 
   // WhatsApp, Instagram e playground: caminho de produção, com as settings da
   // organização.
@@ -123,17 +176,47 @@ async function montarPrompt(input: {
     // que o WhatsApp não monta (sem a linha de agendamento, e afirmando que
     // "já tem histórico" num turno em que o histórico não está no contexto).
     const agendamento = await resolveSchedulingRuntime(organizationId, settings);
-    return buildSystemPromptForContact({
+    const r = await buildAgentContextForContact({
+      origem: canal,
       organizationId,
       contactId: `xray:${organizationId}`,
       orgSettings: settings,
       ragContext,
       agendamento,
       temHistoricoNoContexto: historico.length > 0,
+      // O Testar minha IA passa o contato da sessão (A072); os outros dois
+      // fazem o lookup de sempre, que aqui não acha ninguém.
+      contato: canal === 'playground' ? contatoDaSessao(historico) : undefined,
+      agora,
     });
+    return r.viaContextoUnico
+      ? { prompt: r.systemPrompt, hash: r.hash, hashEstavel: r.hashEstavel ?? null, partes: r.partes, motor: 'unico' }
+      : montadoPeloDeAntes(r.systemPrompt);
   }
 
   if (canal === 'site') {
+    if (flags.contextoUnico) {
+      // O MESMO montador que o visitante aciona com o interruptor ligado. A
+      // busca já foi feita pelo Raio-X (e só quando ragNoChatDoSite permite).
+      try {
+        const ctx = await montarContextoDoChatDoSite({
+          organizationId,
+          orgSettings: settings,
+          contato: contatoDaSessao(historico),
+          mensagem,
+          temHistoricoNoContexto: historico.length > 0,
+          perfilVivoLigado: flags.perfilVivo,
+          consultarBase: flags.ragNoChatDoSite,
+          busca: { context: ragContext, status: ragStatus },
+          agora,
+        });
+        return { prompt: ctx.systemPrompt, hash: ctx.hash, hashEstavel: ctx.hashEstavel, partes: ctx.partes, motor: 'unico' };
+      } catch (e) {
+        if (e instanceof SystemPromptNaoEncontrado) throw new SemPromptDoSite();
+        throw e;
+      }
+    }
+
     // Sem cópia da regra: quem escolhe o agente é o mesmo carregador que o
     // visitante do site aciona, com o mesmo cache de 5 minutos.
     let orgPrompt: string;
@@ -154,25 +237,53 @@ async function montarPrompt(input: {
     // que a correção não funcionou no site.
     let perfilVivoBlock = '';
     let saudacaoBlock = '';
-    if (await isFlagOn(organizationId, 'perfilVivo')) {
-      perfilVivoBlock = buildLiveProfileBlock(settings, null, { now: new Date() });
+    if (flags.perfilVivo) {
+      perfilVivoBlock = buildLiveProfileBlock(settings, null, { now: agora });
       saudacaoBlock = buildGreetingBlock(historico.length === 0, settings.greetingMessage);
     }
 
-    return buildWebChatSystemPrompt({
-      orgPrompt,
-      factsBlock: ehIza ? await getIzaFactsBlock() : '',
-      isIzaCanonical: ehIza,
-      perfilVivoBlock,
-      saudacaoBlock,
-    });
+    return montadoPeloDeAntes(
+      buildWebChatSystemPrompt({
+        orgPrompt,
+        factsBlock: ehIza ? await getIzaFactsBlock() : '',
+        isIzaCanonical: ehIza,
+        perfilVivoBlock,
+        saudacaoBlock,
+      }),
+    );
   }
 
   // canal === 'qualidade'
   const agente = await carregarAgenteDaQualidade(organizationId);
-  return buildEvalSystemPrompt(
-    { systemPrompt: agente?.systemPrompt ?? null },
-    { id: 'xray', userMessage: mensagem, history: historico },
+  if (flags.contextoUnico) {
+    // O MESMO contexto que services/agentEvalContext monta para cada cenário:
+    // contato mock de sempre, data FIXA e a base pela mensagem do cenário.
+    const ctx = await montarContextoDoTurno({
+      origem: 'qualidade',
+      organizationId,
+      orgSettings: settings,
+      agente: {
+        id: agente?.id ?? 'sem-agente',
+        name: agente?.name ?? '',
+        systemPrompt: agente?.systemPrompt || PROMPT_AUSENTE,
+        role: 'comercial',
+      },
+      contato: contatoDoCenario({ id: 'xray', history: historico }),
+      ragContext,
+      ragStatus,
+      temHistoricoNoContexto: historico.length > 0,
+      agora: DATA_FIXA_DO_EVAL,
+      perfilVivoLigado: flags.perfilVivo,
+    });
+    if (ctx) {
+      return { prompt: ctx.systemPrompt, hash: ctx.hash, hashEstavel: ctx.hashEstavel, partes: ctx.partes, motor: 'unico' };
+    }
+  }
+  return montadoPeloDeAntes(
+    buildEvalSystemPrompt(
+      { systemPrompt: agente?.systemPrompt ?? null },
+      { id: 'xray', userMessage: mensagem, history: historico },
+    ),
   );
 }
 
@@ -214,7 +325,22 @@ router.post(
         })
       ).map((q) => ({ id: q.id, question: q.question }));
 
-      const usaRag = CANAIS_COM_RAG.includes(canal);
+      // Os interruptores, lidos uma vez por pedido. O `isFlagOn` direto fica
+      // para o teste antigo do perfil vivo; os demais passam pelo mesmo
+      // flagLigada da produção (fail-closed).
+      const [contextoUnico, perfilVivo, ragNoChatDoSite] = await Promise.all([
+        flagLigada(organizationId, 'contextoUnico'),
+        isFlagOn(organizationId, 'perfilVivo').catch(() => false),
+        flagLigada(organizationId, 'ragNoChatDoSite'),
+      ]);
+      const flags = { contextoUnico, perfilVivo, ragNoChatDoSite };
+      // Com o motor único, o site consulta a base só com o portão
+      // ragNoChatDoSite (A197), e a Qualidade consulta sempre (A036).
+      const usaRag =
+        CANAIS_COM_RAG.includes(canal) ||
+        (canal === 'site' && contextoUnico && ragNoChatDoSite) ||
+        (canal === 'qualidade' && contextoUnico);
+      const agora = new Date();
       const turnos: Array<Record<string, unknown>> = [];
       const historico: Mensagem[] = [];
 
@@ -230,14 +356,17 @@ router.post(
           ? await ragService.searchWithSources(organizationId, m.content, 5)
           : { context: '', sources: [] as ragService.RagSource[] };
 
-        const prompt = await montarPrompt({
+        const montado = await montarPrompt({
           canal,
           organizationId,
           settings,
           ragContext: context,
           mensagem: m.content,
           historico: [...historico],
+          flags,
+          agora,
         });
+        const prompt = montado.prompt;
 
         const fontes: FonteRecuperada[] = sources.map((s) => ({
           source: s.source,
@@ -247,6 +376,12 @@ router.post(
         turnos.push({
           mensagem: m.content,
           prompt_chars: prompt.length,
+          // C1a: hash do prompt inteiro, hash estável do tenant (só no motor
+          // único), orçamento por bloco e qual motor montou.
+          hash: montado.hash,
+          hash_estavel: montado.hashEstavel,
+          partes: montado.partes,
+          motor: montado.motor,
           fatias: sliceBySections(prompt),
           fontes,
           // As checagens comparam sempre com as configurações REAIS da

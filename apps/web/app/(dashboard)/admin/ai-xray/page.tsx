@@ -251,6 +251,52 @@ export default function AiXrayPage() {
             </span>
           </div>
 
+          {/* Hash e motor (C1a): o mesmo hash estável em dois canais prova que
+              eles atendem pelo mesmo agente. O hash inteiro muda com a
+              mensagem, a base e o relógio. */}
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span
+              className={`px-2 py-0.5 rounded font-semibold ${
+                turno.motor === 'unico' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
+              }`}
+              title={
+                turno.motor === 'unico'
+                  ? 'Montado pelo motor único de contexto (interruptor contextoUnico ligado)'
+                  : 'Montado pelo caminho antigo deste canal (interruptor contextoUnico desligado)'
+              }
+            >
+              {turno.motor === 'unico' ? 'motor único' : 'motor de antes'}
+            </span>
+            <span className="text-gray-500">
+              hash <span className="font-mono text-gray-700">{turno.hash.slice(0, 12)}</span>
+            </span>
+            <span className="text-gray-500">
+              hash estável{' '}
+              <span className="font-mono text-gray-700">
+                {turno.hash_estavel ? turno.hash_estavel.slice(0, 12) : 'só no motor único'}
+              </span>
+            </span>
+          </div>
+
+          {/* Orçamento por bloco (C1a, A063) */}
+          {turno.partes.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-gray-600">Orçamento por bloco</p>
+              <ul className="flex flex-wrap gap-1.5 text-[11px]">
+                {turno.partes.map((p) => (
+                  <li
+                    key={p.nome}
+                    className={`px-2 py-0.5 rounded border ${
+                      p.chars > 0 ? 'border-gray-200 text-gray-700' : 'border-dashed border-gray-200 text-gray-400'
+                    }`}
+                  >
+                    {p.nome}: {p.chars.toLocaleString('pt-BR')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Checagens */}
           <div className="space-y-2">
             <p className="text-xs font-semibold text-gray-600">Checagens</p>

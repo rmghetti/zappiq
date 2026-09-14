@@ -99,6 +99,15 @@ export interface AgentContextOutput {
   partes: ParteDoContexto[];
   /** sha256 do systemPrompt, para o Raio-X e para o snapshot. */
   hash: string;
+  /**
+   * sha256 só dos blocos ESTÁVEIS do tenant (CORE, iza_facts, prompt do
+   * agente, regras e links). Não muda com o canal, a mensagem, o histórico,
+   * a base nem o relógio: é o que o Raio-X compara entre canais para dizer
+   * que o WhatsApp e o site atendem pelo mesmo agente. O perfil vivo fica
+   * de fora de propósito: ele carrega "Agora: aberto" (relógio) e a linha
+   * de agendamento, que depende das ferramentas do canal.
+   */
+  hashEstavel: string;
 }
 
 /** Nomes fixos dos blocos, na ordem em que entram no prompt. */
@@ -223,5 +232,8 @@ export function composeAgentContext(input: AgentContextInput): AgentContextOutpu
     systemPrompt,
     partes: NOMES_DAS_PARTES.map((nome) => ({ nome, chars: porNome[nome].length })),
     hash: hashDoContexto(systemPrompt),
+    hashEstavel: hashDoContexto(
+      [core, izaFacts, promptDoAgente, regrasDoCliente, links].filter(Boolean).join('\n'),
+    ),
   };
 }

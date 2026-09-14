@@ -1797,6 +1797,11 @@ export interface BuildSystemPromptInput {
    * dispensa o lookup por contactId; o caminho de antes ignora.
    */
   contato?: ContatoDoTurno;
+  /**
+   * C1a: relógio injetado (o Raio-X monta todos os canais com o mesmo
+   * instante para comparar hashes). Só o motor único usa; padrão: agora.
+   */
+  agora?: Date;
 }
 
 export interface AgentContextResult {
@@ -1805,6 +1810,8 @@ export interface AgentContextResult {
   hash: string;
   /** Orçamento por bloco. Vazio no caminho de antes, que não fatia. */
   partes: ParteDoContexto[];
+  /** Hash dos blocos estáveis do tenant. Só no motor único. */
+  hashEstavel?: string;
   /** true = montado pelo motor único (interruptor `contextoUnico`). */
   viaContextoUnico: boolean;
   /** O contexto completo, só no motor único. */
@@ -1841,11 +1848,13 @@ export async function buildAgentContextForContact(
       temHistoricoNoContexto: input.temHistoricoNoContexto,
       instrucaoDeCanal: input.instrucaoDeCanal,
       perfilVivoLigado,
+      agora: input.agora,
     });
     if (contexto) {
       return {
         systemPrompt: contexto.systemPrompt,
         hash: contexto.hash,
+        hashEstavel: contexto.hashEstavel,
         partes: contexto.partes,
         viaContextoUnico: true,
         contexto,

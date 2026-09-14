@@ -526,3 +526,96 @@ describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => 
     expect(promptDoTurno(res, 1)).toContain('Primeiro contato? NÃO (já tem histórico');
   });
 });
+
+/* ── 8. Hash, partes e motor por turno (C1a) ──────────────────────────── */
+/*
+ * O Raio-X passa a dizer QUE motor montou o prompt de cada canal, o hash do
+ * prompt inteiro e o hash estável do tenant (só os blocos que não mudam com
+ * a mensagem, a base nem o relógio). Com o interruptor contextoUnico ligado,
+ * o WhatsApp e o site têm de mostrar o MESMO hash estável: é a prova, para o
+ * fundador, de que os dois canais atendem pelo mesmo agente.
+ */
+
+describe('POST /api/admin/ai-xray: hash, partes e motor por turno', () => {
+  const ligar = (ativas: string[]) =>
+    isFlagOn.mockImplementation(async (_org: string, flag: string) => ativas.includes(flag));
+
+  it('com tudo desligado, cada turno tem hash e partes, e o motor é o de antes', async () => {
+    for (const canal of ['whatsapp', 'site', 'qualidade']) {
+      const res = await chamar({ ...corpoValido, canal });
+      const turno = res.body.turnos[0];
+      expect(turno.motor, canal).toBe('antes');
+      expect(turno.hash, canal).toMatch(/^[0-9a-f]{64}$/);
+      expect(turno.hash_estavel, canal).toBeNull();
+      expect(turno.partes.length, canal).toBeGreaterThan(0);
+      expect(turno.partes[0], canal).toMatchObject({ nome: 'Regras base (CORE)' });
+    }
+  });
+
+  it('com contextoUnico ligado, WhatsApp e site mostram o MESMO hash estável', async () => {
+    ligar(['contextoUnico', 'perfilVivo']);
+
+    const wa = await chamar({ ...corpoValido, canal: 'whatsapp' });
+    const site = await chamar({ ...corpoValido, canal: 'site' });
+
+    expect(wa.body.turnos[0].motor).toBe('unico');
+    expect(site.body.turnos[0].motor).toBe('unico');
+    expect(wa.body.turnos[0].hash_estavel).toMatch(/^[0-9a-f]{64}$/);
+    expect(site.body.turnos[0].hash_estavel).toBe(wa.body.turnos[0].hash_estavel);
+    // O hash inteiro difere de propósito: o site tem a instrução de canal.
+    expect(site.body.turnos[0].hash).not.toBe(wa.body.turnos[0].hash);
+    expect(site.body.turnos[0].partes.find((p: any) => p.nome === 'instrucao_de_canal').chars).toBeGreaterThan(0);
+    expect(wa.body.turnos[0].partes.find((p: any) => p.nome === 'instrucao_de_canal').chars).toBe(0);
+  });
+
+  it('com contextoUnico ligado, o site NÃO consulta a base sem ragNoChatDoSite, e consulta com ele', async () => {
+    ligar(['contextoUnico']);
+    let res = await chamar({ ...corpoValido, canal: 'site' });
+    expect(searchWithSources).not.toHaveBeenCalled();
+    expect(res.body.turnos[0].fontes).toEqual([]);
+    expect(res.body.turnos[0].motor).toBe('unico');
+    // O site pelo motor único não passa pelo carregador com cache.
+    expect(queryRawUnsafe).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    ligar(['contextoUnico', 'ragNoChatDoSite']);
+    orgFindUnique.mockResolvedValue({ id: 'org-1', name: 'Cantina da Nona', settings: SETTINGS_DA_ORG });
+    agentFindFirst.mockResolvedValue({ id: 'a1', name: 'Antonella', systemPrompt: PROMPT_DO_AGENTE });
+    qaFindMany.mockResolvedValue([]);
+    searchWithSources.mockResolvedValue({
+      context: 'Trecho da base: o rodízio custa R$ 89.',
+      sources: [{ source: 'cardapio.pdf', similarity: 0.61, snippet: 'rodízio R$ 89' }],
+    });
+    res = await chamar({ ...corpoValido, canal: 'site' });
+    expect(searchWithSources).toHaveBeenCalledWith('org-1', 'vocês abrem domingo?', 5);
+    expect(res.body.turnos[0].fontes).toEqual([{ source: 'cardapio.pdf', similarity: 0.61 }]);
+    expect(promptDoTurno(res)).toContain('Trecho da base: o rodízio custa R$ 89.');
+  });
+
+  it('com contextoUnico ligado, a Qualidade consulta a base e monta com o contato mock e a data fixa (A036)', async () => {
+    ligar(['contextoUnico']);
+
+    const res = await chamar({ ...corpoValido, canal: 'qualidade' });
+
+    expect(searchWithSources).toHaveBeenCalledWith('org-1', 'vocês abrem domingo?', 5);
+    const turno = res.body.turnos[0];
+    expect(turno.motor).toBe('unico');
+    const base = turno.checagens.find((c: any) => c.id === 'base_consultada');
+    expect(base.ok).toBe(true);
+    const prompt = promptDoTurno(res);
+    expect(prompt).toContain('Nome registrado: Rod');
+    expect(prompt).toContain('# Agora\n14/09/2026, 12:00:00');
+    expect(prompt).toContain('### Links oficiais de Cantina da Nona');
+  });
+
+  it('a instrução de canal do site fica DEPOIS do CORE com o motor único (A076)', async () => {
+    ligar(['contextoUnico']);
+
+    const res = await chamar({ ...corpoValido, canal: 'site' });
+
+    const prompt = promptDoTurno(res);
+    const canal = prompt.indexOf('# CANAL DE COMUNICAÇÃO');
+    expect(canal).toBeGreaterThan(0);
+    expect(prompt.indexOf(PROMPT_DO_AGENTE)).toBeGreaterThan(canal);
+  });
+});

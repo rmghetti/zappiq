@@ -268,12 +268,17 @@ export async function montarContextoDoChatDoSite(input: {
   perfilVivoLigado: boolean;
   /** `ragNoChatDoSite`: só com ele a base entra no site (A197: portão da P02). */
   consultarBase: boolean;
+  /** Busca já feita por quem chamou (o Raio-X). Com ela, nenhuma busca nova. */
+  busca?: { context: string; status: ragService.RagSearchStatus };
   agora?: Date;
 }): Promise<ContextoDoTurno> {
   const { organizationId } = input;
   let ragContext = '';
   let ragStatus: ragService.RagSearchStatus = 'sem_resultado';
-  if (input.consultarBase) {
+  if (input.busca) {
+    ragContext = input.busca.context;
+    ragStatus = input.busca.status;
+  } else if (input.consultarBase) {
     try {
       const busca = await ragService.searchDetailed(organizationId, input.mensagem, 5);
       ragContext = busca.context;
