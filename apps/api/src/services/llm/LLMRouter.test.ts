@@ -397,6 +397,22 @@ describe('LLMRouter', () => {
       expect(url).toContain('gemini-2.5-flash');
     });
 
+    // A201: a chave ia na query string. A instrumentação de rastreamento grava
+    // url.full de toda chamada de saída, então a chave saía para o Grafana
+    // dentro do atributo do span, com a retenção de lá.
+    it('a chave do Gemini vai no cabeçalho x-goog-api-key, nunca na URL', async () => {
+      fetchSpy.mockResolvedValueOnce(geminiOk('Resposta Gemini'));
+      const router = new LLMRouter();
+      await router.complete({ messages: [{ role: 'user', content: 'oi' }], tier: 'STARTER' });
+
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).not.toContain('key=');
+      expect(url).not.toContain('test-key-google');
+      expect(url).not.toContain('?');
+      const init = fetchSpy.mock.calls[0][1] as any;
+      expect(init.headers['x-goog-api-key']).toBe('test-key-google');
+    });
+
     it('GROWTH tier também usa Gemini como primary', async () => {
       fetchSpy.mockResolvedValueOnce(geminiOk('Growth response'));
       const router = new LLMRouter();
