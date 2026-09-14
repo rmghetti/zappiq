@@ -33,7 +33,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION}
 
 # Dependências runtime (sem build-deps)
-# libstdc++ e requerido pelo binario nativo do PyMuPDF (_extra.so)
+# libstdc++ e requerido por extensoes nativas do venv. O PyMuPDF, que era o
+# motivo original desta linha, saiu em 14/09/2026 (AGPL-3.0). Os conversores
+# que entraram no lugar (pypdf, mammoth, openpyxl, readability-lxml, lxml) tem
+# roda musllinux_1_2 publicada para cp312, entao nenhum deles compila aqui.
 RUN apk add --no-cache \
     curl \
     libstdc++ \

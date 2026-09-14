@@ -759,13 +759,13 @@ async def ingest(
     Ingestao: upload -> extract -> chunk -> cabecalho -> embed -> upsert.
 
     Form fields:
-      file       — PDF, DOCX, XLSX, TXT, MD, CSV ou HTML (max 20MB)
-      namespace  — 'org_<uuid>' (isola multi-tenant)
-      source     — identificador do doc (a API manda doc-<id do kb_document>)
-      metadata   — JSON extra. Dois campos com significado aqui:
-                   titulo   — nome do documento para o cabecalho de contexto
-                   pergunta — repete a pergunta no cabecalho de todo trecho de Q&A
-      source_url — endereco de origem, quando o conteudo veio de uma pagina
+      file:       PDF, DOCX, XLSX, TXT, MD, CSV ou HTML (max 20MB)
+      namespace:  'org_<uuid>' (isola multi-tenant)
+      source:     identificador do doc (a API manda doc-<id do kb_document>)
+      metadata:   JSON extra. Dois campos com significado aqui:
+                    titulo: nome do documento para o cabecalho de contexto
+                    pergunta: repete a pergunta no cabecalho de todo trecho de Q&A
+      source_url: endereco de origem, quando o conteudo veio de uma pagina
     """
     import time
 
