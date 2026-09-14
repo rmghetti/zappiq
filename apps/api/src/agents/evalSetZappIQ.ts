@@ -26,6 +26,7 @@ import {
   ADDONS,
   VOICE_ADDON_META,
   listActivePlans,
+  planAnnualMonthlyEquivalent,
   type PlanConfig,
 } from '@zappiq/shared';
 import { escapeRegex, type ScenarioFactory } from './evalScenarioTypes.js';
@@ -58,12 +59,27 @@ function padraoDoValor(v: number): RegExp {
 }
 
 /**
- * "Disse um valor em reais que NÃO é este." Pega o preço velho (o R$ 997 do
- * achado) sem precisar listar preço morto nenhum, que é o que faria o
- * gabarito envelhecer de novo.
+ * "Disse um valor em reais que não é NENHUM dos permitidos." Pega o preço
+ * velho (o R$ 997 do achado) sem precisar listar preço morto nenhum, que é o
+ * que faria o gabarito envelhecer de novo.
+ *
+ * Recebe vários valores porque a resposta certa pode ter mais de um número
+ * legítimo. O caso que reprovava a Iza injustamente: a seção PRICING gerada
+ * manda ela dizer "R$ 1.497/mês · no anual R$ 1.197,60/mês", e o anti-padrão
+ * antigo, montado só com o mensal, cobrava dela justamente o que o prompt
+ * pedia. Passando mensal e equivalente anual, o gabarito volta a cobrar o que
+ * importa: valor de fora do catálogo.
  */
-function padraoDeValorErrado(v: number): RegExp {
-  return new RegExp(`R\\$\\s*(?!${corpoDoValor(v)})[0-9]`);
+function padraoDeValorErrado(...valores: number[]): RegExp {
+  const permitidos = valores.map(corpoDoValor).join('|');
+  return new RegExp(`R\\$\\s*(?!(?:${permitidos}))[0-9]`);
+}
+
+/** Mensal e equivalente anual do plano: os dois valores que ele pode dizer. */
+function valoresDoPlano(p: PlanConfig): number[] {
+  const mensal = p.priceMonthly as number;
+  const anual = planAnnualMonthlyEquivalent(p);
+  return anual === null || anual === mensal ? [mensal] : [mensal, anual];
 }
 
 /** Planos ativos com preço, na ordem do catálogo. O primeiro é o de entrada. */
@@ -175,9 +191,9 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     description: `Preço do plano ${plano.name} deve ser ${brl(plano.priceMonthly as number)} (o valor do catálogo, não outro)`,
     userMessage: `quanto custa o plano ${plano.name}?`,
     expectedBehavior:
-      `Dizer ${brl(plano.priceMonthly as number)}/mês para o ${plano.name}, explicitamente. Responder SÓ o preço deste plano: não citar valor de outro plano nem de add-on na mesma resposta, e NUNCA inventar preço.`,
+      `Dizer ${brl(plano.priceMonthly as number)}/mês para o ${plano.name}, explicitamente. Pode citar também o equivalente anual DESTE MESMO plano (${brl(planAnnualMonthlyEquivalent(plano) as number)}/mês no plano anual), que é o que a seção PRICING manda dizer. Não citar valor de outro plano nem de add-on na mesma resposta, e NUNCA inventar preço.`,
     passPatterns: [padraoDoValor(plano.priceMonthly as number)],
-    failPatterns: [padraoDeValorErrado(plano.priceMonthly as number)],
+    failPatterns: [padraoDeValorErrado(...valoresDoPlano(plano))],
   })),
 
   () => ({

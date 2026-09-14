@@ -161,6 +161,60 @@ describe('cenários de preço da Iza', () => {
     expect(scale!.failPatterns!.some((p) => p.test(respostaVelha))).toBe(true);
   });
 
+  /*
+   * O anti-padrão antigo era `R\$\s*(?!1\.?497\b)[0-9]`: reprovava QUALQUER
+   * valor em reais que não fosse o mensal. Só que a própria seção PRICING
+   * gerada manda a Iza dizer "R$ 1.497/mês · no anual R$ 1.197,60/mês". Ou
+   * seja: o gabarito reprovava a resposta que o prompt mandava dar. Agora o
+   * mensal E o equivalente anual do MESMO plano passam; qualquer outro valor
+   * continua reprovando.
+   */
+  it('o cenário de preço aceita o equivalente anual do mesmo plano', () => {
+    const scale = CENARIOS.find((s) => s.id === 'zappiq_preco_SCALE_correto');
+    expect(scale).toBeDefined();
+    expect(planAnnualMonthlyEquivalent(PLAN_CONFIG.SCALE)).toBe(1197.6);
+
+    const comAnual = 'O Scale custa R$ 1.497/mês, ou R$ 1.197,60/mês no plano anual';
+    const soMensal = 'O Scale custa R$ 1.497/mês.';
+    const velho = 'O Scale custa R$ 997/mês.';
+
+    expect(scale!.failPatterns!.some((p) => p.test(comAnual))).toBe(false);
+    expect(scale!.failPatterns!.some((p) => p.test(soMensal))).toBe(false);
+    expect(scale!.failPatterns!.some((p) => p.test(velho))).toBe(true);
+    expect(scale!.passPatterns!.some((p) => p.test(comAnual))).toBe(true);
+  });
+
+  it('o equivalente anual passa escrito de qualquer jeito plausível', () => {
+    const scale = CENARIOS.find((s) => s.id === 'zappiq_preco_SCALE_correto')!;
+
+    for (const escrita of ['R$ 1.197,60', 'R$ 1197,6', 'R$ 1.197,6', 'R$1197,60']) {
+      expect(
+        scale.failPatterns!.some((p) => p.test(`No anual fica ${escrita}/mês.`)),
+        `${escrita} deveria passar`,
+      ).toBe(false);
+    }
+  });
+
+  it('todo plano ativo com preço aceita mensal e anual, e reprova valor de fora', () => {
+    for (const p of listActivePlans().filter((x) => x.priceMonthly !== null)) {
+      const cenario = CENARIOS.find((s) => s.id === `zappiq_preco_${p.id}_correto`);
+      expect(cenario, `faltou cenário de preço do ${p.name}`).toBeDefined();
+
+      const mensal = p.priceMonthly as number;
+      const anual = planAnnualMonthlyEquivalent(p) as number;
+      const reprova = (t: string) => cenario!.failPatterns!.some((x) => x.test(t));
+
+      expect(reprova(`Sai por R$ ${mensal.toLocaleString('pt-BR')}/mês.`)).toBe(false);
+      expect(
+        reprova(
+          `No anual, R$ ${anual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês.`,
+        ),
+      ).toBe(false);
+      expect(reprova('Sai por R$ 997/mês.')).toBe(true);
+      expect(cenario!.expectedBehavior.toLowerCase()).toContain('anual');
+    }
+  });
+
   it('o cenário de desconto anual usa o percentual do catálogo', () => {
     const s = CENARIOS.find((c) => c.id === 'zappiq_desconto_plano_anual');
     expect(s).toBeDefined();
