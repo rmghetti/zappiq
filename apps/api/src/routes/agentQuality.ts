@@ -36,7 +36,12 @@ import { authMiddleware, requireRole } from '../middleware/auth.js';
 // modelo tem teto por organização por dia.
 import { cotaDiaria } from '../middleware/cotaDiaria.js';
 import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
-import { resolveEvalSet, getSkippedScenarios, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
+import {
+  resolveEvalSet,
+  getSkippedScenarios,
+  EVAL_SET_VERSION,
+  HARNESS_VERSION,
+} from '../agents/agentEvalSet.js';
 import {
   resolveTenantAgentProfile,
   type TenantAgentProfile,
@@ -65,6 +70,24 @@ import { suggestFix } from '../services/agentEvalRunner.js';
 import { carregarRuidoDoAgente, classificarMudanca } from '../services/evalRuidoService.js';
 // P61 — "Corrigimos o método de avaliação": o aviso da nota recalculada.
 import { resumirRegravacao } from '../services/evalRegradeService.js';
+// C3 (Passo 14) — a correção aprovada vira REGISTRO: uma regra ativa por
+// cenário, substituição no lugar de acúmulo, e desfazer cirúrgico.
+import { isFlagOn } from '../services/featureFlags.js';
+import {
+  carregarRegrasAtivas,
+  aplicarRegraDoCenario,
+  reverterRegra,
+  regraDaDecisao,
+  TetoDeRegrasError,
+  TETO_DE_REGRAS_ATIVAS,
+} from '../services/agentRulesService.js';
+import { detectarConflitos, limparTextoDaRegra } from '../agents/regrasDoAgente.js';
+// A049 — o re-teste roda 3 amostras e vira execução gravada.
+import {
+  AMOSTRAS_DO_RETESTE,
+  consolidarReteste,
+  type AmostraDoReteste,
+} from '../services/retesteDaCorrecao.js';
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -432,6 +455,11 @@ router.get('/runs', async (req: Request, res: Response) => {
     const where: any = {
       agent: { organizationId: orgId },
       status: { not: 'invalidated' },
+      // C3 (A049): o re-teste passou a ser execução GRAVADA, para existir
+      // rastro de eficácia da correção. Ele roda 1 cenário 3 vezes, então
+      // não é "a nota da semana" e não pode aparecer no histórico como se
+      // fosse: a lista do cliente segue mostrando só execuções completas.
+      triggeredBy: { not: 'client_retest' },
     };
     if (agentId) where.agentId = agentId;
 
@@ -733,6 +761,116 @@ router.post(
         throw err;
       }
 
+      // ─── C3: VERIFICADOR DE CONFLITO (A078, A217) ─────────────────
+      // Guarda de escrita, como as duas acima: roda com e sem o interruptor.
+      // Em produção existem correções que mandam o OPOSTO da regra base
+      // (uma da Iza sugere 20% de desconto contra o teto de 10% do CR-7) e
+      // uma que proíbe a frase que o próprio gabarito exige (A217). Com as
+      // duas no ar, o agente fica dividido e o erro volta: é exatamente o
+      // sintoma que o dono relata.
+      const regrasAtivas = await carregarRegrasAtivas({
+        organizationId: orgId,
+        agentId: run.agentId,
+      });
+      const cenarioDoGabarito = resolveEvalSet(profile).find((c) => c.id === scenarioId);
+      const conflitos = detectarConflitos({
+        texto: diffToApply,
+        expectedBehavior: cenarioDoGabarito?.expectedBehavior ?? null,
+        regrasAtivas,
+        cenarioDaRegraNova: scenarioId,
+      });
+      if (conflitos.length > 0) {
+        logger.warn('[agentQuality] apply-fix BLOQUEADO: correção conflitante', {
+          orgId,
+          agentId: run.agentId,
+          scenarioId,
+          tipos: conflitos.map((c) => c.tipo),
+        });
+        res.status(422).json({
+          error: 'regra_conflitante',
+          message: conflitos[0].explicacao,
+          conflitos,
+        });
+        return;
+      }
+
+      const actor = await getActorSnapshot(actorUserId);
+
+      // ─── C3: a correção como REGISTRO (A079, A081, A083) ──────────
+      // Com o interruptor ligado, aplicar NÃO reescreve o system_prompt:
+      // cria (ou substitui) a regra daquele cenário, e o bloco
+      // "# Regras aprovadas pelo dono" é montado a cada turno. Era o acúmulo
+      // que fazia o prompt da Iza crescer 65% em 30 aplicações.
+      let comoRegistro = false;
+      try {
+        comoRegistro = await isFlagOn(orgId, 'regrasComoRegistros');
+      } catch {
+        comoRegistro = false;
+      }
+
+      if (comoRegistro) {
+        const texto = limparTextoDaRegra(diffToApply);
+        const saida = await prisma.$transaction(async (tx) => {
+          const criada = await tx.agentEvalFixDecision.create({
+            data: {
+              runId,
+              scenarioId,
+              agentId: run.agentId,
+              decision: 'applied',
+              originalSuggestion: suggestion as any,
+              finalDiff: diffToApply,
+              // O prompt não muda neste caminho. Os dois lados do snapshot
+              // guardam o mesmo texto de propósito: é a prova de que esta
+              // decisão não mexeu no prompt, e o revert por hash continua
+              // batendo caso a organização volte o interruptor.
+              promptBefore: run.agent.systemPrompt || '',
+              promptAfter: run.agent.systemPrompt || '',
+              decidedById: actor.id,
+              decidedByEmail: actor.email,
+              decidedByName: actor.name,
+              decidedByRole: actor.role,
+              notes: notes || 'Aprovada como regra do cenário',
+            },
+          });
+
+          const aplicada = await aplicarRegraDoCenario(
+            {
+              organizationId: orgId,
+              agentId: run.agentId,
+              scenarioId,
+              texto,
+              origem: finalDiff ? 'editada' : 'sugestao_ia',
+              decisionId: criada.id,
+              createdBy: actor.email,
+            },
+            tx as any,
+          );
+
+          return { decision: criada, aplicada };
+        });
+
+        logger.info({
+          msg: 'agent_quality_fix_applied',
+          runId,
+          scenarioId,
+          agentId: run.agentId,
+          orgId,
+          comoRegistro: true,
+          substituiu: saida.aplicada.substituiu,
+          decidedBy: actor.email,
+          decisionId: saida.decision.id,
+        });
+
+        res.json({
+          ok: true,
+          decision: saida.decision,
+          regra: saida.aplicada.regra,
+          substituiu: saida.aplicada.substituiu,
+          comoRegistro: true,
+        });
+        return;
+      }
+
       const currentPrompt = run.agent.systemPrompt || '';
       const result = applyPatch({
         currentPrompt,
@@ -741,7 +879,6 @@ router.post(
         scenarioId,
       });
 
-      const actor = await getActorSnapshot(actorUserId);
       const decision = await prisma.$transaction(async (tx) => {
         // A decisão nasce primeiro para a versão do prompt já carregar o id
         // dela: no histórico dá para ir da versão à correção que a gerou.
@@ -795,6 +932,13 @@ router.post(
         insertedAtLine: result.insertedAtLine,
       });
     } catch (err: any) {
+      if (err instanceof TetoDeRegrasError) {
+        logger.warn('[agentQuality] apply-fix recusado: teto de regras ativas', {
+          runId, scenarioId, orgId,
+        });
+        res.status(422).json({ error: 'teto_de_regras', message: err.message });
+        return;
+      }
       if (err instanceof DuplicatePatchError) {
         logger.warn('[agentQuality] apply-fix rejeitado (DUPLICATE_PATCH)', {
           runId, scenarioId, orgId,
@@ -840,31 +984,100 @@ router.post(
         res.status(404).json({ error: 'cenário não encontrado no set atual' });
         return;
       }
-      const { results } = await executeAgentEvalRun(
-        [scenario],
-        {
-          id: run.agentId,
-          name: run.agent.name,
-          systemPrompt: run.agent.systemPrompt || '',
-        },
-        profile,
-      );
-      const result = results[0];
+      // ─── A049: 3 amostras, gravadas ───────────────────────────────
+      // Rodava UMA vez e não deixava rastro. Uma amostra a temperatura 0,3
+      // não separa correção que pegou de sorte, e sem execução gravada
+      // ninguém consegue dizer depois se a correção valeu. Agora são três
+      // passadas do MESMO cenário contra o MESMO prompt.
+      const amostras: AmostraDoReteste[] = [];
+      for (let i = 1; i <= AMOSTRAS_DO_RETESTE; i++) {
+        const { results } = await executeAgentEvalRun(
+          [scenario],
+          {
+            id: run.agentId,
+            name: run.agent.name,
+            systemPrompt: run.agent.systemPrompt || '',
+          },
+          profile,
+        );
+        const r = results[0];
+        amostras.push({
+          amostra: i,
+          combined: r.combined,
+          resposta: String(r.response ?? ''),
+          motivoDoJuiz: String(r.judge?.reason ?? ''),
+        });
+      }
+
+      const resumo = consolidarReteste(amostras);
+
+      // A decisão que motivou o re-teste, para o rastro de eficácia ficar
+      // ligado à correção e não solto no tempo.
+      const decisao = await prisma.agentEvalFixDecision.findFirst({
+        where: { runId, scenarioId, decision: 'applied' },
+        orderBy: { decidedAt: 'desc' },
+        select: { id: true },
+      });
+
+      // Gravar é importante, mas não pode segurar a resposta: o re-teste já
+      // rodou e o dono já pagou as três chamadas.
+      let runDoReteste: string | null = null;
+      try {
+        const criada = await prisma.agentEvalRun.create({
+          data: {
+            agentId: run.agentId,
+            status: 'completed',
+            evalSetVersion: EVAL_SET_VERSION,
+            coreRulesVersion: CORE_RULES_VERSION,
+            harnessVersion: HARNESS_VERSION,
+            triggeredBy: 'client_retest',
+            fixDecisionId: decisao?.id ?? null,
+            scenarioFilter: { scenarios: [scenarioId] } as any,
+            totalScenarios: amostras.length,
+            passed: resumo.aprovadas,
+            partial: resumo.parciais,
+            failed: resumo.reprovadas,
+            erros: resumo.erros,
+            results: amostras as any,
+            completedAt: new Date(),
+          },
+          select: { id: true },
+        });
+        runDoReteste = criada.id;
+      } catch (err: any) {
+        logger.error('[agentQuality] re-teste rodou mas não gravou', {
+          runId,
+          scenarioId,
+          orgId,
+          err: err?.message,
+        });
+      }
+
       logger.info({
         msg: 'agent_quality_scenario_retested',
         runId,
         scenarioId,
         agentId: run.agentId,
         orgId,
-        combined: result.combined,
+        amostras: amostras.length,
+        veredito: resumo.veredito,
+        runDoReteste,
       });
+
       res.json({
         ok: true,
         scenarioId,
-        combined: result.combined,
-        judge: result.judge,
-        severity: result.severity,
-        response: result.response,
+        runId: runDoReteste,
+        fixDecisionId: decisao?.id ?? null,
+        amostras,
+        veredito: resumo.veredito,
+        resumo,
+        severity: scenario.severity,
+        // O dono vê o que custou: são três chamadas ao modelo, não uma.
+        custo: {
+          chamadasDeLlm: AMOSTRAS_DO_RETESTE,
+          explicacao: `Este re-teste roda o cenário ${AMOSTRAS_DO_RETESTE} vezes para não confundir sorte com correção.`,
+        },
       });
     } catch (err: any) {
       logger.error('[agentQuality] re-test erro:', err);
@@ -966,6 +1179,52 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
       return;
     }
 
+    const actorDaRegra = await getActorSnapshot(actorUserId);
+
+    // ─── C3: a correção virou REGISTRO? Então desfazer é desativar UMA
+    // regra, e o prompt não é tocado (A083). Sem isto, desfazer uma
+    // correção de terça apagaria tudo o que entrou depois de terça.
+    const regraViva = await regraDaDecisao(original.id);
+    if (regraViva) {
+      const revertida = await prisma.$transaction(async (tx) => {
+        const criada = await tx.agentEvalFixDecision.create({
+          data: {
+            runId: original.runId,
+            scenarioId: original.scenarioId,
+            agentId: original.agentId,
+            decision: 'reverted',
+            originalSuggestion: original.originalSuggestion as any,
+            // Prompt intocado: os dois lados guardam o texto atual.
+            promptBefore: original.promptAfter,
+            promptAfter: original.promptAfter,
+            decidedById: actorDaRegra.id,
+            decidedByEmail: actorDaRegra.email,
+            decidedByName: actorDaRegra.name,
+            decidedByRole: actorDaRegra.role,
+            notes: notes || `Regra desfeita (cenário ${original.scenarioId})`,
+            revertedFromId: original.id,
+          },
+        });
+        const regra = await reverterRegra(
+          { ruleId: regraViva.id, organizationId: orgId, actor: actorDaRegra.email },
+          tx as any,
+        );
+        return { decision: criada, regra };
+      });
+
+      logger.info({
+        msg: 'agent_quality_regra_revertida',
+        decisionId: revertida.decision.id,
+        ruleId: regraViva.id,
+        revertedFromId: original.id,
+        orgId,
+        decidedBy: actorDaRegra.email,
+      });
+
+      res.json({ ok: true, decision: revertida.decision, regra: revertida.regra });
+      return;
+    }
+
     // ─── A083: reverter é cirúrgico, não é voltar no tempo ────────────
     // Antes, o revert gravava promptBefore sem olhar o que existia no
     // agente. Se o cliente tivesse editado o prompt depois (ou outra
@@ -995,7 +1254,7 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
       return;
     }
 
-    const actor = await getActorSnapshot(actorUserId);
+    const actor = actorDaRegra;
     const revertDecision = await prisma.$transaction(async (tx) => {
       const criada = await tx.agentEvalFixDecision.create({
         data: {
@@ -1053,5 +1312,83 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
     res.status(500).json({ error: 'erro ao reverter', message: err?.message });
   }
 });
+
+// ════════════════════════════════════════════════════════════════════
+// GET /agents/:agentId/rules — as regras aprovadas, por cenário
+// ─────────────────────────────────────────────────────────────────
+// P08: "uma lista legível das regras da sua IA, com a origem de cada uma e
+// botão de desfazer". Antes o dono não tinha onde ver o que já estava valendo
+// no agente dele: o texto aprovado sumia dentro de um prompt de 26 mil
+// caracteres, e a tela da Qualidade só mostrava a decisão daquela execução.
+// ════════════════════════════════════════════════════════════════════
+router.get('/agents/:agentId/rules', async (req: Request, res: Response) => {
+  const orgId = req.user!.organizationId;
+  const { agentId } = req.params;
+  try {
+    const agent = await loadAgentScoped(agentId, orgId);
+    if (!agent) {
+      res.status(404).json({ error: 'agente não encontrado' });
+      return;
+    }
+
+    const incluirHistorico = req.query.incluirHistorico === 'true';
+    const regras = await carregarRegrasAtivas({
+      organizationId: orgId,
+      agentId,
+      status: incluirHistorico ? ['ativa', 'substituida', 'revertida'] : 'ativa',
+    });
+
+    const ativas = regras.filter((r) => r.status === 'ativa');
+    res.json({
+      total: regras.length,
+      teto: TETO_DE_REGRAS_ATIVAS,
+      /** Quantas ainda cabem antes de o dono precisar consolidar (A081). */
+      restantes: Math.max(0, TETO_DE_REGRAS_ATIVAS - ativas.length),
+      regras: regras.map((r) => ({
+        id: r.id,
+        scenarioId: r.scenarioId,
+        cenarioLegivel: r.scenarioId ?? 'Regra escrita por você',
+        texto: r.texto,
+        origem: r.origem,
+        status: r.status,
+        motivo: r.motivo,
+        decisionId: r.decisionId,
+        createdBy: r.createdBy ?? null,
+        createdAt: r.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    logger.error('[agentQuality] listar regras erro:', err);
+    res.status(500).json({ error: 'erro ao listar regras', message: err?.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════
+// POST /rules/:ruleId/revert — desfazer UMA regra
+// ─────────────────────────────────────────────────────────────────
+// A083. Desfazer deixa de ser "voltar o prompt inteiro para o texto de
+// antes" e passa a ser desativar uma linha. As outras regras continuam
+// exatamente onde estavam, e o prompt não é reescrito.
+// ════════════════════════════════════════════════════════════════════
+router.post(
+  '/rules/:ruleId/revert',
+  requireRole('ADMIN', 'SUPERADMIN'),
+  async (req: Request, res: Response) => {
+    const orgId = req.user!.organizationId;
+    const { ruleId } = req.params;
+    try {
+      const actor = await getActorSnapshot(req.user?.userId);
+      const regra = await reverterRegra({ ruleId, organizationId: orgId, actor: actor.email });
+      if (!regra) {
+        res.status(404).json({ error: 'regra não encontrada ou já desfeita' });
+        return;
+      }
+      res.json({ ok: true, regra });
+    } catch (err: any) {
+      logger.error('[agentQuality] desfazer regra erro:', err);
+      res.status(500).json({ error: 'erro ao desfazer a regra', message: err?.message });
+    }
+  },
+);
 
 export default router;
