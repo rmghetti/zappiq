@@ -594,9 +594,18 @@ async function alertarSePreciso(input: {
 
   // Execução concluída IMEDIATAMENTE anterior do mesmo agente. É a régua da
   // reprovação repetida: defeito que sobreviveu a um ciclo inteiro.
+  //
+  // Rodada 4 do PR #375: o re-teste do cliente também nasce 'completed', mas
+  // as amostras dele não têm scenarioId. Contado como "anterior", a
+  // comparação dava vazio e o alerta do cenário reprovado duas vezes sumia.
   const anterior = await prisma.agentEvalRun
     .findFirst({
-      where: { agentId: run.agentId, status: 'completed', id: { not: run.id } },
+      where: {
+        agentId: run.agentId,
+        status: 'completed',
+        id: { not: run.id },
+        triggeredBy: { not: 'client_retest' },
+      },
       orderBy: { startedAt: 'desc' },
       select: { results: true },
     })

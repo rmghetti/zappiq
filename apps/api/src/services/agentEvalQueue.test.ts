@@ -49,6 +49,10 @@ vi.mock('./agentEvalRunner.js', () => runnerMock);
 vi.mock('./agentEvalCronService.js', () => cronServiceMock);
 vi.mock('../agents/tenantAgentProfile.js', () => profileMock);
 vi.mock('../agents/agentEvalSet.js', () => evalSetMock);
+// Rodada 4 do PR #375: um teste abaixo carrega o agentEvalCronService REAL
+// (as regras do alerta de reprovação repetida). A contagem de trechos do RAG
+// que ele importa puxaria o ragService e o cache; aqui ela não é usada.
+vi.mock('./aiReadinessService.js', () => ({ countRagChunksByNamespaceOrNull: vi.fn() }));
 
 const {
   executeRunJob,
@@ -617,5 +621,85 @@ describe('executeRunJob entrega o bloco de regras do agente ao avaliador', () =>
     // A conclusão é gravada por updateMany (filtro de status): a execução
     // terminou 'completed', e não ficou presa nem virou 'failed'.
     expect(updateManysCom('status').map((c) => c.data.status)).toContain('completed');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Rodada 4 do PR #375: o alerta de "reprovou duas vezes" compara com a
+ * execução concluída anterior. O re-teste do cliente também nasce
+ * 'completed', e as amostras dele não têm scenarioId: um re-teste entre
+ * duas semanais virava a "anterior", a comparação dava vazio e o alerta do
+ * cenário que reprovou nas duas semanais ficava 'skipped'. Vale com a flag
+ * desligada.
+ *
+ * As regras de comparação são as REAIS (scenariosFailingTwice e
+ * shouldAlertQuality do agentEvalCronService), não o duble: o teste prova
+ * o alerta, não só a consulta.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('alerta de reprovação repetida: o re-teste do meio não é a execução anterior', () => {
+  const SEMANAL_ANTERIOR = {
+    id: 'run-semanal-1',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'cron',
+    startedAt: new Date('2026-09-07T04:30:00Z'),
+    results: [
+      { scenarioId: 'cr1', combined: 'fail' },
+      { scenarioId: 'cr2', combined: 'pass' },
+    ],
+  };
+  const RETESTE_NO_MEIO = {
+    id: 'run-reteste',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'client_retest',
+    startedAt: new Date('2026-09-10T15:00:00Z'),
+    results: [
+      { amostra: 1, combined: 'pass', resposta: 'oi', motivoDoJuiz: 'ok' },
+      { amostra: 2, combined: 'pass', resposta: 'oi', motivoDoJuiz: 'ok' },
+      { amostra: 3, combined: 'fail', resposta: 'oi', motivoDoJuiz: 'não' },
+    ],
+  };
+
+  beforeEach(async () => {
+    const real = await vi.importActual<typeof import('./agentEvalCronService.js')>(
+      './agentEvalCronService.js',
+    );
+    cronServiceMock.scenariosFailingTwice.mockImplementation(real.scenariosFailingTwice);
+    cronServiceMock.shouldAlertQuality.mockImplementation(real.shouldAlertQuality);
+
+    const linhas = [SEMANAL_ANTERIOR, RETESTE_NO_MEIO];
+    // O banco falso honra o `where`: sem o filtro, o re-teste (mais novo) vem.
+    prismaMock.agentEvalRun.findFirst.mockImplementation(async ({ where }: any) => {
+      const [primeira] = linhas
+        .filter((l) => l.agentId === where.agentId && l.status === where.status)
+        .filter((l) => !(where?.id?.not && l.id === where.id.not))
+        .filter((l) => !(where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not))
+        .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+      return primeira ? { results: primeira.results } : null;
+    });
+
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(
+      runPendente({ id: 'run-semanal-2', triggeredBy: 'cron' }),
+    );
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results: [
+        { scenarioId: 'cr1', combined: 'fail', severity: 'high', category: 'cr1_acceptance' },
+        { scenarioId: 'cr2', combined: 'pass', severity: 'critical', category: 'cr2_handoff' },
+      ],
+      durationMs: 10,
+      summary: { passed: 1, partial: 0, failed: 1, criticalFailed: 0, erros: 0, scorePercent: 50 },
+    });
+  });
+
+  it('a semanal que reprova X de novo alerta, com X na lista de repetidos', async () => {
+    await executeRunJob('run-semanal-2');
+
+    expect(ultimoUpdate('slackAlertStatus')).toMatchObject({ slackAlertStatus: 'sent' });
+    expect(cronServiceMock.scenariosFailingTwice).toHaveReturnedWith(['cr1']);
+    expect(cronServiceMock.notifySlackQualityIssue).toHaveBeenCalledTimes(1);
+    expect(cronServiceMock.notifySlackQualityIssue.mock.calls[0][0].repetidos).toEqual(['cr1']);
+    const where = prismaMock.agentEvalRun.findFirst.mock.calls[0][0].where;
+    expect(where.triggeredBy).toEqual({ not: 'client_retest' });
   });
 });
