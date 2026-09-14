@@ -576,11 +576,19 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
     // antiga aberta pelo histórico, a mesma frase dava a entender que a nota
     // de hoje tinha mudado. A consulta extra só acontece quando existe
     // regravação para mostrar.
+    //
+    // Rodada 4 do PR #375: o re-teste do cliente também nasce 'completed'.
+    // Sem o filtro, um re-teste feito depois da última execução completa
+    // tomava o lugar dela e o aviso sumia da execução certa.
     let regravacao = await resumirRegravacao(run.id).catch(() => null);
     if (regravacao) {
       const ultimaConcluida = await prisma.agentEvalRun
         .findFirst({
-          where: { agentId: run.agentId, status: 'completed' },
+          where: {
+            agentId: run.agentId,
+            status: 'completed',
+            triggeredBy: { not: 'client_retest' },
+          },
           orderBy: { startedAt: 'desc' },
           select: { id: true },
         })
@@ -589,6 +597,9 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
     }
 
     // ─── P56: estado em vez de número, para quem não é técnico ────
+    // Rodada 4 do PR #375: a anterior é execução completa. O re-teste do
+    // cliente tem nota nula; entre duas completas, ele virava a "anterior" e
+    // o estado caía para 'sem_base'.
     const ruido = await carregarRuidoDoAgente(run.agentId);
     const anterior = await prisma.agentEvalRun
       .findFirst({
@@ -597,6 +608,7 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
           status: 'completed',
           id: { not: run.id },
           startedAt: { lt: run.startedAt },
+          triggeredBy: { not: 'client_retest' },
         },
         orderBy: { startedAt: 'desc' },
         select: { scorePercent: true },

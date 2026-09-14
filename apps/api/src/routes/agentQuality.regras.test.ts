@@ -18,7 +18,7 @@
  * real (mesmo padrão de agentQuality.notaHonesta.test.ts).
  * ============================================================================
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const prismaMock: any = {
   agent: { findFirst: vi.fn() },
@@ -706,5 +706,136 @@ describe('GET /runs: o re-teste não vira execução na lista do cliente', () =>
 
     const where = prismaMock.agentEvalRun.findMany.mock.calls[0][0].where;
     expect(where.triggeredBy).toEqual({ not: 'client_retest' });
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Rodada 4 do PR #375. GET /runs/:id faz duas consultas que ainda contavam
+ * o re-teste do cliente como execução de verdade (vale com a flag
+ * desligada, ou seja, no dia do merge):
+ *
+ *   P56  `anterior` (a nota com que o estado compara): um re-teste entre
+ *        duas execuções completas vinha como anterior, com nota nula, e o
+ *        estado virava 'sem_base'.
+ *   P61  `ultimaConcluida` (o aviso da nota recalculada só aparece na
+ *        última execução): um re-teste depois da última completa tomava o
+ *        lugar dela e o aviso sumia.
+ *
+ * O banco falso honra o `where`: sem o filtro, o re-teste vem. A régua do
+ * estado é a REAL (classificarMudanca), não o duble do topo do arquivo.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('GET /runs/:id: o re-teste do cliente não é execução anterior nem a última', () => {
+  const SEMANAL_1 = {
+    id: 'run-semanal-1',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'cron',
+    scorePercent: 80,
+    startedAt: new Date('2026-09-07T04:30:00Z'),
+  };
+  const RETESTE_ENTRE_AS_DUAS = {
+    id: 'run-reteste-1',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'client_retest',
+    scorePercent: null,
+    startedAt: new Date('2026-09-10T15:00:00Z'),
+  };
+  const SEMANAL_2 = {
+    id: 'run-semanal-2',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'cron',
+    scorePercent: 82,
+    startedAt: new Date('2026-09-14T04:30:00Z'),
+  };
+  const RETESTE_DEPOIS = {
+    id: 'run-reteste-2',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'client_retest',
+    scorePercent: null,
+    startedAt: new Date('2026-09-14T10:00:00Z'),
+  };
+  const LINHAS = [SEMANAL_1, RETESTE_ENTRE_AS_DUAS, SEMANAL_2, RETESTE_DEPOIS];
+
+  let ruido: any;
+  let regravacao: any;
+
+  beforeEach(async () => {
+    ruido = await import('../services/evalRuidoService.js');
+    regravacao = await import('../services/evalRegradeService.js');
+    const real = await vi.importActual<typeof import('../services/evalRuidoService.js')>(
+      '../services/evalRuidoService.js',
+    );
+    vi.mocked(ruido.classificarMudanca).mockImplementation(real.classificarMudanca);
+    vi.mocked(ruido.carregarRuidoDoAgente).mockResolvedValue({ desvio: 2, n: 8 });
+
+    prismaMock.agentEvalRun.findFirst.mockImplementation(async ({ where }: any) => {
+      // A consulta da própria execução, por id.
+      if (typeof where.id === 'string') {
+        const r = LINHAS.find((l) => l.id === where.id);
+        return r
+          ? {
+              ...r,
+              results: [],
+              agent: { id: 'agent-1', name: 'Marcia', organizationId: 'org-1' },
+              fixDecisions: [],
+            }
+          : null;
+      }
+      const [primeira] = LINHAS.filter((l) => l.agentId === where.agentId)
+        .filter((l) => typeof where.status !== 'string' || l.status === where.status)
+        .filter((l) => !(where?.id?.not && l.id === where.id.not))
+        .filter((l) => !(where?.startedAt?.lt && !(l.startedAt < where.startedAt.lt)))
+        .filter((l) => !(where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not))
+        .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+      return primeira ? { id: primeira.id, scorePercent: primeira.scorePercent } : null;
+    });
+  });
+
+  afterEach(() => {
+    // O duble do topo do arquivo volta a valer para os testes seguintes.
+    vi.mocked(ruido.classificarMudanca).mockImplementation(() => ({
+      estado: 'estavel',
+      explicacao: 'estável',
+    }));
+    vi.mocked(ruido.carregarRuidoDoAgente).mockResolvedValue({ desvio: 8, n: 8 });
+    vi.mocked(regravacao.resumirRegravacao).mockResolvedValue(null);
+  });
+
+  it('com um re-teste entre duas completas, o estado compara com a completa e não vira sem_base', async () => {
+    const res = makeRes();
+    await getHandler('get', '/runs/:id')({ ...USER, params: { id: 'run-semanal-2' }, query: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.estado.estado).not.toBe('sem_base');
+    // 82 contra 80, com desvio 2: dentro da faixa, estável.
+    expect(res.body.estado.estado).toBe('estavel');
+    expect(vi.mocked(ruido.classificarMudanca)).toHaveBeenCalledWith(
+      expect.objectContaining({ nota: 82, notaAnterior: 80 }),
+    );
+  });
+
+  it('com um re-teste depois da última completa, o aviso da nota recalculada continua nela', async () => {
+    const RESUMO = {
+      runId: 'run-semanal-2',
+      agentId: 'agent-1',
+      agentName: 'Marcia',
+      startedAt: '2026-09-14T04:30:00.000Z',
+      harnessVersion: 3,
+      notaAntiga: 82,
+      notaRegravada: 88,
+      totalCenarios: 17,
+      reprovacoesDoGabarito: 1,
+      continuamReprovados: [],
+    };
+    vi.mocked(regravacao.resumirRegravacao).mockResolvedValue(RESUMO);
+
+    const res = makeRes();
+    await getHandler('get', '/runs/:id')({ ...USER, params: { id: 'run-semanal-2' }, query: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.regravacao).toEqual(RESUMO);
   });
 });
