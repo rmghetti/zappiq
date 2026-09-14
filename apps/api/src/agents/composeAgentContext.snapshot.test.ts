@@ -18,6 +18,11 @@
  *
  * Duas organizações: uma cliente (a Vera, do CMJ) e a Iza, com iza_facts.
  * Nenhum teste aqui chama modelo, base de conhecimento ou banco: tudo é dublê.
+ *
+ * Rodada 2 do PR #377: a 5ª fixture (contexto-vera-regras) foi gravada pelo
+ * caminho de antes do PR #375 (regrasComoRegistros ligado, contextoUnico
+ * desligado) e prova que o motor único põe as regras aprovadas pelo dono no
+ * MESMO lugar, byte a byte. As 4 fixtures antigas não mudaram.
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -33,6 +38,9 @@ const orgFindUnique = vi.fn();
 const tipoFindMany = vi.fn();
 const getIzaFactsBlock = vi.fn();
 const isFlagOn = vi.fn();
+// PR #375: as regras aprovadas pelo dono, lidas pelo serviço de verdade
+// (agentRulesService). Só a tabela é dublê.
+const agentRuleFindMany = vi.fn();
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -41,6 +49,20 @@ vi.mock('@zappiq/database', () => ({
     agent: { findFirst: (...a: any[]) => agentFindFirst(...a) },
     organization: { findUnique: (...a: any[]) => orgFindUnique(...a) },
     appointmentType: { findMany: (...a: any[]) => tipoFindMany(...a) },
+    agentRule: { findMany: (...a: any[]) => agentRuleFindMany(...a) },
+  },
+}));
+
+// O orquestrador importa o motor de fluxos, e o agendador dele cria a fila
+// BullMQ no import, abrindo conexão com o Redis em segundo plano. Fila falsa:
+// nenhum teste daqui enfileira nada (o mesmo padrão do PR #375).
+vi.mock('bullmq', () => ({
+  Queue: class {
+    add = vi.fn();
+    on = vi.fn();
+  },
+  Worker: class {
+    on = vi.fn();
   },
 }));
 
@@ -66,6 +88,8 @@ import {
 } from './composeAgentContext.js';
 import { buildLiveProfileBlock } from './tenantLiveProfile.js';
 import { buildTenantLinksBlock } from './tenantConversionUrls.js';
+import { montarBlocoDeRegras, TITULO_BLOCO_DE_REGRAS } from './regrasDoAgente.js';
+import { buildEvalSystemPrompt } from '../services/agentEvalRunner.js';
 
 // ── Relógio fixo: o '# Agora' entra no prompt ─────────────────────────
 const AGORA = new Date('2026-09-16T17:00:00Z'); // quarta, 14:00 em São Paulo
@@ -167,6 +191,7 @@ beforeEach(() => {
   getIzaFactsBlock.mockResolvedValue(FACTS_DA_IZA);
   orgFindUnique.mockResolvedValue(null);
   tipoFindMany.mockResolvedValue([]);
+  agentRuleFindMany.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -294,6 +319,7 @@ function entradaPura(opts: {
   izaFacts: string;
   origem?: AgentContextInput['origem'];
   instrucaoDeCanal?: string;
+  regrasDoCliente?: string;
 }): AgentContextInput {
   return {
     origem: opts.origem ?? 'whatsapp',
@@ -312,6 +338,7 @@ function entradaPura(opts: {
         : '',
       links: buildTenantLinksBlock(opts.settings, opts.settings.businessName),
       rag: opts.ragContext,
+      regrasDoCliente: opts.regrasDoCliente,
     },
     agora: AGORA,
     ragStatus: opts.ragStatus,
@@ -638,5 +665,144 @@ describe('buildSystemPromptForContact com contextoUnico LIGADO: mesmo texto, ago
     expect(saida.systemPrompt).toContain(PROMPT_DA_VERA);
     expect(saida.systemPrompt).toContain('Status do lead: CONVERTED');
     expect(agentFindFirst.mock.calls.map((c: any[]) => c[0].where.role)).toEqual(['suporte', 'comercial']);
+  });
+});
+
+/* ── 5. A 5ª fixture: regras aprovadas pelo dono (PR #375) ─────────── */
+
+/**
+ * Rodada 2 do PR #377. O compositor reservava `regrasDoCliente` e o
+ * carregador não preenchia: com `regrasComoRegistros` E `contextoUnico`
+ * ligados, a organização perdia as regras em todos os canais. A 5ª fixture é
+ * o texto do caminho de antes do #375; o motor único tem de dar o mesmo.
+ */
+describe('5ª fixture: as regras aprovadas pelo dono no mesmo lugar, nos dois motores', () => {
+  const REGRAS = [
+    {
+      id: 'regra-nome',
+      organizationId: ORG_CMJ,
+      agentId: 'agente-vera',
+      scenarioId: 'cr5_nome_disponivel_usar',
+      texto: 'Chame o cliente pelo nome quando souber.',
+      origem: 'sugestao_ia',
+      status: 'ativa',
+      createdAt: new Date('2026-09-10T12:00:00Z'),
+    },
+    {
+      id: 'regra-desconto',
+      organizationId: ORG_CMJ,
+      agentId: 'agente-vera',
+      scenarioId: 'cr7_no_invent_preco_desconto',
+      texto: '+ **REGRA INVIOLÁVEL #14 - DESCONTO:** Desconto só no PIX, até 5%. Acima disso, chame um especialista.',
+      origem: 'editada',
+      status: 'ativa',
+      createdAt: new Date('2026-09-12T12:00:00Z'),
+    },
+  ];
+  const BLOCO = montarBlocoDeRegras(REGRAS as any);
+
+  it('caminho de antes (#375), regrasComoRegistros ligado: grava a 5ª fixture', async () => {
+    armarVera();
+    agentRuleFindMany.mockResolvedValue(REGRAS);
+    flags = { perfilVivo: true, regrasComoRegistros: true };
+
+    const hoje = await buildSystemPromptForContact(ENTRADA_VERA);
+    const fixture = lerOuGravar('contexto-vera-regras', hoje);
+
+    expect(hoje).toBe(fixture);
+    expect(fixture).toContain(BLOCO);
+    // A posição do #375: depois do perfil vivo e antes dos links.
+    expect(fixture.indexOf('# Como você atende nesta empresa')).toBeLessThan(fixture.indexOf(TITULO_BLOCO_DE_REGRAS));
+    expect(fixture.indexOf(TITULO_BLOCO_DE_REGRAS)).toBeLessThan(fixture.indexOf('### Links oficiais'));
+    // É a fixture do perfil vivo com o bloco no meio, e nada mais.
+    expect(fixture.replace(`${BLOCO}\n`, '')).toBe(lerFixture('contexto-vera-perfil-vivo'));
+  });
+
+  it('a função pura com regrasDoCliente produz a 5ª fixture byte a byte', () => {
+    const saida = composeAgentContext(
+      entradaPura({
+        org: ORG_CMJ,
+        settings: SETTINGS_CMJ,
+        agente: AGENTE_VERA,
+        contato: CONTATO_VERA,
+        ragContext: RAG_CMJ,
+        ragStatus: 'ok',
+        agendamento: AGENDAMENTO_CMJ,
+        perfilVivo: true,
+        izaFacts: '',
+        regrasDoCliente: BLOCO,
+      }),
+    );
+
+    const fixture = lerFixture('contexto-vera-regras');
+    expect(saida.systemPrompt).toBe(fixture);
+    expect(saida.hash).toBe(sha256(fixture));
+    expect(saida.partes.find((p) => p.nome === 'regras_do_cliente')?.chars).toBe(BLOCO.length);
+  });
+
+  it('com contextoUnico E regrasComoRegistros ligados, a casca produz a 5ª fixture pelo motor único', async () => {
+    armarVera();
+    agentRuleFindMany.mockResolvedValue(REGRAS);
+    flags = { perfilVivo: true, regrasComoRegistros: true, contextoUnico: true };
+
+    const saida = await buildAgentContextForContact(ENTRADA_VERA);
+
+    expect(saida.viaContextoUnico).toBe(true);
+    expect(saida.systemPrompt).toBe(lerFixture('contexto-vera-regras'));
+    // Uma leitura só, das regras do agente que o turno usa.
+    expect(agentRuleFindMany).toHaveBeenCalledTimes(1);
+    expect(agentRuleFindMany.mock.calls[0][0].where).toEqual({
+      organizationId: ORG_CMJ,
+      agentId: 'agente-vera',
+      status: 'ativa',
+    });
+  });
+
+  it('regra na tabela com regrasComoRegistros DESLIGADO: as 4 fixtures antigas não mudam, nos dois motores, sem consulta', async () => {
+    agentRuleFindMany.mockResolvedValue(REGRAS);
+    const casos: Array<{ fixture: string; armar: () => void; flags: Record<string, boolean>; entrada: any }> = [
+      { fixture: 'contexto-vera-perfil-vivo', armar: armarVera, flags: { perfilVivo: true }, entrada: ENTRADA_VERA },
+      { fixture: 'contexto-vera-sem-perfil-vivo', armar: armarVera, flags: {}, entrada: ENTRADA_VERA },
+      {
+        fixture: 'contexto-vera-a212-base-fora',
+        armar: armarVera,
+        flags: { perfilVivo: true },
+        entrada: { ...ENTRADA_VERA, ragStatus: 'servico_fora', temHistoricoNoContexto: false },
+      },
+      { fixture: 'contexto-iza-primeiro-contato', armar: armarIza, flags: {}, entrada: ENTRADA_IZA },
+    ];
+    for (const caso of casos) {
+      for (const contextoUnico of [false, true]) {
+        caso.armar();
+        flags = { ...caso.flags, contextoUnico };
+        const texto = await buildSystemPromptForContact(caso.entrada);
+        expect(texto, `${caso.fixture} contextoUnico=${contextoUnico}`).toBe(lerFixture(caso.fixture));
+      }
+    }
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
+  });
+
+  it('no avaliador, o bloco fica depois do system_prompt e antes de # Cliente atual, nos dois motores', () => {
+    // O avaliador de antes (#375) e o compositor com origem 'qualidade', sem
+    // perfil vivo e sem links: CORE, prompt e bloco são o mesmo texto, e o
+    // bloco do cliente vem logo depois. O que muda dali em diante (linha em
+    // branco, cabeçalho "(eval test mock)", saudação, base, data) é a
+    // diferença de propósito do motor único na Qualidade (A036), anterior a
+    // esta rodada.
+    const cenario = { id: 'cr7_no_invent_preco_desconto', userMessage: 'tem desconto?' };
+    const legado = buildEvalSystemPrompt({ systemPrompt: PROMPT_DA_VERA }, cenario, BLOCO);
+    const novo = composeAgentContext({
+      origem: 'qualidade',
+      agente: AGENTE_VERA,
+      organizacao: { id: ORG_CMJ, nome: 'CMJ', settings: {}, ehZappIQ: false },
+      contato: { nome: 'Rod', leadStatus: 'NEW', primeiroContato: true, totalMensagens: 1, telefone: '+5511999999999' },
+      blocos: { izaFacts: '', perfilVivo: '', links: '', rag: '', regrasDoCliente: BLOCO },
+      agora: AGORA,
+    }).systemPrompt;
+
+    const core = lerFixture('contexto-vera-perfil-vivo').split('\n## IDENTIDADE')[0];
+    const ateAsRegras = `${[core, PROMPT_DA_VERA, BLOCO].join('\n')}\n`;
+    expect(legado.startsWith(`${ateAsRegras}\n# Cliente atual (eval test mock)\n`)).toBe(true);
+    expect(novo.startsWith(`${ateAsRegras}# Cliente atual\n`)).toBe(true);
   });
 });
