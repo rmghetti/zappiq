@@ -27,7 +27,11 @@ vi.mock('@zappiq/database', () => ({
     kBDocument: {
       findFirst: (...a: any[]) => findFirst(...a),
       update: (...a: any[]) => update(...a),
-      findMany: vi.fn(),
+      // A rota consulta os outros documentos da org para saber quem divide
+      // cada source antigo antes de apagar qualquer coisa no vetor.
+      findMany: vi.fn().mockResolvedValue([]),
+      // Título repetido na mesma org é 409. Nenhum documento repetido aqui.
+      count: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
       delete: vi.fn(),
     },
@@ -38,15 +42,20 @@ vi.mock('@zappiq/database', () => ({
 
 const ingestDocument = vi.fn().mockResolvedValue(undefined);
 const deleteDocument = vi.fn().mockResolvedValue(undefined);
-vi.mock('../services/ragService.js', () => ({
-  ingestDocument: (...a: any[]) => ingestDocument(...a),
-  deleteDocument: (...a: any[]) => deleteDocument(...a),
-  ingestUrl: vi.fn(),
-  urlToSource: (u: string) => u,
-  search: vi.fn(),
-  searchWithSources: vi.fn(),
-  namespaceFor: (o: string) => `org_${o}`,
-}));
+// O módulo real entra por baixo: a rota usa dele o `falhaDeIngestao`, que
+// traduz o erro da ingestão no status e na frase que o cliente lê. Só as
+// funções que saem do processo são substituídas.
+vi.mock('../services/ragService.js', async () => {
+  const real = await vi.importActual<any>('../services/ragService.js');
+  return {
+    ...real,
+    ingestDocument: (...a: any[]) => ingestDocument(...a),
+    deleteDocument: (...a: any[]) => deleteDocument(...a),
+    ingestUrl: vi.fn(),
+    search: vi.fn(),
+    searchWithSources: vi.fn(),
+  };
+});
 
 // Auth: injeta a org do teste, sem JWT.
 vi.mock('../middleware/auth.js', () => ({
@@ -167,22 +176,36 @@ describe('PUT /api/ai-training/documents/:id', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(update).toHaveBeenCalledWith(
+    // O texto novo e o estado 'processando' entram juntos, ANTES da
+    // reingestão: o 'pronto' só vem depois que o vetor aceitou. Marcar
+    // 'pronto' de saída deixava o documento verde na tela mesmo quando a
+    // reingestão falhava, com zero trecho no vetor (revisão PI-3).
+    expect(update).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         where: { id: 'doc-1' },
         data: {
           title: 'Política de troca',
           content: 'Trocas em até 30 dias corridos, com nota fiscal e produto sem uso.',
+          status: 'processando',
+          motivo: null,
         },
       }),
     );
-    // Título igual → replace-on-ingest cobre, sem delete.
-    expect(deleteDocument).not.toHaveBeenCalled();
+    // Edição bem-sucedida devolve o documento ao estado 'pronto': se a
+    // ingestão anterior tinha falhado, a lista não pode continuar mostrando o
+    // erro antigo (achado A142).
+    expect(update.mock.calls.at(-1)![0].data).toEqual({ status: 'pronto', motivo: null });
     expect(ingestDocument).toHaveBeenCalledTimes(1);
     const [org, payload] = ingestDocument.mock.calls[0];
     expect(org).toBe(ORG);
-    expect(payload.filename).toBe('Política de troca');
+    // O source é doc-<id>, não mais o título: dois documentos com o mesmo
+    // título deixaram de dividir o mesmo lugar no vetor (achado A001).
+    expect(payload.source).toBe('doc-doc-1');
     expect(payload.content.toString('utf-8')).toContain('30 dias');
+    // O source ANTIGO (o título) sai junto: ele guarda a versão anterior deste
+    // mesmo texto enquanto o reprocessamento do RAG não roda.
+    expect(deleteDocument).toHaveBeenCalledWith(ORG, 'Política de troca');
   });
 
   it('título alterado: remove os chunks do título antigo antes de ingerir o novo', async () => {
@@ -195,7 +218,7 @@ describe('PUT /api/ai-training/documents/:id', () => {
     });
 
     expect(deleteDocument).toHaveBeenCalledWith(ORG, 'Política de troca');
-    expect(ingestDocument.mock.calls[0][1].filename).toBe('Política de troca e devolução');
+    expect(ingestDocument.mock.calls[0][1].source).toBe('doc-doc-1');
   });
 
   it('REJEITA edição de URL e de arquivo (400, sem tocar no banco nem no RAG)', async () => {
@@ -229,7 +252,10 @@ describe('PUT /api/ai-training/documents/:id', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it('falha do RAG não derruba a edição (best-effort, igual ao Q&A)', async () => {
+  it('falha do RAG salva o texto, mas diz que não indexou e marca o documento', async () => {
+    // Era "best-effort": respondia 200 e a lista mostrava o documento pronto
+    // com o conteúdo velho (ou nenhum) no vetor. O texto continua salvo no
+    // Postgres, mas o cliente precisa saber que a IA ainda não sabe disso.
     findFirst.mockResolvedValue(TEXT_DOC);
     update.mockResolvedValue(TEXT_DOC);
     ingestDocument.mockRejectedValueOnce(new Error('vector store fora do ar'));
@@ -238,8 +264,12 @@ describe('PUT /api/ai-training/documents/:id', () => {
       title: 'Política de troca',
       content: 'Trocas em até 30 dias corridos, com nota fiscal e produto sem uso.',
     });
+    const body = await res.json();
 
-    expect(res.status).toBe(200); // conteúdo salvo no banco; RAG reconcilia depois
+    expect(res.status).toBe(503);
+    expect(body.error).toBe('Não consegui indexar este conteúdo agora. Tente de novo em alguns minutos.');
+    expect(update.mock.calls.at(-1)![0].data.status).toBe('falhou');
+    expect(deleteDocument).not.toHaveBeenCalled();
   });
 });
 
@@ -259,18 +289,29 @@ describe('POST /api/ai-training/documents, recusas de upload', () => {
     const body = await res.json();
 
     expect(res.status).toBe(415);
-    expect(body.error).toBe('Tipo de arquivo não suportado: envie PDF, TXT, MD ou CSV.');
+    expect(body.error).toBe(
+      'Tipo de arquivo não aceito: envie PDF, Word (.docx), Excel (.xlsx), texto, Markdown ou CSV.',
+    );
     expect(ingestDocument).not.toHaveBeenCalled();
   });
 
-  it('planilha Excel de verdade continua recusada com 415', async () => {
-    // Word e Excel passam pelo filtro de mime mas o indexador devolve 415 e
-    // nenhum documento é criado. Enquanto não houver extração, param aqui.
+  it('planilha .xlsx PASSA pelo filtro desde que a extração existe', async () => {
+    // Word e Excel voltaram à lista em 14/09/2026, com os conversores de
+    // services/rag/extractors.py (mammoth e openpyxl). Aqui só provamos que o
+    // arquivo atravessa o filtro; o que o handler faz depois é outro teste.
     const res = await enviar(
       'tabela.xlsx',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       new Uint8Array([80, 75]),
     );
+
+    expect(res.status).not.toBe(415);
+  });
+
+  it('o .xls do Office 97 continua recusado com 415', async () => {
+    // Nenhuma biblioteca livre lê o binário antigo com confiança: recusar na
+    // porta é mais honesto do que aceitar o upload e falhar depois.
+    const res = await enviar('planilha.xls', 'application/vnd.ms-excel', new Uint8Array([208, 207]));
 
     expect(res.status).toBe(415);
     expect(ingestDocument).not.toHaveBeenCalled();

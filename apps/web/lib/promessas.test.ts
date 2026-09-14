@@ -7,11 +7,11 @@
  * peça de copy.
  *
  * Regra de convivência: quando a funcionalidade passar a existir de fato
- * (Word e Excel na ingestão, re-teste gravado no histórico, disparo de
- * lembrete, voz gravada de origem em português), apague a regra
- * correspondente aqui NO MESMO PR que entrega a funcionalidade, com a prova
- * no corpo do PR. Antes disso, não afrouxe a regra: o teste é o que separa
- * promessa de fato.
+ * (re-teste gravado no histórico, disparo de lembrete, voz gravada de origem
+ * em português), apague a regra correspondente aqui NO MESMO PR que entrega a
+ * funcionalidade, com a prova no corpo do PR. Antes disso, não afrouxe a
+ * regra: o teste é o que separa promessa de fato. Foi assim que Word e Excel
+ * na ingestão saíram desta lista em 14/09/2026.
  *
  * As regras de residência de dados são de natureza diferente: não são
  * funcionalidade que falta, são fato de infraestrutura. Só saem daqui se o
@@ -171,18 +171,13 @@ const REGRAS: Regra[] = [
       'Não existe garantia de ausência de alucinação. A busca na base reduz o risco, não o elimina.',
     padrao: /sem alucina[çc][ãa]o/i,
   },
-  {
-    nome: 'formato DOCX na ingestão',
-    motivo:
-      'O serviço de ingestão extrai texto de PDF e de text/*. Word responde 415 e o cliente vê erro genérico. A regra vale em qualquer caixa, porque no accept do input a extensão vem em minúscula.',
-    padrao: /\bDOCX\b/i,
-  },
-  {
-    nome: 'planilha como formato aceito (perto de PDF)',
-    motivo:
-      'Excel e CSV de planilha não são extraídos na ingestão. Vale para a lista de formatos, não para a planilha que o cliente exporta do CRM.',
-    padrao: /PDFs?[^\n]{0,80}planilhas?|planilhas?[^\n]{0,80}PDFs?/i,
-  },
+  // As regras "formato DOCX na ingestão" e "planilha como formato aceito
+  // (perto de PDF)" saíram em 14/09/2026, no PR que entregou a extração de
+  // verdade: services/rag/extractors.py converte .docx com mammoth e .xlsx com
+  // openpyxl, provado em services/rag/test_extractors.py e em
+  // services/rag/test_ingest_documentos.py. Word e Excel deixaram de ser
+  // promessa e viraram fato, então a tela pode citá-los. Os binários do Office
+  // 97 (.doc e .xls) continuam fora da lista de formatos aceitos.
   {
     nome: '"boa parte da nota vem" do conteúdo cadastrado',
     motivo:

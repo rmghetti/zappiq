@@ -111,12 +111,14 @@ def upserts(monkeypatch) -> list[dict]:
     async def fake_embed_batch(texts, input_type):
         return [[0.0] * main.EMBEDDING_DIM for _ in texts]
 
-    async def fake_upsert_chunks(namespace, source, chunks, vectors, metadata):
+    async def fake_upsert_chunks(namespace, source, trechos, vectors, metadata):
         gravados.append(
             {
                 "namespace": namespace,
                 "source": source,
-                "chunks": chunks,
+                # trechos sao chunking.Trecho: texto original + cabecalho (P64).
+                "chunks": [t.texto for t in trechos],
+                "cabecalhos": [t.cabecalho for t in trechos],
                 "metadata": metadata,
             }
         )
@@ -319,9 +321,14 @@ def test_ingest_rejeita_metadata_que_nao_e_objeto(client):
 
 
 def test_ingest_rejeita_content_type_nao_suportado(client):
+    """
+    .zip nao e documento. Atencao: .xlsx NAO serve mais de exemplo aqui, porque
+    desde os conversores da B2 o Excel e aceito de verdade (ver
+    test_ingest_documentos.py).
+    """
     resp = client.post(
         "/ingest",
-        files=_upload("planilha.xlsx", b"PK\x03\x04", "application/vnd.ms-excel"),
+        files=_upload("backup.zip", b"PK\x03\x04", "application/zip"),
         data={"namespace": NAMESPACE},
     )
 

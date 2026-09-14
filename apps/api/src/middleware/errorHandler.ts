@@ -13,15 +13,18 @@ export interface AppError extends Error {
 /**
  * Tipo de arquivo recusado antes de sair do processo.
  *
- * A lista de formatos vem do que o serviço de indexação realmente lê hoje
- * (PDF, TXT, MD e CSV). Não prometa Word nem Excel na mensagem: eles são
- * aceitos pelo filtro de mimetype, mas o indexador devolve 415, e o cliente
- * fica sem entender por que o arquivo sumiu.
+ * A lista de formatos é a que o serviço de indexação realmente lê. Word e
+ * Excel entraram nela em 14/09/2026, junto com os conversores (mammoth e
+ * openpyxl) em services/rag/extractors.py: até ali a tela prometia os dois, o
+ * indexador devolvia 415 e o cliente ficava sem entender por que o arquivo
+ * sumiu (achado A003). Se um formato sair de lá, tem de sair daqui também.
  */
 export class UnsupportedFileTypeError extends Error {
   statusCode = 415;
 
-  constructor(message = 'Tipo de arquivo não suportado: envie PDF, TXT, MD ou CSV.') {
+  constructor(
+    message = 'Tipo de arquivo não aceito: envie PDF, Word (.docx), Excel (.xlsx), texto, Markdown ou CSV.',
+  ) {
     super(message);
     this.name = 'UnsupportedFileTypeError';
   }

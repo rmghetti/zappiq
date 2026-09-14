@@ -83,7 +83,12 @@ interface KBDocument {
   sourceType: string;
   sourceUrl?: string | null;
   createdAt: string;
-  ragChunks?: number;
+  /** null quando a contagem no motor não pôde ser lida (não é "não indexado"). */
+  ragChunks?: number | null;
+  /** 'processando' | 'pronto' | 'falhou' */
+  status?: string;
+  /** Preenchido só em 'falhou', com o motivo em português. */
+  motivo?: string | null;
 }
 
 interface QAPair {
@@ -114,6 +119,30 @@ function IndexedBadge({ chunks }: { chunks?: number }) {
       ⚠ não indexado
     </span>
   );
+}
+
+// Estado da ingestão, que existe desde que o documento passou a nascer ANTES
+// de o conteúdo ir para o motor. Enquanto não havia isso, um envio que falhava
+// mostrava um alerta e sumia, sem linha na lista e sem motivo.
+function EstadoBadge({ doc }: { doc: KBDocument }) {
+  if (doc.status === 'processando') {
+    return (
+      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 whitespace-nowrap">
+        ⏳ processando
+      </span>
+    );
+  }
+  if (doc.status === 'falhou') {
+    return (
+      <span
+        className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-700 whitespace-nowrap"
+        title={doc.motivo || 'A IA não conseguiu ler este arquivo.'}
+      >
+        ✕ não foi lido
+      </span>
+    );
+  }
+  return <IndexedBadge chunks={doc.ragChunks ?? undefined} />;
 }
 
 interface TrainingActivity {
@@ -534,6 +563,10 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        // A lista é recarregada mesmo na falha: o documento existe, marcado
+        // como "não foi lido" e com o motivo, para o cliente ver o que
+        // aconteceu em vez de um alerta que some.
+        await loadDocs();
         throw new Error(err.error || `Falha no upload (${res.status})`);
       }
       await loadDocs();
@@ -610,7 +643,9 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
 
   // Itens que estão na lista mas NÃO chegaram à IA (ingestão falhou/sem texto).
   const notIndexed: NotIndexedItem[] = docs
-    .filter((d) => d.ragChunks === 0)
+    // 'processando' e 'falhou' já têm sinal próprio na linha, com o motivo.
+    // ragChunks null significa "não deu para contar", que não é "não indexado".
+    .filter((d) => d.ragChunks === 0 && d.status !== 'processando' && d.status !== 'falhou')
     .map((d) => ({
       id: d.id,
       label: d.title,
@@ -628,7 +663,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.txt,.md,.csv"
+            accept=".pdf,.docx,.xlsx,.txt,.md,.csv"
             className="hidden"
             onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
           />
@@ -636,7 +671,13 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
           <p className="text-sm font-medium text-gray-900 mb-1">
             Suba contratos, FAQs, políticas, catálogos
           </p>
-          <p className="text-xs text-gray-500 mb-3">PDF, TXT, MD ou CSV, até 20 MB cada</p>
+          {/* Word e Excel voltaram para a lista em 14/09/2026, quando os
+              conversores passaram a existir de verdade no motor de indexação.
+              Os formatos antigos (.doc e .xls) ficam de fora: nenhuma
+              biblioteca livre os lê com confiança. */}
+          <p className="text-xs text-gray-500 mb-3">
+            PDF, Word (.docx), Excel (.xlsx), TXT, MD e CSV, até 20 MB cada
+          </p>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
@@ -751,9 +792,12 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
                     <p className="text-xs text-gray-500">
                       {d.sourceType === 'url' ? 'URL' : d.sourceType === 'text' ? 'Texto' : d.sourceType} · {new Date(d.createdAt).toLocaleDateString('pt-BR')}
                     </p>
+                    {d.status === 'falhou' && d.motivo && (
+                      <p className="text-xs text-red-600 mt-0.5">{d.motivo}</p>
+                    )}
                   </div>
                 </button>
-                <IndexedBadge chunks={d.ragChunks} />
+                <EstadoBadge doc={d} />
                 <button
                   onClick={() => handleDelete(d.id)}
                   className="text-gray-400 hover:text-red-500 p-2 transition-colors"

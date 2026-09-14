@@ -79,7 +79,7 @@ describe('UnsupportedFileTypeError', () => {
 
     expect(out.status).toBe(415);
     expect(out.body.error).toBe(
-      'Tipo de arquivo não suportado: envie PDF, TXT, MD ou CSV.',
+      'Tipo de arquivo não aceito: envie PDF, Word (.docx), Excel (.xlsx), texto, Markdown ou CSV.',
     );
   });
 

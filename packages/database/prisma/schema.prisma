@@ -943,11 +943,19 @@ model KBDocument {
   sourceType      String
   sourceUrl       String?
   content         String
+  // Estado da ingestão: 'processando', 'pronto' ou 'falhou'. O documento nasce
+  // em 'processando' ANTES de o conteúdo ir para o vetor, para que uma falha
+  // deixe rastro na tela com o motivo, em vez de um alerta que some (A142).
+  // Migration: 20260914000040_kb_document_estado.
+  status          String        @default("pronto")
+  // Preenchido só em 'falhou', com a mensagem em português que o cliente lê.
+  motivo          String?
   chunks          KBChunk[]
   knowledgeBaseId String
   knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
   createdAt       DateTime      @default(now())
 
+  @@index([status])
   @@map("kb_documents")
 }
 

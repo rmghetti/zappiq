@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   textDocSchema,
   isEditableDocument,
-  planTextDocRagSync,
   normalizeQaUpdate,
   ALLOWED_UPLOAD_MIMES,
   ALLOWED_UPLOAD_EXTENSIONS,
@@ -53,24 +52,6 @@ describe('isEditableDocument', () => {
   });
 });
 
-describe('planTextDocRagSync', () => {
-  it('título inalterado: re-ingere no mesmo source, sem delete (replace-on-ingest cobre)', () => {
-    expect(planTextDocRagSync('Política de troca', 'Política de troca')).toEqual({
-      deleteSource: null,
-      ingestSource: 'Política de troca',
-    });
-  });
-
-  it('título alterado: remove o source antigo antes de ingerir o novo', () => {
-    // Sem o delete, os chunks do título antigo ficam órfãos no vector store e a
-    // IA segue respondendo com a versão anterior do texto.
-    expect(planTextDocRagSync('Política de troca', 'Política de troca e devolução')).toEqual({
-      deleteSource: 'Política de troca',
-      ingestSource: 'Política de troca e devolução',
-    });
-  });
-});
-
 describe('normalizeQaUpdate', () => {
   it('categoria apagada vira null (o cliente consegue tirar a categoria)', () => {
     expect(normalizeQaUpdate({ question: 'P', category: '' })).toEqual({ question: 'P', category: null });
@@ -96,11 +77,12 @@ describe('normalizeQaUpdate', () => {
 });
 
 describe('formatos aceitos no upload da base de conhecimento', () => {
-  /* O serviço de extração lê PDF e text/*. Word e Excel voltam 415, o erro
-   * chega sem statusCode e em produção vira 'Internal Server Error' na cara
-   * do cliente, sem nenhum documento criado. Enquanto a extração desses dois
-   * não existir, eles não podem passar pelo filtro nem aparecer na tela.
-   * Quando a conversão entrar, este teste muda NO MESMO PR que a entrega.
+  /* O serviço de extração lê PDF, text/*, Word (.docx) e Excel (.xlsx). Os
+   * dois últimos entraram em 14/09/2026 com os conversores de
+   * services/rag/extractors.py, provados em services/rag/test_extractors.py e
+   * test_ingest_documentos.py: por isso este teste mudou no mesmo PR que
+   * entrega a extração, como o texto anterior exigia. Os binários do Office
+   * 97 (.doc e .xls) seguem recusados, porque nenhuma biblioteca livre os lê.
    *
    * O filtro olha mime OU extensão porque o navegador mente sobre o mime: no
    * Windows um .csv chega como application/vnd.ms-excel e um .md chega como
@@ -113,6 +95,14 @@ describe('formatos aceitos no upload da base de conhecimento', () => {
       ['text/plain', 'horarios.txt'],
       ['text/markdown', 'politica.md'],
       ['text/csv', 'tabela.csv'],
+      [
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'contrato.docx',
+      ],
+      [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'planilha.xlsx',
+      ],
     ];
     for (const [mime, nome] of aceitos) {
       expect(isUploadAllowed(mime, nome), `${mime} ${nome}`).toBe(true);
@@ -135,18 +125,15 @@ describe('formatos aceitos no upload da base de conhecimento', () => {
     expect(isUploadAllowed('', 'Tabela.CSV')).toBe(true);
   });
 
-  it('recusa Word e Excel de verdade enquanto não houver extração', () => {
+  it('aceita .docx e .xlsx pela extensão, mesmo sem mime do navegador', () => {
+    expect(isUploadAllowed('application/octet-stream', 'contrato.docx')).toBe(true);
+    expect(isUploadAllowed('', 'Tabela-de-precos.XLSX')).toBe(true);
+  });
+
+  it('recusa os binários do Office 97, que nenhuma biblioteca livre lê', () => {
     const recusados: [string, string][] = [
       ['application/msword', 'contrato.doc'],
-      [
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'contrato.docx',
-      ],
       ['application/vnd.ms-excel', 'planilha.xls'],
-      [
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'planilha.xlsx',
-      ],
     ];
     for (const [mime, nome] of recusados) {
       expect(isUploadAllowed(mime, nome), `${mime} ${nome}`).toBe(false);
@@ -165,13 +152,22 @@ describe('formatos aceitos no upload da base de conhecimento', () => {
     expect(isUploadAllowed('', '')).toBe(false);
   });
 
-  it('as duas listas têm exatamente os quatro formatos suportados', () => {
+  it('as duas listas têm exatamente os seis formatos suportados', () => {
     expect([...ALLOWED_UPLOAD_MIMES].sort()).toEqual([
       'application/pdf',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'text/csv',
       'text/markdown',
       'text/plain',
     ]);
-    expect([...ALLOWED_UPLOAD_EXTENSIONS].sort()).toEqual(['.csv', '.md', '.pdf', '.txt']);
+    expect([...ALLOWED_UPLOAD_EXTENSIONS].sort()).toEqual([
+      '.csv',
+      '.docx',
+      '.md',
+      '.pdf',
+      '.txt',
+      '.xlsx',
+    ]);
   });
 });

@@ -15,7 +15,6 @@ python-dotenv==1.2.3
 httpx==0.27.2
 
 # Ingestao de documentos
-pymupdf==1.24.10            # extracao PDF (rapido, sem deps C externas)
 python-multipart==0.0.32    # FastAPI UploadFile
 tiktoken==0.8.0             # token counting (chunk sizing por tokens, nao chars)
 
@@ -37,3 +36,19 @@ opentelemetry-sdk==1.44.0
 opentelemetry-exporter-otlp==1.44.0
 opentelemetry-instrumentation-fastapi==0.65b0
 opentelemetry-instrumentation-asyncpg==0.65b0
+
+# Conversores de documentos (B2)
+# A tela promete PDF, Word, Excel, texto, Markdown e CSV; estas bibliotecas sao
+# o que torna a promessa verdadeira. Nenhuma delas e AGPL (o pymupdf era, e por
+# isso saiu daqui: servico de rede multi-inquilino com AGPL obriga a oferecer o
+# codigo-fonte a quem usa o servico).
+pypdf==6.18.1               # extracao PDF (BSD-3-Clause), no lugar do pymupdf
+mammoth==1.12.2             # .docx para texto (BSD-2-Clause)
+openpyxl==3.1.5             # .xlsx para texto (MIT)
+readability-lxml==0.9       # conteudo principal de pagina web (Apache-2.0)
+# O extra [html-clean] e obrigatorio, nao cosmetico: o readability-lxml importa
+# lxml_html_clean, que saiu do lxml na versao 5. Sem o extra, a imagem instala
+# o lxml puro e toda ingestao de pagina morre no import, em producao, com 500.
+# Declarado aqui para o pip resolver isso na hora do build e nao por sorte de
+# dependencia transitiva.
+lxml[html-clean]==6.1.3     # parser do readability (BSD-3-Clause)

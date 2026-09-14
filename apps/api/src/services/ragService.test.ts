@@ -146,6 +146,9 @@ describe('buildIngestForm', () => {
 });
 
 describe('htmlToPlainText', () => {
+  // Continua existindo porque o RAG antigo não sabe ler HTML: enquanto ele não
+  // for atualizado, é esta limpeza que impede a página inteira (script, menu e
+  // rodapé) de entrar no vetor. Ver ragCapabilities em ragService.ts.
   it('remove scripts, styles e tags — só o texto legível vai pro RAG', () => {
     const html = `<html><head><style>.x{color:red}</style><script>var a=1;</script></head>
       <body><h1>Horário</h1><p>Seg a sex, 9h às 18h &amp; sábado até 12h</p></body></html>`;

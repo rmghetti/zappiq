@@ -178,7 +178,22 @@ jobs:
                 || { echo "::error::provider de embedding diferente de openai."; exit 1; }
               jq -e '.checks.embedding.model == "text-embedding-3-small"' /tmp/ready.json > /dev/null \
                 || { echo "::error::modelo de embedding diferente de text-embedding-3-small."; exit 1; }
-              echo "Embedding conforme: openai / text-embedding-3-small."
+              # Provedor e modelo certos ainda podem embedar na dimensão errada
+              # (EMBEDDING_DIM vem de env, não do modelo). O /ready informa a
+              # dimensão configurada e a dimensão real da coluna: se divergirem,
+              # toda ingestão e toda busca quebram (achado A018).
+              CONFIG=$(jq -r '.checks.embedding.embedding_dim // "ausente"' /tmp/ready.json)
+              COLUNA=$(jq -r '.checks.embedding.coluna_dim // "ausente"' /tmp/ready.json)
+              echo "embedding_dim=${CONFIG} coluna_dim=${COLUNA}"
+              if [ "${CONFIG}" = "ausente" ] || [ "${COLUNA}" = "ausente" ]; then
+                echo "::error::/ready não expôs embedding_dim e coluna_dim."
+                exit 1
+              fi
+              if [ "${CONFIG}" != "${COLUNA}" ]; then
+                echo "::error::embedding em ${CONFIG} dimensões contra coluna de ${COLUNA}."
+                exit 1
+              fi
+              echo "Embedding conforme: openai / text-embedding-3-small / ${CONFIG} dimensões."
               exit 0
             fi
             echo "Tentativa ${tentativa}: RAG ainda não respondeu. Nova tentativa em 5s."

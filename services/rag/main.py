@@ -24,17 +24,21 @@ import hmac
 import json
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from typing import Literal
 
 import asyncpg
-import fitz  # PyMuPDF
 import retrieval
 import tiktoken
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pgvector.asyncpg import register_vector
 from pydantic import BaseModel, Field
+
+import chunking
+import extractors
+import reprocess
 
 # ── OpenTelemetry ──────────────────────────────────────────────────────
 # SDK init precisa rodar antes de qualquer import instrumentado.
@@ -180,12 +184,22 @@ class QueryResponse(BaseModel):
     latency_ms: int
 
 
+class ReprocessRequest(BaseModel):
+    namespace: str
+    # dry_run e o padrao de proposito: escrever no vetor de producao nao pode
+    # ser o comportamento de quem esqueceu um campo.
+    dry_run: bool = True
+
+
 class IngestResponse(BaseModel):
     namespace: str
     source: str
     chunks_ingested: int
     tokens_embedded: int
     latency_ms: int
+    # Titulo da tag <title>, so quando o conteudo era uma pagina. A API usa
+    # para trocar o titulo do documento, que ate aqui era a URL crua na lista.
+    titulo_detectado: str | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -196,6 +210,12 @@ class IngestResponse(BaseModel):
 class AppState:
     pool: asyncpg.Pool | None = None
     tokenizer: tiktoken.Encoding | None = None
+    # Dimensao declarada em rag_chunks.embedding. Ela so muda com migracao, e o
+    # Fly bate no /ready a cada 15 segundos: ler o catalogo em toda batida gasta
+    # conexao do pool a troco de nada. Guardada apos a primeira leitura BEM
+    # SUCEDIDA; erro nao vira cache, senao uma tabela ainda nao criada
+    # congelaria o servico em "nao sei" ate o proximo deploy.
+    dimensao_da_coluna: int | None = None
 
 
 state = AppState()
@@ -301,38 +321,6 @@ async def _require_service_secret(request: Request, call_next):
         if not hmac.compare_digest(provided, RAG_SERVICE_SECRET):
             return JSONResponse(status_code=401, content={"detail": "unauthorized"})
     return await call_next(request)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Utilities — text extraction
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def _extract_pdf(data: bytes) -> str:
-    """Extrai texto de PDF com PyMuPDF. Preserva quebras de pagina com \\n\\n."""
-    with fitz.open(stream=data, filetype="pdf") as doc:
-        pages = [page.get_text("text") for page in doc]
-    return "\n\n".join(pages).strip()
-
-
-def _extract_text(content_type: str | None, filename: str, data: bytes) -> str:
-    """Dispatch por content-type ou extensao. Levanta HTTPException se nao suportado."""
-    lower = filename.lower()
-    if (content_type == "application/pdf") or lower.endswith(".pdf"):
-        return _extract_pdf(data)
-    if (content_type and content_type.startswith("text/")) or lower.endswith(
-        (".txt", ".md")
-    ):
-        try:
-            return data.decode("utf-8", errors="replace").strip()
-        except Exception as exc:
-            raise HTTPException(
-                status_code=400, detail=f"Falha ao decodificar texto: {exc}"
-            )
-    raise HTTPException(
-        status_code=415,
-        detail=f"Content-type nao suportado: {content_type} ({filename}). Use pdf/txt/md.",
-    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -475,16 +463,22 @@ async def _embed_openai(texts: list[str]) -> list[list[float]]:
 #     USING hnsw (embedding vector_cosine_ops);
 
 
-def _chunk_hash(namespace: str, source: str, chunk_idx: int, text: str) -> str:
-    """Hash idempotente pra upsert. Inclui texto pra re-embed se conteudo mudou."""
-    payload = f"{namespace}|{source}|{chunk_idx}|{text}".encode("utf-8")
+def _chunk_hash(
+    namespace: str, source: str, chunk_idx: int, text: str, header: str = ""
+) -> str:
+    """
+    Hash idempotente pra upsert. Inclui o texto para re-embed quando o conteudo
+    muda, e o cabecalho de contexto (P64) porque e ele, junto com o texto, que
+    vai para o embedding: mudar o cabecalho muda o vetor.
+    """
+    payload = f"{namespace}|{source}|{chunk_idx}|{header}|{text}".encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
 async def _upsert_chunks(
     namespace: str,
     source: str,
-    chunks: list[str],
+    trechos: list[chunking.Trecho],
     vectors: list[list[float]],
     metadata: dict,
 ) -> int:
@@ -499,21 +493,23 @@ async def _upsert_chunks(
     """
     if not state.pool:
         raise HTTPException(status_code=503, detail="DB pool nao inicializado")
-    if len(chunks) != len(vectors):
-        raise RuntimeError("chunks e vectors com tamanhos diferentes")
+    if len(trechos) != len(vectors):
+        raise RuntimeError("trechos e vectors com tamanhos diferentes")
 
-    metadata_json = json.dumps(metadata)
+    # metadata.header guarda o cabecalho de contexto que entrou no embedding.
+    # Sem isso nao da para reprocessar nem auditar o que foi embedado: o `text`
+    # gravado e o original, de proposito, porque e o que o cliente le.
     rows = [
         (
             namespace,
             source,
             idx,
-            _chunk_hash(namespace, source, idx, chunk),
-            chunk,
+            _chunk_hash(namespace, source, idx, trecho.texto, trecho.cabecalho),
+            trecho.texto,
             vec,
-            metadata_json,
+            json.dumps({**metadata, "header": trecho.cabecalho}),
         )
-        for idx, (chunk, vec) in enumerate(zip(chunks, vectors))
+        for idx, (trecho, vec) in enumerate(zip(trechos, vectors))
     ]
 
     async with state.pool.acquire() as conn:
@@ -631,6 +627,41 @@ async def health():
     return {"status": "ok", "service": "zappiq-rag", "version": "0.2.0"}
 
 
+_TIPO_VECTOR = re.compile(r"vector\((\d+)\)")
+
+
+async def _dimensao_da_coluna_embedding() -> tuple[int | None, str | None]:
+    """
+    Le a dimensao declarada em rag_chunks.embedding pelo catalogo do Postgres.
+    Devolve (dimensao, erro): so um dos dois vem preenchido.
+
+    Cacheada em state depois do primeiro acerto (ver AppState.dimensao_da_coluna).
+    """
+    if state.dimensao_da_coluna is not None:
+        return state.dimensao_da_coluna, None
+    if not state.pool:
+        return None, "pool nao inicializado"
+    try:
+        async with state.pool.acquire() as conn:
+            tipo = await conn.fetchval(
+                """
+                SELECT format_type(atttypid, atttypmod)
+                  FROM pg_attribute
+                 WHERE attrelid = 'rag_chunks'::regclass
+                   AND attname = 'embedding'
+                   AND NOT attisdropped
+                """
+            )
+    except Exception as exc:
+        return None, str(exc)
+
+    casou = _TIPO_VECTOR.search(str(tipo or ""))
+    if not casou:
+        return None, f"tipo inesperado na coluna embedding: {tipo}"
+    state.dimensao_da_coluna = int(casou.group(1))
+    return state.dimensao_da_coluna, None
+
+
 @app.get("/ready", tags=["health"])
 async def ready():
     """Readiness: Postgres responde SELECT 1 e temos API key de embedding."""
@@ -656,13 +687,43 @@ async def ready():
         "ok": has_key,
         "provider": EMBEDDING_PROVIDER,
         "model": EMBEDDING_MODEL,
+        "embedding_dim": EMBEDDING_DIM,
     }
     if not has_key:
+        ok = False
+
+    # Dimensao configurada contra dimensao da coluna (achado A018). Producao
+    # embeda em 1536 e a coluna e vector(1536), mas o fly.toml do repositorio
+    # fixa 1024: um deploy que fizesse valer o arquivo quebraria toda ingestao
+    # e toda busca, em silencio.
+    #
+    # ATENCAO ao que isto NAO faz: o corpo passa a dizer not_ready, mas a
+    # resposta continua sendo HTTP 200. O health check do Fly olha o status
+    # HTTP, entao ele segue achando a maquina saudavel e NAO a tira de rotacao.
+    # Quem barra o deploy e o smoke do .github/workflows/fly-deploy.yml, que le
+    # estes dois campos do corpo e derruba o job quando divergem. Trocar o
+    # status HTTP mudaria a disponibilidade do servico e e decisao a parte.
+    coluna_dim, coluna_erro = await _dimensao_da_coluna_embedding()
+    checks["embedding"]["coluna_dim"] = coluna_dim
+    if coluna_erro:
+        # Catalogo ilegivel nao e prova de divergencia: informa e segue.
+        checks["embedding"]["coluna_erro"] = coluna_erro
+    elif coluna_dim is not None and coluna_dim != EMBEDDING_DIM:
+        checks["embedding"]["ok"] = False
+        checks["embedding"]["erro"] = (
+            f"EMBEDDING_DIM={EMBEDDING_DIM} diverge de rag_chunks.embedding "
+            f"vector({coluna_dim})"
+        )
         ok = False
 
     return {
         "status": "ready" if ok else "not_ready",
         "service": "zappiq-rag",
+        # Capacidade de codigo, nao de estado: sai mesmo com o servico
+        # not_ready, porque e por ela que a API descobre com qual versao do RAG
+        # esta falando. Sem o campo (RAG anterior a este deploy), a API assume
+        # que nao ha "html" e limpa a pagina antes de enviar.
+        "extratores": list(extractors.FORMATOS_SUPORTADOS),
         "checks": checks,
     }
 
@@ -718,16 +779,20 @@ async def ingest(
     source: str | None = Form(None),
     metadata: str | None = Form(None),  # JSON string
     single_chunk: bool = Form(False),
+    source_url: str | None = Form(None),
 ):
     """
-    Ingestao: upload -> extract -> chunk -> embed -> upsert.
+    Ingestao: upload -> extract -> chunk -> cabecalho -> embed -> upsert.
 
     Form fields:
-      file         = PDF, TXT ou MD (max 20MB)
-      namespace    = 'org_<uuid>' (isola multi-tenant)
-      source       = identificador do doc (default: filename)
-      metadata     = JSON extra (ex: {"uploader":"user_123","category":"faq"})
-      single_chunk = nao fatiar: o conteudo vira UM trecho so (Q&A, A011)
+      file:       PDF, DOCX, XLSX, TXT, MD, CSV ou HTML (max 20MB)
+      namespace:  'org_<uuid>' (isola multi-tenant)
+      source:     identificador do doc (a API manda doc-<id do kb_document>)
+      metadata:   JSON extra. Dois campos com significado aqui:
+                    titulo: nome do documento para o cabecalho de contexto
+                    pergunta: repete a pergunta no cabecalho de todo trecho de Q&A
+      source_url: endereco de origem, quando o conteudo veio de uma pagina
+      single_chunk: nao fatiar, o conteudo vira UM trecho so (Q&A, A011)
     """
     import time
 
@@ -742,7 +807,7 @@ async def ingest(
     if size_mb > MAX_UPLOAD_MB:
         raise HTTPException(
             status_code=413,
-            detail=f"Arquivo {size_mb:.1f}MB excede limite de {MAX_UPLOAD_MB}MB",
+            detail=extractors.mensagem_arquivo_grande(size_mb, MAX_UPLOAD_MB),
         )
 
     # Parse metadata
@@ -761,11 +826,17 @@ async def ingest(
     meta.setdefault("original_filename", file.filename)
     meta.setdefault("content_type", file.content_type)
     meta.setdefault("size_bytes", len(data))
+    if source_url:
+        meta.setdefault("source_url", source_url)
 
     # Extract
-    text = _extract_text(file.content_type, file.filename or "", data)
+    formato = extractors.detectar_formato(file.content_type, file.filename or "")
+    titulo_detectado = extractors.titulo_da_pagina(data) if formato == "html" else None
+    text = extractors.extrair_texto(
+        file.content_type, file.filename or "", data, source_url=source_url
+    )
     if not text.strip():
-        raise HTTPException(status_code=422, detail="Arquivo sem texto extraivel")
+        raise HTTPException(status_code=422, detail=extractors.MENSAGEM_SEM_TEXTO)
 
     # Chunk. Q&A nao pode ser fatiado: so o primeiro pedaco carrega
     # 'Pergunta: ...' e os seguintes viram resposta solta que nao casa com a
@@ -778,18 +849,24 @@ async def ingest(
     else:
         chunks = _chunk_text(text)
     if not chunks:
-        raise HTTPException(
-            status_code=422, detail="Nenhum chunk gerado apos tokenizacao"
-        )
+        raise HTTPException(status_code=422, detail=extractors.MENSAGEM_SEM_TEXTO)
 
-    # Embed
-    vectors = await _embed_batch(chunks, input_type="document")
+    # Cabecalho de contexto por trecho (P64): o titulo vem do kb_document
+    # quando a API manda, senao do nome do arquivo.
+    titulo = str(meta.get("titulo") or file.filename or source_id)
+    pergunta = meta.get("pergunta")
+    trechos = chunking.montar_trechos(
+        chunks, titulo, pergunta=str(pergunta) if pergunta else None
+    )
+
+    # Embed do cabecalho + texto; o texto guardado continua sendo o original.
+    vectors = await _embed_batch([t.embed for t in trechos], input_type="document")
 
     # Upsert
     await _upsert_chunks(
         namespace=namespace,
         source=source_id,
-        chunks=chunks,
+        trechos=trechos,
         vectors=vectors,
         metadata=meta,
     )
@@ -816,6 +893,7 @@ async def ingest(
         chunks_ingested=len(chunks),
         tokens_embedded=tokens,
         latency_ms=latency,
+        titulo_detectado=titulo_detectado,
     )
 
 
@@ -842,6 +920,30 @@ async def delete_source(namespace: str, source: str):
     return {"namespace": namespace, "source": source, "deleted": deleted}
 
 
+@app.post("/admin/reprocess", tags=["admin"])
+async def admin_reprocess(request: ReprocessRequest):
+    """
+    Reprocessa a base de um namespace: monta o cabecalho de contexto de cada
+    trecho, reembeda e troca o source de titulo para doc-<id do kb_document>.
+
+    Roda atras do X-Service-Secret, como toda rota privada. O padrao e dry_run,
+    que devolve o plano (quantos trechos, quais sources mudam, quais titulos
+    colidem) sem escrever nada. Ver services/rag/reprocess.py.
+    """
+    if not request.namespace.strip():
+        raise HTTPException(status_code=400, detail="namespace vazio")
+    if not state.pool:
+        raise HTTPException(status_code=503, detail="DB pool nao inicializado")
+
+    return await reprocess.executar(
+        pool=state.pool,
+        namespace=request.namespace.strip(),
+        dry_run=request.dry_run,
+        embed=lambda textos, input_type: _embed_batch(textos, input_type=input_type),
+        chunk_hash=_chunk_hash,
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Error handler global
 # ─────────────────────────────────────────────────────────────────────────────
@@ -849,8 +951,17 @@ async def delete_source(namespace: str, source: str):
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(_request, exc: Exception):
+    """
+    Devolvia um dict cru: o Starlette nao consegue enviar isso e o cliente
+    recebia 500 com corpo "Internal Server Error" em texto puro, sem o detalhe
+    (achado A019). Quem chama e a API, que precisa de JSON para repassar a
+    mensagem ao dono do negocio.
+    """
     logger.error(f"unhandled exception: {exc}", exc_info=True)
-    return {"error": "internal_server_error", "detail": str(exc)}
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal_server_error", "detail": str(exc)},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
