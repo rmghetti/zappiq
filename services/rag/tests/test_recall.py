@@ -180,7 +180,7 @@ def legacy_rerank(
 
 
 def eval_set() -> list[tuple[str, str]]:
-    """(pergunta, source esperado) — metade Q&A, metade documento do cliente."""
+    """(pergunta, source esperado): metade Q&A, metade documento do cliente."""
     pares = [(q, f"qa-{i}.txt") for i, (q, _) in enumerate(QA_FIXTURES)]
     return pares + list(DOC_QUESTIONS)
 

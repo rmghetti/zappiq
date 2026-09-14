@@ -173,7 +173,7 @@ export async function readConfigVersion(organizationId: string): Promise<number>
 /**
  * Sobe a versão da organização. Chamada por QUALQUER escrita de treino
  * (upload, texto, URL, Q&A criar/editar/desativar/apagar, questionário
- * reingerido, identidade, agendamento) — na prática, por toda ingestão e todo
+ * reingerido, identidade, agendamento). Na prática, por toda ingestão e todo
  * delete deste módulo. Fail-soft: sem Redis devolve 0 e a busca segue.
  */
 export async function bumpConfigVersion(organizationId: string): Promise<number> {
@@ -285,7 +285,7 @@ export async function searchDetailed(
   } catch (err: any) {
     // error, não warn: a IA vai responder SEM nada do treinamento do cliente.
     // E o status NÃO é cacheado: a próxima mensagem tenta o serviço de novo.
-    logger.error('[RAG] serviço fora — respondendo sem contexto treinado', {
+    logger.error('[RAG] serviço fora, respondendo sem contexto treinado', {
       organizationId,
       status: 'servico_fora',
       erro: err?.message,

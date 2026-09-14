@@ -722,11 +722,11 @@ async def ingest(
     Ingestao: upload -> extract -> chunk -> embed -> upsert.
 
     Form fields:
-      file         — PDF, TXT ou MD (max 20MB)
-      namespace    — 'org_<uuid>' (isola multi-tenant)
-      source       — identificador do doc (default: filename)
-      metadata     — JSON extra (ex: {"uploader":"user_123","category":"faq"})
-      single_chunk — nao fatiar: o conteudo vira UM trecho so (Q&A, A011)
+      file         = PDF, TXT ou MD (max 20MB)
+      namespace    = 'org_<uuid>' (isola multi-tenant)
+      source       = identificador do doc (default: filename)
+      metadata     = JSON extra (ex: {"uploader":"user_123","category":"faq"})
+      single_chunk = nao fatiar: o conteudo vira UM trecho so (Q&A, A011)
     """
     import time
 

@@ -1078,7 +1078,7 @@ function ultimasMensagens(history: HistoryTurn[], n: number): string[] {
  *
  * A026: a busca usava a última mensagem isolada, e a mediana das mensagens
  * recebidas é de 18 caracteres ("e quanto fica?"). A064: já rodam DOIS
- * classificadores Haiku por turno — a reescrita entra como um campo a mais na
+ * classificadores Haiku por turno, e a reescrita entra como um campo a mais na
  * MESMA resposta, sem chamada nova. Mensagem que já se explica (>= 25
  * caracteres) nem chega a usar a reescrita, então o caminho quente de hoje não
  * muda.

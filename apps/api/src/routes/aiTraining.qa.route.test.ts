@@ -1,5 +1,5 @@
 /**
- * POST/PUT /api/ai-training/qa — teste de ROTA.
+ * POST/PUT /api/ai-training/qa (teste de ROTA).
  *
  * A009: a prioridade (0 a 10) do Q&A era gravada em qa_pairs e usada só para
  * ordenar a lista na tela. O texto ingerido era "Pergunta: ... Resposta: ..."
@@ -125,7 +125,7 @@ const put = (id: string, body: unknown) =>
 /** Terceiro argumento de ingestDocument: as opções (metadata + singleChunk). */
 const opcoesDaIngestao = () => ingestDocument.mock.calls[0][2];
 
-describe('POST /qa — prioridade e categoria viram metadata (A009)', () => {
+describe('POST /qa: prioridade e categoria viram metadata (A009)', () => {
   it('manda priority e category na metadata do trecho', async () => {
     qaCreate.mockResolvedValue({
       id: 'qa-1',
@@ -183,7 +183,7 @@ describe('POST /qa — prioridade e categoria viram metadata (A009)', () => {
   });
 });
 
-describe('PUT /qa/:id — a prioridade editada chega na busca', () => {
+describe('PUT /qa/:id: a prioridade editada chega na busca', () => {
   it('reingere com a prioridade NOVA', async () => {
     qaFindFirst.mockResolvedValue({
       id: 'qa-1',

@@ -1,5 +1,5 @@
 /**
- * ragQueryRewrite.test.ts — B4, consulta de continuação (A026, A064)
+ * ragQueryRewrite.test.ts (B4, consulta de continuação: A026, A064)
  * ============================================================================
  * A busca vetorial usava messageContent isolado. A mediana das mensagens
  * recebidas em 90 dias é de 18 caracteres: "e quanto fica?", "e o prazo?",
@@ -109,7 +109,7 @@ describe('sanitizeRewrittenQuery', () => {
   });
 });
 
-describe('parseClassifierOutput (A064 — uma chamada só, dois campos)', () => {
+describe('parseClassifierOutput (A064: uma chamada só, dois campos)', () => {
   it('lê intenção e consulta do JSON', () => {
     const out = parseClassifierOutput(
       '{"intent":"pricing","consulta":"preço do curso de fotografia noturna"}',

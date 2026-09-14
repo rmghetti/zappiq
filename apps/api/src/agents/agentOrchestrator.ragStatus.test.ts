@@ -1,5 +1,5 @@
 /**
- * agentOrchestrator.ragStatus.test.ts — B4 (A028)
+ * agentOrchestrator.ragStatus.test.ts (B4, A028)
  * ============================================================================
  * search() engolia qualquer erro (serviço Python fora, timeout de 30 s, Redis)
  * e devolvia string vazia. O orquestrador trocava o vazio pela frase
@@ -53,7 +53,7 @@ const baseInput = {
 
 const AVISO = 'base de conhecimento indisponível neste momento';
 
-describe('buildSystemPromptForContact — status do RAG no prompt (A028)', () => {
+describe('buildSystemPromptForContact: status do RAG no prompt (A028)', () => {
   it('sem resultado: o bloco do RAG fica VAZIO, sem afirmar que não existe informação', async () => {
     const prompt = await buildSystemPromptForContact({
       ...baseInput,

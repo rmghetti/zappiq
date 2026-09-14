@@ -1,5 +1,5 @@
 /**
- * ragService.cache.test.ts — B4 (busca que acha o que foi treinado)
+ * ragService.cache.test.ts (B4, busca que acha o que foi treinado)
  * ============================================================================
  * Cobre os três defeitos do caminho da busca na API:
  *
@@ -99,7 +99,7 @@ beforeEach(() => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// A025 — chave de cache
+// A025: chave de cache
 // ─────────────────────────────────────────────────────────────────────────
 
 describe('buildCacheKey (A025)', () => {
@@ -163,7 +163,7 @@ describe('normalizeQuery', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// A010 / A033 — versão da configuração
+// A010 e A033: versão da configuração
 // ─────────────────────────────────────────────────────────────────────────
 
 describe('versão da configuração da organização', () => {
@@ -196,7 +196,7 @@ describe('versão da configuração da organização', () => {
 // Comportamento do cache na busca
 // ─────────────────────────────────────────────────────────────────────────
 
-describe('searchDetailed — cache', () => {
+describe('searchDetailed: cache', () => {
   it('segunda busca igual não chama o serviço', async () => {
     post.mockResolvedValue(resposta('preço do plano é 100'));
     const a = await searchDetailed('org-1', 'quanto custa o plano?', 5);
@@ -222,7 +222,7 @@ describe('searchDetailed — cache', () => {
     expect(clareamento.context).toBe('clareamento custa 1200');
   });
 
-  it('desativar um Q&A (bump de versão) invalida o cache na hora — A010', async () => {
+  it('desativar um Q&A (bump de versão) invalida o cache na hora (A010)', async () => {
     post.mockResolvedValueOnce(resposta('resposta antiga do Q&A'));
     const antes = await searchDetailed('org-1', 'voces entregam no interior?', 5);
     expect(antes.context).toBe('resposta antiga do Q&A');
@@ -243,7 +243,7 @@ describe('searchDetailed — cache', () => {
     expect(post).toHaveBeenCalledTimes(1);
   });
 
-  it('playground e produção compartilham o mesmo cache versionado — A033', async () => {
+  it('playground e produção compartilham o mesmo cache versionado (A033)', async () => {
     post.mockResolvedValue(resposta('mesma coisa nos dois'));
     const producao = await search('org-1', 'qual o horário?', 5);
     const playground = await searchWithSources('org-1', 'qual o horário?', 5);
@@ -262,10 +262,10 @@ describe('searchDetailed — cache', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// A028 — sem resultado x serviço fora
+// A028: sem resultado x serviço fora
 // ─────────────────────────────────────────────────────────────────────────
 
-describe('searchDetailed — status (A028)', () => {
+describe('searchDetailed: status (A028)', () => {
   it('com resultados: ok', async () => {
     post.mockResolvedValue(resposta('achou'));
     const out = await searchDetailed('org-1', 'pergunta', 5);
@@ -286,7 +286,7 @@ describe('searchDetailed — status (A028)', () => {
     expect(out.context).toBe('');
   });
 
-  it('resultado vazio é cacheado (não repete a busca cara por 120 s) — A032', async () => {
+  it('resultado vazio é cacheado (não repete a busca cara por 120 s, A032)', async () => {
     post.mockResolvedValue({ data: { results: [], latency_ms: 5 } });
     await searchDetailed('org-1', 'oi', 5);
     const segundo = await searchDetailed('org-1', 'oi', 5);

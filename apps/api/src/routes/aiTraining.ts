@@ -559,7 +559,7 @@ router.get('/qa', async (req: Request, res: Response, next: NextFunction) => {
 /**
  * Opções de ingestão de um par de Q&A.
  *
- * A009: a prioridade (0 a 10) só ordenava a lista na tela — o trecho ia para o
+ * A009: a prioridade (0 a 10) só ordenava a lista na tela. O trecho ia para o
  * vetor sem ela, e o re-rank aplicava o mesmo fator a todo source qa-*. Agora
  * prioridade e categoria viajam na metadata e viram bônus proporcional (com
  * teto) no ranking do serviço.

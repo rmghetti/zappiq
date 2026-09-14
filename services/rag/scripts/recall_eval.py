@@ -125,7 +125,7 @@ async def run(args) -> int:
                     args.top_k,
                     args.min_similarity,
                 )
-            except Exception as exc:  # noqa: BLE001 — o erro vai para a tabela
+            except Exception as exc:  # noqa: BLE001, o erro vai para a tabela
                 linhas.append((pergunta, "ERRO", str(exc)[:60]))
                 continue
 
@@ -141,7 +141,7 @@ async def run(args) -> int:
     recall = acertos / total
 
     largura = 68
-    print(f"\nrecall@{args.top_k} — {args.namespace}")
+    print(f"\nrecall@{args.top_k} para {args.namespace}")
     print("=" * (largura + 20))
     for pergunta, posicao, detalhe in linhas:
         print(f"{pergunta[:largura]:<{largura}} {posicao:>6}  {detalhe}")
