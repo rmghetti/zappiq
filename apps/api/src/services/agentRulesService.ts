@@ -72,7 +72,14 @@ export class TetoDeRegrasError extends Error {
 
 export interface FiltroDeRegras {
   organizationId: string;
-  /** Opcional: o chat do site não sabe o id do agente, só o da organização. */
+  /**
+   * Opcional. O montador do prompt filtra só por ORGANIZAÇÃO, e não por
+   * agente, porque o carregador do chat do site devolve o texto do prompt e
+   * não o id do agente. Na prática as 15 organizações têm um agente
+   * comercial vivo cada, então dá no mesmo; a coluna agent_id existe para
+   * quando isso deixar de ser verdade. A tela e as rotas de escrita, essas,
+   * sempre passam o agente.
+   */
   agentId?: string | null;
   /** Padrão 'ativa'. A tela do dono pede o histórico também. */
   status?: string | string[];
