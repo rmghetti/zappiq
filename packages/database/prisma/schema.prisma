@@ -260,6 +260,8 @@ model Organization {
   miraCampanhas           MiraCampanha[]
   miraReleases            MiraRelease[]
   miraUsageMonthly        MiraUsageMonthly[]
+  // Interruptores de comportamento novo, um por organização (A2 14/09/2026).
+  featureFlags            OrgFeatureFlag[]
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
@@ -1363,9 +1365,64 @@ model Agent {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
   evalRuns        AgentEvalRun[]
+  // Histórico imutável do system_prompt. Quem numera é o gatilho do Postgres
+  // (agents_versiona_prompt), não a aplicação: escrita feita fora do produto
+  // também vira versão, com source 'fora_do_app'.
+  promptVersions  AgentPromptVersion[]
 
   @@index([organizationId, role, status])
   @@map("agents")
+}
+
+// ═══════════════════════════════════════════════════════════
+// OrgFeatureFlag — interruptor de comportamento novo, por organização.
+// -----------------------------------------------------------
+// Fundir na main publica a API e o web na hora. Todo comportamento novo
+// nasce DESLIGADO e cada organização é ligada de propósito pela rota
+// /api/admin/organizations/:id/flags. `remove_by` é o prazo para tirar o
+// interruptor do código: prazo vencido quebra a suíte de propósito.
+// Sem política de RLS (nega tudo para quem não ignora RLS) e sem grant
+// para anon/authenticated: é dado de plataforma, só a API lê.
+// ═══════════════════════════════════════════════════════════
+model OrgFeatureFlag {
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  flag           String
+  enabled        Boolean      @default(false)
+  /// Configuração opcional do interruptor (percentuais, listas). Hoje nulo.
+  value          Json?
+  removeBy       DateTime?    @map("remove_by") @db.Date
+  updatedBy      String?      @map("updated_by")
+  updatedAt      DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([organizationId, flag])
+  @@map("org_feature_flags")
+}
+
+// ═══════════════════════════════════════════════════════════
+// AgentPromptVersion — histórico do system_prompt do agente.
+// -----------------------------------------------------------
+// Achado A083: o prompt era sobrescrito em cinco lugares diferentes, sem
+// rastro, e reverter apagava tudo que veio depois. Agora toda escrita em
+// agents.system_prompt cria uma linha aqui, pelo gatilho do banco.
+// A origem vem de set_config('zappiq.prompt_source'): escrita que não
+// passa pelo produto (psql, script, migração) fica marcada 'fora_do_app'.
+// ═══════════════════════════════════════════════════════════
+model AgentPromptVersion {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agentId      String   @map("agent_id")
+  agent        Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  version      Int
+  systemPrompt String   @map("system_prompt")
+  hash         String
+  /// 'seed' | 'fix_apply' | 'fix_revert' | 'identity_sync' | 'remediacao' | 'migracao' | 'manual' | 'fora_do_app'
+  source       String
+  decisionId   String?  @map("decision_id")
+  createdBy    String?  @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([agentId, version])
+  @@map("agent_prompt_versions")
 }
 
 // FASE 1.B task #240 — Onboarding journey D+1/D+3/D+7 state.
