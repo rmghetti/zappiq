@@ -1073,7 +1073,9 @@ export function medirQuestionario(
 /** Devolve o id do primeiro campo que estourou o teto, em qualquer nível. */
 function primeiraRespostaLongaDemais(valor: unknown, chave = '', nivel = 0): string | null {
   if (typeof valor === 'string') return valor.length > MAX_CHARS_POR_RESPOSTA ? chave : null;
-  if (nivel > 6 || !valor || typeof valor !== 'object') return null;
+  // 24 níveis: o corte é contra ciclo e recursão absurda, não contra profundidade
+  // legítima; o teto de 8.000 tem de valer em qualquer nível (re-revisão do #373).
+  if (nivel > 24 || !valor || typeof valor !== 'object') return null;
 
   if (Array.isArray(valor)) {
     for (const item of valor) {
