@@ -109,7 +109,7 @@ que muda é que ela deixa de receber turnos "assistant" forjados pelo visitante,
 ou seja, ela para de dar sequência a fala que ela nunca disse.
 
 **Ação no /admin/iza-knowledge** (após merge):
-- [ ] Nenhuma (mudança técnica sem impacto narrativo)
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) Nenhuma (mudança técnica sem impacto narrativo)
 
 **Smoke esperado:** no chat da landing, mandar uma mensagem e conferir que a
 resposta chega normalmente. Com a conversa pausada no painel, a tela mostra o

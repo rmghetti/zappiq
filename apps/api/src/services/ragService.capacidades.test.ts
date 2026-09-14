@@ -30,6 +30,20 @@ vi.mock('axios', () => {
   return { default: fake, ...fake };
 });
 
+// O portão de destino (urlSegura.ts) resolve o nome antes de conectar. Sem este
+// DNS falso o teste sairia para a rede de verdade, e o resultado passaria a
+// depender de a máquina ter internet. `cmj.com.br` responde um endereço público
+// combinado aqui.
+vi.mock('node:dns', () => {
+  const lookup = vi.fn(async (hostname: string) => {
+    if (hostname === 'cmj.com.br') return [{ address: '93.184.216.34', family: 4 }];
+    const err: any = new Error(`getaddrinfo ENOTFOUND ${hostname}`);
+    err.code = 'ENOTFOUND';
+    throw err;
+  });
+  return { default: { promises: { lookup } }, promises: { lookup } };
+});
+
 // `incrby` e `del` entram aqui porque toda escrita de treino sobe a versão de
 // configuração da organização, o que invalida o cache da busca (A010, A033).
 vi.mock('./cloud/index.js', () => ({

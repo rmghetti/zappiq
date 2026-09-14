@@ -247,8 +247,12 @@ export async function buscarUrlPublica(
       validateStatus: (status: number) => status >= 200 && status < 400,
     });
 
+    // Só 3xx é salto. Qualquer outra coisa, inclusive resposta sem status, é a
+    // resposta final: perguntar "não é 3xx?" em vez de "é fora da faixa?" evita
+    // que um status ausente (NaN em toda comparação) caia no ramo de
+    // redirecionamento e vire recusa por destino inválido.
     const status = Number(resposta.status);
-    if (status < 300 || status >= 400) return resposta;
+    if (!(status >= 300 && status < 400)) return resposta;
 
     const destino = (resposta.headers as any)?.location || (resposta.headers as any)?.Location;
     if (!destino) {
