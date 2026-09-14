@@ -27,7 +27,7 @@
  *   - Não conta image tokens (vision) — adicionar quando entrar.
  * ══════════════════════════════════════════════════════════════════════ */
 
-export const PRICING_VERSION = '2026-05-04'; // V4 #160 (PR #72) — added Google TTS pt-BR Neural2/Wavenet
+export const PRICING_VERSION = '2026-09-14'; // A200 — gemini-2.5-flash no preço oficial do Google (0,30 / 2,50)
 
 export interface ModelPricing {
   /** USD por 1M input tokens */
@@ -74,7 +74,16 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'pt-BR-Wavenet-D':             { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.0024 },
   'pt-BR-Wavenet-E':             { inputUsdPerMillion: 0,     outputUsdPerMillion: 0, audioUsdPerMinute: 0.0024 },
   // Google (V4 #V4-001 — adicionado em 2026-04-30 pós-Gate 1)
-  'gemini-2.5-flash':            { inputUsdPerMillion: 0.075, outputUsdPerMillion: 0.30 },
+  // A200 (14/09/2026): o 2.5 Flash estava com o preço do 1.5 Flash
+  // (0,075/0,30), 4,3 vezes abaixo do oficial. Fonte primária conferida em
+  // 14/09/2026: https://ai.google.dev/gemini-api/docs/pricing — 2.5 Flash
+  // US$ 0,30 de entrada e US$ 2,50 de saída por 1M de tokens, com os tokens
+  // de raciocínio cobrados COMO SAÍDA.
+  // O gemini-2.0-flash fica como estava de propósito: a página oficial já não
+  // lista esse modelo, então não há fonte primária para corrigir o valor, e
+  // inventar número de terceiro é pior que manter o antigo. O provedor em uso
+  // é o 2.5 Flash (ver LLMRouter).
+  'gemini-2.5-flash':            { inputUsdPerMillion: 0.30,  outputUsdPerMillion: 2.50 },
   'gemini-2.0-flash':            { inputUsdPerMillion: 0.075, outputUsdPerMillion: 0.30 },
 };
 
