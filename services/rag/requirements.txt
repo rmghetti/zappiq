@@ -10,7 +10,7 @@ fastapi==0.141.1
 # a versão que realmente vai para a imagem.
 starlette==1.6.0
 uvicorn[standard]==0.53.0
-pydantic==2.9.2
+pydantic==2.13.5
 python-dotenv==1.2.3
 httpx==0.27.2
 
