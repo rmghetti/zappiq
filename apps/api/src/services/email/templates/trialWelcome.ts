@@ -2,7 +2,7 @@
  * Template · trial-welcome
  *
  * E-mail de boas-vindas ao trial da ZappIQ. Disparado ao criar uma
- * organização em trial. Inclui os 3 próximos passos e CTA para IA Training.
+ * organização em trial. Inclui os 3 próximos passos e CTA para o Treinar IA.
  *
  * Uso típico:
  *
@@ -85,8 +85,8 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
                     <td style="padding:16px;background:#f8faf9;border-radius:12px;margin-bottom:12px;">
                       <p style="margin:0;font-size:13px;font-weight:700;color:#4f46e5;text-transform:uppercase;letter-spacing:.08em;">1. Conectar WhatsApp</p>
                       <p style="margin:6px 0 0;font-size:14px;line-height:1.6;color:#374151;">
-                        Vá para Settings e copie seus detalhes do WhatsApp Business.
-                        Você redireciona para nossa API, leva 30 segundos.
+                        Abra Configurações, aba Canais, e siga a conexão pela Meta.
+                        A liberação do número depende da análise da Meta.
                       </p>
                     </td>
                   </tr>
@@ -96,8 +96,8 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
                     <td style="padding:16px;background:#f8faf9;border-radius:12px;margin-bottom:12px;">
                       <p style="margin:0;font-size:13px;font-weight:700;color:#4f46e5;text-transform:uppercase;letter-spacing:.08em;">2. Subir 1 documento</p>
                       <p style="margin:6px 0 0;font-size:14px;line-height:1.6;color:#374151;">
-                        Vá para Knowledge Base e faça upload de um PDF, planilha ou Google Doc.
-                        Sua IA vai aprender tudo daí.
+                        Abra Treinar IA, aba Documentos, e envie um PDF, TXT, MD ou CSV.
+                        A IA passa a responder com base nele.
                       </p>
                     </td>
                   </tr>
@@ -107,8 +107,8 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
                     <td style="padding:16px;background:#f8faf9;border-radius:12px;">
                       <p style="margin:0;font-size:13px;font-weight:700;color:#4f46e5;text-transform:uppercase;letter-spacing:.08em;">3. Envie uma pergunta teste</p>
                       <p style="margin:6px 0 0;font-size:14px;line-height:1.6;color:#374151;">
-                        Responda nosso micro-formulário (2 minutos). Usamos para calibrar
-                        o tom e contexto inicial da IA.
+                        Abra Treinar IA, aba Testar minha IA, e pergunte o que um cliente
+                        perguntaria. Dá para ver na hora o que ela já sabe responder.
                       </p>
                     </td>
                   </tr>
@@ -119,7 +119,7 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
                   <tr>
                     <td align="center">
                       <a href="${escapeHtml(ctaUrl)}" style="display:inline-block;padding:16px 32px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;font-size:16px;box-shadow:0 4px 10px rgba(79,70,229,.35);">
-                        Começar IA Training agora →
+                        Abrir o Treinar IA →
                       </a>
                     </td>
                   </tr>
@@ -163,13 +163,13 @@ export function renderTrialWelcomeEmail(input: TrialWelcomeEmailInput): Rendered
     'Próximos passos:',
     '',
     '1. Conectar WhatsApp',
-    'Vá para Settings e copie seus detalhes do WhatsApp Business.',
+    'Abra Configurações, aba Canais, e siga a conexão pela Meta.',
     '',
     '2. Subir 1 documento',
-    'Vá para Knowledge Base e faça upload de um PDF ou Google Doc.',
+    'Abra Treinar IA, aba Documentos, e envie um PDF, TXT, MD ou CSV.',
     '',
     '3. Enviar uma pergunta teste',
-    'Responda nosso micro-formulário (2 minutos).',
+    'Abra Treinar IA, aba Testar minha IA, e pergunte o que um cliente perguntaria.',
     '',
     `Começar agora: ${ctaUrl}`,
     '',

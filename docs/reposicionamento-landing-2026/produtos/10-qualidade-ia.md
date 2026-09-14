@@ -1,5 +1,28 @@
 # Qualidade da IA
 
+> **Aviso de 14/09/2026, leia antes de usar este material como fonte.**
+> A auditoria de "Treinar IA e Qualidade da IA" mediu, contra o código e o banco de
+> produção, que estes dossiês descrevem como pronto o que ainda não existe. Não copie
+> frase daqui sem conferir. O que foi refutado:
+>
+> - **Embeddings:** a produção usa outro fornecedor e outra dimensão, não os citados aqui.
+> - **Formatos:** a ingestão lê PDF, TXT, MD e CSV. Word e Excel respondem 415.
+> - **Fontes rastreáveis:** nada é gravado. O que a tela mostra é "a busca encontrou algo".
+> - **Exclusão de dados da LGPD:** a rotina não toca nos trechos do índice de busca.
+> - **Lacuna sinalizada quando a IA não sabe:** não existe.
+> - **Salvamento automático em todas as fontes:** o questionário do cadastro não salva
+>   rascunho, só envia no fim.
+> - **Bateria de 25 cenários:** os clientes rodam 16 ou 17.
+> - **Juiz de IA independente, com modelo separado:** é o mesmo modelo que responde.
+> - **Filtro que confere o preço contra a tabela:** o agente testado não recebe a tabela.
+> - **Agenda:** cria o compromisso, não confirma, não lembra e não remarca.
+> - **Residência de dados:** o banco fica no Brasil, o processamento de IA acontece nos
+>   Estados Unidos, em todas as conversas.
+>
+> Enquanto o "Status honesto" de cada dossiê não for reescrito com prova, trate cada
+> afirmação como [confirmar]. A varredura que trava as frases já retiradas do site está
+> em `apps/web/lib/promessas.test.ts`.
+
 **Loop de auto-correção auditada**
 
 > Uma plataforma MACHIA · ZappIQ · Meta Business Partner · dados processados e armazenados no Brasil, em São Paulo

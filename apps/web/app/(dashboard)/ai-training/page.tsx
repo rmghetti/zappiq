@@ -769,6 +769,7 @@ function DocumentsPanel({ onChange }: { onChange: () => void }) {
 
       <DocumentDetailModal
         documentId={openDocId}
+        ragChunks={docs.find((d) => d.id === openDocId)?.ragChunks}
         onClose={() => setOpenDocId(null)}
         onSaved={async () => {
           await loadDocs();
@@ -861,7 +862,7 @@ function TrainingHistory() {
               onClick={() => setExpanded((v) => !v)}
               className="w-full px-4 py-2.5 text-xs font-medium text-primary-600 hover:bg-primary-50/40 border-t border-gray-100 transition-colors"
             >
-              {expanded ? 'Mostrar menos' : `Ver todos os ${items.length} eventos`}
+              {expanded ? 'Mostrar menos' : `Ver os ${items.length} eventos mais recentes`}
             </button>
           )}
         </>
@@ -1337,7 +1338,7 @@ function PlaygroundPanel() {
                       }`}
                     >
                       <BookOpen size={11} />
-                      {t.usedContext ? 'Usou seus documentos' : 'Sem contexto dos seus documentos'}
+                      {t.usedContext ? 'Encontrei no seu treino' : 'Não encontrei nada no seu treino'}
                     </span>
                     {t.usedContext && t.sources && t.sources.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">

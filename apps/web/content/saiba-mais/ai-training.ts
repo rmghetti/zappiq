@@ -48,16 +48,16 @@ export const aiTrainingContent: SaibaMaisContent[] = [
     titulo: 'Histórico de treinamento',
     clientSafe: true,
     oQueE:
-      'É a lista de tudo que já foi alterado no treinamento da sua IA: documentos enviados ou removidos, Q&A criadas ou editadas, o questionário e a identidade atualizados, com data, hora e quem fez a mudança.',
+      'É a lista das últimas 200 mudanças feitas na aba Treinar IA: documentos enviados ou removidos, Q&A criadas ou editadas, o questionário e a identidade atualizados, com data, hora e quem fez. Ainda não entram aqui as correções aplicadas na Qualidade da IA, as edições diretas das instruções do agente nem as mudanças feitas em Configurações.',
     paraQueServe:
-      'Serve para você ter rastro de quem mexeu no treinamento da IA e quando, útil se algo mudou de comportamento e você quer entender o que foi alterado, ou se mais de uma pessoa da equipe treina a IA.',
+      'Serve para você ter rastro de quem mexeu no conteúdo de treino e quando, útil quando mais de uma pessoa da equipe treina a IA. Se a IA mudou de comportamento e você não acha a causa aqui, olhe também a Qualidade da IA e as Configurações.',
     comoImplementar: [
       'Vá até a aba Documentos e role até o fim da página.',
       'Veja os eventos mais recentes na lista, com o tipo de ação e quem fez.',
-      'Clique em "Ver todos os [número] eventos", no fim da lista, para abrir o histórico completo.',
+      'Clique em "Ver todos os [número] eventos", no fim da lista, para abrir a janela inteira de 200 eventos.',
     ],
     exemploResultado:
-      'Numa loja com dois funcionários treinando a IA, o histórico mostra que a atendente Ana subiu a tabela de preços na terça e o dono editou a identidade do agente na quinta. Se a IA passar a responder algo diferente, dá para saber exatamente o que mudou e quando.',
+      'Numa loja com dois funcionários treinando a IA, o histórico mostra que a atendente Ana subiu a tabela de preços na terça e o dono editou a identidade do agente na quinta. Com isso dá para saber o que mudou no conteúdo e quando.',
     relacionados: ['ai-training.readiness-score'],
   },
   {

@@ -203,7 +203,7 @@ export const billingContent: SaibaMaisContent[] = [
     oQueE:
       'É o painel com quatro barras mostrando o quanto você já usou neste mês contra o limite do seu plano: Conversas (quantas conversas novas foram abertas no mês), Atendentes (quantas pessoas da sua equipe têm login no sistema), Documentos na base (quanto material você treinou na Iza) e Mensagens de IA (quantas respostas automáticas a Iza já gerou no mês).',
     paraQueServe:
-      'Serve para você antecipar quando vai estourar um limite, em vez de descobrir isso só quando a Iza parar de responder ou um upload for recusado. Se uma barra estiver próxima de 100%, é hora de considerar um upgrade de plano ou um add-on específico daquele item.',
+      'Serve para você antecipar quando vai estourar um limite, em vez de descobrir isso só quando a Iza parar de responder. A barra de Documentos na base é informativa: hoje o envio pelo Treinar IA não é recusado ao chegar no limite do plano. Se uma barra estiver próxima de 100%, é hora de considerar um upgrade de plano ou um add-on específico daquele item.',
     comoImplementar: [
       'Role até a seção "Uso do plano atual", perto do fim da página.',
       'Veja o número exato ao lado de cada barra: uso atual dividido pelo limite do plano.',

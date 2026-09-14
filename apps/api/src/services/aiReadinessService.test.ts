@@ -169,7 +169,10 @@ describe('computeAIReadiness — o teatro dos 45 pontos', () => {
     expect(r.breakdown.qaPairs).toBe(0);
   });
 
-  it('nextActions sinaliza reprocessamento quando há conteúdo mas sem chunks', async () => {
+  it('nextActions manda REENVIAR quando há conteúdo mas sem chunks', async () => {
+    // 14/09/2026: o CTA dizia "Reprocessar". Reprocessar não existe em lugar
+    // nenhum do produto, e o arquivo original nem é guardado: o único caminho
+    // real é apagar e enviar de novo. O texto agora diz isso.
     stubOrg({});
     kbCount.mockResolvedValue(5);
     qaCount.mockResolvedValue(12);
@@ -180,8 +183,12 @@ describe('computeAIReadiness — o teatro dos 45 pontos', () => {
 
     const docAction = r.nextActions.find((a) => a.id === 'upload_documents');
     const qaAction = r.nextActions.find((a) => a.id === 'add_qa_pairs');
-    expect(docAction?.cta).toBe('Reprocessar documentos');
-    expect(qaAction?.cta).toBe('Reprocessar Q&A');
+    expect(docAction?.cta).toBe('Reenviar documentos');
+    expect(qaAction?.cta).toBe('Revisar Q&A');
+
+    // Nenhuma ação pode prometer um reprocessamento que não existe.
+    const textos = r.nextActions.map((a) => `${a.title} ${a.description} ${a.cta}`).join(' ');
+    expect(textos.toLowerCase()).not.toContain('reprocess');
   });
 
   it('fail-soft do RAG não derruba o readiness (survey/identidade ainda pontuam)', async () => {

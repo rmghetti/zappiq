@@ -233,19 +233,20 @@ export async function computeAIReadiness(organizationId: string): Promise<AIRead
   }
 
   if (documentsScore < 25) {
-    // Caso "teatro": há docs no Postgres mas nenhum chunk indexado no RAG —
-    // a IA não consegue usar esse material. Sinaliza reindexação, não novo upload.
+    // Caso "teatro": há docs no Postgres mas nenhum chunk indexado no RAG e a
+    // IA não consegue usar esse material. Não existe reprocessar: o arquivo
+    // original não é guardado, então o caminho real é reenviar.
     const docsNotIndexed = documentsCount > 0 && docChunks === 0;
     nextActions.push({
       id: 'upload_documents',
       title: docsNotIndexed
-        ? 'Reprocesse seus documentos para a IA'
+        ? 'Reenvie seus documentos para a IA'
         : 'Envie documentos, contratos e materiais do seu negócio',
       description: docsNotIndexed
-        ? 'Seus documentos foram enviados mas ainda não estão indexados na base da IA, então ela não consegue usá-los nas respostas. Reenvie ou reprocesse para que virem conhecimento consultável.'
-        : 'PDFs, URLs, planilhas, contratos, FAQ, políticas, catálogos. Tudo que sua equipe já consulta deve alimentar a IA. Sem limite de uploads no plano atual.',
+        ? 'Seus documentos foram enviados mas não chegaram à base da IA, então ela não consegue usá-los nas respostas. Apague e envie de novo, em PDF, TXT, MD ou CSV.'
+        : 'Contratos, FAQ, políticas, catálogos e páginas do seu site, em PDF, TXT, MD ou CSV. Tudo que sua equipe já consulta deve alimentar a IA.',
       impact: 25 - documentsScore,
-      cta: docsNotIndexed ? 'Reprocessar documentos' : 'Enviar documentos',
+      cta: docsNotIndexed ? 'Reenviar documentos' : 'Enviar documentos',
       completed: false,
     });
   }
@@ -256,13 +257,13 @@ export async function computeAIReadiness(organizationId: string): Promise<AIRead
     nextActions.push({
       id: 'add_qa_pairs',
       title: qaNotIndexed
-        ? 'Reprocesse suas perguntas e respostas'
+        ? 'Salve de novo suas perguntas e respostas'
         : 'Crie perguntas e respostas prontas',
       description: qaNotIndexed
-        ? 'Suas perguntas e respostas foram cadastradas mas ainda não estão indexadas na base da IA. Reprocesse para que ela possa usá-las nas conversas.'
-        : 'Use Q&A para fixar respostas exatas a perguntas recorrentes — horário, preços, prazo de entrega. Garante consistência total, sem alucinação.',
+        ? 'Suas perguntas e respostas foram cadastradas mas não chegaram à base da IA. Abra cada uma, confira que está ativa e salve de novo.'
+        : 'Use Q&A para fixar respostas exatas a perguntas recorrentes: horário, preços, prazo de entrega. É o jeito de garantir a mesma resposta toda vez.',
       impact: 20 - qaScore,
-      cta: qaNotIndexed ? 'Reprocessar Q&A' : 'Criar Q&A',
+      cta: qaNotIndexed ? 'Revisar Q&A' : 'Criar Q&A',
       completed: false,
     });
   }
@@ -277,8 +278,8 @@ export async function computeAIReadiness(organizationId: string): Promise<AIRead
           : 'Conecte seu número de WhatsApp e sua Conta Instagram';
     const channelDesc =
       channelIntent === 'instagram'
-        ? 'Sem o canal conectado, sua IA não responde DMs. Conexão direta via Meta — escolha o que ativar e leva poucos minutos.'
-        : 'Sem o canal conectado, sua IA não fala com clientes. Conecte WhatsApp e/ou Instagram Direct via Meta — você escolhe o que ativar.';
+        ? 'Sem o canal conectado, sua IA não responde DMs. A conexão é direta pela Meta: escolha o que ativar e leva poucos minutos.'
+        : 'Sem o canal conectado, sua IA não fala com clientes. Conecte WhatsApp e Instagram Direct pela Meta: você escolhe o que ativar.';
     nextActions.push({
       // Mantém id 'connect_whatsapp' pra preservar o deep-link existente do
       // frontend (ACTION_TARGET/ACTION_HREFS). O texto agora cobre WA + IG.

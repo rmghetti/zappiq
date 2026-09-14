@@ -1,5 +1,28 @@
 # Reposicionamento da landing ZappIQ, 2026
 
+> **Aviso de 14/09/2026, leia antes de usar este material como fonte.**
+> A auditoria de "Treinar IA e Qualidade da IA" mediu, contra o código e o banco de
+> produção, que estes dossiês descrevem como pronto o que ainda não existe. Não copie
+> frase daqui sem conferir. O que foi refutado:
+>
+> - **Embeddings:** a produção usa outro fornecedor e outra dimensão, não os citados aqui.
+> - **Formatos:** a ingestão lê PDF, TXT, MD e CSV. Word e Excel respondem 415.
+> - **Fontes rastreáveis:** nada é gravado. O que a tela mostra é "a busca encontrou algo".
+> - **Exclusão de dados da LGPD:** a rotina não toca nos trechos do índice de busca.
+> - **Lacuna sinalizada quando a IA não sabe:** não existe.
+> - **Salvamento automático em todas as fontes:** o questionário do cadastro não salva
+>   rascunho, só envia no fim.
+> - **Bateria de 25 cenários:** os clientes rodam 16 ou 17.
+> - **Juiz de IA independente, com modelo separado:** é o mesmo modelo que responde.
+> - **Filtro que confere o preço contra a tabela:** o agente testado não recebe a tabela.
+> - **Agenda:** cria o compromisso, não confirma, não lembra e não remarca.
+> - **Residência de dados:** o banco fica no Brasil, o processamento de IA acontece nos
+>   Estados Unidos, em todas as conversas.
+>
+> Enquanto o "Status honesto" de cada dossiê não for reescrito com prova, trate cada
+> afirmação como [confirmar]. A varredura que trava as frases já retiradas do site está
+> em `apps/web/lib/promessas.test.ts`.
+
 Plano completo para reposicionar a landing zappiq.com.br de "plataforma de IA conversacional para WhatsApp" para o que a plataforma de fato já é: uma operação de atendimento, vendas e campanhas que roda sozinha, com CRM que se preenche na origem e você aprovando.
 
 Base de evidência: código real de julho de 2026 no monorepo `~/zappiq-main` (`apps/web`, `apps/api`, `packages/shared/src/planConfig.ts`, `Sidebar.tsx`), auditoria da landing atual e do site live, e pesquisa verificada de melhores práticas (posicionamento agêntico, CRO, SEO/GEO, pricing, concorrentes BR).
@@ -36,7 +59,7 @@ Produtos cliente-facing: Conversas, Contatos, CRM, Agenda, Tarefas, Zap Impulso,
 
 ## Status e prontidão
 
-- **Base factual da plataforma (o que faz, quanto custa, como se chama):** verificada contra o código, confiança 9/10. Planos ativos Lite R$ 247, Growth R$ 497, Scale R$ 1.497, Enterprise sob consulta. Starter e Business descontinuados.
+- **Base factual da plataforma (o que faz, quanto custa, como se chama):** a parte de preço e nome de plano segue válida. A parte de capacidade do Treinar IA e da Qualidade da IA foi refutada pela auditoria de 14/09/2026 (ver o aviso no topo): a nota de confiança 9/10 não vale mais para ela. Planos ativos Lite R$ 247, Growth R$ 497, Scale R$ 1.497, Enterprise sob consulta. Starter e Business descontinuados.
 - **Higiene de copy:** zero travessão, zero codinome antigo como marca, zero hype proibido, status honesto por recurso (parcial e "em breve" marcados).
 - **Bloqueio para publicar:** 15 decisões suas (ver `DECISOES-PARA-O-FUNDADOR.md`), das quais 8 são claims de fato com risco jurídico já marcados `[confirmar]` (Meta Business Partner, dados no Brasil, SLA, comparativos nominais). Nada com `[confirmar]` vai ao ar sem sign-off.
 

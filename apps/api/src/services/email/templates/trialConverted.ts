@@ -71,7 +71,7 @@ export function renderTrialConvertedEmail(input: TrialConvertedEmailInput): Rend
               <td style="padding:32px;">
                 <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#374151;">
                   Sua conta foi ativada. <strong>${escapeHtml(orgName)}</strong> agora é uma
-                  cliente oficial da ZappIQ e sua IA está 100% operacional.
+                  cliente oficial da ZappIQ, com a assinatura ativa.
                 </p>
 
                 <!-- Resumo do plano -->
@@ -96,16 +96,16 @@ export function renderTrialConvertedEmail(input: TrialConvertedEmailInput): Rend
                   <div style="padding:16px;background:#f8faf9;border-radius:8px;margin-bottom:12px;">
                     <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#4f46e5;">1. Revisar suas integrações</p>
                     <p style="margin:4px 0 0;font-size:14px;line-height:1.5;color:#374151;">
-                      Verifique se WhatsApp, e-mail e APIs estão conectadas corretamente
-                      em Settings > Integrations.
+                      Confira se WhatsApp, Instagram e integrações estão conectados
+                      em Configurações, abas Canais e Integrações.
                     </p>
                   </div>
 
                   <div style="padding:16px;background:#f8faf9;border-radius:8px;margin-bottom:12px;">
                     <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#4f46e5;">2. Ativar notificações para sua equipe</p>
                     <p style="margin:4px 0 0;font-size:14px;line-height:1.5;color:#374151;">
-                      Invite seus colegas em Settings > Team. Notificações em tempo real
-                      ajudam a pegar gaps de resposta rápido.
+                      Cadastre seus colegas em Configurações, aba Equipe. Assim mais gente
+                      acompanha as conversas que precisam de humano.
                     </p>
                   </div>
 
@@ -171,10 +171,10 @@ export function renderTrialConvertedEmail(input: TrialConvertedEmailInput): Rend
     'Próximos passos:',
     '',
     '1. Revisar suas integrações',
-    'Verifique WhatsApp, e-mail e APIs em Settings > Integrations.',
+    'Confira WhatsApp, Instagram e integrações em Configurações, abas Canais e Integrações.',
     '',
     '2. Ativar notificações para sua equipe',
-    'Invite colegas em Settings > Team.',
+    'Cadastre seus colegas em Configurações, aba Equipe.',
     '',
     '3. Agendar onboarding (opcional)',
     'Se quiser suporte especializado, responda este e-mail.',
