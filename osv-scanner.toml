@@ -2,9 +2,11 @@
 # Exceções do portão de dependências (osv-scanner)
 # ---------------------------------------------------------------------------
 # Este arquivo é o ÚNICO lugar onde um alerta de dependência pode ser aceito.
-# Nada de `|| true` no CI: se um alerta novo aparecer, o job `osv` do ci.yml
-# fica vermelho até alguém corrigir a dependência ou escrever a exceção aqui,
-# com id, motivo, dono e prazo.
+# Nada de `|| true` no CI: o job `osv` do ci.yml compara a base com o branch da
+# PR e fica vermelho quando a PR INTRODUZ vulnerabilidade, até alguém corrigir
+# a dependência ou escrever a exceção aqui, com id, motivo, dono e prazo.
+# O passivo que já existe é cobrado pelo `pnpm audit --prod --audit-level=high`
+# e pelo `pip-audit --strict`, no mesmo CI e também sem `|| true`.
 #
 # Regras da casa:
 #   1. Toda entrada tem `reason` dizendo POR QUE o alerta não se aplica (ou o
@@ -34,16 +36,12 @@
 # mexa lá.
 # ═══════════════════════════════════════════════════════════════════════════
 
-# ── Dependências de desenvolvimento ────────────────────────────────────────
-# O portão existe para proteger o que roda em produção. O osv-scanner lê o
-# lockfile inteiro, inclusive o que só existe na máquina de quem desenvolve e
-# no runner do CI (vitest, tsx, tipos, turbo). Esses pacotes não atendem
-# requisição de cliente nenhum. O `pnpm audit --prod` do mesmo CI já aplica o
-# mesmo recorte.
-[[PackageOverrides]]
-group = "dev"
-ignore = true
-reason = "Dependência só de desenvolvimento e de CI: não vai para a imagem da API nem para o build do web. O recorte de produção é coberto pelo pnpm audit --prod e pelo pip-audit do requirements.txt."
+# Nota de 14/09/2026: houve uma tentativa de recortar as dependências só de
+# desenvolvimento com `[[PackageOverrides]] group = "dev"`. Na execução real do
+# scanner o recorte não pegou (vitest, vite, esbuild e turbo continuaram na
+# saída), então a regra foi removida em vez de ficar aqui fingindo que filtra.
+# O recorte de produção é feito pelo `pnpm audit --prod` e pelo `pip-audit`,
+# ambos no mesmo CI e ambos falhando de verdade.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Exceções abertas em 14/09/2026

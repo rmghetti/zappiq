@@ -115,19 +115,36 @@ jobs:
           pip install pip-audit --quiet
           pip-audit -r services/rag/requirements.txt --strict
 
-  # -- OSV-Scanner: portao unico de dependencia -------------------
+  # -- OSV-Scanner: nenhuma vulnerabilidade NOVA entra pela PR ----
   # O pnpm audit le so o registro do npm e o pip-audit so o PyPI. O
   # osv-scanner le a base OSV.dev, que agrega GitHub Advisories, PySec e
-  # outras fontes, e enxerga o mesmo lockfile pelos dois ecossistemas.
+  # outras fontes, e enxerga o mesmo repositorio pelos dois ecossistemas.
   #
-  # fail-on-vuln fica ligado: alerta novo deixa o CI vermelho ate alguem
-  # corrigir a dependencia ou escrever a excecao em osv-scanner.toml (id,
-  # motivo, dono e prazo). upload-sarif desligado de proposito para o job nao
-  # depender de Code Scanning estar habilitado; o resultado sai no log e no
-  # artefato do job.
+  # POR QUE O MODO DE PR, E NAO A VARREDURA COMPLETA: a varredura completa foi
+  # medida neste mesmo repositorio em 14/09/2026 e devolveu 103 alertas em 23
+  # pacotes. Boa parte nao e acionavel aqui:
+  #   - dependencias de desenvolvimento (vitest, vite, esbuild, turbo), que nao
+  #     atendem requisicao de cliente nenhuma;
+  #   - o resolvedor de requirements.txt do osv-scanner escolhe a MENOR versao
+  #     que satisfaz cada restricao transitiva (numpy 1.19.3, aiohttp 3.9.5),
+  #     e nao a que o pip instala de fato. O pip-audit, que resolve como o pip,
+  #     devolve zero para o mesmo arquivo.
+  # Transformar isso num portao exigiria uma lista de ~100 excecoes, que e o
+  # mesmo que nao ter portao. O modo de PR compara a base com o branch e falha
+  # quando a PR INTRODUZ vulnerabilidade, que e o momento em que alguem pode
+  # agir. O passivo que ja existe fica com o pnpm audit --prod --audit-level
+  # =high e com o pip-audit --strict, que agora falham de verdade.
+  #
+  # Excecao aceita mora em osv-scanner.toml, com id, motivo, dono e prazo. Na
+  # execucao de 14/09/2026 o scanner confirmou o arquivo: "Filtered 18
+  # vulnerabilities from output".
+  #
+  # upload-sarif desligado para o job nao depender de Code Scanning habilitado;
+  # o resultado sai no log e no artefato do job.
   osv:
     name: Dependency scan (OSV)
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
+    if: github.event_name == 'pull_request'
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
     permissions:
       actions: read
       contents: read
