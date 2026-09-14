@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+// A213: a chave do rascunho do cadastro (que já guardou senha em texto) sai
+// do navegador no login e no logout.
+import { armazenamentoDoNavegador, limparRascunho } from '../lib/onboardingDraft';
 
 interface User {
   id: string;
@@ -39,9 +42,19 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (data: { email: string; password: string; name: string; organizationName: string }) => Promise<void>;
   logout: () => void;
   fetchMe: () => Promise<void>;
+}
+
+/**
+ * Apaga a chave 'zappiq_onboarding'. Ela nasceu como backup de depuração,
+ * nunca foi lida e guardava password e passwordConfirm em texto claro. Hoje
+ * ela é o rascunho do questionário, sem senha, e some quando o cliente entra
+ * (o rascunho já cumpriu o papel) ou sai.
+ */
+function limparRascunhoDoNavegador(): void {
+  const storage = armazenamentoDoNavegador();
+  if (storage) limparRascunho(storage);
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -52,7 +65,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   // ── PR #101 (Onda 2A) — P0 #3 AUTH BYPASS KILL ──────────────────────────
   // Mock fallback REMOVIDO. authStore agora propaga erro real do backend
-  // /api/auth/login (e /register) pra UI. Antes: qualquer credencial fake
+  // /api/auth/login pra UI. Antes: qualquer credencial fake
   // logava com role ADMIN via mock — vulnerabilidade crítica de segurança.
   // Backend já existe e está completo (apps/api/src/routes/auth.ts) com
   // bcrypt + JWT + Prisma. Se /api/auth/login falhar (rede/server), erro
@@ -64,16 +77,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     localStorage.setItem('zappiq_token', res.token);
     if (res.refreshToken) localStorage.setItem('zappiq_refresh_token', res.refreshToken);
-    set({ user: res.user, isAuthenticated: true, isLoading: false });
-  },
-
-  register: async (data) => {
-    const res = await api.post('/api/auth/register', data);
-    if (!res?.token || !res?.user) {
-      throw new Error('Resposta inválida do servidor de cadastro');
-    }
-    localStorage.setItem('zappiq_token', res.token);
-    if (res.refreshToken) localStorage.setItem('zappiq_refresh_token', res.refreshToken);
+    limparRascunhoDoNavegador();
     set({ user: res.user, isAuthenticated: true, isLoading: false });
   },
 
@@ -81,6 +85,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem('zappiq_token');
     localStorage.removeItem('zappiq_refresh_token');
     localStorage.removeItem('zappiq_user');
+    limparRascunhoDoNavegador();
     set({ user: null, organization: null, isAuthenticated: false, isLoading: false });
     window.location.href = '/login';
   },

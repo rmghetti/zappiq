@@ -8,6 +8,25 @@ import { formatPhone } from '../../lib/masks';
 import { QuotaBehaviorStep } from '../../components/onboarding/QuotaBehaviorStep';
 import { SurveyIntroModal } from '../../components/onboarding/SurveyIntroModal';
 import { examplePlaceholder } from '../../lib/surveyExamples';
+// A213 e A176: a senha nunca vai para o navegador, e o rascunho do
+// questionário volta quando o lead volta.
+import {
+  armazenamentoDoNavegador,
+  lerRascunho,
+  limparRascunho,
+  salvarRascunho,
+} from '../../lib/onboardingDraft';
+// A242: o funil entre confirmar o cadastro e criar a organização passa a
+// ter evento em cada passo.
+import { track } from '../../lib/analytics';
+import {
+  EVENTO_CONCLUSAO,
+  EVENTO_ERRO,
+  EVENTO_PASSO,
+  motivoDoErro,
+  propsDoErro,
+  propsDoPasso,
+} from '../../lib/onboardingFunnel';
 
 import {
   GLOBAL_SURVEY_BLOCKS as RAW_GLOBAL_BLOCKS,
@@ -350,9 +369,32 @@ export default function OnboardingPage() {
   // e pula direto para Step 1 (Segmento).
   useEffect(() => {
     setMounted(true);
+    // A176: o rascunho volta ANTES da pré-população. A pré-população (nome,
+    // e-mail, empresa da sessão autenticada) roda depois e prevalece, que é
+    // o que queremos: o rascunho traz as respostas, a sessão traz a conta.
+    const guardado = lerRascunho(armazenamentoDoNavegador() ?? { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+    if (guardado) {
+      setForm((prev) => ({ ...prev, ...(guardado as Record<string, any>) }));
+    }
     void detectAndPrefillForm();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A176 — rascunho de verdade, no navegador. Antes disto nada ficava, e
+  // fechar a aba perdia as cerca de 200 respostas. A senha NUNCA entra
+  // (A213): quem decide isso é sanitizarRascunho, com teste próprio.
+  useEffect(() => {
+    if (!mounted) return;
+    const storage = armazenamentoDoNavegador();
+    if (storage) salvarRascunho(form as Record<string, unknown>, storage);
+  }, [mounted, form]);
+
+  // A242 — funil medido. Sem estes eventos, "parou no passo 3" e "nunca
+  // chegou" eram indistinguíveis no admin.
+  useEffect(() => {
+    if (!mounted) return;
+    track(EVENTO_PASSO, propsDoPasso(step, STEPS.length));
+  }, [mounted, step]);
 
   async function detectAndPrefillForm() {
     try {
@@ -658,7 +700,11 @@ export default function OnboardingPage() {
           // FIX: redireciona pra /login com flag explicando o motivo. La cliente
           // entra via Google/Magic Link, /auth/login-callback faz passwordless
           // exchange (existe User Prisma -> 200 com JWT), e cai em /dashboard.
-          localStorage.setItem('zappiq_onboarding', JSON.stringify(form));
+          // A213: o rascunho fica, a senha não. salvarRascunho tira
+          // password, passwordConfirm e e-mail antes de gravar.
+          const storage409 = armazenamentoDoNavegador();
+          if (storage409) salvarRascunho(form as Record<string, unknown>, storage409);
+          track(EVENTO_ERRO, propsDoErro(step, motivoDoErro(409)));
           router.push('/login?reason=already_registered');
           return;
         }
@@ -671,8 +717,10 @@ export default function OnboardingPage() {
             .map((d: { field: string; message: string }) => `${d.field}: ${d.message}`)
             .join(' · ');
           console.error('[onboarding] Validation failed:', data.details, 'Payload:', payload);
+          track(EVENTO_ERRO, propsDoErro(step, motivoDoErro(400)));
           throw new Error(`Faltou preencher: ${fieldErrors}`);
         }
+        track(EVENTO_ERRO, propsDoErro(step, motivoDoErro(res.status)));
         throw new Error(data?.error || `Erro ${res.status} ao finalizar onboarding`);
       }
 
@@ -681,11 +729,20 @@ export default function OnboardingPage() {
       if (data.token) localStorage.setItem('zappiq_token', data.token);
       if (data.refreshToken) localStorage.setItem('zappiq_refresh_token', data.refreshToken);
       if (data.organization?.name) localStorage.setItem('zappiq_org_name', data.organization.name);
-      // Backup do form completo (debug + retomada se algo falhar)
-      localStorage.setItem('zappiq_onboarding', JSON.stringify(form));
+      // A213: a organização nasceu e o cliente está logado. O rascunho
+      // cumpriu o papel e a chave sai do navegador agora, não "algum dia".
+      const storageOk = armazenamentoDoNavegador();
+      if (storageOk) limparRascunho(storageOk);
+
+      track(EVENTO_CONCLUSAO, { step, total_steps: STEPS.length });
 
       router.push('/dashboard');
     } catch (err: any) {
+      // Só entra aqui o que NÃO teve status próprio (falha de rede, por
+      // exemplo). Os erros com status já registraram o evento acima.
+      if (!(err instanceof Error) || !/^Erro \d{3}|^Faltou preencher/.test(err.message)) {
+        track(EVENTO_ERRO, propsDoErro(step, motivoDoErro(null, err)));
+      }
       setError(err?.message || 'Erro ao salvar configurações. Tente novamente.');
     } finally {
       setLoading(false);

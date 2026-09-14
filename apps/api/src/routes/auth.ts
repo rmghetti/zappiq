@@ -6,91 +6,36 @@ import { logger } from '../utils/logger.js';
 import { signToken, signRefreshToken, verifyRefreshToken } from '../utils/token.js';
 import { validate } from '../middleware/validate.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { seedDefaultPipelineStages } from '../services/pipelineStageProvisioningService.js';
 import { computeAccessState } from '../services/accountAccess.js'; // Trial Enforcement — paywall p/ o web
 
 const router = Router();
 
 // ── Schemas ─────────────────────────────────────
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  name: z.string().min(2),
-  organizationName: z.string().min(2),
-});
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
 
-// ── POST /api/auth/register ─────────────────────
-router.post('/register', validate(registerSchema), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { email, password, name, organizationName } = req.body;
-
-    // Check if email exists
-    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (existing) {
-      res.status(409).json({ error: 'Email already registered' });
-      return;
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    // Create organization + user in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      const slug = organizationName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-
-      const org = await tx.organization.create({
-        data: {
-          name: organizationName,
-          slug: `${slug}-${Date.now().toString(36)}`,
-          plan: 'STARTER',
-          settings: {},
-        },
-      });
-
-      const user = await tx.user.create({
-        data: {
-          email: email.toLowerCase(),
-          name,
-          passwordHash,
-          role: 'ADMIN',
-          organizationId: org.id,
-        },
-        select: { id: true, email: true, name: true, role: true, organizationId: true },
-      });
-
-      // Fix W3.5 — semeia os 7 PipelineStage default na MESMA transação.
-      // Antes os estágios só existiam via backfill da migração 20260524, então
-      // orgs criadas depois nasciam SEM estágios e o sync de stageId em
-      // PUT /deals/:id/stage falhava em silêncio. Idempotente por org.
-      await seedDefaultPipelineStages(org.id, tx);
-
-      return { org, user };
-    });
-
-    const token = signToken(result.user, result.org.id);
-    const refreshToken = signRefreshToken(result.user.id);
-
-    logger.info(`[Auth] New organization registered: ${result.org.id} (${organizationName})`);
-
-    res.status(201).json({
-      token,
-      refreshToken,
-      user: {
-        id: result.user.id,
-        email: result.user.email,
-        name: result.user.name,
-        role: result.user.role,
-        organizationId: result.org.id,
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
-});
+/*
+ * A214 (14/09/2026) — POST /api/auth/register foi REMOVIDA.
+ *
+ * Era uma segunda porta de cadastro, pública (com limitador de 10 por 15
+ * minutos) e sem nenhum uso na tela. Ela criava organização com plano
+ * STARTER e settings vazio e parava aí: não criava o agente live, não criava
+ * a base de conhecimento, não semeava o trial, não ligava o signup nem o
+ * espelho no CRM. Quem entrasse por ela caía no fallback do promptEngine com
+ * configurações vazias e ficava sem a Qualidade da IA.
+ *
+ * Nenhuma das 15 organizações veio daqui e nenhum componente do apps/web
+ * chamava a rota. O cadastro de verdade é POST /api/onboarding/complete, que
+ * cria organização, usuário, agente, base, estágios do funil e o espelho no
+ * CRM na mesma transação. Ter duas portas era ter duas definições de "conta
+ * pronta"; agora é uma.
+ *
+ * O portão está em auth.register.test.ts: se alguém remontar a rota, o CI
+ * quebra.
+ */
 
 // ── POST /api/auth/login ────────────────────────
 router.post('/login', validate(loginSchema), async (req: Request, res: Response, next: NextFunction) => {

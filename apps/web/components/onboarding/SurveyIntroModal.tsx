@@ -106,10 +106,11 @@ export function SurveyIntroModal({ onClose }: { onClose: () => void }) {
 
         <Bloco icon={<Coffee size={16} />} titulo="Reserve um tempo seguido">
           <p>
-            Dá pra avançar as telas e pular as perguntas que não se aplicam. Só não feche a aba antes de
-            terminar: as respostas ainda não ficam salvas até o envio do cadastro. Responda o que der,
+            Dá pra avançar as telas e pular as perguntas que não se aplicam. Se você fechar a aba, o que
+            já respondeu volta quando abrir o cadastro de novo <strong>neste mesmo navegador</strong>. Em
+            outro aparelho, ou depois de limpar o navegador, o questionário recomeça. Responda o que der,
             finalize, e complete o resto depois na aba <strong>Treinar IA</strong> do painel, onde cada
-            resposta é gravada sozinha. Sua IA não precisa estar perfeita no primeiro dia.
+            resposta é gravada sozinha na sua conta. Sua IA não precisa estar perfeita no primeiro dia.
           </p>
         </Bloco>
 
