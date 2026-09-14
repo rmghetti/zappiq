@@ -46,10 +46,18 @@ import { testMessageSchema, buildPlaygroundResult } from './aiTraining.playgroun
 import {
   textDocSchema,
   isEditableDocument,
-  planTextDocRagSync,
   normalizeQaUpdate,
   isUploadAllowed,
 } from './aiTraining.text.util.js';
+import {
+  MENSAGEM_TITULO_REPETIDO,
+  sourceDoDocumento,
+  sourceLegado,
+  nomeDeArquivoDoUpload,
+  donosDoSourceLegado,
+  trechosDoDocumento,
+  type DocumentoParaSource,
+} from './aiTraining.documents.util.js';
 import {
   appointmentTypeSchema,
   schedulingConfigSchema,
@@ -228,6 +236,123 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
 // DOCUMENTOS
 // ═══════════════════════════════════════════════════════════
 
+// Campos do documento que a tela lista. `status` e `motivo` existem desde a
+// migração 20260914000040: o documento nasce em 'processando' antes da
+// ingestão e termina em 'pronto' ou 'falhou' com o motivo em português.
+const SELECT_DOCUMENTO = {
+  id: true,
+  title: true,
+  sourceType: true,
+  sourceUrl: true,
+  status: true,
+  motivo: true,
+  createdAt: true,
+} as const;
+
+/**
+ * Recusa título repetido na mesma organização (409).
+ *
+ * Sem isto, dois documentos com o mesmo título dividiam o mesmo lugar no vetor
+ * e um apagava os trechos do outro (achado A001). Agora o source é o id, mas o
+ * título continua sendo como o cliente reconhece o documento na tela: dois
+ * "Proposta.pdf" seriam indistinguíveis para ele.
+ */
+async function garantirTituloLivre(
+  orgId: string,
+  title: string,
+  ignorarId?: string,
+): Promise<boolean> {
+  // `count` e nao `findFirst`: o findFirst desta rota e o do tenant scoping, e
+  // misturar os dois deixa o proposito de cada consulta ilegivel.
+  const repetidos = await prisma.kBDocument.count({
+    where: {
+      title,
+      knowledgeBase: { organizationId: orgId },
+      ...(ignorarId ? { NOT: { id: ignorarId } } : {}),
+    },
+  });
+  return repetidos === 0;
+}
+
+/** Os outros documentos da organização, para saber quem divide qual source. */
+async function outrosDocumentos(orgId: string, exceto?: string): Promise<DocumentoParaSource[]> {
+  return prisma.kBDocument.findMany({
+    where: {
+      knowledgeBase: { organizationId: orgId },
+      ...(exceto ? { NOT: { id: exceto } } : {}),
+    },
+    select: { id: true, title: true, sourceType: true, sourceUrl: true },
+  });
+}
+
+/**
+ * Remove do vetor os trechos de um documento.
+ *
+ * Apaga o source novo (doc-<id>) sempre. O source antigo (título, ou
+ * hostname+caminho para URL) só sai quando NENHUM outro documento da base
+ * divide ele: apagar o source por título era exatamente o que derrubava o
+ * conhecimento do documento vizinho (achado A001). Enquanto o
+ * reprocessamento do RAG não roda, os trechos antigos ainda estão lá, e
+ * deixá-los para trás seria dado do cliente indexado depois de ele mandar
+ * apagar (LGPD Art. 18).
+ */
+async function removerDoVetor(orgId: string, doc: DocumentoParaSource): Promise<void> {
+  const novo = sourceDoDocumento(doc.id);
+  await ragService
+    .deleteDocument(orgId, novo)
+    .catch((err: any) => logger.warn(`[AITraining] RAG remove doc falhou: ${err.message}`));
+
+  const legado = sourceLegado(doc);
+  if (legado === novo) return;
+
+  const donos = donosDoSourceLegado(await outrosDocumentos(orgId, doc.id));
+  if ((donos.get(legado) ?? 0) > 0) {
+    logger.info(
+      `[AITraining] source antigo "${legado}" mantido: outro documento da org ainda usa`,
+    );
+    return;
+  }
+  await ragService
+    .deleteDocument(orgId, legado)
+    .catch((err: any) => logger.warn(`[AITraining] RAG remove source antigo falhou: ${err.message}`));
+}
+
+/**
+ * Grava o desfecho da ingestão no documento e responde.
+ *
+ * Em caso de falha o documento FICA na lista, marcado como 'falhou' e com o
+ * motivo: antes disso o cliente via um alerta que sumia, sem linha na base,
+ * sem motivo e sem botão para tentar de novo (achados A004 e A142).
+ */
+async function concluirIngestao(
+  res: Response,
+  orgId: string,
+  docId: string,
+  erro: unknown | null,
+) {
+  if (!erro) {
+    const documento = await prisma.kBDocument.update({
+      where: { id: docId },
+      data: { status: 'pronto', motivo: null },
+      select: SELECT_DOCUMENTO,
+    });
+    const readiness = await refreshAIReadiness(orgId).catch(() => null);
+    res.status(201).json({ document: documento, readiness });
+    return;
+  }
+
+  const falha = ragService.falhaDeIngestao(erro);
+  logger.warn(`[AITraining] ingestão falhou (${falha.status}): ${(erro as any)?.message}`);
+  const documento = await prisma.kBDocument
+    .update({
+      where: { id: docId },
+      data: { status: 'falhou', motivo: falha.mensagem },
+      select: SELECT_DOCUMENTO,
+    })
+    .catch(() => null);
+  res.status(falha.status).json({ error: falha.mensagem, document: documento });
+}
+
 // Contagem de chunks por source no vector store (mesma instância Postgres).
 // É o que torna o status por item HONESTO: "indexado" só se chunks > 0 de fato.
 async function ragChunkCounts(orgId: string): Promise<Map<string, number>> {
@@ -247,23 +372,19 @@ router.get('/documents', async (req: Request, res: Response, next: NextFunction)
     const docs = await prisma.kBDocument.findMany({
       where: { knowledgeBase: { organizationId: orgId } },
       orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        sourceType: true,
-        sourceUrl: true,
-        createdAt: true,
-      },
+      select: SELECT_DOCUMENTO,
     });
-    const counts = await ragChunkCounts(orgId).catch(() => new Map<string, number>());
+    // `null` em vez de Map vazio: uma consulta que falha não pode pintar a base
+    // inteira de "não indexado" e mandar o cliente reenviar o que já está lá
+    // (achado A017).
+    const counts = await ragChunkCounts(orgId).catch((err: any) => {
+      logger.warn(`[AITraining] contagem de trechos falhou: ${err?.message}`);
+      return null;
+    });
+    const donos = donosDoSourceLegado(docs);
     const documents = docs.map((d) => ({
       ...d,
-      // URLs são ingeridas com source = hostname+pathname (ver urlToSource);
-      // arquivos usam o próprio título/filename.
-      ragChunks:
-        counts.get(
-          d.sourceType === 'url' && d.sourceUrl ? ragService.urlToSource(d.sourceUrl) : d.title,
-        ) ?? 0,
+      ragChunks: trechosDoDocumento(d, counts, donos),
     }));
     res.json({ documents });
   } catch (err) {
@@ -284,39 +405,50 @@ router.post(
         return;
       }
 
+      // O multer entrega o nome em latin1: sem a correção, "editável" vira
+      // "editaÌvel" no título, no vetor e na lista (achado A014).
+      const title = nomeDeArquivoDoUpload(file.originalname);
+
+      if (!(await garantirTituloLivre(orgId, title))) {
+        res.status(409).json({ error: MENSAGEM_TITULO_REPETIDO });
+        return;
+      }
+
       // Garante existência da knowledgeBase (criada no onboarding, mas seguro).
       const kb = await ensureKnowledgeBase(orgId);
 
-      // Delega ingestão ao serviço RAG (faz chunking + embedding).
-      await ragService.ingestDocument(orgId, {
-        filename: file.originalname,
-        content: file.buffer,
-        mimeType: file.mimetype,
-      });
-
-      // Registra no Postgres (canônico). O conteúdo textual fica no RAG;
-      // aqui guardamos metadata para listagem e gerência pelo cliente.
+      // O documento nasce ANTES da ingestão. Assim o source do vetor pode ser
+      // o id (único por definição) e uma falha deixa rastro na tela em vez de
+      // um alerta que some (achados A001, A017b e A142).
       const doc = await prisma.kBDocument.create({
         data: {
-          title: file.originalname,
+          title,
           sourceType: file.mimetype,
           content: '', // chunks ficam no vector store; contrato mínimo aqui
+          status: 'processando',
           knowledgeBaseId: kb.id,
         },
-        select: { id: true, title: true, sourceType: true, createdAt: true },
+        select: SELECT_DOCUMENTO,
       });
 
-      // Recompute score — feedback imediato pro cliente.
-      const readiness = await refreshAIReadiness(orgId).catch(() => null);
-
-      logger.info(
-        `[AITraining] Doc ingestado: ${file.originalname} (${file.size}b) org=${orgId}`,
-      );
+      let erro: unknown = null;
+      try {
+        await ragService.ingestDocument(orgId, {
+          filename: title,
+          content: file.buffer,
+          mimeType: file.mimetype,
+          source: sourceDoDocumento(doc.id),
+          metadata: { titulo: title },
+        });
+        logger.info(`[AITraining] Doc ingestado: ${title} (${file.size}b) org=${orgId}`);
+      } catch (falha) {
+        erro = falha;
+      }
 
       await logTraining(req, 'kb.document.create', 'kb_document', doc.id,
-        `Documento enviado: "${file.originalname}"`);
+        `Documento enviado: "${title}"`);
 
-      res.status(201).json({ document: doc, readiness });
+      await concluirIngestao(res, orgId, doc.id, erro);
     } catch (err: any) {
       logger.warn(`[AITraining] Upload falhou: ${err.message}`);
       next(err);
@@ -334,9 +466,14 @@ router.post(
       const orgId = req.user!.organizationId;
       const { url } = req.body as { url: string };
 
-      const kb = await ensureKnowledgeBase(orgId);
+      // A mesma URL duas vezes duplicava trechos na base e disputava o top 5
+      // com o conteúdo bom (achado A012).
+      if (!(await garantirTituloLivre(orgId, url))) {
+        res.status(409).json({ error: MENSAGEM_TITULO_REPETIDO });
+        return;
+      }
 
-      await ragService.ingestUrl(orgId, url);
+      const kb = await ensureKnowledgeBase(orgId);
 
       const doc = await prisma.kBDocument.create({
         data: {
@@ -344,15 +481,25 @@ router.post(
           sourceType: 'url',
           sourceUrl: url,
           content: '',
+          status: 'processando',
           knowledgeBaseId: kb.id,
         },
-        select: { id: true, title: true, sourceType: true, sourceUrl: true, createdAt: true },
+        select: SELECT_DOCUMENTO,
       });
+
+      let erro: unknown = null;
+      try {
+        await ragService.ingestUrl(orgId, url, {
+          source: sourceDoDocumento(doc.id),
+          titulo: url,
+        });
+      } catch (falha) {
+        erro = falha;
+      }
 
       await logTraining(req, 'kb.url.create', 'kb_document', doc.id, `URL ingerida: ${url}`);
 
-      const readiness = await refreshAIReadiness(orgId).catch(() => null);
-      res.status(201).json({ document: doc, readiness });
+      await concluirIngestao(res, orgId, doc.id, erro);
     } catch (err: any) {
       logger.warn(`[AITraining] URL ingest falhou: ${err.message}`);
       next(err);
@@ -372,29 +519,41 @@ router.post(
       const orgId = req.user!.organizationId;
       const { title, content } = req.body as { title: string; content: string };
 
-      const kb = await ensureKnowledgeBase(orgId);
+      if (!(await garantirTituloLivre(orgId, title))) {
+        res.status(409).json({ error: MENSAGEM_TITULO_REPETIDO });
+        return;
+      }
 
-      await ragService.ingestDocument(orgId, {
-        filename: title,
-        content: Buffer.from(content, 'utf-8'),
-        mimeType: 'text/plain',
-      });
+      const kb = await ensureKnowledgeBase(orgId);
 
       const doc = await prisma.kBDocument.create({
         data: {
           title,
           sourceType: 'text',
           content, // texto colado é curto: guardamos o canônico aqui também
+          status: 'processando',
           knowledgeBaseId: kb.id,
         },
-        select: { id: true, title: true, sourceType: true, createdAt: true },
+        select: SELECT_DOCUMENTO,
       });
+
+      let erro: unknown = null;
+      try {
+        await ragService.ingestDocument(orgId, {
+          filename: title,
+          content: Buffer.from(content, 'utf-8'),
+          mimeType: 'text/plain',
+          source: sourceDoDocumento(doc.id),
+          metadata: { titulo: title },
+        });
+      } catch (falha) {
+        erro = falha;
+      }
 
       await logTraining(req, 'kb.text.create', 'kb_document', doc.id,
         `Texto colado: "${title}"`);
 
-      const readiness = await refreshAIReadiness(orgId).catch(() => null);
-      res.status(201).json({ document: doc, readiness });
+      await concluirIngestao(res, orgId, doc.id, erro);
     } catch (err: any) {
       logger.warn(`[AITraining] Texto colado falhou: ${err.message}`);
       next(err);
@@ -449,7 +608,7 @@ router.put(
 
       const existing = await prisma.kBDocument.findFirst({
         where: { id, knowledgeBase: { organizationId: orgId } },
-        select: { id: true, title: true, sourceType: true, content: true },
+        select: { id: true, title: true, sourceType: true, sourceUrl: true, content: true },
       });
       if (!existing) {
         res.status(404).json({ error: 'Documento não encontrado' });
@@ -461,27 +620,41 @@ router.put(
         });
         return;
       }
+      if (title !== existing.title && !(await garantirTituloLivre(orgId, title, id))) {
+        res.status(409).json({ error: MENSAGEM_TITULO_REPETIDO });
+        return;
+      }
 
       const doc = await prisma.kBDocument.update({
         where: { id },
-        data: { title, content },
-        select: { id: true, title: true, sourceType: true, createdAt: true },
+        data: { title, content, status: 'pronto', motivo: null },
+        select: SELECT_DOCUMENTO,
       });
 
-      // Sincroniza o vector store com o estado final (best-effort, igual ao Q&A).
-      const sync = planTextDocRagSync(existing.title, title);
-      if (sync.deleteSource) {
-        await ragService
-          .deleteDocument(orgId, sync.deleteSource)
-          .catch((err: any) =>
-            logger.warn(`[AITraining] RAG remove texto (título antigo) falhou: ${err.message}`),
-          );
+      // O source é doc-<id>, então mudar o título não move mais os trechos de
+      // lugar: a reingestão substitui o conteúdo no mesmo source. O que sai é
+      // o source ANTIGO (título), que ainda existe enquanto o reprocessamento
+      // do RAG não roda, e só quando ninguém mais divide ele (achado A001).
+      const legado = sourceLegado({ ...existing, sourceType: existing.sourceType });
+      if (legado !== sourceDoDocumento(id)) {
+        const donos = donosDoSourceLegado(await outrosDocumentos(orgId, id));
+        if ((donos.get(legado) ?? 0) === 0) {
+          await ragService
+            .deleteDocument(orgId, legado)
+            .catch((err: any) =>
+              logger.warn(`[AITraining] RAG remove source antigo do texto falhou: ${err.message}`),
+            );
+        }
       }
+
+      // Best-effort, igual ao Q&A: o conteúdo já está salvo no Postgres.
       await ragService
         .ingestDocument(orgId, {
-          filename: sync.ingestSource,
+          filename: title,
           content: Buffer.from(content, 'utf-8'),
           mimeType: 'text/plain',
+          source: sourceDoDocumento(id),
+          metadata: { titulo: title },
         })
         .catch((err: any) =>
           logger.warn(`[AITraining] RAG re-sync texto (update) falhou: ${err.message}`),
@@ -509,7 +682,7 @@ router.delete('/documents/:id', async (req: Request, res: Response, next: NextFu
     // Tenant scoping: só apaga se o doc pertence à KB da org.
     const doc = await prisma.kBDocument.findFirst({
       where: { id, knowledgeBase: { organizationId: orgId } },
-      select: { id: true, title: true },
+      select: { id: true, title: true, sourceType: true, sourceUrl: true },
     });
     if (!doc) {
       res.status(404).json({ error: 'Documento não encontrado' });
@@ -518,10 +691,9 @@ router.delete('/documents/:id', async (req: Request, res: Response, next: NextFu
 
     await prisma.kBDocument.delete({ where: { id } });
 
-    // Remove do RAG também (best-effort, por filename estável = título do doc)
-    await ragService
-      .deleteDocument(orgId, doc.title)
-      .catch((err: any) => logger.warn(`[AITraining] RAG remove doc falhou: ${err.message}`));
+    // Apaga os trechos DESTE documento. Nunca os de outro que compartilhe o
+    // título, que era o defeito do CMJ em 21/08 (achado A001).
+    await removerDoVetor(orgId, doc);
 
     await logTraining(req, 'kb.document.delete', 'kb_document', id,
       `Documento removido: "${doc.title}"`);
@@ -615,6 +787,10 @@ router.post('/qa', validate(qaSchema), async (req: Request, res: Response, next:
           filename: `qa-${pair.id}.txt`,
           content: Buffer.from(content),
           mimeType: 'text/plain',
+          // A pergunta vai no cabeçalho de TODOS os trechos: resposta longa é
+          // fatiada, e sem isso o trecho 2 era pedaço solto que não casava com a
+          // pergunta do cliente (achado A011).
+          metadata: { titulo: 'Perguntas e respostas', pergunta: question },
         },
         qaIngestOptions(pair),
       )
@@ -666,6 +842,7 @@ router.put('/qa/:id', validate(qaSchema.partial()), async (req: Request, res: Re
             filename: `qa-${pair.id}.txt`,
             content: Buffer.from(content),
             mimeType: 'text/plain',
+            metadata: { titulo: 'Perguntas e respostas', pergunta: pair.question },
           },
           qaIngestOptions(pair),
         )
@@ -779,6 +956,7 @@ router.put('/survey', validate(surveySchema), async (req: Request, res: Response
         filename: currentFilename,
         content: Buffer.from(kb),
         mimeType: 'text/plain',
+        metadata: { titulo: 'Questionário de qualificação' },
       })
       .catch((err: any) => logger.warn(`[AITraining] RAG re-sync survey falhou: ${err.message}`));
 
@@ -940,6 +1118,7 @@ async function resyncSchedulingRag(orgId: string): Promise<void> {
       filename: SCHEDULING_RAG_SOURCE,
       content: Buffer.from(doc, 'utf-8'),
       mimeType: 'text/plain',
+      metadata: { titulo: 'Agendamento' },
     })
     .catch((err: any) => logger.warn(`[AITraining] RAG sync agendamento falhou: ${err.message}`));
 }

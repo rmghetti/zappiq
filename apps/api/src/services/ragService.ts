@@ -317,7 +317,105 @@ export async function search(organizationId: string, query: string, topK = 5): P
 // ── Ingestão ─────────────────────────────────────────────────────────────────
 
 /**
- * Metadata de ingestão que o serviço grava em rag_chunks.metadata e o re-rank
+ * Erro de ingestão que carrega o status HTTP do serviço de indexação.
+ *
+ * Antes o `ingestDocument` lançava `new Error('RAG ingest 415: ...')`, sem
+ * statusCode: o errorHandler, em produção, transformava em 500 "Internal
+ * Server Error" e a tela mostrava "Erro no upload: Internal Server Error"
+ * (achados A003 e A004). A mensagem útil ficava só no log do servidor.
+ */
+export class RagRequestError extends Error {
+  statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.name = 'RagRequestError';
+    this.statusCode = statusCode;
+  }
+}
+
+export const MENSAGEM_RAG_INDISPONIVEL =
+  'Não consegui indexar este conteúdo agora. Tente de novo em alguns minutos.';
+
+export const MENSAGEM_REDE_SOCIAL =
+  'Redes sociais não podem ser lidas automaticamente. Cole o texto do perfil ou da publicação.';
+
+export const MENSAGEM_PAGINA_ILEGIVEL =
+  'Não consegui abrir esta página. Confira o endereço ou cole o conteúdo como texto.';
+
+const MENSAGEM_INGESTAO_GENERICA =
+  'Não consegui indexar este conteúdo. Confira o arquivo e envie de novo.';
+
+/**
+ * Domínios que não entregam conteúdo a um leitor sem sessão: o que volta é
+ * título com entidade HTML e menu de navegação, que entrava no vetor com selo
+ * verde de indexado e competia com o conteúdo bom (achado A012). A comparação
+ * é por domínio, nunca por substring: "meufacebook.com.br" não é o Facebook.
+ */
+const DOMINIOS_REDE_SOCIAL = new Set([
+  'instagram.com',
+  'facebook.com',
+  'fb.com',
+  'tiktok.com',
+  'x.com',
+  'twitter.com',
+  'linkedin.com',
+  'youtube.com',
+  'youtu.be',
+]);
+
+export function ehRedeSocial(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  const partes = host.split('.');
+  for (let corte = 0; corte < partes.length - 1; corte++) {
+    if (DOMINIOS_REDE_SOCIAL.has(partes.slice(corte).join('.'))) return true;
+  }
+  return false;
+}
+
+/**
+ * Traduz a resposta de erro do serviço de indexação no erro que a rota
+ * devolve. 4xx é diagnóstico sobre o conteúdo enviado e vale repassar inteiro;
+ * 5xx é problema nosso e vira indisponibilidade, sem vazar detalhe interno.
+ */
+export function erroDaRespostaDoRag(status: number, corpo: string): RagRequestError {
+  if (status >= 500) return new RagRequestError(503, MENSAGEM_RAG_INDISPONIVEL);
+
+  let detalhe = '';
+  try {
+    const json = JSON.parse(corpo);
+    if (typeof json?.detail === 'string') detalhe = json.detail.trim();
+  } catch {
+    // Corpo que não é JSON nunca vira mensagem crua para o cliente.
+  }
+  return new RagRequestError(status, detalhe || MENSAGEM_INGESTAO_GENERICA);
+}
+
+/** O que a rota responde quando a ingestão falha. */
+export function falhaDeIngestao(err: unknown): { status: number; mensagem: string } {
+  if (err instanceof RagRequestError) return { status: err.statusCode, mensagem: err.message };
+  return { status: 503, mensagem: MENSAGEM_RAG_INDISPONIVEL };
+}
+
+export interface ArquivoParaIngestao {
+  filename: string;
+  content: Buffer;
+  mimeType: string;
+  /** Identificador estável no vetor. Sem ele, o serviço usa o filename. */
+  source?: string;
+  /** `titulo` e `pergunta` viram o cabeçalho de contexto de cada trecho. */
+  metadata?: Record<string, unknown>;
+  /** Origem, quando o conteúdo veio de uma página. */
+  sourceUrl?: string;
+}
+
+/**
+ * Opções de ingestão que o serviço grava em rag_chunks.metadata e o re-rank
  * lê de volta. `priority` e `category` vêm do Q&A (A009: a prioridade 0 a 10
  * era só ordenação de tela e não pesava nada na busca).
  */
@@ -330,23 +428,23 @@ export interface IngestOptions {
 /**
  * Builder puro do form de ingestão. Isolado para teste sem tocar axios.
  * Rota real: POST /ingest. Campos reais: file, namespace, source?, metadata?,
- * single_chunk?. O campo `tenant_id` do código antigo NÃO existe no serviço e
- * causava 422.
+ * single_chunk?, source_url?. O campo `tenant_id` do código antigo NÃO existe
+ * no serviço e causava 422.
  */
 export function buildIngestForm(
   organizationId: string,
-  file: { filename: string; content: Buffer; mimeType: string },
+  file: ArquivoParaIngestao,
   options: IngestOptions = {},
 ): { path: string; form: FormData } {
   const form = new FormData();
   form.append('namespace', namespaceFor(organizationId));
-  form.append('source', file.filename);
-  if (options.metadata && Object.keys(options.metadata).length > 0) {
-    form.append('metadata', JSON.stringify(options.metadata));
-  }
-  if (options.singleChunk) {
-    form.append('single_chunk', 'true');
-  }
+  form.append('source', file.source || file.filename);
+  // Duas origens de metadata: o arquivo traz título e pergunta (cabeçalho de
+  // contexto do trecho) e as opções trazem prioridade e categoria do Q&A.
+  const metadata = { ...(file.metadata || {}), ...(options.metadata || {}) };
+  if (Object.keys(metadata).length > 0) form.append('metadata', JSON.stringify(metadata));
+  if (file.sourceUrl) form.append('source_url', file.sourceUrl);
+  if (options.singleChunk) form.append('single_chunk', 'true');
   // `Buffer` is no longer assignable to `BlobPart` under newer @types/node
   // (SharedArrayBuffer / ArrayBuffer divergence). Wrap in Uint8Array, which is.
   form.append('file', new Blob([new Uint8Array(file.content)], { type: file.mimeType }), file.filename);
@@ -355,22 +453,27 @@ export function buildIngestForm(
 
 export async function ingestDocument(
   organizationId: string,
-  file: { filename: string; content: Buffer; mimeType: string },
+  file: ArquivoParaIngestao,
   options: IngestOptions = {},
 ) {
   const { path, form } = buildIngestForm(organizationId, file, options);
-  // IMPORTANTE: NAO usar o ragClient (axios) aqui — a instancia forca
+  // IMPORTANTE: NAO usar o ragClient (axios) aqui: a instancia forca
   // Content-Type: application/json em toda request, o que quebra o multipart
   // do /ingest (o servico Python recebe o form com header errado -> 422).
   // fetch/undici serializa o FormData+Blob com o boundary multipart correto.
+  //
+  // O timeout existe porque o RAG roda com auto_stop_machines: uma maquina
+  // travada segurava o upload indefinidamente, sem nada do outro lado (A019).
   const res = await fetch(`${env.RAG_SERVICE_URL}${path}`, {
     method: 'POST',
     headers: { 'X-Service-Secret': env.RAG_SERVICE_SECRET || '' },
     body: form as any,
+    signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
-    throw new Error(`RAG ingest ${res.status}: ${detail.slice(0, 200)}`);
+    logger.warn(`[RAG] ingest ${res.status}: ${detail.slice(0, 200)}`);
+    throw erroDaRespostaDoRag(res.status, detail);
   }
   // Toda escrita de treino sobe a versão da organização: o cache da busca
   // passa a errar de propósito e o conteúdo novo vale na mensagem seguinte,
@@ -413,30 +516,6 @@ function assertPublicUrl(url: string): void {
  * respeitando o contrato real. O guard anti-SSRF continua valendo.
  */
 /**
- * HTML → texto legível. Sem isso, páginas eram ingeridas com markup/JS cru —
- * uma única página do YouTube gerou 1.532 chunks de lixo que competiam no
- * retrieval com o conteúdo curado do cliente.
- */
-export function htmlToPlainText(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<\/(p|div|section|article|li|tr|h[1-6]|br)>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\s*\n\s*/g, '\n')
-    .trim();
-}
-
-/**
  * Nome de `source` estável derivado da URL (hostname+pathname, sem protocolo).
  * Usado na ingestão E na reconciliação de chunks por documento — precisa ser
  * a MESMA derivação nos dois lados.
@@ -450,34 +529,46 @@ export function urlToSource(url: string): string {
   }
 }
 
-export async function ingestUrl(organizationId: string, url: string) {
+export async function ingestUrl(
+  organizationId: string,
+  url: string,
+  opcoes: { source?: string; titulo?: string } = {},
+) {
   assertPublicUrl(url);
+  // Antes de gastar uma requisição: perfil de rede social não entrega conteúdo
+  // a quem não está logado, e o menu de navegação que volta ia para o vetor
+  // com selo verde de indexado (achado A012).
+  if (ehRedeSocial(url)) throw new RagRequestError(422, MENSAGEM_REDE_SOCIAL);
 
-  const resp = await axios.get(url, {
-    responseType: 'arraybuffer',
-    timeout: 30_000,
-    maxContentLength: 20 * 1024 * 1024, // alinhado ao MAX_UPLOAD_MB do serviço
-  });
+  let resp;
+  try {
+    resp = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 30_000,
+      maxContentLength: 20 * 1024 * 1024, // alinhado ao MAX_UPLOAD_MB do serviço
+      // Sem User-Agent, muito site devolve página de bloqueio em vez do texto.
+      headers: { 'User-Agent': 'ZappIQ-Crawler/1.0 (+https://zappiq.com.br)' },
+    });
+  } catch (err: any) {
+    logger.warn(`[RAG] leitura da URL falhou (${url}): ${err?.message}`);
+    throw new RagRequestError(422, MENSAGEM_PAGINA_ILEGIVEL);
+  }
 
   const mimeType =
     (resp.headers['content-type'] as string | undefined)?.split(';')[0]?.trim() ||
     'text/plain';
 
-  const filename = urlToSource(url);
-
-  let content = Buffer.from(resp.data);
-  let effectiveMime = mimeType;
-  if (mimeType === 'text/html' || mimeType === 'application/xhtml+xml') {
-    const text = htmlToPlainText(content.toString('utf-8'));
-    if (!text) throw new Error('Página sem texto extraível após limpeza de HTML');
-    content = Buffer.from(text, 'utf-8');
-    effectiveMime = 'text/plain';
-  }
-
+  // O HTML vai CRU para o serviço de indexação, que extrai o conteúdo
+  // principal com Readability e recusa página sem texto legível. A limpeza por
+  // expressão regular que existia aqui entregava menu e rodapé: o site do CMJ
+  // rendeu 1 trecho de 29 caracteres e apareceu como indexado.
   return ingestDocument(organizationId, {
-    filename,
-    content,
-    mimeType: effectiveMime,
+    filename: urlToSource(url),
+    content: Buffer.from(resp.data),
+    mimeType,
+    source: opcoes.source,
+    sourceUrl: url,
+    metadata: opcoes.titulo ? { titulo: opcoes.titulo } : undefined,
   });
 }
 

@@ -5,7 +5,6 @@ import {
   parseQueryContext,
   parseQuerySources,
   buildIngestForm,
-  htmlToPlainText,
   urlToSource,
 } from './ragService.js';
 
@@ -142,23 +141,6 @@ describe('buildIngestForm', () => {
     expect(form.get('source')).toBe('manual.pdf');
     expect(form.has('tenant_id')).toBe(false);
     expect(form.has('file')).toBe(true);
-  });
-});
-
-describe('htmlToPlainText', () => {
-  it('remove scripts, styles e tags — só o texto legível vai pro RAG', () => {
-    const html = `<html><head><style>.x{color:red}</style><script>var a=1;</script></head>
-      <body><h1>Horário</h1><p>Seg a sex, 9h às 18h &amp; sábado até 12h</p></body></html>`;
-    const text = htmlToPlainText(html);
-    expect(text).toContain('Horário');
-    expect(text).toContain('Seg a sex, 9h às 18h & sábado até 12h');
-    expect(text).not.toContain('<');
-    expect(text).not.toContain('var a=1');
-    expect(text).not.toContain('color:red');
-  });
-
-  it('devolve vazio para página sem texto', () => {
-    expect(htmlToPlainText('<html><script>x()</script></html>')).toBe('');
   });
 });
 

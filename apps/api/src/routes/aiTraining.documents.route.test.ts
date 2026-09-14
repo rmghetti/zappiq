@@ -27,7 +27,11 @@ vi.mock('@zappiq/database', () => ({
     kBDocument: {
       findFirst: (...a: any[]) => findFirst(...a),
       update: (...a: any[]) => update(...a),
-      findMany: vi.fn(),
+      // A rota consulta os outros documentos da org para saber quem divide
+      // cada source antigo antes de apagar qualquer coisa no vetor.
+      findMany: vi.fn().mockResolvedValue([]),
+      // Título repetido na mesma org é 409. Nenhum documento repetido aqui.
+      count: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
       delete: vi.fn(),
     },
@@ -173,16 +177,24 @@ describe('PUT /api/ai-training/documents/:id', () => {
         data: {
           title: 'Política de troca',
           content: 'Trocas em até 30 dias corridos, com nota fiscal e produto sem uso.',
+          // Edição bem-sucedida devolve o documento ao estado 'pronto': se a
+          // ingestão anterior tinha falhado, a lista não pode continuar
+          // mostrando o erro antigo (achado A142).
+          status: 'pronto',
+          motivo: null,
         },
       }),
     );
-    // Título igual → replace-on-ingest cobre, sem delete.
-    expect(deleteDocument).not.toHaveBeenCalled();
     expect(ingestDocument).toHaveBeenCalledTimes(1);
     const [org, payload] = ingestDocument.mock.calls[0];
     expect(org).toBe(ORG);
-    expect(payload.filename).toBe('Política de troca');
+    // O source é doc-<id>, não mais o título: dois documentos com o mesmo
+    // título deixaram de dividir o mesmo lugar no vetor (achado A001).
+    expect(payload.source).toBe('doc-doc-1');
     expect(payload.content.toString('utf-8')).toContain('30 dias');
+    // O source ANTIGO (o título) sai junto: ele guarda a versão anterior deste
+    // mesmo texto enquanto o reprocessamento do RAG não roda.
+    expect(deleteDocument).toHaveBeenCalledWith(ORG, 'Política de troca');
   });
 
   it('título alterado: remove os chunks do título antigo antes de ingerir o novo', async () => {
@@ -195,7 +207,7 @@ describe('PUT /api/ai-training/documents/:id', () => {
     });
 
     expect(deleteDocument).toHaveBeenCalledWith(ORG, 'Política de troca');
-    expect(ingestDocument.mock.calls[0][1].filename).toBe('Política de troca e devolução');
+    expect(ingestDocument.mock.calls[0][1].source).toBe('doc-doc-1');
   });
 
   it('REJEITA edição de URL e de arquivo (400, sem tocar no banco nem no RAG)', async () => {
@@ -259,7 +271,9 @@ describe('POST /api/ai-training/documents, recusas de upload', () => {
     const body = await res.json();
 
     expect(res.status).toBe(415);
-    expect(body.error).toBe('Tipo de arquivo não suportado: envie PDF, TXT, MD ou CSV.');
+    expect(body.error).toBe(
+      'Tipo de arquivo não aceito: envie PDF, Word (.docx), Excel (.xlsx), texto, Markdown ou CSV.',
+    );
     expect(ingestDocument).not.toHaveBeenCalled();
   });
 
