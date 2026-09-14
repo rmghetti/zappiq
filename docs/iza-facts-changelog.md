@@ -320,6 +320,12 @@ porque os preços dela são os vigentes.
   planos no prompt gravado: os nomes Starter e Business continuam listados (sem
   preço) e a cota do Scale ali ainda diz 25.000 mensagens, enquanto o catálogo
   diz 80.000. Isso é texto, não preço, e está fora do que o script mexe.
+- [ ] (aberto em 2026-09-14) A REGRA 7 (excedente) ficou sem preço: o R$ 197 do
+  pacote de 10.000 mensagens IA (`ADDONS.EXTRA_AI_MESSAGES`, vigente) colide com
+  o Starter morto e virou ponteiro, mas a seção PRICING gerada não lista as
+  famílias `AI_MSG` e `BROADCAST`. Antes de incluir, decidir 197 x 179:
+  `ADDONS.EXTRA_AI_MESSAGES` diz R$ 197 e `ADDONS_V4_LIST.AI_MSG_PACK_10K` diz
+  R$ 179 para o mesmo pacote. Até lá a Iza diz que confirma com o time.
 
 **Smoke esperado:** "quanto custa o pacote de voz de 1.500 minutos?" → a Iza
 responde R$ 379,90/mês com minuto excedente de R$ 0,22 (ou o que estiver no
