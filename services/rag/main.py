@@ -792,6 +792,7 @@ async def ingest(
                     titulo: nome do documento para o cabecalho de contexto
                     pergunta: repete a pergunta no cabecalho de todo trecho de Q&A
       source_url: endereco de origem, quando o conteudo veio de uma pagina
+      single_chunk: nao fatiar, o conteudo vira UM trecho so (Q&A, A011)
     """
     import time
 

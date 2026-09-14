@@ -47,25 +47,28 @@ export function normalizeQaUpdate<T extends Record<string, unknown>>(
 /**
  * Formatos que o upload da base de conhecimento aceita.
  *
- * A lista espelha o que o serviço de extração lê de verdade: PDF e text/*.
- * Word e Excel estiveram aqui até 14/09/2026 e nunca funcionaram: o serviço
- * responde 415, o erro sobe sem statusCode, o tratador em produção devolve
- * 'Internal Server Error' e nenhum documento é criado, então nem o aviso de
- * 'não indexado' aparece. Enquanto a conversão de DOCX e XLSX não existir, os
- * dois ficam fora daqui, do texto da tela e do accept do input.
+ * A lista espelha o que o serviço de extração lê de verdade. Word (.docx) e
+ * Excel (.xlsx) entraram em 14/09/2026, junto com os conversores de
+ * services/rag/extractors.py (mammoth e openpyxl), provados em
+ * services/rag/test_extractors.py e test_ingest_documentos.py. Antes disso
+ * eles estavam na tela sem existir no motor: o serviço respondia 415, o erro
+ * subia sem statusCode e o cliente lia 'Internal Server Error'.
  *
- * Quando a conversão entrar, acrescente o mime aqui e ajuste o teste no mesmo
- * PR que entrega a extração, com a prova de um arquivo real indexado.
+ * Os binários do Office 97 ficam fora: 'application/msword' (.doc) e
+ * 'application/vnd.ms-excel' (.xls). Nenhuma biblioteca livre os lê com
+ * confiança, e aceitar na porta só adiaria a recusa.
  */
 export const ALLOWED_UPLOAD_MIMES: ReadonlySet<string> = new Set([
   'application/pdf',
   'text/plain',
   'text/markdown',
   'text/csv',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
 
 /**
- * As mesmas quatro coisas, pela ponta do nome do arquivo.
+ * As mesmas seis coisas, pela ponta do nome do arquivo.
  *
  * O navegador não olha o conteúdo: ele manda o mime que o sistema associa à
  * extensão. No Windows, .csv sai como application/vnd.ms-excel (é o Excel que
@@ -78,6 +81,8 @@ export const ALLOWED_UPLOAD_EXTENSIONS: ReadonlySet<string> = new Set([
   '.txt',
   '.md',
   '.csv',
+  '.docx',
+  '.xlsx',
 ]);
 
 /** Extensão em minúscula, com o ponto. Nome sem ponto devolve string vazia. */
@@ -93,8 +98,8 @@ export function uploadExtension(originalname: string): string {
  * Aceita por mime OU por extensão. O OU é de propósito: cada um dos dois
  * sinais falha sozinho (o mime porque o navegador chuta, a extensão porque
  * pode não existir), e nenhum arquivo que a ingestão não lê passa pelos dois.
- * Word e Excel continuam de fora: nem o mime nem a extensão deles estão nas
- * listas.
+ * Os formatos antigos .doc e .xls continuam de fora: nem o mime nem a
+ * extensão deles estão nas listas.
  */
 export function isUploadAllowed(mimetype: string, originalname: string): boolean {
   if (ALLOWED_UPLOAD_MIMES.has(mimetype)) return true;

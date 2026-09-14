@@ -148,15 +148,41 @@ def test_sem_titulo_no_metadata_o_cabecalho_usa_o_nome_do_arquivo(client, gravad
     assert _upsert(gravados)["trechos"][0].cabecalho == "Documento: Tabela de precos."
 
 
+def test_qa_curto_vira_um_trecho_so_com_a_pergunta_no_cabecalho(client, gravados):
+    """
+    Os dois cuidados convivem: o Q&A abaixo do teto nao e fatiado (A011, regra
+    de retrieval.wants_single_chunk) e o unico trecho leva a pergunta no
+    cabecalho de contexto (P64).
+    """
+    resposta = _subir(
+        client,
+        "qa-abc.txt",
+        b"Damos desconto para turma fechada a partir de cinco pessoas.",
+        "text/plain",
+        source="qa-abc.txt",
+        metadata=json.dumps({"pergunta": "Vocês dão desconto?"}),
+    )
+
+    assert resposta.status_code == 200
+    trechos = _upsert(gravados)["trechos"]
+    assert len(trechos) == 1
+    assert "Pergunta: Vocês dão desconto?" in trechos[0].cabecalho
+
+
 def test_qa_longo_repete_a_pergunta_em_todos_os_trechos(client, gravados):
     """
     Achado A011: a resposta de Q&A aceita 4.000 caracteres, o trecho cabe em 512
     tokens, e so o primeiro pedaco trazia "Pergunta:". Os demais eram resposta
     solta que nao casava com a pergunta do cliente.
+
+    Acima de RAG_SINGLE_CHUNK_MAX_TOKENS o Q&A volta a ser fatiado, para nunca
+    estourar o contexto do embedding. E ai que a pergunta em todo cabecalho
+    precisa valer. O tokenizador do teste conta um token por caractere.
     """
     corpo = (
-        "Damos desconto para turma fechada a partir de cinco pessoas. " * 40
+        "Damos desconto para turma fechada a partir de cinco pessoas. " * 120
     ).encode()
+    assert len(corpo) > 6000
 
     resposta = _subir(
         client,

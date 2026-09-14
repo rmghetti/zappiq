@@ -30,8 +30,15 @@ vi.mock('axios', () => {
   return { default: fake, ...fake };
 });
 
+// `incrby` e `del` entram aqui porque toda escrita de treino sobe a versão de
+// configuração da organização, o que invalida o cache da busca (A010, A033).
 vi.mock('./cloud/index.js', () => ({
-  cache: { get: vi.fn().mockResolvedValue(null), set: vi.fn().mockResolvedValue(true) },
+  cache: {
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue(true),
+    incrby: vi.fn().mockResolvedValue(2),
+    del: vi.fn().mockResolvedValue(true),
+  },
 }));
 
 const {

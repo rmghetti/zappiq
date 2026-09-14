@@ -275,9 +275,18 @@ def upserts(monkeypatch):
     async def fake_embed_batch(texts, input_type):
         return [[0.0] * main.EMBEDDING_DIM for _ in texts]
 
-    async def fake_upsert_chunks(namespace, source, chunks, vectors, metadata):
-        gravados.append({"source": source, "chunks": chunks, "metadata": metadata})
-        return len(chunks)
+    # O /ingest grava Trecho (texto original + cabecalho de contexto), nao
+    # string crua: o cabecalho entra so no texto que vai para o embedding.
+    async def fake_upsert_chunks(namespace, source, trechos, vectors, metadata):
+        gravados.append(
+            {
+                "source": source,
+                "chunks": [t.texto for t in trechos],
+                "cabecalhos": [t.cabecalho for t in trechos],
+                "metadata": metadata,
+            }
+        )
+        return len(trechos)
 
     monkeypatch.setattr(main.state, "tokenizer", FakeTokenizer())
     monkeypatch.setattr(main, "_embed_batch", fake_embed_batch)

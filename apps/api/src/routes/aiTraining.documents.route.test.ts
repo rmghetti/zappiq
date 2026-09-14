@@ -295,14 +295,23 @@ describe('POST /api/ai-training/documents, recusas de upload', () => {
     expect(ingestDocument).not.toHaveBeenCalled();
   });
 
-  it('planilha Excel de verdade continua recusada com 415', async () => {
-    // Word e Excel passam pelo filtro de mime mas o indexador devolve 415 e
-    // nenhum documento é criado. Enquanto não houver extração, param aqui.
+  it('planilha .xlsx PASSA pelo filtro desde que a extração existe', async () => {
+    // Word e Excel voltaram à lista em 14/09/2026, com os conversores de
+    // services/rag/extractors.py (mammoth e openpyxl). Aqui só provamos que o
+    // arquivo atravessa o filtro; o que o handler faz depois é outro teste.
     const res = await enviar(
       'tabela.xlsx',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       new Uint8Array([80, 75]),
     );
+
+    expect(res.status).not.toBe(415);
+  });
+
+  it('o .xls do Office 97 continua recusado com 415', async () => {
+    // Nenhuma biblioteca livre lê o binário antigo com confiança: recusar na
+    // porta é mais honesto do que aceitar o upload e falhar depois.
+    const res = await enviar('planilha.xls', 'application/vnd.ms-excel', new Uint8Array([208, 207]));
 
     expect(res.status).toBe(415);
     expect(ingestDocument).not.toHaveBeenCalled();
