@@ -39,11 +39,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
-import {
-  resolveEvalSet,
-  EVAL_SET_VERSION,
-  type EvalScenario,
-} from '../agents/agentEvalSet.js';
+import { resolveEvalSet, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
 // Isolamento de tenant: o gabarito deixou de ser constante global e passou a
 // ser resolvido pelo perfil da org do agente testado.
 import {
@@ -55,11 +51,9 @@ import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 // V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
 // Q1: computeReverifyVerdict exportado pra teste unitário puro.
 import { executeAgentEvalRun, computeReverifyVerdict } from '../services/agentEvalRunner.js';
+import { enqueueEvalRun, resolveScenariosForRun } from '../services/agentEvalQueue.js';
 // FASE 2.1 (#241): Slack notify reusável entre cron e route manual.
-import {
-  notifySlackQualityIssue,
-  shouldAlertQuality,
-} from '../services/agentEvalCronService.js';
+import { notifySlackQualityIssue } from '../services/agentEvalCronService.js';
 import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services/slackNotifier.js';
 // FASE 2.2a (#243): aplicação cirúrgica de patches no system_prompt.
 // FASE 2.2c (#246): DuplicatePatchError pra rejeitar sugestão IA repetida.
@@ -141,27 +135,10 @@ router.get(
   },
 );
 
-// ─── Filtro de cenários (helper compartilhado pelos 2 endpoints) ────
-
-// A base é sempre o gabarito do tenant do agente testado. Antes era a constante
-// AGENT_EVAL_SET (a prova da ZappIQ), que caía em cima de todo mundo: o filtro
-// só pode recortar dentro do que se aplica àquele agente.
-function filterScenarios(
-  profile: TenantAgentProfile,
-  opts: {
-    scenarioIds?: string[];
-    category?: string;
-    criticalOnly?: boolean;
-  },
-): EvalScenario[] {
-  const base = resolveEvalSet(profile);
-  if (opts.scenarioIds && opts.scenarioIds.length > 0) {
-    return base.filter((s) => opts.scenarioIds!.includes(s.id));
-  }
-  if (opts.criticalOnly) return base.filter((s) => s.severity === 'critical');
-  if (opts.category) return base.filter((s) => s.category === opts.category);
-  return base;
-}
+// ─── Filtro de cenários: um só, em services/agentEvalQueue.ts ───────
+// Era uma cópia por rota mais a leitura da execução: três lugares lendo o
+// mesmo scenarioFilter. resolveScenariosForRun é a leitura única, e a base
+// continua sendo o gabarito do tenant do agente testado.
 
 // ─── executeRunLoop e computeSummary agora vêm de services/agentEvalRunner ─
 //    (extraídos em FASE 2 / V5 — reusados pelo agentEvalCronService).
@@ -192,7 +169,7 @@ router.post(
       // Perfil da org DO AGENTE. O superadmin é da ZappIQ e o agente pode ser de
       // qualquer cliente: usar a org do logado reintroduziria o gabarito da Iza.
       const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId });
-      const scenarios = filterScenarios(profile, {
+      const scenarios = resolveScenariosForRun(profile, {
         scenarioIds: Array.isArray(req.body?.scenarios) ? req.body.scenarios : undefined,
         category: req.body?.category,
         criticalOnly: req.body?.criticalOnly === true,
@@ -252,7 +229,7 @@ router.post(
 
       // Perfil da org DO AGENTE, não a do superadmin logado (ver cabeçalho).
       const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId });
-      const scenarios = filterScenarios(profile, { scenarioIds, category, criticalOnly });
+      const scenarios = resolveScenariosForRun(profile, { scenarioIds, category, criticalOnly });
       if (scenarios.length === 0) {
         res.status(400).json({ error: 'nenhum scenario corresponde ao filtro' });
         return;
@@ -272,107 +249,12 @@ router.post(
         select: { id: true, startedAt: true },
       });
 
-      // Dispara execução em background (setImmediate libera response imediato)
-      setImmediate(async () => {
-        try {
-          await prisma.agentEvalRun.update({
-            where: { id: run.id },
-            data: { status: 'running' },
-          });
-          logger.info(`[agentEval] async run iniciado runId=${run.id} agentId=${agentId} scenarios=${scenarios.length}`);
-
-          const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile);
-
-          await prisma.agentEvalRun.update({
-            where: { id: run.id },
-            data: {
-              status: 'completed',
-              ...summary,
-              results: results as any,
-              completedAt: new Date(),
-              durationMs,
-            },
-          });
-          logger.info(`[agentEval] async run completed runId=${run.id} score=${summary.scorePercent}%`);
-
-          // FASE 2.2a (#243): instrumentação Slack — persiste status no DB
-          // pra diagnosticar falhas silenciosas que antes só ficavam nos
-          // Fly logs (que somem com restart).
-          if (!shouldAlertQuality(summary)) {
-            await prisma.agentEvalRun.update({
-              where: { id: run.id },
-              data: { slackAlertStatus: 'skipped' }, // score >= 90, sem critical
-            }).catch(() => {});
-          } else {
-            try {
-              const topFails = (results as any[])
-                .filter((r) => r.combined === 'fail')
-                .map((r) => ({
-                  scenarioId: r.scenarioId,
-                  category: r.category,
-                  severity: r.severity,
-                }));
-
-              const orgInfo = await prisma.agent.findUnique({
-                where: { id: agentId },
-                select: { organization: { select: { name: true } } },
-              });
-
-              const sent = await notifySlackQualityIssue({
-                agentId,
-                agentName: agent.name,
-                organizationName: orgInfo?.organization?.name || '—',
-                runId: run.id,
-                scorePercent: summary.scorePercent,
-                passed: summary.passed,
-                partial: summary.partial,
-                failed: summary.failed,
-                criticalFailed: summary.criticalFailed,
-                totalScenarios: scenarios.length,
-                durationMs,
-                topFails,
-              });
-
-              await prisma.agentEvalRun.update({
-                where: { id: run.id },
-                data: {
-                  slackAlertStatus: sent ? 'sent' : 'failed',
-                  slackAlertError: sent
-                    ? null
-                    : 'sendSlackAlert retornou false (webhook não configurado, 4xx/5xx, ou timeout)',
-                  slackAlertSentAt: sent ? new Date() : null,
-                },
-              }).catch(() => {});
-
-              logger.info(
-                `[agentEval] Slack alert ${sent ? 'enviado' : 'falhou silenciosamente'} runId=${run.id}`,
-              );
-            } catch (slackErr: any) {
-              await prisma.agentEvalRun.update({
-                where: { id: run.id },
-                data: {
-                  slackAlertStatus: 'failed',
-                  slackAlertError: String(slackErr?.message || slackErr).slice(0, 1000),
-                },
-              }).catch(() => {});
-              logger.warn(`[agentEval] Slack alert exceção (não bloqueia run)`, {
-                err: slackErr?.message,
-                runId: run.id,
-              });
-            }
-          }
-        } catch (err: any) {
-          logger.error(`[agentEval] async run failed runId=${run.id}`, { err: err?.message });
-          await prisma.agentEvalRun.update({
-            where: { id: run.id },
-            data: {
-              status: 'failed',
-              error: String(err?.message || 'unknown'),
-              completedAt: new Date(),
-            },
-          }).catch(() => {});
-        }
-      });
+      // A048: a execução deixou de rodar dentro do processo da API. Vira job
+      // da fila `agent-eval` (concorrência 1, jobId = runId) e o worker roda
+      // executeRunJob, o MESMO corpo do cron e da rota do cliente. Antes era
+      // um setImmediate, e reinício de máquina no meio deixava a linha em
+      // 'running' para sempre (duas execuções da Iza de 15/07 seguem assim).
+      await enqueueEvalRun(run.id);
 
       res.status(202).json({
         runId: run.id,

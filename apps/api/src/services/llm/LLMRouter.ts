@@ -116,7 +116,10 @@ export function toAnthropicMessages(messages: LLMMessage[]): any[] {
     });
 }
 
-export type LLMOperation = 'chat' | 'classify' | 'sentiment' | 'extract';
+// 'eval' = teste da Qualidade do Agente. Gasto de bastidor da casa: grava
+// custo com a organização, mas fica fora do teto de trial e do disjuntor
+// mensal dela (ver OPERACOES_FORA_DO_ORCAMENTO em llmCallAudit.ts).
+export type LLMOperation = 'chat' | 'classify' | 'sentiment' | 'extract' | 'eval';
 
 /** Tier do tenant — usado em V4 pra tier-based default routing. */
 export type LLMTier = 'STARTER' | 'GROWTH' | 'SCALE' | 'BUSINESS' | 'ENTERPRISE';

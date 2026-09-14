@@ -1535,7 +1535,9 @@ model LLMCallLog {
   conversationId    String?  @map("conversation_id")
   provider          String // 'anthropic-sonnet' | 'anthropic-haiku' | 'openai-mini' | 'none'
   model             String // 'claude-sonnet-4-6' | etc
-  operation         String   @default("chat") // 'chat' | 'classify' | 'sentiment' | 'extract'
+  // 'eval' = teste da Qualidade do Agente (gasto de bastidor da casa: tem
+  // organização, mas fica fora do teto de trial e do disjuntor mensal dela).
+  operation         String   @default("chat") // 'chat' | 'classify' | 'sentiment' | 'extract' | 'eval'
   inputTokens       Int?     @map("input_tokens")
   outputTokens      Int?     @map("output_tokens")
   costUsdEstimate   Decimal? @map("cost_usd_estimate") @db.Decimal(10, 6)

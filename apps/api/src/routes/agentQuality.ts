@@ -31,22 +31,14 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
-import {
-  resolveEvalSet,
-  getSkippedScenarios,
-  EVAL_SET_VERSION,
-  type EvalScenario,
-} from '../agents/agentEvalSet.js';
+import { resolveEvalSet, getSkippedScenarios, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
 import {
   resolveTenantAgentProfile,
   type TenantAgentProfile,
 } from '../agents/tenantAgentProfile.js';
 import { assertNoForeignBrand, ForeignBrandLeakError } from '../agents/tenantIsolationGuard.js';
 import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
-import {
-  notifySlackQualityIssue,
-  shouldAlertQuality,
-} from '../services/agentEvalCronService.js';
+import { enqueueEvalRun, resolveScenariosForRun } from '../services/agentEvalQueue.js';
 import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
 // A083: quem grava o prompt declara a origem da mudança e o histórico vira
 // versão no banco. Reverter passa a exigir que o prompt ainda seja o que a
@@ -67,22 +59,11 @@ router.use(authMiddleware as any);
 // ─── Cooldown: cliente roda no máximo 1 eval / 24h por agent ────────
 const RUN_COOLDOWN_HOURS = 24;
 
-// ─── Filtro de cenários, sempre a partir do gabarito DO TENANT ──────
-// Antes, a base era a constante AGENT_EVAL_SET (a prova da ZappIQ). Agora o
-// ponto de partida é sempre resolveEvalSet(profile): o cliente só pode ser
-// filtrado dentro do que se aplica a ele.
-function filterScenarios(
-  profile: TenantAgentProfile,
-  opts: { scenarioIds?: string[]; category?: string; criticalOnly?: boolean },
-): EvalScenario[] {
-  const base = resolveEvalSet(profile);
-  if (opts.scenarioIds && opts.scenarioIds.length > 0) {
-    return base.filter((s) => opts.scenarioIds!.includes(s.id));
-  }
-  if (opts.criticalOnly) return base.filter((s) => s.severity === 'critical');
-  if (opts.category) return base.filter((s) => s.category === opts.category);
-  return base;
-}
+// ─── Filtro de cenários: um só, em services/agentEvalQueue.ts ───────
+// A cópia que vivia aqui fazia o RECORTE na rota, e a EXECUÇÃO reconstruía o
+// recorte a partir do scenarioFilter gravado na linha, com outra função. Duas
+// leituras do mesmo filtro é uma a mais: se elas divergirem, o cliente vê um
+// total de cenários e recebe outro. resolveScenariosForRun é a leitura única.
 
 // ─── Helper: extrai snapshot do actor (mesma assinatura do admin) ───
 async function getActorSnapshot(userId: string | undefined) {
@@ -282,7 +263,7 @@ router.get('/agents/:agentId/versions/:version', async (req: Request, res: Respo
 });
 
 // ════════════════════════════════════════════════════════════════════
-// POST /run-async — dispara eval (cooldown 24h por agent)
+// POST /run-async: dispara eval (uma execução viva por agente + 24 h)
 // ════════════════════════════════════════════════════════════════════
 router.post('/run-async', async (req: Request, res: Response) => {
   const orgId = req.user!.organizationId;
@@ -299,21 +280,58 @@ router.post('/run-async', async (req: Request, res: Response) => {
       return;
     }
 
-    // Cooldown: bloqueia se já rodou nas últimas 24h
+    // Trava 1, execução VIVA: um teste por agente de cada vez, sem janela de
+    // tempo. Com a fila, a linha fica 'pending' enquanto a trava global não
+    // libera, o que em dia cheio são dezenas de minutos. Se só o cooldown de
+    // 24 h contasse (e ele conta apenas 'completed'), cada clique impaciente
+    // criaria OUTRA execução paga, todas na fila, todas cobradas.
+    const viva = await prisma.agentEvalRun.findFirst({
+      where: {
+        agentId,
+        triggeredBy: 'client_manual',
+        status: { in: ['pending', 'running'] },
+      },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true, status: true },
+    });
+    if (viva) {
+      // O código continua 'cooldown' porque é o que a tela do cliente já sabe
+      // ler para mostrar a mensagem no lugar certo; `reason` distingue os dois
+      // motivos para quem consome a API.
+      res.status(429).json({
+        error: 'cooldown',
+        reason: 'execucao_em_andamento',
+        message: 'Já existe um teste em andamento para este agente. Aguarde ele terminar.',
+        lastRunId: viva.id,
+      });
+      return;
+    }
+
+    // Trava 2, cooldown: bloqueia se o CLIENTE já CONCLUIU um teste nas
+    // últimas 24 h.
+    //
+    // A048: antes contava qualquer execução 'manual' ou 'client_manual' com
+    // status diferente de 'failed'. Duas consequências medidas: execução presa
+    // em 'running' por reinício de máquina travava o botão por um dia, e teste
+    // disparado pelo superadmin gastava o direito do cliente. Agora conta só o
+    // que ele mesmo rodou e concluiu. Execução 'failed' não gasta nada: o
+    // cliente pode tentar de novo na hora.
     const cutoff = new Date(Date.now() - RUN_COOLDOWN_HOURS * 3600 * 1000);
     const recent = await prisma.agentEvalRun.findFirst({
       where: {
         agentId,
-        triggeredBy: { in: ['manual', 'client_manual'] },
+        triggeredBy: 'client_manual',
+        status: 'completed',
         startedAt: { gte: cutoff },
       },
       orderBy: { startedAt: 'desc' },
       select: { id: true, startedAt: true, status: true },
     });
-    if (recent && recent.status !== 'failed') {
+    if (recent) {
       const nextAvailable = new Date(recent.startedAt.getTime() + RUN_COOLDOWN_HOURS * 3600 * 1000);
       res.status(429).json({
         error: 'cooldown',
+        reason: 'aguardando_24h',
         message: `Você já executou um teste nas últimas ${RUN_COOLDOWN_HOURS}h. Próximo disponível em ${nextAvailable.toLocaleString('pt-BR')}.`,
         nextAvailableAt: nextAvailable.toISOString(),
         lastRunId: recent.id,
@@ -326,7 +344,7 @@ router.post('/run-async', async (req: Request, res: Response) => {
     const criticalOnly = req.body?.criticalOnly === true;
 
     const profile = await resolveTenantAgentProfile(orgId, { agentId });
-    const scenarios = filterScenarios(profile, { scenarioIds, category, criticalOnly });
+    const scenarios = resolveScenariosForRun(profile, { scenarioIds, category, criticalOnly });
     if (scenarios.length === 0) {
       res.status(400).json({ error: 'nenhum cenário corresponde ao filtro' });
       return;
@@ -345,95 +363,13 @@ router.post('/run-async', async (req: Request, res: Response) => {
       select: { id: true, startedAt: true },
     });
 
-    setImmediate(async () => {
-      try {
-        await prisma.agentEvalRun.update({
-          where: { id: run.id },
-          data: { status: 'running' },
-        });
-        logger.info(
-          `[agentQuality] client run iniciado runId=${run.id} agentId=${agentId} orgId=${orgId} scenarios=${scenarios.length}`,
-        );
-
-        const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile);
-
-        await prisma.agentEvalRun.update({
-          where: { id: run.id },
-          data: {
-            status: 'completed',
-            ...summary,
-            results: results as any,
-            completedAt: new Date(),
-            durationMs,
-          },
-        });
-
-        // Slack alert (mesma lógica do admin — score < 90 ou critical fail)
-        if (!shouldAlertQuality(summary)) {
-          await prisma.agentEvalRun.update({
-            where: { id: run.id },
-            data: { slackAlertStatus: 'skipped' },
-          }).catch(() => {});
-        } else {
-          try {
-            const topFails = (results as any[])
-              .filter((r) => r.combined === 'fail')
-              .map((r) => ({
-                scenarioId: r.scenarioId,
-                category: r.category,
-                severity: r.severity,
-              }));
-
-            const orgInfo = await prisma.agent.findUnique({
-              where: { id: agentId },
-              select: { organization: { select: { name: true } } },
-            });
-
-            const sent = await notifySlackQualityIssue({
-              agentId,
-              agentName: agent.name,
-              organizationName: orgInfo?.organization?.name || '—',
-              runId: run.id,
-              scorePercent: summary.scorePercent,
-              passed: summary.passed,
-              partial: summary.partial,
-              failed: summary.failed,
-              criticalFailed: summary.criticalFailed,
-              totalScenarios: scenarios.length,
-              durationMs,
-              topFails,
-            });
-
-            await prisma.agentEvalRun.update({
-              where: { id: run.id },
-              data: {
-                slackAlertStatus: sent ? 'sent' : 'failed',
-                slackAlertError: sent ? null : 'sendSlackAlert retornou false',
-                slackAlertSentAt: sent ? new Date() : null,
-              },
-            }).catch(() => {});
-          } catch (slackErr: any) {
-            await prisma.agentEvalRun.update({
-              where: { id: run.id },
-              data: {
-                slackAlertStatus: 'failed',
-                slackAlertError: String(slackErr?.message || slackErr).slice(0, 1000),
-              },
-            }).catch(() => {});
-          }
-        }
-      } catch (err: any) {
-        logger.error(`[agentQuality] client run failed runId=${run.id}`, { err: err?.message });
-        await prisma.agentEvalRun.update({
-          where: { id: run.id },
-          data: {
-            status: 'failed',
-            error: String(err?.message || 'unknown'),
-            completedAt: new Date(),
-          },
-        }).catch(() => {});
-      }
-    });
+    // A048: a execução deixou de rodar dentro do processo da API. Sai daqui
+    // como job da fila `agent-eval` (concorrência 1, jobId = runId) e o worker
+    // roda executeRunJob, o MESMO corpo do cron e da rota do superadmin.
+    // Antes era um setImmediate: reinício de máquina no meio deixava a linha
+    // em 'running' para sempre, e era essa linha presa que travava o botão do
+    // cliente pelo cooldown de 24 h.
+    await enqueueEvalRun(run.id);
 
     res.status(202).json({
       runId: run.id,

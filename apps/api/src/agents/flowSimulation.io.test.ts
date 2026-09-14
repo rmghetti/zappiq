@@ -185,6 +185,40 @@ describe('executeFlowSimulation', () => {
     expect(Array.isArray(report.recommendations)).toBe(true);
   });
 
+  it('o juiz da simulação NÃO é marcado como gasto de bastidor da casa', async () => {
+    // A simulação do Maestro é recurso DO CLIENTE: roda quando ele pede, então
+    // o custo dela tem de continuar dentro do teto do trial e do disjuntor
+    // mensal da organização dele. runJudge é chamado sem sobrepor a operação,
+    // e o padrão da função é 'classify' (nunca 'eval').
+    const fluxoComIa = {
+      name: 'Fluxo com IA',
+      nodes: [
+        { id: 'n1', type: 'start' },
+        { id: 'n2', type: 'ai', data: { prompt: 'Ajude o cliente' } },
+      ],
+      edges: [{ id: 'e1', source: 'n1', target: 'n2' }],
+    };
+    (llmRouter.complete as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          personas: [{ name: 'Cliente A', tone: 'objetivo', intent: 'comprar', painPoint: 'preço' }],
+        }),
+      })
+      .mockResolvedValue({ text: 'quanto custa?' });
+    (runJudge as ReturnType<typeof vi.fn>).mockResolvedValue({
+      passed: true,
+      confidence: 1,
+      reason: 'ok',
+    });
+
+    await executeFlowSimulation({ organizationId: 'org1', flow: fluxoComIa, personaCount: 1 });
+
+    const chamadas = (runJudge as ReturnType<typeof vi.fn>).mock.calls;
+    expect(chamadas.length).toBeGreaterThanOrEqual(1);
+    // Três argumentos: esperado, resposta e perfil. Nenhum quarto com operação.
+    expect(chamadas[0]).toHaveLength(3);
+  });
+
   it('passRate = 100 when all personas pass', async () => {
     const mockPersonas = [
       { name: 'Cliente A', tone: 'objetivo', intent: 'comprar', painPoint: 'quer rapidez' },

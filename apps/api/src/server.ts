@@ -18,6 +18,7 @@ import { authMiddleware } from './middleware/auth.js';
 import { rlsTenantMiddleware } from './middleware/rlsTenant.js';
 import { requireActivePlan } from './middleware/requireActivePlan.js'; // Trial Enforcement — gate de trial vencido (402)
 import { initCronQueue } from './services/cronQueue.js';
+import { initAgentEvalQueue } from './services/agentEvalQueue.js';
 import { initQueues, closeQueues } from './services/queueService.js';
 import { initFlowTimerWorker } from './services/flowScheduler.js';
 import { setIo } from './utils/socketRegistry.js';
@@ -406,6 +407,14 @@ initCronQueue().catch((err) => {
   logger.error('[Server] Failed to initialize cron queue:', err);
 });
 
+// ── Fila do teste da Qualidade do Agente (A048) ────────────────
+// Fora da fila `cron` de propósito: uma execução leva minutos e, com a
+// concorrência 3 da fila de rotinas, seguraria as rotinas da madrugada.
+// Concorrência 1 aqui, porque o gargalo é o limite de taxa do provedor.
+initAgentEvalQueue().catch((err) => {
+  logger.error('[Server] Failed to initialize agent-eval queue:', err);
+});
+
 // ── W2.4: sweep de campanhas agendadas (a cada minuto) — dispara SCHEDULED ──
 // Fora da fila `cron` de propósito: roda a cada minuto, então não é rotina
 // ociosa, e numa fila compartilhada ficaria atrás de rotina diária longa.
@@ -481,6 +490,16 @@ async function gracefulShutdown(signal: string): Promise<void> {
       logger.info('[Server] Cron queue closed');
     } catch (err) {
       logger.warn('[Server] Cron queue close error:', err);
+    }
+
+    // 3c) Drena a fila do teste da Qualidade. Sem isto, uma execução em curso
+    // fica sem worker e só a varredura horária a marcaria como falha.
+    try {
+      const { closeAgentEvalQueue } = await import('./services/agentEvalQueue.js');
+      await closeAgentEvalQueue();
+      logger.info('[Server] Agent eval queue closed');
+    } catch (err) {
+      logger.warn('[Server] Agent eval queue close error:', err);
     }
 
     // 4) Fecha Prisma

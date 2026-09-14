@@ -54,6 +54,7 @@ const SCORE_THRESHOLD = 90;
 const TRIGGER_LABELS: Record<string, string> = {
   manual: 'Manual',
   cron: 'Automático (cron)',
+  cron_on_change: 'Automático após mudança',
   pre_release: 'Pré-release',
 };
 

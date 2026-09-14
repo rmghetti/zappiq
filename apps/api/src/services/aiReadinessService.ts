@@ -364,10 +364,30 @@ export interface RagChunkCounts {
  * falhar, retorna 0/0. Isso NÃO derruba o readiness — apenas não concede os
  * pontos de docs/Q&A, que é exatamente o comportamento seguro (não inflar o
  * score com conteúdo que a IA comprovadamente não consegue recuperar).
+ *
+ * Atenção a quem chamar daqui: para o SCORE, erro e "zero chunk" levam à mesma
+ * decisão (não pontuar), então confundir os dois é inofensivo. Para quem toma
+ * decisão de EXCLUSÃO a partir da contagem, não é: ver
+ * countRagChunksByNamespaceOrNull.
  */
 export async function countRagChunksByNamespace(
   organizationId: string,
 ): Promise<RagChunkCounts> {
+  return (await countRagChunksByNamespaceOrNull(organizationId)) ?? { docChunks: 0, qaChunks: 0 };
+}
+
+/**
+ * Mesma contagem, mas devolve `null` quando a consulta FALHA, em vez de 0/0.
+ *
+ * A diferença importa para quem decide excluir alguém pela contagem. O cron da
+ * Qualidade pula a organização "sem base cadastrada": com 0/0 vindo de um erro
+ * de banco, a organização do cliente que treinou a IA seria pulada em silêncio
+ * por uma falha de infraestrutura. Com `null` quem chama distingue "não tem
+ * base" de "não deu para saber" e escolhe o lado seguro.
+ */
+export async function countRagChunksByNamespaceOrNull(
+  organizationId: string,
+): Promise<RagChunkCounts | null> {
   const namespace = namespaceFor(organizationId);
   try {
     const rows = await prisma.$queryRaw<Array<{ is_qa: boolean; n: bigint | number }>>`
@@ -387,7 +407,7 @@ export async function countRagChunksByNamespace(
   } catch (err: any) {
     // Ex.: relação rag_chunks inexistente em ambientes sem RAG. Não é fatal.
     logger.warn(`[AIReadiness] contagem de rag_chunks falhou (ns=${namespace}): ${err?.message}`);
-    return { docChunks: 0, qaChunks: 0 };
+    return null;
   }
 }
 

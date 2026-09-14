@@ -23,7 +23,11 @@ import { Queue, Worker, type Job } from 'bullmq';
 
 import { queueConnection as connection } from '../config/queueRedis.js';
 import { logger } from '../utils/logger.js';
-import { runAgentEvalCronCycle } from './agentEvalCronService.js';
+import {
+  runAgentEvalCronCycle,
+  runAgentEvalOnChangeCycle,
+} from './agentEvalCronService.js';
+import { sweepStuckEvalRuns } from './agentEvalQueue.js';
 import { runAnalyticsPulseCycle } from './analyticsPulseCron.js';
 import { runConversationExpiryCycle } from './conversationExpiryService.js';
 import { runCostGuardCycle } from './costGuardService.js';
@@ -64,8 +68,21 @@ export const CRON_JOBS: CronJobDefinition[] = [
   { name: 'analytics-pulse', pattern: '20 3 * * *', run: runAnalyticsPulseCycle },
   { name: 'trial-expiration', pattern: '40 3 * * *', run: runTrialExpirationCycle },
   { name: 'usage-reconciliation', pattern: '0 4 * * *', run: runUsageReconciliationCycle },
-  { name: 'agent-eval-iza', pattern: '30 4 * * *', run: () => runAgentEvalCron('iza') },
+  // Qualidade do Agente (A045 / A067): as duas auditorias automáticas são
+  // SEMANAIS. A da Iza era diária e custava sozinha cerca de USD 1,25 por dia
+  // sem detectar o que o ciclo semanal não detecte; a de clientes já era
+  // semanal, e agora só roda para organização elegível (fora STAGING, trial
+  // vencido sem assinatura e quem não tem base cadastrada).
+  { name: 'agent-eval-iza', pattern: '30 4 * * 0', run: () => runAgentEvalCron('iza') },
   { name: 'agent-eval-clients', pattern: '30 4 * * 1', run: () => runAgentEvalCron('clients') },
+  // Diário por MUDANÇA: cobre o vão do semanal sem voltar ao teste diário de
+  // todo mundo. Só avalia agente cuja organização mexeu na base depois da
+  // última execução concluída, no máximo 1 vez por dia. 04:50 fica depois dos
+  // dois ciclos semanais das 04:30, então nunca disputa com eles.
+  { name: 'agent-eval-on-change', pattern: '50 4 * * *', run: runAgentEvalOnChange },
+  // Varredura de execução presa (A048). De hora em hora no minuto 35, fora dos
+  // minutos 20 (cost-guard) e 50 (conversation-expiry).
+  { name: 'agent-eval-sweep', pattern: '35 * * * *', run: () => sweepStuckEvalRuns() },
   { name: 'mira-releases', pattern: '0 6 * * 1', run: runMiraReleasesCycle },
   { name: 'mira-cnpj-mirror', pattern: '0 6 1 * *', run: runMiraMirrors },
   { name: 'superadmin-trial-digest', pattern: '0 13 * * *', run: runDigest },
@@ -91,9 +108,18 @@ export const CRON_JOBS: CronJobDefinition[] = [
 async function runAgentEvalCron(scope: 'iza' | 'clients'): Promise<unknown> {
   if (process.env.AGENT_EVAL_CRON_DISABLED === 'true') {
     logger.warn('[cron] AGENT_EVAL_CRON_DISABLED=true — ciclo do agent-eval pulado (kill-switch).');
-    return { agentsProcessed: 0, agentsAlerted: 0, agentsFailed: 0, durationMs: 0 };
+    return { agentsProcessed: 0, agentsSkipped: 0, agentsFailed: 0, durationMs: 0 };
   }
   return runAgentEvalCronCycle(scope);
+}
+
+/** O mesmo kill-switch vale para o ciclo por mudança: um interruptor só. */
+async function runAgentEvalOnChange(): Promise<unknown> {
+  if (process.env.AGENT_EVAL_CRON_DISABLED === 'true') {
+    logger.warn('[cron] AGENT_EVAL_CRON_DISABLED=true — ciclo por mudança pulado (kill-switch).');
+    return { agentsProcessed: 0, agentsSkipped: 0, agentsFailed: 0, durationMs: 0 };
+  }
+  return runAgentEvalOnChangeCycle();
 }
 
 /**
@@ -176,6 +202,66 @@ export async function removeLegacyCronSchedulers(): Promise<number> {
   return removed;
 }
 
+/** Um agendamento como o BullMQ devolve. Só o que a limpeza precisa ler. */
+export interface AgendamentoRegistrado {
+  key: string;
+  name?: string | null;
+  pattern?: string | null;
+}
+
+/** O par de métodos da fila que a limpeza usa. Injetável para o teste. */
+export interface RegistroDeAgendamentos {
+  getJobSchedulers(): Promise<Array<AgendamentoRegistrado | undefined>>;
+  removeJobScheduler(key: string): Promise<unknown>;
+}
+
+/**
+ * Remove agendamento da PRÓPRIA fila `cron` que não corresponde mais ao
+ * registro de CRON_JOBS.
+ *
+ * Por que isto é obrigatório: no BullMQ 5.71.1 a chave do agendamento é o md5
+ * de `nome:jobId:endDate:tz:padrão` (classes/repeat.js, getRepeatConcatOptions).
+ * Mudar só o PADRÃO de uma rotina muda a chave, então `cronQueue.add` não
+ * substitui o agendamento antigo: cria um SEGUNDO ao lado dele, e o worker
+ * passa a receber os dois disparos.
+ *
+ * Foi o caso da auditoria da Iza, que saiu de `30 4 * * *` (diária) para
+ * `30 4 * * 0` (domingo): sem esta limpeza ela continuaria rodando todo dia,
+ * e duas vezes no domingo, com o custo de LLM que a mudança existe para cortar.
+ *
+ * A comparação é por (nome, padrão), não por nome: é o par que forma a chave.
+ * Idempotente de propósito, porque as duas máquinas do Fly rodam isto no boot.
+ * Fail-soft: erro aqui é logado e o registro das rotinas segue.
+ */
+export async function removeObsoleteCronSchedulers(
+  fila: RegistroDeAgendamentos = cronQueue,
+): Promise<number> {
+  const esperado = new Set(CRON_JOBS.map((job) => `${job.name}|${job.pattern}`));
+  let removidos = 0;
+
+  try {
+    for (const agendamento of await fila.getJobSchedulers()) {
+      if (!agendamento?.key) continue;
+      if (esperado.has(`${agendamento.name ?? ''}|${agendamento.pattern ?? ''}`)) continue;
+
+      await fila.removeJobScheduler(agendamento.key);
+      removidos += 1;
+      logger.info({
+        msg: 'cron_scheduler_obsoleto_removido',
+        name: agendamento.name,
+        pattern: agendamento.pattern,
+      });
+    }
+  } catch (err) {
+    logger.error({
+      msg: 'cron_scheduler_obsoleto_limpeza_falhou',
+      error: String((err as Error)?.message ?? err),
+    });
+  }
+
+  return removidos;
+}
+
 let cronWorker: Worker | undefined;
 
 export async function initCronQueue(): Promise<void> {
@@ -221,6 +307,9 @@ export async function initCronQueue(): Promise<void> {
   });
 
   await removeLegacyCronSchedulers();
+  // Antes do laço de registro: o `add` abaixo NÃO substitui o agendamento de
+  // uma rotina que mudou de padrão, cria outro ao lado. Ver a função.
+  await removeObsoleteCronSchedulers();
 
   for (const { name, pattern } of CRON_JOBS) {
     await cronQueue.add(name, {}, { repeat: { pattern }, jobId: `cron:${name}` });

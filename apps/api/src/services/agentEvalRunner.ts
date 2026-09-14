@@ -20,7 +20,7 @@
  *     - sugestão que ainda assim vazar marca é DESCARTADA (rede final).
  */
 
-import { llmRouter } from './llm/LLMRouter.js';
+import { llmRouter, type LLMOperation } from './llm/LLMRouter.js';
 import { classifyIntent, shouldEscalateToSonnet, type IzaIntent } from './llm/intentClassifier.js';
 import { logger } from '../utils/logger.js';
 import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
@@ -82,6 +82,45 @@ export interface RunSummary {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * A192 — tempo limite por chamada de LLM dentro do avaliador.
+ *
+ * O LLMRouter chama os provedores com fetch cru, sem AbortSignal: nada corta
+ * uma chamada pendurada e o fetch do Node espera minutos antes de a cascata
+ * tentar o próximo provedor. Medido em produção no teste da Qualidade: 23
+ * chamadas acima de 30 s, 13 acima de 60 s, máximo de 207 s, e uma execução
+ * inteira de 38 minutos.
+ *
+ * Enquanto o router não aceita `signal`, o corte é aqui, na borda: a chamada
+ * lenta vira erro, o cenário vira reprovado registrado (como já acontece com
+ * qualquer erro) e a execução segue. A chamada continua correndo no provedor
+ * até ele mesmo desistir; o que garantimos é que ela não segura mais o teste.
+ */
+export const LLM_CALL_TIMEOUT_MS = 60_000;
+
+export class LlmCallTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`tempo limite da chamada de LLM (${ms / 1000}s)`);
+    this.name = 'LlmCallTimeoutError';
+  }
+}
+
+function comTempoLimite<T>(fn: () => Promise<T>, ms = LLM_CALL_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new LlmCallTimeoutError(ms)), ms);
+    fn().then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
 }
 
 async function withRetry<T>(
@@ -162,13 +201,44 @@ export interface JudgeProfile {
   agentName: string;
   businessName: string;
   niche?: string;
+  /**
+   * A067 — dono do gasto. Toda chamada de LLM do avaliador vai para
+   * llm_call_logs com esta organização e operation 'eval'. Antes ia com
+   * organization_id nulo: USD 164 em 90 dias que o painel por tenant não via.
+   *
+   * 'eval' tem dono mas NÃO consome o orçamento do cliente (nem o teto do
+   * trial, nem o disjuntor mensal): ver OPERACOES_FORA_DO_ORCAMENTO em
+   * llm/llmCallAudit.ts. O TenantAgentProfile já traz organizationId, então
+   * todo caminho existente preenche isto sem mudar chamada nenhuma.
+   */
+  organizationId?: string | null;
 }
 
+/** Contexto de audit comum às quatro chamadas de LLM do avaliador. */
+function auditDoEval(profile: JudgeProfile): { orgId: string | null; operation: 'eval' } {
+  return { orgId: profile.organizationId ?? null, operation: 'eval' };
+}
+
+/**
+ * O juiz é usado por DOIS caminhos com donos diferentes:
+ *
+ *   - o teste da Qualidade (aqui), que é gasto de bastidor da casa e passa
+ *     `operation: 'eval'`;
+ *   - a simulação do Maestro (agents/flowSimulation.ts), que é recurso DO
+ *     CLIENTE: roda quando ele pede, e tem de continuar dentro do teto de
+ *     custo do trial e do disjuntor mensal da organização dele.
+ *
+ * Por isso a operação é argumento explícito, com padrão 'classify'. Quando ela
+ * era fixada em 'eval' aqui dentro, a simulação do cliente passava a gravar
+ * custo de bastidor e escapava dos dois orçamentos sem ninguém decidir isso.
+ */
 export async function runJudge(
   expectedBehavior: string,
   agentResponse: string,
   profile: JudgeProfile,
+  opts: { operation?: LLMOperation } = {},
 ): Promise<{ passed: boolean; confidence: number; reason: string }> {
+  const operation = opts.operation ?? 'classify';
   try {
     const userPrompt = `### Comportamento esperado
 ${expectedBehavior}
@@ -178,13 +248,18 @@ ${agentResponse}
 
 ### Avaliação (JSON)`;
 
-    const judge = await withRetry(() => llmRouter.complete({
-      system: buildJudgeSystem(profile),
-      messages: [{ role: 'user', content: userPrompt }],
-      maxTokens: 200,
-      temperature: 0,
-      operation: 'classify',
-    }));
+    const judge = await withRetry(() =>
+      comTempoLimite(() =>
+        llmRouter.complete({
+          system: buildJudgeSystem(profile),
+          messages: [{ role: 'user', content: userPrompt }],
+          maxTokens: 200,
+          temperature: 0,
+          orgId: profile.organizationId ?? null,
+          operation,
+        }),
+      ),
+    );
 
     const raw = judge.text.trim();
     let parsed: any = null;
@@ -302,13 +377,15 @@ ${systemPromptExcerpt.slice(0, 2000)}
 ### Patches sugeridos (JSON)`;
 
     const out = await withRetry(() =>
-      llmRouter.complete({
-        system: buildSuggestSystem(profile),
-        messages: [{ role: 'user', content: userPrompt }],
-        maxTokens: 600,
-        temperature: 0.2,
-        operation: 'classify',
-      }),
+      comTempoLimite(() =>
+        llmRouter.complete({
+          system: buildSuggestSystem(profile),
+          messages: [{ role: 'user', content: userPrompt }],
+          maxTokens: 600,
+          temperature: 0.2,
+          ...auditDoEval(profile),
+        }),
+      ),
     );
 
     const raw = out.text.trim();
@@ -428,10 +505,17 @@ async function runScenario(
   let intent: IzaIntent = 'normal';
   let preferProvider: 'anthropic-sonnet' | undefined;
   try {
-    intent = await classifyIntent(scenario.userMessage, messages.slice(0, -1) as any, {
-      orgId: null,
-      conversationId: null,
-    });
+    // Com tempo limite como as demais: a classificação também vai ao provedor
+    // pelo mesmo fetch sem AbortSignal, e pendurada aqui segurava a execução
+    // inteira antes de a primeira resposta do agente sequer ser pedida.
+    intent = await comTempoLimite(() =>
+      classifyIntent(scenario.userMessage, messages.slice(0, -1) as any, {
+        // agentName fica de fora de propósito: o izaTurnRouter de produção
+        // também não passa, e o avaliador tem de espelhar produção 1:1.
+        ...auditDoEval(profile),
+        conversationId: null,
+      }),
+    );
     if (shouldEscalateToSonnet(intent)) {
       // PR #216: preferProvider (com fallback) em vez de forceProvider (sem).
       // Bug anterior: Sonnet rate-limit derrubava 7 cenarios com "all providers
@@ -446,14 +530,18 @@ async function runScenario(
   }
 
   const t0 = Date.now();
-  const resp = await withRetry(() => llmRouter.complete({
-    system: systemPrompt,
-    messages: messages as any,
-    maxTokens: 800,
-    temperature: 0.3,
-    operation: 'chat',
-    preferProvider,
-  }));
+  const resp = await withRetry(() =>
+    comTempoLimite(() =>
+      llmRouter.complete({
+        system: systemPrompt,
+        messages: messages as any,
+        maxTokens: 800,
+        temperature: 0.3,
+        preferProvider,
+        ...auditDoEval(profile),
+      }),
+    ),
+  );
   const responseLatencyMs = Date.now() - t0;
 
   const response = resp.text;
@@ -470,7 +558,11 @@ async function runScenario(
   }
   const deterministicPassed = missingPatterns.length === 0 && failedPatterns.length === 0;
 
-  const judge = await runJudge(scenario.expectedBehavior, response, profile);
+  // 'eval' explícito: aqui o juiz é gasto de bastidor da casa. O padrão da
+  // função é 'classify', que é o que a simulação do Maestro precisa.
+  const judge = await runJudge(scenario.expectedBehavior, response, profile, {
+    operation: 'eval',
+  });
 
   let combined: 'pass' | 'partial' | 'fail';
   if (deterministicPassed && judge.passed) combined = 'pass';

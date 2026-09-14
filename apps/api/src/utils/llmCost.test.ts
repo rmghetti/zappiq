@@ -130,6 +130,18 @@ describe('llmCost', () => {
       }
     });
 
+    // A200 — o gemini-2.5-flash estava com o preço do 1.5 Flash (0,075/0,30),
+    // 4,3 vezes abaixo do oficial. O custo do Gemini alimenta o custo por
+    // organização, o teto do trial e as decisões do Modo Econômico: preço
+    // errado subestima os três. Fonte primária conferida em 14/09/2026:
+    // https://ai.google.dev/gemini-api/docs/pricing
+    it('gemini-2.5-flash usa o preço oficial do Google (0,30 entrada / 2,50 saída)', () => {
+      expect(MODEL_PRICING['gemini-2.5-flash']).toEqual({
+        inputUsdPerMillion: 0.3,
+        outputUsdPerMillion: 2.5,
+      });
+    });
+
     it('modelos audio-only (whisper-1, tts-1, tts-1-hd) têm audioUsdPerMinute', () => {
       const audioModels = ['whisper-1', 'tts-1', 'tts-1-hd'];
       for (const m of audioModels) {
