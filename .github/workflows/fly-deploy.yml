@@ -160,7 +160,11 @@ jobs:
       - name: Deploy RAG service
         run: flyctl deploy --remote-only --config services/rag/fly.toml
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          # O FLY_API_TOKEN do repositório é um token de deploy do app zappiq-api
+          # e devolve "unauthorized" no zappiq-rag (run 34867203546, 14/09/2026).
+          # O RAG usa um token próprio, FLY_API_TOKEN_RAG, e cai no antigo só
+          # enquanto o novo não existir.
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_RAG || secrets.FLY_API_TOKEN }}
 
       # O smoke confere PROVEDOR e MODELO de embedding, não só se o serviço
       # está de pé. A coluna rag_chunks.embedding é vector(1536): se o serviço
