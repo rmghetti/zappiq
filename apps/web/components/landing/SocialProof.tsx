@@ -62,7 +62,7 @@ export function SocialProof() {
             Roda sobre a mesma infraestrutura que empresas Fortune 500 usam.
           </h3>
           <p className="text-[13.5px] text-muted">
-            Integração direta com WhatsApp · IA de ponta · seus dados processados no Brasil.
+            Integração direta com WhatsApp · IA de ponta · LGPD com DPA e encarregado de dados.
           </p>
         </div>
 

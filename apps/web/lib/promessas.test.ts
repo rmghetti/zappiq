@@ -13,14 +13,19 @@
  * no corpo do PR. Antes disso, não afrouxe a regra: o teste é o que separa
  * promessa de fato.
  *
- * As três regras de residência de dados são de natureza diferente: não são
+ * As regras de residência de dados são de natureza diferente: não são
  * funcionalidade que falta, são fato de infraestrutura. Só saem daqui se o
- * banco de produção mudar de região, com a prova da região nova.
+ * banco de produção mudar de região, com a prova da região nova. A frase
+ * canônica, a única que descreve o fato, é: "Os dados ficam em servidores nos
+ * Estados Unidos (banco de dados e processamento de IA), com salvaguardas
+ * contratuais para transferência internacional."
  *
  * O que a varredura lê: no site, as pastas app, components, content e lib; na
  * API, apps/api/src/agents, onde ficam os gabaritos que ditam o que a Iza
  * pode afirmar (uma promessa falsa no gabarito sai pela boca dela, mesmo que
- * o site esteja limpo). Extensões .ts e .tsx.
+ * o site esteja limpo). Extensões .ts e .tsx. Só as regras de residência leem
+ * também os dossiês de reposicionamento em Markdown, porque a frase errada
+ * voltou por ali uma vez.
  * O que fica de fora: este arquivo e app/blog (texto editorial de opinião,
  * com contexto próprio, fora do contrato de produto).
  *
@@ -52,6 +57,25 @@ const PASTAS = [
   'apps/api/src/agents',
 ];
 
+/**
+ * Dossiês do reposicionamento lidos pelas regras de residência de dados, em
+ * caminho relativo à raiz do monorepo.
+ *
+ * Por que uma lista de arquivos e não a pasta inteira: em 14/09/2026 a pasta
+ * `docs/reposicionamento-landing-2026` tem 92 linhas com alguma redação de
+ * "dados no Brasil", e boa parte delas é referência legítima ao próprio claim
+ * ("claims de fato com risco jurídico: Meta Business Partner, dados no
+ * Brasil, SLA"), ou o registro de uma auditoria citando o que a copy dizia.
+ * Varrer a pasta inteira reprovaria esse texto sem motivo. A lista cobre os
+ * três dossiês que descreviam a residência como fato e foram corrigidos; as
+ * outras 20 peças da pasta continuam pendentes, registradas no corpo do PR.
+ */
+const DOSSIES = [
+  'docs/reposicionamento-landing-2026/README.md',
+  'docs/reposicionamento-landing-2026/produtos/09-treinar-ia.md',
+  'docs/reposicionamento-landing-2026/produtos/10-qualidade-ia.md',
+];
+
 /** Caminhos (relativos à raiz do monorepo) que a varredura não lê. */
 const FORA_DA_VARREDURA = [
   'apps/web/lib/promessas.test.ts',
@@ -74,6 +98,18 @@ interface Regra {
    * expressão que reprova a Iza por dizê-lo.
    */
   apenasEm?: string[];
+  /**
+   * Prefixos de caminho onde a regra NÃO vale. Mesmo mecanismo do `apenasEm`,
+   * no sentido contrário: hoje só a página de subprocessadores precisa, porque
+   * o histórico dela registra, de propósito, a frase errada que saiu do ar.
+   */
+  exceto?: string[];
+  /**
+   * A regra também lê os dossiês de `DOSSIES`. Vale só para residência de
+   * dados: as demais regras falam de funcionalidade que falta, e os dossiês
+   * são justamente o material que descreve o que ainda não existe.
+   */
+  tambemNosDossies?: boolean;
 }
 
 const REGRAS: Regra[] = [
@@ -82,24 +118,46 @@ const REGRAS: Regra[] = [
     motivo:
       'Os dados ficam em servidores nos Estados Unidos: o banco e o processamento de IA. Não existe residência em território nacional.',
     padrao: /territ[óo]rio nacional/i,
+    tambemNosDossies: true,
   },
   {
     nome: 'residência de dados: banco no Brasil',
     motivo:
       'O banco de dados de produção é o projeto Supabase hwdeezdxyphvxikvgjyf, região us-east-1, Estados Unidos. Dizer que ele fica no Brasil é erro de fato, não imprecisão de copy.',
     padrao: /banco (de dados )?(fica|hospedado|no) Brasil/i,
+    tambemNosDossies: true,
   },
   {
     nome: 'residência de dados: dados primários no Brasil',
     motivo:
       'Não há dado primário no Brasil: banco e processamento de IA rodam nos Estados Unidos, com salvaguardas contratuais para a transferência internacional. A regra ignora "proteção de dados no Brasil", que fala da LEI brasileira e da ANPD, não de onde os dados moram.',
     padrao: /(?<!prote[çc][ãa]o de )dados (prim[áa]rios )?no Brasil/i,
+    tambemNosDossies: true,
   },
   {
     nome: 'residência de dados: servidores no Brasil',
     motivo:
       'Mesma correção, pela terceira redação que a copy usava: selo de rodapé e faixa do pré-lançamento diziam "servidores 100% no Brasil". A API roda em gru, mas ela não guarda dado; quem guarda é o banco, que está em us-east-1.',
     padrao: /servidor(es)?[^\n]{0,20}no Brasil|100% no Brasil/i,
+    tambemNosDossies: true,
+  },
+  {
+    nome: 'residência de dados: dado que "fica no Brasil" em qualquer redação',
+    motivo:
+      'As três regras anteriores exigiam a palavra exata que a copy usava naquele dia, e três páginas escaparam: "dados residentes no Brasil" (/sobre), "seus dados processados no Brasil" (prova social da home) e "Seus dados, no Brasil. Ponto." (card 06 da home). Esta regra pega a ideia, não a redação. A frase certa é: os dados ficam em servidores nos Estados Unidos (banco de dados e processamento de IA), com salvaguardas contratuais para transferência internacional. Ignora "proteção de dados no Brasil", que fala da LEI brasileira e da ANPD.',
+    padrao:
+      /(?<!prote[çc][ãa]o de )dados[^\n]{0,25}(residentes|processados|armazenados)?[^\n]{0,10}\bno Brasil\b/i,
+    // O histórico da página de subprocessadores registra, de propósito, a frase
+    // errada que saiu do ar em 14/09/2026. Apagar de lá seria apagar a correção.
+    exceto: ['apps/web/app/legal/subprocessadores'],
+    tambemNosDossies: true,
+  },
+  {
+    nome: 'residência de dados: infraestrutura ou servidor "brasileiro"',
+    motivo:
+      'Nenhum servidor que guarda dado do cliente é brasileiro. O banco de produção é o projeto Supabase da região us-east-1 e o processamento de IA também roda nos Estados Unidos. A API tem uma máquina em gru, mas ela não guarda dado. A regra pega o adjetivo, que passava por baixo das regras escritas com "no Brasil".',
+    padrao: /infraestrutura brasileira|servidor(es)? brasileir/i,
+    tambemNosDossies: true,
   },
   {
     nome: '"se corrige sozinha"',
@@ -207,22 +265,28 @@ function listarArquivos(dir: string, acc: string[] = []): string[] {
 }
 
 const ARQUIVOS = PASTAS.flatMap((p) => listarArquivos(join(REPO, p)));
+const ARQUIVOS_DOSSIES = DOSSIES.map((d) => join(REPO, ...d.split('/')));
 
-/** Cache de leitura: são centenas de arquivos e doze regras. */
+/** Cache de leitura: são centenas de arquivos e dezoito regras. */
 const CONTEUDO = new Map<string, string[]>(
   ARQUIVOS.map((a) => [a, readFileSync(a, 'utf8').split('\n')]),
 );
+const CONTEUDO_DOSSIES = new Map<string, string[]>(
+  ARQUIVOS_DOSSIES.map((a) => [a, readFileSync(a, 'utf8').split('\n')]),
+);
 
-function ocorrencias(padrao: RegExp, apenasEm?: string[]): string[] {
+function ocorrencias(regra: Regra): string[] {
   const achados: string[] = [];
-  for (const [caminho, linhas] of CONTEUDO) {
+  const fontes = regra.tambemNosDossies
+    ? [...CONTEUDO, ...CONTEUDO_DOSSIES]
+    : [...CONTEUDO];
+  for (const [caminho, linhas] of fontes) {
     const rel = relative(REPO, caminho).split(sep).join('/');
-    if (apenasEm && !apenasEm.some((prefixo) => rel.startsWith(prefixo))) continue;
+    if (regra.apenasEm && !regra.apenasEm.some((p) => rel.startsWith(p))) continue;
+    if (regra.exceto?.some((p) => rel === p || rel.startsWith(`${p}/`))) continue;
     linhas.forEach((linha, i) => {
-      if (padrao.test(linha)) {
-        achados.push(
-          `${relative(REPO, caminho).split(sep).join('/')}:${i + 1}  ${linha.trim().slice(0, 160)}`,
-        );
+      if (regra.padrao.test(linha)) {
+        achados.push(`${rel}:${i + 1}  ${linha.trim().slice(0, 160)}`);
       }
     });
   }
@@ -248,9 +312,19 @@ describe('promessas que o código não cumpre', () => {
     ).toEqual([]);
   });
 
+  it('os dossiês de reposicionamento entram na varredura de residência', () => {
+    // Sem isto, renomear um dossiê esvaziaria a varredura em silêncio: foi por
+    // um desses arquivos que a frase errada voltou depois de corrigida no site.
+    expect(CONTEUDO_DOSSIES.size).toBe(DOSSIES.length);
+    for (const linhas of CONTEUDO_DOSSIES.values()) {
+      expect(linhas.length).toBeGreaterThan(20);
+    }
+    expect(REGRAS.filter((r) => r.tambemNosDossies).length).toBe(6);
+  });
+
   for (const regra of REGRAS) {
     it(`não reintroduz: ${regra.nome}`, () => {
-      const achados = ocorrencias(regra.padrao, regra.apenasEm);
+      const achados = ocorrencias(regra);
       expect(
         achados,
         `${achados.length} ocorrência(s). ${regra.motivo}\n  ${achados.join('\n  ')}`,

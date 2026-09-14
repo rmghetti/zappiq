@@ -16,8 +16,9 @@
 > - **Juiz de IA independente, com modelo separado:** é o mesmo modelo que responde.
 > - **Filtro que confere o preço contra a tabela:** o agente testado não recebe a tabela.
 > - **Agenda:** cria o compromisso, não confirma, não lembra e não remarca.
-> - **Residência de dados:** o banco fica no Brasil, o processamento de IA acontece nos
->   Estados Unidos, em todas as conversas.
+> - **Residência de dados:** banco de dados e processamento de IA ficam em servidores nos
+>   Estados Unidos (Supabase/AWS us-east-1), com salvaguardas contratuais para
+>   transferência internacional.
 >
 > Enquanto o "Status honesto" de cada dossiê não for reescrito com prova, trate cada
 > afirmação como [confirmar]. A varredura que trava as frases já retiradas do site está
@@ -25,7 +26,7 @@
 
 ### Base de conhecimento (RAG) que ensina a sua IA a responder como a sua empresa responderia
 
-> Selo: A Platform MACHIA Company · Meta Business Partner · Dados no Brasil (São Paulo)
+> Selo: A Platform MACHIA Company · Meta Business Partner · LGPD com DPA e encarregado de dados
 > Agente padrão: Iza (você renomeia)
 
 ---
@@ -51,7 +52,7 @@ Fundação de conhecimento da plataforma agêntica. Não é um "editor de chatbo
 - Onboarding self-service: Qualificação (survey guiado), Documentos (upload + URL + colar texto), Perguntas & Respostas, Identidade do agente.
 - AI Readiness Score de 0 a 100, com breakdown por fonte e checklist de próximas ações.
 - Playground "Testar minha IA": conversa real com o mesmo motor do atendimento, antes de conectar o WhatsApp.
-- RAG com dados processados e armazenados no Brasil, em São Paulo (infraestrutura no Brasil), embeddings Voyage AI `voyage-3` multilíngue, busca vetorial `pgvector` com isolamento por organização.
+- RAG com banco e processamento em servidores nos Estados Unidos (Supabase/AWS us-east-1), com salvaguardas contratuais para transferência internacional, embeddings Voyage AI `voyage-3` multilíngue, busca vetorial `pgvector` com isolamento por organização.
 - Badge honesto de indexação (verde "indexado" / âmbar "não indexado") e histórico de treinamento auditável.
 - Agendamento pela IA disponível dentro do Treinar IA (add-on no Lite, incluído do Growth pra cima).
 
@@ -101,7 +102,7 @@ Por baixo, cada coisa que você sobe passa por um pipeline de RAG (busca aumenta
 
 - **A IA quebra o seu material em trechos e "entende" o significado de cada um.** Cada documento é fatiado em pedaços de mais ou menos meia página e convertido em vetor semântico pelo Voyage AI (`voyage-3`, multilíngue, forte em português). Tradução: a IA não decora palavra por palavra, ela entende a ideia. Se o cliente pergunta "vocês trocam?" e o seu PDF diz "aceitamos devolução em 7 dias", ela conecta as duas coisas.
 - **Na hora da conversa, a IA busca só os trechos certos e responde com base neles.** Quando chega uma pergunta, o sistema faz uma busca por similaridade (`pgvector`, índice HNSW, distância de cosseno) e puxa os pedaços mais relevantes da SUA base. A resposta sai fundamentada no seu conteúdo, com as fontes rastreáveis.
-- **O seu conteúdo é seu, e fica isolado.** Cada empresa tem um espaço próprio (namespace `org_<id>`). A busca nunca cruza a base de um cliente com a de outro. E os dados são processados e armazenados no Brasil, em São Paulo, com autenticação por segredo de serviço entre a plataforma e o motor de busca.
+- **O seu conteúdo é seu, e fica isolado.** Cada empresa tem um espaço próprio (namespace `org_<id>`). A busca nunca cruza a base de um cliente com a de outro. E os dados ficam em servidores nos Estados Unidos (banco de dados e processamento de IA), com salvaguardas contratuais para transferência internacional e autenticação por segredo de serviço entre a plataforma e o motor de busca.
 - **A sua palavra vale mais que um site aleatório.** O motor faz um re-rank: Perguntas & Respostas que você escreveu pesam 20% mais, e o questionário de qualificação pesa 15% mais, do que um trecho genérico raspado de site. Ou seja, a resposta oficial que você fixou ganha da informação solta. Isso mata alucinação onde mais dói.
 - **Reprocessou, substituiu. Sem lixo acumulado.** Ao reenviar um documento, a versão antiga é apagada e a nova entra na mesma transação. A IA nunca fica respondendo com um preço velho porque "sobrou" um pedaço antigo. (Esse era um bug real de acúmulo de versões; hoje é substituição limpa por design.)
 - **Você vê o que a IA realmente usa, não o que você só cadastrou.** Cada item tem um selo: verde "indexado" quando existem trechos reais no motor de busca, âmbar "não indexado" quando o conteúdo ainda não chegou à IA. O Readiness Score só conta pontos de documento e Q&A se houver trecho REAL indexado. Nada de medidor de teatro: se está verde, a IA usa; se está âmbar, você sabe que precisa reprocessar.
@@ -126,7 +127,7 @@ O mercado inteiro (Blip, Zenvia, Huggy, Poli, Letalk, Kommo, RD Conversas, GPT M
 
 1. **Zero taxa de setup, treinar você mesmo.** Boa parte do mercado embute onboarding pago ou projeto de implementação pra "treinar o agente". Na ZappIQ, treinar é self-service e grátis: survey, upload, Q&A, teste. Consultoria MACHIA existe quando VOCÊ quer, nunca como pedágio da plataforma.
 2. **Mensalidade fixa, sem cobrança por conversa nem por crédito.** Treinar, testar e atender dentro da franquia do seu plano não infla a fatura (acima da franquia há excedente de mensagens e passthroughput de disparo da Meta, sempre publicado). Plataformas que cobram por sessão/conversa/token punem exatamente o uso que você quer estimular. Aqui, o preço é o preço.
-3. **Dados no Brasil e conformidade de verdade.** Os dados são processados e armazenados no Brasil, em São Paulo. Seu conteúdo fica isolado por empresa e é apagável na hora (a exclusão de dados da LGPD remove os trechos do índice de busca, não só esconde da tela). Isolamento multi-tenant real, não promessa de marketing.
+3. **Residência de dados declarada e conformidade de verdade.** Os dados ficam em servidores nos Estados Unidos (banco de dados e processamento de IA), com salvaguardas contratuais para transferência internacional. Seu conteúdo fica isolado por empresa e é apagável na hora (a exclusão de dados da LGPD remove os trechos do índice de busca, não só esconde da tela). Isolamento multi-tenant real, não promessa de marketing.
 4. **A cunha que ninguém tem: o loop de auto-correção auditada.** A base de conhecimento não fica parada. Ela conversa com o produto **Qualidade da IA**: quando a Iza erra ou não sabe, isso vira uma lacuna sinalizada pra você preencher com uma nova Q&A ou documento, com registro auditável de tudo que treina a IA. A IA melhora sozinha, sob supervisão, com trilha de auditoria. Chatbot não faz isso. Agente que se corrige, faz.
 
 E um detalhe que os concorrentes não mostram: a **honestidade de indexação**. A gente te fala, na cara, quando um documento NÃO chegou à IA. A maioria das ferramentas deixa você achar que "cadastrou = treinou" e a IA segue burra. Aqui o medidor não mente.

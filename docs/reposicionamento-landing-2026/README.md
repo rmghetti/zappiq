@@ -16,8 +16,9 @@
 > - **Juiz de IA independente, com modelo separado:** é o mesmo modelo que responde.
 > - **Filtro que confere o preço contra a tabela:** o agente testado não recebe a tabela.
 > - **Agenda:** cria o compromisso, não confirma, não lembra e não remarca.
-> - **Residência de dados:** o banco fica no Brasil, o processamento de IA acontece nos
->   Estados Unidos, em todas as conversas.
+> - **Residência de dados:** banco de dados e processamento de IA ficam em servidores nos
+>   Estados Unidos (Supabase/AWS us-east-1), com salvaguardas contratuais para
+>   transferência internacional.
 >
 > Enquanto o "Status honesto" de cada dossiê não for reescrito com prova, trate cada
 > afirmação como [confirmar]. A varredura que trava as frases já retiradas do site está
@@ -61,7 +62,7 @@ Produtos cliente-facing: Conversas, Contatos, CRM, Agenda, Tarefas, Zap Impulso,
 
 - **Base factual da plataforma (o que faz, quanto custa, como se chama):** a parte de preço e nome de plano segue válida. A parte de capacidade do Treinar IA e da Qualidade da IA foi refutada pela auditoria de 14/09/2026 (ver o aviso no topo): a nota de confiança 9/10 não vale mais para ela. Planos ativos Lite R$ 247, Growth R$ 497, Scale R$ 1.497, Enterprise sob consulta. Starter e Business descontinuados.
 - **Higiene de copy:** zero travessão, zero codinome antigo como marca, zero hype proibido, status honesto por recurso (parcial e "em breve" marcados).
-- **Bloqueio para publicar:** 15 decisões suas (ver `DECISOES-PARA-O-FUNDADOR.md`), das quais 8 são claims de fato com risco jurídico já marcados `[confirmar]` (Meta Business Partner, dados no Brasil, SLA, comparativos nominais). Nada com `[confirmar]` vai ao ar sem sign-off.
+- **Bloqueio para publicar:** 15 decisões suas (ver `DECISOES-PARA-O-FUNDADOR.md`), das quais 8 são claims de fato com risco jurídico já marcados `[confirmar]` (Meta Business Partner, residência de dados, SLA, comparativos nominais). Nada com `[confirmar]` vai ao ar sem sign-off.
 
 ## Como implementar (ordem sugerida)
 

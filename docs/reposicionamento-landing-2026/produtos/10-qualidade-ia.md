@@ -16,8 +16,9 @@
 > - **Juiz de IA independente, com modelo separado:** é o mesmo modelo que responde.
 > - **Filtro que confere o preço contra a tabela:** o agente testado não recebe a tabela.
 > - **Agenda:** cria o compromisso, não confirma, não lembra e não remarca.
-> - **Residência de dados:** o banco fica no Brasil, o processamento de IA acontece nos
->   Estados Unidos, em todas as conversas.
+> - **Residência de dados:** banco de dados e processamento de IA ficam em servidores nos
+>   Estados Unidos (Supabase/AWS us-east-1), com salvaguardas contratuais para
+>   transferência internacional.
 >
 > Enquanto o "Status honesto" de cada dossiê não for reescrito com prova, trate cada
 > afirmação como [confirmar]. A varredura que trava as frases já retiradas do site está
@@ -25,7 +26,7 @@
 
 **Loop de auto-correção auditada**
 
-> Uma plataforma MACHIA · ZappIQ · Meta Business Partner · dados processados e armazenados no Brasil, em São Paulo
+> Uma plataforma MACHIA · ZappIQ · Meta Business Partner · LGPD com DPA e encarregado de dados
 
 ---
 
@@ -148,7 +149,7 @@ Nada muda sozinho. Toda aplicação tem foto de antes e depois, autor, data e a 
 A correção aprovada é gravada nas instruções do agente na hora. Não tem "ciclo de treinamento de 2 semanas", não tem fatura de consultoria. O conhecimento fica com você.
 
 **6. As três cunhas da ZappIQ, também aqui.**
-Zero setup fee. Mensalidade fixa, sem cobrança por conversa. Dados processados e armazenados no Brasil, em São Paulo, LGPD. Enquanto boa parte da concorrência esconde setup, cobrança por crédito/conversa e fidelidade, a Qualidade da IA já vem incluída no seu plano, sem letra miúda.
+Zero setup fee. Mensalidade fixa, sem cobrança por conversa. LGPD com DPA e encarregado de dados. Enquanto boa parte da concorrência esconde setup, cobrança por crédito/conversa e fidelidade, a Qualidade da IA já vem incluída no seu plano, sem letra miúda.
 
 ---
 
