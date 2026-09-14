@@ -42,6 +42,13 @@ vi.mock('../utils/logger.js', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+// O perfil vivo (A8) consulta o interruptor por organização dentro do
+// buildSystemPromptForContact. Sem este mock o teste tenta abrir conexão com
+// o Redis e estoura o tempo. Desligado: este arquivo é sobre o bloco do RAG.
+vi.mock('../services/featureFlags.js', () => ({
+  isFlagOn: vi.fn().mockResolvedValue(false),
+}));
+
 import { buildSystemPromptForContact } from './agentOrchestrator.js';
 
 const baseInput = {

@@ -114,8 +114,10 @@ describe('interruptor perfilVivo DESLIGADO: prompt byte a byte igual ao de hoje'
       'Status do lead: NEW',
       'Mensagens trocadas até agora: 7',
       'Primeiro contato? NÃO (já tem histórico — não pergunte nome de novo, use o que está acima)',
+      // A028 (PR #365): busca sem resultado deixa o bloco do RAG VAZIO. A
+      // frase "(sem contexto relevante...)" saiu do produto, porque ela
+      // dizia a mesma coisa quando a base estava fora do ar.
       '# Contexto recuperado (RAG)',
-      '(sem contexto relevante encontrado para esta query)',
       '# Agora',
       agora,
     ].join('\n');
