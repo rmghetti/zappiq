@@ -1,5 +1,5 @@
 /**
- * agentQuality.runAsync.test.ts — A048 (rodada 3)
+ * agentQuality.runAsync.test.ts (A048, rodada 3)
  * ============================================================================
  * O teste da Qualidade virou job de fila. Entre o clique e a conclusão a linha
  * fica 'pending' enquanto a trava global não libera, o que em dia cheio são
@@ -159,7 +159,7 @@ beforeEach(() => {
   prismaMock.agentEvalRun.create.mockResolvedValue({ id: 'run-novo', startedAt: AGORA });
 });
 
-describe('POST /run-async — execução viva barra o segundo clique', () => {
+describe('POST /run-async: execução viva barra o segundo clique', () => {
   it("execução 'pending' do cliente devolve 429 e não cria nem enfileira", async () => {
     // Clique de 5 minutos atrás: a linha está na fila, esperando a trava.
     bancoDeRuns.push(run('pending', 5));
@@ -201,7 +201,7 @@ describe('POST /run-async — execução viva barra o segundo clique', () => {
   });
 });
 
-describe('POST /run-async — cooldown de 24 h vale só para execução concluída', () => {
+describe('POST /run-async: cooldown de 24 h vale só para execução concluída', () => {
   it("'completed' de 2 h atrás devolve 429 de cooldown com o próximo horário", async () => {
     bancoDeRuns.push(run('completed', 120));
     const res = makeRes();

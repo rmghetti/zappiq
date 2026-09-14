@@ -263,7 +263,7 @@ router.get('/agents/:agentId/versions/:version', async (req: Request, res: Respo
 });
 
 // ════════════════════════════════════════════════════════════════════
-// POST /run-async — dispara eval (uma execução viva por agente + 24 h)
+// POST /run-async: dispara eval (uma execução viva por agente + 24 h)
 // ════════════════════════════════════════════════════════════════════
 router.post('/run-async', async (req: Request, res: Response) => {
   const orgId = req.user!.organizationId;
@@ -280,7 +280,7 @@ router.post('/run-async', async (req: Request, res: Response) => {
       return;
     }
 
-    // Trava 1 — execução VIVA: um teste por agente de cada vez, sem janela de
+    // Trava 1, execução VIVA: um teste por agente de cada vez, sem janela de
     // tempo. Com a fila, a linha fica 'pending' enquanto a trava global não
     // libera, o que em dia cheio são dezenas de minutos. Se só o cooldown de
     // 24 h contasse (e ele conta apenas 'completed'), cada clique impaciente
@@ -307,7 +307,7 @@ router.post('/run-async', async (req: Request, res: Response) => {
       return;
     }
 
-    // Trava 2 — cooldown: bloqueia se o CLIENTE já CONCLUIU um teste nas
+    // Trava 2, cooldown: bloqueia se o CLIENTE já CONCLUIU um teste nas
     // últimas 24 h.
     //
     // A048: antes contava qualquer execução 'manual' ou 'client_manual' com
