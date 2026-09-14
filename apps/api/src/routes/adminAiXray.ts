@@ -180,6 +180,9 @@ async function montarPrompt(input: {
   return buildEvalSystemPrompt(
     { systemPrompt: agente?.systemPrompt ?? null },
     { id: 'xray', userMessage: mensagem, history: historico },
+    // Rodada 3 do PR #375: o avaliador passou a receber o bloco de regras do
+    // agente testado. O Raio-X mostra o mesmo prompt que o teste envia.
+    await blocoDeRegrasDaOrganizacao(organizationId, { agentId: agente?.id ?? null }),
   );
 }
 

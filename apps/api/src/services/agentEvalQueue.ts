@@ -41,6 +41,7 @@ import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { executeAgentEvalRun } from './agentEvalRunner.js';
+import { blocoDeRegrasDaOrganizacao } from './agentRulesService.js';
 import {
   notifySlackQualityIssue,
   scenariosFailingTwice,
@@ -482,6 +483,22 @@ export async function executeRunJob(runId: string): Promise<void> {
       scenarios: scenarios.length,
     });
 
+    // Rodada 3 do PR #375: a execução completa mede o agente COM as regras
+    // aprovadas. Com o interruptor ligado, aplicar cria o registro e não toca
+    // no prompt; sem este bloco a nota da organização migrada cai e nunca
+    // mais reflete as regras. Fail-soft: sem bloco, a execução segue.
+    let regrasBlock = '';
+    try {
+      regrasBlock = await blocoDeRegrasDaOrganizacao(agent.organizationId, { agentId: agent.id });
+    } catch (err) {
+      logger.warn({
+        msg: 'agent_eval_bloco_de_regras_indisponivel',
+        runId,
+        agentId: agent.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     // A conclusão é gravada por ESTA continuação, e não depois do race: se o
     // teto estourar, a execução continua correndo no provedor e volta aqui
     // atrasada. É o filtro de status em gravarConclusao que a barra.
@@ -489,6 +506,7 @@ export async function executeRunJob(runId: string): Promise<void> {
       scenarios,
       { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' },
       profile,
+      { regrasBlock },
     ).then(async (saida) => ({
       saida,
       gravacao: await gravarConclusao(runId, saida, scenarios.length),

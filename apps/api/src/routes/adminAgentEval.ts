@@ -79,7 +79,10 @@ import {
 // FASE 2.2d (#252): on-demand suggestion pra cenários partial
 import { suggestFix } from '../services/agentEvalRunner.js';
 // C3 (A043): as regras aprovadas pelo dono, para o sugeridor não duplicar.
-import { carregarRegrasAtivas } from '../services/agentRulesService.js';
+import {
+  carregarRegrasAtivas,
+  blocoDeRegrasDaOrganizacao,
+} from '../services/agentRulesService.js';
 // C3 (A078, A217): a mesma guarda de conflito da porta do cliente.
 import { detectarConflitos } from '../agents/regrasDoAgente.js';
 // A083: toda escrita no prompt declara a origem e vira versão; reverter só
@@ -167,6 +170,26 @@ router.get(
 
 // ─── POST /run (sync — backwards compat) ────────────────────────────
 
+/**
+ * O bloco "# Regras aprovadas pelo dono" do agente, sem derrubar a rota.
+ *
+ * Rodada 3 do PR #375: as duas portas do superadmin que executam o avaliador
+ * (POST /run e o re-verify do apply-fix) mediam o agente SEM as regras que o
+ * dono aprovou. Fail-soft como no orquestrador: sem bloco, a execução segue.
+ */
+async function blocoDeRegrasFailSoft(organizationId: string, agentId: string): Promise<string> {
+  try {
+    return await blocoDeRegrasDaOrganizacao(organizationId, { agentId });
+  } catch (err) {
+    logger.warn('[agentEval] bloco de regras indisponível (segue sem ele)', {
+      organizationId,
+      agentId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return '';
+  }
+}
+
 router.post(
   '/run',
   authMiddleware as any,
@@ -202,7 +225,10 @@ router.post(
       }
 
       logger.info(`[agentEval] sync run iniciado agentId=${agentId} scenarios=${scenarios.length}`);
-      const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile);
+      const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile, {
+        // Rodada 3 do PR #375: mede o agente COM as regras aprovadas pelo dono.
+        regrasBlock: await blocoDeRegrasFailSoft(agent.organizationId, agent.id),
+      });
 
       res.json({
         version: EVAL_SET_VERSION,
@@ -899,6 +925,11 @@ router.post(
               systemPrompt: result.promptAfter,
             },
             profile,
+            {
+              // Rodada 3 do PR #375: o re-verify mede o prompt novo COM as
+              // regras aprovadas, como o orquestrador vai montar.
+              regrasBlock: await blocoDeRegrasFailSoft(run.agent.organizationId, run.agentId),
+            },
           );
           // A171: 'erro' é falha técnica do re-teste. computeReverifyVerdict
           // já trata: improved só quando o resultado novo é 'pass'.

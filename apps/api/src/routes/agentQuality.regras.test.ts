@@ -626,6 +626,41 @@ describe('re-test — 3 amostras gravadas (A049)', () => {
     }
   });
 
+  // ── Rodada 3 do PR #375: o re-teste mede o agente COM as regras ──
+  // Com o interruptor ligado, aplicar cria o registro e não toca no prompt.
+  // Se o re-teste montar o prompt só com o system_prompt cru, ele mede o
+  // agente SEM a regra que acabou de ser aprovada, e "não funcionou" vira
+  // a resposta padrão de toda correção.
+  it('monta o bloco de regras DO AGENTE e o entrega às três amostras', async () => {
+    const BLOCO = '# Regras aprovadas pelo dono\n1. Chame o cliente pelo nome quando souber.';
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue(BLOCO);
+    respostas('pass', 'pass', 'pass');
+
+    const res = makeRes();
+    await getHandler('post', RETEST)({ ...USER, params: paramsApply, body: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(regrasMock.blocoDeRegrasDaOrganizacao).toHaveBeenCalledWith('org-1', {
+      agentId: 'agent-1',
+    });
+    expect(runnerMock.executeAgentEvalRun).toHaveBeenCalledTimes(3);
+    for (const chamada of runnerMock.executeAgentEvalRun.mock.calls) {
+      expect(chamada[3]).toMatchObject({ pularSugestao: true, regrasBlock: BLOCO });
+    }
+  });
+
+  it('bloco de regras indisponível não derruba o re-teste (segue sem ele)', async () => {
+    regrasMock.blocoDeRegrasDaOrganizacao.mockRejectedValue(new Error('banco fora'));
+    respostas('pass', 'pass', 'pass');
+
+    const res = makeRes();
+    await getHandler('post', RETEST)({ ...USER, params: paramsApply, body: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(runnerMock.executeAgentEvalRun).toHaveBeenCalledTimes(3);
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({ regrasBlock: '' });
+  });
+
   it('a cota do re-teste é 7 por dia, e não a padrão de 20', () => {
     expect(cotasRegistradas).toContainEqual({ rota: 're-test', limite: 7 });
   });

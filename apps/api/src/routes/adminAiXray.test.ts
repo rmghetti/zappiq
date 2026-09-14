@@ -508,6 +508,40 @@ describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
       expect(prompt, canal).toContain('1. Chame o cliente pelo nome quando souber.');
     }
   });
+
+  // Rodada 3 do PR #375. O avaliador montava o prompt sem o bloco: o Raio-X
+  // do canal de Qualidade mostrava, corretamente, que o teste media o agente
+  // SEM a regra aprovada. Agora o canal monta com o bloco do agente testado.
+  it('com o interruptor LIGADO, o teste de Qualidade também recebe o bloco, do agente testado', async () => {
+    isFlagOn.mockResolvedValue(true);
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+
+    const res = await chamar({ ...corpoValido, canal: 'qualidade' });
+
+    expect(res.statusCode).toBe(200);
+    const prompt = promptDoTurno(res);
+    expect(prompt).toContain('# Regras aprovadas pelo dono');
+    expect(prompt).toContain('1. Chame o cliente pelo nome quando souber.');
+    // Antes do bloco do cliente, como no orquestrador.
+    expect(prompt.indexOf('# Regras aprovadas pelo dono')).toBeLessThan(
+      prompt.indexOf('# Cliente atual (eval test mock)'),
+    );
+    // Filtrado pelo agente que o canal carregou (a1), não só pela organização.
+    expect(agentRuleFindMany.mock.calls[0][0].where).toMatchObject({
+      organizationId: 'org-1',
+      agentId: 'a1',
+    });
+  });
+
+  it('com o interruptor DESLIGADO, o teste de Qualidade fica byte a byte como hoje', async () => {
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+
+    const res = await chamar({ ...corpoValido, canal: 'qualidade' });
+
+    expect(res.statusCode).toBe(200);
+    expect(promptDoTurno(res)).not.toContain('# Regras aprovadas pelo dono');
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => {

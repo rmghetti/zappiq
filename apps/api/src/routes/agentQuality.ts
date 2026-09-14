@@ -78,6 +78,7 @@ import {
   aplicarRegraDoCenario,
   reverterRegra,
   regraDaDecisao,
+  blocoDeRegrasDaOrganizacao,
   TetoDeRegrasError,
   TETO_DE_REGRAS_ATIVAS,
 } from '../services/agentRulesService.js';
@@ -1039,6 +1040,21 @@ router.post(
       // não separa correção que pegou de sorte, e sem execução gravada
       // ninguém consegue dizer depois se a correção valeu. Agora são três
       // passadas do MESMO cenário contra o MESMO prompt.
+      // Rodada 3 do PR #375: o re-teste mede o agente COM as regras aprovadas.
+      // Com o interruptor ligado, aplicar cria o registro e não toca no
+      // prompt; montar só com o system_prompt cru media o agente SEM a regra
+      // que acabou de ser aprovada. Fail-soft: sem bloco, o re-teste segue.
+      let regrasBlock = '';
+      try {
+        regrasBlock = await blocoDeRegrasDaOrganizacao(orgId, { agentId: run.agentId });
+      } catch (err) {
+        logger.warn('[agentQuality] bloco de regras indisponível no re-teste (segue sem ele)', {
+          orgId,
+          agentId: run.agentId,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
+
       const amostras: AmostraDoReteste[] = [];
       for (let i = 1; i <= AMOSTRAS_DO_RETESTE; i++) {
         const { results } = await executeAgentEvalRun(
@@ -1052,7 +1068,7 @@ router.post(
           // O re-teste lê o veredito e joga o resto fora. Sem esta marca, cada
           // amostra reprovada pedia uma sugestão nova (às vezes duas) que
           // ninguém ia ver: o clique custava 12 chamadas em vez de 6.
-          { pularSugestao: true },
+          { pularSugestao: true, regrasBlock },
         );
         const r = results[0];
         amostras.push({

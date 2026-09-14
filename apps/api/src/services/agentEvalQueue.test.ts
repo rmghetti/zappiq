@@ -18,7 +18,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { prismaMock, runnerMock, cronServiceMock, profileMock, evalSetMock } = vi.hoisted(() => ({
+const { prismaMock, runnerMock, cronServiceMock, profileMock, evalSetMock, regrasMock } = vi.hoisted(() => ({
   prismaMock: {
     agentEvalRun: {
       findUnique: vi.fn(),
@@ -35,9 +35,13 @@ const { prismaMock, runnerMock, cronServiceMock, profileMock, evalSetMock } = vi
   },
   profileMock: { resolveTenantAgentProfile: vi.fn() },
   evalSetMock: { resolveEvalSet: vi.fn(), EVAL_SET_VERSION: 'v2', HARNESS_VERSION: 3 },
+  // Rodada 3 do PR #375: a fila monta o bloco de regras do agente e entrega
+  // ao avaliador. Duble para o teste não tocar interruptor nem Redis.
+  regrasMock: { blocoDeRegrasDaOrganizacao: vi.fn(async () => '') },
 }));
 
 vi.mock('@zappiq/database', () => ({ prisma: prismaMock }));
+vi.mock('./agentRulesService.js', () => regrasMock);
 vi.mock('../utils/logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -565,5 +569,53 @@ describe('topFails do Slack bate com a contagem de críticos', () => {
     expect(ids).not.toContain('cr3'); // parcial não crítico segue fora
     expect(ids).not.toContain('cr4'); // aprovado
     expect(ids).not.toContain('cr5'); // falha técnica não é reprovação
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Rodada 3 do PR #375: a execução completa (cron e botão do cliente) mede o
+ * agente COM as regras aprovadas. Sem isto, depois da migração dos patches a
+ * nota da organização migrada cai e nunca mais reflete as regras.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('executeRunJob entrega o bloco de regras do agente ao avaliador', () => {
+  const BLOCO = '# Regras aprovadas pelo dono\n1. Chame o cliente pelo nome quando souber.';
+
+  beforeEach(() => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runPendente());
+    prismaMock.agentEvalRun.update.mockResolvedValue({});
+    prismaMock.agentEvalRun.updateMany.mockResolvedValue({ count: 1 });
+    profileMock.resolveTenantAgentProfile.mockResolvedValue({ organizationId: 'org-1' });
+    evalSetMock.resolveEvalSet.mockReturnValue(CENARIOS);
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results: [],
+      durationMs: 10,
+      summary: RESUMO_LIMPO,
+    });
+    cronServiceMock.shouldAlertQuality.mockReturnValue(false);
+    cronServiceMock.scenariosFailingTwice.mockResolvedValue([]);
+  });
+
+  it('monta o bloco pela organização E pelo agente da execução', async () => {
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue(BLOCO);
+
+    await executeRunJob('run-1');
+
+    expect(regrasMock.blocoDeRegrasDaOrganizacao).toHaveBeenCalledWith('org-1', {
+      agentId: 'agent-1',
+    });
+    expect(runnerMock.executeAgentEvalRun).toHaveBeenCalledTimes(1);
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({ regrasBlock: BLOCO });
+  });
+
+  it('bloco indisponível não derruba a execução: segue sem ele', async () => {
+    regrasMock.blocoDeRegrasDaOrganizacao.mockRejectedValue(new Error('banco fora'));
+
+    await executeRunJob('run-1');
+
+    expect(runnerMock.executeAgentEvalRun).toHaveBeenCalledTimes(1);
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({ regrasBlock: '' });
+    // A conclusão é gravada por updateMany (filtro de status): a execução
+    // terminou 'completed', e não ficou presa nem virou 'failed'.
+    expect(updateManysCom('status').map((c) => c.data.status)).toContain('completed');
   });
 });
