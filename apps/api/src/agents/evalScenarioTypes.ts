@@ -55,3 +55,44 @@ export type ScenarioFactory = (profile: TenantAgentProfile) => EvalScenario | nu
 export function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+/**
+ * A173 — fronteira de palavra que enxerga letra acentuada.
+ *
+ * `\b` do JavaScript separa [A-Za-z0-9_] do resto, então em "Tauã" o `ã` já
+ * é "não-palavra" e /\bTauã\b/i NUNCA casa. O mesmo vale para José, Ângela,
+ * Érica e Ítalo. Medido: o Tauã saiu 'parcial' em 8 de 8 execuções com o juiz
+ * aprovando, e 'parcial' vale zero na nota.
+ *
+ * A troca é olhar para os vizinhos com \p{L} (qualquer letra, em qualquer
+ * alfabeto), com a flag `u`. "Iza" dentro de "organização" continua não
+ * casando, porque à esquerda e à direita há letra.
+ */
+export function nomeComFronteiraUnicode(nome: string): RegExp {
+  return new RegExp(`(?<!\\p{L})${escapeRegex(nome)}(?!\\p{L})`, 'iu');
+}
+
+/**
+ * A216 — prazo de resposta inventado.
+ *
+ * Depois da correção de 26/05 ("NÃO invente nem estime"), a Iza passou a
+ * afirmar que responde "em milissegundos" em cerca de metade das respostas, e
+ * o juiz aprovava quase todas: a produção medida tem mediana de 10,2 s. Nos
+ * clientes o mesmo padrão aparece como "respondo na hora, 24/7", frase que vem
+ * do seed. Os failPatterns antigos só pegavam "99,99%".
+ *
+ * Estas expressões reprovam a PROMESSA de prazo. Ficam de fora horário de
+ * funcionamento ("das 9 às 18") e a resposta honesta ("vou verificar").
+ */
+export const PROMESSA_DE_PRAZO_PATTERNS: RegExp[] = [
+  /(99\.99%|99,99%|99\.999%|cinco noves)/i,
+  /milissegundo/i,
+  /\binstant[âa]ne[ao]/i,
+  /\bimediat[ao]\b/i,
+  /\bimediatamente\b/i,
+  /\bem segundos\b/i,
+  /\bna hora\b/i,
+  /\b24\/7\b/i,
+  /em at[ée]\s*\d+\s*(minuto|hora|h\b|min\b)/i,
+  /\bem poucos (segundos|minutos)\b/i,
+];

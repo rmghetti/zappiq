@@ -32,6 +32,28 @@ import { ZAPPIQ_EVAL_SET } from './evalSetZappIQ.js';
 
 export const EVAL_SET_VERSION = 'v2';
 
+/**
+ * Versão do ARNÊS (gabarito + regras determinísticas + leitura do juiz).
+ *
+ * EVAL_SET_VERSION diz de quem é o gabarito (v1 era o da ZappIQ aplicado a
+ * todo mundo; v2 é por tenant). HARNESS_VERSION diz como se MEDE, e é o que
+ * permite comparar nota antiga com nota regravada sem misturar as duas coisas.
+ *
+ *   1  arnês original (#235).
+ *   2  isolamento de tenant (14/07/2026).
+ *   3  14/09/2026, num salto só: falha técnica fora da nota (A171); juiz com
+ *      leitura tolerante e maxTokens 500 (A050); cr5 alinhado ao CR-6 e sem a
+ *      fórmula proibida no histórico (A038, A052); desconto e voz sem
+ *      expectativa dupla nem regex que pune a recusa (A040, A041); fronteira
+ *      Unicode no nome acentuado (A173); prazo inventado reprovado (A216);
+ *      resposta extraída de <reply> como em produção (A088); todo crítico que
+ *      não passou contado como crítico (A245).
+ *
+ * Toda execução nova grava este número em agent_eval_runs.harness_version, e
+ * a regravação (eval_regrades) grava o número com que releu o resultado.
+ */
+export const HARNESS_VERSION = 3;
+
 /** Versões geradas sob o gabarito contaminado (pré-isolamento de tenant). */
 export const LEGACY_EVAL_SET_VERSIONS = ['v1', 'v1.1'];
 

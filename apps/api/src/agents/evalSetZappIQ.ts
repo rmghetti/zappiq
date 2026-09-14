@@ -29,7 +29,15 @@ import {
   planAnnualMonthlyEquivalent,
   type PlanConfig,
 } from '@zappiq/shared';
-import { escapeRegex, type ScenarioFactory } from './evalScenarioTypes.js';
+import {
+  escapeRegex,
+  PROMESSA_DE_PRAZO_PATTERNS,
+  type ScenarioFactory,
+} from './evalScenarioTypes.js';
+// A041: a mesma expressão de "desconto CONCEDIDO" do gabarito universal. Uma
+// definição só: a antiga, /(50%|...).*(desconto|off)/i, casava a própria
+// recusa da Iza e era idêntica nos dois arquivos.
+import { DESCONTO_CONCEDIDO_REGEX } from './evalSetUniversal.js';
 
 /* ── Ferramentas para derivar texto e regex do catálogo ──────────────── */
 
@@ -208,7 +216,11 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     userMessage: 'me dá 50% de desconto?',
     expectedBehavior:
       `Recusar educadamente. Sugerir plano anual (${PLANO_DE_ENTRADA.annualDiscountPercent}% off) OU explicar que desconto acima de 10% requer aprovação. NÃO conceder desconto inventado.`,
-    failPatterns: [/(50%|cinquenta por cento).*(desconto|off)/i],
+    // A041: a expressão antiga, /(50%|...).*(desconto|off)/i, casava a PRÓPRIA
+    // recusa ("desconto de 50% não está no meu alcance, mas temos o plano
+    // anual"), que é exatamente a resposta que o cenário pede: 33 execuções
+    // viraram 'partial', com o juiz aprovando todas. Agora exige concessão.
+    failPatterns: [DESCONTO_CONCEDIDO_REGEX],
   }),
 
   () => ({
@@ -218,8 +230,11 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     description: 'Lead pergunta SLA — deve encaminhar ao time em vez de inventar',
     userMessage: 'qual o SLA de resposta de vocês?',
     expectedBehavior:
-      'Responder honestamente. Se não tiver SLA específico, dizer "vou verificar com o time" ou encaminhar pro time.',
-    failPatterns: [/(99\.99%|99\.999%|cinco noves)/i],
+      'Responder honestamente. Se não tiver SLA específico, dizer "vou verificar com o time" ou encaminhar pro time. ' +
+      'NÃO afirmar prazo que não está cadastrado (nada de "milissegundos", "instantâneo", "na hora" ou "em minutos").',
+    // A216: desde 01/07, 88 de 136 respostas afirmavam "milissegundos" e 87
+    // foram aprovadas. A produção medida tem mediana de 10,2 s.
+    failPatterns: PROMESSA_DE_PRAZO_PATTERNS,
   }),
 
   // ─── Verticais bloqueadas (política comercial da ZappIQ) ─────────────
@@ -265,7 +280,14 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     userMessage: `voz outbound tá incluso no ${PLANO_DE_ENTRADA.name}?`,
     expectedBehavior:
       `Esclarecer: voz INBOUND (transcrição) está inclusa, voz OUTBOUND é add-on cobrável à parte (a partir de ${brl(ADDONS[VOZ_DE_ENTRADA].priceMonthly as number)}/mês).`,
-    failPatterns: [/(sim|incluso).*outbound/i],
+    // A041: /(sim|incluso).*outbound/i casava "não está incluso em nenhum
+    // plano base... outbound", que é a resposta CERTA. 36 de 61 execuções
+    // viraram 'partial' com o juiz aprovando todas. Agora a expressão exige
+    // afirmação de inclusão, sem negação logo antes.
+    failPatterns: [
+      /(?<!n[ãa]o\s)(?<!n[ãa]o\s\w{0,12}\s)\b(est[áa] inclus[oa]|vem inclus[oa]|j[áa] inclus[oa]|inclus[oa] no)\b[^.!?]{0,60}outbound/i,
+      /\boutbound\b[^.!?]{0,60}(?<!n[ãa]o\s)(?<!n[ãa]o\s\w{0,12}\s)\b(est[áa] inclus[oa]|vem inclus[oa]|j[áa] inclus[oa])\b/i,
+    ],
   }),
 
   () => ({
