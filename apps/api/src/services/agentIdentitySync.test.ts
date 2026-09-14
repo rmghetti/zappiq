@@ -149,3 +149,87 @@ describe('syncAgentIdentity', () => {
     expect(out.synced).toBe(false);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * O nome e o prompt são a MESMA mudança do cliente.
+ * --------------------------------------------------------------------
+ * Quando o `db` é o prisma (e portanto sabe abrir transação), as duas
+ * escritas tinham de entrar juntas. Estavam em transações separadas: se o
+ * publishPrompt caísse, o agente ficava com o nome novo e o prompt velho,
+ * ainda se apresentando como Vera.
+ *
+ * O banco falso abaixo imita o commit de verdade: escrita fora de
+ * transação vale na hora, escrita dentro só vale se o bloco terminar.
+ * ════════════════════════════════════════════════════════════════════ */
+describe('syncAgentIdentity com transação', () => {
+  const PROMPT_INICIAL = PROMPT_VERA;
+
+  function bancoTransacional(opts: { falhaAoGravarPrompt?: boolean } = {}) {
+    const gravado = { name: 'Vera', systemPrompt: PROMPT_INICIAL };
+
+    /** Uma "conexão": lê do que está gravado, escreve no destino que receber. */
+    function conexao(destino: { name?: string; systemPrompt?: string }) {
+      return {
+        $executeRaw: vi.fn(async () => 1),
+        agentPromptVersion: {
+          findFirst: vi.fn(async () => ({ version: 8, hash: 'h8' })),
+        },
+        agent: {
+          findFirst: vi.fn(async () => ({
+            id: 'ag1',
+            name: gravado.name,
+            systemPrompt: gravado.systemPrompt,
+          })),
+          findUnique: vi.fn(async () => ({
+            systemPrompt: destino.systemPrompt ?? gravado.systemPrompt,
+          })),
+          update: vi.fn(async ({ data }: any) => {
+            if (data.systemPrompt !== undefined && opts.falhaAoGravarPrompt) {
+              throw new Error('banco caiu ao gravar o prompt');
+            }
+            if (data.name !== undefined) destino.name = data.name;
+            if (data.systemPrompt !== undefined) destino.systemPrompt = data.systemPrompt;
+            return {};
+          }),
+        },
+      };
+    }
+
+    // Fora de transação, a escrita cai direto no que está gravado.
+    const db: any = conexao(gravado);
+    db.$transaction = vi.fn(async (fn: any) => {
+      const rascunho: any = {};
+      const saida = await fn(conexao(rascunho));
+      // Chegou aqui: commit. Se o callback lançar, o rascunho morre com ele.
+      Object.assign(gravado, rascunho);
+      return saida;
+    });
+
+    return { db, gravado };
+  }
+
+  it('falha ao gravar o prompt não deixa o nome novo gravado', async () => {
+    const { db, gravado } = bancoTransacional({ falhaAoGravarPrompt: true });
+
+    const out = await syncAgentIdentity(db, 'org-cmj', 'Sofia');
+
+    // Fail-soft na resposta ao cliente, como sempre foi.
+    expect(out.synced).toBe(false);
+    // Mas o banco não pode ter ficado pela metade.
+    expect(gravado.name).toBe('Vera');
+    expect(gravado.systemPrompt).toBe(PROMPT_INICIAL);
+  });
+
+  it('nome e prompt entram juntos quando tudo dá certo', async () => {
+    const { db, gravado } = bancoTransacional();
+
+    const out = await syncAgentIdentity(db, 'org-cmj', 'Sofia');
+
+    expect(out.synced).toBe(true);
+    expect(out.promptAtualizado).toBe(true);
+    expect(gravado.name).toBe('Sofia');
+    expect(gravado.systemPrompt).toContain('Você é Sofia');
+    // As duas escritas foram no mesmo bloco.
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+  });
+});
