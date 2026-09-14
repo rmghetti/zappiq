@@ -125,4 +125,16 @@ ALTER TABLE public.signups
 -- 20260914000020_revoke_anon_public. O apps/web escreve com service_role,
 -- que atravessa RLS; anon e authenticated não têm nada aqui.
 ALTER TABLE public.signups ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.signups FROM anon, authenticated;
+
+-- REVOKE condicional, como em 20260914000030: banco local de desenvolvimento
+-- não tem os papéis do Supabase, e sem o IF a migração quebraria fora dele.
+DO $$
+DECLARE
+  papel text;
+BEGIN
+  FOREACH papel IN ARRAY ARRAY['anon', 'authenticated', 'app_user'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = papel) THEN
+      EXECUTE format('REVOKE ALL ON public.signups FROM %I', papel);
+    END IF;
+  END LOOP;
+END $$;

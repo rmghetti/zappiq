@@ -60,6 +60,14 @@ import { isFlagOn } from './featureFlags.js';
 // visitantes leem hoje. É decisão de produto, não de refatoração: fica de
 // fora deste PR.
 import { stripStructuredTags, stripLeakedPrefixes } from '../agents/replyText.js';
+// P62, A251, A232: o chat do site NÃO passava pelo pré-filtro. Era o único
+// canal em que uma mensagem de crise não encontrava nenhuma guarda.
+import { detectBlockedVertical, detectarSinalDeCrise } from './llm/blockedVerticalFilter.js';
+import {
+  acionarRedeDeCrise,
+  acionarTransbordoDeCompliance,
+  acrescentarAcolhimento,
+} from './llm/crisisSafetyNet.js';
 
 /* ── Org/agent canonical da Iza (dogfood) ─────────────────────────────
  * Documentado em memory `project_zappiq_3_orgs_zappiq_naming.md`. */
@@ -582,16 +590,49 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     { role: 'user', content: userMessage },
   ];
 
+  // 2.b Pré-filtro determinístico (P62, A251, A232).
+  //
+  // Este canal não passava por ele. WhatsApp, Instagram e Testar minha IA
+  // entram pelo routeIzaTurn e ganhavam a guarda de graça; o chat do site
+  // ia direto para o modelo. Era o único lugar em que uma mensagem de risco
+  // à vida não encontrava nenhuma camada determinística.
+  //
+  // Ordem: crise primeiro. Quem pede ajuda nunca recebe recusa nem template.
+  const sinalDeCrise = detectarSinalDeCrise(userMessage);
+  const bloqueio = sinalDeCrise.crise
+    ? ({ blocked: false } as const)
+    : detectBlockedVertical(userMessage, { organizationId });
+
+  // Quando o pré-filtro decide, o modelo não é chamado: a resposta é
+  // determinística e o turno custa zero.
+  const respostaDoPrefiltro = bloqueio.blocked ? bloqueio.suggestedResponse : null;
+
   // 3. Chama cascade LLM (mesma do WhatsApp)
-  let llmResp;
-  try {
-    llmResp = await chatCompletion(systemPrompt, messages, MAX_OUTPUT_TOKENS, {
-      orgId: organizationId,
-      conversationId: `web-chat:${sessionId}`,
-    });
-  } catch (err) {
-    logger.error('[webChat] chatCompletion failed', { sessionId, err });
-    throw new Error('LLM_UNAVAILABLE');
+  let llmResp: {
+    text: string;
+    provider?: string;
+    model?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+  };
+  if (respostaDoPrefiltro) {
+    llmResp = {
+      text: respostaDoPrefiltro,
+      provider: 'pre-filtro',
+      model: 'deterministico',
+      inputTokens: 0,
+      outputTokens: 0,
+    };
+  } else {
+    try {
+      llmResp = await chatCompletion(systemPrompt, messages, MAX_OUTPUT_TOKENS, {
+        orgId: organizationId,
+        conversationId: `web-chat:${sessionId}`,
+      });
+    } catch (err) {
+      logger.error('[webChat] chatCompletion failed', { sessionId, err });
+      throw new Error('LLM_UNAVAILABLE');
+    }
   }
 
   // 4. Limpeza das tags estruturadas: o prompt pode devolver <action>,
@@ -604,6 +645,13 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   if (replyMatch) reply = replyMatch[1].trim();
   reply = stripStructuredTags(reply);
   reply = stripLeakedPrefixes(reply);
+
+  // 4.b Crise: a linha do CVV entra no texto já limpo, ACRESCENTADA à
+  //     resposta do agente. `comTransbordo` só é verdade quando existe
+  //     conversa de verdade para uma pessoa assumir.
+  if (sinalDeCrise.crise) {
+    reply = acrescentarAcolhimento(reply, { comTransbordo: Boolean(lead) });
+  }
 
   // 5. Resposta Meta 2026: espelho OUTBOUND + realtime + débito sombra.
   //    Tudo best-effort num try/catch próprio: o visitante recebe a resposta
@@ -648,6 +696,32 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
         err: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  // 5.b Pausa, aviso ao dono e registro. Depois do envio e do espelho, para
+  //      não atrasar a resposta de quem pediu ajuda. Fail-soft por dentro.
+  if (sinalDeCrise.crise) {
+    await acionarRedeDeCrise({
+      organizationId,
+      conversationId: lead?.conversationId ?? null,
+      canal: 'site',
+      regra: sinalDeCrise.regra,
+    }).catch((err) =>
+      logger.error('[webChat] rede de crise falhou (fluxo público segue)', {
+        err: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  } else if (bloqueio.blocked && bloqueio.action === 'transbordo') {
+    await acionarTransbordoDeCompliance({
+      organizationId,
+      conversationId: lead?.conversationId ?? null,
+      canal: 'site',
+      regra: bloqueio.vertical,
+    }).catch((err) =>
+      logger.warn('[webChat] transbordo de compliance falhou (fluxo público segue)', {
+        err: err instanceof Error ? err.message : String(err),
+      }),
+    );
   }
 
   const latencyMs = Date.now() - startedAt;

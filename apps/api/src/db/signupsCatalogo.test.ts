@@ -72,6 +72,9 @@ describe('migração de signups — segurança e reexecução', () => {
 
   it('mantém a RLS ligada e a chave pública sem privilégio', () => {
     expect(sql).toMatch(/ALTER TABLE\s+"?(public\.)?signups"?\s+ENABLE ROW LEVEL SECURITY/i);
-    expect(sql).toMatch(/REVOKE ALL ON\s+"?(public\.)?signups"?\s+FROM anon, authenticated/i);
+    // O REVOKE é condicional (banco local não tem os papéis do Supabase),
+    // então a asserção lê o comando e a lista de papéis separadamente.
+    expect(sql).toMatch(/REVOKE ALL ON\s+"?(public\.)?signups"?\s+FROM/i);
+    expect(sql).toMatch(/'anon',\s*'authenticated'/);
   });
 });

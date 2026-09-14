@@ -262,6 +262,7 @@ model Organization {
   miraUsageMonthly        MiraUsageMonthly[]
   // Interruptores de comportamento novo, um por organização (A2 14/09/2026).
   featureFlags            OrgFeatureFlag[]
+  prefilterEvents         PrefilterEvent[]
 
   // ── Self-service AI training (maturação da IA pelo próprio cliente) ──
   // Score 0-100 cacheado. Atualizado a cada mutação relevante (upload de doc,
@@ -1431,6 +1432,43 @@ model AgentPromptVersion {
 
   @@unique([agentId, version])
   @@map("agent_prompt_versions")
+}
+
+// ═══════════════════════════════════════════════════════════
+// PrefilterEvent: o que o pré-filtro determinístico fez, e por quê.
+// -----------------------------------------------------------
+// O pré-filtro roda antes de qualquer LLM, em todo turno, para TODA
+// organização. Até 14/09/2026 o único rastro de um disparo era um
+// logger.info: o dono nunca soube que o cliente final dele levou uma
+// recusa (A251, A232), e a rede de crise (P62) não podia nascer assim.
+//
+// O TEXTO DA MENSAGEM NÃO ENTRA AQUI. Indício de risco à vida é dado
+// sensível de saúde (LGPD art. 5º II e art. 11). O registro guarda a regra
+// que casou, o canal e o que foi feito; o conteúdo continua só na conversa,
+// com o controle de acesso que ela já tem.
+//
+// Sem política de RLS e sem grant para anon/authenticated: dado de
+// plataforma, só a API lê.
+// ═══════════════════════════════════════════════════════════
+model PrefilterEvent {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId String?      @map("conversation_id")
+  /// 'whatsapp' | 'instagram' | 'site' | 'playground'
+  canal          String
+  /// 'crise' | 'compliance' | 'politica-comercial-zappiq'
+  categoria      String
+  /// Id da regra de crise (crise_me_matar, ...) ou o nome da vertical.
+  regra          String
+  /// 'acolhimento' | 'transbordo' | 'recusa'
+  acao           String
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([organizationId, createdAt])
+  @@index([categoria])
+  @@index([conversationId])
+  @@map("prefilter_events")
 }
 
 // FASE 1.B task #240 — Onboarding journey D+1/D+3/D+7 state.

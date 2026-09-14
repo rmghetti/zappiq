@@ -22,6 +22,12 @@ import {
 import { chatCompletion, classify, type LLMMessage, type LLMContext } from '../services/llm/langchainClient.js';
 import { syncContactToCrm } from '../services/crmAutomationService.js'; // CRM Onda 1 — IA preenche o pipeline
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
+// Rede de crise e transbordo do pré-filtro (P62, A251, A232).
+import {
+  acionarRedeDeCrise,
+  acionarTransbordoDeCompliance,
+  acrescentarAcolhimento,
+} from '../services/llm/crisisSafetyNet.js';
 import { getToolsForContext } from '../services/llm/tools.js';
 import { isZappIQOrg, ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 import { extractConversionUrls, buildTenantLinksBlock } from './tenantConversionUrls.js';
@@ -799,6 +805,20 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
           aiConfidence: 1.0, // resposta determinística (regex match)
         },
       });
+      // A251 e A232: na conta de um cliente, quem escreve é o cliente final
+      // dele. A camada compliance deixou de recusar e passou a transbordar,
+      // com registro e aviso ao dono. A recusa segue existindo só no nosso
+      // funil (política comercial da ZappIQ), e lá também vira registro.
+      if (turnResult.action === 'transbordo') {
+        await acionarTransbordoDeCompliance({
+          organizationId,
+          conversationId,
+          canal: channel === 'instagram' ? 'instagram' : 'whatsapp',
+          regra: turnResult.vertical,
+        }).catch((err) =>
+          logger.warn('[Agent] transbordo de compliance falhou (fail-soft)', { err: String(err) }),
+        );
+      }
       return;
     }
 
@@ -812,6 +832,15 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // ── 10. Parse structured response ───────────────────
     const llmResponse = { text: turnResult.response.text };
     const parsed = parseAgentResponse(llmResponse.text);
+
+    // ── 10.5. Rede de crise (P62) ───────────────────────
+    // A resposta do agente NÃO é substituída: a linha do CVV é acrescentada
+    // ao texto já limpo (depois do parse, senão ela cairia fora de <reply>).
+    // Só o texto é tocado aqui; a pausa, o aviso ao dono e o registro vêm
+    // depois do envio, para não atrasar a resposta de quem pediu ajuda.
+    if (turnResult.crise) {
+      parsed.replyText = acrescentarAcolhimento(parsed.replyText, { comTransbordo: true });
+    }
 
     // ── 11. Execute actions ─────────────────────────────
     if (parsed.action) {
@@ -931,6 +960,20 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
             : {}),
         },
       });
+    }
+
+    // ── 12.5. Crise: a IA para e uma pessoa assume ──────
+    // Depois do envio, de propósito: a linha do CVV já saiu para o cliente
+    // final, e nada aqui pode segurar aquela mensagem. Fail-soft por dentro.
+    if (turnResult.crise) {
+      await acionarRedeDeCrise({
+        organizationId,
+        conversationId,
+        canal: channel === 'instagram' ? 'instagram' : 'whatsapp',
+        regra: turnResult.crise.regra,
+      }).catch((err) =>
+        logger.error('[Agent] rede de crise falhou (fail-soft)', { err: String(err) }),
+      );
     }
 
     // ── 13. Real-time dashboard push ────────────────────

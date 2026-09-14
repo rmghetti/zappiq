@@ -37,7 +37,9 @@
 import { llmRouter, type LLMMessage, type LLMTier, type LLMProviderId, type ToolDefinition } from './LLMRouter.js';
 import {
   detectBlockedVertical,
+  detectarSinalDeCrise,
   type BlockedVertical,
+  type BlockedVerticalAction,
 } from './blockedVerticalFilter.js';
 import {
   classifyIntent,
@@ -98,13 +100,27 @@ export interface IzaTurnRequest {
   tools?: ToolDefinition[];
 }
 
+/**
+ * Sinal de crise do turno (P62). Só o id da regra: o texto da mensagem
+ * NUNCA sai daqui, porque indício de risco à vida é dado sensível de saúde.
+ *
+ * Quem recebe este campo é o CANAL, que acrescenta a linha do CVV à resposta
+ * já limpa e aciona o transbordo. O router não escreve no banco.
+ */
+export interface SinalDeCriseDoTurno {
+  regra: string;
+}
+
 export type IzaTurnResult =
   | {
       kind: 'blocked';
       vertical: BlockedVertical;
+      /** 'recusa' (nosso funil) ou 'transbordo' (conta de cliente). */
+      action: BlockedVerticalAction;
       response: string;
       matchedSnippet: string;
       llmCallsMade: 0;
+      crise?: undefined;
     }
   | {
       kind: 'llm';
@@ -115,6 +131,8 @@ export type IzaTurnResult =
       // 1 (skipClassify) ou 2 (classify+chat) no caminho normal; mais quando o
       // loop de tools (agendamento) faz rodadas adicionais de complete().
       llmCallsMade: number;
+      /** Presente quando o pré-filtro viu sinal de crise neste turno. */
+      crise?: SinalDeCriseDoTurno;
     };
 
 /**
@@ -149,14 +167,37 @@ function pickProvider(
  *   - LLM principal failure propaga erro pro caller (caller decide retry)
  */
 export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> {
+  // ── 0. Rede de crise (P62) — vem ANTES de tudo ───────────────
+  // Regra determinística, para toda organização, que NÃO bloqueia: o
+  // agente responde normalmente e o turno volta marcado, para o canal
+  // acrescentar a linha do CVV e chamar uma pessoa.
+  //
+  // A ordem importa. Uma mensagem pode tocar crise E uma regra de
+  // conteúdo ao mesmo tempo ('não aguento mais viver com esse vício em
+  // pornografia'). Quem pede ajuda não pode receber uma recusa, então a
+  // crise vence e o bloqueio nem é avaliado.
+  //
+  // O log NÃO leva o trecho da mensagem, ao contrário do bloqueio abaixo:
+  // indício de risco à vida é dado sensível de saúde (LGPD).
+  const sinalDeCrise = detectarSinalDeCrise(req.userMessage);
+  if (sinalDeCrise.crise) {
+    logger.warn('[izaTurnRouter] sinal de crise no turno', {
+      regra: sinalDeCrise.regra,
+      orgId: req.orgId,
+      conversationId: req.conversationId,
+    });
+  }
+
   // ── 1. Pre-filter (regex local, zero custo) ──────────────────
   // A org decide o que é checado: na org da ZappIQ vale nossa política
   // comercial (apostas/cripto/MLM); na org de cliente só compliance, com
   // mensagem sem marca. Sem orgId → cliente (fail-safe).
-  const blockedCheck = detectBlockedVertical(req.userMessage, {
-    organizationId: req.orgId,
-    businessName: req.businessName,
-  });
+  const blockedCheck = sinalDeCrise.crise
+    ? ({ blocked: false } as const)
+    : detectBlockedVertical(req.userMessage, {
+        organizationId: req.orgId,
+        businessName: req.businessName,
+      });
   if (blockedCheck.blocked) {
     logger.info(
       `[izaTurnRouter] Pre-filter blocked: vertical=${blockedCheck.vertical}, layer=${blockedCheck.layer}, snippet="${blockedCheck.matchedSnippet}"`,
@@ -165,6 +206,7 @@ export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> 
     return {
       kind: 'blocked',
       vertical: blockedCheck.vertical,
+      action: blockedCheck.action,
       response: blockedCheck.suggestedResponse,
       matchedSnippet: blockedCheck.matchedSnippet,
       llmCallsMade: 0,
@@ -303,5 +345,6 @@ export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> 
     escalated: intent !== 'normal',
     tierUsed: req.tier,
     llmCallsMade: llmCalls,
+    crise: sinalDeCrise.crise ? { regra: sinalDeCrise.regra } : undefined,
   };
 }

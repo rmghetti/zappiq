@@ -140,6 +140,11 @@ vi.mock('../services/llm/intentClassifier.js', () => ({
 
 vi.mock('../services/llm/blockedVerticalFilter.js', () => ({
   detectBlockedVertical: vi.fn(() => ({ blocked: false })),
+  // P62: o router consulta a rede de crise antes do bloqueio. Aqui o turno
+  // é sempre comercial, então o dublê nunca vê crise.
+  detectarSinalDeCrise: vi.fn(() => ({ crise: false })),
+  LINHA_DE_ACOLHIMENTO_CVV: 'linha do CVV',
+  LINHA_DE_TRANSBORDO_DE_CRISE: 'linha do transbordo',
 }));
 
 vi.mock('../services/llm/tools.js', () => ({
