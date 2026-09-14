@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * A242 — vigia dos cadastros que confirmaram e nunca viraram organização.
+ * A242: vigia dos cadastros que confirmaram e nunca viraram organização.
  *
  * Em 60 dias, 5 pessoas confirmaram o cadastro (linha em `signups` com
  * status active e usuário no Supabase Auth) e nenhuma virou organização,
@@ -28,7 +28,7 @@ function linha(over: Partial<LinhaDeSignup> = {}): LinhaDeSignup {
   };
 }
 
-describe('selecionarOrfaos — quem conta como órfão', () => {
+describe('selecionarOrfaos: quem conta como órfão', () => {
   it('confirmado há mais de 24 h e sem organização entra', () => {
     const r = selecionarOrfaos([linha()], AGORA);
     expect(r).toHaveLength(1);
@@ -81,7 +81,7 @@ describe('selecionarOrfaos — quem conta como órfão', () => {
   });
 });
 
-describe('runSignupOrfaosCycle — o alerta sai e não se repete no mesmo dia', () => {
+describe('runSignupOrfaosCycle: o alerta sai e não se repete no mesmo dia', () => {
   function deps(over: Record<string, any> = {}) {
     return {
       agora: AGORA,

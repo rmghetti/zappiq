@@ -18,7 +18,7 @@ const loginSchema = z.object({
 });
 
 /*
- * A214 (14/09/2026) — POST /api/auth/register foi REMOVIDA.
+ * A214 (14/09/2026): POST /api/auth/register foi REMOVIDA.
  *
  * Era uma segunda porta de cadastro, pública (com limitador de 10 por 15
  * minutos) e sem nenhum uso na tela. Ela criava organização com plano

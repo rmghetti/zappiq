@@ -11,7 +11,7 @@ import {
   normalizarPlanoDoSignup,
 } from './signupContract.js';
 
-describe('signupContract — plan_chosen', () => {
+describe('signupContract: plan_chosen', () => {
   it('aceita exatamente os planos do catálogo, nem um a mais', () => {
     expect([...SIGNUP_PLAN_CHOSEN_VALUES].sort()).toEqual([...PLAN_IDS].sort());
   });
@@ -21,7 +21,7 @@ describe('signupContract — plan_chosen', () => {
   });
 });
 
-describe('signupContract — onboarding_path', () => {
+describe('signupContract: onboarding_path', () => {
   it('inclui wizard, que é o caminho que o produto grava de verdade', () => {
     expect(ONBOARDING_PATHS).toContain('wizard');
   });
@@ -38,7 +38,7 @@ describe('signupContract — onboarding_path', () => {
   });
 });
 
-describe('signupContract — normalizarPlanoDoSignup', () => {
+describe('signupContract: normalizarPlanoDoSignup', () => {
   it('devolve IZA_LITE para o plano de entrada (era o caso que quebrava)', () => {
     expect(normalizarPlanoDoSignup('IZA_LITE')).toBe('IZA_LITE');
     expect(isSelfSignupPlan('IZA_LITE')).toBe(true);

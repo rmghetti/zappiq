@@ -1,5 +1,5 @@
 /**
- * A214 — a segunda porta de cadastro foi fechada.
+ * A214: a segunda porta de cadastro foi fechada.
  *
  * POST /api/auth/register continuava montada e pública. Ela criava
  * organização com plano STARTER e settings vazio e NÃO fazia nada do que o
@@ -14,7 +14,7 @@
  * REMOVER, não alinhar: manter duas portas de cadastro é manter duas
  * definições de "conta pronta".
  *
- * Abordagem: mesma de appointments.test.ts — sem supertest (server.ts puxa
+ * Abordagem: mesma de appointments.test.ts: sem supertest (server.ts puxa
  * Redis, OTel e BullMQ no import). Inspecionamos o router de verdade.
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -42,7 +42,7 @@ function caminhosMontados(metodo: string): string[] {
     .map((layer) => layer.route.path as string);
 }
 
-describe('router de autenticação — a porta paralela de cadastro sumiu', () => {
+describe('router de autenticação: a porta paralela de cadastro sumiu', () => {
   it('POST /register não existe mais (a rota devolve 404 no Express)', () => {
     expect(caminhosMontados('post')).not.toContain('/register');
   });

@@ -328,7 +328,7 @@ describe('blockedVerticalFilter — helpers', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════
- * A251 e A232 — corpus de NEGATIVOS por segmento.
+ * A251 e A232: corpus de NEGATIVOS por segmento.
  *
  * A camada compliance rodava para TODA organização, decidia por palavra
  * solta e recusava o cliente final com um template fixo. Reprodução de
@@ -338,7 +338,7 @@ describe('blockedVerticalFilter — helpers', () => {
  *
  * Estas frases são o contrato: nenhuma delas pode voltar a ser bloqueada.
  * ══════════════════════════════════════════════════════════════════════ */
-describe('compliance — negativos por segmento (A251, A232)', () => {
+describe('compliance: negativos por segmento (A251, A232)', () => {
   const CORPUS: Array<{ segmento: string; frases: string[] }> = [
     {
       segmento: 'saúde e saúde mental',
@@ -394,7 +394,7 @@ describe('compliance — negativos por segmento (A251, A232)', () => {
   }
 });
 
-describe('compliance — o que CONTINUA bloqueado (operação declarada)', () => {
+describe('compliance: o que CONTINUA bloqueado (operação declarada)', () => {
   const POSITIVOS = [
     'temos um site adulto com 10 mil assinantes',
     'tenho uma plataforma de conteúdo adulto',
@@ -419,14 +419,14 @@ describe('compliance — o que CONTINUA bloqueado (operação declarada)', () =>
 });
 
 /* ══════════════════════════════════════════════════════════════════════
- * P62 — rede de crise emocional.
+ * P62: rede de crise emocional.
  *
  * A única regra da plataforma para ideação suicida vivia na seção de
  * psicologia do prompt de segmento e não chegava a nenhum agente (A163,
  * A155). Aqui ela vira guarda programática, que não depende do modelo
  * obedecer. A detecção NÃO bloqueia: ela acrescenta.
  * ══════════════════════════════════════════════════════════════════════ */
-describe('detectarSinalDeCrise — positivos, com e sem acento', () => {
+describe('detectarSinalDeCrise: positivos, com e sem acento', () => {
   const POSITIVOS = [
     'quero me matar',
     'vou me matar',
@@ -458,7 +458,7 @@ describe('detectarSinalDeCrise — positivos, com e sem acento', () => {
   }
 });
 
-describe('detectarSinalDeCrise — NEGATIVOS (expressão figurada)', () => {
+describe('detectarSinalDeCrise: NEGATIVOS (expressão figurada)', () => {
   const NEGATIVOS = [
     'morrendo de rir com o vídeo de vocês',
     'esse bolo mata a saudade da vó',
@@ -490,7 +490,7 @@ describe('detectarSinalDeCrise — NEGATIVOS (expressão figurada)', () => {
   });
 });
 
-describe('detectarSinalDeCrise — LGPD', () => {
+describe('detectarSinalDeCrise: LGPD', () => {
   it('não devolve o texto da mensagem, só a regra que casou', () => {
     const r = detectarSinalDeCrise('quero me matar, meu nome é Ana e moro na rua X');
     expect(r.crise).toBe(true);
@@ -501,7 +501,7 @@ describe('detectarSinalDeCrise — LGPD', () => {
   });
 });
 
-describe('crise x compliance — a crise vem primeiro', () => {
+describe('crise x compliance: a crise vem primeiro', () => {
   it('pedido de ajuda com termo de compliance não vira recusa nem bloqueio', () => {
     const frase = 'não aguento mais viver com esse vício em pornografia';
     expect(detectarSinalDeCrise(frase).crise).toBe(true);

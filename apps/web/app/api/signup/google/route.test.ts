@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * A242 — o plano escolhido tem de estar GRAVADO antes de o lead sair do
+ * A242: o plano escolhido tem de estar GRAVADO antes de o lead sair do
  * nosso domínio para o Google.
  *
  * Medido em produção: signup_oauth_started com plan=IZA_LITE oito vezes
@@ -66,7 +66,7 @@ beforeEach(() => {
   vi.resetModules();
 });
 
-describe('POST /api/signup/google — plano gravado antes do redirecionamento', () => {
+describe('POST /api/signup/google: plano gravado antes do redirecionamento', () => {
   it('com e-mail, cria o signup com o plano escolhido ANTES de devolver a URL', async () => {
     const res = await chamar({ plan: 'IZA_LITE', email: 'Lead@Exemplo.com.br', name: 'Lead' });
     expect(res.status).toBe(200);

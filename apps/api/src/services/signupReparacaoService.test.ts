@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * A242 — reparação dos cadastros órfãos. Só o PLANO é decidido aqui; a
+ * A242: reparação dos cadastros órfãos. Só o PLANO é decidido aqui; a
  * gravação é decisão do fundador e roda pelo script, fora do produto.
  * ══════════════════════════════════════════════════════════════════════ */
 
@@ -22,7 +22,7 @@ const usuarios: UsuarioComOrganizacao[] = [
   { email: 'alguem@terceiro.com', organizationId: 'org-9' },
 ];
 
-describe('planejarReparacao — quem dá para religar', () => {
+describe('planejarReparacao: quem dá para religar', () => {
   const plano = planejarReparacao(orfaos, usuarios);
 
   it('liga o signup à organização quando o e-mail bate, ignorando a caixa', () => {
@@ -46,7 +46,7 @@ describe('planejarReparacao — quem dá para religar', () => {
   });
 });
 
-describe('executarReparacao — dry-run é o padrão', () => {
+describe('executarReparacao: dry-run é o padrão', () => {
   it('sem dryRun:false, NÃO escreve nada', async () => {
     const ligar = vi.fn(async () => 1);
     const r = await executarReparacao(planejarReparacao(orfaos, usuarios), { ligar });

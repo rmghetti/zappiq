@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * A242 — o callback do Google só CONFIRMA o cadastro.
+ * A242: o callback do Google só CONFIRMA o cadastro.
  *
  * Quem grava o plano é /api/signup/google, antes do redirecionamento. Aqui
  * o callback nunca pode sobrescrever a escolha do lead, e quando não há
@@ -65,7 +65,7 @@ beforeEach(() => {
   vi.resetModules();
 });
 
-describe('GET /auth/callback — só confirma, nunca reescreve o plano', () => {
+describe('GET /auth/callback: só confirma, nunca reescreve o plano', () => {
   it('com linha existente, confirma sem tocar em plan_chosen', async () => {
     linhaExistente = { id: 'sig-1' };
     await chamar('?code=abc&plan=GROWTH');

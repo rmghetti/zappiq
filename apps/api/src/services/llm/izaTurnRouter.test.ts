@@ -443,13 +443,13 @@ describe('routeIzaTurn — loop de tools (agendamento)', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════
- * P62 — sinal de crise no turno.
+ * P62: sinal de crise no turno.
  *
  * A crise NÃO bloqueia: o agente responde normalmente e o turno volta
  * marcado, para o canal acrescentar a linha do CVV e acionar o transbordo.
  * Bloquear seria devolver uma parede a quem pediu ajuda.
  * ══════════════════════════════════════════════════════════════════════ */
-describe('routeIzaTurn — rede de crise', () => {
+describe('routeIzaTurn: rede de crise', () => {
   beforeEach(() => {
     mockComplete.mockReset();
     mockClassify.mockReset();
@@ -509,7 +509,7 @@ describe('routeIzaTurn — rede de crise', () => {
   });
 });
 
-describe('routeIzaTurn — compliance devolve a ação do pré-filtro', () => {
+describe('routeIzaTurn: compliance devolve a ação do pré-filtro', () => {
   beforeEach(() => {
     mockComplete.mockReset();
     mockClassify.mockReset();

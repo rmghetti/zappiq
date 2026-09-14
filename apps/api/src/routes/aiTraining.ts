@@ -238,7 +238,7 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
 
     const result = buildPlaygroundResult({ rawLlmText: rawText, sources });
 
-    // P62 — rede de crise no playground.
+    // P62: rede de crise no playground.
     // A linha do CVV entra DEPOIS da limpeza das tags, no texto que a tela
     // mostra. `comTransbordo: false` de propósito: aqui não existe fila de
     // atendimento, e prometer uma pessoa seria inventar recurso (CR-7).

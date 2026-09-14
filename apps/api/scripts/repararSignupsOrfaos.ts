@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * repararSignupsOrfaos (CLI) — A242, 14/09/2026. DRY-RUN POR PADRÃO.
+ * repararSignupsOrfaos (CLI): A242, 14/09/2026. DRY-RUN POR PADRÃO.
  * --------------------------------------------------------------------
  * Cinco pessoas confirmaram o cadastro entre 23/07 e 14/09/2026 e ficaram
  * sem organização. Duas coisas diferentes na mesma lista:
@@ -35,7 +35,7 @@ const APLICAR = process.env.REPARAR_SIGNUPS_APLICAR === '1';
 
 async function main() {
   console.log(
-    `[repararSignupsOrfaos] início${APLICAR ? ' (APLICANDO)' : ' (DRY RUN — nada será gravado)'}`,
+    `[repararSignupsOrfaos] início${APLICAR ? ' (APLICANDO)' : ' (DRY RUN: nada será gravado)'}`,
   );
 
   const orfaos = await carregarOrfaos();
@@ -46,13 +46,13 @@ async function main() {
   const plano = planejarReparacao(orfaos, usuarios);
 
   console.log('');
-  console.log(`— A LIGAR (já têm organização com o mesmo e-mail): ${plano.ligaveis.length}`);
+  console.log(`: A LIGAR (já têm organização com o mesmo e-mail): ${plano.ligaveis.length}`);
   for (const l of plano.ligaveis) {
     console.log(`   signup ${l.signupId} -> organização ${l.organizationId}`);
   }
 
   console.log('');
-  console.log(`— SEM ORGANIZAÇÃO (decisão do fundador): ${plano.semOrganizacao.length}`);
+  console.log(`: SEM ORGANIZAÇÃO (decisão do fundador): ${plano.semOrganizacao.length}`);
   for (const s of plano.semOrganizacao) {
     console.log(`   signup ${s.signupId} · ${s.email} · plano ${s.plano ?? 'não escolhido'}`);
   }
@@ -61,7 +61,7 @@ async function main() {
 
   console.log('');
   console.log(
-    `[repararSignupsOrfaos] ${r.dryRun ? 'DRY RUN' : 'aplicado'} — ` +
+    `[repararSignupsOrfaos] ${r.dryRun ? 'DRY RUN' : 'aplicado'}: ` +
       `aLigar=${r.aLigar} ligados=${r.ligados} semOrganizacao=${r.semOrganizacao} ` +
       `falhas=${r.falhas.length}`,
   );

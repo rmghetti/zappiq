@@ -167,7 +167,7 @@ function pickProvider(
  *   - LLM principal failure propaga erro pro caller (caller decide retry)
  */
 export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> {
-  // ── 0. Rede de crise (P62) — vem ANTES de tudo ───────────────
+  // ── 0. Rede de crise (P62): vem ANTES de tudo ───────────────
   // Regra determinística, para toda organização, que NÃO bloqueia: o
   // agente responde normalmente e o turno volta marcado, para o canal
   // acrescentar a linha do CVV e chamar uma pessoa.

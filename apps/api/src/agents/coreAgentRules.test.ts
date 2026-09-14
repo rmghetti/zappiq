@@ -73,7 +73,7 @@ describe('CORE_RULES_VERSION', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════
- * P62, A163, A155 — a regra de crise no CORE, como SEGUNDA camada.
+ * P62, A163, A155: a regra de crise no CORE, como SEGUNDA camada.
  *
  * A primeira camada é o pré-filtro determinístico (blockedVerticalFilter +
  * crisisSafetyNet), que não depende do modelo obedecer. Esta aqui existe

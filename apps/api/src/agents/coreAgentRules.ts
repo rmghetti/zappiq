@@ -203,7 +203,7 @@ geração automática. Aplique sempre:
 - Frases com mais de 20 palavras precisam de um ponto de respiração (vírgula ou ponto).
 - Números escritos como serão lidos: "R$ 1.200" → "mil e duzentos reais".
 
-## CR-10 — SINAL DE CRISE (CRÍTICA, vale acima de qualquer outra regra)
+## CR-10: SINAL DE CRISE (CRÍTICA, vale acima de qualquer outra regra)
 
 Se a pessoa der qualquer sinal de que quer tirar a própria vida, se machucar
 ou de que não aguenta mais viver, isto vem antes de venda, de agendamento e

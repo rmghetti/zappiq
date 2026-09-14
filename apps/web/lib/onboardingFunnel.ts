@@ -7,9 +7,9 @@
  * que "ninguém novo chegou" virou "ninguém quis".
  *
  * Três eventos novos, pelo track() que já existe (analytics_events):
- *   onboarding_step_view  — o lead viu o passo N
- *   onboarding_complete   — a organização nasceu
- *   onboarding_error      — parou no passo N, com o motivo
+ *   onboarding_step_view: o lead viu o passo N
+ *   onboarding_complete: a organização nasceu
+ *   onboarding_error: parou no passo N, com o motivo
  *
  * LGPD: nada de dado pessoal nas props. O motivo do erro é uma ETIQUETA
  * curta e fechada, nunca a mensagem do servidor (que pode carregar e-mail,

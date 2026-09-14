@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * P62 — o que acontece DEPOIS que o pré-filtro vê um sinal de crise.
+ * P62: o que acontece DEPOIS que o pré-filtro vê um sinal de crise.
  *
  * A regra de ouro: a resposta do agente NÃO é substituída. A linha do CVV
  * é acrescentada. Substituir por template é o defeito de A251 e A232, e num
@@ -19,7 +19,7 @@ import {
 
 const RESPOSTA = 'Entendo. Me conta um pouco mais sobre o que você precisa?';
 
-describe('acrescentarAcolhimento — acrescenta, nunca substitui', () => {
+describe('acrescentarAcolhimento: acrescenta, nunca substitui', () => {
   it('a resposta do agente continua inteira', () => {
     const saida = acrescentarAcolhimento(RESPOSTA, { comTransbordo: false });
     expect(saida).toContain(RESPOSTA);
@@ -68,7 +68,7 @@ function deps(over: Record<string, any> = {}) {
   };
 }
 
-describe('acionarRedeDeCrise — pausa, avisa e registra', () => {
+describe('acionarRedeDeCrise: pausa, avisa e registra', () => {
   const entrada = {
     organizationId: 'org-1',
     conversationId: 'conv-1',
@@ -138,7 +138,7 @@ describe('acionarRedeDeCrise — pausa, avisa e registra', () => {
   });
 });
 
-describe('acionarTransbordoDeCompliance — o mesmo, com outra etiqueta', () => {
+describe('acionarTransbordoDeCompliance: o mesmo, com outra etiqueta', () => {
   it('registra categoria compliance e ação transbordo', async () => {
     const d = deps();
     await acionarTransbordoDeCompliance(

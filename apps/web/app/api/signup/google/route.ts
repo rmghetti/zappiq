@@ -3,7 +3,7 @@
  * --------------------------------------------------------------
  * Inicia OAuth Google via Supabase Auth e devolve a URL de redirect.
  *
- * A242 (14/09/2026) — o plano escolhido é GRAVADO ANTES do redirecionamento.
+ * A242 (14/09/2026): o plano escolhido é GRAVADO ANTES do redirecionamento.
  *
  * O desenho anterior confiava no parâmetro `plan` da URL de callback. Medido
  * em produção: oito eventos signup_oauth_started com plan=IZA_LITE (23/07,

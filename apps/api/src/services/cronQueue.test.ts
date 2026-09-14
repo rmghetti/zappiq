@@ -169,7 +169,7 @@ describe('fila cron: agendamento obsoleto sai do Redis', () => {
   });
 });
 
-// A242 — a vigia da porta de entrada entrou na fila única, não numa fila nova.
+// A242: a vigia da porta de entrada entrou na fila única, não numa fila nova.
 describe('cron: vigia dos cadastros órfãos', () => {
   const vigia = CRON_JOBS.find((j) => j.name === 'signup-orfaos-vigia');
 

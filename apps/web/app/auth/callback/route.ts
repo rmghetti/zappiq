@@ -11,7 +11,7 @@
  *
  * Por isso fazemos SELECT + INSERT/UPDATE em vez de UPDATE direto.
  *
- * A242 (14/09/2026) — aqui o callback só CONFIRMA.
+ * A242 (14/09/2026): aqui o callback só CONFIRMA.
  *   Quem grava o plano escolhido é /api/signup/google, antes do
  *   redirecionamento. Este handler nunca sobrescreve um plan_chosen que já
  *   existe: era assim que a escolha do Lite virava GROWTH.

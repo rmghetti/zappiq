@@ -70,9 +70,9 @@ export const BLOCKED_VERTICAL_LAYERS: Record<BlockedVertical, BlockedVerticalLay
 /**
  * O que fazer com o que casou.
  *
- *   'recusa'     — desqualifica e encerra. Só vale na camada da política
+ *   'recusa': desqualifica e encerra. Só vale na camada da política
  *                  comercial da ZappIQ, no NOSSO funil.
- *   'transbordo' — a IA para e uma pessoa assume, com registro e aviso ao
+ *   'transbordo': a IA para e uma pessoa assume, com registro e aviso ao
  *                  dono. É o que a camada compliance faz desde 14/09/2026
  *                  (A232, A251): na conta de um cliente quem escreve é o
  *                  cliente final dele, e recusar cliente final com template
@@ -150,7 +150,7 @@ const PATTERNS: Array<{
     vertical: 'pornografia',
     regex: new RegExp(
       [
-        // A251/A232 — a camada compliance passou a exigir OPERAÇÃO DECLARADA.
+        // A251/A232: a camada compliance passou a exigir OPERAÇÃO DECLARADA.
         //
         // Antes bastava a palavra solta ('pornografia', 'conteúdo adulto',
         // 'site adulto', 'escort', 'onlyfans'). O desenho partia de que quem

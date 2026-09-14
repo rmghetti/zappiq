@@ -11,7 +11,7 @@ import {
 /** Mesma validação da rota POST /api/analytics. Evento fora dela é descartado. */
 const REGEX_DA_ROTA = /^[a-z][a-z0-9_]{2,63}$/;
 
-describe('funil do cadastro — os três eventos', () => {
+describe('funil do cadastro: os três eventos', () => {
   it('os nomes passam na validação da rota de analytics', () => {
     for (const nome of [EVENTO_PASSO, EVENTO_CONCLUSAO, EVENTO_ERRO]) {
       expect(nome).toMatch(REGEX_DA_ROTA);
@@ -27,7 +27,7 @@ describe('funil do cadastro — os três eventos', () => {
   });
 });
 
-describe('motivoDoErro — etiqueta fechada, sem dado pessoal', () => {
+describe('motivoDoErro: etiqueta fechada, sem dado pessoal', () => {
   it('traduz os status que o cadastro devolve de verdade', () => {
     expect(motivoDoErro(409)).toBe('ja_registrado');
     expect(motivoDoErro(400)).toBe('validacao');

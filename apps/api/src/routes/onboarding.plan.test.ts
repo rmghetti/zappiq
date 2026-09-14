@@ -24,11 +24,11 @@ describe('normalizePlanChosen', () => {
   });
 });
 
-// A242 (14/09/2026) — o plano de ENTRADA não era reconhecido. O lead que
+// A242 (14/09/2026): o plano de ENTRADA não era reconhecido. O lead que
 // mantinha o padrão da tela (Lite) era rebaixado a STARTER, plano
 // descontinuado, e a organização nascia no plano errado. A lista passou a
 // derivar do catálogo de @zappiq/shared; nada mais é escrito à mão aqui.
-describe('normalizePlanChosen — catálogo único (A242)', () => {
+describe('normalizePlanChosen: catálogo único (A242)', () => {
   it('reconhece IZA_LITE, o plano que a tela pré-seleciona', () => {
     expect(normalizePlanChosen('IZA_LITE')).toBe('IZA_LITE');
     expect(normalizePlanChosen('iza_lite')).toBe('IZA_LITE');

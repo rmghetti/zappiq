@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * A213 e A176 — o rascunho do cadastro.
+ * A213 e A176: o rascunho do cadastro.
  *
  * A213: a senha escolhida no cadastro ficava gravada EM TEXTO no navegador,
  * para sempre, na chave 'zappiq_onboarding'. Ninguém lia e ninguém apagava:
@@ -62,7 +62,7 @@ beforeEach(() => {
   storage = memoria();
 });
 
-describe('sanitizarRascunho — a senha nunca entra', () => {
+describe('sanitizarRascunho: a senha nunca entra', () => {
   it('não devolve password nem passwordConfirm', () => {
     const limpo = sanitizarRascunho(formCompleto);
     expect(limpo).not.toHaveProperty('password');
@@ -82,7 +82,7 @@ describe('sanitizarRascunho — a senha nunca entra', () => {
   });
 });
 
-describe('salvarRascunho — o que chega no navegador', () => {
+describe('salvarRascunho: o que chega no navegador', () => {
   it('a senha em texto não aparece em lugar nenhum do que foi gravado', () => {
     salvarRascunho(formCompleto, storage);
     const gravado = storage.getItem(CHAVE_RASCUNHO) || '';
@@ -108,7 +108,7 @@ describe('salvarRascunho — o que chega no navegador', () => {
   });
 });
 
-describe('lerRascunho — o rascunho volta quando o lead volta (A176)', () => {
+describe('lerRascunho: o rascunho volta quando o lead volta (A176)', () => {
   it('devolve as respostas gravadas', () => {
     salvarRascunho(formCompleto, storage);
     const voltou = lerRascunho(storage) as Record<string, any>;
@@ -131,7 +131,7 @@ describe('lerRascunho — o rascunho volta quando o lead volta (A176)', () => {
   });
 });
 
-describe('limparRascunho — a chave sai do navegador (A213)', () => {
+describe('limparRascunho: a chave sai do navegador (A213)', () => {
   it('apaga a chave', () => {
     salvarRascunho(formCompleto, storage);
     expect(storage.getItem(CHAVE_RASCUNHO)).toBeTruthy();

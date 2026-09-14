@@ -39,7 +39,7 @@ export function valoresDaCheck(sqlTexto: string, coluna: string): string[] {
   return Array.from(m[1].matchAll(/'([^']+)'/g)).map((x) => x[1]);
 }
 
-describe('migração de signups — CHECK derivada do catálogo', () => {
+describe('migração de signups: CHECK derivada do catálogo', () => {
   it('plan_chosen aceita exatamente os planos de @zappiq/shared', () => {
     const doBanco = valoresDaCheck(sql, 'plan_chosen').sort();
     expect(doBanco).toEqual([...SIGNUP_PLAN_CHOSEN_VALUES].sort());
@@ -59,7 +59,7 @@ describe('migração de signups — CHECK derivada do catálogo', () => {
   });
 });
 
-describe('migração de signups — segurança e reexecução', () => {
+describe('migração de signups: segurança e reexecução', () => {
   it('é idempotente: derruba a constraint antiga antes de criar a nova', () => {
     expect(sql).toMatch(/DROP CONSTRAINT IF EXISTS\s+"?signups_plan_chosen_check"?/i);
     expect(sql).toMatch(/DROP CONSTRAINT IF EXISTS\s+"?signups_onboarding_path_check"?/i);

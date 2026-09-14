@@ -380,7 +380,7 @@ export default function OnboardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // A176 — rascunho de verdade, no navegador. Antes disto nada ficava, e
+  // A176: rascunho de verdade, no navegador. Antes disto nada ficava, e
   // fechar a aba perdia as cerca de 200 respostas. A senha NUNCA entra
   // (A213): quem decide isso é sanitizarRascunho, com teste próprio.
   useEffect(() => {
@@ -389,7 +389,7 @@ export default function OnboardingPage() {
     if (storage) salvarRascunho(form as Record<string, unknown>, storage);
   }, [mounted, form]);
 
-  // A242 — funil medido. Sem estes eventos, "parou no passo 3" e "nunca
+  // A242: funil medido. Sem estes eventos, "parou no passo 3" e "nunca
   // chegou" eram indistinguíveis no admin.
   useEffect(() => {
     if (!mounted) return;
