@@ -61,6 +61,10 @@ import {
 // FASE 2.2d (#252): on-demand suggestion pra cenários partial.
 // AGENT_EVAL_SET já importado mais acima (FASE 2.2b) — só adicionamos suggestFix.
 import { suggestFix } from '../services/agentEvalRunner.js';
+// P56 — a nota oscila sozinha. O cliente leigo recebe um ESTADO, não a faixa.
+import { carregarRuidoDoAgente, classificarMudanca } from '../services/evalRuidoService.js';
+// P61 — "Corrigimos o método de avaliação": o aviso da nota recalculada.
+import { resumirRegravacao } from '../services/evalRegradeService.js';
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -454,7 +458,12 @@ router.get('/runs', async (req: Request, res: Response) => {
         agent: { select: { name: true } },
       },
     });
-    res.json({ total: runs.length, runs });
+    // P56: piso de ruído do agente escolhido. É o que separa "caiu 5 pontos"
+    // (a mesma nota, medida duas vezes) de queda de verdade. A tela do
+    // cliente usa só o ESTADO derivado dele; o número fica para o admin.
+    const ruido = agentId ? await carregarRuidoDoAgente(agentId) : null;
+
+    res.json({ total: runs.length, runs, ruido });
   } catch (err: any) {
     logger.error('[agentQuality] /runs erro:', err);
     res.status(500).json({ error: 'erro ao listar runs', message: err?.message });
@@ -500,10 +509,37 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
             r.userMessage || defs.find((s) => s.id === r.scenarioId)?.userMessage || null,
         }))
       : undefined;
+    // ─── P61: a nota recalculada, quando existir ──────────────────
+    // Nunca confundida com execução nova: vem num campo próprio, com o
+    // rótulo "recalculada" na tela.
+    const regravacao = await resumirRegravacao(run.id).catch(() => null);
+
+    // ─── P56: estado em vez de número, para quem não é técnico ────
+    const ruido = await carregarRuidoDoAgente(run.agentId);
+    const anterior = await prisma.agentEvalRun
+      .findFirst({
+        where: {
+          agentId: run.agentId,
+          status: 'completed',
+          id: { not: run.id },
+          startedAt: { lt: run.startedAt },
+        },
+        orderBy: { startedAt: 'desc' },
+        select: { scorePercent: true },
+      })
+      .catch(() => null);
+    const estado = classificarMudanca({
+      nota: run.scorePercent ?? null,
+      notaAnterior: anterior?.scorePercent ?? null,
+      ruido,
+    });
+
     res.json({
       ...rest,
       results: enrichedResults,
       hasResults: results != null,
+      regravacao,
+      estado,
     });
   } catch (err: any) {
     logger.error('[agentQuality] /runs/:id erro:', err);

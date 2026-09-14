@@ -73,6 +73,18 @@ vi.mock('../services/agentPromptPatcher.js', () => ({
   regraTerminaEmFraseCompleta: (t: string) =>
     /[.!?…]$/u.test(String(t ?? '').trim().replace(/[”"'’»)\]*`]+$/u, '').trimEnd()),
 }));
+const ruidoMock = {
+  carregarRuidoDoAgente: vi.fn(async () => ({ desvio: 8, n: 8 })),
+  classificarMudanca: vi.fn(() => ({
+    estado: 'estavel',
+    explicacao: 'A IA está estável: a diferença está dentro da variação normal deste agente.',
+  })),
+};
+vi.mock('../services/evalRuidoService.js', () => ruidoMock);
+
+const regradeMock = { resumirRegravacao: vi.fn(async () => null) };
+vi.mock('../services/evalRegradeService.js', () => regradeMock);
+
 vi.mock('../services/promptVersionService.js', () => ({
   publishPrompt: vi.fn(),
   hashPrompt: vi.fn(() => 'hash'),
@@ -112,6 +124,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.setSystemTime(AGORA);
   prismaMock.evalRegrade.findMany.mockResolvedValue([]);
+  ruidoMock.carregarRuidoDoAgente.mockResolvedValue({ desvio: 8, n: 8 });
+  ruidoMock.classificarMudanca.mockReturnValue({
+    estado: 'estavel',
+    explicacao: 'A IA está estável: a diferença está dentro da variação normal deste agente.',
+  });
+  regradeMock.resumirRegravacao.mockResolvedValue(null);
   prismaMock.agentEvalRun.findMany.mockResolvedValue([]);
   prismaMock.agent.findFirst.mockResolvedValue({
     id: 'agent-1',
@@ -303,5 +321,98 @@ describe('A188 — regra cortada no meio não é gravada no prompt', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(prismaMock.agentEvalFixDecision.create).toHaveBeenCalled();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+describe('P56 — piso de ruído por agente em GET /runs', () => {
+  it('devolve o piso do agente junto da lista', async () => {
+    prismaMock.agentEvalRun.findMany.mockResolvedValue([
+      { id: 'r1', agentId: 'agent-1', scorePercent: 80, status: 'completed' },
+    ]);
+    const res = makeRes();
+
+    await getHandler('get', '/runs')(
+      { user: { organizationId: 'org-1' }, query: { agentId: 'agent-1' } },
+      res,
+    );
+
+    expect(res.body.ruido).toEqual({ desvio: 8, n: 8 });
+    expect(ruidoMock.carregarRuidoDoAgente).toHaveBeenCalledWith('agent-1');
+  });
+
+  it('sem agente escolhido, não inventa piso', async () => {
+    prismaMock.agentEvalRun.findMany.mockResolvedValue([]);
+    const res = makeRes();
+    await getHandler('get', '/runs')({ user: { organizationId: 'org-1' }, query: {} }, res);
+    expect(res.body.ruido).toBeNull();
+    expect(ruidoMock.carregarRuidoDoAgente).not.toHaveBeenCalled();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+describe('P61 — o aviso da regravação chega à tela do cliente', () => {
+  function runCompleta() {
+    return {
+      id: 'run-ok',
+      agentId: 'agent-1',
+      status: 'completed',
+      results: [],
+      scorePercent: 74,
+      startedAt: AGORA,
+      agent: { id: 'agent-1', name: 'Vera', organizationId: 'org-1' },
+      fixDecisions: [],
+    };
+  }
+
+  it('sem regravação, o campo vem nulo e a tela não mostra aviso', async () => {
+    prismaMock.agentEvalRun.findFirst.mockResolvedValue(runCompleta());
+    const res = makeRes();
+    await getHandler('get', '/runs/:id')(
+      { user: { organizationId: 'org-1' }, params: { id: 'run-ok' }, query: {} },
+      res,
+    );
+    expect(res.body.regravacao).toBeNull();
+  });
+
+  it('com regravação, devolve nota antiga, nova e o que continua reprovado', async () => {
+    prismaMock.agentEvalRun.findFirst.mockResolvedValue(runCompleta());
+    regradeMock.resumirRegravacao.mockResolvedValue({
+      runId: 'run-ok',
+      notaAntiga: 74,
+      notaRegravada: 86,
+      reprovacoesDoGabarito: 4,
+      continuamReprovados: ['cr8_no_pede_cpf'],
+      porCenario: [],
+    });
+    const res = makeRes();
+
+    await getHandler('get', '/runs/:id')(
+      { user: { organizationId: 'org-1' }, params: { id: 'run-ok' }, query: {} },
+      res,
+    );
+
+    expect(res.body.regravacao.notaAntiga).toBe(74);
+    expect(res.body.regravacao.notaRegravada).toBe(86);
+    expect(res.body.regravacao.continuamReprovados).toEqual(['cr8_no_pede_cpf']);
+  });
+
+  it('devolve o estado leigo, comparando com a execução anterior', async () => {
+    prismaMock.agentEvalRun.findFirst
+      .mockResolvedValueOnce(runCompleta())
+      .mockResolvedValueOnce({ scorePercent: 80 });
+    const res = makeRes();
+
+    await getHandler('get', '/runs/:id')(
+      { user: { organizationId: 'org-1' }, params: { id: 'run-ok' }, query: {} },
+      res,
+    );
+
+    expect(res.body.estado.estado).toBe('estavel');
+    expect(ruidoMock.classificarMudanca).toHaveBeenCalledWith({
+      nota: 74,
+      notaAnterior: 80,
+      ruido: { desvio: 8, n: 8 },
+    });
   });
 });

@@ -47,6 +47,31 @@ describe('shouldAlertQuality — quando o Slack merece ser incomodado', () => {
     ).toBe(true);
   });
 
+  // ── P56: o alerta NUNCA é pela nota ───────────────────────────────
+  // Com o prompt parado, o Tauã varia 10,4 pontos entre execuções
+  // consecutivas (desvio 7,9) e os STAGING variam 7,7. Alertar por "caiu 5
+  // pontos" é alertar por ruído. A régua é crítico reprovado ou o MESMO
+  // cenário falhando duas vezes seguidas, e este bloco existe para que
+  // ninguém reintroduza o limiar de nota sem quebrar o CI.
+  it('queda grande de nota, sozinha, NÃO alerta', () => {
+    for (const scorePercent of [89, 70, 50, 20, 0]) {
+      expect(
+        shouldAlertQuality({ scorePercent, criticalFailed: 0 }, { repetidos: [] }),
+        `nota ${scorePercent} não pode alertar sozinha`,
+      ).toBe(false);
+    }
+  });
+
+  it('a decisão não olha a nota: mesma entrada, notas opostas, mesmo veredito', () => {
+    const comCritico = (scorePercent: number) =>
+      shouldAlertQuality({ scorePercent, criticalFailed: 1 }, { repetidos: [] });
+    const semNada = (scorePercent: number) =>
+      shouldAlertQuality({ scorePercent, criticalFailed: 0 }, { repetidos: [] });
+
+    expect(comCritico(100)).toBe(comCritico(0));
+    expect(semNada(100)).toBe(semNada(0));
+  });
+
   it('execução impecável não alerta', () => {
     expect(shouldAlertQuality({ scorePercent: 100, criticalFailed: 0 }, { repetidos: [] })).toBe(
       false,

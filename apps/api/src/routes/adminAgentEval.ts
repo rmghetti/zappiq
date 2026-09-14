@@ -58,6 +58,9 @@ import {
 } from '../services/agentEvalQueue.js';
 // P61 — regravar a nota sobre as respostas já gravadas, sem chamar LLM.
 import { execucoesParaRegravar, resumirRegravacao } from '../services/evalRegradeService.js';
+// P56 — piso de ruído do agente. No admin a faixa aparece com número; na tela
+// do cliente, só o estado derivado dela.
+import { carregarRuidoDoAgente } from '../services/evalRuidoService.js';
 // FASE 2.1 (#241): Slack notify reusável entre cron e route manual.
 import { notifySlackQualityIssue } from '../services/agentEvalCronService.js';
 import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services/slackNotifier.js';
@@ -321,10 +324,13 @@ router.get(
               r.userMessage || defs.find((s) => s.id === r.scenarioId)?.userMessage || null,
           }))
         : undefined;
+      // P61: resumo da nota recalculada desta execução, quando existir.
+      const regravacao = await resumirRegravacao(run.id).catch(() => null);
       res.json({
         ...rest,
         results: enrichedResults,
         hasResults: results != null,
+        regravacao,
       });
     } catch (err: any) {
       logger.error('[agentEval] runs/:id erro:', err);
@@ -369,11 +375,16 @@ router.get(
           startedAt: true,
           completedAt: true,
           durationMs: true,
+          erros: true,
+          harnessVersion: true,
           error: true,
           agent: { select: { name: true } },
         },
       });
-      res.json({ total: runs.length, runs });
+      // P56: quanto a nota deste agente oscila sozinha, com o prompt parado.
+      // Sem isso, o painel lê 5 pontos de diferença como se fosse sinal.
+      const ruido = agentId ? await carregarRuidoDoAgente(agentId) : null;
+      res.json({ total: runs.length, runs, ruido });
     } catch (err: any) {
       logger.error('[agentEval] runs (list) erro:', err);
       res.status(500).json({ error: 'erro ao listar runs', message: err?.message });
