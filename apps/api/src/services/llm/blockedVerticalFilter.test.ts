@@ -521,6 +521,8 @@ describe('crise x compliance: a crise vem primeiro', () => {
  * ══════════════════════════════════════════════════════════════════════ */
 describe('CONTRATO de crise: as frases da revisão são todas detectadas', () => {
   const CRISE = [
+    // Re-revisão do PR #374: a forma mais falada de crise_peso.
+    'se eu sumir ninguém vai sentir minha falta',
     'quero me matar',
     'vou me matar',
     'nao aguento mais viver',
@@ -545,6 +547,12 @@ describe('CONTRATO de crise: as frases da revisão são todas detectadas', () =>
 
 describe('CONTRATO de crise: as frases legítimas continuam livres', () => {
   const LEGITIMAS = [
+    // Re-revisão do PR #374: conversa comercial e lesão acidental.
+    'não tem jeito, vou ter que comprar outro',
+    'nao tem jeito, o preco subiu de novo',
+    'nao vejo mais saida pra esse problema de estoque',
+    'me cortei fazendo a barba',
+    'me cortei com a faca na cozinha',
     'morrendo de rir',
     'matar a saudade',
     'vou me matar de trabalhar',

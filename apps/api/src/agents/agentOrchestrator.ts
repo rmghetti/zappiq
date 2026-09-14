@@ -561,6 +561,17 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
     // ── 5. Check for handoff request ────────────────────
     if (intent === 'request_human') {
+      // Rede de crise (re-revisão do PR #374): quem pede uma pessoa depois
+      // de dizer que não aguenta mais recebe a linha do CVV ANTES do "vou te
+      // conectar". O handoff já pausa a IA e chama alguém; o que ele não faz
+      // é avisar o dono do sinal nem deixar registro, e é isso que a rede
+      // acrescenta.
+      if (sinalDeCriseDoTurno.crise) {
+        await fecharSaidaAntecipadaComAcolhimento({
+          organizationId, conversationId, canal: canalDoTurno,
+          regra: sinalDeCriseDoTurno.regra, jaRespondeu: false,
+        });
+      }
       await handleHandoff(organizationId, conversationId, contactPhone, contactId, orgSettings, io);
       return;
     }

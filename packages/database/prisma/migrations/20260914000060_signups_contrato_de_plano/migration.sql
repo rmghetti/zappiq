@@ -146,6 +146,20 @@ CREATE INDEX IF NOT EXISTS "signups_status_idx" ON public.signups ("status");
 CREATE INDEX IF NOT EXISTS "signups_organization_id_idx" ON public.signups ("organization_id");
 CREATE INDEX IF NOT EXISTS "signups_confirmed_at_idx" ON public.signups ("confirmed_at");
 
+-- Índices que JÁ existem em produção (lidos de pg_indexes em 14/09/2026) e
+-- nunca tiveram DDL no repositório. Entram aqui para o banco de preview e
+-- de CI nascer igual ao de produção; lá o IF NOT EXISTS não toca em nada.
+CREATE INDEX IF NOT EXISTS "signups_email_idx"
+  ON public.signups ("email");
+CREATE INDEX IF NOT EXISTS "signups_trial_ends_at_idx"
+  ON public.signups ("trial_ends_at") WHERE "status" IN ('active', 'pending_email');
+CREATE INDEX IF NOT EXISTS "signups_supabase_user_id_idx"
+  ON public.signups ("supabase_user_id") WHERE "supabase_user_id" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "signups_stripe_customer_idx"
+  ON public.signups ("stripe_customer_id") WHERE "stripe_customer_id" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "idx_signups_utm_source"
+  ON public.signups ("utm_source") WHERE "utm_source" IS NOT NULL;
+
 -- Vínculo com o usuário do Supabase Auth. ON DELETE SET NULL de propósito:
 -- apagar a conta de autenticação (direito do titular, LGPD) não pode apagar
 -- o registro comercial do funil; o que some é o vínculo.

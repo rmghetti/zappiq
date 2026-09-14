@@ -10,6 +10,7 @@
  *   ✓ cap de custo do trial (mensagem fixa degradada)
  *   ✓ quota do plano estourada em modo enforce (a IA sai calada)
  *   ✓ caminho agêntico do Maestro (resposta já enviada)
+ *   ✓ pedido de humano (request_human) que sai pelo handleHandoff
  *
  * O caso mais duro é a quota: a pessoa escreve pedindo ajuda e a plataforma
  * não responde nada porque a organização passou do limite do plano. Limite
@@ -216,6 +217,9 @@ beforeEach(() => {
   consumeTrialContactReplyBudgetStub.mockResolvedValue({ allowed: true, count: 1 });
   assertTrialCostCapStub.mockResolvedValue({ allowed: true, spentUsd: 0, capUsd: 15 });
   resolveActiveFlowStepMock.mockResolvedValue(null);
+  // clearAllMocks limpa chamadas, não implementações: o bloco do
+  // request_human troca o rótulo e aqui ele volta ao padrão.
+  classifyMock.mockResolvedValue('faq');
 
   routeIzaTurnMock.mockResolvedValue({
     kind: 'llm',
@@ -366,6 +370,43 @@ describe('fluxo do Maestro que termina sem IA', () => {
     await processIncomingMessage(inputBase('quero falar do orçamento'));
 
     expect(sendReplyTextMock).not.toHaveBeenCalled();
+    expect(acionarRedeDeCriseMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('pedido de humano (request_human) com sinal de crise', () => {
+  beforeEach(() => {
+    classifyMock.mockResolvedValue('request_human');
+  });
+
+  it('a linha do CVV sai ANTES do "vou te conectar" do transbordo', async () => {
+    await processIncomingMessage(inputBase());
+
+    expect(routeIzaTurnMock, 'o transbordo continua sem passar pelo LLM').not.toHaveBeenCalled();
+    const textos = textosEnviados();
+    expect(textos.length).toBeGreaterThanOrEqual(2);
+    expect(textos[0]).toContain(LINHA_DE_ACOLHIMENTO_CVV);
+    expect(textos[textos.length - 1]).toContain('especialistas');
+  });
+
+  it('a rede de crise é acionada uma vez e o registro é da regra que casou', async () => {
+    await processIncomingMessage(inputBase());
+
+    expect(acionarRedeDeCriseMock).toHaveBeenCalledTimes(1);
+    expect(acionarRedeDeCriseMock.mock.calls[0][0]).toMatchObject({
+      organizationId: 'org-cliente',
+      conversationId: 'conv-1',
+      canal: 'whatsapp',
+    });
+    expect(String((acionarRedeDeCriseMock.mock.calls[0][0] as any).regra)).toMatch(/^crise_/);
+  });
+
+  it('SEM crise, o transbordo manda só a mensagem de espera (nada muda)', async () => {
+    await processIncomingMessage(inputBase('quero falar com um atendente humano'));
+
+    const textos = textosEnviados();
+    expect(textos).toHaveLength(1);
+    expect(textos[0]).toContain('especialistas');
     expect(acionarRedeDeCriseMock).not.toHaveBeenCalled();
   });
 });

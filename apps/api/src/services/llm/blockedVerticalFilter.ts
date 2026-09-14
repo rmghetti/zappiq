@@ -467,7 +467,7 @@ const REGRAS_DE_CRISE: Array<{ id: string; regex: RegExp }> = [
     // horário no salão. O lookahead fecha os três.
     id: 'crise_me_machucar',
     regex:
-      /\bme\s+(machucar|machucando|machuquei|ferir|feri|cortar|cortando|cortei)\b(?!\s+(na|no|com\s+a\s+maquina|o\s+cabelo|a\s+franja|as\s+pontas)\b)/,
+      /\bme\s+(machucar|machucando|machuquei|ferir|feri|cortar|cortando|cortei)\b(?!\s+(na|no|com\s+a\s+(maquina|faca|tesoura|gilete)|com\s+o\s+vidro|fazendo|sem\s+querer|o\s+cabelo|a\s+franja|as\s+pontas)\b)/,
   },
   { id: 'crise_suicidio', regex: /\b(suicidio|suicida|suicidar|automutilacao|autolesao)\w*\b/ },
   { id: 'crise_se_jogar', regex: /\bme\s+jogar\s+(na\s+frente|do\s+alto|da\s+janela|da\s+ponte)\b/ },
@@ -483,7 +483,10 @@ const REGRAS_DE_CRISE: Array<{ id: string; regex: RegExp }> = [
     // 'não vejo mais saída', 'não tem jeito', 'não vejo sentido em
     // continuar'. Vale com e sem acento porque o texto chega normalizado.
     id: 'crise_sem_saida',
-    regex: /\bnao\s+(vejo|tem|ha|existe)\s+(mais\s+)?(saida|sentido|jeito)\b/,
+    // Re-revisão do PR #374: 'nao tem jeito' e 'nao vejo saida pra esse
+    // problema' sao conversa comercial; 'jeito' sai e o complemento de objeto
+    // exclui.
+    regex: /\bnao\s+(vejo|tem|ha|existe)\s+(mais\s+)?(saida|sentido)\b(?!\s+(pra|para|nisso|nesse|nessa|com|de)\b)/,
   },
   {
     // A forma mais comum de dizer sem dizer.
@@ -495,7 +498,7 @@ const REGRAS_DE_CRISE: Array<{ id: string; regex: RegExp }> = [
     // pessoa quase nunca diz a palavra suicídio; ela diz isto.
     id: 'crise_peso',
     regex:
-      /\b(sou|seria)\s+(um\s+)?peso\s+(pra|para)\b|\bninguem\s+(ia\s+)?sentir(ia)?\s+minha\s+falta\b|\bseria\s+melhor\s+se\s+eu\s+nao\s+existisse\b/,
+      /\b(sou|seria)\s+(um\s+)?peso\s+(pra|para)\b|\bninguem\s+(vai|ia|iria)?\s*sentir(ia)?\s+(a\s+)?minha\s+falta\b|\bseria\s+melhor\s+se\s+eu\s+nao\s+existisse\b/,
   },
 ];
 
