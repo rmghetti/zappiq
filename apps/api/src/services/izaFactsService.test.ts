@@ -38,10 +38,15 @@ vi.mock('../utils/logger.js', () => ({
   },
 }));
 
+const { prisma } = await import('@zappiq/database');
+const queryRaw = prisma.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>;
+
 const {
   renderSecaoPrecosDoPlanConfig,
   ehFatoDePrecoDePlano,
   renderBlockParaTeste,
+  getIzaFactsBlock,
+  invalidateIzaFactsCache,
 } = await import('./izaFactsService.js');
 
 /** Todo valor em reais que o catálogo comercial autoriza a Iza a dizer. */
@@ -161,6 +166,31 @@ describe('renderSecaoPrecosDoPlanConfig', () => {
       ADDONS_V4_LIST.find((a) => a.key === 'EXTRA_WA_NUMBER')!.amountBrl,
     );
   });
+
+  /*
+   * O Radar 360 Pro já vem dentro de alguns planos. Dizer só "contrata no
+   * Growth, Scale, Enterprise" faria a Iza oferecer a venda de algo que o
+   * cliente do Enterprise já tem. O dado está no `planConfig` em duas formas
+   * (`ADDONS.RADAR_360.includedIn` e `features.radar360`), e elas divergem,
+   * então o código usa a união: nunca vender o que já está incluído.
+   */
+  it('diz que o Radar já vem incluído nos planos que o trazem, em vez de mandar contratar', () => {
+    const texto = renderSecaoPrecosDoPlanConfig();
+    const linha = texto.split('\n').find((l) => l.includes('Radar'));
+
+    expect(linha).toBeDefined();
+    const inclusos = listActivePlans().filter(
+      (p) => p.features.radar360 || ADDONS.RADAR_360.includedIn.includes(p.id),
+    );
+    expect(inclusos.length).toBeGreaterThan(0);
+
+    expect(linha).toContain('já incluído');
+    for (const p of inclusos) {
+      expect(linha).toContain(p.name);
+      // O plano que já tem o add-on não pode aparecer como "contrata no".
+      expect(linha!.split('já incluído')[0]).not.toContain(p.name);
+    }
+  });
 });
 
 describe('ehFatoDePrecoDePlano', () => {
@@ -243,5 +273,131 @@ describe('renderBlock com a seção de preços gerada', () => {
 
     expect(bloco).toContain('WhatsApp Business');
     expect(bloco).toContain('Tarifa da Meta');
+  });
+});
+
+/*
+ * O aviso "estes são os ÚNICOS preços que você pode dizer" brigava com a
+ * subseção "Outros fatos de preço (banco)", logo abaixo dele, onde a tarifa da
+ * Meta de 01/10 vai entrar. A Iza receberia a ordem de não dizer o preço que a
+ * seção seguinte manda dizer.
+ */
+describe('o aviso de exclusividade não briga com "Outros fatos de preço"', () => {
+  it('a exclusividade é de preço de PLANO e de ADD-ON, não de todo preço', () => {
+    const texto = renderSecaoPrecosDoPlanConfig();
+
+    expect(texto).toContain('ÚNICOS preços de PLANO e de ADD-ON');
+    expect(texto).not.toContain('ÚNICOS preços que você pode dizer');
+  });
+
+  it('aponta explicitamente para a subseção onde a tarifa da Meta aparece', () => {
+    const texto = renderSecaoPrecosDoPlanConfig();
+
+    expect(texto).toContain('Outros fatos de preço');
+    expect(texto.toLowerCase()).toContain('tarifa do whatsapp');
+  });
+
+  it('a subseção citada é a mesma que o renderBlock cria para o fato do banco', () => {
+    const bloco = renderBlockParaTeste([
+      fato({ section: 'pricing', fact_key: 'meta_tarifa_outubro', label: 'Tarifa da Meta',
+        description: 'A Meta cobra por resposta a partir de 01/10, a custo. Referência R$ 0,035.' }),
+    ]);
+
+    expect(bloco).toContain('### Outros fatos de preço (banco)');
+    expect(bloco).toContain('Tarifa da Meta');
+    expect(bloco).toContain('Outros preços');
+    expect(bloco.indexOf('Outros preços')).toBeLessThan(bloco.indexOf('### Outros fatos de preço'));
+  });
+});
+
+/*
+ * A heurística antiga derrubava o fato assim que ele tivesse um "R$" em
+ * qualquer lugar E um nome de plano em qualquer outro lugar, por mais longe
+ * que estivessem. Fato legítimo que só ENCOSTA num nome de plano caía junto.
+ */
+describe('ehFatoDePrecoDePlano exige o plano PERTO do valor', () => {
+  it('não derruba o fair use, onde o plano está longe do valor', () => {
+    expect(
+      ehFatoDePrecoDePlano(
+        fato({
+          section: 'pricing',
+          fact_key: 'fair_use',
+          label: 'Fair use por atendimento',
+          description:
+            'No Growth o fair use é de 12 respostas de IA por atendimento; acima disso a tarifa da Meta entra a custo, hoje R$ 0,035 por resposta.',
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it('não derruba a garantia, onde o plano está longe do valor', () => {
+    expect(
+      ehFatoDePrecoDePlano(
+        fato({
+          section: 'pricing',
+          fact_key: 'garantia_60_dias',
+          label: 'Garantia de 60 dias',
+          description:
+            'O Lite tem garantia: se o cliente cancelar em até 60 dias por qualquer motivo, devolvemos a mensalidade paga, R$ 247.',
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it('continua derrubando a tabela de planos, onde o valor encosta no plano', () => {
+    expect(
+      ehFatoDePrecoDePlano(
+        fato({ section: 'pricing', fact_key: 'planos_tabela', label: 'Planos',
+          description: 'Starter R$ 197, Growth R$ 497.' }),
+      ),
+    ).toBe(true);
+
+    // Sem a chave reservada, a proximidade sozinha tem de derrubar.
+    expect(
+      ehFatoDePrecoDePlano(
+        fato({ section: 'pricing', fact_key: 'tabela_2026', label: 'Tabela',
+          description: 'Starter R$ 197, Growth R$ 497.' }),
+      ),
+    ).toBe(true);
+  });
+});
+
+/*
+ * Achado da revisão: no `catch`, o serviço devolvia string vazia quando o
+ * cache estava frio. Banco fora do ar e a Iza ficava SEM a seção de preços,
+ * que não depende do banco para nada: ela é gerada do catálogo.
+ */
+describe('getIzaFactsBlock com o banco fora do ar', () => {
+  beforeEach(() => {
+    invalidateIzaFactsCache();
+    queryRaw.mockReset();
+  });
+
+  it('devolve o bloco do catálogo mesmo com o cache frio', async () => {
+    queryRaw.mockRejectedValue(new Error('connection refused'));
+
+    const bloco = await getIzaFactsBlock();
+
+    expect(bloco).toContain('### Planos ativos');
+    expect(bloco).toContain(PLAN_CONFIG.SCALE.name);
+    expect(extrairValoresEmReais(bloco)).toContain(PLAN_CONFIG.SCALE.priceMonthly);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('prefere o último bloco bom quando o cache está quente', async () => {
+    queryRaw.mockResolvedValueOnce([
+      fato({ section: 'canais', fact_key: 'instagram', label: 'Instagram Direct' }),
+    ]);
+    const bom = await getIzaFactsBlock();
+    expect(bom).toContain('Instagram Direct');
+
+    // O TTL é de 60s. Adiantando o relógio, o cache vence e o serviço volta
+    // ao banco, que agora falha: o último bloco bom tem de sobreviver.
+    const relogio = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
+    queryRaw.mockRejectedValue(new Error('connection refused'));
+    const depois = await getIzaFactsBlock();
+    relogio.mockRestore();
+
+    expect(depois).toBe(bom);
   });
 });

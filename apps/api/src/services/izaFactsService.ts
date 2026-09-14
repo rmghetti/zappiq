@@ -143,8 +143,23 @@ function nomeCurto(nome: string): string {
 }
 
 /**
+ * Quantos caracteres separam o valor do nome do plano para contar como "o
+ * valor é DESTE plano". Acima disso são dois assuntos na mesma frase.
+ */
+const DISTANCIA_MAXIMA_DO_PLANO = 40;
+
+/**
  * Este fato da seção `pricing` fala de preço de PLANO? Se fala, o código
  * vence e o registro do banco é ignorado.
+ *
+ * A proximidade importa. A versão anterior derrubava o fato assim que ele
+ * tivesse um "R$" em qualquer lugar E um nome de plano em qualquer outro, por
+ * mais longe que estivessem, e levava junto fato legítimo que só ENCOSTA num
+ * plano: "No Growth o fair use é de 12 respostas por atendimento; acima disso
+ * a Meta cobra R$ 0,035 por resposta" não é tabela de preço de plano, é
+ * política de consumo. Agora o nome do plano precisa estar a até 40
+ * caracteres do valor, que é a distância de uma tabela de verdade ("Starter
+ * R$ 197, Growth R$ 497").
  */
 export function ehFatoDePrecoDePlano(f: Pick<IzaFact, 'section' | 'fact_key' | 'label' | 'description'>): boolean {
   if (f.section !== 'pricing') return false;
@@ -154,17 +169,40 @@ export function ehFatoDePrecoDePlano(f: Pick<IzaFact, 'section' | 'fact_key' | '
     COMPOSTOS_QUE_NAO_SAO_PLANO,
     ' ',
   );
-  const temValorEmReais = /R\$\s*[0-9]/.test(texto);
-  if (!temValorEmReais) return false;
 
-  return NOMES_DE_PLANOS.some((nome) => new RegExp(`\\b${nome}\\b`, 'i').test(texto));
+  const valores = /R\$\s*[0-9]/g;
+  let m: RegExpExecArray | null;
+  while ((m = valores.exec(texto)) !== null) {
+    const ini = Math.max(0, m.index - DISTANCIA_MAXIMA_DO_PLANO);
+    const fim = Math.min(texto.length, m.index + m[0].length + DISTANCIA_MAXIMA_DO_PLANO);
+    const janela = texto.slice(ini, fim);
+    if (NOMES_DE_PLANOS.some((nome) => new RegExp(`\\b${nome}\\b`, 'i').test(janela))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
-/** Planos ativos onde este add-on pode ser contratado, pelo nome do catálogo. */
-function planosDoAddon(availableFor: readonly string[]): string {
-  const ativos = listActivePlans().filter((p) => availableFor.includes(p.id));
-  if (ativos.length === 0) return '';
-  return ` (contrata no ${ativos.map((p) => p.name).join(', ')})`;
+/**
+ * Onde este add-on se contrata e onde ele já vem dentro do plano.
+ *
+ * Sem a segunda metade a Iza ofereceria a venda de algo que o cliente já tem:
+ * o Radar 360 Pro está no `availableFor` do Enterprise, mas também no
+ * `includedIn` dele. Plano que já traz o add-on sai da lista de "contrata no"
+ * e aparece como "já incluído".
+ */
+function planosDoAddon(availableFor: readonly string[], inclusoEm: readonly string[] = []): string {
+  const ativos = listActivePlans();
+  const inclusos = ativos.filter((p) => inclusoEm.includes(p.id));
+  const contrata = ativos.filter(
+    (p) => availableFor.includes(p.id) && !inclusoEm.includes(p.id),
+  );
+
+  const partes: string[] = [];
+  if (contrata.length > 0) partes.push(`contrata no ${contrata.map((p) => p.name).join(', ')}`);
+  if (inclusos.length > 0) partes.push(`já incluído no ${inclusos.map((p) => p.name).join(' e no ')}`);
+  return partes.length === 0 ? '' : ` (${partes.join('; ')})`;
 }
 
 /** Uma linha por plano ativo: preço, equivalente anual, cota e trial. */
@@ -203,9 +241,20 @@ function linhasDosAddonsPublicos(): string[] {
       a.availableFor.some((id) => idsAtivos.has(id)),
   ).map((a) => `- **${nomeCurto(a.name)}**: ${brl(a.amountBrl)}/mês${planosDoAddon(a.availableFor)}`);
 
+  // O Radar é o único add-on renderizado que tem `includedIn` no catálogo.
+  // O `planConfig` guarda o mesmo fato em dois lugares e eles DIVERGEM: o
+  // `includedIn` do add-on diz Business e Enterprise, e `features.radar360`
+  // (que é o que a página de preços lê para escrever "incluído") diz Scale,
+  // Business e Enterprise. Na dúvida vale a união: errar para o lado de não
+  // vender o que o cliente já tem é barato; o contrário é venda indevida.
   const radar = ADDONS.RADAR_360;
   if (radar?.priceMonthly != null) {
-    linhas.push(`- **${nomeCurto(radar.name)}**: ${brl(radar.priceMonthly)}/mês${planosDoAddon(radar.availableFor)}`);
+    const inclusoEm = listActivePlans()
+      .filter((p) => p.features.radar360 || radar.includedIn.includes(p.id))
+      .map((p) => p.id);
+    linhas.push(
+      `- **${nomeCurto(radar.name)}**: ${brl(radar.priceMonthly)}/mês${planosDoAddon(radar.availableFor, inclusoEm)}`,
+    );
   }
 
   // Voz outbound tem seis faixas no catálogo. Para o lead, a faixa de
@@ -233,11 +282,12 @@ export function renderSecaoPrecosDoPlanConfig(): string {
   return [
     '## PRICING (gerado do catálogo comercial a cada turno)',
     '',
-    '> Estes são os ÚNICOS preços que você pode dizer ao cliente. Eles saem do',
-    '> catálogo oficial da ZappIQ e mudam junto com ele. Se um valor não estiver',
-    '> aqui, diga que vai confirmar com o time e NÃO chute. Nunca repita preço de',
-    '> memória, de conversa antiga ou de qualquer tabela escrita em outro lugar',
-    '> deste prompt: se divergir, o que vale é esta lista.',
+    '> Estes são os ÚNICOS preços de PLANO e de ADD-ON que você pode dizer ao',
+    '> cliente. Eles saem do catálogo oficial da ZappIQ e mudam junto com ele. Se',
+    '> um valor de plano ou de add-on não estiver aqui, diga que vai confirmar com',
+    '> o time e NÃO chute. Nunca repita preço de memória, de conversa antiga ou de',
+    '> qualquer tabela escrita em outro lugar deste prompt: se divergir, o que vale',
+    '> é esta lista.',
     '',
     '### Planos ativos',
     ...ativos.map(linhaDoPlano),
@@ -250,6 +300,8 @@ export function renderSecaoPrecosDoPlanConfig(): string {
     ...linhasDosAddonsPublicos(),
     '',
     '> Add-on é cobrado à parte da mensalidade do plano.',
+    '> Outros preços (por exemplo a tarifa do WhatsApp cobrada pela Meta) aparecem',
+    '> em "Outros fatos de preço" logo abaixo, quando existirem.',
     '',
   ].join('\n');
 }
@@ -326,8 +378,14 @@ export const renderBlockParaTeste = renderBlock;
 
 /**
  * Retorna o bloco "# FATOS ATUAIS" formatado pra injeção no system prompt.
- * Cache 60s — não bombardeia o DB. Em erro de DB, retorna string vazia
- * (fail-soft: prompt original ainda funciona, só sem o overlay de runtime).
+ * Cache 60s — não bombardeia o DB.
+ *
+ * Em erro de banco, devolve o último bloco bom e, se nem isso existir, o bloco
+ * montado SEM fato nenhum, que já traz a seção de preços inteira: ela vem do
+ * `planConfig` e não depende do banco para nada. Antes o fail-soft devolvia
+ * string vazia com o cache frio, e aí o banco fora do ar deixava a Iza sem
+ * saber o preço de nenhum plano, que é justamente o achado A229 acontecendo de
+ * novo por outro caminho.
  */
 export async function getIzaFactsBlock(): Promise<string> {
   const now = Date.now();
@@ -340,8 +398,11 @@ export async function getIzaFactsBlock(): Promise<string> {
     cachedAt = now;
     return cachedBlock;
   } catch (err) {
-    logger.warn('[izaFacts] Falha ao carregar facts do DB — usando empty block fail-soft', { err });
-    return cachedBlock ?? '';
+    logger.warn(
+      '[izaFacts] Falha ao carregar facts do DB — devolvendo o último bloco bom, ou só a seção de preços do catálogo',
+      { err, temCache: cachedBlock !== null },
+    );
+    return cachedBlock ?? renderBlock([]);
   }
 }
 
