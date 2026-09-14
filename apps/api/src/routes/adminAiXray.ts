@@ -29,7 +29,12 @@ import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
-import { buildSystemPromptForContact } from '../agents/agentOrchestrator.js';
+import {
+  buildSystemPromptForContact,
+  resolveSchedulingRuntime,
+} from '../agents/agentOrchestrator.js';
+import { buildLiveProfileBlock, buildGreetingBlock } from '../agents/tenantLiveProfile.js';
+import { isFlagOn } from '../services/featureFlags.js';
 import {
   buildWebChatSystemPrompt,
   loadOrgSystemPrompt,
@@ -113,11 +118,18 @@ async function montarPrompt(input: {
   // achado A057). O defeito foi corrigido em 14/09/2026: o webhook passa as
   // settings reais, como o do WhatsApp sempre fez. O Raio-X acompanha.
   if (canal === 'whatsapp' || canal === 'playground' || canal === 'instagram') {
+    // Agendamento e histórico entram pelo mesmo caminho da produção. Os dois
+    // mudam o texto que a IA recebe: sem eles, o Raio-X mostrava um prompt
+    // que o WhatsApp não monta (sem a linha de agendamento, e afirmando que
+    // "já tem histórico" num turno em que o histórico não está no contexto).
+    const agendamento = await resolveSchedulingRuntime(organizationId, settings);
     return buildSystemPromptForContact({
       organizationId,
       contactId: `xray:${organizationId}`,
       orgSettings: settings,
       ragContext,
+      agendamento,
+      temHistoricoNoContexto: historico.length > 0,
     });
   }
 
@@ -135,10 +147,24 @@ async function montarPrompt(input: {
       throw e;
     }
     const ehIza = isZappIQOrg(organizationId);
+
+    // Perfil vivo e saudação (A8, A068): o MESMO caminho de
+    // webChatService.processWebChatTurn. Sem isto, ligar o interruptor e vir
+    // conferir aqui mostrava o prompt de antes, e quem olhasse concluiria
+    // que a correção não funcionou no site.
+    let perfilVivoBlock = '';
+    let saudacaoBlock = '';
+    if (await isFlagOn(organizationId, 'perfilVivo')) {
+      perfilVivoBlock = buildLiveProfileBlock(settings, null, { now: new Date() });
+      saudacaoBlock = buildGreetingBlock(historico.length === 0, settings.greetingMessage);
+    }
+
     return buildWebChatSystemPrompt({
       orgPrompt,
       factsBlock: ehIza ? await getIzaFactsBlock() : '',
       isIzaCanonical: ehIza,
+      perfilVivoBlock,
+      saudacaoBlock,
     });
   }
 
