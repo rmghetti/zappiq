@@ -346,6 +346,7 @@ describe('lerArgumentosDaMigracao: o que o script vai fazer, antes de conectar',
     expect(USO_DA_MIGRACAO).toContain('--dry-run');
     expect(USO_DA_MIGRACAO).toContain('--apply --agent <id>');
     expect(USO_DA_MIGRACAO).toContain('--in');
-    expect(USO_DA_MIGRACAO).not.toContain('—');
+    // Escrito como escape para esta linha não entrar no grep do travessão.
+    expect(USO_DA_MIGRACAO).not.toContain('\u2014');
   });
 });
