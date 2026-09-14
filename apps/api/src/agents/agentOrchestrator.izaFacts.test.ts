@@ -46,6 +46,14 @@ vi.mock('../services/izaFactsService.js', () => ({
   invalidateIzaFactsCache: vi.fn(),
 }));
 
+// Interruptores sempre desligados, sem Redis: a casca lê dois por turno
+// (contextoUnico e perfilVivo) e, sem este dublê, cada leitura espera o
+// cache real responder. Este arquivo prova o vazamento de marca, não o
+// interruptor.
+vi.mock('../services/featureFlags.js', () => ({
+  isFlagOn: vi.fn().mockResolvedValue(false),
+}));
+
 // logger silencioso pra não poluir output
 vi.mock('../utils/logger.js', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },

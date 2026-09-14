@@ -31,6 +31,13 @@ vi.mock('../services/izaFactsService.js', () => ({
   invalidateIzaFactsCache: vi.fn(),
 }));
 
+// Interruptores sempre desligados, sem Redis: a casca lê dois por turno
+// (contextoUnico e perfilVivo) e, sem este dublê, cada leitura espera o
+// cache real responder. O fatiamento aqui é do caminho de antes.
+vi.mock('../services/featureFlags.js', () => ({
+  isFlagOn: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('../utils/logger.js', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
