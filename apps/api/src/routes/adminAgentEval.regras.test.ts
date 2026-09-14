@@ -249,3 +249,69 @@ describe('apply-fix do superadmin: o re-verify mede o prompt novo COM as regras'
     });
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Rodada 4 do PR #375. O re-teste do cliente é gravado como execução
+ * 'completed' com 3 amostras no formato {amostra, combined, resposta,
+ * motivoDoJuiz}: sem scenarioId e sem judge. A tela do superadmin
+ * (admin/agent-quality) abre a última concluída da lista e o
+ * FixSuggestionCard lê `judge.reason`: com o re-teste no topo, a tela
+ * quebrava com "Cannot read properties of undefined (reading 'reason')".
+ * Vale com o interruptor DESLIGADO, ou seja, no dia do merge.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('GET /runs do superadmin: o re-teste do cliente não entra na lista', () => {
+  const SEMANAL = {
+    id: 'run-semanal',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'cron',
+    startedAt: new Date('2026-09-11T04:30:00Z'),
+  };
+  const RETESTE = {
+    id: 'run-reteste',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'client_retest',
+    startedAt: new Date('2026-09-14T10:00:00Z'),
+  };
+
+  beforeEach(() => {
+    const linhas = [SEMANAL, RETESTE];
+    // O banco falso honra o `where`: se a rota não excluir o re-teste, ele
+    // vem, e vem PRIMEIRO (é o mais novo).
+    prismaMock.agentEvalRun.findMany.mockImplementation(async ({ where, take }: any) =>
+      linhas
+        .filter((l) => !where?.agentId || l.agentId === where.agentId)
+        .filter((l) => !where?.status || l.status === where.status)
+        .filter((l) => !(where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not))
+        .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+        .slice(0, take ?? linhas.length),
+    );
+  });
+
+  it('com um re-teste mais novo que a execução semanal, a lista não o devolve', async () => {
+    const res = makeRes();
+    await getHandler('get', '/runs')({ user: { userId: 'super-1' }, query: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.runs.map((r: any) => r.id)).toEqual(['run-semanal']);
+    // A tela abre a primeira concluída: tem de ser a semanal, que tem judge.
+    expect(res.body.runs.find((r: any) => r.status === 'completed')?.id).toBe('run-semanal');
+  });
+
+  it('filtrando por agente e por status, o re-teste continua de fora', async () => {
+    const res = makeRes();
+    await getHandler('get', '/runs')(
+      { user: { userId: 'super-1' }, query: { agentId: 'agent-1', status: 'completed' } },
+      res,
+    );
+
+    expect(res.body.runs.map((r: any) => r.id)).toEqual(['run-semanal']);
+    const where = prismaMock.agentEvalRun.findMany.mock.calls[0][0].where;
+    expect(where).toMatchObject({
+      agentId: 'agent-1',
+      status: 'completed',
+      triggeredBy: { not: 'client_retest' },
+    });
+  });
+});

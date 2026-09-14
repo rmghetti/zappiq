@@ -390,7 +390,10 @@ router.get(
       const limit = Math.min(Number(req.query.limit) || 20, 100);
       const status = req.query.status ? String(req.query.status) : undefined;
 
-      const where: any = {};
+      // Rodada 4 do PR #375: o re-teste do cliente é gravado como execução
+      // concluída, mas as amostras dele não têm `judge`. A tela abre a última
+      // concluída e o FixSuggestionCard quebrava lendo `judge.reason`.
+      const where: any = { triggeredBy: { not: 'client_retest' } };
       if (agentId) where.agentId = agentId;
       if (status) where.status = status;
 
