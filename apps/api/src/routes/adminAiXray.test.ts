@@ -45,6 +45,8 @@ const messageCount = vi.fn().mockResolvedValue(0);
 const appointmentTypeFindMany = vi.fn().mockResolvedValue([]);
 // O chat do site carrega o prompt por SQL cru (webChatService.loadOrgSystemPrompt).
 const queryRawUnsafe = vi.fn();
+// C3: as regras aprovadas pelo dono, lidas por agentRulesService.
+const agentRuleFindMany = vi.fn().mockResolvedValue([]);
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -54,6 +56,7 @@ vi.mock('@zappiq/database', () => ({
     contact: { findUnique: (...a: any[]) => contactFindUnique(...a) },
     message: { count: (...a: any[]) => messageCount(...a) },
     appointmentType: { findMany: (...a: any[]) => appointmentTypeFindMany(...a) },
+    agentRule: { findMany: (...a: any[]) => agentRuleFindMany(...a) },
     $queryRawUnsafe: (...a: any[]) => queryRawUnsafe(...a),
   },
 }));
@@ -97,6 +100,19 @@ vi.mock('../services/izaFactsService.js', () => ({
 const isFlagOn = vi.fn().mockResolvedValue(false);
 vi.mock('../services/featureFlags.js', () => ({
   isFlagOn: (...a: any[]) => isFlagOn(...a),
+}));
+
+// O Raio-X importa o orquestrador, que importa o motor de fluxos, e o
+// agendador dele cria a fila BullMQ no import, abrindo conexão com o Redis em
+// segundo plano. Fila falsa: nenhum teste daqui enfileira nada.
+vi.mock('bullmq', () => ({
+  Queue: class {
+    add = vi.fn();
+    on = vi.fn();
+  },
+  Worker: class {
+    on = vi.fn();
+  },
 }));
 
 vi.mock('../utils/logger.js', () => ({
@@ -169,6 +185,7 @@ beforeEach(() => {
   agentFindFirst.mockResolvedValue({ id: 'a1', name: 'Antonella', systemPrompt: PROMPT_DO_AGENTE });
   qaFindMany.mockResolvedValue([{ id: 'q1', question: 'Vocês atendem aos sábados?' }]);
   queryRawUnsafe.mockResolvedValue([{ system_prompt: PROMPT_DO_AGENTE }]);
+  agentRuleFindMany.mockResolvedValue([]);
   searchWithSources.mockResolvedValue({
     context: 'Trecho da base: o rodízio custa R$ 89.',
     sources: [{ source: 'cardapio.pdf', similarity: 0.61, snippet: 'rodízio R$ 89' }],
@@ -471,6 +488,118 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
  * dizer se o histórico está no contexto. Os dois mudam o texto que a IA
  * recebe, então o Raio-X mostrava um prompt que a produção não monta.
  */
+
+describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
+  const REGRA = {
+    id: 'regra-1',
+    organizationId: 'org-1',
+    agentId: 'a1',
+    scenarioId: 'cr5_nome_disponivel_usar',
+    texto: 'Chame o cliente pelo nome quando souber.',
+    origem: 'sugestao_ia',
+    status: 'ativa',
+    createdAt: new Date('2026-09-14T10:00:00Z'),
+  };
+
+  it('com o interruptor DESLIGADO, nenhum canal mostra o bloco de regras', async () => {
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+    for (const canal of ['whatsapp', 'site']) {
+      const res = await chamar({ ...corpoValido, canal });
+      expect(promptDoTurno(res), canal).not.toContain('# Regras aprovadas pelo dono');
+    }
+    // Desligado nem consulta o banco: é a mesma conta de hoje por turno.
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
+  });
+
+  it('com o interruptor LIGADO, o bloco aparece no WhatsApp E no site', async () => {
+    // Só o interruptor deste caso (rodada 2 do PR #377): `true` para todos
+    // ligaria também o motor único, que tem teste próprio mais abaixo.
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'regrasComoRegistros');
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+
+    for (const canal of ['whatsapp', 'site']) {
+      const res = await chamar({ ...corpoValido, canal });
+      const prompt = promptDoTurno(res);
+      expect(res.statusCode, canal).toBe(200);
+      expect(prompt, canal).toContain('# Regras aprovadas pelo dono');
+      expect(prompt, canal).toContain('1. Chame o cliente pelo nome quando souber.');
+    }
+  });
+
+  // Rodada 3 do PR #375. O avaliador montava o prompt sem o bloco: o Raio-X
+  // do canal de Qualidade mostrava, corretamente, que o teste media o agente
+  // SEM a regra aprovada. Agora o canal monta com o bloco do agente testado.
+  it('com o interruptor LIGADO, o teste de Qualidade também recebe o bloco, do agente testado', async () => {
+    // Só o interruptor deste caso (rodada 2 do PR #377): `true` para todos
+    // ligaria também o motor único, que tem teste próprio mais abaixo.
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'regrasComoRegistros');
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+
+    const res = await chamar({ ...corpoValido, canal: 'qualidade' });
+
+    expect(res.statusCode).toBe(200);
+    const prompt = promptDoTurno(res);
+    expect(prompt).toContain('# Regras aprovadas pelo dono');
+    expect(prompt).toContain('1. Chame o cliente pelo nome quando souber.');
+    // Antes do bloco do cliente, como no orquestrador.
+    expect(prompt.indexOf('# Regras aprovadas pelo dono')).toBeLessThan(
+      prompt.indexOf('# Cliente atual (eval test mock)'),
+    );
+    // Filtrado pelo agente que o canal carregou (a1), não só pela organização.
+    expect(agentRuleFindMany.mock.calls[0][0].where).toMatchObject({
+      organizationId: 'org-1',
+      agentId: 'a1',
+    });
+  });
+
+  // Rodada 3 do PR #375 (item 4). O canal site montava o bloco por
+  // organização, sem agentId, enquanto o chat do site monta por agente
+  // (webChatService.idDoAgenteComercial). Com dois agentes vivos, o Raio-X
+  // mostraria as regras do outro. Agora os dois usam o MESMO seletor.
+  it('com o interruptor LIGADO, o canal site filtra as regras pelo agente comercial, como o chat', async () => {
+    // Só o interruptor deste caso (rodada 2 do PR #377): `true` para todos
+    // ligaria também o motor único, que tem teste próprio mais abaixo.
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'regrasComoRegistros');
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+    orgFindUnique.mockResolvedValue({ id: 'org-site-agente', name: 'Cantina', settings: SETTINGS_DA_ORG });
+
+    const res = await chamar({ ...corpoValido, organizationId: 'org-site-agente', canal: 'site' });
+
+    expect(res.statusCode).toBe(200);
+    expect(promptDoTurno(res)).toContain('1. Chame o cliente pelo nome quando souber.');
+    // O seletor do chat do site: comercial, vivo, o mais antigo.
+    expect(agentFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: 'org-site-agente', role: 'comercial', status: 'live' },
+        orderBy: { createdAt: 'asc' },
+      }),
+    );
+    expect(agentRuleFindMany.mock.calls[0][0].where).toMatchObject({
+      organizationId: 'org-site-agente',
+      agentId: 'a1',
+    });
+  });
+
+  it('com o interruptor DESLIGADO, o canal site nem procura o agente para as regras', async () => {
+    orgFindUnique.mockResolvedValue({ id: 'org-site-off', name: 'Cantina', settings: SETTINGS_DA_ORG });
+
+    const res = await chamar({ ...corpoValido, organizationId: 'org-site-off', canal: 'site' });
+
+    expect(res.statusCode).toBe(200);
+    expect(agentFindFirst).not.toHaveBeenCalled();
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
+  });
+
+  it('com o interruptor DESLIGADO, o teste de Qualidade fica byte a byte como hoje', async () => {
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+
+    const res = await chamar({ ...corpoValido, canal: 'qualidade' });
+
+    expect(res.statusCode).toBe(200);
+    expect(promptDoTurno(res)).not.toContain('# Regras aprovadas pelo dono');
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
+  });
+});
 
 describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => {
   it('resolve o agendamento e mostra a linha honesta quando não há tipo ativo', async () => {

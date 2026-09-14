@@ -37,6 +37,9 @@ import { llmRouter, type LLMTier, type LLMProviderId, type LLMMessage as RouterL
 import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
+// C3: correção aprovada pelo dono é REGISTRO (agent_rules), montado em bloco
+// a cada turno, atrás do interruptor `regrasComoRegistros`.
+import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
 import {
   extractProductionReplyText,
   stripStructuredTags,
@@ -2002,42 +2005,69 @@ async function buildSystemPromptLegado(
       })
     : '';
 
-  // 2. Tentar carregar Agent live correspondente
+  // 2. Agent live correspondente ao canal.
+  //
+  // Carregado ANTES do bloco de regras de propósito: o bloco é por AGENTE, e
+  // sem o id dele a consulta filtraria só por organização. Hoje cada
+  // organização tem um agente comercial vivo, então dava no mesmo; basta a
+  // primeira ligar um agente de suporte para as regras do comercial vazarem
+  // para ele.
+  let agent: { id: string; systemPrompt: string | null; name: string } | null = null;
   try {
-    const agent = await prisma.agent.findFirst({
+    agent = await prisma.agent.findFirst({
       where: { organizationId, role, status: 'live' },
-      select: { systemPrompt: true, name: true },
+      select: { id: true, systemPrompt: true, name: true },
       orderBy: { createdAt: 'desc' }, // se houver múltiplos, pega o mais recente
     });
-    if (agent?.systemPrompt) {
-      // V4 task #234 (2026-05-13): Universal Core Rules V1 prependado.
-      // Cliente customiza agent.systemPrompt livremente, mas comportamento
-      // crítico (purchase_intent, handoff, anti-padrões, dados sensíveis)
-      // é IMUTÁVEL. Reduz risco de bug silencioso em agentes de clientes
-      // externos que não saberiam reportar gap de calibração.
-      const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-      return [
-        CORE_AGENT_RULES_V1,
-        factsBlock, // Camada 2 — fatos da plataforma sincronizados em runtime
-        agent.systemPrompt,
-        // Perfil vivo depois do prompt gravado: o que o cliente acabou de
-        // salvar precisa vencer o tom e o horário congelados no cadastro.
-        perfilVivoBlock,
-        // Depois do systemPrompt de propósito: se um prompt antigo tiver link
-        // congelado do seed, o bloco fresco vem por último e é o que vale.
-        linksBlock,
-        '',
-        clienteBlock,
-        saudacaoBlock,
-        '',
-        ragBlock,
-        '',
-        `# Agora`,
-        now,
-      ].filter(Boolean).join('\n');
-    }
   } catch (err) {
     logger.warn('[Agent] buildSystemPromptForContact: lookup agent falhou — fallback promptEngine', { err });
+  }
+
+  // C3 (A079, A081): as correções que o dono aprovou moram em agent_rules e
+  // entram aqui como bloco montado, uma regra por cenário. Antes cada
+  // aprovação colava um "# PATCH MANUAL" no fim do texto gravado, escolhido
+  // por heurística, e o prompt só crescia. Vazio sem o interruptor
+  // `regrasComoRegistros`, e vazio em qualquer erro: regra que não conseguimos
+  // ler não pode segurar a resposta ao cliente final.
+  //
+  // Sem agente semeado (caminho do fallback), vai sem id: aí a organização é
+  // o melhor recorte que existe, e é o que havia antes.
+  let regrasBlock = '';
+  try {
+    regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, { agentId: agent?.id ?? null });
+  } catch (err) {
+    logger.warn('[Agent] bloco de regras indisponível neste turno (segue sem ele)', { err });
+  }
+
+  if (agent?.systemPrompt) {
+    // V4 task #234 (2026-05-13): Universal Core Rules V1 prependado.
+    // Cliente customiza agent.systemPrompt livremente, mas comportamento
+    // crítico (purchase_intent, handoff, anti-padrões, dados sensíveis)
+    // é IMUTÁVEL. Reduz risco de bug silencioso em agentes de clientes
+    // externos que não saberiam reportar gap de calibração.
+    const now = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    return [
+      CORE_AGENT_RULES_V1,
+      factsBlock, // Camada 2 — fatos da plataforma sincronizados em runtime
+      agent.systemPrompt,
+      // Perfil vivo depois do prompt gravado: o que o cliente acabou de
+      // salvar precisa vencer o tom e o horário congelados no cadastro.
+      perfilVivoBlock,
+      // As regras aprovadas pelo dono, pelo mesmo motivo: o que ele
+      // aprovou esta semana vence o texto do dia do cadastro.
+      regrasBlock,
+      // Depois do systemPrompt de propósito: se um prompt antigo tiver link
+      // congelado do seed, o bloco fresco vem por último e é o que vale.
+      linksBlock,
+      '',
+      clienteBlock,
+      saudacaoBlock,
+      '',
+      ragBlock,
+      '',
+      `# Agora`,
+      now,
+    ].filter(Boolean).join('\n');
   }
 
   // 3. Fallback (orgs sem seed): CORE rules + facts + promptEngine antigo + cliente block.
@@ -2059,7 +2089,16 @@ async function buildSystemPromptLegado(
   });
   // O bloco vivo também entra no fallback (re-revisão do PR #368): sem ele,
   // uma organização sem Agent semeado ficaria sem 'Agora', transbordo e agendamento.
-  return [CORE_AGENT_RULES_V1, factsBlock, fallback, perfilVivoBlock, '', clienteBlock, saudacaoBlock]
+  return [
+    CORE_AGENT_RULES_V1,
+    factsBlock,
+    fallback,
+    perfilVivoBlock,
+    regrasBlock,
+    '',
+    clienteBlock,
+    saudacaoBlock,
+  ]
     .filter(Boolean)
     .join('\n');
 }

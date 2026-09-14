@@ -24,6 +24,14 @@ import { llmRouter, type LLMOperation } from './llm/LLMRouter.js';
 import { classifyIntent, shouldEscalateToSonnet, type IzaIntent } from './llm/intentClassifier.js';
 import { logger } from '../utils/logger.js';
 import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
+// A043/A078: o sugeridor precisa VER as regras base e as regras já aprovadas.
+// Sem isso ele propôs, em produção, o oposto do CR-7 (20% de desconto contra
+// o teto de 10%) e numerou por conta própria, colidindo cinco vezes no "#14".
+import {
+  resumirCoreParaSugeridor,
+  resumirRegrasParaSugeridor,
+  type RegraDoAgente,
+} from '../agents/regrasDoAgente.js';
 import type { EvalScenario } from '../agents/agentEvalSet.js';
 import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
 // A088: a MESMA extração que o WhatsApp usa. Antes o avaliador lia resp.text
@@ -50,16 +58,25 @@ export interface ContextoDoCenario {
 }
 
 /**
+ * O que o runner entrega ao montador além do cenário. Rodada 2 do PR #377:
+ * o bloco "# Regras aprovadas pelo dono" que quem chamou o avaliador JÁ leu
+ * (uma vez por execução, em ContextoDoSugeridor.regrasBlock). O montador usa
+ * este texto, e não lê de novo por cenário.
+ */
+export interface ExtrasDoMontador {
+  regrasBlock: string;
+}
+
+/**
  * Montador injetado por quem chama o runner. null = interruptor
  * `contextoUnico` desligado: o cenário usa o prompt de antes
  * (buildEvalSystemPrompt). O runner NÃO importa banco, base nem interruptor
  * por causa disto, e continua testável com dublês.
  */
-export type MontadorDeContexto = (scenario: EvalScenario) => Promise<ContextoDoCenario | null>;
-
-export interface ExecuteAgentEvalRunOpts {
-  montarContexto?: MontadorDeContexto | null;
-}
+export type MontadorDeContexto = (
+  scenario: EvalScenario,
+  extras: ExtrasDoMontador,
+) => Promise<ContextoDoCenario | null>;
 
 export interface ScenarioResult {
   scenarioId: string;
@@ -473,6 +490,14 @@ em formato fraco e bullets soltos):
    ponto final. NUNCA pare no meio de uma palavra, de uma frase ou logo
    depois de "Exemplo INCORRETO:". Se não couber, encurte os exemplos.
 
+7. REGRAS BASE (A078, a mais cara de violar): o pedido traz o resumo das
+   REGRAS BASE DO AGENTE, que são imutáveis e prevalecem sobre qualquer
+   patch. NUNCA proponha patch que as contradiga (desconto acima do teto,
+   nome do cliente em todas as mensagens, pedir dado sensível). Um patch que
+   contradiz a base deixa o agente dividido e o erro volta. O pedido também
+   traz as regras JÁ APROVADAS: se uma delas trata do mesmo tema, fortaleça
+   aquela (where = "fortalecer a regra do cenário X") em vez de criar outra.
+
 Output FORMATO EXATO (JSON único, sem prefixo, sem markdown):
 {"summary": "1 linha executiva", "patches": [{"where": "INVIOLÁVEIS — novo item #N | REGRA INVIOLÁVEL #X — fortalecer", "diff": "+ **REGRA INVIOLÁVEL #N — TÍTULO:** ... Exemplo CORRETO: ... Exemplo INCORRETO: ..."}], "confidence": 0-100}`;
 }
@@ -504,6 +529,49 @@ function cortarEmFronteiraDeFrase(texto: string, teto = TETO_DO_PATCH): string {
   return ultimaPontuacao > 0 ? recorte.slice(0, ultimaPontuacao + 1) : recorte;
 }
 
+/**
+ * O que o sugeridor precisa saber além do cenário que falhou (A043, A078).
+ *
+ * Opcional para não quebrar chamada existente, mas quem tem o dado passa: o
+ * sugeridor que não vê o CORE propõe o contrário dele, e o que não vê as
+ * regras aprovadas escreve a sexta versão da mesma regra.
+ */
+export interface ContextoDoSugeridor {
+  /** Regras já aprovadas pelo dono para este agente. */
+  regrasAtivas?: RegraDoAgente[];
+  /** Bloco vivo do turno (tom, horário, agendamento), quando disponível. */
+  blocoVivo?: string | null;
+  /**
+   * Quem chamou já sabe que vai jogar a sugestão fora: não peça nenhuma.
+   *
+   * É o caso do re-teste. Ele roda o mesmo cenário três vezes só para ler o
+   * veredito, e cada amostra reprovada chamava o sugeridor por baixo, com a
+   * sugestão sendo descartada em seguida. Um clique custava até 15
+   * chamadas ao modelo em vez das 9 que o re-teste declara (e o sugeridor
+   * ainda pede DUAS quando a primeira resposta volta cortada).
+   */
+  pularSugestao?: boolean;
+  /**
+   * O bloco "# Regras aprovadas pelo dono" já montado, para o prompt que o
+   * AGENTE recebe no teste (não só o sugeridor). Rodada 3 do PR #375: com
+   * `regrasComoRegistros` ligado, aplicar cria o registro e não toca no
+   * prompt; sem este bloco o re-teste e a execução semanal mediam o agente
+   * SEM a regra recém-aprovada. Quem chama é quem tem banco: monta com
+   * `blocoDeRegrasDaOrganizacao(orgId, { agentId })` e passa. Vazio ou
+   * ausente, o prompt é byte a byte o de antes.
+   */
+  regrasBlock?: string;
+  /**
+   * C1a (Passo 12, A036): o montador do contexto de produção. Rodada 2 do PR
+   * #377: mora no MESMO objeto das regras, e não num quarto parâmetro, porque
+   * os dois PRs tinham acrescentado um cada. Presente e com o interruptor
+   * `contextoUnico` da organização ligado, o cenário roda com o contexto do
+   * motor único, e o bloco de regras entra nele pelo `regrasBlock` acima.
+   * Ausente, null ou devolvendo null: o prompt de antes (buildEvalSystemPrompt).
+   */
+  montarContexto?: MontadorDeContexto | null;
+}
+
 export async function suggestFix(
   scenarioId: string,
   expectedBehavior: string,
@@ -511,7 +579,12 @@ export async function suggestFix(
   judgeReason: string,
   systemPromptExcerpt: string,
   profile: JudgeProfile,
+  contexto: ContextoDoSugeridor = {},
 ): Promise<ScenarioResult['suggestedFix']> {
+  // A guarda fica AQUI, e não em quem chama, porque quem chama é o runner
+  // interno: bastava alguém esquecer o if para a conta voltar a dobrar.
+  if (contexto.pularSugestao) return undefined;
+
   const primeira = await pedirPatch(
     scenarioId,
     expectedBehavior,
@@ -519,6 +592,8 @@ export async function suggestFix(
     judgeReason,
     systemPromptExcerpt,
     profile,
+    false,
+    contexto,
   );
 
   // A188: a regra cortada no meio nunca deveria chegar à tela. Uma segunda
@@ -536,6 +611,7 @@ export async function suggestFix(
     systemPromptExcerpt,
     profile,
     true,
+    contexto,
   );
   return segunda ?? primeira;
 }
@@ -548,6 +624,7 @@ async function pedirPatch(
   systemPromptExcerpt: string,
   profile: JudgeProfile,
   segundaTentativa = false,
+  contexto: ContextoDoSugeridor = {},
 ): Promise<ScenarioResult['suggestedFix']> {
   try {
     const aviso = segundaTentativa
@@ -569,6 +646,16 @@ ${judgeReason}
 ### Trecho relevante do system prompt atual
 ${systemPromptExcerpt.slice(0, 2000)}
 
+### REGRAS BASE DO AGENTE (resumo: imutáveis, prevalecem sobre o patch)
+${resumirCoreParaSugeridor()}
+
+### Regras já aprovadas pelo dono (fortaleça, não duplique)
+${resumirRegrasParaSugeridor(contexto.regrasAtivas ?? [])}
+${
+  contexto.blocoVivo
+    ? `\n### O que está configurado hoje neste atendimento\n${String(contexto.blocoVivo).slice(0, 800)}\n`
+    : ''
+}
 ### Patches sugeridos (JSON)`;
 
     const out = await withRetry(() =>
@@ -659,6 +746,12 @@ export function buildEvalSystemPrompt(
     userMessage?: string;
     history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   },
+  /**
+   * O bloco "# Regras aprovadas pelo dono", quando o interruptor está ligado.
+   * Entra na MESMA posição do orquestrador (depois do prompt do agente, antes
+   * do bloco do cliente). Vazio, não muda um byte do prompt.
+   */
+  regrasBlock?: string,
 ): string {
   // FASE 2.1 fix (2026-05-13): mock condicional do bloco "Cliente atual".
   // Cenários cr5_nome_ausente_* testam o comportamento de PERGUNTAR nome —
@@ -676,6 +769,10 @@ export function buildEvalSystemPrompt(
   return [
     CORE_AGENT_RULES_V1,
     agent.systemPrompt || '(agente sem system_prompt customizado — só CORE rules)',
+    // As regras aprovadas pelo dono, pelo mesmo motivo do orquestrador: o
+    // que ele aprovou esta semana vence o texto do dia do cadastro. Só entra
+    // quando existe, para o prompt sem regra continuar idêntico ao de hoje.
+    ...(regrasBlock ? [regrasBlock] : []),
     '',
     '# Cliente atual (eval test mock)',
     nameMockEnabled
@@ -749,26 +846,33 @@ async function runScenario(
   scenario: EvalScenario,
   agent: { id: string; systemPrompt: string | null; name: string },
   profile: JudgeProfile,
-  montarContexto?: MontadorDeContexto | null,
+  contexto: ContextoDoSugeridor = {},
 ): Promise<ScenarioResult> {
   // C1a: o contexto de produção quando o montador existe e o interruptor da
   // organização está ligado. Erro no montador não derruba o cenário: cai no
   // prompt de antes, com registro, porque o teste ainda vale como era.
-  let contexto: ContextoDoCenario | null = null;
-  if (montarContexto) {
+  //
+  // Rodada 2 do PR #377: o bloco de regras do chamador vai ao montador (o
+  // compositor o põe depois do perfil vivo) e ao prompt de antes (depois do
+  // system_prompt). É o MESMO texto nos dois ramos, lido uma vez só.
+  const regrasBlock = contexto.regrasBlock ?? '';
+  let doCenario: ContextoDoCenario | null = null;
+  if (contexto.montarContexto) {
     try {
-      contexto = await montarContexto(scenario);
+      doCenario = await contexto.montarContexto(scenario, { regrasBlock });
     } catch (err: any) {
       logger.warn('[agentEvalRunner] montador de contexto falhou: cenário com o prompt de antes', {
         scenarioId: scenario.id,
         err: err?.message,
       });
-      contexto = null;
+      doCenario = null;
     }
   }
-  const systemPrompt = contexto ? contexto.systemPrompt : buildEvalSystemPrompt(agent, scenario);
-  const rastroDoContexto = contexto
-    ? { ragStatus: contexto.ragStatus, promptHash: contexto.hash }
+  const systemPrompt = doCenario
+    ? doCenario.systemPrompt
+    : buildEvalSystemPrompt(agent, scenario, contexto.regrasBlock);
+  const rastroDoContexto = doCenario
+    ? { ragStatus: doCenario.ragStatus, promptHash: doCenario.hash }
     : {};
 
   const messages = (scenario.history || []).map((h) => ({
@@ -907,6 +1011,7 @@ async function runScenario(
       judge.reason,
       agent.systemPrompt || '(sem prompt customizado)',
       profile,
+      contexto,
     );
   }
 
@@ -1007,7 +1112,13 @@ export async function executeAgentEvalRun(
   scenarios: EvalScenario[],
   agent: { id: string; name: string; systemPrompt: string | null },
   profile: JudgeProfile,
-  opts: ExecuteAgentEvalRunOpts = {},
+  /**
+   * A043: as regras já aprovadas e o bloco vivo, para o sugeridor fortalecer
+   * a regra existente em vez de escrever a sexta versão dela. Quem chama é
+   * quem tem banco; o avaliador não vai buscar sozinho. C1a: e o montador do
+   * contexto de produção (`montarContexto`), no mesmo objeto.
+   */
+  contexto: ContextoDoSugeridor = {},
 ): Promise<{ results: ScenarioResult[]; durationMs: number; summary: RunSummary }> {
   const t0 = Date.now();
   const results: ScenarioResult[] = [];
@@ -1016,7 +1127,7 @@ export async function executeAgentEvalRun(
     if (!isFirst) await sleep(THROTTLE_BETWEEN_SCENARIOS_MS);
     isFirst = false;
     try {
-      const r = await runScenario(s, agent, profile, opts.montarContexto);
+      const r = await runScenario(s, agent, profile, contexto);
       results.push(r);
     } catch (err: any) {
       // A171: cenário que quebra é FALHA TÉCNICA, não reprovação. Eram 90

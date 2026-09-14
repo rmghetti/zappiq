@@ -88,6 +88,61 @@ export interface ClientCooldownError {
   lastRunId: string;
 }
 
+/** Uma passada do cenário no re-teste (A049: agora são três). */
+export interface AmostraDoReteste {
+  amostra: number;
+  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  resposta: string;
+  motivoDoJuiz: string;
+}
+
+export interface ResultadoDoReteste {
+  ok: boolean;
+  scenarioId: string;
+  /** Execução gravada deste re-teste (null se a gravação falhou). */
+  runId: string | null;
+  fixDecisionId: string | null;
+  amostras: AmostraDoReteste[];
+  veredito: 'funcionou' | 'nao_funcionou' | 'indefinido';
+  resumo: {
+    aprovadas: number;
+    reprovadas: number;
+    parciais: number;
+    erros: number;
+    avaliadas: number;
+    explicacao: string;
+  };
+  severity: string;
+  custo: { chamadasDeLlm: number; explicacao: string };
+}
+
+/**
+ * Uma regra aprovada pelo dono (P08).
+ *
+ * A correção deixou de ser texto colado dentro do prompt e virou registro:
+ * uma ativa por cenário, com origem, e com botão de desfazer por regra.
+ */
+export interface RegraDoAgente {
+  id: string;
+  scenarioId: string | null;
+  cenarioLegivel: string;
+  texto: string;
+  origem: 'sugestao_ia' | 'editada' | 'manual';
+  status: 'ativa' | 'substituida' | 'revertida';
+  motivo: string | null;
+  decisionId: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface ListaDeRegras {
+  total: number;
+  /** Teto de regras ativas por agente: passar disso pede consolidação. */
+  teto: number;
+  restantes: number;
+  regras: RegraDoAgente[];
+}
+
 class ClientAgentQualityApi {
   /** GET /api/agent-quality/agents — agentes da org do usuário logado. */
   async getAgents(): Promise<ClientAgentListResponse> {
@@ -147,25 +202,33 @@ class ClientAgentQualityApi {
 
   /**
    * POST /runs/:runId/scenarios/:scenarioId/re-test
-   * Loop curto pós-Apply: roda só aquele cenário contra o systemPrompt atual.
-   * Devolve o veredicto novo (pass/partial/fail) pra confirmar que o fix
-   * empurrou o score em direção a 90%+.
+   *
+   * A049: roda o MESMO cenário 3 vezes contra o prompt atual, grava a
+   * execução e devolve as 3 amostras. Uma amostra só não separava correção
+   * que pegou de sorte do modelo, e nada ficava registrado. Custa 3 chamadas,
+   * e a tela diz isso antes do clique.
    */
-  async reTestScenario(
-    runId: string,
-    scenarioId: string,
-  ): Promise<{
-    ok: boolean;
-    scenarioId: string;
-    combined: 'pass' | 'partial' | 'fail' | 'erro';
-    judge: { passed: boolean | null; reason: string };
-    severity: string;
-    response: string;
-  }> {
+  async reTestScenario(runId: string, scenarioId: string): Promise<ResultadoDoReteste> {
     return api.post(
       `/api/agent-quality/runs/${encodeURIComponent(runId)}/scenarios/${encodeURIComponent(scenarioId)}/re-test`,
       {},
     );
+  }
+
+  /** GET /agents/:agentId/rules: as regras aprovadas, por cenário. */
+  async getRules(
+    agentId: string,
+    opts: { incluirHistorico?: boolean } = {},
+  ): Promise<ListaDeRegras> {
+    const qs = opts.incluirHistorico ? '?incluirHistorico=true' : '';
+    return api.get<ListaDeRegras>(
+      `/api/agent-quality/agents/${encodeURIComponent(agentId)}/rules${qs}`,
+    );
+  }
+
+  /** POST /rules/:ruleId/revert: desfaz UMA regra, sem tocar nas outras. */
+  async revertRule(ruleId: string): Promise<{ ok: boolean; regra: RegraDoAgente }> {
+    return api.post(`/api/agent-quality/rules/${encodeURIComponent(ruleId)}/revert`, {});
   }
 
   /** POST /runs/:runId/scenarios/:scenarioId/reject-fix */

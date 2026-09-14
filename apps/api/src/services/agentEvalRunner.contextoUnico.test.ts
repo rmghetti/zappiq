@@ -1,8 +1,9 @@
 /* ══════════════════════════════════════════════════════════════════════
  * agentEvalRunner com o montador de contexto injetado (C1a, A036).
  * --------------------------------------------------------------------
- * O runner não importa banco, base nem interruptor: recebe o montador por
- * opts.montarContexto. O que este teste prova:
+ * O runner não importa banco, base nem interruptor: recebe o montador em
+ * ContextoDoSugeridor.montarContexto, o MESMO objeto das regras (rodada 2 do
+ * PR #377). O que este teste prova:
  *   1. Sem montador (ou com montador que devolve null): o prompt de antes
  *      (buildEvalSystemPrompt) e nenhum rastro de contexto no resultado.
  *   2. Com montador: o modelo recebe o prompt do montador, e o resultado
@@ -103,7 +104,8 @@ describe('sem montador: o prompt de antes', () => {
 
     const { results } = await executeAgentEvalRun([CENARIO], AGENTE, PERFIL, { montarContexto: montar });
 
-    expect(montar).toHaveBeenCalledWith(CENARIO);
+    // O montador recebe o cenário e o bloco de regras do chamador (vazio aqui).
+    expect(montar).toHaveBeenCalledWith(CENARIO, { regrasBlock: '' });
     expect(systemDoAgente()).toBe(buildEvalSystemPrompt(AGENTE, CENARIO));
     expect(results[0].promptHash).toBeUndefined();
   });

@@ -21,6 +21,10 @@ const prismaMock: any = {
   agentEvalFixDecision: { findFirst: vi.fn(), create: vi.fn() },
   agentPromptVersion: { findMany: vi.fn(), findFirst: vi.fn() },
   agentEvalRun: { findFirst: vi.fn(), update: vi.fn() },
+  // C3: o revert pergunta antes se aquela correção virou REGRA. Sem regra,
+  // o caminho é o de sempre (regravar o prompt de antes), que é o que este
+  // arquivo prova. A consulta é real: o service não está mocado aqui.
+  agentRule: { findFirst: vi.fn(async () => null), update: vi.fn() },
   user: { findUnique: vi.fn() },
   $executeRaw: vi.fn(async () => 1),
   $queryRaw: vi.fn(async () => []),

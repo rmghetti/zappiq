@@ -69,7 +69,7 @@ function makeFakeDb(rows: any[] = []) {
 }
 
 describe('registro FLAGS', () => {
-  it('tem as sete flags previstas no plano (compositorUnico saiu: contextoUnico faz o papel)', () => {
+  it('tem as oito flags previstas no plano (compositorUnico saiu: contextoUnico faz o papel)', () => {
     expect(Object.keys(FLAGS).sort()).toEqual(
       [
         'contextoUnico',
@@ -78,6 +78,9 @@ describe('registro FLAGS', () => {
         'modeloPorPolitica',
         'perfilVivo',
         'ragNoChatDoSite',
+        // C3: as correções aprovadas viram registros e o bloco de regras
+        // entra no prompt só com este interruptor ligado.
+        'regrasComoRegistros',
         'treinarSomenteAdmin',
       ].sort(),
     );

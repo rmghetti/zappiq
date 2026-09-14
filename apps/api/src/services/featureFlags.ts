@@ -29,6 +29,7 @@ export type FlagName =
   | 'ragNoChatDoSite'
   | 'evalNoTier'
   | 'treinarSomenteAdmin'
+  | 'regrasComoRegistros'
   | 'contextoUnico'
   | 'modeloPorPolitica';
 
@@ -69,6 +70,11 @@ export const FLAGS: Record<FlagName, FlagDef> = {
     descricao:
       'Só ADMIN e SUPERADMIN podem aplicar, reverter ou disparar correções no prompt do agente.',
     removeBy: '2026-12-31',
+  },
+  regrasComoRegistros: {
+    descricao:
+      'As correções aprovadas viram registros com uma regra por cenário, montadas num bloco do prompt, em vez de texto colado dentro dele.',
+    removeBy: '2027-06-30',
   },
   contextoUnico: {
     descricao:

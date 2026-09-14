@@ -46,12 +46,32 @@ vi.mock('../services/izaFactsService.js', () => ({
   invalidateIzaFactsCache: vi.fn(),
 }));
 
+// C3: o bloco de regras aprovadas é lido por agentRulesService, que consulta
+// o interruptor por organização. Sem este mock, um teste de unidade abriria
+// conexão com o Redis. Vazio = comportamento de hoje.
+vi.mock('../services/agentRulesService.js', () => ({
+  blocoDeRegrasDaOrganizacao: vi.fn().mockResolvedValue(''),
+}));
+
 // Interruptores sempre desligados, sem Redis: a casca lê dois por turno
 // (contextoUnico e perfilVivo) e, sem este dublê, cada leitura espera o
 // cache real responder. Este arquivo prova o vazamento de marca, não o
 // interruptor.
 vi.mock('../services/featureFlags.js', () => ({
   isFlagOn: vi.fn().mockResolvedValue(false),
+}));
+
+// O orquestrador importa o motor de fluxos, e o agendador dele cria a fila
+// BullMQ no import, abrindo conexão com o Redis em segundo plano. Fila falsa:
+// nenhum teste daqui enfileira nada.
+vi.mock('bullmq', () => ({
+  Queue: class {
+    add = vi.fn();
+    on = vi.fn();
+  },
+  Worker: class {
+    on = vi.fn();
+  },
 }));
 
 // logger silencioso pra não poluir output

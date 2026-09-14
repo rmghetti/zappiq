@@ -71,6 +71,42 @@ describe('buildEvalSystemPrompt', () => {
     expect(prompt.startsWith(CORE_AGENT_RULES_V1)).toBe(true);
   });
 
+  // Rodada 3 do PR #375. Com `regrasComoRegistros` ligado, aplicar cria o
+  // registro e não toca no prompt. Se o avaliador montar o prompt sem o
+  // bloco, o re-teste e a execução semanal medem o agente SEM a regra que o
+  // dono acabou de aprovar, e a nota da organização migrada nunca mais
+  // reflete as regras.
+  it('o bloco de regras entra logo depois do prompt do agente, antes de "# Cliente atual"', () => {
+    const bloco = '# Regras aprovadas pelo dono\n1. Chame o cliente pelo nome quando souber.';
+
+    const prompt = buildEvalSystemPrompt(agente, { id: 'cr1_aceitacao_direta' }, bloco);
+
+    expect(prompt).toBe(
+      [
+        CORE_AGENT_RULES_V1,
+        '## IDENTIDADE\nVocê é a Vera do CMJ.',
+        bloco,
+        '',
+        '# Cliente atual (eval test mock)',
+        'Nome registrado: Rod',
+        'Telefone: +5511999999999',
+        'Status do lead: NEW',
+        'Mensagens trocadas até agora: 1',
+        'Primeiro contato? SIM',
+      ].join('\n'),
+    );
+  });
+
+  it('sem bloco (interruptor desligado), o prompt é byte a byte o de hoje', () => {
+    const semArgumento = buildEvalSystemPrompt(agente, { id: 'cr1_aceitacao_direta' });
+
+    expect(buildEvalSystemPrompt(agente, { id: 'cr1_aceitacao_direta' }, '')).toBe(semArgumento);
+    expect(buildEvalSystemPrompt(agente, { id: 'cr1_aceitacao_direta' }, undefined)).toBe(
+      semArgumento,
+    );
+    expect(semArgumento).not.toContain('# Regras aprovadas pelo dono');
+  });
+
   it('não traz base de conhecimento, saudação, links nem data (achado A036)', () => {
     const prompt = buildEvalSystemPrompt(agente, { id: 'cr7_preco_da_base' });
 

@@ -80,6 +80,14 @@ import {
 } from '../services/agentPromptPatcher.js';
 // FASE 2.2d (#252): on-demand suggestion pra cenários partial
 import { suggestFix } from '../services/agentEvalRunner.js';
+// C3 (A043): as regras aprovadas pelo dono, para o sugeridor não duplicar.
+import {
+  carregarRegrasAtivas,
+  blocoDeRegrasDaOrganizacao,
+  type RegraGravada,
+} from '../services/agentRulesService.js';
+// C3 (A078, A217): a mesma guarda de conflito da porta do cliente.
+import { detectarConflitos } from '../agents/regrasDoAgente.js';
 // A083: toda escrita no prompt declara a origem e vira versão; reverter só
 // vale enquanto o prompt ainda for o que aquela correção deixou.
 import {
@@ -165,6 +173,54 @@ router.get(
 
 // ─── POST /run (sync — backwards compat) ────────────────────────────
 
+/**
+ * O bloco "# Regras aprovadas pelo dono" do agente, sem derrubar a rota.
+ *
+ * Rodada 3 do PR #375: as duas portas do superadmin que executam o avaliador
+ * (POST /run e o re-verify do apply-fix) mediam o agente SEM as regras que o
+ * dono aprovou. Fail-soft como no orquestrador: sem bloco, a execução segue.
+ */
+async function blocoDeRegrasFailSoft(organizationId: string, agentId: string): Promise<string> {
+  try {
+    return await blocoDeRegrasDaOrganizacao(organizationId, { agentId });
+  } catch (err) {
+    logger.warn('[agentEval] bloco de regras indisponível (segue sem ele)', {
+      organizationId,
+      agentId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return '';
+  }
+}
+
+/**
+ * O contexto de regras do avaliador: o bloco para o AGENTE e as regras
+ * ativas para o SUGERIDOR.
+ *
+ * Rodada 4 do PR #375: o bloco chegava ao agente, mas o sugeridor lia
+ * "Nenhuma regra aprovada ainda para este agente" e propunha de novo a
+ * regra que já estava no bloco. Bloco vazio (interruptor desligado ou
+ * agente sem regra): lista vazia e nenhuma consulta a mais. Fail-soft como
+ * o bloco.
+ */
+async function contextoDeRegrasFailSoft(
+  organizationId: string,
+  agentId: string,
+): Promise<{ regrasBlock: string; regrasAtivas: RegraGravada[] }> {
+  const regrasBlock = await blocoDeRegrasFailSoft(organizationId, agentId);
+  if (!regrasBlock) return { regrasBlock, regrasAtivas: [] };
+  try {
+    return { regrasBlock, regrasAtivas: await carregarRegrasAtivas({ organizationId, agentId }) };
+  } catch (err) {
+    logger.warn('[agentEval] regras do sugeridor indisponíveis (segue sem elas)', {
+      organizationId,
+      agentId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return { regrasBlock, regrasAtivas: [] };
+  }
+}
+
 router.post(
   '/run',
   authMiddleware as any,
@@ -201,6 +257,11 @@ router.post(
 
       logger.info(`[agentEval] sync run iniciado agentId=${agentId} scenarios=${scenarios.length}`);
       const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile, {
+        // Rodada 3 do PR #375: mede o agente COM as regras aprovadas pelo
+        // dono. Rodada 4: e o sugeridor sabe quais regras já existem.
+        ...(await contextoDeRegrasFailSoft(agent.organizationId, agent.id)),
+        // C1a: o contexto de produção, atrás de contextoUnico. Rodada 2 do PR
+        // #377: no mesmo objeto; o montador recebe o bloco lido acima.
         montarContexto: criarMontadorDeContextoDoEval(agent, agent.organizationId),
       });
 
@@ -364,7 +425,10 @@ router.get(
       const limit = Math.min(Number(req.query.limit) || 20, 100);
       const status = req.query.status ? String(req.query.status) : undefined;
 
-      const where: any = {};
+      // Rodada 4 do PR #375: o re-teste do cliente é gravado como execução
+      // concluída, mas as amostras dele não têm `judge`. A tela abre a última
+      // concluída e o FixSuggestionCard quebrava lendo `judge.reason`.
+      const where: any = { triggeredBy: { not: 'client_retest' } };
       if (agentId) where.agentId = agentId;
       if (status) where.status = status;
 
@@ -566,6 +630,14 @@ router.post(
         scenarioResult.judge?.reason || 'Cenário parcial — usuário pediu sugestão de melhoria',
         run.agent.systemPrompt || '',
         profile,
+        // A043: as regras já aprovadas deste agente vão junto, para o
+        // sugeridor fortalecer a existente em vez de duplicá-la.
+        {
+          regrasAtivas: await carregarRegrasAtivas({
+            organizationId: run.agent.organizationId,
+            agentId: run.agentId,
+          }),
+        },
       );
       if (!suggestion) {
         res.status(500).json({ error: 'IA não conseguiu gerar sugestão' });
@@ -753,7 +825,58 @@ router.post(
         throw err;
       }
 
-      // Aplica patch no system_prompt
+      // ─── C3: verificador de conflito (A078, A217) ─────────────────
+      // A mesma guarda da porta do cliente. O caminho do superadmin foi por
+      // onde entraram as quatro regras contraditórias da Iza sobre
+      // "tecnologia proprietária", uma delas listando como Exemplo INCORRETO
+      // a frase que o gabarito EXIGE.
+      const cenarioParaConflito = resolveEvalSet(profile).find((c) => c.id === scenarioId);
+      const conflitos = detectarConflitos({
+        texto: diffToApply,
+        expectedBehavior: cenarioParaConflito?.expectedBehavior ?? null,
+        regrasAtivas: await carregarRegrasAtivas({
+          organizationId: run.agent.organizationId,
+          agentId: run.agentId,
+        }),
+        cenarioDaRegraNova: scenarioId,
+      });
+      if (conflitos.length > 0) {
+        logger.warn('[agentEval] apply-fix BLOQUEADO: correção conflitante', {
+          agentId: run.agentId,
+          scenarioId,
+          tipos: conflitos.map((c) => c.tipo),
+        });
+        res.status(422).json({
+          error: 'regra_conflitante',
+          message: conflitos[0].explicacao,
+          conflitos,
+        });
+        return;
+      }
+
+      // ─── ATENÇÃO: esta porta IGNORA `regrasComoRegistros` de propósito ──
+      //
+      // A porta do cliente (agentQuality.ts) olha o interruptor da
+      // organização: com ele ligado, aprovar cria um REGISTRO em agent_rules
+      // e o system_prompt não é tocado. Aqui, não: o superadmin continua
+      // colando o texto dentro do prompt, sempre.
+      //
+      // É deliberado. Esta rota é a saída de emergência da casa, e ela
+      // precisa funcionar mesmo com o interruptor desligado, com a tabela
+      // indisponível ou com o serviço de regras quebrado. Trocar o
+      // comportamento dela pelo do cliente tiraria justamente a rota que
+      // conserta o cliente quando o caminho novo falha.
+      //
+      // O PREÇO: numa organização COM a flag ligada, aplicar por aqui
+      // DUPLICA a regra. Ela entra colada no prompt por este caminho e
+      // continua sendo montada no bloco "# Regras aprovadas pelo dono" pelo
+      // outro. O agente recebe a mesma ordem duas vezes, e desfazer pela
+      // tela do cliente tira só a do bloco.
+      //
+      // REGRA DE OPERAÇÃO: com a flag ligada na organização X, não aplique
+      // correção pela tela de admin daquele agente. Use a tela do cliente.
+      // Se precisar mesmo usar esta porta, desligue a flag da organização
+      // antes e migre as regras ativas dela depois.
       const currentPrompt = run.agent.systemPrompt || '';
       const result = applyPatch({
         currentPrompt,
@@ -841,7 +964,15 @@ router.post(
             [scenarioDef],
             agenteDoReteste,
             profile,
-            { montarContexto: criarMontadorDeContextoDoEval(agenteDoReteste, run.agent.organizationId) },
+            {
+              // Rodada 3 do PR #375: o re-verify mede o prompt novo COM as
+              // regras aprovadas, como o orquestrador vai montar. Rodada 4: e o
+              // sugeridor sabe quais regras já existem.
+              ...(await contextoDeRegrasFailSoft(run.agent.organizationId, run.agentId)),
+              // C1a: contexto de produção, atrás de contextoUnico (rodada 2
+              // do PR #377: no mesmo objeto das regras).
+              montarContexto: criarMontadorDeContextoDoEval(agenteDoReteste, run.agent.organizationId),
+            },
           );
           // A171: 'erro' é falha técnica do re-teste. computeReverifyVerdict
           // já trata: improved só quando o resultado novo é 'pass'.

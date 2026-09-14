@@ -34,6 +34,7 @@ import {
   resolveSchedulingRuntime,
 } from '../agents/agentOrchestrator.js';
 import { buildLiveProfileBlock, buildGreetingBlock } from '../agents/tenantLiveProfile.js';
+import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
 import { isFlagOn } from '../services/featureFlags.js';
 // C1a (Passo 12): o Raio-X mostra o hash e as partes do contexto de cada
 // canal. Com o interruptor `contextoUnico` da organização ligado, o site e
@@ -49,6 +50,7 @@ import {
   buildWebChatSystemPrompt,
   loadOrgSystemPrompt,
   montarContextoDoChatDoSite,
+  idDoAgenteComercial,
   SystemPromptNaoEncontrado,
 } from '../services/webChatService.js';
 import { buildEvalSystemPrompt } from '../services/agentEvalRunner.js';
@@ -242,12 +244,32 @@ async function montarPrompt(input: {
       saudacaoBlock = buildGreetingBlock(historico.length === 0, settings.greetingMessage);
     }
 
+    // C3: as regras aprovadas pelo dono. Mesmo caminho do visitante, então
+    // quem liga o interruptor e vem conferir aqui vê o bloco que o chat do
+    // site está recebendo, e não o prompt de antes.
+    //
+    // Rodada 3 do PR #375: por AGENTE, com o mesmo seletor do chat do site
+    // (idDoAgenteComercial). Montar só por organização mostraria, com dois
+    // agentes vivos, as regras do outro. O interruptor é conferido antes,
+    // como no chat, para o canal desligado nem procurar o agente.
+    //
+    // Rodada 2 do PR #377: só no caminho de antes. Com `contextoUnico`, o
+    // ramo de cima monta pelo carregador, que põe as regras do MESMO agente
+    // do prompt em `regrasDoCliente`, como o chat do site faz.
+    let regrasBlock = '';
+    if (await isFlagOn(organizationId, 'regrasComoRegistros')) {
+      regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
+        agentId: await idDoAgenteComercial(organizationId),
+      });
+    }
+
     return montadoPeloDeAntes(
       buildWebChatSystemPrompt({
         orgPrompt,
         factsBlock: ehIza ? await getIzaFactsBlock() : '',
         isIzaCanonical: ehIza,
         perfilVivoBlock,
+        regrasBlock,
         saudacaoBlock,
       }),
     );
@@ -255,6 +277,15 @@ async function montarPrompt(input: {
 
   // canal === 'qualidade'
   const agente = await carregarAgenteDaQualidade(organizationId);
+  // Rodada 3 do PR #375: o avaliador passou a receber o bloco de regras do
+  // agente testado. O Raio-X mostra o mesmo prompt que o teste envia.
+  //
+  // Rodada 2 do PR #377: lido UMA vez e usado pelos dois motores, como faz
+  // quem chama o avaliador (o montador do teste recebe o bloco pronto e não
+  // lê de novo). No motor único ele entra em `regrasDoCliente`.
+  const regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
+    agentId: agente?.id ?? null,
+  });
   if (flags.contextoUnico) {
     // O MESMO contexto que services/agentEvalContext monta para cada cenário:
     // contato mock de sempre, data FIXA e a base pela mensagem do cenário.
@@ -283,6 +314,7 @@ async function montarPrompt(input: {
     buildEvalSystemPrompt(
       { systemPrompt: agente?.systemPrompt ?? null },
       { id: 'xray', userMessage: mensagem, history: historico },
+      regrasBlock,
     ),
   );
 }
