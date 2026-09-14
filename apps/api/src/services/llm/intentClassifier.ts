@@ -33,7 +33,7 @@
  *   Audit registra que classify falhou pra investigação posterior.
  * ══════════════════════════════════════════════════════════════════════ */
 
-import { llmRouter, type LLMMessage } from './LLMRouter.js';
+import { llmRouter, type LLMMessage, type LLMOperation } from './LLMRouter.js';
 import { logger } from '../../utils/logger.js';
 
 export type IzaIntent =
@@ -93,6 +93,14 @@ export interface ClassifyContext {
    * da Vera chegava ao classificador assinada pela agente da ZappIQ.
    */
   agentName?: string | null;
+  /**
+   * Operação semântica gravada em llm_call_logs. Default 'classify'.
+   *
+   * O teste da Qualidade passa 'eval': a classificação dele é gasto de
+   * bastidor da casa e precisa ser separável do classify do atendimento real
+   * (A067). Ver OPERACOES_FORA_DO_ORCAMENTO em llmCallAudit.ts.
+   */
+  operation?: LLMOperation;
 }
 
 /**
@@ -130,7 +138,7 @@ export async function classifyIntent(
       maxTokens: 10,
       temperature: 0,
       forceProvider: 'anthropic-haiku',
-      operation: 'classify',
+      operation: ctx.operation ?? 'classify',
       orgId: ctx.orgId ?? null,
       conversationId: ctx.conversationId ?? null,
     });
