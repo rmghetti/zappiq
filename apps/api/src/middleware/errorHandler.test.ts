@@ -1,5 +1,5 @@
 /**
- * errorHandler — o que o cliente lê quando o envio dá errado.
+ * errorHandler: o que o cliente lê quando o envio dá errado.
  *
  * Antes deste teste, qualquer erro do multer (arquivo grande demais, campo
  * inesperado, tipo recusado) caía no ramo genérico e virava 500 com
@@ -48,7 +48,7 @@ function run(err: any) {
 
 beforeEach(() => vi.clearAllMocks());
 
-describe('errorHandler — erros de upload (multer)', () => {
+describe('errorHandler, erros de upload do multer', () => {
   it('arquivo acima do limite vira 413 com a explicação do limite', () => {
     const out = run(new MulterError('LIMIT_FILE_SIZE', 'file'));
 
@@ -88,7 +88,7 @@ describe('UnsupportedFileTypeError', () => {
   });
 });
 
-describe('errorHandler — o que já valia continua valendo', () => {
+describe('errorHandler, o que já valia continua valendo', () => {
   it('erro genérico em produção não vaza detalhe interno', () => {
     const out = run(new Error('connect ECONNREFUSED 10.0.0.7:5432 senha do pooler'));
 

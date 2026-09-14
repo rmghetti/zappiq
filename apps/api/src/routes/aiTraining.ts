@@ -104,7 +104,7 @@ const ALLOWED_MIMES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
 
-// 20 MB — suficiente para contratos e FAQs extensos. AI_TRAINING_MAX_UPLOAD_MB
+// 20 MB, suficiente para contratos e FAQs extensos. AI_TRAINING_MAX_UPLOAD_MB
 // existe só para o teste de rota poder provar o 413 sem trafegar 20 MB por
 // loopback; em produção a variável não é definida e vale o default.
 const MAX_UPLOAD_MB = Number(process.env.AI_TRAINING_MAX_UPLOAD_MB) || 20;

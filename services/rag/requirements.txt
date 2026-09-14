@@ -1,18 +1,22 @@
-# Pin setuptools <81 porque setuptools 81+ removeu pkg_resources
-# e opentelemetry-instrumentation==0.48b0 ainda importa pkg_resources.
-# Sem este pin, pip resolve setuptools-82+ e o boot crasha com
-# ModuleNotFoundError: No module named 'pkg_resources'
-setuptools<81
+# O pin setuptools<81 caiu junto com a subida do OpenTelemetry: ele existia
+# porque opentelemetry-instrumentation==0.48b0 ainda importava pkg_resources,
+# removido no setuptools 81. Da 0.50b0 em diante a importação não existe mais,
+# e o pin travava o projeto numa versão com alerta publicado.
 
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
+fastapi==0.141.1
+# Starlette fixada de propósito: o fastapi só exige >=0.46.0, e as correções de
+# negação de serviço por multipart (GHSA-f96h-pmfr-66vw e GHSA-82w8-qh3p-5jfq)
+# só existem a partir da 1.3.1. Pinada aqui, o pip-audit e o osv-scanner veem
+# a versão que realmente vai para a imagem.
+starlette==1.6.0
+uvicorn[standard]==0.53.0
 pydantic==2.9.2
-python-dotenv==1.0.1
+python-dotenv==1.2.3
 httpx==0.27.2
 
 # Ingestao de documentos
 pymupdf==1.24.10            # extracao PDF (rapido, sem deps C externas)
-python-multipart==0.0.12    # FastAPI UploadFile
+python-multipart==0.0.32    # FastAPI UploadFile
 tiktoken==0.8.0             # token counting (chunk sizing por tokens, nao chars)
 
 # Persistencia pgvector
@@ -20,14 +24,16 @@ asyncpg==0.29.0
 pgvector==0.3.3
 sqlalchemy[asyncio]==2.0.35
 
-# Embeddings — Voyage AI e padrao (contexto 32k, multilingual)
-# OpenAI deixado como fallback pois ja tem API key em outras partes
+# Embeddings: o que roda em producao e OpenAI text-embedding-3-small com 1536
+# dimensoes (ver docs/architecture/embeddings.md e services/rag/fly.toml).
+# O voyageai continua instalado porque main.py ainda oferece o provider, mas ele
+# so volta a valer com reingestao completa da rag_chunks.
 voyageai==0.3.0
 openai==1.51.0
 
 # Observabilidade (alinhado com apps/api)
-opentelemetry-api==1.27.0
-opentelemetry-sdk==1.27.0
-opentelemetry-exporter-otlp==1.27.0
-opentelemetry-instrumentation-fastapi==0.48b0
-opentelemetry-instrumentation-asyncpg==0.48b0
+opentelemetry-api==1.44.0
+opentelemetry-sdk==1.44.0
+opentelemetry-exporter-otlp==1.44.0
+opentelemetry-instrumentation-fastapi==0.65b0
+opentelemetry-instrumentation-asyncpg==0.65b0

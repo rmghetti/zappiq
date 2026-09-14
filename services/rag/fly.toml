@@ -33,16 +33,26 @@ type = "http"
 
 [env]
 DEPLOYMENT_ENV = "production"
-EMBEDDING_DIM = "1024"
-EMBEDDING_MODEL = "voyage-3"
-EMBEDDING_PROVIDER = "voyage"
+# Este bloco descreve o que JÁ roda em produção, não uma intenção.
+# O /ready de zappiq-rag.fly.dev responde provider "openai" e modelo
+# "text-embedding-3-small", e a coluna rag_chunks.embedding é vector(1536),
+# com os 350 trechos existentes em 1536 dimensões.
+# Até 14/09/2026 o arquivo dizia voyage-3 com 1024: a configuração efetiva vinha
+# de fora do repositório e sobrepunha estes valores. Se uma limpeza de secrets
+# fizesse o arquivo valer, toda ingestão e toda busca passariam a falhar por
+# dimensão incompatível, sem alarme. Decisão registrada em
+# docs/architecture/embeddings.md. Trocar de provedor exige reingestão completa:
+# pgvector não converte entre dimensões diferentes.
+EMBEDDING_DIM = "1536"
+EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_PROVIDER = "openai"
 OTEL_SERVICE_NAME = "zappiq-rag"
 PORT = "8001"
 
 # Secrets (set via flyctl secrets set):
 #   DATABASE_URL       — Supabase pooler (direct, não session mode)
-#   VOYAGE_API_KEY     — Voyage AI embedding key
-#   OPENAI_API_KEY     — OpenAI fallback (opcional)
+#   OPENAI_API_KEY     — chave de embedding em uso (obrigatória com o provider acima)
+#   VOYAGE_API_KEY     — alternativa não ativa; só volta a valer com reingestão
 #   OTEL_EXPORTER_OTLP_ENDPOINT — Grafana Cloud OTLP gateway
 #   OTEL_EXPORTER_OTLP_HEADERS  — Grafana Cloud auth header
 

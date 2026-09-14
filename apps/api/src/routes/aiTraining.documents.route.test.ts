@@ -247,7 +247,7 @@ describe('PUT /api/ai-training/documents/:id', () => {
 // O upload é a porta mais exposta do Treinar IA: qualquer conta com plano
 // ativo chega nela. Os dois casos abaixo provam que ela recusa em português,
 // com o status certo, e sem tocar no vector store.
-describe('POST /api/ai-training/documents — recusas de upload', () => {
+describe('POST /api/ai-training/documents, recusas de upload', () => {
   const enviar = (nome: string, tipo: string, bytes: Uint8Array) => {
     const form = new FormData();
     form.append('file', new Blob([bytes], { type: tipo }), nome);
