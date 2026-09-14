@@ -51,8 +51,8 @@ PORT = "8001"
 
 # Secrets (set via flyctl secrets set):
 #   DATABASE_URL       — Supabase pooler (direct, não session mode)
-#   OPENAI_API_KEY     — chave de embedding em uso (obrigatória com o provider acima)
-#   VOYAGE_API_KEY     — alternativa não ativa; só volta a valer com reingestão
+#   OPENAI_API_KEY:      chave de embedding em uso (obrigatória com o provider acima)
+#   VOYAGE_API_KEY:      alternativa não ativa; só volta a valer com reingestão
 #   OTEL_EXPORTER_OTLP_ENDPOINT — Grafana Cloud OTLP gateway
 #   OTEL_EXPORTER_OTLP_HEADERS  — Grafana Cloud auth header
 
