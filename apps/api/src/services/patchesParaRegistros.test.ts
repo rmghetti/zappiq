@@ -28,10 +28,10 @@ import {
 describe('extrairPatches — a fixture do prompt da Marcia', () => {
   const extraido = extrairPatches(PROMPT_COM_PATCHES_MANUAIS);
 
-  it('acha os quatro "# PATCH MANUAL" e a regra solta no meio do texto', () => {
+  it('acha os cinco "# PATCH MANUAL" e a regra solta no meio do texto', () => {
     const doPatcher = extraido.blocos.filter((b) => b.origemNoTexto === 'patch_manual');
     const soltas = extraido.blocos.filter((b) => b.origemNoTexto === 'regra_inviolavel');
-    expect(doPatcher).toHaveLength(4);
+    expect(doPatcher).toHaveLength(5);
     expect(soltas).toHaveLength(1);
   });
 
@@ -44,14 +44,35 @@ describe('extrairPatches — a fixture do prompt da Marcia', () => {
       'cr5_nome_ausente_perguntar',
       'cr7_preco_da_base_correto',
       'cr5_nome_disponivel_usar',
+      'cr6_uma_pergunta_por_vez',
     ]);
   });
 
-  it('marca como truncado exatamente os três que param no meio da frase', () => {
+  it('marca como truncado exatamente os quatro que param no meio', () => {
     const truncados = extraido.blocos.filter((b) => b.truncada);
-    expect(truncados).toHaveLength(3);
+    expect(truncados).toHaveLength(4);
     expect(truncados[0].texto).toMatch(/Já te explico como$/);
     expect(truncados[1].texto).toMatch(/me co$/);
+  });
+
+  // ── O caso que estava VIVO no prompt da Marcia ────────────────────
+  // A régua olhava só o último caractere. O corte do sugeridor caiu logo
+  // depois do "?" de uma frase que abria aspas e nunca as fechou, então o
+  // fragmento passava por frase inteira e virava regra ATIVA. A aspa aberta
+  // é a prova de que o texto continuava.
+  it('bloco cortado depois de "?" com a aspa ainda aberta é truncado', () => {
+    const bloco = extraido.blocos.find((b) => b.scenarioId === 'cr6_uma_pergunta_por_vez');
+    expect(bloco?.texto).toMatch(/Como posso te chamar\?$/);
+    expect(bloco?.truncada).toBe(true);
+  });
+
+  it('bloco com as aspas fechadas e ponto final continua inteiro', () => {
+    const inteiro = extrairPatches(
+      '## IDENTIDADE\nVocê é a Marcia.\n\n' +
+        '# PATCH MANUAL 2026-09-01 10:00 (cenário: cr9)\n' +
+        'Pergunte o nome assim: "Como posso te chamar?".\n',
+    );
+    expect(inteiro.blocos[0].truncada).toBe(false);
   });
 
   it('o prompt limpo perde os blocos e mantém a identidade', () => {
@@ -84,8 +105,15 @@ describe('planejarRegistros — o mais recente vence, o truncado nunca', () => {
 
   it('bloco truncado nunca nasce ativo: vira substituida com motivo truncada', () => {
     const truncadas = plano.filter((r) => r.motivo === 'truncada');
-    expect(truncadas).toHaveLength(3);
+    expect(truncadas).toHaveLength(4);
     for (const r of truncadas) expect(r.status).toBe('substituida');
+  });
+
+  it('o bloco cortado na aspa aberta não vira regra ativa', () => {
+    const doCenario = plano.filter((r) => r.scenarioId === 'cr6_uma_pergunta_por_vez');
+    expect(doCenario).toHaveLength(1);
+    expect(doCenario[0].status).toBe('substituida');
+    expect(doCenario[0].motivo).toBe('truncada');
   });
 
   it('cenário cujo único patch estava truncado fica SEM regra ativa', () => {
@@ -103,7 +131,7 @@ describe('planejarRegistros — o mais recente vence, o truncado nunca', () => {
 
   it('no total, 3 regras ativas viram 1: o prompt para de acumular', () => {
     expect(plano.filter((r) => r.status === 'ativa')).toHaveLength(2); // 1 cenário + 1 solta
-    expect(plano).toHaveLength(5);
+    expect(plano).toHaveLength(6);
   });
 
   it('o mais recente vence pela DATA do cabeçalho, não pela ordem no arquivo', () => {
@@ -127,6 +155,34 @@ describe('planejarRegistros — o mais recente vence, o truncado nunca', () => {
     ]);
     const ativa = invertido.find((r) => r.status === 'ativa');
     expect(ativa?.texto).toContain('Regra nova');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// A172: o nome fictício do teste não pode virar regra de produção.
+//
+// O cenário do gabarito simula um contato chamado Rod, e 44% das sugestões
+// traziam "Oi, Rod!" como exemplo. Doze dessas correções foram aplicadas, e
+// hoje o prompt da Iza e o da Marcia ensinam o agente a saudar "Rod". A
+// migração é a última chance de tirar isso antes de o texto virar registro.
+describe('o nome do mock não atravessa a migração (A172)', () => {
+  it('troca "Rod" por "[nome]" no texto da regra', () => {
+    const { blocos } = extrairPatches(
+      '## IDENTIDADE\nVocê é a Marcia.\n\n' +
+        '# PATCH MANUAL 2026-08-01 09:00 (cenário: cr5_nome_disponivel_usar)\n' +
+        'Use o nome do cliente na saudação. Exemplo CORRETO: "Oi, Rod! Aqui é a Marcia."\n',
+    );
+    expect(blocos[0].texto).toContain('Oi, [nome]!');
+    expect(blocos[0].texto).not.toMatch(/\bRod\b/);
+  });
+
+  it('não encosta em palavra que apenas começa com Rod', () => {
+    const { blocos } = extrairPatches(
+      '## IDENTIDADE\nVocê é a Marcia.\n\n' +
+        '# PATCH MANUAL 2026-08-01 09:00 (cenário: cr2)\n' +
+        'Se o cliente for o Rodrigo da Rodoviária, confirme o endereço antes.\n',
+    );
+    expect(blocos[0].texto).toContain('Rodrigo da Rodoviária');
   });
 });
 

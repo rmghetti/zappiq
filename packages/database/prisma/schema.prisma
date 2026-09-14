@@ -1560,6 +1560,11 @@ model AgentEvalRun {
   /// que o motivou. Antes ele rodava 1 amostra e não deixava rastro nenhum,
   /// então ninguém conseguia dizer se a correção pegou.
   fixDecisionId    String?   @map("fix_decision_id")
+  /// Versão de agent_prompt_versions que estava valendo quando esta execução
+  /// rodou. Sem ela, "a correção pegou" fica solto no tempo: não dá para
+  /// dizer contra qual texto o agente foi medido. O re-teste grava sempre;
+  /// a execução completa grava quando souber a versão.
+  promptVersion    Int?      @map("prompt_version")
   // Scenarios rodados (subset filter aplicado) — null = todos
   scenarioFilter   Json?     @map("scenario_filter")
   // Métricas agregadas

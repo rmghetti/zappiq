@@ -1,5 +1,5 @@
 -- ═════════════════════════════════════════════════════════════════
--- 20260914000060: as correções aprovadas viram REGISTRO, não texto colado
+-- 20260914000080: as correções aprovadas viram REGISTRO, não texto colado
 -- ─────────────────────────────────────────────────────────────────
 -- POR QUE ESTA MIGRAÇÃO EXISTE
 --
@@ -37,7 +37,8 @@
 --   SELECT has_table_privilege('anon','public.agent_rules','SELECT');             -- false
 --   SELECT has_table_privilege('authenticated','public.agent_rules','SELECT');    -- false
 --   SELECT column_name FROM information_schema.columns
---    WHERE table_name = 'agent_eval_runs' AND column_name = 'fix_decision_id';    -- 1 linha
+--    WHERE table_name = 'agent_eval_runs'
+--      AND column_name IN ('fix_decision_id','prompt_version');                   -- 2 linhas
 --   -- duas regras ativas para o mesmo cenário têm de ser IMPOSSÍVEIS:
 --   SELECT agent_id, scenario_id, count(*) FROM agent_rules
 --    WHERE status = 'ativa' AND scenario_id IS NOT NULL
@@ -55,6 +56,7 @@
 -- REVERTER:
 --   DROP TABLE IF EXISTS public.agent_rules;
 --   ALTER TABLE public.agent_eval_runs DROP COLUMN IF EXISTS fix_decision_id;
+--   ALTER TABLE public.agent_eval_runs DROP COLUMN IF EXISTS prompt_version;
 -- ═════════════════════════════════════════════════════════════════
 
 -- ── 1. agent_rules ───────────────────────────────────────────────
@@ -125,6 +127,17 @@ ALTER TABLE public.agent_eval_runs
 
 CREATE INDEX IF NOT EXISTS "agent_eval_runs_fix_decision_idx"
   ON public.agent_eval_runs("fix_decision_id");
+
+-- prompt_version: contra QUAL texto o agente foi medido.
+--
+-- Sem esta coluna, "a correção pegou" fica solto no tempo. O dono aprova a
+-- regra na terça, edita o prompt na quarta e re-testa na quinta: a linha do
+-- re-teste não dizia qual das duas versões respondeu. Agora o re-teste grava
+-- a versão vigente de agent_prompt_versions, e a regra criada pelo aplicar
+-- guarda a mesma versão em agent_rules.versao_do_prompt_de_origem. As duas
+-- pontas casam.
+ALTER TABLE public.agent_eval_runs
+  ADD COLUMN IF NOT EXISTS "prompt_version" INTEGER;
 
 -- ── 3. RLS: nega tudo para quem não ignora RLS ───────────────────
 -- Mesmo desenho da 20260715000004_rls_fecha_anon e da 20260914000050: RLS

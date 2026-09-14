@@ -7,9 +7,13 @@
  *   • quatro cabeçalhos "# PATCH MANUAL" no fim do prompt, um por
  *     aplicação, porque nenhum cabeçalho do prompt de cliente casava com a
  *     heurística do patcher;
- *   • TRÊS deles cortados no meio da frase, porque o sugeridor recortava o
- *     texto em 600 caracteres em silêncio (um termina em "me co", outro no
- *     meio do "Exemplo INCORRETO");
+ *   • QUATRO deles cortados no meio, porque o sugeridor recortava o texto em
+ *     600 caracteres em silêncio. Três param no meio de uma palavra ("me co",
+ *     "Para te passar o"). O quarto é o caso que escapou da primeira régua e
+ *     está VIVO no prompt da Marcia: o corte caiu logo depois de um ponto de
+ *     interrogação que estava DENTRO de uma aspa aberta. Olhando só a
+ *     pontuação final, esse fragmento passa por frase inteira e vira regra
+ *     ativa; olhando as aspas, ele é o que é, um texto pela metade;
  *   • dois patches para o MESMO cenário, aplicados em datas diferentes: é o
  *     acúmulo do A081, que a regra por cenário passa a substituir;
  *   • um "**REGRA INVIOLÁVEL #1" no meio do texto, fora de qualquer bloco
@@ -53,6 +57,10 @@ contexto antes de informar os valores. Exemplo INCORRETO: "Para te passar o
 # PATCH MANUAL 2026-08-17 10:12 (cenário: cr5_nome_disponivel_usar)
 Use o nome do cliente na saudação e não pergunte o nome de novo quando ele já
 estiver registrado. Exemplo CORRETO: "Oi, Ana! Sobre o que combinamos."
+
+# PATCH MANUAL 2026-08-29 11:20 (cenário: cr6_uma_pergunta_por_vez)
+Faça uma pergunta por mensagem e espere a resposta antes da próxima. Quando
+precisar do nome, pergunte com esta frase exata: "Como posso te chamar?
 `;
 
 /** Só a identidade, sem nenhum patch: o que o script deve deixar no prompt. */

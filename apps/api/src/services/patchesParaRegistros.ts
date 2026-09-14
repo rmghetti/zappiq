@@ -17,7 +17,11 @@
  *     cortada em 600 caracteres (A188) e cinco fragmentos estão vivos nos
  *     prompts hoje. Não dá para adivinhar o fim da frase: o fragmento sai do
  *     prompt, entra como 'substituida' com motivo 'truncada' e aparece no
- *     relatório para o dono decidir se quer reescrever a regra.
+ *     relatório para o dono decidir se quer reescrever a regra. A régua tem
+ *     DUAS condições, porque cada uma sozinha deixa passar um corte real:
+ *     pontuação final e aspas fechadas (ver `aspasFechadas`).
+ *   1b. O nome fictício do teste ("Rod") vira "[nome]" (A172). Doze
+ *     correções com esse nome já estão coladas nos prompts vivos.
  *   2. Dois patches do MESMO cenário viram UMA regra ativa: a mais recente
  *     não truncada. As outras viram histórico (A081).
  *   3. Nada é gravado se o prompt resultante perder "## IDENTIDADE",
@@ -65,6 +69,58 @@ function arrumar(texto: string): string {
 }
 
 /**
+ * As aspas do texto estão todas fechadas?
+ *
+ * Esta é a segunda metade da régua do A188, e ela existe por causa de um
+ * fragmento que está VIVO no prompt da Marcia. A régua antiga
+ * (`regraTerminaEmFraseCompleta`) olha só o último caractere, e o corte do
+ * sugeridor caiu logo depois do "?" de uma frase que abria aspas:
+ *
+ *   pergunte com esta frase exata: "Como posso te chamar?
+ *
+ * Termina em "?", então passava por frase inteira e virava regra ATIVA. A
+ * aspa aberta é a prova de que o texto continuava.
+ *
+ * Contagem PAR, não casamento de pares: aspa curva de abertura e de
+ * fechamento entram no mesmo balde porque o modelo mistura as duas formas na
+ * mesma sugestão, e exigir a ordem certa daria falso positivo em texto
+ * legítimo. Ímpar é que é sinal de corte.
+ */
+export function aspasFechadas(texto: string): boolean {
+  const t = String(texto ?? '');
+  const simples = (t.match(/'/g) ?? []).length;
+  const duplas = (t.match(/["“”]/g) ?? []).length;
+  return simples % 2 === 0 && duplas % 2 === 0;
+}
+
+/**
+ * A regra está inteira? Pontuação final E aspas fechadas.
+ *
+ * As duas condições, porque cada uma sozinha deixa passar um corte real:
+ * a pontuação não vê a aspa aberta, e a aspa não vê o corte no meio da
+ * palavra ("...me co").
+ */
+function blocoTruncado(texto: string): boolean {
+  return !regraTerminaEmFraseCompleta(texto) || !aspasFechadas(texto);
+}
+
+/**
+ * O nome fictício do teste vira marcador (A172).
+ *
+ * O cenário do gabarito simula um contato chamado Rod. O sugeridor não era
+ * proibido de usar o dado do teste, então 44% das sugestões traziam "Oi,
+ * Rod!" como exemplo, doze foram aplicadas e hoje o prompt da Iza e o da
+ * Marcia ensinam o agente a saudar "Rod". Levar isso para o registro seria
+ * carimbar o defeito.
+ *
+ * Só a palavra inteira e só com R maiúsculo: "Rodrigo", "Rodoviária" e
+ * "rodada" continuam intactos.
+ */
+function trocarNomeDoMock(texto: string): string {
+  return String(texto ?? '').replace(/\bRod\b/g, '[nome]');
+}
+
+/**
  * Arranca do prompt os blocos de correção e devolve o resto.
  *
  * Os "# PATCH MANUAL" saem primeiro: uma regra inviolável que esteja DENTRO
@@ -97,7 +153,7 @@ export function extrairPatches(prompt: string): ExtracaoDePatches {
       i++;
     }
 
-    const texto = limparTextoDaRegra(arrumar(corpo.join('\n')));
+    const texto = trocarNomeDoMock(limparTextoDaRegra(arrumar(corpo.join('\n'))));
     if (texto) {
       blocos.push({
         origemNoTexto: 'patch_manual',
@@ -105,7 +161,7 @@ export function extrairPatches(prompt: string): ExtracaoDePatches {
         texto,
         scenarioId: cenario,
         carimbo: carimbo ? carimbo.replace('T', ' ') : null,
-        truncada: !regraTerminaEmFraseCompleta(texto),
+        truncada: blocoTruncado(texto),
       });
     }
   }
@@ -120,7 +176,7 @@ export function extrairPatches(prompt: string): ExtracaoDePatches {
       guardados.push(p);
       continue;
     }
-    const texto = limparTextoDaRegra(arrumar(p));
+    const texto = trocarNomeDoMock(limparTextoDaRegra(arrumar(p)));
     if (!texto) continue;
     blocos.push({
       origemNoTexto: 'regra_inviolavel',
@@ -128,7 +184,7 @@ export function extrairPatches(prompt: string): ExtracaoDePatches {
       texto,
       scenarioId: null,
       carimbo: null,
-      truncada: !regraTerminaEmFraseCompleta(texto),
+      truncada: blocoTruncado(texto),
     });
   }
 

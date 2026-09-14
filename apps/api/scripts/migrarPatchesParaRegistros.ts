@@ -13,11 +13,14 @@
  *   • bloco inteiro, cenário novo          -> regra ATIVA
  *   • dois blocos do mesmo cenário         -> o mais recente fica ATIVO,
  *                                             o anterior nasce 'substituida'
- *   • bloco TRUNCADO (para no meio da frase, sem pontuação final)
+ *   • bloco TRUNCADO (para no meio da frase, sem pontuação final, OU com
+ *     aspa aberta que nunca fecha)
  *                                          -> NUNCA fica ativo. Nasce
  *                                             'substituida' com motivo
  *                                             'truncada' e vai listado no
  *                                             relatório.
+ *   • "Rod" (o nome fictício do cenário de teste, A172) vira "[nome]" no
+ *     texto da regra. Palavra inteira: "Rodrigo" e "Rodoviária" ficam.
  *   • cenário cujo único bloco era truncado -> termina SEM regra ativa, de
  *                                             propósito: o dono aprovou um
  *                                             texto inteiro e o produto
@@ -98,7 +101,7 @@
  *       ('<org>', '<agent>', 'cr5_nome_disponivel_usar',
  *        $texto$...$texto$, 'manual', 'ativa', NULL, 'migracao');
  *
- *     -- PROVA, ainda dentro da transação. As três têm de dar certo:
+ *     -- PROVA, ainda dentro da transação. As QUATRO têm de dar certo:
  *     SELECT count(*) FROM agents
  *      WHERE id = '<agent>' AND system_prompt LIKE '%# PATCH MANUAL%';   -- 0
  *     SELECT count(*) FROM agents
@@ -106,6 +109,14 @@
  *     SELECT scenario_id, count(*) FROM agent_rules
  *      WHERE agent_id = '<agent>' AND status = 'ativa' AND scenario_id IS NOT NULL
  *      GROUP BY 1 HAVING count(*) > 1;                                   -- 0 linhas
+ *     -- 4a prova: o que entrou no banco é o arquivo revisado, inteiro.
+ *     -- As três acima passariam mesmo com o prompt cortado pelo caminho (um
+ *     -- copiar e colar que perde a última linha, por exemplo). O número a
+ *     -- comparar é o Y da linha "tamanho: X → Y" que o script imprime, que
+ *     -- é contagem de CARACTERES, igual ao length() do Postgres (o `wc -c`
+ *     -- do terminal conta BYTES e dá mais, por causa dos acentos):
+ *     SELECT length(system_prompt), md5(system_prompt) FROM agents
+ *      WHERE id = '<agent>';        -- iguais ao Y e ao md5 impressos
  *     -- qualquer divergência -> ROLLBACK;
  *     COMMIT;
  *
@@ -217,6 +228,10 @@ function modoOffline(entrada: string, saida: string): void {
 
   console.log(`\n== OFFLINE (sem banco) ==`);
   console.log(`  entrada: ${entrada}`);
+  // O md5 da ENTRADA é o que a cláusula `AND md5(system_prompt) = '...'` do
+  // passo 3 confere: se o arquivo exportado não for mais o prompt vivo, o
+  // UPDATE casa 0 linhas em vez de gravar por cima do trabalho de outro.
+  console.log(`  md5 da entrada: ${md5(antes)}`);
   imprimirPlano(antes, promptLimpo, plano);
 
   const v = validarPromptLimpo(antes, promptLimpo, blocos);
