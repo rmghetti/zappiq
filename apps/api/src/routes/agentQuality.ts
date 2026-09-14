@@ -1152,9 +1152,10 @@ router.post(
         promptVersion: versaoVigente,
         // O dono vê o que custou, com o número certo: cada amostra é uma
         // conversa com o agente MAIS uma avaliação. Três amostras são seis
-        // chamadas ao modelo, não três.
+        // chamadas ao modelo, não três (rodada 3 do PR #375: o campo dizia
+        // 3 enquanto a explicação ao lado falava em 6).
         custo: {
-          chamadasDeLlm: AMOSTRAS_DO_RETESTE,
+          chamadasDeLlm: AMOSTRAS_DO_RETESTE * 2,
           explicacao:
             `Este re-teste roda o cenário ${AMOSTRAS_DO_RETESTE} vezes para não confundir sorte ` +
             `com correção: ${AMOSTRAS_DO_RETESTE} conversas de teste e ${AMOSTRAS_DO_RETESTE} ` +

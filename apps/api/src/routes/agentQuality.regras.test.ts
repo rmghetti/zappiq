@@ -561,7 +561,9 @@ describe('re-test — 3 amostras gravadas (A049)', () => {
     expect(runnerMock.executeAgentEvalRun).toHaveBeenCalledTimes(3);
     expect(res.statusCode).toBe(200);
     expect(res.body.amostras).toHaveLength(3);
-    expect(res.body.custo.chamadasDeLlm).toBe(3);
+    // Rodada 3 do PR #375: cada amostra é uma conversa MAIS uma avaliação.
+    // O campo dizia 3 e a explicação ao lado falava em 6 chamadas.
+    expect(res.body.custo.chamadasDeLlm).toBe(6);
     expect(res.body.veredito).toBe('funcionou');
   });
 
