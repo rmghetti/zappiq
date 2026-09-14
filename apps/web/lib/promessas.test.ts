@@ -7,10 +7,15 @@
  * peça de copy.
  *
  * Regra de convivência: quando a funcionalidade passar a existir de fato
- * (Word e Excel na ingestão, re-teste gravado no histórico, lembrete de
- * agendamento, voz pelo Google), apague a regra correspondente aqui NO
- * MESMO PR que entrega a funcionalidade, com a prova no corpo do PR. Antes
- * disso, não afrouxe a regra: o teste é o que separa promessa de fato.
+ * (Word e Excel na ingestão, re-teste gravado no histórico, disparo de
+ * lembrete, voz gravada de origem em português), apague a regra
+ * correspondente aqui NO MESMO PR que entrega a funcionalidade, com a prova
+ * no corpo do PR. Antes disso, não afrouxe a regra: o teste é o que separa
+ * promessa de fato.
+ *
+ * As três regras de residência de dados são de natureza diferente: não são
+ * funcionalidade que falta, são fato de infraestrutura. Só saem daqui se o
+ * banco de produção mudar de região, com a prova da região nova.
  *
  * O que a varredura lê: no site, as pastas app, components, content e lib; na
  * API, apps/api/src/agents, onde ficam os gabaritos que ditam o que a Iza
