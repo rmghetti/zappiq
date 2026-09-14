@@ -80,6 +80,8 @@ import {
 import { suggestFix } from '../services/agentEvalRunner.js';
 // C3 (A043): as regras aprovadas pelo dono, para o sugeridor não duplicar.
 import { carregarRegrasAtivas } from '../services/agentRulesService.js';
+// C3 (A078, A217): a mesma guarda de conflito da porta do cliente.
+import { detectarConflitos } from '../agents/regrasDoAgente.js';
 // A083: toda escrita no prompt declara a origem e vira versão; reverter só
 // vale enquanto o prompt ainda for o que aquela correção deixou.
 import {
@@ -757,6 +759,35 @@ router.post(
           return;
         }
         throw err;
+      }
+
+      // ─── C3: verificador de conflito (A078, A217) ─────────────────
+      // A mesma guarda da porta do cliente. O caminho do superadmin foi por
+      // onde entraram as quatro regras contraditórias da Iza sobre
+      // "tecnologia proprietária", uma delas listando como Exemplo INCORRETO
+      // a frase que o gabarito EXIGE.
+      const cenarioParaConflito = resolveEvalSet(profile).find((c) => c.id === scenarioId);
+      const conflitos = detectarConflitos({
+        texto: diffToApply,
+        expectedBehavior: cenarioParaConflito?.expectedBehavior ?? null,
+        regrasAtivas: await carregarRegrasAtivas({
+          organizationId: run.agent.organizationId,
+          agentId: run.agentId,
+        }),
+        cenarioDaRegraNova: scenarioId,
+      });
+      if (conflitos.length > 0) {
+        logger.warn('[agentEval] apply-fix BLOQUEADO: correção conflitante', {
+          agentId: run.agentId,
+          scenarioId,
+          tipos: conflitos.map((c) => c.tipo),
+        });
+        res.status(422).json({
+          error: 'regra_conflitante',
+          message: conflitos[0].explicacao,
+          conflitos,
+        });
+        return;
       }
 
       // Aplica patch no system_prompt

@@ -244,6 +244,41 @@ describe('reverterRegra — cirúrgico (A083)', () => {
     expect(prismaMock.agentRule.updateMany).not.toHaveBeenCalled();
   });
 
+  it('desfazer UMA regra deixa as outras exatamente como estavam (A083)', async () => {
+    // O defeito original: reverter regravava o prompt inteiro de antes, e
+    // tudo que tinha entrado depois sumia junto. Aqui, três regras ativas e
+    // só a do meio sai.
+    const tabela: any[] = [
+      linha({ id: 'r1', scenarioId: 'cr1' }),
+      linha({ id: 'r2', scenarioId: 'cr2' }),
+      linha({ id: 'r3', scenarioId: 'cr3' }),
+    ];
+    prismaMock.agentRule.findFirst.mockImplementation(async ({ where }: any) =>
+      tabela.find(
+        (r) =>
+          r.id === where.id &&
+          r.organizationId === where.organizationId &&
+          r.status === where.status,
+      ) ?? null,
+    );
+    prismaMock.agentRule.update.mockImplementation(async ({ where, data }: any) => {
+      const alvo = tabela.find((r) => r.id === where.id);
+      Object.assign(alvo, data);
+      return alvo;
+    });
+
+    await reverterRegra({ ruleId: 'r2', organizationId: 'org-1' });
+
+    expect(tabela.map((r) => `${r.id}:${r.status}`)).toEqual([
+      'r1:ativa',
+      'r2:revertida',
+      'r3:ativa',
+    ]);
+    // E os textos das outras duas continuam intactos.
+    expect(tabela[0].texto).toBe('Chame o cliente pelo nome quando souber.');
+    expect(tabela[2].texto).toBe('Chame o cliente pelo nome quando souber.');
+  });
+
   it('regra de outra organização não é encontrada (404, não 403)', async () => {
     prismaMock.agentRule.findFirst.mockResolvedValue(null);
     const out = await reverterRegra({ ruleId: 'regra-de-outro', organizationId: 'org-1' });
