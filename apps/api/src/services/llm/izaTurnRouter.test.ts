@@ -403,6 +403,34 @@ describe('routeIzaTurn — loop de tools (agendamento)', () => {
     expect(mockComplete.mock.calls[0][0].tools).toBeUndefined();
   });
 
+  it('sem tipo de agendamento ativo, o turno NÃO é forçado para Sonnet (A066)', async () => {
+    // O orquestrador só manda tools quando o agendamento está mesmo de pé
+    // (tipo ativo E direito ao recurso). O CMJ tinha o interruptor ligado com
+    // zero tipos: 246 de 249 conversas foram para Sonnet, ignorando o tier do
+    // plano, o trial e o Modo Econômico. Aqui trancamos a outra ponta: sem
+    // tools, nada de preferência por Sonnet e o tier do plano é respeitado.
+    mockComplete.mockResolvedValueOnce({ text: 'oi', provider: 'google-gemini-flash', model: 'gemini-2.5-flash', latencyMs: 8, attempt: 1, stopReason: 'end_turn' });
+    await routeIzaTurn({
+      systemPrompt: 'Vera', userMessage: 'quero agendar', skipClassify: true,
+      orgId: 'org-do-cmj', conversationId: 'c1', tier: 'GROWTH', tools: [],
+    });
+    const call = mockComplete.mock.calls[0][0];
+    expect(call.preferProvider).toBeUndefined();
+    expect(call.forceProvider).toBeUndefined();
+    expect(call.tier).toBe('GROWTH');
+    expect(call.tools).toBeUndefined();
+  });
+
+  it('com tipo ativo (tools de verdade), aí sim prefere um provider com tools', async () => {
+    mockComplete.mockResolvedValueOnce({ text: 'ok', provider: 'anthropic-sonnet', model: 'claude-sonnet-4-6', latencyMs: 9, attempt: 1, stopReason: 'end_turn' });
+    await routeIzaTurn({
+      systemPrompt: 'Vera', userMessage: 'quero agendar', skipClassify: true,
+      orgId: 'org-do-cmj', conversationId: 'c1', tier: 'GROWTH', tools: [TOOL],
+    });
+    const call = mockComplete.mock.calls[0][0];
+    expect(call.preferProvider).toBe('anthropic-sonnet');
+  });
+
   it('respeita o teto de rodadas (não faz loop infinito)', async () => {
     // modelo insiste em pedir tool sempre
     mockComplete.mockResolvedValue({ text: '', provider: 'anthropic-sonnet', model: 'claude-sonnet-4-6', latencyMs: 5, attempt: 1, stopReason: 'tool_use', toolCalls: [{ id: 't', name: 'check_availability', input: {} }] });

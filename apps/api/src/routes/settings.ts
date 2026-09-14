@@ -30,6 +30,11 @@ import {
   getInstagramWebhookStatus,
   subscribeInstagramWebhooks,
 } from '../services/instagramWebhookSetup.js';
+import { syncAgentIdentity } from '../services/agentIdentitySync.js';
+import {
+  perfilDoAgenteSchema,
+  mergePerfilDoAgente,
+} from './settings.perfilDoAgente.js';
 import {
   teamCreateSchema,
   teamUpdateSchema,
@@ -104,6 +109,78 @@ router.put('/', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Re
     }
     // Consistência com o GET: resposta também sem segredos.
     res.json({ success: true, data: redactOrgSecrets(org) });
+  } catch (err) { next(err); }
+});
+
+/**
+ * PUT /api/settings/perfil-do-agente: nome, tom, segmento, mensagem de
+ * transbordo e horário do agente, gravados POR CHAVE.
+ *
+ * Por que uma rota própria (A156, A170): o PUT /api/settings recebe
+ * `settings` e troca o JSON inteiro, com a mescla feita no navegador. Uma
+ * leitura velha apaga o que entrou no meio, e nesse campo mora o add-on
+ * pago, o segredo de integração e o treinamento. Aqui a mescla é no
+ * servidor, só com as chaves desta lista, e o nome novo sincroniza o Agent
+ * que roda em produção, em vez de ficar só na tela.
+ *
+ * Horário entra no formato ÚNICO (businessHoursConfig, com fuso), que é o
+ * que a IA passa a ler no turno e o que o Maestro já avalia.
+ */
+router.put('/perfil-do-agente', requireRole('ADMIN', 'SUPERADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orgId = req.organizationId!;
+    const parsed = perfilDoAgenteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Perfil do agente inválido', details: parsed.error.flatten() });
+      return;
+    }
+
+    const antes = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { settings: true },
+    });
+    if (!antes) {
+      res.status(404).json({ error: 'Organization not found' });
+      return;
+    }
+
+    const { settings, alterados, nomeNovo } = mergePerfilDoAgente(
+      (antes.settings as Record<string, any>) || {},
+      parsed.data,
+    );
+
+    if (alterados.length === 0) {
+      res.json({ success: true, data: { alterados: [], sincronizacao: null } });
+      return;
+    }
+
+    await prisma.organization.update({ where: { id: orgId }, data: { settings } });
+
+    // A170: renomear na tela precisa chegar ao agente que atende. Fail-soft
+    // por dentro (syncAgentIdentity engole o próprio erro), então o save do
+    // cliente nunca cai por causa da sincronia.
+    const sincronizacao = nomeNovo
+      ? await syncAgentIdentity(prisma as any, orgId, nomeNovo)
+      : null;
+
+    if (trainingFieldsChanged((antes.settings as any) || {}, settings)) {
+      await refreshAIReadiness(orgId).catch(() => null);
+    }
+
+    await logAuditEvent(req, {
+      action: 'agent.profile.update',
+      resource: 'organization',
+      resourceId: orgId,
+      details: { alterados, renomeado: Boolean(nomeNovo) },
+    }).catch(() => null);
+
+    logger.info('[settings/perfil-do-agente] perfil do agente atualizado', {
+      orgId,
+      alterados,
+      renomeado: Boolean(nomeNovo),
+    });
+
+    res.json({ success: true, data: { alterados, sincronizacao } });
   } catch (err) { next(err); }
 });
 

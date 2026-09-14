@@ -39,6 +39,10 @@ vi.mock('../middleware/auth.js', async (original) => {
 const orgFindUnique = vi.fn();
 const agentFindFirst = vi.fn();
 const qaFindMany = vi.fn();
+const contactFindUnique = vi.fn().mockResolvedValue(null);
+const messageCount = vi.fn().mockResolvedValue(0);
+// resolveSchedulingRuntime só chega aqui quando scheduling.enabled é true.
+const appointmentTypeFindMany = vi.fn().mockResolvedValue([]);
 // O chat do site carrega o prompt por SQL cru (webChatService.loadOrgSystemPrompt).
 const queryRawUnsafe = vi.fn();
 
@@ -47,8 +51,9 @@ vi.mock('@zappiq/database', () => ({
     organization: { findUnique: (...a: any[]) => orgFindUnique(...a) },
     agent: { findFirst: (...a: any[]) => agentFindFirst(...a) },
     qAPair: { findMany: (...a: any[]) => qaFindMany(...a) },
-    contact: { findUnique: vi.fn().mockResolvedValue(null) },
-    message: { count: vi.fn().mockResolvedValue(0) },
+    contact: { findUnique: (...a: any[]) => contactFindUnique(...a) },
+    message: { count: (...a: any[]) => messageCount(...a) },
+    appointmentType: { findMany: (...a: any[]) => appointmentTypeFindMany(...a) },
     $queryRawUnsafe: (...a: any[]) => queryRawUnsafe(...a),
   },
 }));
@@ -83,6 +88,15 @@ vi.mock('../services/llm/langchainClient.js', () => ({
 vi.mock('../services/izaFactsService.js', () => ({
   getIzaFactsBlock: vi.fn().mockResolvedValue(''),
   invalidateIzaFactsCache: vi.fn(),
+}));
+
+// O perfil vivo (A8) consulta o interruptor por organização. Sem este mock, o
+// Raio-X tentaria abrir conexão com o Redis no meio de um teste que não pode
+// tocar em infraestrutura. Controlável por caso: o Raio-X precisa mostrar o
+// bloco vivo nos DOIS canais quando o interruptor está ligado.
+const isFlagOn = vi.fn().mockResolvedValue(false);
+vi.mock('../services/featureFlags.js', () => ({
+  isFlagOn: (...a: any[]) => isFlagOn(...a),
 }));
 
 vi.mock('../utils/logger.js', () => ({
@@ -146,6 +160,10 @@ const PROMPT_DO_AGENTE = '## IDENTIDADE\nVocê é a Antonella da Cantina da Nona
 
 beforeEach(() => {
   vi.clearAllMocks();
+  isFlagOn.mockResolvedValue(false);
+  contactFindUnique.mockResolvedValue(null);
+  messageCount.mockResolvedValue(0);
+  appointmentTypeFindMany.mockResolvedValue([]);
   usuarioAtual = { userId: 'u1', organizationId: 'org-admin', role: 'SUPERADMIN' };
   orgFindUnique.mockResolvedValue({ id: 'org-1', name: 'Cantina da Nona', settings: SETTINGS_DA_ORG });
   agentFindFirst.mockResolvedValue({ id: 'a1', name: 'Antonella', systemPrompt: PROMPT_DO_AGENTE });
@@ -277,19 +295,18 @@ describe('POST /api/admin/ai-xray: o prompt de cada canal', () => {
     }
   });
 
-  it('o Instagram roda com as configurações vazias, então a saudação do cliente some (achado A057)', async () => {
+  it('o Instagram agora roda com as configurações do cliente, igual ao WhatsApp (A057 corrigido)', async () => {
+    // Este caso nasceu reproduzindo o defeito: o webhook do Instagram
+    // enfileirava orgSettings vazio e a saudação configurada sumia no Direct.
+    // Corrigido em 14/09/2026 (tarefa A8). O Raio-X mostra a correção.
     const noWhatsapp = await chamar({ ...corpoValido, canal: 'whatsapp' });
     const noInstagram = await chamar({ ...corpoValido, canal: 'instagram' });
 
-    const saudacaoWhatsapp = noWhatsapp.body.turnos[0].checagens.find(
-      (c: any) => c.id === 'saudacao_no_primeiro_contato',
-    );
-    const saudacaoInstagram = noInstagram.body.turnos[0].checagens.find(
-      (c: any) => c.id === 'saudacao_no_primeiro_contato',
-    );
+    const saudacao = (res: any) =>
+      res.body.turnos[0].checagens.find((c: any) => c.id === 'saudacao_no_primeiro_contato');
 
-    expect(saudacaoWhatsapp.ok).toBe(true);
-    expect(saudacaoInstagram.ok).toBe(false);
+    expect(saudacao(noWhatsapp).ok).toBe(true);
+    expect(saudacao(noInstagram).ok).toBe(true);
   });
 
   it('só as mensagens do cliente viram turno; as do agente entram no histórico', async () => {
@@ -374,3 +391,138 @@ describe('POST /api/admin/ai-xray: o canal site não reimplementa a escolha do p
   });
 });
 
+
+/* ── 6. O perfil vivo aparece nos DOIS canais ─────────────────────────── */
+/*
+ * Correção da revisão do PR #368. O Raio-X do canal `site` montava o prompt
+ * sem o bloco vivo e sem a saudação, então quem ligasse o interruptor e
+ * fosse conferir no Raio-X veria o prompt de antes e concluiria que a
+ * correção não funcionou. O Raio-X só vale se repetir o caminho da produção
+ * de cada canal, inteiro.
+ */
+
+const CABECALHO_VIVO = '# Como você atende nesta empresa';
+const CABECALHO_SAUDACAO = '# Saudação configurada pelo dono do negócio';
+
+/** Junta as fatias de volta: é o prompt inteiro, caractere por caractere. */
+function promptDoTurno(res: any, indice = 0): string {
+  return res.body.turnos[indice].fatias.map((f: any) => f.texto).join('\n');
+}
+
+describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () => {
+  it('com o interruptor DESLIGADO, nenhum canal mostra o bloco vivo', async () => {
+    for (const canal of ['whatsapp', 'site']) {
+      const res = await chamar({ ...corpoValido, canal });
+      expect(promptDoTurno(res), canal).not.toContain(CABECALHO_VIVO);
+    }
+  });
+
+  it('com o interruptor LIGADO, o bloco vivo aparece no WhatsApp E no site', async () => {
+    isFlagOn.mockResolvedValue(true);
+
+    for (const canal of ['whatsapp', 'site']) {
+      const res = await chamar({ ...corpoValido, canal });
+      const prompt = promptDoTurno(res);
+
+      expect(res.statusCode, canal).toBe(200);
+      expect(prompt, canal).toContain(CABECALHO_VIVO);
+      // O horário do cadastro, já normalizado pelo bloco vivo.
+      expect(prompt, canal).toContain('Segunda a sexta: 09:00 às 18:00');
+      expect(prompt, canal).toContain('Você é Antonella, de Cantina da Nona.');
+    }
+  });
+
+  it('com o interruptor LIGADO, a saudação do dono entra no primeiro turno do site (A068)', async () => {
+    isFlagOn.mockResolvedValue(true);
+
+    const res = await chamar({
+      ...corpoValido,
+      canal: 'site',
+      messages: [
+        { role: 'user', content: 'oi' },
+        { role: 'assistant', content: 'olá' },
+        { role: 'user', content: 'vocês abrem domingo?' },
+      ],
+    });
+
+    // Primeiro turno: histórico vazio, saudação entra.
+    expect(promptDoTurno(res, 0)).toContain(CABECALHO_SAUDACAO);
+    expect(promptDoTurno(res, 0)).toContain('Que bom ter você por aqui na Cantina da Nona');
+    // Turno seguinte: já tem histórico, a saudação não se repete.
+    expect(promptDoTurno(res, 1)).not.toContain(CABECALHO_SAUDACAO);
+  });
+
+  it('a checagem horario_confere fica VERDE nos dois canais com o interruptor ligado', async () => {
+    isFlagOn.mockResolvedValue(true);
+
+    for (const canal of ['whatsapp', 'site']) {
+      const res = await chamar({ ...corpoValido, canal });
+      const horario = res.body.turnos[0].checagens.find((c: any) => c.id === 'horario_confere');
+      expect(horario.ok, canal).toBe(true);
+    }
+  });
+});
+
+/* ── 7. Agendamento e histórico no prompt do WhatsApp/Instagram ───────── */
+/*
+ * O Raio-X montava o prompt do WhatsApp sem resolver o agendamento e sem
+ * dizer se o histórico está no contexto. Os dois mudam o texto que a IA
+ * recebe, então o Raio-X mostrava um prompt que a produção não monta.
+ */
+
+describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => {
+  it('resolve o agendamento e mostra a linha honesta quando não há tipo ativo', async () => {
+    isFlagOn.mockResolvedValue(true);
+    orgFindUnique.mockResolvedValue({
+      id: 'org-1',
+      name: 'Cantina da Nona',
+      // O caso do CMJ: interruptor ligado, zero tipo cadastrado.
+      settings: { ...SETTINGS_DA_ORG, scheduling: { enabled: true } },
+      plan: 'IZA_PRO',
+    });
+    appointmentTypeFindMany.mockResolvedValue([]);
+
+    for (const canal of ['whatsapp', 'instagram']) {
+      const res = await chamar({ ...corpoValido, canal });
+      expect(promptDoTurno(res), canal).toContain('Agendamento: não ofereça agendamento por aqui');
+    }
+  });
+
+  it('com tipo ativo e direito ao recurso, o prompt lista o que dá para marcar', async () => {
+    isFlagOn.mockResolvedValue(true);
+    orgFindUnique.mockResolvedValue({
+      id: 'org-1',
+      name: 'Cantina da Nona',
+      settings: { ...SETTINGS_DA_ORG, scheduling: { enabled: true }, addons: ['SCHEDULING_AGENT'] },
+      plan: 'IZA_PRO',
+    });
+    appointmentTypeFindMany.mockResolvedValue([{ name: 'Reserva de mesa' }]);
+
+    const res = await chamar(corpoValido);
+
+    expect(promptDoTurno(res)).toContain('Agendamento: disponível para: Reserva de mesa');
+  });
+
+  it('o primeiro turno diz que o histórico NÃO está no contexto (A212)', async () => {
+    isFlagOn.mockResolvedValue(true);
+    // Contato antigo: o contador do CONTATO já passou de 1, mas o Raio-X
+    // começa sem uma linha de histórico no contexto. É o achado A212: a
+    // conversa fecha sozinha em 72 h e quem volta abre outra, então o
+    // contador do contato e o histórico enviado ao modelo discordam.
+    contactFindUnique.mockResolvedValue({ leadStatus: 'QUALIFIED', name: 'Bia', _count: {} });
+    messageCount.mockResolvedValue(9);
+
+    const res = await chamar({
+      ...corpoValido,
+      messages: [
+        { role: 'user', content: 'oi de novo' },
+        { role: 'assistant', content: 'olá!' },
+        { role: 'user', content: 'e o rodízio?' },
+      ],
+    });
+
+    expect(promptDoTurno(res, 0)).toContain('o que foi conversado antes NÃO está aqui');
+    // Terceira mensagem: agora o histórico está no contexto de verdade.
+    expect(promptDoTurno(res, 1)).toContain('Primeiro contato? NÃO (já tem histórico');
+  });
+});

@@ -87,7 +87,24 @@ export interface RegisteredTool {
 
 // ─── Tool: get_org_billing_summary ───────────────────────────────────────
 
-const getOrgBillingSummary: RegisteredTool = {
+/**
+ * FORA DO AR desde 14/09/2026 (achado A228). Ela não está no TOOL_REGISTRY,
+ * então não é oferecida a ninguém nem executável.
+ *
+ * O defeito: o handler lê `ctx.organizationId`, que é a organização DA
+ * CONVERSA. Na Iza essa organização é a própria ZappIQ, então qualquer lead
+ * que perguntasse pelo próprio plano receberia o contrato, o consumo e o teto
+ * em reais da ZappIQ. E ela era ligada de carona no interruptor do
+ * Agendamento, ou seja, ligar agendamento no Treinar IA da Iza passava a
+ * oferecer a ferramenta de cobrança.
+ *
+ * Para voltar: resolver a organização de QUEM FALA (contato vinculado a um
+ * cliente ZappIQ), recusar quando não houver vínculo, e ter interruptor
+ * próprio. Enquanto isso, o código fica aqui, exportado e testado, mas fora
+ * do registro. Apagar seria perder o trabalho; registrar seria repor o
+ * vazamento.
+ */
+export const getOrgBillingSummaryForaDoAr: RegisteredTool = {
   // Devolve plano, consumo, limite e teto em R$ da org. É dado do NOSSO
   // contrato com o tenant, não do negócio dele: o agente do cliente (a "Vera"
   // do CMJ) jamais deve poder responder isso pro consumidor final dele.
@@ -146,8 +163,10 @@ const getOrgBillingSummary: RegisteredTool = {
 
 // ─── Registry ────────────────────────────────────────────────────────────
 
+// get_org_billing_summary NÃO entra aqui de propósito (A228). Ver o comentário
+// em getOrgBillingSummaryForaDoAr: ela responde pela organização da conversa,
+// que na Iza é a própria ZappIQ.
 const TOOL_REGISTRY: Record<string, RegisteredTool> = {
-  [getOrgBillingSummary.definition.name]: getOrgBillingSummary,
   [checkAvailabilityTool.definition.name]: checkAvailabilityTool,
   [createAppointmentTool.definition.name]: createAppointmentTool,
 };

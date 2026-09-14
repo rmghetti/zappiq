@@ -31,6 +31,16 @@ import { getSystemPrompt } from './promptEngine.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 import { applyVozHumanaFilter } from './vozHumanaFilter.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
+// Perfil vivo (A8): identidade, tom, horário e agendamento montados das
+// settings a cada turno, atrás do interruptor `perfilVivo`. Desligado, o
+// prompt é byte a byte o de antes.
+import {
+  buildLiveProfileBlock,
+  buildGreetingBlock,
+  type LiveProfileAgendamento,
+} from './tenantLiveProfile.js';
+import { isFlagOn } from '../services/featureFlags.js';
+import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
 // ZappIQ Maestro (#280) — flow runtime híbrido. Aditivo: só atua se a org tem
 // flag maestro.enabled + Flow ativo; senão devolve null e a Iza pura roda igual.
 import { resolveActiveFlowStep } from './flowRuntime.js';
@@ -609,6 +619,12 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // - lead/trial (leadStatus in NEW/CONTACTED/QUALIFIED/UNQUALIFIED) → role='comercial'
     // - customer (leadStatus = CONVERTED)                              → role='suporte'
     // Fallback pro promptEngine antigo se Agent não existir (orgs sem seed).
+    // Estado REAL do agendamento, resolvido UMA vez por turno e usado nos dois
+    // lugares que precisam concordar: o que a IA lê no prompt e as ferramentas
+    // que ela recebe. Antes, o prompt prometia agendamento e a ferramenta não
+    // existia (ou o contrário). Ver resolveSchedulingRuntime.
+    const agendamento = await resolveSchedulingRuntime(organizationId, orgSettings);
+
     let systemPrompt = await buildSystemPromptForContact({
       organizationId,
       contactId,
@@ -616,6 +632,10 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       orgSettings,
       ragContext,
       ragStatus,
+      agendamento,
+      // A212: o histórico enviado ao modelo é só desta conversa. Contato que
+      // volta depois de 72 h abre conversa nova e chega aqui sem passado.
+      temHistoricoNoContexto: historyMessages.length > 1,
     });
 
     // Maestro (#280): se viemos de um nó-IA, injeta a instrução do passo NO TOPO
@@ -719,9 +739,11 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // Per-org override via organizations.settings.llm_routing (#133):
     //   { forceProvider: "anthropic-sonnet" | ... } → bypassa tier-based
     //   { useDefaultCascade: true }                 → cascade default (Iza)
-    // Agendamento: só oferece as tools de booking quando a org ativou (não
-    // opt-out). Sem isso o turn segue idêntico (zero mudança pra quem não usa).
-    const schedulingOn = Boolean(orgSettings?.scheduling?.enabled) && !orgSettings?.scheduling?.optOut;
+    // Agendamento: as ferramentas de marcação só entram quando o agendamento
+    // está REALMENTE de pé (não optou por sair, tem direito ao recurso e tem
+    // tipo ativo). O CMJ tinha o interruptor ligado com zero tipos e pagava
+    // Sonnet em todo turno (A066, A165) para dizer que não agenda.
+    const schedulingOn = agendamento.ativo;
     const turnTools = schedulingOn
       ? getToolsForContext({ hasScheduling: true, isIzaOrg: isZappIQOrg(organizationId) })
       : undefined;
@@ -1275,16 +1297,13 @@ export function stripLeakedPrefixes(text: string): string {
  *
  * Retorna '' quando não é primeiro contato ou não há saudação: o join com
  * .filter(Boolean) descarta o bloco vazio.
+ *
+ * 14/09/2026 (A8): o corpo mudou de casa para agents/tenantLiveProfile.ts, o
+ * módulo puro do perfil vivo. O chat do site precisa da MESMA saudação e não
+ * pode importar o orquestrador inteiro só para isso. O nome segue exportado
+ * daqui porque é assim que o resto do código (e o teste da saudação) chama.
  */
-export function buildGreetingBlock(isFirstContact: boolean, greetingMessage?: string | null): string {
-  const msg = (greetingMessage || '').trim();
-  if (!isFirstContact || !msg) return '';
-  return [
-    '# Saudação configurada pelo dono do negócio',
-    'Na PRIMEIRA mensagem desta conversa (primeiro contato), abra com esta saudação, adaptando levemente ao seu tom mas mantendo o sentido e as informações. Depois de saudar, já responda à mensagem do cliente na mesma resposta. NÃO repita esta saudação nas mensagens seguintes:',
-    msg,
-  ].join('\n');
-}
+export { buildGreetingBlock };
 
 // ── Execute Actions ─────────────────────────────────────
 async function executeAction(
@@ -1439,6 +1458,62 @@ async function resolveWaCreds(organizationId: string): Promise<waService.WaCreds
 }
 
 // ═══════════════════════════════════════════════════════════════════
+/**
+ * O agendamento está REALMENTE de pé nesta organização?
+ *
+ * Até 14/09/2026 o produto acreditava num único campo, `scheduling.enabled`,
+ * e ele mentia dos dois lados (A165):
+ *   • o CMJ tem `enabled: true` com ZERO tipos cadastrados, então todo turno
+ *     levava as ferramentas de agendamento (e ia para Sonnet, A066) só para
+ *     a IA responder que a empresa não agenda;
+ *   • quem cadastra tipo nenhum interruptor liga, e a IA ficava sem
+ *     ferramenta para consultar horário.
+ *
+ * Ligado agora é o cruzamento de três coisas verdadeiras: o dono não optou
+ * por sair, a organização tem direito ao recurso (plano ou add-on) e existe
+ * pelo menos um tipo ativo. Qualquer erro devolve DESLIGADO: prometer
+ * agendamento que não existe é o defeito que estamos consertando.
+ */
+export async function resolveSchedulingRuntime(
+  organizationId: string,
+  orgSettings: any,
+): Promise<{ ativo: boolean; tipos: string[]; motivo: string }> {
+  const scheduling = orgSettings?.scheduling ?? null;
+  if (scheduling?.optOut) return { ativo: false, tipos: [], motivo: 'optou_por_sair' };
+  if (!scheduling?.enabled) return { ativo: false, tipos: [], motivo: 'nao_ligado' };
+
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { plan: true, settings: true },
+    });
+    const addons = Array.isArray((org?.settings as any)?.addons)
+      ? ((org!.settings as any).addons as string[])
+      : [];
+    const acesso = resolveSchedulingAccess((org?.plan as PlanId) || 'IZA_LITE', addons);
+    if (!acesso.entitled) return { ativo: false, tipos: [], motivo: 'sem_direito' };
+
+    const tipos = await (prisma as any).appointmentType.findMany({
+      where: { organizationId, active: true },
+      select: { name: true },
+      take: 20,
+    });
+    const nomes: string[] = (tipos ?? [])
+      .map((t: any) => String(t?.name ?? '').trim())
+      .filter(Boolean);
+    if (!nomes.length && (!tipos || tipos.length === 0)) {
+      return { ativo: false, tipos: [], motivo: 'sem_tipo_ativo' };
+    }
+    return { ativo: true, tipos: nomes, motivo: 'ativo' };
+  } catch (err) {
+    logger.warn('[Agent] resolveSchedulingRuntime falhou: agendamento tratado como desligado', {
+      organizationId,
+      err: String(err),
+    });
+    return { ativo: false, tipos: [], motivo: 'erro' };
+  }
+}
+
 // V2-021 (Sprint 0 §11.3) · Persona dual via Agent table
 // ─────────────────────────────────────────────────────────────────
 // Decisão de persona:
@@ -1462,6 +1537,19 @@ export async function buildSystemPromptForContact(input: {
    * o campo (playground, eval, Maestro).
    */
   ragStatus?: ragService.RagSearchStatus;
+  /**
+   * Estado REAL do agendamento (tipo ativo E direito ao recurso), resolvido
+   * por quem chamou. Ausente = o bloco vivo não fala de agendamento, nem
+   * para prometer nem para proibir. Só tem efeito com o interruptor ligado.
+   */
+  agendamento?: LiveProfileAgendamento | null;
+  /**
+   * O histórico que o modelo vai receber tem mensagem anterior de verdade?
+   * A conversa fecha sozinha em 72 h e o contato que volta abre uma conversa
+   * NOVA: o contador de mensagens é do contato, mas o histórico é só desta
+   * conversa (A212). Só tem efeito com o interruptor ligado.
+   */
+  temHistoricoNoContexto?: boolean;
 }): Promise<string> {
   const { organizationId, contactId, contactPhone, orgSettings, ragContext } = input;
   const ragStatus = input.ragStatus ?? 'ok';
@@ -1471,6 +1559,16 @@ export async function buildSystemPromptForContact(input: {
   ]
     .filter(Boolean)
     .join('\n');
+
+  // Interruptor por organização. Qualquer erro devolve false (o próprio
+  // featureFlags já é fail-closed; o try aqui cobre o mock de teste que
+  // rejeita). Desligado, tudo daqui para baixo é byte a byte o de antes.
+  let perfilVivoLigado = false;
+  try {
+    perfilVivoLigado = await isFlagOn(organizationId, 'perfilVivo');
+  } catch {
+    perfilVivoLigado = false;
+  }
 
   // V4 #157 (PR #70) — Lookup completo do Contact pra injetar nome no prompt.
   // Antes: lookup só pegava leadStatus → Iza não sabia o nome → sempre
@@ -1507,6 +1605,19 @@ export async function buildSystemPromptForContact(input: {
   // V4 #157 — bloco "# Cliente atual" injetado SEMPRE antes do RAG.
   // Iza usa isso pra cumprir REGRA 9 (use o nome desde o "oi" se já tem).
   const isFirstContact = messageCount <= 1; // 1 = a mensagem inbound atual
+
+  // A212: o contador é do CONTATO, o histórico enviado ao modelo é só da
+  // CONVERSA. Conversa parada 72 h fecha sozinha e quem volta abre uma nova,
+  // então a IA ouvia "já tem histórico" sem receber uma linha dele: convite a
+  // inventar o que foi combinado. Com o interruptor ligado, a frase passa a
+  // dizer a verdade. Desligado, o texto é o de antes, caractere por caractere.
+  const historicoNoContexto = input.temHistoricoNoContexto !== false;
+  const linhaPrimeiroContato = isFirstContact
+    ? 'Primeiro contato? SIM'
+    : perfilVivoLigado && !historicoNoContexto
+      ? 'Primeiro contato? NÃO, mas o que foi conversado antes NÃO está aqui. Não pergunte o nome de novo e não afirme o que foi combinado antes: confirme com o cliente.'
+      : 'Primeiro contato? NÃO (já tem histórico — não pergunte nome de novo, use o que está acima)';
+
   const clienteBlock = [
     '# Cliente atual',
     contactName
@@ -1515,7 +1626,7 @@ export async function buildSystemPromptForContact(input: {
     contactPhone ? `Telefone: ${contactPhone}` : '',
     `Status do lead: ${leadStatus}`,
     `Mensagens trocadas até agora: ${messageCount}`,
-    `Primeiro contato? ${isFirstContact ? 'SIM' : 'NÃO (já tem histórico — não pergunte nome de novo, use o que está acima)'}`,
+    linhaPrimeiroContato,
   ].filter(Boolean).join('\n');
 
   // Saudação configurada pelo dono (settings.greetingMessage). Camada viva,
@@ -1544,6 +1655,18 @@ export async function buildSystemPromptForContact(input: {
   // o prompt seedado nasceu sem link nenhum. Ver tenantConversionUrls.ts.
   const linksBlock = buildTenantLinksBlock(orgSettings, orgSettings?.businessName);
 
+  // Perfil vivo (A8): identidade, tom, horário, "agora" e agendamento lidos
+  // das settings NESTE turno. Entra logo depois do prompt gravado, então o
+  // dado vivo vence o texto congelado, e antes dos links, da saudação e do
+  // RAG, para o prefixo estável seguir estável. Vazio com o interruptor
+  // desligado: o join com .filter(Boolean) descarta.
+  const perfilVivoBlock = perfilVivoLigado
+    ? buildLiveProfileBlock(orgSettings, null, {
+        now: new Date(),
+        agendamento: input.agendamento ?? null,
+      })
+    : '';
+
   // 2. Tentar carregar Agent live correspondente
   try {
     const agent = await prisma.agent.findFirst({
@@ -1562,6 +1685,9 @@ export async function buildSystemPromptForContact(input: {
         CORE_AGENT_RULES_V1,
         factsBlock, // Camada 2 — fatos da plataforma sincronizados em runtime
         agent.systemPrompt,
+        // Perfil vivo depois do prompt gravado: o que o cliente acabou de
+        // salvar precisa vencer o tom e o horário congelados no cadastro.
+        perfilVivoBlock,
         // Depois do systemPrompt de propósito: se um prompt antigo tiver link
         // congelado do seed, o bloco fresco vem por último e é o que vale.
         linksBlock,
@@ -1596,7 +1722,9 @@ export async function buildSystemPromptForContact(input: {
       ragStatus === 'servico_fora' ? 'base de conhecimento indisponível neste momento' : ragContext,
     currentDateTime: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
   });
-  return [CORE_AGENT_RULES_V1, factsBlock, fallback, '', clienteBlock, saudacaoBlock]
+  // O bloco vivo também entra no fallback (re-revisão do PR #368): sem ele,
+  // uma organização sem Agent semeado ficaria sem 'Agora', transbordo e agendamento.
+  return [CORE_AGENT_RULES_V1, factsBlock, fallback, perfilVivoBlock, '', clienteBlock, saudacaoBlock]
     .filter(Boolean)
     .join('\n');
 }

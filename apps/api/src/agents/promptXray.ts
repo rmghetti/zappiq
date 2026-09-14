@@ -22,6 +22,9 @@
 
 import { getToneInstructions } from './promptEngine.js';
 import { normalizeUrl } from './tenantConversionUrls.js';
+// O bloco vivo (A8) reescreve tom e horário no turno. O Raio-X precisa
+// procurar o texto que ELE escreve, e não só o texto cru das settings.
+import { linhaDeTomDoPerfilVivo, normalizarHorario } from './tenantLiveProfile.js';
 
 // ── Fatiamento ───────────────────────────────────────────────────────
 
@@ -251,6 +254,21 @@ function checarTom(prompt: string, settings: Record<string, any>): ChecagemXray 
   const configurado = texto(settings.tone);
   const tom = configurado || 'friendly';
 
+  // Caminho do perfil vivo (A8): com o interruptor ligado, o tom entra no
+  // prompt como UMA LINHA montada no turno, e não como o cabeçalho de seção
+  // que o seed gravava. Essa linha aceita qualquer tom, inclusive o texto
+  // livre que o dono escreveu no questionário. Se ela está no prompt, o tom
+  // configurado chegou de verdade, e não há o que reclamar.
+  const linhaViva = linhaDeTomDoPerfilVivo(tom);
+  if (linhaViva && prompt.includes(linhaViva)) {
+    return {
+      id: 'tom_no_prompt',
+      rotulo: ROTULO_TOM,
+      ok: true,
+      detalhe: `Tom configurado nas configurações: "${tom}". Encontrado no bloco vivo do prompt: "${recorte(linhaViva)}".`,
+    };
+  }
+
   // getToneInstructions devolve o bloco AMIGÁVEL para qualquer valor fora dos
   // três reconhecidos. Sem este corte a checagem ficaria verde comparando o
   // prompt com o bloco amigável, justamente no caso em que o tom escolhido
@@ -260,9 +278,9 @@ function checarTom(prompt: string, settings: Record<string, any>): ChecagemXray 
       id: 'tom_no_prompt',
       rotulo: ROTULO_TOM,
       ok: false,
-      detalhe: `Tom configurado nas configurações: "${configurado}". Esse valor não é reconhecido pelo montador do prompt, que só entende ${TONS_RECONHECIDOS.map(
+      detalhe: `Tom configurado nas configurações: "${configurado}". Esse valor não é reconhecido pelo montador do prompt do seed, que só entende ${TONS_RECONHECIDOS.map(
         (t) => `"${t}"`,
-      ).join(', ')}. A produção caiu no tom amigável, então o agente responde num tom que ninguém escolheu.`,
+      ).join(', ')}, e o bloco vivo do perfil não está neste prompt (interruptor "perfilVivo" desligado). A produção caiu no tom amigável, então o agente responde num tom que ninguém escolheu.`,
     };
   }
 
@@ -302,15 +320,41 @@ function checarHorario(prompt: string, settings: Record<string, any>): ChecagemX
   }
 
   const encontrado = esperados.find((e) => prompt.includes(e));
+  if (encontrado) {
+    return {
+      id: 'horario_confere',
+      rotulo: 'O horário de funcionamento confere com o cadastro',
+      ok: true,
+      detalhe: `Horário cadastrado encontrado no prompt: "${encontrado}".`,
+    };
+  }
+
+  // Caminho do perfil vivo (A8): o bloco montado no turno NORMALIZA o texto
+  // do cadastro ("11:30-23:00" vira "11:30 às 23:00", os dias iguais viram
+  // uma faixa só). Procurar apenas o texto cru pintava de vermelho justamente
+  // a organização em que o horário chegou certo à IA. Aqui procuramos também
+  // o texto que o bloco vivo escreve, com o MESMO normalizador dele.
+  const textoVivo = normalizarHorario(settings).texto;
+  if (textoVivo && prompt.includes(textoVivo)) {
+    return {
+      id: 'horario_confere',
+      rotulo: 'O horário de funcionamento confere com o cadastro',
+      ok: true,
+      detalhe: `Horário encontrado no prompt pelo texto do bloco vivo: "${recorte(textoVivo, 200)}". O cadastro guarda o mesmo horário em outro formato (${esperados
+        .map((e) => `"${e}"`)
+        .join(', ')}).`,
+    };
+  }
+
   return {
     id: 'horario_confere',
     rotulo: 'O horário de funcionamento confere com o cadastro',
-    ok: Boolean(encontrado),
-    detalhe: encontrado
-      ? `Horário cadastrado encontrado no prompt: "${encontrado}".`
-      : `Nenhum dos horários cadastrados aparece no prompt. Trechos procurados: ${esperados
-          .map((e) => `"${e}"`)
-          .join(', ')}.`,
+    ok: false,
+    detalhe: `Nenhum dos horários cadastrados aparece no prompt. Trechos procurados: ${esperados
+      .map((e) => `"${e}"`)
+      .join(', ')}${
+      textoVivo ? `, e também o texto do bloco vivo "${recorte(textoVivo, 200)}"` : ''
+    }.`,
   };
 }
 

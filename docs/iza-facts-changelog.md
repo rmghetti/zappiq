@@ -469,3 +469,34 @@ TODA org, inclusive a da Iza, então o path sensível dispara o gate.
 **Smoke esperado:** Nenhuma mudança no que a Iza responde. "Quais os planos?",
 "tem trial?" e "qual o link de cadastro?" continuam saindo do `factsBlock`, idênticos a
 antes do PR.
+
+---
+
+### 2026-09-14 · Perfil vivo (A8) · promptEngine e nichePrompts param de congelar dado vivo
+
+**O que mudou:** `promptEngine.ts` deixou de gravar no prompt seedado a data do
+cadastro, a seção de tom, o bloco `Fluxo de Agendamento` (com a promessa de lembrete
+24 h e 1 h antes, que o produto não envia) e o bloco `<buttons>`. `buildHoursSection`
+passou a ler os três formatos de horário que existem no banco e a dizer "não informado"
+quando não há dado, no lugar do `• Domingo: Fechado` que era inventado. `nichePrompts.ts`
+perdeu as afirmações de oferta de cada segmento (aula grátis, "poucas vagas", convênios
+nominais, pacotes, delivery, status de pedido, valor de deslocamento, mensalidade) e
+ganhou chaves sem acento com mapa de compatibilidade.
+
+**Impacto na Iza:** Nenhum no que ela fala. Conferido:
+- A Iza tem `Agent.systemPrompt` próprio, escrito à mão (cerca de 27 mil caracteres).
+  Ela NUNCA passa pelo fallback do `promptEngine`, que é o único consumidor destas
+  funções em produção. O seed também não a alcança: o prompt dela não foi semeado.
+- Os fatos que a Iza fala (planos, preço, trial, add-ons) vêm da tabela `iza_facts` via
+  `getIzaFactsBlock()`, mecanismo separado que este PR não toca.
+- `nichePrompts.ts` é o catálogo de segmentos do CLIENTE. A organização da ZappIQ não
+  usa nenhum desses modelos.
+- O bloco vivo novo (`agents/tenantLiveProfile.ts`) entra SÓ com o interruptor
+  `perfilVivo` ligado por organização, e nasce desligado para todas, inclusive a Iza.
+
+**Ação no /admin/iza-knowledge:** Nenhuma. Não há fato novo, atualizado ou removido.
+
+**Smoke esperado:** Nenhuma mudança no que a Iza responde enquanto o interruptor estiver
+desligado. Depois de ligar para a organização da Iza, ela passa a receber o horário e o
+tom que estiverem nas settings dela, e "Agora: aberto" ou "Agora: fechado" calculado por
+código.

@@ -40,6 +40,12 @@ vi.mock('../services/izaFactsService.js', () => ({
   invalidateIzaFactsCache: vi.fn(),
 }));
 
+// O perfil vivo (A8) consulta o interruptor por organização. Sem este mock,
+// um teste de montagem de prompt tentaria abrir conexão com o Redis.
+vi.mock('../services/featureFlags.js', () => ({
+  isFlagOn: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('../utils/logger.js', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
