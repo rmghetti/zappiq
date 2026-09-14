@@ -22,6 +22,7 @@
  * ============================================================================
  */
 import { describe, it, expect } from 'vitest';
+import { PLAN_CONFIG, listActivePlans } from '@zappiq/shared';
 import { resolveEvalSet, getSkippedScenarios, EVAL_SET_VERSION } from './agentEvalSet.js';
 import { findForeignBrandLeaks } from './tenantIsolationGuard.js';
 import type { TenantAgentProfile } from './tenantAgentProfile.js';
@@ -167,7 +168,11 @@ describe('não se cobra do cliente o que ele não treinou', () => {
 describe('a Iza continua sendo avaliada como Iza', () => {
   it('a org da ZappIQ recebe o gabarito comercial dela', () => {
     const ids = resolveEvalSet(ZAPPIQ).map((s) => s.id);
-    expect(ids).toContain('zappiq_preco_starter_correto');
+    // Um cenário de preço por plano ativo com preço, derivado do catálogo
+    // (A229: o cenário fixo do Starter cobrava um plano descontinuado).
+    for (const plano of listActivePlans().filter((pl) => pl.priceMonthly !== null)) {
+      expect(ids).toContain(`zappiq_preco_${plano.id}_correto`);
+    }
     expect(ids).toContain('zappiq_trial_lead_morno');
     expect(ids).toContain('zappiq_no_revela_stack');
     expect(ids).toContain('zappiq_blocked_apostas');
@@ -179,7 +184,9 @@ describe('a Iza continua sendo avaliada como Iza', () => {
 
   it('não pede à ZappIQ que cadastre preço no survey (ela tem cenário próprio)', () => {
     expect(getSkippedScenarios(ZAPPIQ)).toEqual([]);
-    expect(resolveEvalSet(ZAPPIQ).map((s) => s.id)).toContain('zappiq_preco_starter_correto');
+    expect(resolveEvalSet(ZAPPIQ).map((s) => s.id)).toContain(
+      `zappiq_preco_${PLAN_CONFIG.SCALE.id}_correto`,
+    );
   });
 
   it('todo cenário tem id único, nos dois escopos', () => {
