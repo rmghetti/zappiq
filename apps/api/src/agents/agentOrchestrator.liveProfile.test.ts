@@ -286,3 +286,38 @@ describe('"já tem histórico": a IA só ouve isso quando o histórico está no 
     expect(prompt).toContain('já tem histórico');
   });
 });
+
+describe('as regras do questionário chegam ao prompt (B3)', () => {
+  const COM_REGRAS = {
+    ...ENTRADA,
+    orgSettings: {
+      ...SETTINGS,
+      surveyAnswers: {
+        ...SETTINGS.surveyAnswers,
+        precos_condicoes: {
+          pre_desconto_maximo: 'Até 10% à vista, aprovado pelo gerente',
+          pre_quem_aprova_desconto: 'O gerente comercial',
+          pre_tabela_precos: 'Plano mensal R$ 149',
+        },
+      },
+    },
+  };
+
+  it('desligado, a política de desconto continua fora do prompt', async () => {
+    isFlagOn.mockResolvedValue(false);
+    const prompt = await buildSystemPromptForContact(COM_REGRAS);
+    expect(prompt).not.toContain('Até 10% à vista');
+  });
+
+  it('ligado, quem perguntar sobre desconto encontra a política nas instruções', async () => {
+    isFlagOn.mockResolvedValue(true);
+    const prompt = await buildSystemPromptForContact(COM_REGRAS);
+    expect(prompt).toContain('Até 10% à vista, aprovado pelo gerente');
+    expect(prompt).toContain('O gerente comercial');
+    // A tabela de preços é conhecimento: ela vive na busca, não no prompt.
+    expect(prompt).not.toContain('Plano mensal R$ 149');
+    // E continua sendo o bloco vivo, depois do prompt gravado do agente.
+    const posBloco = prompt.indexOf('# Como você atende nesta empresa');
+    expect(posBloco).toBeGreaterThan(prompt.indexOf(PROMPT_DO_AGENTE));
+  });
+});
