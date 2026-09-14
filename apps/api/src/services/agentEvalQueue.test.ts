@@ -46,8 +46,15 @@ vi.mock('./agentEvalCronService.js', () => cronServiceMock);
 vi.mock('../agents/tenantAgentProfile.js', () => profileMock);
 vi.mock('../agents/agentEvalSet.js', () => evalSetMock);
 
-const { executeRunJob, sweepStuckEvalRuns, EVAL_RUN_STUCK_AFTER_MS, ERRO_TEMPO_LIMITE } =
-  await import('./agentEvalQueue.js');
+const {
+  executeRunJob,
+  sweepStuckEvalRuns,
+  enqueueEvalRun,
+  getAgentEvalQueue,
+  EVAL_RUN_STUCK_AFTER_MS,
+  ERRO_TEMPO_LIMITE,
+  ERRO_NAO_ENFILEIRADA,
+} = await import('./agentEvalQueue.js');
 
 const CENARIOS = [
   { id: 'cr1', category: 'cr1_acceptance', severity: 'high' },
@@ -228,5 +235,28 @@ describe('sweepStuckEvalRuns — varredura de execução presa', () => {
 
   it('sem execução presa, devolve 0 e não alarma', async () => {
     expect(await sweepStuckEvalRuns(new Date())).toBe(0);
+  });
+});
+
+describe('enqueueEvalRun — fila fora do ar não deixa a linha pendurada', () => {
+  it("marca 'failed' na hora e devolve o erro para a rota", async () => {
+    const fila = getAgentEvalQueue();
+    vi.spyOn(fila, 'add').mockRejectedValue(new Error('Redis fora do ar'));
+
+    await expect(enqueueEvalRun('run-1')).rejects.toThrow('Redis fora do ar');
+
+    expect(ultimoUpdate('status')).toMatchObject({
+      status: 'failed',
+      error: ERRO_NAO_ENFILEIRADA,
+    });
+  });
+
+  it('jobId é o runId, para o mesmo teste não rodar duas vezes', async () => {
+    const fila = getAgentEvalQueue();
+    const add = vi.spyOn(fila, 'add').mockResolvedValue({} as any);
+
+    await enqueueEvalRun('run-1');
+
+    expect(add).toHaveBeenCalledWith('run', { runId: 'run-1' }, expect.objectContaining({ jobId: 'run-1' }));
   });
 });

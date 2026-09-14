@@ -77,18 +77,40 @@ export function getAgentEvalQueue(): Queue {
   return queue;
 }
 
+/** Erro gravado quando a fila não aceita o job (Redis fora, por exemplo). */
+export const ERRO_NAO_ENFILEIRADA = 'não foi possível enfileirar a execução';
+
 /**
  * Enfileira a execução já criada em AgentEvalRun.
  *
  * jobId = runId: se a mesma execução for enfileirada duas vezes (retry de
  * rota, dois nós do Fly), o BullMQ descarta a segunda.
+ *
+ * Se a fila recusar, a linha vira 'failed' na hora em vez de ficar 'pending'
+ * até a varredura horária passar: a tela do cliente precisa dizer o que houve
+ * agora, não em uma hora. O erro sobe para a rota devolver 500.
  */
 export async function enqueueEvalRun(runId: string): Promise<void> {
-  await getAgentEvalQueue().add(
-    'run',
-    { runId },
-    { jobId: runId, removeOnComplete: true },
-  );
+  try {
+    await getAgentEvalQueue().add('run', { runId }, { jobId: runId, removeOnComplete: true });
+  } catch (err: any) {
+    logger.error({
+      msg: 'agent_eval_enfileiramento_falhou',
+      runId,
+      error: String(err?.message || err),
+    });
+    await prisma.agentEvalRun
+      .update({
+        where: { id: runId },
+        data: {
+          status: 'failed',
+          error: ERRO_NAO_ENFILEIRADA,
+          completedAt: new Date(),
+        },
+      })
+      .catch(() => undefined);
+    throw err;
+  }
 }
 
 /**
@@ -320,6 +342,11 @@ async function alertarSePreciso(input: {
  * Marca 'failed' toda execução em 'running' ou 'pending' começada há mais de
  * uma hora. Sem isso a linha fica presa para sempre no reinício de máquina, e
  * é ela que trava o botão do cliente pelo cooldown de 24 h.
+ *
+ * A régua é o started_at da CRIAÇÃO da linha, então uma execução que ficou
+ * mais de uma hora na fila atrás de outras também é marcada. Isso é de
+ * propósito: executeRunJob ignora linha que já não está pending/running, o
+ * cliente vê 'failed' em vez de um girador eterno e pode disparar de novo.
  */
 export async function sweepStuckEvalRuns(now: Date = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - EVAL_RUN_STUCK_AFTER_MS);
