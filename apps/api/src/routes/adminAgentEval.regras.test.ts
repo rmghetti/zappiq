@@ -143,6 +143,17 @@ function makeRes() {
 
 const BLOCO = '# Regras aprovadas pelo dono\n1. Nunca prometa prazo que não esteja cadastrado.';
 
+const REGRAS = [
+  {
+    id: 'regra-1',
+    organizationId: 'org-cliente',
+    agentId: 'agent-1',
+    scenarioId: 'cr7_no_invent_sla',
+    texto: 'Nunca prometa prazo que não esteja cadastrado.',
+    status: 'ativa',
+  },
+];
+
 const AGENTE = {
   id: 'agent-1',
   name: 'Vera',
@@ -197,6 +208,52 @@ describe('POST /run (síncrono): o superadmin mede o agente COM as regras aprova
     expect(res.statusCode).toBe(200);
     expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({ regrasBlock: '' });
   });
+
+  // Rodada 4 do PR #375: o sugeridor desta execução lia "Nenhuma regra
+  // aprovada ainda" com as regras no bloco, e propunha a mesma de novo.
+  it('com bloco, o sugeridor recebe as regras ativas do agente', async () => {
+    regrasMock.carregarRegrasAtivas.mockResolvedValue(REGRAS as any);
+
+    const res = makeRes();
+    await getHandler('post', '/run')({ user: { userId: 'super-1' }, body: { agentId: 'agent-1' } }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(regrasMock.carregarRegrasAtivas).toHaveBeenCalledWith({
+      organizationId: 'org-cliente',
+      agentId: 'agent-1',
+    });
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({
+      regrasBlock: BLOCO,
+      regrasAtivas: REGRAS,
+    });
+  });
+
+  it('bloco vazio (interruptor desligado): nenhuma consulta a mais e lista vazia', async () => {
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue('');
+
+    const res = makeRes();
+    await getHandler('post', '/run')({ user: { userId: 'super-1' }, body: { agentId: 'agent-1' } }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(regrasMock.carregarRegrasAtivas).not.toHaveBeenCalled();
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toEqual({
+      regrasBlock: '',
+      regrasAtivas: [],
+    });
+  });
+
+  it('regras indisponíveis não derrubam a execução: segue com lista vazia', async () => {
+    regrasMock.carregarRegrasAtivas.mockRejectedValue(new Error('banco fora'));
+
+    const res = makeRes();
+    await getHandler('post', '/run')({ user: { userId: 'super-1' }, body: { agentId: 'agent-1' } }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({
+      regrasBlock: BLOCO,
+      regrasAtivas: [],
+    });
+  });
 });
 
 describe('apply-fix do superadmin: o re-verify mede o prompt novo COM as regras', () => {
@@ -246,6 +303,52 @@ describe('apply-fix do superadmin: o re-verify mede o prompt novo COM as regras'
     // E mede o prompt recém-aplicado, como antes.
     expect(runnerMock.executeAgentEvalRun.mock.calls[0][1]).toMatchObject({
       systemPrompt: 'depois',
+    });
+  });
+
+  // Rodada 4 do PR #375: o re-verify também leva as regras ao sugeridor.
+  it('com bloco, o re-verify entrega as regras ativas do agente', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runComSugestao());
+    regrasMock.carregarRegrasAtivas.mockResolvedValue(REGRAS as any);
+
+    const res = makeRes();
+    await getHandler('post', ROTA)(
+      {
+        user: { userId: 'super-1', role: 'SUPERADMIN' },
+        params: { runId: 'run-1', scenarioId: 'cr7_no_invent_sla' },
+        body: {},
+      },
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(runnerMock.executeAgentEvalRun).toHaveBeenCalledTimes(1);
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({
+      regrasBlock: BLOCO,
+      regrasAtivas: REGRAS,
+    });
+  });
+
+  it('bloco vazio: o re-verify não consulta as regras de novo e segue com lista vazia', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runComSugestao());
+    regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue('');
+
+    const res = makeRes();
+    await getHandler('post', ROTA)(
+      {
+        user: { userId: 'super-1', role: 'SUPERADMIN' },
+        params: { runId: 'run-1', scenarioId: 'cr7_no_invent_sla' },
+        body: {},
+      },
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    // A única leitura é a do verificador de conflito, antes de aplicar.
+    expect(regrasMock.carregarRegrasAtivas).toHaveBeenCalledTimes(1);
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toEqual({
+      regrasBlock: '',
+      regrasAtivas: [],
     });
   });
 });

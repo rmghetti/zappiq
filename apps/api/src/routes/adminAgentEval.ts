@@ -82,6 +82,7 @@ import { suggestFix } from '../services/agentEvalRunner.js';
 import {
   carregarRegrasAtivas,
   blocoDeRegrasDaOrganizacao,
+  type RegraGravada,
 } from '../services/agentRulesService.js';
 // C3 (A078, A217): a mesma guarda de conflito da porta do cliente.
 import { detectarConflitos } from '../agents/regrasDoAgente.js';
@@ -190,6 +191,34 @@ async function blocoDeRegrasFailSoft(organizationId: string, agentId: string): P
   }
 }
 
+/**
+ * O contexto de regras do avaliador: o bloco para o AGENTE e as regras
+ * ativas para o SUGERIDOR.
+ *
+ * Rodada 4 do PR #375: o bloco chegava ao agente, mas o sugeridor lia
+ * "Nenhuma regra aprovada ainda para este agente" e propunha de novo a
+ * regra que já estava no bloco. Bloco vazio (interruptor desligado ou
+ * agente sem regra): lista vazia e nenhuma consulta a mais. Fail-soft como
+ * o bloco.
+ */
+async function contextoDeRegrasFailSoft(
+  organizationId: string,
+  agentId: string,
+): Promise<{ regrasBlock: string; regrasAtivas: RegraGravada[] }> {
+  const regrasBlock = await blocoDeRegrasFailSoft(organizationId, agentId);
+  if (!regrasBlock) return { regrasBlock, regrasAtivas: [] };
+  try {
+    return { regrasBlock, regrasAtivas: await carregarRegrasAtivas({ organizationId, agentId }) };
+  } catch (err) {
+    logger.warn('[agentEval] regras do sugeridor indisponíveis (segue sem elas)', {
+      organizationId,
+      agentId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return { regrasBlock, regrasAtivas: [] };
+  }
+}
+
 router.post(
   '/run',
   authMiddleware as any,
@@ -225,10 +254,14 @@ router.post(
       }
 
       logger.info(`[agentEval] sync run iniciado agentId=${agentId} scenarios=${scenarios.length}`);
-      const { results, durationMs, summary } = await executeAgentEvalRun(scenarios, agent, profile, {
-        // Rodada 3 do PR #375: mede o agente COM as regras aprovadas pelo dono.
-        regrasBlock: await blocoDeRegrasFailSoft(agent.organizationId, agent.id),
-      });
+      const { results, durationMs, summary } = await executeAgentEvalRun(
+        scenarios,
+        agent,
+        profile,
+        // Rodada 3 do PR #375: mede o agente COM as regras aprovadas pelo
+        // dono. Rodada 4: e o sugeridor sabe quais regras já existem.
+        await contextoDeRegrasFailSoft(agent.organizationId, agent.id),
+      );
 
       res.json({
         version: EVAL_SET_VERSION,
@@ -928,11 +961,10 @@ router.post(
               systemPrompt: result.promptAfter,
             },
             profile,
-            {
-              // Rodada 3 do PR #375: o re-verify mede o prompt novo COM as
-              // regras aprovadas, como o orquestrador vai montar.
-              regrasBlock: await blocoDeRegrasFailSoft(run.agent.organizationId, run.agentId),
-            },
+            // Rodada 3 do PR #375: o re-verify mede o prompt novo COM as
+            // regras aprovadas, como o orquestrador vai montar. Rodada 4: e o
+            // sugeridor sabe quais regras já existem.
+            await contextoDeRegrasFailSoft(run.agent.organizationId, run.agentId),
           );
           // A171: 'erro' é falha técnica do re-teste. computeReverifyVerdict
           // já trata: improved só quando o resultado novo é 'pass'.
