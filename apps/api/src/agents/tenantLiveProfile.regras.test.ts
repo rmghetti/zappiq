@@ -249,3 +249,40 @@ describe('o bloco de quem não respondeu o questionário não mudou', () => {
     expect(bloco).not.toContain('—');
   });
 });
+
+describe('detalhes que o corte e os tipos de resposta podem estragar', () => {
+  it('título de regras nunca fica sozinho, sem regra nenhuma embaixo', () => {
+    // Teto apertado na mão: cabe o cabeçalho e quase nada mais.
+    const bloco = buildLiveProfileBlock(
+      { ...SETTINGS_BASE, surveyAnswers: { precos_condicoes: { pre_desconto_maximo: 'Até 10%' } } },
+      null,
+      { maxChars: 400 },
+    );
+    if (bloco.includes(TITULO_DAS_REGRAS)) {
+      const depois = bloco.split(TITULO_DAS_REGRAS)[1] ?? '';
+      expect(depois.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it('resposta booleana vira Sim ou Não, nunca "true"', () => {
+    const bloco = buildLiveProfileBlock(
+      { ...SETTINGS_BASE, surveyAnswers: { regras_ia: { reg_pode_enviar_orcamento: true, reg_quando_vender: true } } },
+      null,
+      {},
+    );
+    expect(bloco).not.toContain('true');
+    expect(bloco).toContain(': Sim');
+  });
+
+  it('resposta em lista vira enumeração legível', () => {
+    const bloco = buildLiveProfileBlock(
+      {
+        ...SETTINGS_BASE,
+        surveyAnswers: { escalonamento: { esc_situacoes_obrigatorias: ['Cobrança', 'Cancelamento'] } },
+      },
+      null,
+      {},
+    );
+    expect(bloco).toContain('Cobrança, Cancelamento');
+  });
+});

@@ -386,7 +386,9 @@ export function regrasDoQuestionario(
     const bruto = porId.get(id);
     const texto = Array.isArray(bruto)
       ? sanearRegraDoCliente(bruto.filter(Boolean).join(', '))
-      : sanearRegraDoCliente(typeof bruto === 'string' ? bruto : String(bruto ?? ''));
+      : typeof bruto === 'boolean'
+        ? (bruto ? 'Sim' : 'Não')
+        : sanearRegraDoCliente(typeof bruto === 'string' ? bruto : String(bruto ?? ''));
     if (!texto) continue;
 
     // O rótulo é a PERGUNTA em português. Sem o ponto de interrogação, que
@@ -489,6 +491,9 @@ export function buildLiveProfileBlock(
     cortado.push(linha);
     tamanho += 1 + linha.length;
   }
+  // Título de regras sem nenhuma regra embaixo seria uma promessa vazia no
+  // prompt: anuncia regras do dono e não mostra nenhuma.
+  if (cortado[cortado.length - 1] === TITULO_DAS_REGRAS) cortado.pop();
   return cortado.join('\n').slice(0, maxChars).trimEnd();
 }
 

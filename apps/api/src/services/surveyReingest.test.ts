@@ -269,3 +269,28 @@ describe('execução da reingestão', () => {
     expect(ingerir).not.toHaveBeenCalled();
   });
 });
+
+describe('limpeza do formato antigo acontece uma vez só', () => {
+  it('organização já migrada não fica tentando apagar o arquivo único a cada salvamento', async () => {
+    const apagar = vi.fn(async () => ({ ok: true }));
+    const { db } = bancoFalso({
+      niche: 'padaria',
+      surveyAnswers: RESPOSTAS,
+      surveyDocFilename: 'onboarding-survey-padaria.txt',
+      surveySync: {
+        status: 'ok',
+        at: '2026-09-13T10:00:00.000Z',
+        sources: ['survey-identidade_empresa', 'survey-precos_condicoes'],
+      },
+    });
+
+    await executarReingestaoDoQuestionario(ORG, {
+      db: db as any,
+      ingerir: vi.fn(async () => ({ ok: true })),
+      apagar,
+      subirVersao: vi.fn(async () => 2),
+    });
+
+    expect(apagar).not.toHaveBeenCalled();
+  });
+});

@@ -227,14 +227,19 @@ export async function executarReingestaoDoQuestionario(
   const aRemover = anteriores.filter((s) => !sources.includes(s));
 
   // Documento único do formato antigo (um arquivo com tudo, rotulado por
-  // chave de código). A primeira reingestão no formato novo tira ele do ar.
-  const legado: string | undefined =
-    typeof settings.surveyDocFilename === 'string' ? settings.surveyDocFilename : undefined;
-  if (legado) aRemover.push(legado);
-  // Mesmo sem o registro em settings, o nome do arquivo antigo é derivado do
-  // segmento. Apagar por nome é idempotente: se não existir, não faz nada.
-  const legadoPorSegmento = surveyDocFilename(niche);
-  if (!aRemover.includes(legadoPorSegmento)) aRemover.push(legadoPorSegmento);
+  // chave de código). A PRIMEIRA reingestão no formato novo tira ele do ar.
+  // Só a primeira: depois que a organização tem sources registrados, tentar
+  // apagar de novo seria uma chamada de rede por salvamento, para sempre.
+  const jaMigrada = anteriores.length > 0;
+  if (!jaMigrada) {
+    const legado =
+      typeof settings.surveyDocFilename === 'string' ? settings.surveyDocFilename : undefined;
+    if (legado) aRemover.push(legado);
+    // Mesmo sem o registro em settings, o nome do arquivo antigo é derivado
+    // do segmento. Apagar por nome é idempotente: se não existir, não faz nada.
+    const legadoPorSegmento = surveyDocFilename(niche);
+    if (!aRemover.includes(legadoPorSegmento)) aRemover.push(legadoPorSegmento);
+  }
 
   const removidos: string[] = [];
 
