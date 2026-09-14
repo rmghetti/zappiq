@@ -67,6 +67,13 @@ interface Regra {
   /** O que o código faz de verdade, para quem for reintroduzir a frase. */
   motivo: string;
   padrao: RegExp;
+  /**
+   * Prefixos de caminho onde a regra vale, quando ela NÃO vale nas duas
+   * raízes. Só uma regra precisa disso hoje: o nome do fornecedor de voz é
+   * proibido na copy e obrigatório no gabarito, que é justamente onde mora a
+   * expressão que reprova a Iza por dizê-lo.
+   */
+  apenasEm?: string[];
 }
 
 const REGRAS: Regra[] = [
@@ -155,6 +162,13 @@ const REGRAS: Regra[] = [
     padrao: /confirma,? e lembra|confirma, lembra|lembra e remarca/i,
   },
   {
+    nome: 'nome do fornecedor de voz na copy',
+    motivo:
+      'O gabarito da Iza reprova citar o fornecedor de síntese de voz, e a copy pública citava o modelo dele por extenso no selo de /voz, no card da home e no FAQ. A página legal de subprocessadores cita as EMPRESAS, que é obrigação de LGPD; o nome do modelo não serve para nada além de entregar o fornecedor.',
+    padrao: /neural2|wavenet/i,
+    apenasEm: ['apps/web'],
+  },
+  {
     nome: 'lembrete automático de vencimento, de aula ou de evento',
     motivo:
       'Não existe disparo programado de lembrete em lugar nenhum do produto. O agendamento consulta o horário livre e cria o compromisso; avisar o cliente antes continua sendo trabalho da equipe.',
@@ -199,9 +213,11 @@ const CONTEUDO = new Map<string, string[]>(
   ARQUIVOS.map((a) => [a, readFileSync(a, 'utf8').split('\n')]),
 );
 
-function ocorrencias(padrao: RegExp): string[] {
+function ocorrencias(padrao: RegExp, apenasEm?: string[]): string[] {
   const achados: string[] = [];
   for (const [caminho, linhas] of CONTEUDO) {
+    const rel = relative(REPO, caminho).split(sep).join('/');
+    if (apenasEm && !apenasEm.some((prefixo) => rel.startsWith(prefixo))) continue;
     linhas.forEach((linha, i) => {
       if (padrao.test(linha)) {
         achados.push(
@@ -234,7 +250,7 @@ describe('promessas que o código não cumpre', () => {
 
   for (const regra of REGRAS) {
     it(`não reintroduz: ${regra.nome}`, () => {
-      const achados = ocorrencias(regra.padrao);
+      const achados = ocorrencias(regra.padrao, regra.apenasEm);
       expect(
         achados,
         `${achados.length} ocorrência(s). ${regra.motivo}\n  ${achados.join('\n  ')}`,

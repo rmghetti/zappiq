@@ -23,7 +23,7 @@ const VOICE_ADDON_DATA = {
  * --------------------------------------------------------------------------
  * Inbound (Whisper STT): incluído em TODOS os planos. R$ 0 adicional.
  *
- * Outbound (TTS Neural2-C pt-BR): 6 add-ons mensais.
+ * Outbound (voz em português brasileiro): 6 add-ons mensais.
  *   200 min / R$ 79,90  · overage 0,35/min · trial 14d com 30 min
  *   400 min / R$ 137,90 · overage 0,30/min · trial 14d com 30 min
  *   600 min / R$ 184,90 · overage 0,28/min

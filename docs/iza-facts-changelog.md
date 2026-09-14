@@ -112,8 +112,10 @@ tirando frase por frase o que a auditoria provou falso. Na landing:
 - **Voz.** O gabarito da Iza (`evalSetZappIQ.ts`) deixa de mandar afirmar voz "treinada
   nativamente": todo áudio sai pelo fallback, com voz adaptada do inglês. Deixa também de
   mandar creditar "tecnologia proprietária ZappIQ", porque a síntese é de terceiro. Em
-  /voz saem os nomes de fornecedor da copy visível (o próprio gabarito proíbe citá-los) e
-  sai a promessa de áudio 24h antes do evento: não existe disparo programado.
+  /voz, no card de voz da home e no FAQ da home saem os nomes de fornecedor da copy
+  visível (o próprio gabarito proíbe citá-los), e sai a promessa de áudio 24h antes do
+  evento: não existe disparo programado. O nome da EMPRESA continua nas páginas legais,
+  que é obrigação de LGPD; o que sai é o nome do modelo, que só entrega o fornecedor.
 - **Lembretes automáticos.** Saem de /cases, /segmentos/educacao, dos cartões de segmento e
   da lista do CRM as promessas de lembrete de vencimento, de aula, de vacina e de
   documento, com os números de falta apoiados nelas. O que existe é campanha disparada pela

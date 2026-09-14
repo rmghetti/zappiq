@@ -138,7 +138,7 @@ const FAQS: FaqItem[] = [
   {
     group: 'Voz Nativa',
     q: 'A IA consegue responder por áudio também?',
-    a: 'Consegue, como add-on opcional. 6 pacotes disponíveis com voz natural pt-BR (Google Neural2): Voice 200 (R$ 79,90/mês), Voice 400 (R$ 137,90), Voice 600 (R$ 184,90), Voice 800 (R$ 224,90), Voice 1.500 (R$ 379,90) e Voice 4.000 (R$ 929,90). Trial de 14 dias com 30 min grátis nos pacotes 200 e 400.',
+    a: 'Consegue, como add-on opcional. 6 pacotes disponíveis com voz natural em português brasileiro: Voice 200 (R$ 79,90/mês), Voice 400 (R$ 137,90), Voice 600 (R$ 184,90), Voice 800 (R$ 224,90), Voice 1.500 (R$ 379,90) e Voice 4.000 (R$ 929,90). Trial de 14 dias com 30 min grátis nos pacotes 200 e 400.',
   },
   {
     group: 'Voz Nativa',
