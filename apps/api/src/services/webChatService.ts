@@ -601,7 +601,12 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   const sinalDeCrise = detectarSinalDeCrise(userMessage);
   const bloqueio = sinalDeCrise.crise
     ? ({ blocked: false } as const)
-    : detectBlockedVertical(userMessage, { organizationId });
+    : detectBlockedVertical(userMessage, {
+        organizationId,
+        // Visitante anônimo do site não tem conversa: ninguém pode ser
+        // avisado, então a mensagem não promete aviso nenhum.
+        comTransbordo: Boolean(lead),
+      });
 
   // Quando o pré-filtro decide, o modelo não é chamado: a resposta é
   // determinística e o turno custa zero.

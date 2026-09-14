@@ -222,17 +222,29 @@ const ZAPPIQ_POLICY_RESPONSES: Record<BlockedVertical, string> = {
  *
  * Sem businessName, cai na 1ª pessoa do plural ("Não atendemos"), que é
  * neutra e serve pra qualquer negócio.
+ *
+ * `comTransbordo` funciona igual ao de `acrescentarAcolhimento`: só é
+ * verdade onde existe conversa para uma pessoa assumir. No chat do site com
+ * visitante anônimo, e no Testar minha IA, não existe conversa nenhuma:
+ * dizer "Já avisei" ali é prometer um atendimento que ninguém recebeu.
  */
-function complianceResponse(_vertical: BlockedVertical, businessName?: string | null): string {
+function complianceResponse(
+  _vertical: BlockedVertical,
+  businessName?: string | null,
+  comTransbordo = true,
+): string {
   const nome = typeof businessName === 'string' ? businessName.trim() : '';
   const de = nome ? ` da ${nome}` : '';
 
   // Uma frase só, neutra, sem marca e sem recusa. Quem decide se atende é a
   // pessoa que vai assumir a conversa, com o contexto do negócio na mão.
-  return (
+  const abertura =
     'Obrigada pelo contato! Para esse assunto eu prefiro te passar para uma pessoa ' +
-    `da equipe${de}. Já avisei, e em instantes alguém continua com você por aqui.`
-  );
+    `da equipe${de}.`;
+
+  return comTransbordo
+    ? `${abertura} Já avisei, e em instantes alguém continua com você por aqui.`
+    : `${abertura} Me deixe um contato que uma pessoa retorna para você.`;
 }
 
 export interface DetectBlockedVerticalOptions {
@@ -243,6 +255,14 @@ export interface DetectBlockedVerticalOptions {
   organizationId?: string | null;
   /** Override explícito, pra quem já resolveu a org e evita re-checar. */
   isZappIQ?: boolean;
+  /**
+   * O canal tem conversa de verdade, com alguém para assumir?
+   *
+   * Padrão `true`: WhatsApp e Instagram sempre têm conversa. O chat do site
+   * com visitante anônimo e o Testar minha IA passam `false`, e a mensagem
+   * de transbordo sai sem a promessa de que alguém já foi avisado.
+   */
+  comTransbordo?: boolean;
   /**
    * Nome do negócio DO TENANT, usado na mensagem de compliance.
    * Sem ele a mensagem fica neutra ("Não atendemos..."), que também serve.
@@ -277,10 +297,18 @@ export function detectBlockedVertical(
 
     const match = regex.exec(text);
     if (match) {
-      // A camada decide o que acontece: no NOSSO funil, recusa; na conta de
-      // um cliente, transbordo. A resposta acompanha a decisão.
+      // A ORG decide o que acontece, não só a camada.
+      //
+      // No NOSSO funil (org da ZappIQ) quem escreve é lead da ZappIQ, não
+      // cliente final de ninguém: operação declarada que a casa não atende
+      // é recusa, inclusive na camada de compliance. Passar esse lead para
+      // uma pessoa da equipe gastaria tempo de venda com quem já está
+      // desqualificado, e a recusa da casa é decisão da casa.
+      //
+      // Fora do nosso funil nada muda: compliance vira transbordo e quem
+      // decide se atende é o dono da conta, com o contexto do negócio dele.
       const action: BlockedVerticalAction =
-        layer === 'politica-comercial-zappiq' ? 'recusa' : 'transbordo';
+        isZappIQ || layer === 'politica-comercial-zappiq' ? 'recusa' : 'transbordo';
 
       return {
         blocked: true,
@@ -290,7 +318,7 @@ export function detectBlockedVertical(
         suggestedResponse:
           action === 'recusa'
             ? ZAPPIQ_POLICY_RESPONSES[vertical]
-            : complianceResponse(vertical, opts.businessName),
+            : complianceResponse(vertical, opts.businessName, opts.comTransbordo ?? true),
         matchedSnippet: match[0],
       };
     }
@@ -392,8 +420,14 @@ const REGRAS_DE_CRISE: Array<{ id: string; regex: RegExp }> = [
   {
     // 'vou me matar de trabalhar' e 'me matar de rir' são hipérbole. O
     // lookahead corta qualquer 'me matar de <verbo/substantivo>'.
+    //
+    // O PASSADO conta tanto quanto o presente ('já pensei em me matar',
+    // 'tentei me matar'): quem já esteve lá é exatamente quem a rede
+    // precisa alcançar. A primeira versão só olhava intenção futura e
+    // deixava essas frases passarem.
     id: 'crise_me_matar',
-    regex: /\b(quero|vou|penso em|pensando em|pretendo|vontade de|planejei|planejo)\s+me\s+matar\b(?!\s+de\s+\S)/,
+    regex:
+      /\b(quero|vou|penso em|pensei em|ja pensei em|pensando em|cheguei a pensar em|pretendo|vontade de|planejei|planejo|tentei)\s+me\s+matar\b(?!\s+de\s+\S)/,
   },
   { id: 'crise_tirar_a_vida', regex: /\btirar\s+(a\s+)?(minha|sua|propria|a\s+propria)\s+vida\b/ },
   { id: 'crise_por_fim_a_vida', regex: /\b(por|pôr|colocar)\s+(um\s+)?fim\s+(a|na|à)\s+(minha|essa)\s+vida\b/ },
@@ -410,19 +444,59 @@ const REGRAS_DE_CRISE: Array<{ id: string; regex: RegExp }> = [
     regex: /\b(quero|queria|prefiro|preferia|melhor)\s+morrer\b(?!\s+de\s+\S)/,
   },
   {
-    // 'acabar com tudo' isolado é crise; seguido de 'isso', 'que' ou de um
-    // complemento de tarefa é o expediente de qualquer segunda-feira.
+    // Duas correções da revisão do PR #374:
+    //
+    //   1. 'hoje' e 'amanha' saíram da exclusão. 'vou acabar com tudo hoje'
+    //      é a frase mais literal que existe e estava escapando. A exclusão
+    //      ficou só com complemento de TAREFA ('isso', 'que', 'até sexta').
+    //   2. A regra passou a exigir primeira pessoa do SINGULAR. 'vamos
+    //      acabar com tudo no sábado' é a equipe fechando pendência, não um
+    //      pedido de ajuda, e 'vamos' não entra na lista.
     id: 'crise_acabar_com_tudo',
-    regex: /\bacabar\s+com\s+tudo\b(?!\s*(isso|que|de\s+uma\s+vez|ate|antes|hoje|amanha|agora\b\s+\S))/,
+    regex:
+      /\b(vou|quero|queria|penso em|pensei em|pensando em|pretendo)\s+acabar\s+com\s+tudo\b(?!\s+(isso|que|de\s+uma\s+vez|ate|antes|essa\s+semana|no\s+sabado))/,
   },
   {
     // 'me machucar na academia' e 'me machucar no treino' ficam de fora.
+    //
+    // O passado entrou ('me cortei de novo', 'me machuquei ontem'): autolesão
+    // que já aconteceu é o sinal mais concreto que existe.
+    //
+    // I5 da revisão: 'me cortar o cabelo' (e a franja, e as pontas) é o falso
+    // positivo mais provável do corpus, porque é a forma natural de marcar
+    // horário no salão. O lookahead fecha os três.
     id: 'crise_me_machucar',
-    regex: /\bme\s+(machucar|machucando|ferir|cortar|cortando)\b(?!\s+(na|no|com\s+a\s+maquina)\b)/,
+    regex:
+      /\bme\s+(machucar|machucando|machuquei|ferir|feri|cortar|cortando|cortei)\b(?!\s+(na|no|com\s+a\s+maquina|o\s+cabelo|a\s+franja|as\s+pontas)\b)/,
   },
   { id: 'crise_suicidio', regex: /\b(suicidio|suicida|suicidar|automutilacao|autolesao)\w*\b/ },
   { id: 'crise_se_jogar', regex: /\bme\s+jogar\s+(na\s+frente|do\s+alto|da\s+janela|da\s+ponte)\b/ },
   { id: 'crise_sumir_da_vida', regex: /\b(sumir|desaparecer)\s+(dessa|desta|da)\s+vida\b/ },
+
+  /* ── Regras vindas da revisão do PR #374 ───────────────────────────
+   * A primeira versão só reconhecia o pedido de ajuda quando ele vinha
+   * com as palavras óbvias. As três abaixo cobrem a forma como a maior
+   * parte das pessoas escreve de verdade: sem saída, sem querer acordar,
+   * e achando que atrapalha quem está por perto.
+   */
+  {
+    // 'não vejo mais saída', 'não tem jeito', 'não vejo sentido em
+    // continuar'. Vale com e sem acento porque o texto chega normalizado.
+    id: 'crise_sem_saida',
+    regex: /\bnao\s+(vejo|tem|ha|existe)\s+(mais\s+)?(saida|sentido|jeito)\b/,
+  },
+  {
+    // A forma mais comum de dizer sem dizer.
+    id: 'crise_dormir_sem_acordar',
+    regex: /\bdormir\s+e\s+(nao|nunca\s+mais)\s+acordar\b/,
+  },
+  {
+    // Sentir-se um fardo é um dos preditores mais estudados de ideação. A
+    // pessoa quase nunca diz a palavra suicídio; ela diz isto.
+    id: 'crise_peso',
+    regex:
+      /\b(sou|seria)\s+(um\s+)?peso\s+(pra|para)\b|\bninguem\s+(ia\s+)?sentir(ia)?\s+minha\s+falta\b|\bseria\s+melhor\s+se\s+eu\s+nao\s+existisse\b/,
+  },
 ];
 
 export type SinalDeCrise =

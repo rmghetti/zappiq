@@ -508,3 +508,167 @@ describe('crise x compliance: a crise vem primeiro', () => {
     expect(detectBlockedVertical(frase, CLIENTE).blocked).toBe(false);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * CONTRATO da rede de crise (revisão do PR #374).
+ *
+ * A revisão mediu a primeira versão das regras contra frases reais e achou
+ * falso negativo em frase clara de pedido de ajuda. As duas listas abaixo
+ * são o CONTRATO: nenhuma frase da primeira pode voltar a escapar, nenhuma
+ * frase da segunda pode voltar a disparar.
+ *
+ * Mexeu nas regras? Estas duas listas mandam mais do que a sua intuição.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('CONTRATO de crise: as frases da revisão são todas detectadas', () => {
+  const CRISE = [
+    'quero me matar',
+    'vou me matar',
+    'nao aguento mais viver',
+    'penso em tirar minha vida',
+    'não vejo sentido em continuar',
+    'vou acabar com tudo hoje',
+    'me cortei de novo',
+    'queria dormir e não acordar',
+    'sou um peso pra todo mundo',
+    'suicídio é a única saída',
+    'já pensei em me matar várias vezes',
+  ];
+
+  for (const frase of CRISE) {
+    it(`detecta: "${frase}"`, () => {
+      const r = detectarSinalDeCrise(frase);
+      expect(r.crise).toBe(true);
+      if (r.crise) expect(r.regra).toBeTruthy();
+    });
+  }
+});
+
+describe('CONTRATO de crise: as frases legítimas continuam livres', () => {
+  const LEGITIMAS = [
+    'morrendo de rir',
+    'matar a saudade',
+    'vou me matar de trabalhar',
+    'matar a fome',
+    'acabar com tudo que está pendente',
+    'esse curso vai me salvar a vida',
+    'morro de vontade de aprender',
+    'quero cortar o cabelo',
+    'o filme é de morrer de tanto rir',
+    'vida longa ao clube',
+    'vamos acabar com tudo no sábado',
+  ];
+
+  for (const frase of LEGITIMAS) {
+    it(`NÃO detecta: "${frase}"`, () => {
+      expect(detectarSinalDeCrise(frase).crise).toBe(false);
+    });
+  }
+
+  // I5 da revisão: o corte de cabelo é o falso positivo mais provável do
+  // corpus, porque 'me cortar' é a forma natural de dizer a frase.
+  it('marcar corte de cabelo nunca é crise, mesmo na primeira pessoa', () => {
+    expect(detectarSinalDeCrise('quero me cortar o cabelo amanhã').crise).toBe(false);
+    expect(detectarSinalDeCrise('posso me cortar as pontas aí?').crise).toBe(false);
+  });
+
+  // I5 da revisão: fechar a tarefa em grupo é expediente, não crise.
+  it('acabar com tudo na primeira pessoa do PLURAL é tarefa, não crise', () => {
+    expect(detectarSinalDeCrise('vamos acabar com tudo essa semana').crise).toBe(false);
+    expect(detectarSinalDeCrise('vamos acabar com tudo hoje').crise).toBe(false);
+  });
+});
+
+describe('CONTRATO de crise: o passado conta tanto quanto o presente', () => {
+  const PASSADO = [
+    'pensei em me matar semana passada',
+    'ja pensei em me matar',
+    'tentei me matar ano passado',
+    'cheguei a pensar em me matar',
+    'me machuquei de novo ontem',
+    'me feri de propósito',
+  ];
+
+  for (const frase of PASSADO) {
+    it(`detecta: "${frase}"`, () => {
+      expect(detectarSinalDeCrise(frase).crise).toBe(true);
+    });
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * I4 da revisão: o transbordo não promete o que o canal não tem.
+ *
+ * A frase de compliance dizia 'Já avisei, e em instantes alguém continua
+ * com você'. No chat do site o visitante pode ser anônimo: não existe
+ * conversa, ninguém foi avisado e a promessa é falsa.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('compliance: a promessa de aviso depende do canal ter conversa', () => {
+  it('com conversa, a mensagem diz que alguém já foi avisado', () => {
+    const r = detectBlockedVertical('temos um site adulto com 10k assinantes', {
+      ...CLIENTE,
+      comTransbordo: true,
+    });
+    expect(r.blocked).toBe(true);
+    if (r.blocked) expect(r.suggestedResponse).toMatch(/avisei/i);
+  });
+
+  it('sem conversa, a mensagem NÃO promete que alguém foi avisado', () => {
+    const r = detectBlockedVertical('temos um site adulto com 10k assinantes', {
+      ...CLIENTE,
+      comTransbordo: false,
+    });
+    expect(r.blocked).toBe(true);
+    if (r.blocked) {
+      expect(r.suggestedResponse).not.toMatch(/avisei/i);
+      expect(r.suggestedResponse).not.toMatch(/em instantes/i);
+      // Continua sendo transbordo e continua sem marca de terceiro.
+      expect(r.action).toBe('transbordo');
+      expect(findForeignBrandLeaks(r.suggestedResponse)).toEqual([]);
+      expect(r.suggestedResponse).toContain('CMJ');
+    }
+  });
+
+  it('o padrão continua sendo a frase com aviso (canais com conversa)', () => {
+    const r = detectBlockedVertical('temos um site adulto com 10k assinantes', CLIENTE);
+    expect(r.blocked).toBe(true);
+    if (r.blocked) expect(r.suggestedResponse).toMatch(/avisei/i);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * I6 da revisão: no NOSSO funil, operação declarada é recusa.
+ *
+ * Quem escreve para a Iza é lead da ZappIQ, não cliente final de ninguém.
+ * Passar o lead de uma operação que a casa não atende para uma pessoa da
+ * equipe é gastar tempo de venda com quem já está desqualificado. Fora do
+ * nosso funil nada muda: quem decide continua sendo o dono da conta.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('recusa x transbordo: a org decide', () => {
+  it('operação adulta declarada na org da ZappIQ é RECUSA', () => {
+    const r = detectBlockedVertical('Tenho um site adulto', ZAPPIQ);
+    expect(r.blocked).toBe(true);
+    if (r.blocked) {
+      expect(r.vertical).toBe('pornografia');
+      expect(r.layer).toBe('compliance');
+      expect(r.action).toBe('recusa');
+      expect(r.suggestedResponse).toContain('ZappIQ');
+    }
+  });
+
+  it('a mesma frase na org de um cliente é TRANSBORDO, sem nossa marca', () => {
+    const r = detectBlockedVertical('Tenho um site adulto', CLIENTE);
+    expect(r.blocked).toBe(true);
+    if (r.blocked) {
+      expect(r.action).toBe('transbordo');
+      expect(findForeignBrandLeaks(r.suggestedResponse)).toEqual([]);
+    }
+  });
+
+  it('apostas e MLM declarados na org da ZappIQ seguem recusa', () => {
+    for (const frase of ['tenho casa de apostas', 'trabalho com MLM de suplementos']) {
+      const r = detectBlockedVertical(frase, ZAPPIQ);
+      expect(r.blocked).toBe(true);
+      if (r.blocked) expect(r.action).toBe('recusa');
+    }
+  });
+});

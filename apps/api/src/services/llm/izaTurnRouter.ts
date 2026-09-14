@@ -197,6 +197,10 @@ export async function routeIzaTurn(req: IzaTurnRequest): Promise<IzaTurnResult> 
     : detectBlockedVertical(req.userMessage, {
         organizationId: req.orgId,
         businessName: req.businessName,
+        // Sem conversa não existe fila nem pessoa para assumir: é o caso do
+        // Testar minha IA, que chega aqui com conversationId null. A mensagem
+        // de transbordo sai sem prometer que alguém já foi avisado.
+        comTransbordo: req.conversationId != null,
       });
   if (blockedCheck.blocked) {
     logger.info(
