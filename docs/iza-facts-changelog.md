@@ -71,6 +71,61 @@ nada. O prompt gerado é byte a byte o mesmo de antes.
 **Smoke esperado:** nenhum. O teste `promptXray.test.ts` monta o prompt pelo
 montador real de produção e confere as fatias, o que cobre a regressão.
 
+---
+
+### 2026-09-14 · Tarefa A4 · Retirada das promessas que o código não cumpre
+
+**O que mudou:** varredura de honestidade na copy do site, no painel e nos e-mails,
+tirando frase por frase o que a auditoria provou falso. Na landing:
+
+- **Residência de dados.** Hero, aviso rotativo da home, FAQ de conexão, /lgpd,
+  /legal/enderecos-comerciais e /legal/subprocessadores diziam que os dados não saem do
+  território nacional. Não é verdade: o banco fica no Brasil, mas todo vetor do treino e
+  toda resposta do agente são processados por provedores de IA nos Estados Unidos, em
+  todas as conversas. O texto passa a dizer isso, com as salvaguardas contratuais e a
+  lista de subprocessadores.
+- **Autocorreção.** Saem "se corrige sozinha", "aprende com os próprios erros", "detecta
+  as alucinações do seu agente" e "cada correção aprovada vira conhecimento". O que
+  existe é uma bateria semanal de cenários simulados que aponta o desvio e escreve a
+  correção; nada entra no agente sem o clique de aprovar.
+- **Formatos da base de conhecimento.** Saem "planilhas" e DOCX. A ingestão lê PDF, TXT,
+  MD e CSV; Word e Excel voltavam 415. Sai também "sem limite de uploads".
+- **Agenda.** Saem lembrete, confirmação automática, remarcação pela IA e os números de
+  no-show, dos cartões de segmento, de /segmentos/saude, /cases, /vendedor-digital e
+  /diagnostico. A IA consulta o horário livre e cria o compromisso, só isso.
+- **Páginas despublicadas.** /roadmap, /observabilidade e /como-funciona-survey passam a
+  redirecionar permanentemente para a home e saem do menu, do rodapé, do bloco de planos
+  e do sitemap.
+- **Voz.** O gabarito da Iza (`evalSetZappIQ.ts`) deixa de mandar afirmar voz "treinada
+  nativamente": todo áudio sai pelo fallback, com voz adaptada do inglês.
+
+**Ação no /admin/iza-knowledge (obrigatória, os facts contradizem o site agora):**
+
+- [ ] UPDATE `kb_upload`: tirar DOCX e site da lista. Formatos aceitos hoje: PDF, TXT, MD
+      e CSV, mais link de página e texto colado.
+- [ ] UPDATE `self_healing`: tirar "plataforma aprende", "loop fechado" e "única no
+      mundo". Redação factual: a bateria semanal aponta o desvio e sugere a correção,
+      que só vale depois de aprovada por uma pessoa.
+- [ ] UPDATE `instagram_direct`: sair de "em operação real" enquanto não houver nenhuma
+      conversa de Instagram na base.
+- [ ] UPDATE `chat_site`: tirar "mesma cascade LLM do WhatsApp".
+- [ ] UPDATE `como_funciona`: o link para /como-funciona-survey agora redireciona;
+      apontar para /#precos ou para o cadastro.
+- [ ] UPDATE `feat_voz_outbound`: tirar "treinada nativamente em português brasileiro".
+- [ ] UPDATE de qualquer fact que afirme dados só no Brasil: banco no Brasil,
+      processamento de IA nos Estados Unidos com salvaguardas contratuais.
+
+**Smoke esperado no chat da Iza:**
+
+- "Posso subir um Word ou uma planilha?" -> "Hoje leio PDF, TXT, MD e CSV", sem prometer
+  Word nem Excel.
+- "A IA se corrige sozinha?" -> "Eu aponto o desvio e escrevo a correção, quem aprova é
+  você", sem "aprende" e sem "única no mundo".
+- "Meus dados ficam no Brasil?" -> "O banco fica no Brasil; o processamento de IA
+  acontece nos Estados Unidos, com salvaguardas contratuais."
+- "A IA confirma e lembra a consulta?" -> "Eu marco o horário na agenda; confirmar e
+  lembrar continua com a sua equipe."
+
 ### 2026-08-20 · PR #343 · Bandeira nova "por atendimento" + kit Outubro sem Susto
 
 **O que mudou:** toda a copy do site trocou a bandeira "mensalidade fixa sem cobrança por conversa" pela nova: "Mensalidade fixa por atendimento: cada conversa que a Iza cuida conta um, com mensagens à vontade dentro dela. A tarifa do WhatsApp vai a custo, na sua conta, com medidor e teto. Zero markup, zero setup, zero surpresa." Fair use de 12 respostas por atendimento aparece em linha visível. A página /novidades-meta virou o kit "Outubro sem susto" (calculadora da tarifa Meta de 01/10, referência R$ 0,035 por resposta, tabela final até 01/09) e nasceu /legal/subprocessadores. Decisões D1/D2 do plano Resposta Meta, aprovadas pelo fundador em 20/08.
