@@ -151,19 +151,48 @@ export function validarPromptResultante(antes: string, depois: string): Validaca
 }
 
 /**
- * Números de preço que sobraram SEM o "R$" na frente (por exemplo "Scale
- * 997"). Não bloqueiam a gravação, porque um número solto pode ser cota de
- * mensagem e não preço, mas aparecem no dry-run para revisão humana.
+ * Nomes de plano que já apareceram no catálogo da ZappIQ, vivos ou mortos.
+ * Serve só para caçar número encostado num nome de plano; não é fonte de
+ * preço nenhum.
+ */
+const NOMES_DE_PLANO_CONHECIDOS = ['Lite', 'Starter', 'Growth', 'Scale', 'Business', 'Enterprise'];
+
+/**
+ * Números que sobraram SEM o "R$" na frente.
+ *
+ * Existem duas formas, e a segunda é a perigosa:
+ *   1. um preço do catálogo escrito solto ("o plano sai por 1.497");
+ *   2. um número QUALQUER encostado no nome de um plano ("o Scale 997").
+ *
+ * A forma 2 é o buraco que a substituição de "R$ <valor>" não fecha: o preço
+ * velho some de "R$ 997" e sobrevive em "Scale 997", e aí a prova de produção
+ * (`system_prompt LIKE '%997%'` = 0) falharia sem ninguém ver.
+ *
+ * NÃO bloqueiam a gravação de propósito: "Scale 80.000 mensagens" cai aqui e
+ * é cota legítima. O lugar disto é o dry-run, na frente de quem revisa.
  */
 export function avisosDeNumeroSolto(prompt: string, precos: number[]): string[] {
   const avisos: string[] = [];
+  const texto = prompt ?? '';
+
   for (const preco of precos) {
     const comPonto = preco.toLocaleString('pt-BR');
     for (const forma of new Set([String(preco), comPonto])) {
-      if (prompt.includes(forma)) {
+      if (texto.includes(forma)) {
         avisos.push(`Ainda aparece o número "${forma}" sem "R$" na frente. Confira se é preço.`);
       }
     }
   }
+
+  for (const plano of NOMES_DE_PLANO_CONHECIDOS) {
+    const re = new RegExp(`\\b${plano}\\b[^\\n]{0,14}?([0-9][0-9.,]*)`, 'gi');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(texto)) !== null) {
+      avisos.push(
+        `O nome "${plano}" aparece colado no número "${m[1]}". Se for preço velho escrito sem "R$", tire na mão antes de gravar.`,
+      );
+    }
+  }
+
   return avisos;
 }

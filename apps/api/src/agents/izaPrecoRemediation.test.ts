@@ -20,6 +20,7 @@ import { describe, it, expect } from 'vitest';
 import {
   removerTabelaDePrecos,
   validarPromptResultante,
+  avisosDeNumeroSolto,
   MOTIVO_IDENTIDADE,
   MOTIVO_TAMANHO,
 } from './izaPrecoRemediation.js';
@@ -189,5 +190,32 @@ describe('validarPromptResultante', () => {
     expect(sujo).toContain('R$ 997');
     expect(v.ok).toBe(false);
     expect(v.motivos.join(' ')).toContain('R$');
+  });
+});
+
+describe('avisosDeNumeroSolto', () => {
+  it('avisa sobre preço velho escrito SEM "R$" ao lado do nome do plano', () => {
+    // Sem isto a prova de produção (LIKE '%997%' = 0) falharia em silêncio:
+    // o valor some da forma "R$ 997" e sobrevive na forma "Scale 997".
+    const prompt = 'Para volume grande, o Scale 997 costuma resolver.';
+    const avisos = avisosDeNumeroSolto(prompt, [247, 497, 1497]);
+
+    expect(avisos.join(' ')).toContain('Scale');
+    expect(avisos.join(' ')).toContain('997');
+  });
+
+  it('avisa sobre preço do catálogo escrito sem "R$"', () => {
+    const avisos = avisosDeNumeroSolto('O plano sai por 1.497 no mês.', [1497]);
+    expect(avisos.join(' ')).toContain('1.497');
+  });
+
+  it('não avisa quando o prompt não tem número perto de plano nem preço solto', () => {
+    const prompt = 'Pergunte o volume antes de recomendar. Nunca invente preço.';
+    expect(avisosDeNumeroSolto(prompt, [247, 497, 1497])).toEqual([]);
+  });
+
+  it('avisa sobre a cota também, porque quem revisa precisa olhar (falso positivo assumido)', () => {
+    const avisos = avisosDeNumeroSolto('O Scale tem 80.000 mensagens.', [1497]);
+    expect(avisos.length).toBeGreaterThan(0);
   });
 });
