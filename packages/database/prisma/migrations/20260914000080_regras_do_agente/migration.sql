@@ -110,9 +110,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS "agent_rules_ativa_por_cenario_key"
   ON public.agent_rules("agent_id", "scenario_id")
   WHERE "status" = 'ativa' AND "scenario_id" IS NOT NULL;
 
--- Leitura por ORGANIZAÇÃO, sem agente: listagens e relatórios que olham a
--- empresa inteira, na ordem em que as regras entraram. NÃO é a consulta do
--- montador do prompt (rodada 3 do PR #375: o comentário dizia que era).
+-- Leitura por ORGANIZAÇÃO, sem agente, na ordem em que as regras entraram.
+-- É o FALLBACK do montador do prompt: quando o turno não acha agente vivo do
+-- papel, as regras são lidas com agentId nulo. O caso real é o orquestrador
+-- atendendo um contato CONVERTED (papel 'suporte') numa organização sem
+-- agente de suporte; o chat do site e o Raio-X fazem o mesmo quando não acham
+-- o agente comercial. A leitura normal, por agente, usa agent_rules_agent_idx.
 CREATE INDEX IF NOT EXISTS "agent_rules_org_status_idx"
   ON public.agent_rules("organization_id", "status", "created_at");
 

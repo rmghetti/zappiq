@@ -1492,6 +1492,11 @@ model PrefilterEvent {
 // RLS ligada e sem grant para anon/authenticated: é comportamento de
 // produto, só a API lê.
 // ═══════════════════════════════════════════════════════════
+/// ATENÇÃO: o índice único parcial `agent_rules_ativa_por_cenario_key`
+/// (agent_id, scenario_id) WHERE status = 'ativa' AND scenario_id IS NOT NULL
+/// é criado à mão na migração 20260914000080. O Prisma não expressa índice
+/// parcial: ele não aparece neste modelo, mas é ele que garante UMA regra
+/// ativa por cenário. Não o apague achando que sobrou.
 model AgentRule {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String   @map("organization_id")
@@ -1515,9 +1520,11 @@ model AgentRule {
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  @@index([organizationId, status, createdAt])
-  @@index([agentId, status])
-  @@index([decisionId])
+  // Os nomes são os da migração 20260914000080: sem o `map`, o Prisma gera
+  // outros nomes e um `migrate diff` futuro tentaria recriar os índices.
+  @@index([organizationId, status, createdAt], map: "agent_rules_org_status_idx")
+  @@index([agentId, status], map: "agent_rules_agent_idx")
+  @@index([decisionId], map: "agent_rules_decision_idx")
   @@map("agent_rules")
 }
 
@@ -1599,7 +1606,7 @@ model AgentEvalRun {
 
   @@index([agentId, startedAt])
   @@index([status])
-  @@index([fixDecisionId])
+  @@index([fixDecisionId], map: "agent_eval_runs_fix_decision_idx")
   @@map("agent_eval_runs")
 }
 
