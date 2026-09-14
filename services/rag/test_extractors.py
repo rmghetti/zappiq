@@ -344,3 +344,22 @@ def test_titulo_muito_longo_e_cortado():
 def test_formatos_suportados_e_a_lista_que_o_ready_anuncia():
     """Contrato com a API: ela decide o que enviar olhando esta lista."""
     assert extractors.FORMATOS_SUPORTADOS == ("pdf", "docx", "xlsx", "html", "texto")
+
+
+def test_pagina_por_url_com_caminho_txt_servida_como_html_e_lida_como_html():
+    """O mime do servidor vence a extensao do caminho quando a origem e uma URL."""
+    corpo = (
+        "<p>"
+        + ("Politica de troca e devolucao da loja, valida em todo o site. " * 8)
+        + "</p>"
+    )
+    html = (
+        "<html><head><title>Politica</title><script>var x=1</script></head>"
+        "<body><nav>menu</nav><article>" + corpo + "</article></body></html>"
+    ).encode()
+    texto = extractors.extrair_texto(
+        "text/html", "politica.txt", html, source_url="https://exemplo.com/politica.txt"
+    )
+    assert "<" not in texto
+    assert "var x" not in texto
+    assert "Politica de troca" in texto

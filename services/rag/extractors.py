@@ -313,6 +313,14 @@ def extrair_texto(
     verificar_rede_social(source_url)
 
     formato = detectar_formato(content_type, filename)
+    # Pagina baixada por URL: o mime do servidor vence a extensao do caminho.
+    # Sem isso, "exemplo.com/politica.txt" servido como text/html cairia em
+    # texto puro e o HTML cru entraria no vetor, que e o que a negociacao de
+    # capacidade com a API existe para evitar.
+    if source_url:
+        mime = (content_type or "").split(";")[0].strip().lower()
+        if _MIMES.get(mime) == "html":
+            formato = "html"
     if formato is None:
         raise HTTPException(status_code=415, detail=MENSAGEM_TIPO_NAO_ACEITO)
 
