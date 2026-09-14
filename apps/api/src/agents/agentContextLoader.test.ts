@@ -15,6 +15,9 @@ const messageCount = vi.fn();
 const orgFindUnique = vi.fn();
 const isFlagOn = vi.fn();
 const getIzaFactsBlock = vi.fn();
+// Rodada 2 do PR #377: as regras aprovadas (PR #375) passam pelo serviço de
+// verdade (agentRulesService), e só a tabela é dublê.
+const agentRuleFindMany = vi.fn();
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -22,6 +25,7 @@ vi.mock('@zappiq/database', () => ({
     contact: { findUnique: (...a: any[]) => contactFindUnique(...a) },
     message: { count: (...a: any[]) => messageCount(...a) },
     organization: { findUnique: (...a: any[]) => orgFindUnique(...a) },
+    agentRule: { findMany: (...a: any[]) => agentRuleFindMany(...a) },
   },
 }));
 
@@ -55,6 +59,7 @@ const AGENTE = { id: 'a1', name: 'Vera', systemPrompt: '## IDENTIDADE\nVocê é 
 beforeEach(() => {
   vi.clearAllMocks();
   isFlagOn.mockResolvedValue(false);
+  agentRuleFindMany.mockResolvedValue([]);
   getIzaFactsBlock.mockResolvedValue('# FATOS ATUAIS\n- Lite: R$ 197');
   agentFindFirst.mockResolvedValue(AGENTE);
   contactFindUnique.mockResolvedValue(null);
@@ -209,6 +214,81 @@ describe('montarContextoDoTurno', () => {
     expect(saida!.perfilVivoLigado).toBe(true);
     expect(saida!.systemPrompt).toContain('# Como você atende nesta empresa');
     expect(isFlagOn).toHaveBeenCalledWith('org-1', 'perfilVivo');
+  });
+});
+
+/* ── Rodada 2 do PR #377: as regras aprovadas pelo dono no motor único ── */
+
+describe('montarContextoDoTurno: regras aprovadas pelo dono (PR #375)', () => {
+  const REGRA = {
+    id: 'regra-1',
+    organizationId: 'org-1',
+    agentId: 'a1',
+    scenarioId: 'cr5_nome_disponivel_usar',
+    texto: 'Chame o cliente pelo nome quando souber.',
+    origem: 'sugestao_ia',
+    status: 'ativa',
+    createdAt: new Date('2026-09-14T10:00:00Z'),
+  };
+  const SETTINGS = { agentName: 'Vera', businessName: 'CMJ', surveyAnswers: { identidade_empresa: { ide_site_url: 'cmj.com.br' } } };
+  const entrada = {
+    origem: 'whatsapp' as const,
+    organizationId: 'org-1',
+    orgSettings: SETTINGS,
+    contactId: 'c1',
+    ragContext: '',
+    agora: AGORA,
+  };
+
+  it('com regrasComoRegistros LIGADO, o bloco entra entre o perfil vivo e os links, do agente do turno', async () => {
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'regrasComoRegistros' || f === 'perfilVivo');
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+
+    const saida = await montarContextoDoTurno(entrada);
+    const texto = saida!.systemPrompt;
+
+    expect(texto).toContain('# Regras aprovadas pelo dono');
+    expect(texto).toContain('1. Chame o cliente pelo nome quando souber.');
+    // A posição do caminho de antes (#375): depois do perfil vivo, antes dos links.
+    expect(texto.indexOf('# Como você atende nesta empresa')).toBeLessThan(texto.indexOf('# Regras aprovadas pelo dono'));
+    expect(texto.indexOf('# Regras aprovadas pelo dono')).toBeLessThan(texto.indexOf('### Links oficiais'));
+    // Por AGENTE (PI-3 do #375): o id é o do Agent escolhido para o turno.
+    expect(agentRuleFindMany).toHaveBeenCalledTimes(1);
+    expect(agentRuleFindMany.mock.calls[0][0].where).toEqual({ organizationId: 'org-1', agentId: 'a1', status: 'ativa' });
+    expect(saida!.partes.find((p) => p.nome === 'regras_do_cliente')!.chars).toBeGreaterThan(0);
+  });
+
+  it('com regrasComoRegistros DESLIGADO, nenhuma consulta a mais e o bloco vazio', async () => {
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+
+    const saida = await montarContextoDoTurno(entrada);
+
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
+    expect(saida!.systemPrompt).not.toContain('# Regras aprovadas pelo dono');
+    expect(saida!.partes.find((p) => p.nome === 'regras_do_cliente')!.chars).toBe(0);
+  });
+
+  it('regras já lidas por quem chamou entram como vieram, sem ler de novo (a Qualidade)', async () => {
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'regrasComoRegistros');
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+    const JA_LIDO = '# Regras aprovadas pelo dono\n\n1. Bloco lido uma vez pelo chamador.';
+
+    const saida = await montarContextoDoTurno({ ...entrada, regrasDoCliente: JA_LIDO });
+
+    expect(saida!.systemPrompt).toContain('1. Bloco lido uma vez pelo chamador.');
+    expect(saida!.systemPrompt).not.toContain('Chame o cliente pelo nome');
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
+    expect(isFlagOn).not.toHaveBeenCalledWith('org-1', 'regrasComoRegistros');
+  });
+
+  it('banco fora nas regras não derruba o turno: segue sem o bloco (fail-soft, como o #375)', async () => {
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'regrasComoRegistros');
+    agentRuleFindMany.mockRejectedValue(new Error('P1001'));
+
+    const saida = await montarContextoDoTurno(entrada);
+
+    expect(saida).not.toBeNull();
+    expect(saida!.systemPrompt).not.toContain('# Regras aprovadas pelo dono');
   });
 });
 

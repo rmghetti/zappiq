@@ -599,6 +599,36 @@ describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
     expect(promptDoTurno(res)).not.toContain('# Regras aprovadas pelo dono');
     expect(agentRuleFindMany).not.toHaveBeenCalled();
   });
+
+  // Rodada 2 do PR #377: com o motor único ligado, as regras chegam pelo
+  // `regrasDoCliente` do compositor. Antes desta rodada o slot existia e
+  // ninguém o preenchia: a organização com os DOIS interruptores perdia as
+  // regras em todos os canais.
+  it('com contextoUnico E regrasComoRegistros ligados, WhatsApp, site e Qualidade mostram o bloco pelo motor único', async () => {
+    isFlagOn.mockImplementation(
+      async (_o: string, f: string) => f === 'contextoUnico' || f === 'regrasComoRegistros',
+    );
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+
+    const hashes: Record<string, string> = {};
+    for (const canal of ['whatsapp', 'site', 'qualidade']) {
+      agentRuleFindMany.mockClear();
+      const res = await chamar({ ...corpoValido, canal });
+      const turno = res.body.turnos[0];
+      expect(res.statusCode, canal).toBe(200);
+      expect(turno.motor, canal).toBe('unico');
+      const prompt = promptDoTurno(res);
+      expect(prompt, canal).toContain('# Regras aprovadas pelo dono');
+      expect(prompt, canal).toContain('1. Chame o cliente pelo nome quando souber.');
+      expect(turno.partes.find((p: any) => p.nome === 'regras_do_cliente').chars, canal).toBeGreaterThan(0);
+      // Uma leitura por turno, do agente do canal (a1), nunca só da organização.
+      expect(agentRuleFindMany, canal).toHaveBeenCalledTimes(1);
+      expect(agentRuleFindMany.mock.calls[0][0].where, canal).toMatchObject({ organizationId: 'org-1', agentId: 'a1' });
+      hashes[canal] = turno.hash_estavel;
+    }
+    // As regras entram no hash estável, e WhatsApp e site continuam iguais.
+    expect(hashes.site).toBe(hashes.whatsapp);
+  });
 });
 
 describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => {

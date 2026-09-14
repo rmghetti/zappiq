@@ -10,6 +10,8 @@
  *      mensagem do cenário, e a data FIXA.
  *   4. Base fora do ar grava ragStatus 'servico_fora' e o aviso honesto.
  *   5. Cenários nome_ausente omitem o nome; histórico tira o primeiro contato.
+ *   6. Rodada 2 do PR #377: as regras aprovadas pelo dono entram pelo bloco
+ *      que QUEM CHAMOU o avaliador já leu, sem nova leitura por cenário.
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -17,6 +19,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const isFlagOn = vi.fn();
 const orgFindUnique = vi.fn();
 const searchDetailed = vi.fn();
+const agentRuleFindMany = vi.fn();
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -24,6 +27,7 @@ vi.mock('@zappiq/database', () => ({
     agent: { findFirst: vi.fn() },
     contact: { findUnique: vi.fn() },
     message: { count: vi.fn() },
+    agentRule: { findMany: (...a: any[]) => agentRuleFindMany(...a) },
   },
 }));
 vi.mock('./featureFlags.js', () => ({ isFlagOn: (...a: any[]) => isFlagOn(...a) }));
@@ -62,6 +66,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   flags = {};
   isFlagOn.mockImplementation(async (_o: string, f: string) => flags[f] === true);
+  agentRuleFindMany.mockResolvedValue([]);
   orgFindUnique.mockResolvedValue({
     settings: { businessName: 'CMJ', surveyAnswers: { identidade_empresa: { ide_site_url: 'cmj.com.br' } } },
   });
@@ -177,5 +182,37 @@ describe('criarMontadorDeContextoDoEval', () => {
     const b = await montar(CENARIO as any);
 
     expect(a!.hash).toBe(b!.hash);
+  });
+});
+
+describe('criarMontadorDeContextoDoEval: as regras aprovadas pelo dono (rodada 2 do PR #377)', () => {
+  const BLOCO = ['# Regras aprovadas pelo dono', '', '1. Chame o cliente pelo nome quando souber.'].join('\n');
+
+  it('o bloco do chamador entra depois do prompt do agente e antes de # Cliente atual, sem ler de novo', async () => {
+    flags = { contextoUnico: true, regrasComoRegistros: true };
+    const montar = criarMontadorDeContextoDoEval(AGENTE, ORG);
+
+    const ctx = await montar(CENARIO as any, { regrasBlock: BLOCO });
+    const p = ctx!.systemPrompt;
+
+    expect(p).toContain(BLOCO);
+    expect(p.indexOf(AGENTE.systemPrompt)).toBeLessThan(p.indexOf(BLOCO));
+    // '\n# Cliente atual\n' é o cabeçalho do bloco; o CORE cita o nome entre crases.
+    expect(p.indexOf(BLOCO)).toBeLessThan(p.indexOf('\n# Cliente atual\n'));
+    expect(ctx!.partes.find((x) => x.nome === 'regras_do_cliente')!.chars).toBe(BLOCO.length);
+    // O MESMO texto que o chamador leu: nenhuma consulta nova por cenário.
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
+    expect(isFlagOn).not.toHaveBeenCalledWith(ORG, 'regrasComoRegistros');
+  });
+
+  it('bloco vazio do chamador: nenhum bloco no prompt e nenhuma consulta, mesmo com o interruptor ligado', async () => {
+    flags = { contextoUnico: true, regrasComoRegistros: true };
+    agentRuleFindMany.mockResolvedValue([{ id: 'r1', scenarioId: null, texto: 'Regra do banco.', origem: 'manual' }]);
+    const montar = criarMontadorDeContextoDoEval(AGENTE, ORG);
+
+    const ctx = await montar(CENARIO as any, { regrasBlock: '' });
+
+    expect(ctx!.systemPrompt).not.toContain('# Regras aprovadas pelo dono');
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
   });
 });

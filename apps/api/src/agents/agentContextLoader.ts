@@ -12,16 +12,19 @@
  * avaliador precisam do mesmo contexto e não podem carregar a fila, o
  * socket e o WhatsApp só para isso.
  *
- * Fail-soft em tudo que é leitura acessória (contato, fatos, interruptor):
- * o turno nunca cai por causa de um bloco. A única ausência que devolve
- * null é a do Agent: sem prompt gravado, quem chamou segue no caminho de
- * fallback de sempre (promptEngine).
+ * Fail-soft em tudo que é leitura acessória (contato, fatos, interruptor,
+ * regras aprovadas): o turno nunca cai por causa de um bloco. A única
+ * ausência que devolve null é a do Agent: sem prompt gravado, quem chamou
+ * segue no caminho de fallback de sempre (promptEngine).
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { isFlagOn, type FlagName } from '../services/featureFlags.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
+// PR #375: as correções aprovadas pelo dono são registros (agent_rules),
+// montados em bloco atrás do interruptor `regrasComoRegistros`.
+import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
 import { decideLlmCostStage } from '../middleware/planLimits.js';
 import type { RagSearchStatus } from '../services/ragService.js';
@@ -169,6 +172,14 @@ export interface MontarContextoInput {
   agora?: Date;
   /** Já lido por quem chamou? Ausente = lê o interruptor perfilVivo aqui. */
   perfilVivoLigado?: boolean;
+  /**
+   * O bloco "# Regras aprovadas pelo dono" já lido por quem chamou (a
+   * Qualidade lê UMA vez por execução, e o Raio-X da Qualidade faz igual).
+   * Presente, mesmo vazio, entra como veio e nada é lido aqui. Ausente, o
+   * carregador lê as regras do agente do turno, atrás de
+   * `regrasComoRegistros` (rodada 2 do PR #377).
+   */
+  regrasDoCliente?: string;
 }
 
 export interface ContextoDoTurno extends AgentContextOutput {
@@ -176,6 +187,27 @@ export interface ContextoDoTurno extends AgentContextOutput {
   contato: ContatoDoTurno;
   ragStatus: RagSearchStatus;
   perfilVivoLigado: boolean;
+}
+
+/**
+ * As regras aprovadas pelo dono para ESTE agente (PR #375), sem nunca lançar.
+ *
+ * Por agente e não por organização (PI-3 do #375): com o id do Agent que o
+ * turno vai usar, o texto do prompt e as regras são sempre do mesmo agente.
+ * Interruptor `regrasComoRegistros` desligado: o serviço devolve '' sem ir ao
+ * banco, então o turno não paga consulta nenhuma a mais. Erro: segue sem o
+ * bloco, como o caminho de antes faz.
+ */
+export async function carregarRegrasDoAgente(organizationId: string, agentId: string): Promise<string> {
+  try {
+    return await blocoDeRegrasDaOrganizacao(organizationId, { agentId });
+  } catch (err) {
+    logger.warn('[AgentContext] bloco de regras indisponível neste turno (segue sem ele)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return '';
+  }
 }
 
 /**
@@ -221,6 +253,13 @@ export async function montarContextoDoTurno(input: MontarContextoInput): Promise
     ? buildLiveProfileBlock(settings, null, { now: agora, agendamento: input.agendamento ?? null })
     : '';
 
+  // Rodada 2 do PR #377: sem isto, a organização com `regrasComoRegistros` E
+  // `contextoUnico` ligados perdia as regras aprovadas em todos os canais. O
+  // bloco entra no lugar que o compositor reservou (depois do perfil vivo,
+  // antes dos links), o mesmo do caminho de antes do #375.
+  const regrasDoCliente =
+    input.regrasDoCliente ?? (await carregarRegrasDoAgente(organizationId, agente.id));
+
   // A212 só existe com o perfil vivo ligado; desligado, a linha é a de antes.
   const historicoNoContexto = perfilVivoLigado ? input.temHistoricoNoContexto !== false : true;
 
@@ -237,6 +276,7 @@ export async function montarContextoDoTurno(input: MontarContextoInput): Promise
     blocos: {
       izaFacts,
       perfilVivo,
+      regrasDoCliente,
       links: buildTenantLinksBlock(settings, settings.businessName),
       rag: input.ragContext,
     },

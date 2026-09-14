@@ -75,7 +75,7 @@ export interface ExtrasDoMontador {
  */
 export type MontadorDeContexto = (
   scenario: EvalScenario,
-  extras: ExtrasDoMontador,
+  extras?: ExtrasDoMontador,
 ) => Promise<ContextoDoCenario | null>;
 
 export interface ScenarioResult {

@@ -76,7 +76,11 @@ export interface AgentContextInput {
     links: string;
     /** Trechos recuperados da base. Vazio quando a busca não trouxe nada. */
     rag: string;
-    /** Reservado para as regras como registros (PR #375). Entra depois do perfil vivo. */
+    /**
+     * '# Regras aprovadas pelo dono' (PR #375, agent_rules). Entra depois do
+     * perfil vivo e antes dos links, a posição do caminho de antes. Vazio =
+     * interruptor `regrasComoRegistros` desligado ou agente sem regra.
+     */
     regrasDoCliente?: string;
   };
   /** Vem de fora; a Qualidade passa data fixa. */

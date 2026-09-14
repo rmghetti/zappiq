@@ -25,6 +25,10 @@
  * interruptor. Quem chama o runner (rota, fila, admin) é quem cria o
  * montador aqui. A leitura do interruptor e das settings é PREGUIÇOSA, no
  * primeiro cenário: criar o montador não custa nada.
+ *
+ * As regras aprovadas pelo dono (PR #375) NÃO são lidas aqui: quem chama o
+ * avaliador já as leu uma vez (ContextoDoSugeridor.regrasBlock) e o runner
+ * entrega o mesmo texto a cada cenário (rodada 2 do PR #377).
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { prisma } from '@zappiq/database';
@@ -32,7 +36,7 @@ import { logger } from '../utils/logger.js';
 import * as ragService from './ragService.js';
 import { flagLigada, montarContextoDoTurno, type ContatoDoTurno } from '../agents/agentContextLoader.js';
 import type { EvalScenario } from '../agents/evalScenarioTypes.js';
-import type { ContextoDoCenario, MontadorDeContexto } from './agentEvalRunner.js';
+import type { ContextoDoCenario, ExtrasDoMontador, MontadorDeContexto } from './agentEvalRunner.js';
 
 /** Segunda-feira, 12:00 em São Paulo. Fixa: o mesmo cenário dá o mesmo prompt. */
 export const DATA_FIXA_DO_EVAL = new Date('2026-09-14T15:00:00Z');
@@ -97,7 +101,7 @@ export function criarMontadorDeContextoDoEval(
     return setup;
   };
 
-  return async (scenario: EvalScenario): Promise<ContextoDoCenario | null> => {
+  return async (scenario: EvalScenario, extras?: ExtrasDoMontador): Promise<ContextoDoCenario | null> => {
     const { ligado, orgSettings, perfilVivoLigado } = await prepararUmaVez();
     if (!ligado) return null;
 
@@ -135,6 +139,10 @@ export function criarMontadorDeContextoDoEval(
       temHistoricoNoContexto: (scenario.history?.length ?? 0) > 0,
       agora: DATA_FIXA_DO_EVAL,
       perfilVivoLigado,
+      // Rodada 2 do PR #377: o MESMO bloco que quem chamou o avaliador leu
+      // uma vez por execução (ContextoDoSugeridor.regrasBlock), e não uma
+      // leitura nova por cenário. Vazio, o prompt fica sem o bloco.
+      regrasDoCliente: extras?.regrasBlock ?? '',
     });
     // Com o agente explícito o carregador nunca devolve null; o guard é
     // só para o tipo.

@@ -305,6 +305,7 @@ async function montarPrompt(input: {
       temHistoricoNoContexto: historico.length > 0,
       agora: DATA_FIXA_DO_EVAL,
       perfilVivoLigado: flags.perfilVivo,
+      regrasDoCliente: regrasBlock,
     });
     if (ctx) {
       return { prompt: ctx.systemPrompt, hash: ctx.hash, hashEstavel: ctx.hashEstavel, partes: ctx.partes, motor: 'unico' };
