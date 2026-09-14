@@ -14,25 +14,44 @@
  *   1. aceita só http e https;
  *   2. recusa nome interno conhecido (`*.internal` do Fly, `*.local`,
  *      `localhost`, `metadata.google.internal`);
- *   3. resolve o nome com `dns.lookup(..., { all: true })` e recusa se QUALQUER
+ *   3. aceita só as portas de uso normal na web (80, 443, 8080, 8443), para a
+ *      URL não virar varredura de porta da rede de saída;
+ *   4. resolve o nome com `dns.lookup(..., { all: true })` e recusa se QUALQUER
  *      endereço cair em faixa interna (loopback, link-local com o endereço de
  *      metadados da nuvem, 10/8, 172.16/12, 192.168/16, 100.64/10, ::1,
- *      fc00::/7 que cobre o fdaa::/16 do Fly, fe80::/10, e o IPv4 mapeado em
- *      IPv6);
- *   4. conecta com `lookup` fixo no endereço que acabou de ser aprovado, o que
+ *      fc00::/7 que cobre o fdaa::/16 do Fly, fe80::/10, e todas as formas de
+ *      IPv6 que carregam um IPv4 por dentro: o mapeado `::ffff:0:0/96`, o
+ *      compatível `::/96` e o NAT64 `64:ff9b::/96`);
+ *   5. conecta com `lookup` fixo no endereço que acabou de ser aprovado, o que
  *      fecha a janela entre a checagem e a conexão;
- *   5. não deixa o cliente HTTP seguir redirecionamento sozinho
- *      (`maxRedirects: 0`): cada destino passa pelas etapas 1 a 4 de novo, no
+ *   6. não deixa o cliente HTTP seguir redirecionamento sozinho
+ *      (`maxRedirects: 0`): cada destino passa pelas etapas 1 a 5 de novo, no
  *      máximo três vezes.
  *
  * Os limites de 20 MB e 30 segundos da ingestão continuam valendo.
+ *
+ * LIMITE CONHECIDO: fixar o `lookup` só vale com saída direta. Se um dia a API
+ * rodar atrás de proxy de saída (`HTTP_PROXY`/`HTTPS_PROXY` no ambiente), o
+ * axios manda o pedido para o proxy e quem resolve o nome é ele: o endereço que
+ * aprovamos aqui deixa de ser o endereço conectado, e a janela entre a checagem
+ * e a conexão reabre. Hoje o Fly não usa proxy de saída. Quem ligar um proxy
+ * precisa voltar aqui e mover a checagem para o proxy ou para uma lista de
+ * destinos permitidos.
  */
 import { promises as dns } from 'node:dns';
-import { BlockList, isIPv4 } from 'node:net';
+import { BlockList, isIP, isIPv4 } from 'node:net';
 import axios, { AxiosResponse } from 'axios';
 
-/** Erro de destino recusado. A mensagem chega ao cliente, então é em português. */
+/**
+ * Erro de destino recusado. A mensagem chega ao cliente, então é em português.
+ *
+ * O `statusCode` existe para o errorHandler: sem ele o erro cai no ramo
+ * genérico, vira 500, e em produção a frase é trocada por "Internal Server
+ * Error". Com 422 a frase que explica o problema chega a quem colou a URL.
+ */
 export class UrlNaoPublicaError extends Error {
+  statusCode = 422;
+
   constructor(motivo: string) {
     super(motivo);
     this.name = 'UrlNaoPublicaError';
@@ -61,23 +80,36 @@ bloqueioV4.addSubnet('240.0.0.0', 4, 'ipv4'); // reservado
 const bloqueioV6 = new BlockList();
 bloqueioV6.addAddress('::', 'ipv6');
 bloqueioV6.addAddress('::1', 'ipv6'); // loopback
+bloqueioV6.addSubnet('::', 96, 'ipv6'); // IPv4 compatível: `::127.0.0.1` vira `::7f00:1`
+bloqueioV6.addSubnet('64:ff9b::', 96, 'ipv6'); // NAT64: leva a qualquer IPv4
 bloqueioV6.addSubnet('fc00::', 7, 'ipv6'); // privado, cobre o fdaa::/16 do Fly
 bloqueioV6.addSubnet('fe80::', 10, 'ipv6'); // link-local
 bloqueioV6.addSubnet('ff00::', 8, 'ipv6'); // multicast
 
 /**
- * Verdadeiro quando o endereço é de uso interno. Trata o IPv4 mapeado em IPv6
- * (`::ffff:10.0.0.1`) pelas regras de IPv4, que é como ele se comporta na rede.
+ * Verdadeiro quando o endereço é de uso interno.
+ *
+ * O ponto delicado é o IPv6 que carrega um IPv4 por dentro. O interpretador de
+ * URL do Node normaliza `[::ffff:169.254.169.254]` para `[::ffff:a9fe:a9fe]`,
+ * em hexadecimal, então casar a forma decimal com expressão regular deixava
+ * passar exatamente a grafia que chega pela URL. Aqui a tradução é feita pelo
+ * próprio `BlockList`: consultar o bloqueio de IPv4 com tipo `ipv6` faz o Node
+ * converter o endereço mapeado antes de comparar, em qualquer grafia. O que o
+ * mapeado não cobre (IPv4 compatível e NAT64) entra como faixa no bloqueio de
+ * IPv6.
+ *
+ * Endereço que não é IP, ou consulta que estoura, conta como interno: o que não
+ * dá para conferir não vira conexão.
  */
 export function enderecoEhInterno(endereco: string): boolean {
   const limpo = endereco.replace(/^\[|\]$/g, '').split('%')[0];
-  const mapeado = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(limpo);
-  if (mapeado) return bloqueioV4.check(mapeado[1], 'ipv4');
-  if (isIPv4(limpo)) return bloqueioV4.check(limpo, 'ipv4');
+  if (!isIP(limpo)) return true;
   try {
+    if (isIPv4(limpo)) return bloqueioV4.check(limpo, 'ipv4');
+    // Primeiro pelas regras de IPv4 (pega o mapeado), depois pelas de IPv6.
+    if (bloqueioV4.check(limpo, 'ipv6')) return true;
     return bloqueioV6.check(limpo, 'ipv6');
   } catch {
-    // Endereço que não dá para interpretar não vira conexão.
     return true;
   }
 }
@@ -88,6 +120,14 @@ export function nomeEhInterno(hostname: string): boolean {
   if (NOMES_BLOQUEADOS.has(nome)) return true;
   return SUFIXOS_BLOQUEADOS.some((s) => nome.endsWith(s));
 }
+
+/**
+ * Portas aceitas. Página pública mora em 80 ou 443, e 8080/8443 cobrem o site
+ * que roda atrás de proxy. Fora disso a URL deixa de ser leitura de página e
+ * vira sonda da rede de saída (Redis em 6379, Postgres em 5432, painel interno
+ * em 9200), inclusive contra um nome público que aponta para fora da nuvem.
+ */
+const PORTAS_PERMITIDAS = new Set([80, 443, 8080, 8443]);
 
 export interface AlvoPublico {
   /** URL já interpretada. */
@@ -115,6 +155,25 @@ export async function resolverUrlPublica(url: string): Promise<AlvoPublico> {
   if (!hostname) throw new UrlNaoPublicaError('Endereço inválido.');
   if (nomeEhInterno(hostname)) {
     throw new UrlNaoPublicaError('Esse endereço é de uma rede interna e não pode ser lido aqui.');
+  }
+  // O endereço escrito direto na URL é conferido antes do DNS e antes da porta:
+  // é o achado mais grave, e a mensagem precisa ser a dele. Não é só atalho, o
+  // `[::ffff:169.254.169.254]` chega aqui já em hexadecimal, e conferir na
+  // entrada evita depender de como o resolvedor devolve um IP literal.
+  if (isIP(hostname) && enderecoEhInterno(hostname)) {
+    throw new UrlNaoPublicaError(
+      'Esse endereço aponta para uma rede interna ou privada e não pode ser lido aqui.',
+    );
+  }
+  const porta = interpretada.port
+    ? Number(interpretada.port)
+    : interpretada.protocol === 'https:'
+      ? 443
+      : 80;
+  if (!PORTAS_PERMITIDAS.has(porta)) {
+    throw new UrlNaoPublicaError(
+      'Só conseguimos ler páginas nas portas 80, 443, 8080 e 8443. Informe o endereço do site.',
+    );
   }
 
   let resolvidos: Array<{ address: string; family: number }>;
@@ -147,6 +206,11 @@ export interface OpcoesDeBusca {
   timeoutMs?: number;
   /** Tamanho máximo do corpo, em bytes. */
   maxBytes?: number;
+  /**
+   * Cabeçalhos do pedido, repetidos em cada salto. Serve para o User-Agent com
+   * que a ZappIQ se identifica no site de quem está sendo lido.
+   */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -159,6 +223,7 @@ export async function buscarUrlPublica(
 ): Promise<AxiosResponse<any>> {
   const timeout = opcoes.timeoutMs ?? 30_000;
   const maxContentLength = opcoes.maxBytes ?? 20 * 1024 * 1024;
+  const headers = opcoes.headers ?? {};
 
   let alvo = url;
   for (let salto = 0; salto <= MAXIMO_DE_REDIRECIONAMENTOS; salto++) {
@@ -168,6 +233,7 @@ export async function buscarUrlPublica(
       timeout,
       maxContentLength,
       maxRedirects: 0,
+      headers,
       // O endereço já aprovado é o que vai ser conectado. Sem isso, entre a
       // checagem e a conexão o nome poderia resolver para outro endereço.
       lookup: ((_hostname: string, opcoesDoNode: any, callback: any) => {
