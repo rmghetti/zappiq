@@ -110,11 +110,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS "agent_rules_ativa_por_cenario_key"
   ON public.agent_rules("agent_id", "scenario_id")
   WHERE "status" = 'ativa' AND "scenario_id" IS NOT NULL;
 
--- Leitura do turno: todas as regras ativas da organização, na ordem em que
--- entraram. É a consulta do montador do prompt.
+-- Leitura por ORGANIZAÇÃO, sem agente: listagens e relatórios que olham a
+-- empresa inteira, na ordem em que as regras entraram. NÃO é a consulta do
+-- montador do prompt (rodada 3 do PR #375: o comentário dizia que era).
 CREATE INDEX IF NOT EXISTS "agent_rules_org_status_idx"
   ON public.agent_rules("organization_id", "status", "created_at");
 
+-- Leitura do turno: as regras ativas DO AGENTE (PI-3). É esta a consulta do
+-- montador do prompt, nos três canais e no avaliador.
 CREATE INDEX IF NOT EXISTS "agent_rules_agent_idx"
   ON public.agent_rules("agent_id", "status");
 
