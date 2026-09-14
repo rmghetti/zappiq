@@ -38,7 +38,7 @@ const VOICE_ADDON_DATA = {
 export const metadata = {
   title: 'Voz Nativa: IA que fala no WhatsApp | ZappIQ',
   description:
-    'Inbound (cliente manda áudio, Whisper transcreve) incluído em todos os planos. Outbound (IA responde em voz pt-BR Neural2) a partir de R$ 79,90/mês com 200 minutos. 6 pacotes até 4.000 min.',
+    'Inbound (o cliente manda áudio e a IA entende) incluído em todos os planos. Outbound (a IA responde em voz de português brasileiro) a partir de R$ 79,90/mês com 200 minutos. 6 pacotes até 4.000 min.',
 };
 
 interface VoicePackage {
@@ -77,7 +77,7 @@ const PACKAGES: VoicePackage[] = (
 
 const INBOUND_FEATURES = [
   'Recebimento de áudios do cliente no WhatsApp',
-  'Transcrição automática via Whisper (OpenAI) em pt-BR',
+  'Transcrição automática do áudio em português brasileiro',
   'IA entende contexto e responde igual a texto',
   'Suporte a sotaques regionais brasileiros',
   'Funciona em todos os planos, inclusive Starter R$ 197',
@@ -89,14 +89,14 @@ const USE_CASES = [
     icon: MessageSquare,
     title: 'Cliente manda áudio reclamando',
     body:
-      'Whisper transcreve, IA entende a reclamação, responde em texto ou áudio (se outbound ativo). Atendente não para 3 min ouvindo áudio.',
+      'A IA transcreve, entende a reclamação e responde em texto ou áudio (se o outbound estiver ativo). Atendente não para 3 min ouvindo áudio.',
     tier: 'Inbound · R$ 0',
   },
   {
     icon: Volume2,
     title: 'Cliente prefere ouvir, não ler',
     body:
-      'Cliente pede confirmação por áudio. IA responde em áudio com voz natural pt-BR Neural2-C. Experiência humanizada, escala automática.',
+      'Cliente pede confirmação por áudio. A IA responde em áudio, com voz em português brasileiro. Experiência humanizada, escala automática.',
     tier: 'Outbound · a partir de R$ 79,90',
   },
   {
@@ -108,9 +108,9 @@ const USE_CASES = [
   },
   {
     icon: Waves,
-    title: 'Lembrete de consulta / aula / evento',
+    title: 'Recado gravado no lugar do bloco de texto',
     body:
-      'IA manda áudio 24h antes do evento. Cliente ouve, reconhece, responde. Taxa de comparecimento sobe vs lembrete em texto.',
+      'Aviso de turma nova, mudança de horário, retorno de orçamento. Você escreve, a IA fala, o cliente ouve e responde ali mesmo. Quem dispara é você ou a sua equipe: a plataforma não agenda envio sozinha.',
     tier: 'Outbound · 400+ recomendado',
   },
 ];
@@ -135,7 +135,7 @@ export default function VozPage() {
           <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 mb-6">
             <Mic size={14} className="text-emerald-300" />
             <span className="text-xs font-semibold text-emerald-200 uppercase tracking-wider">
-              Voz Nativa · Google Neural2-C pt-BR
+              Voz em português brasileiro
             </span>
           </div>
           <h1 className="text-[44px] lg:text-[64px] font-medium leading-[1.05] tracking-[-0.03em] mb-6 max-w-4xl">
@@ -176,7 +176,7 @@ export default function VozPage() {
                 Inbound: cliente manda áudio, IA entende.
               </h2>
               <p className="text-muted text-[15.5px] leading-relaxed mb-6">
-                70% dos clientes preferem mandar áudio no WhatsApp. Antes, atendente parava 3 min ouvindo. Agora Whisper transcreve em segundos e IA responde com contexto, igual a texto.
+                70% dos clientes preferem mandar áudio no WhatsApp. Antes, atendente parava 3 min ouvindo. Agora a transcrição sai em segundos e a IA responde com contexto, igual a texto.
               </p>
               <ul className="space-y-3">
                 {INBOUND_FEATURES.map((f) => (
@@ -201,7 +201,7 @@ export default function VozPage() {
                   <p className="text-[11px] italic text-gray-500">
                     "Oi, queria saber se vocês fazem exame de sangue em jejum e se tem horário pra amanhã cedo, porque meu médico pediu urgente..."
                   </p>
-                  <p className="text-[10px] text-emerald-600 mt-2 font-semibold">← transcrito por Whisper em 1.6s</p>
+                  <p className="text-[10px] text-emerald-600 mt-2 font-semibold">← transcrito em 1.6s</p>
                 </div>
                 <div className="bg-emerald-500 text-white rounded-xl p-4 shadow-sm ml-auto max-w-[80%]">
                   <p className="text-[10px] text-emerald-100 mb-1">ZappIQ IA · 2s depois</p>
@@ -225,14 +225,14 @@ export default function VozPage() {
             <div className="inline-flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-full px-4 py-1.5 mb-4">
               <Sparkles size={14} className="text-violet-700" />
               <span className="text-xs font-semibold text-violet-800 uppercase tracking-wider">
-                Add-on opcional · Google Neural2-C
+                Add-on opcional · voz em português brasileiro
               </span>
             </div>
             <h2 className="text-[36px] lg:text-[48px] font-medium leading-[1.05] tracking-[-0.02em] text-ink mb-3">
               Outbound: IA responde em áudio. <span className="text-grad">6 pacotes.</span>
             </h2>
             <p className="text-[15.5px] text-muted">
-              Voz natural pt-BR (Google Neural2-C). Trocar de pacote a qualquer momento. Excedente cobrado por minuto.
+              Voz natural em português brasileiro. Trocar de pacote a qualquer momento. Excedente cobrado por minuto.
             </p>
           </div>
 
@@ -267,7 +267,7 @@ export default function VozPage() {
                 <ul className="space-y-2.5 mb-5 flex-1">
                   <li className="flex items-start gap-2.5 text-[13px] text-ink-2">
                     <Check size={14} className="text-emerald-500 mt-0.5 flex-shrink-0" />
-                    <span><strong className="text-ink">{pkg.label}</strong> de TTS pt-BR Neural2-C</span>
+                    <span><strong className="text-ink">{pkg.label}</strong> de voz em português brasileiro</span>
                   </li>
                   <li className="flex items-start gap-2.5 text-[13px] text-ink-2">
                     <Check size={14} className="text-emerald-500 mt-0.5 flex-shrink-0" />

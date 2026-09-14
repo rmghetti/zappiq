@@ -64,7 +64,7 @@ const PILLARS = [
 const CERTIFICATIONS = [
   { icon: Lock, label: 'Dados criptografados no banco' },
   { icon: Lock, label: 'Conexão criptografada ponta a ponta' },
-  { icon: Server, label: 'Servidores 100% no Brasil (São Paulo)' },
+  { icon: Server, label: 'LGPD com DPA e encarregado de dados' },
   { icon: FileCheck, label: 'Backup seguro + restauração até 30 dias atrás' },
   { icon: Shield, label: 'Seus dados isolados dos de outros clientes' },
   { icon: Activity, label: 'Registro auditável de todos os acessos' },

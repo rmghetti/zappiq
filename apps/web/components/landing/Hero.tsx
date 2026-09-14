@@ -424,7 +424,7 @@ export function Hero() {
                 <span className="text-g1 font-semibold">✓</span> Cancela quando quiser
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="text-g1 font-semibold">✓</span> Banco de dados no Brasil, IA nos EUA
+                <span className="text-g1 font-semibold">✓</span> LGPD com DPA e encarregado de dados
               </span>
             </div>
           </div>

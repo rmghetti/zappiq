@@ -47,7 +47,7 @@ const SEGMENTS = [
     icon: GraduationCap,
     name: 'Escolas e Cursos',
     pain: '80% das dúvidas de pais chegam fora do horário. Secretaria não dá conta.',
-    solve: 'IA responde sobre turmas, valores e matrículas 24/7. Lembretes de vencimento automáticos.',
+    solve: 'IA responde sobre turmas, valores e matrículas 24/7. A cobrança vira tarefa com prazo para a secretaria.',
     color: 'from-emerald-500 to-green-600',
     bgLight: 'bg-emerald-50',
     textAccent: 'text-emerald-600',

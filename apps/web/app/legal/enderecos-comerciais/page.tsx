@@ -43,11 +43,11 @@ export default function EnderecosComerciaisPage() {
 
         <h2>3. Endereço técnico (infraestrutura)</h2>
         <p>
-          Dados de clientes ZappIQ são hospedados no Brasil em provedor de nuvem (região{' '}
-          <em>BR/SA-East-1</em>), com backups replicados em segunda região brasileira. O
-          processamento de IA acontece nos Estados Unidos, com salvaguardas contratuais e a lista
-          de subprocessadores em <Link href="/legal/subprocessadores">Subprocessadores</Link>.
-          Mais detalhes em{' '}
+          Os dados ficam em servidores nos Estados Unidos (banco de dados e processamento de IA),
+          com salvaguardas contratuais para transferência internacional. O banco de dados
+          gerenciado opera na região <em>us-east-1</em>. A API roda em São Paulo (região{' '}
+          <em>gru</em>), sem persistir dado de cliente fora do banco. A lista completa está em{' '}
+          <Link href="/legal/subprocessadores">Subprocessadores</Link>. Mais detalhes em{' '}
           <Link href="/legal/dpa">DPA, Seção 5</Link>.
         </p>
 

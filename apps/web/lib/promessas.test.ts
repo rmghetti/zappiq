@@ -12,7 +12,10 @@
  * MESMO PR que entrega a funcionalidade, com a prova no corpo do PR. Antes
  * disso, não afrouxe a regra: o teste é o que separa promessa de fato.
  *
- * O que a varredura lê: app, components, content e lib (.ts e .tsx).
+ * O que a varredura lê: no site, as pastas app, components, content e lib; na
+ * API, apps/api/src/agents, onde ficam os gabaritos que ditam o que a Iza
+ * pode afirmar (uma promessa falsa no gabarito sai pela boca dela, mesmo que
+ * o site esteja limpo). Extensões .ts e .tsx.
  * O que fica de fora: este arquivo e app/blog (texto editorial de opinião,
  * com contexto próprio, fora do contrato de produto).
  *
@@ -27,14 +30,27 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
-const WEB = join(__dirname, '..');
-const PASTAS = ['app', 'components', 'content', 'lib'];
+/** Raiz do monorepo: apps/web/lib -> apps/web -> apps -> raiz. */
+const REPO = join(__dirname, '..', '..', '..');
 const EXTENSOES = ['.ts', '.tsx'];
 
-/** Caminhos (relativos a apps/web) que a varredura não lê. */
+/**
+ * Raízes varridas, em caminho relativo à raiz do monorepo. A copy do site é a
+ * fonte óbvia, mas o gabarito de avaliação da Iza também manda ela afirmar
+ * coisas: promessa falsa ali sai na conversa com o cliente do mesmo jeito.
+ */
+const PASTAS = [
+  'apps/web/app',
+  'apps/web/components',
+  'apps/web/content',
+  'apps/web/lib',
+  'apps/api/src/agents',
+];
+
+/** Caminhos (relativos à raiz do monorepo) que a varredura não lê. */
 const FORA_DA_VARREDURA = [
-  'lib/promessas.test.ts',
-  'app/blog',
+  'apps/web/lib/promessas.test.ts',
+  'apps/web/app/blog',
   'node_modules',
   '.next',
   '.turbo',
@@ -52,8 +68,20 @@ const REGRAS: Regra[] = [
   {
     nome: 'residência de dados: "território nacional"',
     motivo:
-      'O banco fica no Brasil, mas todo embedding e toda resposta do agente são processados por provedores de IA nos Estados Unidos. Os dados saem do país.',
+      'Os dados ficam em servidores nos Estados Unidos: o banco e o processamento de IA. Não existe residência em território nacional.',
     padrao: /territ[óo]rio nacional/i,
+  },
+  {
+    nome: 'residência de dados: banco no Brasil',
+    motivo:
+      'O banco de dados de produção é o projeto Supabase hwdeezdxyphvxikvgjyf, região us-east-1, Estados Unidos. Dizer que ele fica no Brasil é erro de fato, não imprecisão de copy.',
+    padrao: /banco (de dados )?(fica|hospedado|no) Brasil/i,
+  },
+  {
+    nome: 'residência de dados: dados primários no Brasil',
+    motivo:
+      'Não há dado primário no Brasil: banco e processamento de IA rodam nos Estados Unidos, com salvaguardas contratuais para a transferência internacional. A regra ignora "proteção de dados no Brasil", que fala da LEI brasileira e da ANPD, não de onde os dados moram.',
+    padrao: /(?<!prote[çc][ãa]o de )dados (prim[áa]rios )?no Brasil/i,
   },
   {
     nome: '"se corrige sozinha"',
@@ -70,8 +98,8 @@ const REGRAS: Regra[] = [
   {
     nome: 'formato DOCX na ingestão',
     motivo:
-      'O serviço de ingestão extrai texto de PDF e de text/*. Word responde 415 e o cliente vê erro genérico.',
-    padrao: /DOCX/,
+      'O serviço de ingestão extrai texto de PDF e de text/*. Word responde 415 e o cliente vê erro genérico. A regra vale em qualquer caixa, porque no accept do input a extensão vem em minúscula.',
+    padrao: /\bDOCX\b/i,
   },
   {
     nome: 'planilha como formato aceito (perto de PDF)',
@@ -116,6 +144,12 @@ const REGRAS: Regra[] = [
     padrao: /confirma,? e lembra|confirma, lembra|lembra e remarca/i,
   },
   {
+    nome: 'lembrete automático de vencimento, de aula ou de evento',
+    motivo:
+      'Não existe disparo programado de lembrete em lugar nenhum do produto. O agendamento consulta o horário livre e cria o compromisso; avisar o cliente antes continua sendo trabalho da equipe.',
+    padrao: /lembretes? (autom[áa]ticos?|de vencimento|de aulas)|[áa]udio 24h antes/i,
+  },
+  {
     nome: 'resultado numérico de no-show atribuído ao produto',
     motivo:
       'Não existe lembrete nem confirmação automática, e a base nunca registrou um agendamento. Vale para a promessa com número, não para a pergunta do questionário sobre a política de falta do negócio do cliente.',
@@ -136,7 +170,7 @@ function foraDaVarredura(rel: string): boolean {
 function listarArquivos(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir)) {
     const caminho = join(dir, entrada);
-    const rel = relative(WEB, caminho);
+    const rel = relative(REPO, caminho);
     if (foraDaVarredura(rel)) continue;
     if (statSync(caminho).isDirectory()) {
       listarArquivos(caminho, acc);
@@ -147,7 +181,7 @@ function listarArquivos(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-const ARQUIVOS = PASTAS.flatMap((p) => listarArquivos(join(WEB, p)));
+const ARQUIVOS = PASTAS.flatMap((p) => listarArquivos(join(REPO, p)));
 
 /** Cache de leitura: são centenas de arquivos e doze regras. */
 const CONTEUDO = new Map<string, string[]>(
@@ -160,7 +194,7 @@ function ocorrencias(padrao: RegExp): string[] {
     linhas.forEach((linha, i) => {
       if (padrao.test(linha)) {
         achados.push(
-          `${relative(WEB, caminho).split(sep).join('/')}:${i + 1}  ${linha.trim().slice(0, 160)}`,
+          `${relative(REPO, caminho).split(sep).join('/')}:${i + 1}  ${linha.trim().slice(0, 160)}`,
         );
       }
     });
@@ -169,17 +203,22 @@ function ocorrencias(padrao: RegExp): string[] {
 }
 
 describe('promessas que o código não cumpre', () => {
-  it('a varredura enxerga a árvore de arquivos', () => {
+  it('a varredura enxerga a árvore de arquivos das duas raízes', () => {
     // Rede de segurança: se um refactor mudar a estrutura de pastas, o teste
     // passaria vazio e deixaria de proteger qualquer coisa.
     expect(ARQUIVOS.length).toBeGreaterThan(200);
     expect(
-      ARQUIVOS.some((a) => a.endsWith(join('components', 'landing', 'Hero.tsx'))),
+      ARQUIVOS.some((a) => a.endsWith(join('apps', 'web', 'components', 'landing', 'Hero.tsx'))),
+    ).toBe(true);
+    expect(
+      ARQUIVOS.some((a) => a.endsWith(join('apps', 'api', 'src', 'agents', 'evalSetZappIQ.ts'))),
     ).toBe(true);
   });
 
   it('nenhum arquivo de app/blog entra na varredura', () => {
-    expect(ARQUIVOS.filter((a) => relative(WEB, a).startsWith(join('app', 'blog')))).toEqual([]);
+    expect(
+      ARQUIVOS.filter((a) => relative(REPO, a).startsWith(join('apps', 'web', 'app', 'blog'))),
+    ).toEqual([]);
   });
 
   for (const regra of REGRAS) {

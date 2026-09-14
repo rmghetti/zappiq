@@ -37,7 +37,7 @@ const SUBPROCESSADORES: Subprocessador[] = [
   {
     nome: 'AWS',
     finalidade: 'Infraestrutura de nuvem onde o banco de dados gerenciado opera e backups cifrados.',
-    localizacao: 'Brasil (região sa-east-1, São Paulo)',
+    localizacao: 'Estados Unidos (região us-east-1)',
   },
   {
     nome: 'Cloudflare',
@@ -47,7 +47,7 @@ const SUBPROCESSADORES: Subprocessador[] = [
   {
     nome: 'Supabase',
     finalidade: 'Banco de dados PostgreSQL e autenticação da plataforma.',
-    localizacao: 'Brasil (AWS sa-east-1, São Paulo)',
+    localizacao: 'Estados Unidos (AWS us-east-1)',
   },
   {
     nome: 'Stripe',
@@ -77,7 +77,7 @@ const SUBPROCESSADORES: Subprocessador[] = [
 ];
 
 export default function SubprocessadoresPage() {
-  const lastUpdate = '20 de agosto de 2026';
+  const lastUpdate = '14 de setembro de 2026';
 
   return (
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
@@ -132,11 +132,13 @@ export default function SubprocessadoresPage() {
         </div>
 
         <p>
-          Os dados primários da plataforma ficam no Brasil (região AWS sa-east-1, São Paulo). O
-          processamento de IA é a exceção: todo treino vira vetor e toda resposta do agente é
-          gerada por provedores nos Estados Unidos, em todas as conversas. Essas transferências,
-          somadas às de pagamento e de e-mail, seguem cláusulas contratuais e as salvaguardas da
-          LGPD (Art. 33), conforme detalhado na{' '}
+          Os dados ficam em servidores nos Estados Unidos (banco de dados e processamento de IA),
+          com salvaguardas contratuais para transferência internacional. O banco de dados
+          gerenciado da plataforma opera na região us-east-1, e todo treino vira vetor e toda
+          resposta do agente é gerada por provedores nos Estados Unidos, em todas as conversas. A
+          API roda em São Paulo (região gru), sem persistir dado de cliente fora do banco. Essas
+          transferências, somadas às de pagamento e de e-mail, seguem cláusulas contratuais e as
+          salvaguardas da LGPD (Art. 33), conforme detalhado na{' '}
           <a href="/legal/privacidade">Política de Privacidade</a> e no{' '}
           <a href="/legal/dpa">DPA</a>.
         </p>
@@ -144,8 +146,11 @@ export default function SubprocessadoresPage() {
         <h2>Histórico de alterações</h2>
         <ul>
           <li>
-            <strong>14/09/2026:</strong> texto sobre residência de dados corrigido. O processamento
-            de IA nos Estados Unidos não é eventual: acontece em todas as conversas.
+            <strong>14/09/2026:</strong> correção de erro de fato sobre a localização dos dados.
+            Esta página afirmava que o banco de dados ficava no Brasil (AWS sa-east-1). O banco de
+            dados gerenciado sempre operou na região us-east-1, nos Estados Unidos. O
+            processamento de IA também não é eventual: acontece em todas as conversas. Nenhum
+            subprocessador foi incluído nem trocado.
           </li>
           <li>
             <strong>20/08/2026:</strong> página criada, com a lista completa dos subprocessadores em

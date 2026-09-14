@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
 const HIGHLIGHTS = [
   'Iza responde seu cliente em menos de 3 segundos',
   'CRM pronto, direto dentro do WhatsApp',
-  'Banco de dados no Brasil, processamento de IA nos Estados Unidos',
+  'LGPD com DPA e encarregado de dados',
   'LGPD resolvida, pronta pra auditoria do jurídico',
   'Liga em 5 minutos, sem ligar pra TI',
 ];

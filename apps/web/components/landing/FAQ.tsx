@@ -165,12 +165,12 @@ const FAQS: FaqItem[] = [
   {
     group: 'Tecnologia',
     q: 'Com quais empresas o ZappIQ divide operação?',
-    a: 'A gente opera com parceiros de primeira linha: provedores globais de IA, Meta (pra infra do WhatsApp), Stripe (pra cobrança), AWS no Brasil (pra dados) e alguns serviços técnicos de apoio. A lista completa e atualizada fica em /legal/privacidade, seção 4: seu jurídico pode conferir a qualquer momento.',
+    a: 'A gente opera com parceiros de primeira linha: provedores globais de IA, Meta (pra infra do WhatsApp), Stripe (pra cobrança), AWS (pra dados) e alguns serviços técnicos de apoio. A lista completa e atualizada fica em /legal/privacidade, seção 4: seu jurídico pode conferir a qualquer momento.',
   },
   {
     group: 'Tecnologia',
     q: 'Onde meus dados ficam armazenados?',
-    a: 'Banco primário em servidor brasileiro (AWS São Paulo). Quando precisamos consultar IA fora do país, isso acontece sob cláusulas contratuais padrão exigidas pela LGPD, apenas pra cada consulta, nada fica armazenado lá fora.',
+    a: 'Os dados ficam em servidores nos Estados Unidos (banco de dados e processamento de IA), com salvaguardas contratuais para transferência internacional. A lista de quem trata o quê está em /legal/subprocessadores, e as cláusulas estão no DPA, que seu jurídico pode ler antes de assinar.',
   },
 
   // ───────────────────────────── LGPD ───────────────────────────────────

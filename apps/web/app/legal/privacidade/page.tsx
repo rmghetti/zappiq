@@ -111,8 +111,8 @@ export default function PrivacidadePage() {
         <ul>
           <li>
             <strong>Supabase, Inc.</strong> (banco de dados PostgreSQL e autenticação). Dados
-            armazenados em região São Paulo, Brasil, com replicação controlada. SOC 2 Type II,
-            HIPAA-ready.
+            armazenados em região us-east-1, Estados Unidos, com replicação controlada. SOC 2
+            Type II, HIPAA-ready.
           </li>
           <li>
             <strong>Upstash, Inc.</strong> (cache Redis e filas QStash). Dados efêmeros, sem
@@ -159,11 +159,12 @@ export default function PrivacidadePage() {
 
         <h2>5. Armazenamento e transferência internacional</h2>
         <p>
-          Dados primários armazenados em região <strong>AWS sa-east-1 (São Paulo, Brasil)</strong>{' '}
-          via Supabase. Processamento com Anthropic e OpenAI envolve transferência internacional
-          para data centers dos EUA, legitimada por cláusulas contratuais padrão reconhecidas pela
-          ANPD (LGPD Art. 33, IV). Transferências para Stripe (EUA) e Cloudflare (global) seguem a
-          mesma base legal.
+          Os dados ficam em servidores nos Estados Unidos (banco de dados e processamento de IA),
+          com salvaguardas contratuais para transferência internacional. O banco de dados fica em
+          região <strong>AWS us-east-1</strong> via Supabase, e o processamento com Anthropic e
+          OpenAI acontece em data centers dos EUA. As transferências são legitimadas por cláusulas
+          contratuais padrão reconhecidas pela ANPD (LGPD Art. 33, IV). Transferências para Stripe
+          (EUA) e Cloudflare (global) seguem a mesma base legal.
         </p>
 
         <h2>6. Retenção</h2>
