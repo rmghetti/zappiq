@@ -1835,21 +1835,34 @@ export async function buildAgentContextForContact(
     flagLigada(input.organizationId, 'perfilVivo'),
   ]);
   if (contextoUnico) {
-    const contexto = await montarContextoDoTurno({
-      origem: input.origem ?? 'whatsapp',
-      organizationId: input.organizationId,
-      orgSettings: input.orgSettings,
-      contato: input.contato,
-      contactId: input.contactId,
-      contactPhone: input.contactPhone,
-      ragContext: input.ragContext,
-      ragStatus: input.ragStatus,
-      agendamento: input.agendamento,
-      temHistoricoNoContexto: input.temHistoricoNoContexto,
-      instrucaoDeCanal: input.instrucaoDeCanal,
-      perfilVivoLigado,
-      agora: input.agora,
-    });
+    // Erro de banco no carregador (resolveAgentForTurn, contato) não pode
+    // derrubar o turno: o caminho de antes já cai no promptEngine quando o
+    // Agent falha, e o chat do site faz o mesmo. Aqui é igual: avisa e segue.
+    let contexto: ContextoDoTurno | null = null;
+    let falhou = false;
+    try {
+      contexto = await montarContextoDoTurno({
+        origem: input.origem ?? 'whatsapp',
+        organizationId: input.organizationId,
+        orgSettings: input.orgSettings,
+        contato: input.contato,
+        contactId: input.contactId,
+        contactPhone: input.contactPhone,
+        ragContext: input.ragContext,
+        ragStatus: input.ragStatus,
+        agendamento: input.agendamento,
+        temHistoricoNoContexto: input.temHistoricoNoContexto,
+        instrucaoDeCanal: input.instrucaoDeCanal,
+        perfilVivoLigado,
+        agora: input.agora,
+      });
+    } catch (err) {
+      falhou = true;
+      logger.warn('[Agent] motor único falhou; respondendo pelo caminho de antes', {
+        organizationId: input.organizationId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
     if (contexto) {
       return {
         systemPrompt: contexto.systemPrompt,
@@ -1860,9 +1873,11 @@ export async function buildAgentContextForContact(
         contexto,
       };
     }
-    logger.warn('[Agent] motor único sem Agent vivo: seguindo no fallback de sempre', {
-      organizationId: input.organizationId,
-    });
+    if (!falhou) {
+      logger.warn('[Agent] motor único sem Agent vivo: seguindo no fallback de sempre', {
+        organizationId: input.organizationId,
+      });
+    }
   }
   const systemPrompt = await buildSystemPromptLegado(input, perfilVivoLigado);
   return { systemPrompt, hash: hashDoContexto(systemPrompt), partes: [], viaContextoUnico: false };

@@ -58,6 +58,7 @@ import {
 } from './agentOrchestrator.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 import { TEXTO_HORARIO_AUSENTE } from './tenantLiveProfile.js';
+import { logger } from '../utils/logger.js';
 
 const ORG = 'org-do-cmj';
 const PROMPT_DO_AGENTE = '## IDENTIDADE\nVocê é Vera, atendente virtual da CMJ.';
@@ -146,6 +147,26 @@ describe('interruptor perfilVivo DESLIGADO: prompt byte a byte igual ao de hoje'
     const prompt = await buildSystemPromptForContact(ENTRADA);
     expect(prompt).toContain(PROMPT_DO_AGENTE);
     expect(prompt).not.toContain('# Como você atende nesta empresa');
+  });
+});
+
+describe('motor único: erro no carregador não derruba o turno', () => {
+  it('banco fora com contextoUnico ligada: o turno responde pelo caminho de antes', async () => {
+    // O caminho de antes já cai no promptEngine quando o Agent falha, e o
+    // chat do site faz o mesmo. Um erro de banco dentro do motor único não
+    // pode ser a única exceção que derruba o turno do WhatsApp.
+    isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'contextoUnico');
+    agentFindFirst.mockRejectedValue(new Error('banco fora'));
+
+    const r = await buildAgentContextForContact(ENTRADA);
+
+    expect(r.viaContextoUnico).toBe(false);
+    expect(r.systemPrompt).toContain(CORE_AGENT_RULES_V1);
+    expect(r.hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('motor único falhou'),
+      expect.objectContaining({ organizationId: ORG }),
+    );
   });
 });
 
