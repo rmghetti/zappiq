@@ -30,7 +30,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { buildSystemPromptForContact } from '../agents/agentOrchestrator.js';
-import { buildWebChatSystemPrompt } from '../services/webChatService.js';
+import { buildWebChatSystemPrompt, loadOrgSystemPrompt } from '../services/webChatService.js';
 import { buildEvalSystemPrompt } from '../services/agentEvalRunner.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
@@ -68,20 +68,28 @@ type Mensagem = z.infer<typeof corpoSchema>['messages'][number];
 // ── Helpers ───────────────────────────────────────────────
 
 /**
- * Agente comercial vivo da organização.
+ * Agente do teste de Qualidade: o comercial vivo mais RECENTE da organização.
  *
- * A ordem importa e não é capricho: o orquestrador do WhatsApp pega o mais
- * RECENTE e o chat do site pega o mais ANTIGO. Se a organização tiver mais de
- * um agente comercial vivo, os dois canais respondem com prompts diferentes.
- * O Raio-X reproduz cada caminho como ele é, não como deveria ser.
+ * A ordem não é capricho, é o que agentQuality faz. O chat do site pega o mais
+ * ANTIGO, e por isso não passa por aqui: ele usa o carregador do próprio
+ * webChatService. Se a organização tiver mais de um agente comercial vivo, os
+ * dois canais respondem com prompts diferentes. O Raio-X reproduz cada caminho
+ * como ele é, não como deveria ser.
  */
-async function carregarAgenteVivo(organizationId: string, ordem: 'asc' | 'desc') {
+async function carregarAgenteDaQualidade(organizationId: string) {
   return prisma.agent.findFirst({
     where: { organizationId, role: 'comercial', status: 'live' },
     select: { id: true, name: true, systemPrompt: true },
-    orderBy: { createdAt: ordem },
+    orderBy: { createdAt: 'desc' },
   });
 }
+
+/**
+ * A organização não tem agente comercial vivo com prompt. Não é falha do
+ * Raio-X: é o estado em que o chat do site responderia com erro ao visitante.
+ * Vira 422, para a tela não mostrar um prompt vazio como se fosse o prompt.
+ */
+class SemPromptDoSite extends Error {}
 
 async function montarPrompt(input: {
   canal: Canal;
@@ -107,17 +115,24 @@ async function montarPrompt(input: {
   }
 
   if (canal === 'site') {
-    const agente = await carregarAgenteVivo(organizationId, 'asc');
+    // Sem cópia da regra: quem escolhe o agente é o mesmo carregador que o
+    // visitante do site aciona, com o mesmo cache de 5 minutos.
+    let orgPrompt: string;
+    try {
+      orgPrompt = await loadOrgSystemPrompt(organizationId);
+    } catch {
+      throw new SemPromptDoSite();
+    }
     const ehIza = isZappIQOrg(organizationId);
     return buildWebChatSystemPrompt({
-      orgPrompt: agente?.systemPrompt || '',
+      orgPrompt,
       factsBlock: ehIza ? await getIzaFactsBlock() : '',
       isIzaCanonical: ehIza,
     });
   }
 
   // canal === 'qualidade'
-  const agente = await carregarAgenteVivo(organizationId, 'desc');
+  const agente = await carregarAgenteDaQualidade(organizationId);
   return buildEvalSystemPrompt(
     { systemPrompt: agente?.systemPrompt ?? null },
     { id: 'xray', userMessage: mensagem, history: historico },
@@ -214,6 +229,14 @@ router.post(
 
       res.json({ organizationId, canal, turnos });
     } catch (err) {
+      if (err instanceof SemPromptDoSite) {
+        res.status(422).json({
+          error: 'sem_prompt',
+          message:
+            'Esta organização não tem agente comercial ativo; o chat do site responderia com erro.',
+        });
+        return;
+      }
       logger.error('[AiXray] falhou ao montar o Raio-X', {
         organizationId,
         canal,

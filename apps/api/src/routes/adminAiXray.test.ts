@@ -39,6 +39,8 @@ vi.mock('../middleware/auth.js', async (original) => {
 const orgFindUnique = vi.fn();
 const agentFindFirst = vi.fn();
 const qaFindMany = vi.fn();
+// O chat do site carrega o prompt por SQL cru (webChatService.loadOrgSystemPrompt).
+const queryRawUnsafe = vi.fn();
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -47,6 +49,7 @@ vi.mock('@zappiq/database', () => ({
     qAPair: { findMany: (...a: any[]) => qaFindMany(...a) },
     contact: { findUnique: vi.fn().mockResolvedValue(null) },
     message: { count: vi.fn().mockResolvedValue(0) },
+    $queryRawUnsafe: (...a: any[]) => queryRawUnsafe(...a),
   },
 }));
 
@@ -147,6 +150,7 @@ beforeEach(() => {
   orgFindUnique.mockResolvedValue({ id: 'org-1', name: 'Cantina da Nona', settings: SETTINGS_DA_ORG });
   agentFindFirst.mockResolvedValue({ id: 'a1', name: 'Antonella', systemPrompt: PROMPT_DO_AGENTE });
   qaFindMany.mockResolvedValue([{ id: 'q1', question: 'Vocês atendem aos sábados?' }]);
+  queryRawUnsafe.mockResolvedValue([{ system_prompt: PROMPT_DO_AGENTE }]);
   searchWithSources.mockResolvedValue({
     context: 'Trecho da base: o rodízio custa R$ 89.',
     sources: [{ source: 'cardapio.pdf', similarity: 0.61, snippet: 'rodízio R$ 89' }],
@@ -306,6 +310,55 @@ describe('POST /api/admin/ai-xray — o prompt de cada canal', () => {
 
     expect(res.body.organizationId).toBe('org-1');
     expect(res.body.canal).toBe('playground');
+  });
+});
+
+/* ── 5. O canal site usa o carregador do próprio chat do site ─────────── */
+
+describe('POST /api/admin/ai-xray — o canal site não reimplementa a escolha do prompt', () => {
+  it('carrega o prompt por webChatService.loadOrgSystemPrompt, não por agent.findFirst', async () => {
+    // Org nova de propósito: loadOrgSystemPrompt guarda o prompt em memória
+    // por 5 minutos, então uma org já usada em outro teste não bateria no SQL.
+    orgFindUnique.mockResolvedValue({ id: 'org-site-1', name: 'Cantina', settings: SETTINGS_DA_ORG });
+
+    const res = await chamar({ ...corpoValido, organizationId: 'org-site-1', canal: 'site' });
+
+    expect(res.statusCode).toBe(200);
+    expect(queryRawUnsafe).toHaveBeenCalled();
+    expect(String(queryRawUnsafe.mock.calls[0][0])).toContain('FROM agents');
+    expect(queryRawUnsafe.mock.calls[0][1]).toBe('org-site-1');
+    // A rota não pode ter cópia da regra: quem escolhe o agente é o serviço.
+    expect(agentFindFirst).not.toHaveBeenCalled();
+    expect(res.body.turnos[0].prompt_chars).toBeGreaterThan(100);
+  });
+
+  it('422 sem_prompt quando a organização não tem agente comercial ativo', async () => {
+    orgFindUnique.mockResolvedValue({ id: 'org-sem-agente', name: 'Sem agente', settings: SETTINGS_DA_ORG });
+    queryRawUnsafe.mockResolvedValue([]);
+
+    const res = await chamar({ ...corpoValido, organizationId: 'org-sem-agente', canal: 'site' });
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body.error).toBe('sem_prompt');
+    expect(res.body.message).toContain('agente comercial ativo');
+  });
+
+  it('o 422 é só do canal site; o de Qualidade segue montando com o prompt vazio', async () => {
+    orgFindUnique.mockResolvedValue({ id: 'org-sem-agente-2', name: 'Sem agente', settings: SETTINGS_DA_ORG });
+    queryRawUnsafe.mockResolvedValue([]);
+    agentFindFirst.mockResolvedValue(null);
+
+    const res = await chamar({ ...corpoValido, organizationId: 'org-sem-agente-2', canal: 'qualidade' });
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('falha inesperada de banco continua dando 500, não 422', async () => {
+    orgFindUnique.mockRejectedValue(new Error('banco fora do ar'));
+
+    const res = await chamar({ ...corpoValido, canal: 'site' });
+
+    expect(res.statusCode).toBe(500);
   });
 });
 

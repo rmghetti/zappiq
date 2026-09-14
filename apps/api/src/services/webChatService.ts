@@ -81,7 +81,18 @@ export const MAX_OUTPUT_TOKENS = 1024;
 const systemPromptCache = new Map<string, { prompt: string; cachedAt: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-async function loadOrgSystemPrompt(organizationId: string): Promise<string> {
+/**
+ * Prompt do agente que o CHAT DO SITE usa, com o cache de 5 minutos.
+ *
+ * Exportada porque o Raio-X do prompt (/admin/ai-xray) precisa mostrar o
+ * prompt DESTE canal sem chamar o modelo, e uma segunda implementação da
+ * escolha do agente mentiria no dia em que a regra daqui mudasse.
+ *
+ * Lança quando a organização não tem agente comercial vivo com prompt: é o
+ * mesmo erro que o visitante do site provocaria, e quem chama decide o que
+ * fazer com ele.
+ */
+export async function loadOrgSystemPrompt(organizationId: string): Promise<string> {
   const now = Date.now();
   const cached = systemPromptCache.get(organizationId);
   if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
