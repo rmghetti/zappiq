@@ -13,3 +13,8 @@ export * from './schedulingEntitlement.js';
 export * from './miraEntitlement.js';
 export * from './regiaoUf.js';
 export * from './metaRateCard.js';
+
+// Catálogo do questionário de qualificação. Veio do apps/web em 14/09/2026
+// para a API poder ler o TEXTO de cada pergunta (achado A023).
+export * from './surveyTypes.js';
+export * from './surveySegmentQuestions.js';
