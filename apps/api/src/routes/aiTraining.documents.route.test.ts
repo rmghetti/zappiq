@@ -32,8 +32,20 @@ vi.mock('@zappiq/database', () => ({
       findMany: vi.fn().mockResolvedValue([]),
       // Título repetido na mesma org é 409. Nenhum documento repetido aqui.
       count: vi.fn().mockResolvedValue(0),
-      create: vi.fn(),
+      create: vi.fn(async () => ({
+        id: 'doc-novo',
+        title: 'novo',
+        sourceType: 'url',
+        sourceUrl: 'https://site.exemplo.com.br/manual',
+        status: 'processando',
+        createdAt: new Date('2026-09-14'),
+      })),
       delete: vi.fn(),
+    },
+    // A rota de URL passa por ensureKnowledgeBase antes de ingerir.
+    knowledgeBase: {
+      findFirst: vi.fn(async () => ({ id: 'kb-1' })),
+      create: vi.fn(async () => ({ id: 'kb-1' })),
     },
     organization: { findUnique: vi.fn() },
     $queryRaw: vi.fn().mockResolvedValue([]),
@@ -42,6 +54,7 @@ vi.mock('@zappiq/database', () => ({
 
 const ingestDocument = vi.fn().mockResolvedValue(undefined);
 const deleteDocument = vi.fn().mockResolvedValue(undefined);
+const ingestUrl = vi.fn().mockResolvedValue(undefined);
 // O módulo real entra por baixo: a rota usa dele o `falhaDeIngestao`, que
 // traduz o erro da ingestão no status e na frase que o cliente lê. Só as
 // funções que saem do processo são substituídas.
@@ -51,7 +64,7 @@ vi.mock('../services/ragService.js', async () => {
     ...real,
     ingestDocument: (...a: any[]) => ingestDocument(...a),
     deleteDocument: (...a: any[]) => deleteDocument(...a),
-    ingestUrl: vi.fn(),
+    ingestUrl: (...a: any[]) => ingestUrl(...a),
     search: vi.fn(),
     searchWithSources: vi.fn(),
   };
@@ -111,6 +124,8 @@ beforeEach(() => {
   update.mockReset();
   ingestDocument.mockClear();
   deleteDocument.mockClear();
+  ingestUrl.mockReset();
+  ingestUrl.mockResolvedValue(undefined);
 });
 
 const TEXT_DOC = {
@@ -344,5 +359,45 @@ describe('POST /api/ai-training/documents, recusas de upload', () => {
     // mandava o cliente procurar um problema que não existia.
     expect(body.error).toBe('Arquivo maior que 1 MB. Divida o arquivo ou envie um menor.');
     expect(ingestDocument).not.toHaveBeenCalled();
+  });
+});
+
+// ── POST /documents/url ─────────────────────────────────────────────────────
+describe('POST /api/ai-training/documents/url (P4 da revisão do PR #369)', () => {
+  const postUrl = (url: string) =>
+    fetch(`${base}/api/ai-training/documents/url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+
+  it('endereço interno responde 422 com a frase em português', async () => {
+    // Aqui a ingestão de VERDADE entra: o portão de destino (urlSegura.ts)
+    // recusa o endereço interno sem tocar em DNS nem em rede, o ingestUrl
+    // traduz para a frase que o cliente lê, e a rota responde com ela. Se
+    // qualquer elo dessa corrente cair, o cliente volta a ver 500 ou "tente de
+    // novo em alguns minutos" para um endereço que nunca vai funcionar.
+    const real = await vi.importActual<any>('../services/ragService.js');
+    ingestUrl.mockImplementation((...a: any[]) => real.ingestUrl(...a));
+    // A rota marca o documento como falho antes de responder.
+    update.mockResolvedValue({ id: 'doc-novo', status: 'falhou' });
+
+    const res = await postUrl('http://10.0.0.7/segredo');
+    const body = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(body.error).toBe(real.MENSAGEM_URL_NAO_PUBLICA);
+  });
+
+  it('URL pública segue criando o documento', async () => {
+    ingestUrl.mockResolvedValue(undefined);
+    update.mockResolvedValue({ id: 'doc-novo', status: 'pronto' });
+    const res = await postUrl('https://site.exemplo.com.br/manual');
+    expect(res.status).toBe(201);
+    expect(ingestUrl).toHaveBeenCalledWith(
+      ORG,
+      'https://site.exemplo.com.br/manual',
+      expect.any(Object),
+    );
   });
 });
