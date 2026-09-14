@@ -22,7 +22,7 @@ tiktoken==0.8.0             # token counting (chunk sizing por tokens, nao chars
 # Persistencia pgvector
 asyncpg==0.29.0
 pgvector==0.3.3
-sqlalchemy[asyncio]==2.0.35
+sqlalchemy[asyncio]==2.0.52
 
 # Embeddings: o que roda em producao e OpenAI text-embedding-3-small com 1536
 # dimensoes (ver docs/architecture/embeddings.md e services/rag/fly.toml).
