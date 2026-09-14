@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createHash } from 'crypto';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 // PR #V4-005.1: migrado de import direto de Redis para abstração cloud-agnostic.
@@ -79,7 +80,10 @@ export function buildQueryRequest(
       top_k: topK,
       // Sem esse piso o serviço devolve os top_k SEMPRE, mesmo com similaridade
       // irrelevante — chunk aleatório de crawl entrava no prompt em toda resposta.
-      min_similarity: Number(env.RAG_MIN_SIMILARITY ?? 0.25),
+      // O 0,25 original não filtrava nada: medido nos vetores REAIS de produção
+      // (A022), conteúdo de outra empresa tinha mediana 0,375 e só 3,7% ficava
+      // abaixo de 0,25. O default vive em config/env.ts e é ajustável por env.
+      min_similarity: Number(env.RAG_MIN_SIMILARITY ?? 0.30),
     },
   };
 }
@@ -133,71 +137,216 @@ export function parseQuerySources(data: unknown, maxSnippet = 160): RagSource[] 
   return [...bySource.values()].sort((a, b) => b.similarity - a.similarity);
 }
 
+// ── Cache da busca ───────────────────────────────────────────────────────────
+//
+// A chave antiga era `rag:<ns>:base64(mensagem).slice(0,40)`, ou seja, os 30
+// PRIMEIROS BYTES da mensagem (A025). "Quanto custa o tratamento de canal?" e
+// "Quanto custa o tratamento de clareamento?" recebiam o mesmo contexto por
+// 120 s, para qualquer contato da organização. A chave também não levava o
+// top_k (Modo Econômico usa 3, turno normal usa 5) e nada a invalidava: um Q&A
+// desativado continuava saindo por até 2 minutos (A010) e o playground, que
+// buscava sem cache, divergia do WhatsApp (A033).
+//
+// Agora: sha256 da mensagem INTEIRA normalizada + top_k + corte + versão da
+// configuração da organização. A versão é um contador no Redis incrementado
+// por qualquer escrita de treino. Sem Redis a versão é 0 e o cache continua
+// valendo só por mensagem, que é o comportamento degradado aceitável.
+
+const CACHE_TTL_SECONDS = 120;
+
+/** Normaliza a mensagem antes do hash: caixa, espaço e forma unicode. */
+export function normalizeQuery(query: string): string {
+  return (query ?? '').normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** Contador de versão da configuração de treino da organização. */
+export function configVersionKey(organizationId: string): string {
+  return `zappiq:rag:version:${namespaceFor(organizationId)}`;
+}
+
+export async function readConfigVersion(organizationId: string): Promise<number> {
+  const raw = await cache.get(configVersionKey(organizationId));
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 /**
- * Igual a `search`, mas devolve o contexto textual JUNTO com as fontes
- * estruturadas. Usado pelo playground "Testar minha IA" (/ai-training) para
- * mostrar ao dono do negócio QUAIS documentos foram usados. Não usa cache
- * (queremos sempre o retrieval fresco no teste) e é fail-soft: em erro devolve
- * contexto vazio e lista de fontes vazia.
+ * Sobe a versão da organização. Chamada por QUALQUER escrita de treino
+ * (upload, texto, URL, Q&A criar/editar/desativar/apagar, questionário
+ * reingerido, identidade, agendamento). Na prática, por toda ingestão e todo
+ * delete deste módulo. Fail-soft: sem Redis devolve 0 e a busca segue.
  */
-export async function searchWithSources(
-  organizationId: string,
-  query: string,
-  topK = 5,
-): Promise<{ context: string; sources: RagSource[] }> {
+export async function bumpConfigVersion(organizationId: string): Promise<number> {
+  const next = await cache.incrby(configVersionKey(organizationId), 1);
+  return typeof next === 'number' && Number.isFinite(next) ? next : 0;
+}
+
+export function buildCacheKey(input: {
+  organizationId: string;
+  query: string;
+  topK: number;
+  minSimilarity: number;
+  configVersion: number;
+}): string {
+  const material = [
+    normalizeQuery(input.query),
+    String(input.topK),
+    String(input.minSimilarity),
+    String(input.configVersion),
+  ].join('\n');
+  const digest = createHash('sha256').update(material, 'utf8').digest('base64url');
+  return `rag:${namespaceFor(input.organizationId)}:${digest}`;
+}
+
+// ── Resultado da busca ───────────────────────────────────────────────────────
+
+/**
+ * A028: 'nada acima do corte' e 'o serviço caiu' geravam a MESMA string vazia,
+ * e o agente recebia a mesma frase nos dois casos. Sem essa distinção a IA
+ * afirma "não há essa informação" quando o que houve foi uma queda.
+ */
+export type RagSearchStatus = 'ok' | 'sem_resultado' | 'servico_fora';
+
+export interface RagSearchOutcome {
+  context: string;
+  sources: RagSource[];
+  status: RagSearchStatus;
+  fromCache: boolean;
+}
+
+interface CachedOutcome {
+  context: string;
+  sources: RagSource[];
+  status: 'ok' | 'sem_resultado';
+}
+
+function parseCached(raw: string): CachedOutcome | null {
   try {
-    const { path, body } = buildQueryRequest(organizationId, query, topK);
-    const { data } = await ragClient.post(path, body);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.context !== 'string') return null;
     return {
-      context: parseQueryContext(data),
-      sources: parseQuerySources(data),
+      context: parsed.context,
+      sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+      status: parsed.status === 'sem_resultado' ? 'sem_resultado' : 'ok',
     };
-  } catch (err: any) {
-    logger.warn('[RAG] searchWithSources failed:', err.message);
-    return { context: '', sources: [] };
+  } catch {
+    return null;
   }
 }
 
-export async function search(organizationId: string, query: string, topK = 5): Promise<string> {
-  const namespace = namespaceFor(organizationId);
-  const cacheKey = `rag:${namespace}:${Buffer.from(query).toString('base64').slice(0, 40)}`;
+/**
+ * Busca com cache versionado, fontes estruturadas e status explícito.
+ * É o caminho ÚNICO: produção (WhatsApp/Instagram/site) e playground usam esta
+ * função, então não voltam a divergir depois de uma edição (A033).
+ */
+export async function searchDetailed(
+  organizationId: string,
+  query: string,
+  topK = 5,
+): Promise<RagSearchOutcome> {
+  const minSimilarity = Number(env.RAG_MIN_SIMILARITY ?? 0.30);
+  const configVersion = await readConfigVersion(organizationId);
+  const cacheKey = buildCacheKey({
+    organizationId,
+    query,
+    topK,
+    minSimilarity,
+    configVersion,
+  });
 
-  // cache.get() é fail-soft por contrato (retorna null em erro, não throw),
-  // então não precisamos do try/catch defensivo do código antigo.
+  // cache.get() é fail-soft por contrato (retorna null em erro, não throw).
   const cached = await cache.get(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    const parsed = parseCached(cached);
+    if (parsed) return { ...parsed, fromCache: true };
+  }
 
   try {
     const { path, body } = buildQueryRequest(organizationId, query, topK);
     const { data } = await ragClient.post(path, body);
 
     const context = parseQueryContext(data);
+    const sources = parseQuerySources(data);
+    const status: 'ok' | 'sem_resultado' = sources.length > 0 ? 'ok' : 'sem_resultado';
 
-    // cache.set() é fail-soft (retorna false em erro, não throw). TTL em segundos.
-    await cache.set(cacheKey, context, 120);
+    // Resultado vazio TAMBÉM é cacheado (A032): antes, toda saudação repetia a
+    // busca paga porque só o resultado cheio entrava no cache.
+    await cache.set(cacheKey, JSON.stringify({ context, sources, status }), CACHE_TTL_SECONDS);
 
-    return context;
+    // debug, não info: é uma linha por turno de TODA conversa de TODA org.
+    logger.debug('[RAG] busca concluída', {
+      organizationId,
+      status,
+      topK,
+      configVersion,
+      trechos: sources.length,
+    });
+
+    return { context, sources, status, fromCache: false };
   } catch (err: any) {
     // error, não warn: a IA vai responder SEM nada do treinamento do cliente.
-    logger.error('[RAG] Query failed — respondendo sem contexto treinado:', err.message);
-    return '';
+    // E o status NÃO é cacheado: a próxima mensagem tenta o serviço de novo.
+    logger.error('[RAG] serviço fora, respondendo sem contexto treinado', {
+      organizationId,
+      status: 'servico_fora',
+      erro: err?.message,
+    });
+    return { context: '', sources: [], status: 'servico_fora', fromCache: false };
   }
+}
+
+/**
+ * Contexto + fontes estruturadas para o playground "Testar minha IA".
+ * Mantido para não quebrar os chamadores; hoje é um atalho de searchDetailed.
+ */
+export async function searchWithSources(
+  organizationId: string,
+  query: string,
+  topK = 5,
+): Promise<{ context: string; sources: RagSource[] }> {
+  const { context, sources } = await searchDetailed(organizationId, query, topK);
+  return { context, sources };
+}
+
+/** Contrato antigo (só o texto). Prefira searchDetailed, que traz o status. */
+export async function search(organizationId: string, query: string, topK = 5): Promise<string> {
+  const { context } = await searchDetailed(organizationId, query, topK);
+  return context;
 }
 
 // ── Ingestão ─────────────────────────────────────────────────────────────────
 
 /**
+ * Metadata de ingestão que o serviço grava em rag_chunks.metadata e o re-rank
+ * lê de volta. `priority` e `category` vêm do Q&A (A009: a prioridade 0 a 10
+ * era só ordenação de tela e não pesava nada na busca).
+ */
+export interface IngestOptions {
+  metadata?: Record<string, unknown>;
+  /** Não fatiar: o conteúdo vira UM trecho só (Q&A, A011). */
+  singleChunk?: boolean;
+}
+
+/**
  * Builder puro do form de ingestão. Isolado para teste sem tocar axios.
- * Rota real: POST /ingest. Campos reais: file, namespace, source?, metadata?.
- * O campo `tenant_id` do código antigo NÃO existe no serviço e causava 422.
+ * Rota real: POST /ingest. Campos reais: file, namespace, source?, metadata?,
+ * single_chunk?. O campo `tenant_id` do código antigo NÃO existe no serviço e
+ * causava 422.
  */
 export function buildIngestForm(
   organizationId: string,
   file: { filename: string; content: Buffer; mimeType: string },
+  options: IngestOptions = {},
 ): { path: string; form: FormData } {
   const form = new FormData();
   form.append('namespace', namespaceFor(organizationId));
   form.append('source', file.filename);
+  if (options.metadata && Object.keys(options.metadata).length > 0) {
+    form.append('metadata', JSON.stringify(options.metadata));
+  }
+  if (options.singleChunk) {
+    form.append('single_chunk', 'true');
+  }
   // `Buffer` is no longer assignable to `BlobPart` under newer @types/node
   // (SharedArrayBuffer / ArrayBuffer divergence). Wrap in Uint8Array, which is.
   form.append('file', new Blob([new Uint8Array(file.content)], { type: file.mimeType }), file.filename);
@@ -207,8 +356,9 @@ export function buildIngestForm(
 export async function ingestDocument(
   organizationId: string,
   file: { filename: string; content: Buffer; mimeType: string },
+  options: IngestOptions = {},
 ) {
-  const { path, form } = buildIngestForm(organizationId, file);
+  const { path, form } = buildIngestForm(organizationId, file, options);
   // IMPORTANTE: NAO usar o ragClient (axios) aqui — a instancia forca
   // Content-Type: application/json em toda request, o que quebra o multipart
   // do /ingest (o servico Python recebe o form com header errado -> 422).
@@ -222,6 +372,10 @@ export async function ingestDocument(
     const detail = await res.text().catch(() => '');
     throw new Error(`RAG ingest ${res.status}: ${detail.slice(0, 200)}`);
   }
+  // Toda escrita de treino sobe a versão da organização: o cache da busca
+  // passa a errar de propósito e o conteúdo novo vale na mensagem seguinte,
+  // não em até 120 s (A010, A033).
+  await bumpConfigVersion(organizationId);
   return res.json();
 }
 
@@ -337,6 +491,9 @@ export async function deleteDocument(organizationId: string, source: string) {
   const { data } = await ragClient.delete(
     `/ingest/${encodeURIComponent(namespace)}/${encodeURIComponent(source)}`,
   );
+  // Desativar ou apagar também é escrita de treino: sobe a versão para o
+  // conteúdo removido sair da busca na hora (A010).
+  await bumpConfigVersion(organizationId);
   return data;
 }
 

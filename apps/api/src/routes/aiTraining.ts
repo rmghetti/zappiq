@@ -165,7 +165,13 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     const orgSettings = (org?.settings as any) || {};
 
     // 1. Retrieval RAG real (namespace da org) + fontes estruturadas pra UI.
-    const { context: ragContext, sources } = await ragService.searchWithSources(orgId, message, 5);
+    // Mesma função da produção: com a versão da organização na chave, o
+    // playground e o WhatsApp param de divergir depois de uma edição (A033).
+    const {
+      context: ragContext,
+      sources,
+      status: ragStatus,
+    } = await ragService.searchDetailed(orgId, message, 5);
 
     // 2. System prompt idêntico ao de produção. contactId sintético → sem DB write.
     const systemPrompt = await buildSystemPromptForContact({
@@ -173,6 +179,7 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
       contactId: `playground:${orgId}`,
       orgSettings,
       ragContext,
+      ragStatus,
     });
 
     // 3. Mesmo roteamento de tier/provider do bot real.
@@ -547,6 +554,34 @@ router.get('/qa', async (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
+/**
+ * Opções de ingestão de um par de Q&A.
+ *
+ * A009: a prioridade (0 a 10) só ordenava a lista na tela. O trecho ia para o
+ * vetor sem ela, e o re-rank aplicava o mesmo fator a todo source qa-*. Agora
+ * prioridade e categoria viajam na metadata e viram bônus proporcional (com
+ * teto) no ranking do serviço.
+ *
+ * A011: a resposta pode ter 4.000 caracteres e o chunk é de 512 tokens. Um Q&A
+ * longo virava 2 ou 3 trechos e só o primeiro carregava "Pergunta:"; os demais
+ * eram pedaços soltos que não casavam com a pergunta do cliente. `singleChunk`
+ * manda o serviço não fatiar.
+ */
+export function qaIngestOptions(pair: {
+  priority?: number | null;
+  category?: string | null;
+}): { metadata: Record<string, unknown>; singleChunk: true } {
+  const priority = Number.isFinite(Number(pair?.priority)) ? Number(pair.priority) : 0;
+  return {
+    metadata: {
+      kind: 'qa',
+      priority: Math.max(0, Math.min(10, priority)),
+      category: pair?.category ?? null,
+    },
+    singleChunk: true,
+  };
+}
+
 const qaSchema = z.object({
   question: z.string().min(3).max(500),
   answer: z.string().min(3).max(4000),
@@ -574,11 +609,15 @@ router.post('/qa', validate(qaSchema), async (req: Request, res: Response, next:
     // Propaga pro vector store como documento textual estruturado.
     const content = `Pergunta: ${question}\n\nResposta: ${answer}`;
     await ragService
-      .ingestDocument(orgId, {
-        filename: `qa-${pair.id}.txt`,
-        content: Buffer.from(content),
-        mimeType: 'text/plain',
-      })
+      .ingestDocument(
+        orgId,
+        {
+          filename: `qa-${pair.id}.txt`,
+          content: Buffer.from(content),
+          mimeType: 'text/plain',
+        },
+        qaIngestOptions(pair),
+      )
       .catch((err: any) => logger.warn(`[AITraining] RAG sync Q&A falhou: ${err.message}`));
 
     await logTraining(req, 'kb.qa.create', 'qa_pair', pair.id,
@@ -621,11 +660,15 @@ router.put('/qa/:id', validate(qaSchema.partial()), async (req: Request, res: Re
     } else {
       const content = `Pergunta: ${pair.question}\n\nResposta: ${pair.answer}`;
       await ragService
-        .ingestDocument(orgId, {
-          filename: `qa-${pair.id}.txt`,
-          content: Buffer.from(content),
-          mimeType: 'text/plain',
-        })
+        .ingestDocument(
+          orgId,
+          {
+            filename: `qa-${pair.id}.txt`,
+            content: Buffer.from(content),
+            mimeType: 'text/plain',
+          },
+          qaIngestOptions(pair),
+        )
         .catch((err: any) => logger.warn(`[AITraining] RAG re-sync Q&A (update) falhou: ${err.message}`));
     }
 

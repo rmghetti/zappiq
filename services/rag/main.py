@@ -18,6 +18,7 @@ Decisoes chave:
 """
 
 import asyncio
+import dataclasses
 import hashlib
 import hmac
 import json
@@ -28,6 +29,7 @@ from typing import Literal
 
 import asyncpg
 import fitz  # PyMuPDF
+import retrieval
 import tiktoken
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -338,6 +340,13 @@ def _extract_text(content_type: str | None, filename: str, data: bytes) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _token_len(text: str) -> int:
+    """Tamanho em tokens. Sem tokenizer carregado, assume 4 chars por token."""
+    if state.tokenizer:
+        return len(state.tokenizer.encode(text))
+    return len(text) // 4
+
+
 def _chunk_text(
     text: str, chunk_tokens: int = CHUNK_TOKENS, overlap: int = CHUNK_OVERLAP
 ) -> list[str]:
@@ -526,15 +535,41 @@ async def _upsert_chunks(
     return len(rows)
 
 
+def _parse_metadata(raw) -> dict:
+    """metadata volta como dict (jsonb) ou str dependendo do driver/versao."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+    return {}
+
+
 async def _knn_search(
     namespace: str, query_vector: list[float], top_k: int, min_similarity: float
 ) -> list[QueryResult]:
     """
     Busca KNN com cosine distance (vector_cosine_ops no HNSW).
-    similarity = 1 - distance. Filtro min_similarity descarta resultados fracos.
+    similarity = 1 - distance.
+
+    O corte, o re-rank, a deduplicacao e o teto por fonte moram em
+    retrieval.py (logica pura, coberta por tests/test_recall.py). Aqui fica so
+    a ida ao banco e a conversao de linha para candidato.
     """
     if not state.pool:
         raise HTTPException(status_code=503, detail="DB pool nao inicializado")
+
+    corte = retrieval.resolve_min_similarity(
+        requested=min_similarity, floor=retrieval.min_similarity_floor()
+    )
+    # O corte decidido aqui entra NA config que vai ao rerank. Antes ele so
+    # valia num pre-filtro e o rerank re-aplicava o cfg.min_similarity lido do
+    # env do proprio servico: o piso efetivo virava o maior dos dois e baixar o
+    # corte por env na API (o rollback previsto) nao surtia efeito.
+    config = dataclasses.replace(retrieval.config_from_env(), min_similarity=corte)
 
     async with state.pool.acquire() as conn:
         rows = await conn.fetch(
@@ -543,6 +578,8 @@ async def _knn_search(
                    text,
                    source,
                    chunk_idx,
+                   chunk_hash,
+                   metadata,
                    1 - (embedding <=> $2) AS similarity
               FROM rag_chunks
              WHERE namespace = $1
@@ -557,30 +594,31 @@ async def _knn_search(
             min(top_k * 4, 60),
         )
 
-    results = [
-        QueryResult(
+    candidatos = [
+        retrieval.Candidate(
             id=row["id"],
             text=row["text"],
             source=row["source"],
             chunk_idx=row["chunk_idx"],
             similarity=float(row["similarity"]),
+            chunk_hash=row["chunk_hash"] if "chunk_hash" in row else None,
+            metadata=_parse_metadata(row["metadata"] if "metadata" in row else None),
         )
         for row in rows
-        if float(row["similarity"]) >= min_similarity
     ]
 
-    # Re-rank: Q&A e survey de qualificação são conteúdo curado pelo dono do
-    # negócio — pesam mais que chunks de crawl/documentos genéricos empatados.
-    def _rank(r: QueryResult) -> float:
-        src = r.source or ""
-        if src.startswith("qa-"):
-            return r.similarity * 1.20
-        if src.startswith("onboarding-survey"):
-            return r.similarity * 1.15
-        return r.similarity
+    escolhidos = retrieval.rerank(candidatos, top_k=top_k, config=config)
 
-    results.sort(key=_rank, reverse=True)
-    return results[:top_k]
+    return [
+        QueryResult(
+            id=c.id,
+            text=c.text,
+            source=c.source,
+            chunk_idx=c.chunk_idx,
+            similarity=c.similarity,
+        )
+        for c in escolhidos
+    ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -679,15 +717,17 @@ async def ingest(
     namespace: str = Form(...),
     source: str | None = Form(None),
     metadata: str | None = Form(None),  # JSON string
+    single_chunk: bool = Form(False),
 ):
     """
     Ingestao: upload -> extract -> chunk -> embed -> upsert.
 
     Form fields:
-      file       — PDF, TXT ou MD (max 20MB)
-      namespace  — 'org_<uuid>' (isola multi-tenant)
-      source     — identificador do doc (default: filename)
-      metadata   — JSON extra (ex: {"uploader":"user_123","category":"faq"})
+      file         = PDF, TXT ou MD (max 20MB)
+      namespace    = 'org_<uuid>' (isola multi-tenant)
+      source       = identificador do doc (default: filename)
+      metadata     = JSON extra (ex: {"uploader":"user_123","category":"faq"})
+      single_chunk = nao fatiar: o conteudo vira UM trecho so (Q&A, A011)
     """
     import time
 
@@ -727,8 +767,16 @@ async def ingest(
     if not text.strip():
         raise HTTPException(status_code=422, detail="Arquivo sem texto extraivel")
 
-    # Chunk
-    chunks = _chunk_text(text)
+    # Chunk. Q&A nao pode ser fatiado: so o primeiro pedaco carrega
+    # 'Pergunta: ...' e os seguintes viram resposta solta que nao casa com a
+    # pergunta do cliente (A011). Acima do teto de tokens volta a fatiar, para
+    # nunca estourar o contexto do embedding.
+    if retrieval.wants_single_chunk(source_id, single_chunk) and (
+        _token_len(text) <= retrieval.SINGLE_CHUNK_MAX_TOKENS
+    ):
+        chunks = [text]
+    else:
+        chunks = _chunk_text(text)
     if not chunks:
         raise HTTPException(
             status_code=422, detail="Nenhum chunk gerado apos tokenizacao"
