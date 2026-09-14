@@ -87,19 +87,21 @@ export interface ResultadoDaReparacao {
   falhas: string[];
 }
 
-/** Liga um signup à organização. Idempotente: reexecutar não duplica nada. */
+/**
+ * Liga um signup à organização. Idempotente: reexecutar não duplica nada.
+ *
+ * `$executeRaw` tagueado: os dois valores entram como parâmetro de verdade,
+ * pelo próprio template, e não há caminho por onde uma string vire SQL.
+ */
 async function ligarPadrao(l: LigacaoPlanejada): Promise<number> {
-  return prisma.$executeRawUnsafe(
-    `UPDATE signups
-        SET organization_id = $1,
-            onboarding_path = COALESCE(onboarding_path, 'wizard'),
-            status = 'active',
-            updated_at = now()
-      WHERE id = $2
-        AND organization_id IS NULL`,
-    l.organizationId,
-    l.signupId,
-  );
+  return prisma.$executeRaw`
+    UPDATE signups
+       SET organization_id = ${l.organizationId},
+           onboarding_path = COALESCE(onboarding_path, 'wizard'),
+           status = 'active',
+           updated_at = now()
+     WHERE id = ${l.signupId}::uuid
+       AND organization_id IS NULL`;
 }
 
 export async function executarReparacao(
@@ -136,16 +138,15 @@ export async function executarReparacao(
   return resultado;
 }
 
-/** Lê os órfãos do banco. Usado só pelo script. */
+/** Lê os órfãos do banco. Usado só pelo script. `$queryRaw` tagueado. */
 export async function carregarOrfaos(): Promise<OrfaoParaReparo[]> {
-  return (await prisma.$queryRawUnsafe(
-    `SELECT id, email, plan_chosen
-       FROM signups
-      WHERE organization_id IS NULL
-        AND confirmed_at IS NOT NULL
-      ORDER BY confirmed_at ASC
-      LIMIT 500`,
-  )) as OrfaoParaReparo[];
+  return (await prisma.$queryRaw`
+    SELECT id, email, plan_chosen
+      FROM signups
+     WHERE organization_id IS NULL
+       AND confirmed_at IS NOT NULL
+     ORDER BY confirmed_at ASC
+     LIMIT 500`) as OrfaoParaReparo[];
 }
 
 /** Lê os usuários com organização para casar por e-mail. Usado só pelo script. */

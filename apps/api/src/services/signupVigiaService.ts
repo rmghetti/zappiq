@@ -94,16 +94,22 @@ export interface DependenciasDoVigia {
   alertarNoSlack?: (texto: string) => Promise<boolean>;
 }
 
-/** Lê os cadastros que ainda não viraram organização. SQL cru de propósito. */
+/**
+ * Lê os cadastros que ainda não viraram organização. SQL cru de propósito:
+ * `signups` vive fora do Prisma (é escrita pelo apps/web via Supabase).
+ *
+ * `$queryRaw` tagueado, não `$queryRawUnsafe`: a consulta não tem variável
+ * nenhuma, mas a forma insegura não deve virar hábito da casa. Quem copiar
+ * esta função amanhã, para uma consulta com filtro, copia a forma certa.
+ */
 async function buscarSignupsPadrao(): Promise<LinhaDeSignup[]> {
-  return (await prisma.$queryRawUnsafe(
-    `SELECT id, status, plan_chosen, organization_id, confirmed_at, utm_source
-       FROM signups
-      WHERE organization_id IS NULL
-        AND confirmed_at IS NOT NULL
-      ORDER BY confirmed_at ASC
-      LIMIT 500`,
-  )) as LinhaDeSignup[];
+  return (await prisma.$queryRaw`
+    SELECT id, status, plan_chosen, organization_id, confirmed_at, utm_source
+      FROM signups
+     WHERE organization_id IS NULL
+       AND confirmed_at IS NOT NULL
+     ORDER BY confirmed_at ASC
+     LIMIT 500`) as LinhaDeSignup[];
 }
 
 /**
