@@ -21,6 +21,7 @@
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { logger } from '../utils/logger.js';
+import { publishPrompt, type PromptVersionDb } from './promptVersionService.js';
 
 /**
  * Troca o nome do agente na linha de IDENTIDADE do prompt, preservando o resto.
@@ -46,12 +47,15 @@ export function renameAgentInPrompt(
   return systemPrompt.replace(regex, `$1${nomeNovo.trim()}$2`);
 }
 
-interface IdentitySyncDb {
+/**
+ * Precisa do `agent.findFirst` daqui e dos colaboradores do publishPrompt:
+ * o prompt renomeado tem de entrar no histórico com a origem 'identity_sync'.
+ */
+type IdentitySyncDb = PromptVersionDb & {
   agent: {
     findFirst: (args: any) => Promise<any>;
-    update: (args: any) => Promise<any>;
   };
-}
+};
 
 /**
  * Propaga o nome novo do agente para o Agent que roda em produção.
@@ -77,13 +81,21 @@ export async function syncAgentIdentity(
 
     const promptNovo = renameAgentInPrompt(agent.systemPrompt || '', agent.name, novo);
 
-    await db.agent.update({
-      where: { id: agent.id },
-      data: {
-        name: novo,
-        ...(promptNovo ? { systemPrompt: promptNovo } : {}),
-      },
-    });
+    await db.agent.update({ where: { id: agent.id }, data: { name: novo } });
+
+    // O prompt vai por publishPrompt: a renomeação vira versão com origem
+    // 'identity_sync', em vez de aparecer no histórico como 'fora_do_app'.
+    if (promptNovo) {
+      await publishPrompt(
+        {
+          agentId: agent.id,
+          systemPrompt: promptNovo,
+          source: 'identity_sync',
+          actor: `identidade:${novo}`,
+        },
+        db,
+      );
+    }
 
     logger.info('[agentIdentitySync] identidade do agente sincronizada com o que o cliente editou', {
       organizationId,

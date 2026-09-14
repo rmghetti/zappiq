@@ -24,6 +24,7 @@
 import { prisma } from '@zappiq/database';
 import { getSystemPrompt } from '../agents/promptEngine.js';
 import { logger } from '../utils/logger.js';
+import { setPromptContext, type PromptVersionTx } from './promptVersionService.js';
 
 /**
  * Role da persona padrão semeada por org. O orchestrator busca por
@@ -42,6 +43,13 @@ export interface AgentProvisioningDb {
     findFirst: (args: any) => Promise<{ id: string } | null>;
     create: (args: any) => Promise<{ id: string }>;
   };
+  /**
+   * Opcionais porque o `db` injetado pode ser um banco falso de teste ou um
+   * tx já aberto. Quando existem, o create declara a origem 'seed' antes de
+   * gravar, para a versão 1 do agente novo não nascer como 'fora_do_app'.
+   */
+  $executeRaw?: (query: TemplateStringsArray, ...values: any[]) => Promise<number>;
+  $transaction?: (fn: (tx: any) => Promise<any>) => Promise<any>;
 }
 
 export interface EnsureAgentInput {
@@ -114,19 +122,30 @@ export async function ensureLiveAgentForOrg(
   const agentName = s.agentName || 'Assistente';
   const systemPrompt = buildSeedSystemPrompt(s);
 
-  const created = await db.agent.create({
-    data: {
-      organizationId,
-      name: agentName,
-      role,
-      status: 'live',
-      systemPrompt,
-      toneConfig: {},
-      scopeConfig: {},
-      abilities: {},
-    },
-    select: { id: true },
-  });
+  // O gatilho agents_versiona_prompt versiona o INSERT também. A origem
+  // precisa estar declarada NA MESMA transação do create, senão a versão 1
+  // do agente novo nasce marcada como 'fora_do_app'.
+  const criar = async (tx: AgentProvisioningDb) => {
+    if (typeof tx.$executeRaw === 'function') {
+      await setPromptContext(tx as unknown as PromptVersionTx, { source: 'seed' });
+    }
+    return tx.agent.create({
+      data: {
+        organizationId,
+        name: agentName,
+        role,
+        status: 'live',
+        systemPrompt,
+        toneConfig: {},
+        scopeConfig: {},
+        abilities: {},
+      },
+      select: { id: true },
+    });
+  };
+
+  const created: { id: string } =
+    typeof db.$transaction === 'function' ? await db.$transaction(criar) : await criar(db);
 
   return { created: true, agentId: created.id, role };
 }

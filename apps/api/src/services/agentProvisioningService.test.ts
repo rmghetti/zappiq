@@ -87,6 +87,56 @@ describe('ensureLiveAgentForOrg', () => {
     expect(r.role).toBe('suporte');
     expect(db.rows[0].role).toBe('suporte');
   });
+
+  // ── Origem da versão: o prompt semeado não pode virar 'fora_do_app' ──
+  // O gatilho agents_versiona_prompt versiona o INSERT também. Sem declarar
+  // a origem antes do create, a versão 1 do agente novo nasceria sem dono.
+  it('declara a origem "seed" antes do create, na mesma transação', async () => {
+    const db: any = makeFakeDb();
+    const ordem: string[] = [];
+    const raw: string[] = [];
+    db.$executeRaw = vi.fn(async (strings: TemplateStringsArray, ...values: any[]) => {
+      ordem.push('set_config');
+      raw.push(`${strings.join('?')} :: ${values.join('|')}`);
+      return 1;
+    });
+    const createOriginal = db.agent.create;
+    db.agent.create = vi.fn(async (args: any) => {
+      ordem.push('create');
+      return createOriginal(args);
+    });
+
+    await ensureLiveAgentForOrg(db, { organizationId: 'org-nova', settings: { agentName: 'Bia' } });
+
+    expect(ordem).toEqual(['set_config', 'set_config', 'set_config', 'create']);
+    expect(raw[0]).toContain('zappiq.prompt_source');
+    expect(raw[0]).toContain('seed');
+  });
+
+  it('abre transação quando o db tem $transaction', async () => {
+    const base: any = makeFakeDb();
+    const tx: any = {
+      ...base,
+      $executeRaw: vi.fn(async () => 1),
+    };
+    const db: any = {
+      ...tx,
+      $transaction: vi.fn(async (fn: any) => fn(tx)),
+    };
+
+    await ensureLiveAgentForOrg(db, { organizationId: 'org-nova', settings: { agentName: 'Bia' } });
+
+    expect(db.$transaction).toHaveBeenCalledOnce();
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(3);
+    expect(base.rows).toHaveLength(1);
+  });
+
+  it('db sem $executeRaw (fora de transação) ainda cria o agente', async () => {
+    const db = makeFakeDb();
+    const r = await ensureLiveAgentForOrg(db, { organizationId: 'org-nova', settings: { agentName: 'Bia' } });
+    expect(r.created).toBe(true);
+    expect(db.rows).toHaveLength(1);
+  });
 });
 
 describe('buildSeedSystemPrompt', () => {

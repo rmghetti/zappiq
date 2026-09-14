@@ -63,14 +63,26 @@ describe('renameAgentInPrompt', () => {
 
 describe('syncAgentIdentity', () => {
   let db: any;
+  let raw: string[];
   beforeEach(() => {
+    raw = [];
     db = {
+      // Colaboradores do publishPrompt: o prompt novo passa por lá, para a
+      // troca de nome entrar no histórico com a origem certa.
+      $executeRaw: vi.fn(async (strings: TemplateStringsArray, ...values: any[]) => {
+        raw.push(`${strings.join('?')} :: ${values.join('|')}`);
+        return 1;
+      }),
+      agentPromptVersion: {
+        findFirst: vi.fn().mockResolvedValue({ version: 7, hash: 'abc' }),
+      },
       agent: {
         findFirst: vi.fn().mockResolvedValue({
           id: 'ag1',
           name: 'Vera',
           systemPrompt: PROMPT_VERA,
         }),
+        findUnique: vi.fn().mockResolvedValue({ systemPrompt: PROMPT_VERA }),
         update: vi.fn().mockResolvedValue({}),
       },
     };
@@ -83,9 +95,17 @@ describe('syncAgentIdentity', () => {
     expect(out.nomeAntigo).toBe('Vera');
     expect(out.promptAtualizado).toBe(true);
 
-    const data = db.agent.update.mock.calls[0][0].data;
-    expect(data.name).toBe('Sofia');
-    expect(data.systemPrompt).toContain('Você é Sofia');
+    // 1a escrita: só o nome do agente.
+    const primeira = db.agent.update.mock.calls[0][0].data;
+    expect(primeira.name).toBe('Sofia');
+    expect(primeira.systemPrompt).toBeUndefined();
+
+    // 2a escrita: o prompt, pelo publishPrompt, com a origem declarada.
+    const segunda = db.agent.update.mock.calls[1][0].data;
+    expect(segunda.systemPrompt).toContain('Você é Sofia');
+    expect(raw.some((s) => s.includes('zappiq.prompt_source') && s.includes('identity_sync'))).toBe(
+      true,
+    );
   });
 
   it('não faz update quando o nome não mudou', async () => {
@@ -117,8 +137,10 @@ describe('syncAgentIdentity', () => {
     expect(out.promptAtualizado).toBe(false);
     const data = db.agent.update.mock.calls[0][0].data;
     expect(data.name).toBe('Sofia');
-    // Não destrói o prompt customizado.
+    // Não destrói o prompt customizado: nem grava, nem versiona.
     expect(data.systemPrompt).toBeUndefined();
+    expect(db.agent.update).toHaveBeenCalledOnce();
+    expect(db.$executeRaw).not.toHaveBeenCalled();
   });
 
   it('erro no banco não derruba o save do cliente', async () => {

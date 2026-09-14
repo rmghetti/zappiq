@@ -31,7 +31,16 @@ const promptCom = (quem: string) =>
 /** db falso: guarda as linhas em memória e registra todo update. */
 function makeFakeDb(rows: any[]) {
   const updates: { id: string; systemPrompt: string }[] = [];
+  /** Contexto que o publishPrompt manda ao Postgres antes de gravar. */
+  const raw: string[] = [];
   const db: RemediacaoDb = {
+    $executeRaw: async (strings: TemplateStringsArray, ...values: any[]) => {
+      raw.push(`${strings.join('?')} :: ${values.join('|')}`);
+      return 1;
+    },
+    agentPromptVersion: {
+      findFirst: async () => ({ version: 2, hash: 'hash-falso' }),
+    },
     agent: {
       findMany: async () => rows,
       update: async ({ where, data }: any) => {
@@ -43,7 +52,7 @@ function makeFakeDb(rows: any[]) {
       findUnique: async ({ where }: any) => rows.find((r) => r.id === where.id) ?? null,
     },
   };
-  return { db, updates, rows };
+  return { db, updates, rows, raw };
 }
 
 const linhas = () => [
@@ -116,6 +125,25 @@ describe('aplicarRemediacao', () => {
     expect(iza.systemPrompt).toContain('https://zappiq.com.br/cadastro');
   });
 
+  it('grava pelo publishPrompt, declarando a origem "remediacao"', async () => {
+    const { db, raw } = makeFakeDb(linhas());
+    await aplicarRemediacao(db, (await auditarPrompts(db)).afetados);
+
+    expect(raw.some((s) => s.includes('zappiq.prompt_source') && s.includes('remediacao'))).toBe(
+      true,
+    );
+  });
+
+  it('recusa não declara origem nenhuma (não chega a escrever)', async () => {
+    const { db, raw } = makeFakeDb(linhas());
+    const itens = (await auditarPrompts(db)).afetados;
+    itens[0].promptDepois = 'sobrou https://zappiq.com.br/cadastro aqui';
+
+    await aplicarRemediacao(db, itens);
+
+    expect(raw).toEqual([]);
+  });
+
   it('depois de aplicar, o prompt do cliente não tem mais link nosso', async () => {
     const { db, rows } = makeFakeDb(linhas());
     await aplicarRemediacao(db, (await auditarPrompts(db)).afetados);
@@ -171,5 +199,18 @@ describe('reverterRemediacao', () => {
 
     expect(n).toBe(1);
     expect(rows.find((x) => x.id === 'a-cmj').systemPrompt).toEqual(original);
+  });
+
+  it('o revert também passa pelo publishPrompt com origem "remediacao"', async () => {
+    const { db, raw } = makeFakeDb(linhas());
+    const itens = (await auditarPrompts(db)).afetados;
+    await aplicarRemediacao(db, itens);
+    raw.length = 0;
+
+    await reverterRemediacao(db, itens);
+
+    expect(raw.some((s) => s.includes('zappiq.prompt_source') && s.includes('remediacao'))).toBe(
+      true,
+    );
   });
 });

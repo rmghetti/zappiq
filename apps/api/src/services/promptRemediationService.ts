@@ -12,18 +12,23 @@
 
 import { removerBlocoUrlsZappIQ } from '../agents/promptUrlRemediation.js';
 import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
+import { publishPrompt, type PromptVersionDb } from './promptVersionService.js';
 
 /** Org canônica da ZappIQ (onde a Iza roda). Lá o nosso link é legítimo. */
 export const IZA_ORG_ID = 'cmo1ywwfe00ko1jskexiexsm4';
 
-/** Subconjunto do PrismaClient que este service usa. */
-export interface RemediacaoDb {
+/**
+ * Subconjunto do PrismaClient que este service usa. Inclui os colaboradores
+ * do publishPrompt: a gravação passa por lá para a origem 'remediacao'
+ * chegar ao histórico de agent_prompt_versions.
+ */
+export type RemediacaoDb = PromptVersionDb & {
   agent: {
     findMany: (args: any) => Promise<any[]>;
     update: (args: any) => Promise<any>;
     findUnique: (args: any) => Promise<any>;
   };
-}
+};
 
 export interface PromptSnapshot {
   agentId: string;
@@ -113,7 +118,15 @@ export async function aplicarRemediacao(
       continue;
     }
 
-    await db.agent.update({ where: { id: it.agentId }, data: { systemPrompt: it.promptDepois } });
+    await publishPrompt(
+      {
+        agentId: it.agentId,
+        systemPrompt: it.promptDepois,
+        source: 'remediacao',
+        actor: 'remediacao:links',
+      },
+      db,
+    );
     corrigidos++;
   }
 
@@ -146,7 +159,15 @@ export async function reverterRemediacao(
 ): Promise<number> {
   let n = 0;
   for (const it of itens) {
-    await db.agent.update({ where: { id: it.agentId }, data: { systemPrompt: it.promptAntes } });
+    await publishPrompt(
+      {
+        agentId: it.agentId,
+        systemPrompt: it.promptAntes,
+        source: 'remediacao',
+        actor: 'remediacao:revert',
+      },
+      db,
+    );
     n++;
   }
   return n;
