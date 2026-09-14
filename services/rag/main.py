@@ -24,6 +24,7 @@ import hmac
 import json
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from typing import Literal
 
@@ -609,6 +610,36 @@ async def health():
     return {"status": "ok", "service": "zappiq-rag", "version": "0.2.0"}
 
 
+_TIPO_VECTOR = re.compile(r"vector\((\d+)\)")
+
+
+async def _dimensao_da_coluna_embedding() -> tuple[int | None, str | None]:
+    """
+    Le a dimensao declarada em rag_chunks.embedding pelo catalogo do Postgres.
+    Devolve (dimensao, erro): so um dos dois vem preenchido.
+    """
+    if not state.pool:
+        return None, "pool nao inicializado"
+    try:
+        async with state.pool.acquire() as conn:
+            tipo = await conn.fetchval(
+                """
+                SELECT format_type(atttypid, atttypmod)
+                  FROM pg_attribute
+                 WHERE attrelid = 'rag_chunks'::regclass
+                   AND attname = 'embedding'
+                   AND NOT attisdropped
+                """
+            )
+    except Exception as exc:
+        return None, str(exc)
+
+    casou = _TIPO_VECTOR.search(str(tipo or ""))
+    if not casou:
+        return None, f"tipo inesperado na coluna embedding: {tipo}"
+    return int(casou.group(1)), None
+
+
 @app.get("/ready", tags=["health"])
 async def ready():
     """Readiness: Postgres responde SELECT 1 e temos API key de embedding."""
@@ -634,8 +665,26 @@ async def ready():
         "ok": has_key,
         "provider": EMBEDDING_PROVIDER,
         "model": EMBEDDING_MODEL,
+        "embedding_dim": EMBEDDING_DIM,
     }
     if not has_key:
+        ok = False
+
+    # Dimensao configurada contra dimensao da coluna (achado A018). Producao
+    # embeda em 1536 e a coluna e vector(1536), mas o fly.toml do repositorio
+    # fixa 1024: um deploy que fizesse valer o arquivo quebraria toda ingestao
+    # e toda busca, em silencio. Aqui o servico se recusa a ficar pronto.
+    coluna_dim, coluna_erro = await _dimensao_da_coluna_embedding()
+    checks["embedding"]["coluna_dim"] = coluna_dim
+    if coluna_erro:
+        # Catalogo ilegivel nao e prova de divergencia: informa e segue.
+        checks["embedding"]["coluna_erro"] = coluna_erro
+    elif coluna_dim is not None and coluna_dim != EMBEDDING_DIM:
+        checks["embedding"]["ok"] = False
+        checks["embedding"]["erro"] = (
+            f"EMBEDDING_DIM={EMBEDDING_DIM} diverge de rag_chunks.embedding "
+            f"vector({coluna_dim})"
+        )
         ok = False
 
     return {
