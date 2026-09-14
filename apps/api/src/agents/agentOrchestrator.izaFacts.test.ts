@@ -46,6 +46,13 @@ vi.mock('../services/izaFactsService.js', () => ({
   invalidateIzaFactsCache: vi.fn(),
 }));
 
+// C3: o bloco de regras aprovadas é lido por agentRulesService, que consulta
+// o interruptor por organização. Sem este mock, um teste de unidade abriria
+// conexão com o Redis. Vazio = comportamento de hoje.
+vi.mock('../services/agentRulesService.js', () => ({
+  blocoDeRegrasDaOrganizacao: vi.fn().mockResolvedValue(''),
+}));
+
 // logger silencioso pra não poluir output
 vi.mock('../utils/logger.js', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },

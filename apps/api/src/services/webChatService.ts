@@ -50,6 +50,8 @@ import { getIo } from '../utils/socketRegistry.js';
 // bloco e da mesma saudação do WhatsApp e não pode carregar o orquestrador
 // inteiro (fila, socket, WhatsApp) só para isso.
 import { buildLiveProfileBlock, buildGreetingBlock } from '../agents/tenantLiveProfile.js';
+// C3: correção aprovada pelo dono é registro (agent_rules), montado em bloco.
+import { blocoDeRegrasDaOrganizacao } from './agentRulesService.js';
 import { isFlagOn } from './featureFlags.js';
 // A088: a MESMA limpeza do WhatsApp, do playground e do avaliador. Antes eram
 // cópias locais aqui, com um aviso de "alinhar caso o original mude" que
@@ -208,6 +210,18 @@ export function buildWebChatSystemPrompt(input: {
    */
   perfilVivoBlock?: string;
   saudacaoBlock?: string;
+  /**
+   * C3: as correções que o dono aprovou, montadas em bloco a partir de
+   * agent_rules. Vazio sem o interruptor `regrasComoRegistros`.
+   *
+   * Entra AQUI e não no handler pelo mesmo motivo dos outros: a montagem é
+   * uma só, então o Raio-X mostra o mesmo texto que o visitante recebe.
+   *
+   * De quebra, resolve o A089 para este caminho: o prompt gravado tem cache
+   * de 5 minutos por processo, mas as regras são lidas a cada turno, então a
+   * correção aprovada vale na mensagem seguinte.
+   */
+  regrasBlock?: string;
 }): string {
   const { orgPrompt, factsBlock, isIzaCanonical } = input;
   const canalInstrucoes = isIzaCanonical
@@ -220,6 +234,7 @@ export function buildWebChatSystemPrompt(input: {
     // Depois do prompt gravado, pelo mesmo motivo do WhatsApp: o dado vivo
     // vence o tom e o horário congelados no cadastro.
     input.perfilVivoBlock || '',
+    input.regrasBlock || '',
     input.saudacaoBlock || '',
     '# CANAL DE COMUNICAÇÃO',
     canalInstrucoes,
@@ -576,11 +591,17 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     });
   }
 
+  // C3: regras aprovadas pelo dono. Lidas a cada turno (sem o cache de 5
+  // minutos do prompt), então a correção aprovada vale já na mensagem
+  // seguinte no chat do site. Fail-soft: o serviço já devolve '' em erro.
+  const regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId);
+
   const systemPrompt = buildWebChatSystemPrompt({
     orgPrompt,
     factsBlock,
     isIzaCanonical,
     perfilVivoBlock,
+    regrasBlock,
     saudacaoBlock,
   });
 

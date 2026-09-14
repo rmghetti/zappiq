@@ -34,6 +34,7 @@ import {
   resolveSchedulingRuntime,
 } from '../agents/agentOrchestrator.js';
 import { buildLiveProfileBlock, buildGreetingBlock } from '../agents/tenantLiveProfile.js';
+import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
 import { isFlagOn } from '../services/featureFlags.js';
 import {
   buildWebChatSystemPrompt,
@@ -159,11 +160,17 @@ async function montarPrompt(input: {
       saudacaoBlock = buildGreetingBlock(historico.length === 0, settings.greetingMessage);
     }
 
+    // C3: as regras aprovadas pelo dono. Mesmo caminho do visitante, então
+    // quem liga o interruptor e vem conferir aqui vê o bloco que o chat do
+    // site está recebendo, e não o prompt de antes.
+    const regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId);
+
     return buildWebChatSystemPrompt({
       orgPrompt,
       factsBlock: ehIza ? await getIzaFactsBlock() : '',
       isIzaCanonical: ehIza,
       perfilVivoBlock,
+      regrasBlock,
       saudacaoBlock,
     });
   }

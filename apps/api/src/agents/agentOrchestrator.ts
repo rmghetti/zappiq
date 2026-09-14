@@ -37,6 +37,9 @@ import { llmRouter, type LLMTier, type LLMProviderId, type LLMMessage as RouterL
 import { transcribeAudio } from '../services/llm/audioTranscription.js';
 import { getSystemPrompt } from './promptEngine.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
+// C3: correção aprovada pelo dono é REGISTRO (agent_rules), montado em bloco
+// a cada turno, atrás do interruptor `regrasComoRegistros`.
+import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
 import {
   extractProductionReplyText,
   stripStructuredTags,
@@ -1830,6 +1833,19 @@ export async function buildSystemPromptForContact(input: {
       })
     : '';
 
+  // C3 (A079, A081): as correções que o dono aprovou moram em agent_rules e
+  // entram aqui como bloco montado, uma regra por cenário. Antes cada
+  // aprovação colava um "# PATCH MANUAL" no fim do texto gravado, escolhido
+  // por heurística, e o prompt só crescia. Vazio sem o interruptor
+  // `regrasComoRegistros`, e vazio em qualquer erro: regra que não conseguimos
+  // ler não pode segurar a resposta ao cliente final.
+  let regrasBlock = '';
+  try {
+    regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId);
+  } catch (err) {
+    logger.warn('[Agent] bloco de regras indisponível neste turno (segue sem ele)', { err });
+  }
+
   // 2. Tentar carregar Agent live correspondente
   try {
     const agent = await prisma.agent.findFirst({
@@ -1851,6 +1867,9 @@ export async function buildSystemPromptForContact(input: {
         // Perfil vivo depois do prompt gravado: o que o cliente acabou de
         // salvar precisa vencer o tom e o horário congelados no cadastro.
         perfilVivoBlock,
+        // As regras aprovadas pelo dono, pelo mesmo motivo: o que ele
+        // aprovou esta semana vence o texto do dia do cadastro.
+        regrasBlock,
         // Depois do systemPrompt de propósito: se um prompt antigo tiver link
         // congelado do seed, o bloco fresco vem por último e é o que vale.
         linksBlock,
@@ -1887,7 +1906,16 @@ export async function buildSystemPromptForContact(input: {
   });
   // O bloco vivo também entra no fallback (re-revisão do PR #368): sem ele,
   // uma organização sem Agent semeado ficaria sem 'Agora', transbordo e agendamento.
-  return [CORE_AGENT_RULES_V1, factsBlock, fallback, perfilVivoBlock, '', clienteBlock, saudacaoBlock]
+  return [
+    CORE_AGENT_RULES_V1,
+    factsBlock,
+    fallback,
+    perfilVivoBlock,
+    regrasBlock,
+    '',
+    clienteBlock,
+    saudacaoBlock,
+  ]
     .filter(Boolean)
     .join('\n');
 }

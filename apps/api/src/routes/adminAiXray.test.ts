@@ -45,6 +45,8 @@ const messageCount = vi.fn().mockResolvedValue(0);
 const appointmentTypeFindMany = vi.fn().mockResolvedValue([]);
 // O chat do site carrega o prompt por SQL cru (webChatService.loadOrgSystemPrompt).
 const queryRawUnsafe = vi.fn();
+// C3: as regras aprovadas pelo dono, lidas por agentRulesService.
+const agentRuleFindMany = vi.fn().mockResolvedValue([]);
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -54,6 +56,7 @@ vi.mock('@zappiq/database', () => ({
     contact: { findUnique: (...a: any[]) => contactFindUnique(...a) },
     message: { count: (...a: any[]) => messageCount(...a) },
     appointmentType: { findMany: (...a: any[]) => appointmentTypeFindMany(...a) },
+    agentRule: { findMany: (...a: any[]) => agentRuleFindMany(...a) },
     $queryRawUnsafe: (...a: any[]) => queryRawUnsafe(...a),
   },
 }));
@@ -169,6 +172,7 @@ beforeEach(() => {
   agentFindFirst.mockResolvedValue({ id: 'a1', name: 'Antonella', systemPrompt: PROMPT_DO_AGENTE });
   qaFindMany.mockResolvedValue([{ id: 'q1', question: 'Vocês atendem aos sábados?' }]);
   queryRawUnsafe.mockResolvedValue([{ system_prompt: PROMPT_DO_AGENTE }]);
+  agentRuleFindMany.mockResolvedValue([]);
   searchWithSources.mockResolvedValue({
     context: 'Trecho da base: o rodízio custa R$ 89.',
     sources: [{ source: 'cardapio.pdf', similarity: 0.61, snippet: 'rodízio R$ 89' }],
@@ -469,6 +473,42 @@ describe('POST /api/admin/ai-xray: o bloco vivo com o interruptor ligado', () =>
  * dizer se o histórico está no contexto. Os dois mudam o texto que a IA
  * recebe, então o Raio-X mostrava um prompt que a produção não monta.
  */
+
+describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
+  const REGRA = {
+    id: 'regra-1',
+    organizationId: 'org-1',
+    agentId: 'a1',
+    scenarioId: 'cr5_nome_disponivel_usar',
+    texto: 'Chame o cliente pelo nome quando souber.',
+    origem: 'sugestao_ia',
+    status: 'ativa',
+    createdAt: new Date('2026-09-14T10:00:00Z'),
+  };
+
+  it('com o interruptor DESLIGADO, nenhum canal mostra o bloco de regras', async () => {
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+    for (const canal of ['whatsapp', 'site']) {
+      const res = await chamar({ ...corpoValido, canal });
+      expect(promptDoTurno(res), canal).not.toContain('# Regras aprovadas pelo dono');
+    }
+    // Desligado nem consulta o banco: é a mesma conta de hoje por turno.
+    expect(agentRuleFindMany).not.toHaveBeenCalled();
+  });
+
+  it('com o interruptor LIGADO, o bloco aparece no WhatsApp E no site', async () => {
+    isFlagOn.mockResolvedValue(true);
+    agentRuleFindMany.mockResolvedValue([REGRA]);
+
+    for (const canal of ['whatsapp', 'site']) {
+      const res = await chamar({ ...corpoValido, canal });
+      const prompt = promptDoTurno(res);
+      expect(res.statusCode, canal).toBe(200);
+      expect(prompt, canal).toContain('# Regras aprovadas pelo dono');
+      expect(prompt, canal).toContain('1. Chame o cliente pelo nome quando souber.');
+    }
+  });
+});
 
 describe('POST /api/admin/ai-xray: agendamento e histórico no WhatsApp', () => {
   it('resolve o agendamento e mostra a linha honesta quando não há tipo ativo', async () => {
