@@ -36,7 +36,7 @@ import { logger } from '../utils/logger.js';
 // Conexão ioredis da casa (a mesma do costGuard e do tenantUsage). A trava
 // global vive FORA do BullMQ de propósito: ver adquirirTravaGlobal.
 import redis from '../utils/redis.js';
-import { resolveEvalSet } from '../agents/agentEvalSet.js';
+import { resolveEvalSet, HARNESS_VERSION } from '../agents/agentEvalSet.js';
 import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
@@ -46,6 +46,10 @@ import {
   scenariosFailingTwice,
   shouldAlertQuality,
 } from './agentEvalCronService.js';
+// P61 — a regravação entra pela mesma fila e pela mesma trava global. Não por
+// ser cara (ela não chama LLM nenhuma), mas para não ler `results` de uma
+// execução que ainda está sendo gravada.
+import { regradeRun } from './evalRegradeService.js';
 
 export const AGENT_EVAL_QUEUE_NAME = 'agent-eval';
 
@@ -75,6 +79,24 @@ export const ERRO_TEMPO_LIMITE = 'tempo limite: execução em running há mais d
 
 /** Erro gravado quando o teto de 25 minutos estoura. A UI mostra ao cliente. */
 export const ERRO_TETO_EXECUCAO = 'tempo limite da execução (25 min)';
+
+/**
+ * A171 — portão dos 20%.
+ *
+ * O cenário que quebra já sai do denominador da nota. Faltava o outro lado: a
+ * execução em que a MAIORIA quebrou não é uma nota baixa, é uma execução que
+ * não aconteceu. Em 15/06 uma execução com 25 de 25 respostas vazias foi
+ * gravada com nota zero, alertou o Slack e virou correção aplicada no prompt
+ * da Iza, com o sugeridor inventando a causa a partir de resposta vazia.
+ *
+ * Acima de 20% de cenários sem resposta válida, a linha vira 'failed' com
+ * este motivo. Não há nota para gravar nem nota para alertar.
+ */
+export const ERRO_FALHA_TECNICA_DO_PROVEDOR =
+  'falha técnica do provedor: mais de 20% dos cenários sem resposta válida';
+
+/** Acima disto a execução não é avaliável. */
+export const TETO_DE_ERROS_TECNICOS = 0.2;
 
 /**
  * slackAlertStatus de execução que terminou em FALHA: não houve resultado
@@ -176,6 +198,35 @@ export async function enqueueEvalRun(runId: string): Promise<void> {
 }
 
 /**
+ * Enfileira uma REGRAVAÇÃO (P61) de uma lista de execuções já gravadas.
+ *
+ * Devolve o id do job, que é o que a rota admin usa para o fundador
+ * acompanhar. Lista vazia é recusada: job sem trabalho só polui a fila.
+ */
+export async function enqueueRegrade(input: {
+  runIds: string[];
+  dryRun: boolean;
+  jobId?: string;
+}): Promise<string> {
+  if (!Array.isArray(input.runIds) || input.runIds.length === 0) {
+    throw new Error('nenhuma execução elegível para regravar');
+  }
+  const jobId = input.jobId ?? `regrade-${Date.now()}`;
+  await getAgentEvalQueue().add(
+    'regrade',
+    { tipo: 'regrade', runIds: input.runIds, dryRun: input.dryRun },
+    { jobId, removeOnComplete: true },
+  );
+  logger.info({
+    msg: 'agent_eval_regrade_enfileirada',
+    jobId,
+    execucoes: input.runIds.length,
+    dryRun: input.dryRun,
+  });
+  return jobId;
+}
+
+/**
  * Reconstrói os cenários da execução a partir do filtro gravado na linha.
  *
  * O filtro é o mesmo objeto que as rotas e o cron gravam em scenarioFilter.
@@ -213,6 +264,8 @@ interface SaidaDaExecucao {
     partial: number;
     failed: number;
     criticalFailed: number;
+    /** A171 — cenários que não puderam ser avaliados, fora do denominador. */
+    erros: number;
     scorePercent: number;
   };
 }
@@ -226,26 +279,69 @@ interface SaidaDaExecucao {
  * 'completed' por cima da falha que o cliente já viu na tela. O mesmo filtro
  * protege a linha que a varredura horária encerrou.
  */
-async function gravarConclusao(runId: string, saida: SaidaDaExecucao): Promise<boolean> {
+/**
+ * O que a gravação da conclusão decidiu:
+ *   'gravou'        — virou nota, o alerta segue o caminho normal;
+ *   'falha_tecnica' — o portão dos 20% fechou: linha 'failed', sem alerta;
+ *   'ignorada'      — a linha já tinha saído de 'running'.
+ */
+type ResultadoDaGravacao = 'gravou' | 'falha_tecnica' | 'ignorada';
+
+/** A171 — a execução foi avaliável, ou o provedor derrubou a maior parte? */
+export function passouDoTetoDeErros(erros: number, totalScenarios: number): boolean {
+  if (!Number.isFinite(totalScenarios) || totalScenarios <= 0) return false;
+  return erros / totalScenarios > TETO_DE_ERROS_TECNICOS;
+}
+
+async function gravarConclusao(
+  runId: string,
+  saida: SaidaDaExecucao,
+  totalScenarios: number,
+): Promise<ResultadoDaGravacao> {
+  const falhaTecnica = passouDoTetoDeErros(saida.summary.erros, totalScenarios);
   try {
     const { count } = await prisma.agentEvalRun.updateMany({
       where: { id: runId, status: 'running' },
-      data: {
-        status: 'completed',
-        ...saida.summary,
-        results: saida.results as any,
-        completedAt: new Date(),
-        durationMs: saida.durationMs,
-      },
+      data: falhaTecnica
+        ? {
+            // A171: sem nota nenhuma no lugar. Gravar scorePercent aqui seria
+            // exatamente o número que o portão existe para não publicar.
+            status: 'failed',
+            error: ERRO_FALHA_TECNICA_DO_PROVEDOR,
+            slackAlertStatus: ALERTA_NAO_ENVIADO,
+            harnessVersion: HARNESS_VERSION,
+            results: saida.results as any,
+            completedAt: new Date(),
+            durationMs: saida.durationMs,
+          }
+        : {
+            status: 'completed',
+            ...saida.summary,
+            // A régua com que esta execução foi medida. Sem isto, comparar a
+            // nota de agosto com a de setembro é comparar duas réguas sem saber.
+            harnessVersion: HARNESS_VERSION,
+            results: saida.results as any,
+            completedAt: new Date(),
+            durationMs: saida.durationMs,
+          },
     });
-    return count > 0;
+    if (count === 0) return 'ignorada';
+    if (falhaTecnica) {
+      logger.warn({
+        msg: 'agent_eval_run_falha_tecnica_do_provedor',
+        runId,
+        erros: saida.summary.erros,
+        totalScenarios,
+      });
+    }
+    return falhaTecnica ? 'falha_tecnica' : 'gravou';
   } catch (err: any) {
     logger.error({
       msg: 'agent_eval_run_conclusao_nao_gravada',
       runId,
       error: String(err?.message || err),
     });
-    return false;
+    return 'ignorada';
   }
 }
 
@@ -302,6 +398,7 @@ async function fecharCorridaComOTeto(
         partial: true,
         failed: true,
         criticalFailed: true,
+        erros: true,
         scorePercent: true,
         durationMs: true,
         totalScenarios: true,
@@ -325,6 +422,7 @@ async function fecharCorridaComOTeto(
       partial: linha.partial ?? 0,
       failed: linha.failed ?? 0,
       criticalFailed: linha.criticalFailed ?? 0,
+      erros: linha.erros ?? 0,
       scorePercent: linha.scorePercent ?? 0,
     },
     durationMs: linha.durationMs ?? 0,
@@ -391,15 +489,25 @@ export async function executeRunJob(runId: string): Promise<void> {
       scenarios,
       { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' },
       profile,
-    ).then(async (saida) => ({ saida, gravou: await gravarConclusao(runId, saida) }));
+    ).then(async (saida) => ({
+      saida,
+      gravacao: await gravarConclusao(runId, saida, scenarios.length),
+    }));
 
-    const { saida, gravou } = await comTetoDeExecucao(execucao, EVAL_RUN_TIMEOUT_MS);
+    const { saida, gravacao } = await comTetoDeExecucao(execucao, EVAL_RUN_TIMEOUT_MS);
 
-    if (!gravou) {
+    if (gravacao === 'ignorada') {
       // A linha saiu de 'running' enquanto o teste rodava (varredura horária,
       // por exemplo). O resultado é descartado de propósito: a tela do cliente
       // já mostrou outra coisa, e alertar agora seria alerta de execução morta.
       logger.warn({ msg: 'agent_eval_run_conclusao_ignorada', runId, agentId: agent.id });
+      return;
+    }
+
+    if (gravacao === 'falha_tecnica') {
+      // A171: não houve nota. Alertar aqui seria alertar um número medido em
+      // um punhado de cenários que sobraram. slackAlertStatus já foi gravado
+      // como 'not_sent' na própria conclusão.
       return;
     }
 
@@ -458,6 +566,7 @@ async function alertarSePreciso(input: {
     partial: number;
     failed: number;
     criticalFailed: number;
+    erros: number;
     scorePercent: number;
   };
   durationMs: number;
@@ -485,8 +594,15 @@ async function alertarSePreciso(input: {
   }
 
   try {
+    // A052 — a lista tem de bater com a CONTAGEM. criticalFailed conta o
+    // crítico 'fail' e também o crítico 'partial' (parcial vale zero na nota),
+    // mas a lista só mostrava 'fail': o alerta dizia "3 críticos reprovados" e
+    // listava um. Quem abre o Slack não tinha como saber quais eram os outros.
+    // Falha técnica ('erro') fica fora dos dois lados.
     const topFails = results
-      .filter((r) => r.combined === 'fail')
+      .filter(
+        (r) => r.combined === 'fail' || (r.severity === 'critical' && r.combined === 'partial'),
+      )
       .map((r) => ({
         scenarioId: r.scenarioId,
         category: r.category,
@@ -656,8 +772,18 @@ export async function liberarTravaGlobal(
   }
 }
 
+/** Dados que a fila `agent-eval` carrega. Dois tipos de trabalho. */
+export interface DadosDoJobDeEval {
+  /** Execução paga do teste (padrão quando `tipo` vem ausente). */
+  runId?: string;
+  /** 'regrade' = releitura sem LLM das execuções já gravadas (P61). */
+  tipo?: 'execucao' | 'regrade';
+  runIds?: string[];
+  dryRun?: boolean;
+}
+
 /** O mínimo do job que o processador toca. */
-type JobDeExecucao = Pick<Job<{ runId?: string }>, 'id' | 'data' | 'moveToDelayed'>;
+type JobDeExecucao = Pick<Job<DadosDoJobDeEval>, 'id' | 'data' | 'moveToDelayed'>;
 
 /**
  * Corpo do processador da fila `agent-eval`.
@@ -673,24 +799,79 @@ type JobDeExecucao = Pick<Job<{ runId?: string }>, 'id' | 'data' | 'moveToDelaye
 export async function processarExecucaoNaFila(
   job: JobDeExecucao,
   token?: string,
+  cliente: ClienteDeTrava = redis,
 ): Promise<void> {
-  const runId = job.data?.runId;
-  if (!runId) {
+  const ehRegravacao = job.data?.tipo === 'regrade';
+  // A trava é uma só, e o valor dela identifica quem a segurou: o id da
+  // execução, ou o id do job de regravação.
+  const donoDaTrava = ehRegravacao ? String(job.id ?? 'regrade') : job.data?.runId;
+
+  if (!donoDaTrava) {
     logger.warn({ msg: 'agent_eval_job_sem_runid', jobId: job.id });
     return;
   }
 
-  if (!(await adquirirTravaGlobal(runId))) {
-    logger.info({ msg: 'agent_eval_trava_ocupada_job_adiado', runId, jobId: job.id });
+  if (!(await adquirirTravaGlobal(donoDaTrava, cliente))) {
+    logger.info({
+      msg: 'agent_eval_trava_ocupada_job_adiado',
+      runId: donoDaTrava,
+      jobId: job.id,
+    });
     await job.moveToDelayed(Date.now() + ESPERA_TRAVA_OCUPADA_MS, token);
     throw new DelayedError();
   }
 
   try {
-    await executeRunJob(runId);
+    if (ehRegravacao) {
+      // Revisão do PR: a regravação segura a MESMA trava global do teste pago.
+      // Sem teto, um banco lento com 200 execuções na lista deixava todos os
+      // clientes sem conseguir rodar o teste de qualidade deles, por tempo
+      // indeterminado. O teto aborta e o `finally` devolve a trava.
+      try {
+        await comTetoDeExecucao(
+          processarRegravacao(job.data?.runIds ?? [], job.data?.dryRun === true),
+          EVAL_RUN_TIMEOUT_MS,
+        );
+      } catch (err: any) {
+        logger.error({
+          msg:
+            err instanceof EvalRunTimeoutError
+              ? 'agent_eval_regrade_teto_estourado'
+              : 'agent_eval_regrade_falhou',
+          jobId: job.id,
+          execucoes: job.data?.runIds?.length ?? 0,
+          error: String(err?.message || err),
+        });
+      }
+    } else {
+      await executeRunJob(donoDaTrava);
+    }
   } finally {
-    await liberarTravaGlobal(runId);
+    await liberarTravaGlobal(donoDaTrava, cliente);
   }
+}
+
+/**
+ * Relê as execuções da lista, uma a uma.
+ *
+ * Falha numa execução (results corrompido, por exemplo) não derruba as
+ * outras: o fundador clicou uma vez e espera o resumo do que deu para reler.
+ */
+async function processarRegravacao(runIds: string[], dryRun: boolean): Promise<void> {
+  let relidas = 0;
+  for (const runId of runIds) {
+    try {
+      await regradeRun(runId, { dryRun });
+      relidas++;
+    } catch (err: any) {
+      logger.warn({
+        msg: 'agent_eval_regrade_falhou',
+        runId,
+        error: String(err?.message || err),
+      });
+    }
+  }
+  logger.info({ msg: 'agent_eval_regrade_concluida', pedidas: runIds.length, relidas, dryRun });
 }
 
 // ─── Worker ────────────────────────────────────────────────────────

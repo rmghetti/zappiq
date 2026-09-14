@@ -40,7 +40,11 @@ describe('buildEvalSystemPrompt', () => {
   it('omite o nome falso nos cenários que testam justamente a falta de nome', () => {
     const prompt = buildEvalSystemPrompt(agente, { id: 'cr5_nome_ausente_saudacao' });
 
-    expect(prompt).toContain('Nome registrado: (não informado)');
+    // A052 (14/09/2026): a linha passou a ser a MESMA da produção, que diz o
+    // que fazer e não só o estado. O teste media um prompt que ninguém usa.
+    expect(prompt).toContain(
+      'Nome registrado: (ainda não capturado, peça no primeiro turno conforme REGRA 9)',
+    );
     expect(prompt).not.toContain('Nome registrado: Rod');
   });
 
@@ -54,7 +58,10 @@ describe('buildEvalSystemPrompt', () => {
     });
 
     expect(prompt).toContain('Mensagens trocadas até agora: 3');
-    expect(prompt).toContain('Primeiro contato? NÃO');
+    // A052: mesma frase da produção (agentOrchestrator), com a instrução.
+    expect(prompt).toContain(
+      'Primeiro contato? NÃO (já tem histórico, não pergunte nome de novo, use o que está acima)',
+    );
   });
 
   it('agente sem prompt customizado recebe só as regras base, com aviso', () => {

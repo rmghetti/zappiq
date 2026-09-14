@@ -15,6 +15,20 @@ import type {
   AgentEvalRunDetail,
   AgentEvalFixDecision,
 } from './adminApi';
+import type {
+  RegravacaoResumo,
+  EstadoResposta,
+} from '@/app/(dashboard)/treinar/qualidade/_lib/regravacao';
+
+/**
+ * P61 e P56: o detalhe da execução traz, além dela mesma, o resumo da nota
+ * RECALCULADA (quando existir) e o estado em linguagem de dono de negócio.
+ * A faixa numérica do ruído fica no admin, de propósito.
+ */
+export interface ClientRunDetail extends Omit<AgentEvalRunDetail, 'regravacao'> {
+  regravacao?: RegravacaoResumo | null;
+  estado?: EstadoResposta | null;
+}
 
 /**
  * Papéis que executam ação na Qualidade da IA.
@@ -90,8 +104,8 @@ class ClientAgentQualityApi {
   }
 
   /** GET /api/agent-quality/runs/:id?includeResults=true */
-  async getRunDetail(runId: string, includeResults: boolean = true): Promise<AgentEvalRunDetail> {
-    return api.get<AgentEvalRunDetail>(
+  async getRunDetail(runId: string, includeResults: boolean = true): Promise<ClientRunDetail> {
+    return api.get<ClientRunDetail>(
       `/api/agent-quality/runs/${encodeURIComponent(runId)}${includeResults ? '?includeResults=true' : ''}`,
     );
   }
@@ -143,8 +157,8 @@ class ClientAgentQualityApi {
   ): Promise<{
     ok: boolean;
     scenarioId: string;
-    combined: 'pass' | 'partial' | 'fail';
-    judge: { passed: boolean; reason: string };
+    combined: 'pass' | 'partial' | 'fail' | 'erro';
+    judge: { passed: boolean | null; reason: string };
     severity: string;
     response: string;
   }> {
@@ -197,7 +211,11 @@ export const QUALITY_LABELS: Record<QualityHealth, { label: string; color: strin
   good: { label: 'Bom', color: 'text-green-800', bg: 'bg-green-100 border-green-300' },
   attention: { label: 'Atenção', color: 'text-amber-900', bg: 'bg-amber-100 border-amber-300' },
   critical: { label: 'Crítico', color: 'text-red-900', bg: 'bg-red-100 border-red-300' },
-  unknown: { label: '—', color: 'text-neutral-600', bg: 'bg-neutral-100 border-neutral-300' },
+  unknown: {
+    label: 'Sem nota',
+    color: 'text-neutral-600',
+    bg: 'bg-neutral-100 border-neutral-300',
+  },
 };
 
 /**
@@ -205,8 +223,29 @@ export const QUALITY_LABELS: Record<QualityHealth, { label: string; color: strin
  * pro cliente. Mantém ID original como fallback quando não há mapeamento.
  */
 const SCENARIO_FRIENDLY: Record<string, string> = {
+  // ── Gabarito universal: os 17 cenários que rodam para todo cliente ──
+  // A151: metade da lista antiga era de um gabarito que não roda mais, e
+  // nenhum destes estava aqui. O cliente lia "cr7_no_invent_sla" na tela.
+  cr1_aceitacao_pos_oferta: 'Cliente disse que quer: o agente avança',
+  cr1_sim_sem_contexto: '"Sim" solto não é intenção de compra',
+  cr2_quero_humano_explicito: 'Pedido de falar com uma pessoa',
+  cr2_humano_por_favor: 'Pedido curto de falar com uma pessoa',
+  cr2_pergunta_operacional_nao_e_handoff: 'Pergunta simples respondida na hora certa',
+  cr3_no_como_posso_ajudar: 'Saudação sem fórmula de call center',
+  cr3_no_consultora_virtual: 'O agente se apresenta pelo próprio nome',
+  cr4_no_audio_brackets: 'Resposta a áudio sem colchetes na tela',
+  cr5_nome_disponivel_usar: 'Nome do cliente usado, e não perguntado de novo',
+  cr5_nome_ausente_perguntar: 'Nome perguntado uma vez no primeiro contato',
+  cr6_resposta_concisa: 'Resposta curta, do tamanho do WhatsApp',
+  cr7_no_invent_preco_desconto: 'Desconto não é inventado',
+  cr7_no_invent_sla: 'Prazo de resposta não é inventado',
+  cr7_preco_da_base_correto: 'Preço vem da tabela cadastrada',
+  cr8_no_pede_cpf: 'CPF não é pedido pelo WhatsApp',
+  cr8_no_pede_cartao: 'Dados de cartão não são pedidos',
+  cr9_nao_assume_marca_de_terceiro: 'O agente não se diz de outra empresa',
+
+  // ── Gabarito antigo: ainda aparece em execuções já gravadas ──
   cr3_anti_pattern: 'Uso de jargão proibido',
-  cr5_nome_disponivel_usar: 'Personalização com o nome do cliente',
   cr6_assinatura_proibida: 'Assinatura indevida ao final',
   handoff_objection: 'Encaminhamento em objeção comercial',
   handoff_complaint: 'Encaminhamento em reclamação grave',

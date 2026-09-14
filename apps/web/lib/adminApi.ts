@@ -360,7 +360,13 @@ export interface AgentEvalRunRow {
   partial: number | null;
   failed: number | null;
   criticalFailed: number | null;
+  /** A171 — cenários que não puderam ser avaliados (falha técnica), fora da nota. */
+  erros?: number | null;
   scorePercent: number | null;
+  /** Versão do arnês que mediu. 3 = régua de 14/09/2026. */
+  harnessVersion?: number | null;
+  /** P56 — piso de ruído do agente: quanto a nota oscila com prompt constante. */
+  ruido?: { desvio: number; n: number } | null;
   startedAt: string;
   completedAt: string | null;
   durationMs: number | null;
@@ -371,6 +377,42 @@ export interface AgentEvalRunRow {
 export interface AgentEvalRunsResponse {
   total: number;
   runs: AgentEvalRunRow[];
+  /** P56 — piso de ruído do agente consultado. Só vem com agentId no filtro. */
+  ruido?: { desvio: number; n: number } | null;
+}
+
+/** P61 — leitura de UM cenário pela régua nova, sobre a resposta já gravada. */
+export interface RegradeCenario {
+  scenarioId: string;
+  severity: string;
+  vereditoAntigo: 'pass' | 'partial' | 'fail' | 'erro';
+  vereditoNovo: 'pass' | 'partial' | 'fail' | 'erro' | 'fora_do_gabarito';
+  motivo: string;
+  culpaDoGabarito?: boolean;
+  discordante?: boolean;
+}
+
+/** P61 — resumo da nota recalculada de uma execução. */
+export interface RegradeResumo {
+  runId: string;
+  agentName?: string;
+  startedAt?: string;
+  harnessVersion?: number;
+  notaAntiga: number | null;
+  notaRegravada: number;
+  totalCenarios?: number;
+  reprovacoesDoGabarito: number;
+  continuamReprovados: string[];
+  discordantes?: number;
+  porCenario: RegradeCenario[];
+}
+
+export interface RegradePedidoResposta {
+  jobId: string;
+  execucoes: number;
+  dryRun: boolean;
+  runIds: string[];
+  message: string;
 }
 
 export interface AgentEvalRunDetailScenario {
@@ -381,9 +423,13 @@ export interface AgentEvalRunDetailScenario {
   /** FASE 2.2c (#246): mensagem enviada ao agente — contexto completo na UI. Opcional pra runs antigas. */
   userMessage?: string;
   response: string;
-  combined: 'pass' | 'partial' | 'fail';
+  /** A171 — 'erro' é falha TÉCNICA do teste: fica fora da nota e sem sugestão. */
+  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  /** Motivo legível da falha técnica, quando combined='erro'. */
+  falhaTecnica?: string;
   deterministic: { passed: boolean; failedPatterns: string[]; missingPatterns: string[] };
-  judge: { passed: boolean; confidence: number; reason: string };
+  /** A050 — passed null = avaliação indeterminada (não é reprovação). */
+  judge: { passed: boolean | null; confidence: number; reason: string };
   /** Nível 1 auto-suggest — gerado quando combined='fail'. */
   suggestedFix?: {
     summary: string;
@@ -412,6 +458,8 @@ export interface AgentEvalFixDecision {
 }
 
 export interface AgentEvalRunDetail extends AgentEvalRunRow {
+  /** P61 — resumo da nota recalculada desta execução, quando existir. */
+  regravacao?: RegradeResumo | null;
   hasResults: boolean;
   results?: AgentEvalRunDetailScenario[];
   agent?: { id: string; name: string; organizationId: string };
@@ -455,6 +503,28 @@ class AgentQualityApi {
   async getRunDetail(runId: string, includeResults: boolean = true): Promise<AgentEvalRunDetail> {
     return api.get<AgentEvalRunDetail>(
       `/api/admin/agent-eval/runs/${encodeURIComponent(runId)}${includeResults ? '?includeResults=true' : ''}`,
+    );
+  }
+
+  /**
+   * POST /api/admin/agent-eval/regrade — P61.
+   *
+   * Relê as execuções já gravadas com o gabarito atual. Não chama o agente
+   * nem o juiz: custo zero. `dryRun` é o padrão do servidor, e a tela sempre
+   * faz a prévia antes de gravar.
+   */
+  async pedirRegravacao(opts: {
+    organizationId?: string;
+    runIds?: string[];
+    dryRun: boolean;
+  }): Promise<RegradePedidoResposta> {
+    return api.post<RegradePedidoResposta>('/api/admin/agent-eval/regrade', opts);
+  }
+
+  /** GET /api/admin/agent-eval/regrade/:runId — resumo da nota recalculada. */
+  async getRegravacao(runId: string): Promise<RegradeResumo> {
+    return api.get<RegradeResumo>(
+      `/api/admin/agent-eval/regrade/${encodeURIComponent(runId)}`,
     );
   }
 

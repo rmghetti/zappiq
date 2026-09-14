@@ -1476,7 +1476,13 @@ model AgentEvalRun {
   partial          Int?
   failed           Int?
   criticalFailed   Int?      @map("critical_failed")
+  /// A171 — cenários que não puderam ser avaliados (provedor fora, tempo
+  /// limite, resposta vazia ou cortada). Ficam FORA do denominador da nota.
+  erros            Int?
   scorePercent     Int?      @map("score_percent")
+  /// Versão do ARNÊS que mediu (como se mede), separada de evalSetVersion
+  /// (de quem é o gabarito). 3 = régua de 14/09/2026.
+  harnessVersion   Int?      @map("harness_version")
   // Resultado completo (todos os ScenarioResult em JSON)
   results          Json?
   // Erro (se status=failed)
@@ -1492,10 +1498,47 @@ model AgentEvalRun {
   slackAlertSentAt DateTime? @map("slack_alert_sent_at")
 
   fixDecisions AgentEvalFixDecision[]
+  regrades     EvalRegrade[]
 
   @@index([agentId, startedAt])
   @@index([status])
   @@map("agent_eval_runs")
+}
+
+/// P61 — regravação da nota sobre respostas JÁ GRAVADAS.
+///
+/// As respostas de 3.712 cenários v2 estão em agent_eval_runs.results. Reler
+/// a nota sobre elas separa o erro do GABARITO do erro do AGENTE e dá o
+/// número antes e depois sem uma chamada paga. Uma linha por cenário relido.
+///
+/// Nunca reescreve a execução original: a nota recalculada é "recalculada",
+/// não é execução nova.
+model EvalRegrade {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId           String       @map("run_id")
+  run             AgentEvalRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  agentId         String       @map("agent_id")
+  scenarioId      String       @map("scenario_id")
+  /// 'critical' | 'high' | 'medium': a tela mostra os críticos primeiro
+  severity        String       @default("medium")
+  /// 'pass' | 'partial' | 'fail' | 'erro' — o que a execução gravou na época
+  vereditoAntigo  String       @map("veredito_antigo")
+  /// o mesmo vocabulário, relido pelo arnês desta linha
+  vereditoNovo    String       @map("veredito_novo")
+  /// em português: o que mudou e por quê
+  motivo          String
+  harnessVersion  Int          @map("harness_version")
+  /// true quando a regra nova e o veredito gravado do juiz DISCORDAM: é o
+  /// lote do modo opcional --com-juiz e o da calibração do fundador (P56).
+  discordante     Boolean      @default(false)
+  /// true quando a releitura usou o juiz (modo --com-juiz). Padrão: sem juiz.
+  comJuiz         Boolean      @default(false) @map("com_juiz")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([runId, scenarioId, harnessVersion])
+  @@index([runId])
+  @@index([agentId])
+  @@map("eval_regrades")
 }
 
 // FASE 2.2a (#243) — Audit log de decisões de aplicar/recusar sugestões IA.

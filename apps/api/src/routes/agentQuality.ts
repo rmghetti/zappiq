@@ -44,7 +44,11 @@ import {
 import { assertNoForeignBrand, ForeignBrandLeakError } from '../agents/tenantIsolationGuard.js';
 import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
 import { enqueueEvalRun, resolveScenariosForRun } from '../services/agentEvalQueue.js';
-import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
+import {
+  applyPatch,
+  DuplicatePatchError,
+  regraTerminaEmFraseCompleta,
+} from '../services/agentPromptPatcher.js';
 // A083: quem grava o prompt declara a origem da mudança e o histórico vira
 // versão no banco. Reverter passa a exigir que o prompt ainda seja o que a
 // correção deixou. Se mudou, apagaria tudo o que veio depois.
@@ -57,12 +61,33 @@ import {
 // FASE 2.2d (#252): on-demand suggestion pra cenários partial.
 // AGENT_EVAL_SET já importado mais acima (FASE 2.2b) — só adicionamos suggestFix.
 import { suggestFix } from '../services/agentEvalRunner.js';
+// P56 — a nota oscila sozinha. O cliente leigo recebe um ESTADO, não a faixa.
+import { carregarRuidoDoAgente, classificarMudanca } from '../services/evalRuidoService.js';
+// P61 — "Corrigimos o método de avaliação": o aviso da nota recalculada.
+import { resumirRegravacao } from '../services/evalRegradeService.js';
 
 const router = Router();
 router.use(authMiddleware as any);
 
 // ─── Cooldown: cliente roda no máximo 1 eval / 24h por agent ────────
 const RUN_COOLDOWN_HOURS = 24;
+
+/**
+ * A151 — o horário que o cliente lê é o do Brasil.
+ *
+ * `toLocaleString('pt-BR')` sem timeZone usa o fuso do PROCESSO, e o Fly roda
+ * em UTC: "Próximo disponível em 14/09/2026, 09:00" saía 3 h adiantado para
+ * quem está em Brasília. O orquestrador já monta o bloco "# Agora" com
+ * America/Sao_Paulo; esta é a mesma régua, na porta do cliente.
+ *
+ * Pura e exportada para o teste poder fixar a saída sem depender do fuso da
+ * máquina que roda o CI.
+ */
+export const FUSO_DO_CLIENTE = 'America/Sao_Paulo';
+
+export function formatarHorarioDeBrasilia(quando: Date): string {
+  return quando.toLocaleString('pt-BR', { timeZone: FUSO_DO_CLIENTE });
+}
 
 // ─── Filtro de cenários: um só, em services/agentEvalQueue.ts ───────
 // A cópia que vivia aqui fazia o RECORTE na rota, e a EXECUÇÃO reconstruía o
@@ -337,7 +362,7 @@ router.post('/run-async', requireRole('ADMIN', 'SUPERADMIN'), async (req: Reques
       res.status(429).json({
         error: 'cooldown',
         reason: 'aguardando_24h',
-        message: `Você já executou um teste nas últimas ${RUN_COOLDOWN_HOURS}h. Próximo disponível em ${nextAvailable.toLocaleString('pt-BR')}.`,
+        message: `Você já executou um teste nas últimas ${RUN_COOLDOWN_HOURS}h. Próximo disponível em ${formatarHorarioDeBrasilia(nextAvailable)}.`,
         nextAvailableAt: nextAvailable.toISOString(),
         lastRunId: recent.id,
       });
@@ -433,7 +458,12 @@ router.get('/runs', async (req: Request, res: Response) => {
         agent: { select: { name: true } },
       },
     });
-    res.json({ total: runs.length, runs });
+    // P56: piso de ruído do agente escolhido. É o que separa "caiu 5 pontos"
+    // (a mesma nota, medida duas vezes) de queda de verdade. A tela do
+    // cliente usa só o ESTADO derivado dele; o número fica para o admin.
+    const ruido = agentId ? await carregarRuidoDoAgente(agentId) : null;
+
+    res.json({ total: runs.length, runs, ruido });
   } catch (err: any) {
     logger.error('[agentQuality] /runs erro:', err);
     res.status(500).json({ error: 'erro ao listar runs', message: err?.message });
@@ -448,7 +478,15 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
   try {
     const includeResults = req.query.includeResults === 'true';
     const run = await prisma.agentEvalRun.findFirst({
-      where: { id: req.params.id, agent: { organizationId: orgId } },
+      // A055: a listagem escondia as execuções 'invalidated' (as 26 que
+      // rodaram sob o gabarito contaminado, média 47), mas a consulta por id
+      // não filtrava: um link antigo abria a nota que nunca foi sobre o
+      // negócio do cliente. Agora o mesmo filtro vale nos dois lugares.
+      where: {
+        id: req.params.id,
+        agent: { organizationId: orgId },
+        status: { not: 'invalidated' },
+      },
       include: {
         agent: { select: { id: true, name: true, organizationId: true } },
         fixDecisions: { orderBy: { decidedAt: 'desc' } },
@@ -471,10 +509,52 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
             r.userMessage || defs.find((s) => s.id === r.scenarioId)?.userMessage || null,
         }))
       : undefined;
+    // ─── P61: a nota recalculada, quando existir ──────────────────
+    // Nunca confundida com execução nova: vem num campo próprio, com o
+    // rótulo "recalculada" na tela.
+    //
+    // Revisão do PR: o aviso fala de "sua última execução". Numa execução
+    // antiga aberta pelo histórico, a mesma frase dava a entender que a nota
+    // de hoje tinha mudado. A consulta extra só acontece quando existe
+    // regravação para mostrar.
+    let regravacao = await resumirRegravacao(run.id).catch(() => null);
+    if (regravacao) {
+      const ultimaConcluida = await prisma.agentEvalRun
+        .findFirst({
+          where: { agentId: run.agentId, status: 'completed' },
+          orderBy: { startedAt: 'desc' },
+          select: { id: true },
+        })
+        .catch(() => null);
+      if (ultimaConcluida?.id !== run.id) regravacao = null;
+    }
+
+    // ─── P56: estado em vez de número, para quem não é técnico ────
+    const ruido = await carregarRuidoDoAgente(run.agentId);
+    const anterior = await prisma.agentEvalRun
+      .findFirst({
+        where: {
+          agentId: run.agentId,
+          status: 'completed',
+          id: { not: run.id },
+          startedAt: { lt: run.startedAt },
+        },
+        orderBy: { startedAt: 'desc' },
+        select: { scorePercent: true },
+      })
+      .catch(() => null);
+    const estado = classificarMudanca({
+      nota: run.scorePercent ?? null,
+      notaAnterior: anterior?.scorePercent ?? null,
+      ruido,
+    });
+
     res.json({
       ...rest,
       results: enrichedResults,
       hasResults: results != null,
+      regravacao,
+      estado,
     });
   } catch (err: any) {
     logger.error('[agentQuality] /runs/:id erro:', err);
@@ -599,6 +679,29 @@ router.post(
       const firstPatch = suggestion.patches[0];
       const diffToApply = finalDiff || firstPatch.diff;
       const whereHint = firstPatch.where || '';
+
+      // ─── A188: REGRA CORTADA NÃO ENTRA NO PROMPT VIVO ─────────────
+      // O sugeridor corta o patch em 600 caracteres sem avisar: 170 de 324
+      // sugestões de clientes terminam exatamente nesse limite, muitas no meio
+      // de uma palavra. Cinco desses fragmentos estão hoje no prompt da Iza e
+      // da Marcia. A checagem também cobre o texto EDITADO pelo cliente, que
+      // chega pelo corpo da requisição.
+      if (!regraTerminaEmFraseCompleta(diffToApply)) {
+        logger.warn('[agentQuality] apply-fix BLOQUEADO: regra cortada no meio', {
+          orgId,
+          agentId: run.agentId,
+          scenarioId,
+          fim: diffToApply.slice(-40),
+        });
+        res.status(422).json({
+          error: 'regra_incompleta',
+          message:
+            'Esta correção está cortada no meio: o texto termina sem fechar a frase. ' +
+            'Edite a sugestão até ela terminar com ponto final e aplique de novo.',
+          fim: diffToApply.slice(-60),
+        });
+        return;
+      }
 
       // ─── REDE FINAL DO ISOLAMENTO DE TENANT ───────────────────────
       // Este é o único ponto do produto que reescreve o systemPrompt do

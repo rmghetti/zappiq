@@ -34,7 +34,7 @@ const { prismaMock, runnerMock, cronServiceMock, profileMock, evalSetMock } = vi
     scenariosFailingTwice: vi.fn(),
   },
   profileMock: { resolveTenantAgentProfile: vi.fn() },
-  evalSetMock: { resolveEvalSet: vi.fn(), EVAL_SET_VERSION: 'v2' },
+  evalSetMock: { resolveEvalSet: vi.fn(), EVAL_SET_VERSION: 'v2', HARNESS_VERSION: 3 },
 }));
 
 vi.mock('@zappiq/database', () => ({ prisma: prismaMock }));
@@ -56,6 +56,7 @@ const {
   ERRO_TEMPO_LIMITE,
   ERRO_TETO_EXECUCAO,
   ERRO_NAO_ENFILEIRADA,
+  ERRO_FALHA_TECNICA_DO_PROVEDOR,
 } = await import('./agentEvalQueue.js');
 
 const CENARIOS = [
@@ -63,7 +64,14 @@ const CENARIOS = [
   { id: 'cr2', category: 'cr2_handoff', severity: 'critical' },
 ];
 
-const RESUMO_LIMPO = { passed: 2, partial: 0, failed: 0, criticalFailed: 0, scorePercent: 100 };
+const RESUMO_LIMPO = {
+  passed: 2,
+  partial: 0,
+  failed: 0,
+  criticalFailed: 0,
+  erros: 0,
+  scorePercent: 100,
+};
 
 function runPendente(overrides: Record<string, unknown> = {}) {
   return {
@@ -150,7 +158,11 @@ describe('executeRunJob — corpo único da execução', () => {
       status: 'completed',
       scorePercent: 100,
       passed: 2,
+      erros: 0,
       durationMs: 12_345,
+      // A régua com que esta execução foi medida. Sem isso, comparar a nota
+      // de agosto com a de setembro é comparar duas réguas sem saber.
+      harnessVersion: 3,
     });
     expect(conclusao.data.completedAt).toBeInstanceOf(Date);
   });
@@ -426,5 +438,132 @@ describe('enqueueEvalRun — fila fora do ar não deixa a linha pendurada', () =
     await enqueueEvalRun('run-1');
 
     expect(add).toHaveBeenCalledWith('run', { runId: 'run-1' }, expect.objectContaining({ jobId: 'run-1' }));
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * A171 — mais de 20% da execução sem resposta válida não vira nota.
+ * --------------------------------------------------------------------
+ * Em 15/06 uma execução com 25 de 25 respostas vazias foi gravada com nota
+ * zero, alertou o Slack e virou correção aplicada no prompt da Iza. O
+ * cenário 'erro' já sai do denominador, mas a execução inteira continuava
+ * virando nota: 20 de 25 cenários quebrados produziam uma "nota" medida em
+ * cinco respostas.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('A171 — execução majoritariamente quebrada é falha técnica, não nota', () => {
+  const RESUMO_QUEBRADO = {
+    passed: 1,
+    partial: 0,
+    failed: 0,
+    criticalFailed: 0,
+    erros: 1,
+    scorePercent: 100,
+  };
+
+  it("com mais de 20% de erros grava 'failed' e não grava nota", async () => {
+    // 1 de 2 cenários sem resposta válida: 50%.
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results: [
+        { scenarioId: 'cr1', combined: 'pass' },
+        { scenarioId: 'cr2', combined: 'erro' },
+      ],
+      durationMs: 1000,
+      summary: RESUMO_QUEBRADO,
+    });
+
+    await executeRunJob('run-1');
+
+    const [gravacao] = updateManysCom('status');
+    expect(gravacao.where).toEqual({ id: 'run-1', status: 'running' });
+    expect(gravacao.data).toMatchObject({
+      status: 'failed',
+      error: ERRO_FALHA_TECNICA_DO_PROVEDOR,
+      slackAlertStatus: 'not_sent',
+    });
+    expect(gravacao.data.scorePercent).toBeUndefined();
+  });
+
+  it('não alerta a nota de uma execução que não foi avaliada', async () => {
+    cronServiceMock.shouldAlertQuality.mockReturnValue(true);
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results: [
+        { scenarioId: 'cr1', combined: 'pass' },
+        { scenarioId: 'cr2', combined: 'erro' },
+      ],
+      durationMs: 1000,
+      summary: RESUMO_QUEBRADO,
+    });
+
+    await executeRunJob('run-1');
+
+    expect(cronServiceMock.notifySlackQualityIssue).not.toHaveBeenCalled();
+  });
+
+  it('a mensagem explica o que houve, em português e sem jargão de stack', () => {
+    expect(ERRO_FALHA_TECNICA_DO_PROVEDOR).toBe(
+      'falha técnica do provedor: mais de 20% dos cenários sem resposta válida',
+    );
+    expect(ERRO_FALHA_TECNICA_DO_PROVEDOR).not.toContain('—');
+  });
+
+  it('exatamente 20% de erros ainda vira nota: a régua é MAIS de 20%', async () => {
+    evalSetMock.resolveEvalSet.mockReturnValue([
+      { id: 'c1', category: 'x', severity: 'high' },
+      { id: 'c2', category: 'x', severity: 'high' },
+      { id: 'c3', category: 'x', severity: 'high' },
+      { id: 'c4', category: 'x', severity: 'high' },
+      { id: 'c5', category: 'x', severity: 'high' },
+    ]);
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results: [{ scenarioId: 'c1', combined: 'pass' }],
+      durationMs: 1000,
+      summary: { ...RESUMO_LIMPO, erros: 1, passed: 4 },
+    });
+
+    await executeRunJob('run-1');
+
+    const [gravacao] = updateManysCom('status');
+    expect(gravacao.data).toMatchObject({ status: 'completed' });
+  });
+
+  it('sem erro nenhum, o caminho normal continua igual', async () => {
+    await executeRunJob('run-1');
+
+    const [gravacao] = updateManysCom('status');
+    expect(gravacao.data).toMatchObject({ status: 'completed', scorePercent: 100 });
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * O alerta do Slack tem de listar o que a própria contagem chama de crítico.
+ * --------------------------------------------------------------------
+ * criticalFailed conta 'fail' E 'partial' de severidade crítica (A052), mas
+ * topFails só listava 'fail'. O alerta dizia "3 críticos reprovados" e
+ * mostrava um. Quem abre o Slack não tem como saber quais são os outros dois.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('topFails do Slack bate com a contagem de críticos', () => {
+  it('inclui o crítico parcial, que a contagem já considera reprovado', async () => {
+    cronServiceMock.shouldAlertQuality.mockReturnValue(true);
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results: [
+        { scenarioId: 'cr1', category: 'cr1_acceptance', severity: 'high', combined: 'fail' },
+        { scenarioId: 'cr2', category: 'cr2_handoff', severity: 'critical', combined: 'partial' },
+        { scenarioId: 'cr3', category: 'cr3_anti_pattern', severity: 'high', combined: 'partial' },
+        { scenarioId: 'cr4', category: 'cr4_x', severity: 'critical', combined: 'pass' },
+        { scenarioId: 'cr5', category: 'cr5_x', severity: 'critical', combined: 'erro' },
+      ],
+      durationMs: 1000,
+      summary: { ...RESUMO_LIMPO, failed: 1, partial: 2, criticalFailed: 1 },
+    });
+
+    await executeRunJob('run-1');
+
+    const [alerta] = cronServiceMock.notifySlackQualityIssue.mock.calls[0];
+    const ids = alerta.topFails.map((f: any) => f.scenarioId);
+    expect(ids).toContain('cr1'); // fail comum
+    expect(ids).toContain('cr2'); // crítico parcial, que conta como reprovado
+    expect(ids).not.toContain('cr3'); // parcial não crítico segue fora
+    expect(ids).not.toContain('cr4'); // aprovado
+    expect(ids).not.toContain('cr5'); // falha técnica não é reprovação
   });
 });

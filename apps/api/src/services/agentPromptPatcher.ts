@@ -25,6 +25,36 @@
 
 const FALLBACK_MARKER_PREFIX = '# PATCH MANUAL';
 
+/**
+ * A188 — a regra que vai para o prompt está inteira?
+ *
+ * O sugeridor pede "REGRA INVIOLÁVEL #N ... Exemplo CORRETO: ... Exemplo
+ * INCORRETO: ..." sem limite de tamanho, recebe 600 tokens e o código corta o
+ * patch em 600 CARACTERES com slice, em silêncio. Medido nos clientes: 170 de
+ * 324 sugestões com exatamente 600 caracteres, 106 cortadas antes do exemplo
+ * INCORRETO. Cinco fragmentos truncados estão HOJE dentro de
+ * agents.system_prompt (Iza e Marcia), um deles terminando em "qual tecnolog",
+ * colado no cabeçalho seguinte.
+ *
+ * A régua é simples de propósito: a última frase tem de fechar com pontuação.
+ * Texto que para no meio de uma palavra, numa vírgula ou nos dois pontos do
+ * "Exemplo CORRETO:" não entra no prompt vivo.
+ *
+ * Pura, sem I/O. As duas rotas que escrevem no systemPrompt chamam esta antes
+ * de gravar: routes/agentQuality.ts (cliente) e routes/adminAgentEval.ts
+ * (superadmin). As telas repetem a régua só para esconder o botão antes do
+ * clique; quem recusa de verdade são as rotas.
+ */
+export function regraTerminaEmFraseCompleta(texto: string): boolean {
+  const t = String(texto ?? '').trim();
+  if (t.length === 0) return false;
+  // Fechamentos de citação, parêntese e ênfase de markdown não contam como
+  // fim de frase: o que importa é o caractere logo antes deles.
+  const semFechamento = t.replace(/[”"'’»)\]*`]+$/u, '').trimEnd();
+  if (semFechamento.length === 0) return false;
+  return /[.!?…]$/u.test(semFechamento);
+}
+
 export interface PatchInput {
   /** system_prompt atual do agent (lido do DB). */
   currentPrompt: string;

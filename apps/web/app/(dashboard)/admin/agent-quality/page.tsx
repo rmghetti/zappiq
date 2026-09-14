@@ -45,7 +45,13 @@ import {
   type AgentEvalRunDetail,
   type AgentEvalFixDecision,
   type AgentEvalRunDetailScenario,
+  type RegradeResumo,
 } from '../../../../lib/adminApi';
+// A188: a mesma régua da tela do cliente, sem uma terceira cópia.
+import {
+  regraTerminaEmFraseCompleta,
+  AVISO_SUGESTAO_INCOMPLETA,
+} from '../../treinar/qualidade/_lib/sugestao';
 
 const REFRESH_INTERVAL_MS = 60_000;
 const SCORE_THRESHOLD = 90;
@@ -132,6 +138,76 @@ export default function AgentQualityPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runs]);
 
+  // ── P61: recalcular as notas com o gabarito v3 ───────────────────
+  // Sempre em duas etapas. A prévia (dryRun) não grava nada, e é ela que dá
+  // ao fundador o número antes de decidir. Só depois vem o recálculo que
+  // grava em eval_regrades. Nenhuma das duas chama o agente ou o juiz: a
+  // releitura é sobre respostas JÁ gravadas, então custa zero.
+  const [regravando, setRegravando] = useState(false);
+  const [regravacaoPedido, setRegravacaoPedido] = useState<{
+    dryRun: boolean;
+    execucoes: number;
+    message: string;
+  } | null>(null);
+  const [regravacaoResumo, setRegravacaoResumo] = useState<RegradeResumo | null>(null);
+  const [regravacaoErro, setRegravacaoErro] = useState<string | null>(null);
+  const [buscandoResumo, setBuscandoResumo] = useState(false);
+
+  const recalcularNotas = async (dryRun: boolean) => {
+    setRegravando(true);
+    setRegravacaoErro(null);
+    setRegravacaoResumo(null);
+    try {
+      // Sem organização no filtro: o servidor pega as execuções concluídas
+      // com gabarito v2 e resultados gravados, da mais recente para trás.
+      const pedido = await agentQualityApi.pedirRegravacao({ dryRun });
+      setRegravacaoPedido({
+        dryRun: pedido.dryRun,
+        execucoes: pedido.execucoes,
+        message: pedido.message,
+      });
+    } catch (err: any) {
+      setRegravacaoErro(err?.message || 'Erro ao pedir o recálculo');
+    } finally {
+      setRegravando(false);
+    }
+  };
+
+  /**
+   * Lê o resumo da execução concluída mais recente, depois do recálculo.
+   *
+   * A rota devolve 202 e o trabalho roda na fila: pedir o resumo no mesmo
+   * segundo dá "ainda não foi recalculada" e parece erro. Três tentativas de
+   * 5 s cobrem a fila normal sem prender ninguém na tela.
+   */
+  const TENTATIVAS_DO_RESUMO = 3;
+  const ESPERA_ENTRE_TENTATIVAS_MS = 5000;
+
+  const verResumoDaRegravacao = async () => {
+    const ultima = runs.find((r) => r.status === 'completed');
+    if (!ultima) return;
+    setRegravacaoErro(null);
+    setBuscandoResumo(true);
+    try {
+      for (let tentativa = 1; tentativa <= TENTATIVAS_DO_RESUMO; tentativa++) {
+        try {
+          setRegravacaoResumo(await agentQualityApi.getRegravacao(ultima.id));
+          return;
+        } catch (err: any) {
+          if (tentativa === TENTATIVAS_DO_RESUMO) {
+            setRegravacaoErro(
+              err?.message || 'Esta execução ainda não foi recalculada. Rode o recálculo primeiro.',
+            );
+            return;
+          }
+          await new Promise((r) => setTimeout(r, ESPERA_ENTRE_TENTATIVAS_MS));
+        }
+      }
+    } finally {
+      setBuscandoResumo(false);
+    }
+  };
+
   const testSlack = async () => {
     setSlackTesting(true);
     setSlackResult(null);
@@ -214,7 +290,7 @@ export default function AgentQualityPage() {
   // FASE 2.1 fix: tendência só faz sentido entre runs do MESMO tamanho.
   // Comparar 25 cenários vs 3 cenários produz delta falso. Agora pegamos
   // a próxima run anterior que rodou o mesmo `totalScenarios`. Se não
-  // existe, tendência fica vazia ('—' no UI).
+  // existe, a tendência aparece como 'sem variação' na tela.
   const previousRun =
     latestRun
       ? completedRuns.slice(1).find((r) => r.totalScenarios === latestRun.totalScenarios) || null
@@ -282,6 +358,14 @@ export default function AgentQualityPage() {
               {slackTesting ? 'Testando…' : 'Testar Slack'}
             </button>
             <button
+              onClick={() => recalcularNotas(true)}
+              disabled={regravando}
+              title="Relê as execuções já gravadas com o gabarito v3. Não chama o agente nem o juiz: custo zero."
+              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-sky-50 text-sky-800 rounded-lg text-sm font-medium transition-colors border border-sky-200 shadow-sm disabled:opacity-50"
+            >
+              {regravando ? 'Recalculando…' : 'Recalcular notas (gabarito v3)'}
+            </button>
+            <button
               onClick={testRealAlert}
               disabled={slackTesting}
               title="Dispara alerta REAL (mesma payload que o cron usa). Se /test-slack chega mas esse não, é a payload."
@@ -291,6 +375,87 @@ export default function AgentQualityPage() {
             </button>
           </div>
         </div>
+
+        {/* ── P61: prévia e resumo do recálculo ────────────────────── */}
+        {(regravacaoPedido || regravacaoErro) && (
+          <div className="rounded-lg p-4 border bg-sky-50 border-sky-200 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-sky-900 bg-sky-200 px-2 py-0.5 rounded">
+                Nota recalculada
+              </span>
+              <span className="text-xs text-sky-900">
+                releitura das respostas já gravadas, sem chamar o agente nem o juiz
+              </span>
+            </div>
+            {regravacaoErro && <p className="text-sm text-red-800">{regravacaoErro}</p>}
+            {regravacaoPedido && (
+              <>
+                <p className="text-sm text-sky-900">
+                  {regravacaoPedido.dryRun ? 'Prévia' : 'Recálculo'} de{' '}
+                  {regravacaoPedido.execucoes} execução(ões). {regravacaoPedido.message}
+                </p>
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  <button
+                    onClick={verResumoDaRegravacao}
+                    disabled={buscandoResumo}
+                    className="px-3 py-1.5 text-xs font-medium rounded border border-sky-300 bg-white text-sky-900 hover:bg-sky-100 disabled:opacity-50"
+                  >
+                    {buscandoResumo
+                      ? 'Buscando, o resumo aparece em instantes…'
+                      : 'Ver o resumo da última execução'}
+                  </button>
+                  {regravacaoPedido.dryRun && (
+                    <button
+                      onClick={() => recalcularNotas(false)}
+                      disabled={regravando}
+                      className="px-3 py-1.5 text-xs font-medium rounded bg-sky-700 text-white hover:bg-sky-800 disabled:opacity-50"
+                    >
+                      Confirmar e gravar o recálculo
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+            {regravacaoResumo && (
+              <div className="mt-4 bg-white border border-sky-200 rounded p-3">
+                <div className="text-sm text-neutral-800">
+                  <strong>{regravacaoResumo.agentName || 'Agente'}</strong>: a nota passaria de{' '}
+                  <strong>{regravacaoResumo.notaAntiga ?? 'sem nota'}</strong> para{' '}
+                  <strong>{regravacaoResumo.notaRegravada}</strong>.{' '}
+                  {regravacaoResumo.reprovacoesDoGabarito} reprovação(ões) eram do gabarito.
+                </div>
+                {typeof regravacaoResumo.discordantes === 'number' && (
+                  <div className="text-xs text-neutral-600 mt-1">
+                    {regravacaoResumo.discordantes} cenário(s) em que a regra nova e o avaliador da
+                    época discordam: é o lote de rotulagem da calibração.
+                  </div>
+                )}
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-neutral-500 border-b border-neutral-200">
+                        <th className="py-1 pr-3">Cenário</th>
+                        <th className="py-1 pr-3">Antes</th>
+                        <th className="py-1 pr-3">Depois</th>
+                        <th className="py-1">Motivo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {regravacaoResumo.porCenario.map((c) => (
+                        <tr key={c.scenarioId} className="border-b border-neutral-100 align-top">
+                          <td className="py-1 pr-3 font-mono">{c.scenarioId}</td>
+                          <td className="py-1 pr-3">{c.vereditoAntigo}</td>
+                          <td className="py-1 pr-3 font-medium">{c.vereditoNovo}</td>
+                          <td className="py-1 text-neutral-600">{c.motivo}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Feedback do teste Slack */}
         {slackResult && (
@@ -340,7 +505,7 @@ export default function AgentQualityPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
             label="Última execução"
-            value={latestRun ? `${latestRun.scorePercent}%` : '—'}
+            value={latestRun ? `${latestRun.scorePercent}%` : 'sem nota'}
             sub={
               latestRun
                 ? new Date(latestRun.startedAt).toLocaleString('pt-BR')
@@ -353,7 +518,7 @@ export default function AgentQualityPage() {
           />
           <KPICard
             label="Tendência"
-            value={trend === 0 ? '—' : `${trend > 0 ? '+' : ''}${trend} pp`}
+            value={trend === 0 ? 'sem variação' : `${trend > 0 ? '+' : ''}${trend} pp`}
             sub="vs. execução anterior"
             icon={
               trend >= 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />
@@ -362,7 +527,7 @@ export default function AgentQualityPage() {
           />
           <KPICard
             label="Falhas críticas (última)"
-            value={String(latestRun?.criticalFailed ?? '—')}
+            value={String(latestRun?.criticalFailed ?? 'sem dado')}
             sub={
               latestRun?.criticalFailed === 0
                 ? 'Cenários P0 protegidos'
@@ -562,7 +727,7 @@ export default function AgentQualityPage() {
                           {run.scorePercent}%
                         </span>
                       ) : (
-                        '—'
+                        'sem nota'
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-mono">
@@ -575,11 +740,11 @@ export default function AgentQualityPage() {
                           {run.criticalFailed}
                         </span>
                       ) : (
-                        '—'
+                        'sem dado'
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-neutral-600">
-                      {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : '—'}
+                      {run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : 'sem dado'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -612,7 +777,7 @@ export default function AgentQualityPage() {
               <div className="sticky top-0 bg-white p-4 border-b border-neutral-200 flex items-center justify-between">
                 <h3 className="font-semibold text-neutral-900">
                   Detalhes da execução
-                  {selectedRun ? ` · ${selectedRun.scorePercent ?? '—'}%` : ''}
+                  {selectedRun ? ` · ${selectedRun.scorePercent ?? 'sem nota'}` : ''}
                 </h3>
                 <button
                   onClick={() => {
@@ -630,10 +795,17 @@ export default function AgentQualityPage() {
                 {selectedRun && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      <KPISmall label="Pontuação" value={`${selectedRun.scorePercent ?? '—'}%`} />
+                      <KPISmall
+                        label="Pontuação"
+                        value={
+                          selectedRun.scorePercent == null
+                            ? 'sem nota'
+                            : `${selectedRun.scorePercent}%`
+                        }
+                      />
                       <KPISmall
                         label="Falhas críticas"
-                        value={String(selectedRun.criticalFailed ?? '—')}
+                        value={String(selectedRun.criticalFailed ?? 'sem dado')}
                       />
                       <KPISmall
                         label="Aprovados"
@@ -644,7 +816,7 @@ export default function AgentQualityPage() {
                         value={
                           selectedRun.durationMs
                             ? `${(selectedRun.durationMs / 1000).toFixed(1)}s`
-                            : '—'
+                            : 'sem dado'
                         }
                       />
                     </div>
@@ -820,11 +992,18 @@ function ResultBadge({
   combined,
   severity,
 }: {
-  combined: 'pass' | 'partial' | 'fail';
+  combined: 'pass' | 'partial' | 'fail' | 'erro';
   severity: string;
 }) {
   const combinedLabel =
-    combined === 'pass' ? 'Aprovado' : combined === 'partial' ? 'Parcial' : 'Reprovado';
+    combined === 'pass'
+      ? 'Aprovado'
+      : combined === 'partial'
+        ? 'Parcial'
+        : // A171: falha técnica do teste não é erro do agente.
+          combined === 'erro'
+          ? 'Não avaliado'
+          : 'Reprovado';
   const severityLabel =
     severity === 'critical' ? 'crítica' : severity === 'high' ? 'alta' : 'média';
   const color =
@@ -832,7 +1011,9 @@ function ResultBadge({
       ? 'bg-green-100 text-green-800 border-green-200'
       : combined === 'partial'
         ? 'bg-orange-100 text-orange-800 border-orange-200'
-        : 'bg-red-100 text-red-800 border-red-200';
+        : combined === 'erro'
+          ? 'bg-neutral-100 text-neutral-700 border-neutral-300'
+          : 'bg-red-100 text-red-800 border-red-200';
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-medium border ${color}`}>
       {combinedLabel} · {severityLabel}
@@ -881,6 +1062,9 @@ function FixSuggestionCard({
 
   const hasSuggestion = !!scenario.suggestedFix && scenario.suggestedFix.patches.length > 0;
   const decisionMade = existingDecision !== null;
+  // A188: é o texto que SERÁ gravado que precisa estar inteiro, e ele muda
+  // enquanto o admin edita. Por isso olha o editedDiff, não a sugestão crua.
+  const sugestaoInteira = regraTerminaEmFraseCompleta(editedDiff);
 
   async function handleApply() {
     if (!confirm('Aplicar essa sugestão no system_prompt do agente? Essa ação altera o comportamento da IA imediatamente.')) {
@@ -1147,17 +1331,27 @@ function FixSuggestionCard({
               </div>
             )}
 
+            {/* A188: a régua da API roda aqui também, antes do clique. Sem
+                isso o admin clicava e recebia um 422 técnico de volta. */}
+            {!decisionMade && !sugestaoInteira && (
+              <div className="mt-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded p-2">
+                ⚠ {AVISO_SUGESTAO_INCOMPLETA}
+              </div>
+            )}
+
             {/* Botões de ação */}
             <div className="flex gap-2 mt-3">
               {!decisionMade ? (
                 <>
-                  <button
-                    onClick={handleApply}
-                    disabled={loadingAction !== null}
-                    className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loadingAction === 'apply' ? 'Aplicando…' : '✓ Aplicar Sugestão'}
-                  </button>
+                  {sugestaoInteira && (
+                    <button
+                      onClick={handleApply}
+                      disabled={loadingAction !== null}
+                      className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loadingAction === 'apply' ? 'Aplicando…' : '✓ Aplicar Sugestão'}
+                    </button>
+                  )}
                   <button
                     onClick={handleReject}
                     disabled={loadingAction !== null}
@@ -1216,7 +1410,7 @@ function GenerateSuggestionButton({
 }: {
   runId: string;
   scenarioId: string;
-  combined: 'pass' | 'partial' | 'fail';
+  combined: 'pass' | 'partial' | 'fail' | 'erro';
   onGenerated: () => void;
 }) {
   const [loading, setLoading] = useState(false);

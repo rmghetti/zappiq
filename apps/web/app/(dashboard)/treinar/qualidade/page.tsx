@@ -31,11 +31,22 @@ import {
 import { useAuthStore } from '@/stores/authStore';
 import type {
   AgentEvalRunRow,
-  AgentEvalRunDetail,
   AgentEvalRunDetailScenario,
   AgentEvalFixDecision,
 } from '@/lib/adminApi';
+import type { ClientRunDetail } from '@/lib/clientAgentQualityApi';
 import { SaibaMais } from '@/components/shared/SaibaMais';
+import {
+  ROTULOS_DE_ESTADO,
+  precisaMostrarAviso,
+  textoDoAvisoDeRegravacao,
+} from './_lib/regravacao';
+import { regraTerminaEmFraseCompleta, AVISO_SUGESTAO_INCOMPLETA } from './_lib/sugestao';
+import {
+  naoFoiAvaliadaPorFalhaTecnica,
+  ROTULO_NAO_AVALIADA,
+  TEXTO_FALHA_TECNICA,
+} from './_lib/execucao';
 
 const TRIGGER_LABELS: Record<string, string> = {
   cron: 'Semanal automático',
@@ -52,7 +63,7 @@ export default function QualidadeIAClientePage() {
   const [agents, setAgents] = useState<ClientAgentLite[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [runs, setRuns] = useState<AgentEvalRunRow[]>([]);
-  const [selectedRun, setSelectedRun] = useState<AgentEvalRunDetail | null>(null);
+  const [selectedRun, setSelectedRun] = useState<ClientRunDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,6 +180,9 @@ export default function QualidadeIAClientePage() {
   }
 
   const currentAgent = agents.find((a) => a.id === selectedAgent);
+  // A171: cenário com falha TÉCNICA não entra na lista de problemas do
+  // cliente. Não houve resposta para avaliar, então não há o que corrigir no
+  // prompt dele.
   const failedScenarios =
     selectedRun?.results?.filter((r) => r.combined === 'fail' || r.combined === 'partial') || [];
 
@@ -279,9 +293,11 @@ export default function QualidadeIAClientePage() {
                       >
                         {run.status === 'running' || run.status === 'pending'
                           ? '⟳ Em execução'
-                          : run.status === 'failed'
-                            ? 'Falhou'
-                            : labels.label}
+                          : naoFoiAvaliadaPorFalhaTecnica(run)
+                            ? ROTULO_NAO_AVALIADA
+                            : run.status === 'failed'
+                              ? 'Falhou'
+                              : labels.label}
                       </span>
                       <span className="text-[10px] text-neutral-500">
                         {TRIGGER_LABELS[run.triggeredBy] || run.triggeredBy}
@@ -341,7 +357,10 @@ function RunDetailPanel({
   onAfterAction,
   currentAgentName,
 }: {
-  run: AgentEvalRunDetail;
+  // P61/P56: o detalhe do cliente carrega, além da execução, o resumo da nota
+  // recalculada e o estado leigo. #369: podeAgir é o portão de quem pode
+  // escrever no prompt do agente.
+  run: ClientRunDetail;
   podeAgir: boolean;
   failedScenarios: AgentEvalRunDetailScenario[];
   onAfterAction: () => void;
@@ -350,6 +369,9 @@ function RunDetailPanel({
   const health = classifyQuality(run.scorePercent);
   const labels = QUALITY_LABELS[health];
   const isRunning = run.status === 'pending' || run.status === 'running';
+  // A171: o provedor derrubou a maior parte dos cenários. Isto não é nota do
+  // agente, e a tela não pode deixar ninguém ler como se fosse.
+  const falhaTecnica = naoFoiAvaliadaPorFalhaTecnica(run);
 
   // Mapa rápido scenarioId → última decisão
   const decisionsByScenario = new Map<string, AgentEvalFixDecision>();
@@ -403,14 +425,35 @@ function RunDetailPanel({
               Saúde do {currentAgentName}
               <SaibaMais featureKey="qualidade.saude-score" />
             </div>
-            <div className="flex items-center gap-3">
-              <span className={`text-3xl font-bold ${labels.color}`}>{labels.label}</span>
-              {run.scorePercent != null && (
+            <div className="flex items-center gap-3 flex-wrap">
+              <span
+                className={`text-3xl font-bold ${
+                  falhaTecnica ? 'text-neutral-600' : labels.color
+                }`}
+              >
+                {falhaTecnica ? ROTULO_NAO_AVALIADA : labels.label}
+              </span>
+              {!falhaTecnica && run.scorePercent != null && (
                 <span className="text-xs text-neutral-500">
                   ({run.scorePercent.toFixed(0)}% dos cenários aprovados)
                 </span>
               )}
+              {/* P56: a nota oscila sozinha. O que o dono do negócio precisa
+                  saber é se mudou de verdade, não a faixa de variação. */}
+              {run.estado && run.estado.estado !== 'sem_base' && (
+                <span
+                  title={run.estado.explicacao}
+                  className={`text-xs px-2 py-0.5 rounded border font-medium ${
+                    ROTULOS_DE_ESTADO[run.estado.estado].bg
+                  } ${ROTULOS_DE_ESTADO[run.estado.estado].color}`}
+                >
+                  {ROTULOS_DE_ESTADO[run.estado.estado].label}
+                </span>
+              )}
             </div>
+            {run.estado && (
+              <div className="text-xs text-neutral-500 mt-1">{run.estado.explicacao}</div>
+            )}
             <div className="text-xs text-neutral-500 mt-1">
               Execução de {new Date(run.startedAt).toLocaleString('pt-BR')} ·{' '}
               {TRIGGER_LABELS[run.triggeredBy] || run.triggeredBy}
@@ -421,21 +464,67 @@ function RunDetailPanel({
             <div className="text-xs text-blue-600 italic">⟳ Aguarde, finalizando análise…</div>
           )}
         </div>
+        {falhaTecnica && (
+          <div className="mt-4 p-3 bg-neutral-100 border border-neutral-300 rounded text-sm text-neutral-800">
+            {TEXTO_FALHA_TECNICA}
+          </div>
+        )}
         {/* KPIs simplificados */}
-        {!isRunning && run.totalScenarios > 0 && (
+        {!isRunning && !falhaTecnica && run.totalScenarios > 0 && (
           <div className="mt-4">
             <div className="flex items-center gap-1.5 mb-2">
               <SaibaMais featureKey="qualidade.kpis-cenarios" />
             </div>
-            <div className="grid grid-cols-4 gap-3">
+            <div className={`grid gap-3 ${run.erros ? 'grid-cols-5' : 'grid-cols-4'}`}>
               <KPISmall label="Aprovados" value={String(run.passed ?? 0)} tint="green" />
               <KPISmall label="Parciais" value={String(run.partial ?? 0)} tint="amber" />
               <KPISmall label="Reprovados" value={String(run.failed ?? 0)} tint="red" />
               <KPISmall label="Críticos" value={String(run.criticalFailed ?? 0)} tint="red-strong" />
+              {/* A171: cenário que quebrou por falha do provedor não é erro do
+                  agente. Fica visível, fora da nota, e sem sugestão. */}
+              {!!run.erros && (
+                <KPISmall label="Não avaliados" value={String(run.erros)} tint="amber" />
+              )}
             </div>
           </div>
         )}
       </div>
+
+      {/* ── P61: a nota RECALCULADA ──────────────────────────────────
+          Fica em bloco próprio e rotulada "recalculada" de propósito: se
+          aparecesse como número novo, o cliente entenderia que a IA melhorou
+          sozinha durante a noite. O que melhorou foi a régua. */}
+      {!isRunning && precisaMostrarAviso(run.regravacao) && (
+        <div className="px-5 pt-4">
+          <div className="p-4 bg-sky-50 border border-sky-200 rounded">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-sky-900 bg-sky-200 px-2 py-0.5 rounded">
+                Nota recalculada
+              </span>
+              <span className="text-xs text-sky-900">não é uma execução nova</span>
+            </div>
+            <p className="text-sm text-sky-900">{textoDoAvisoDeRegravacao(run.regravacao!)}</p>
+            {run.regravacao!.continuamReprovados.length > 0 && (
+              <div className="mt-2">
+                <div className="text-xs font-medium text-sky-900 mb-1">
+                  Continuam reprovados, e é aqui que você entra:
+                </div>
+                <ul className="text-xs text-sky-900 list-disc list-inside space-y-0.5">
+                  {run.regravacao!.continuamReprovados.map((id) => (
+                    <li key={id}>{friendlyScenarioLabel(id)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {run.regravacao!.reprovacoesDoGabarito > 0 && (
+              <p className="text-xs text-sky-800 mt-2">
+                {run.regravacao!.reprovacoesDoGabarito} reprovação(ões) desta execução eram do
+                método de avaliação, e não do seu agente.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Nudge proativo: nota baixa → completar treinamento eleva o resultado */}
       {!isRunning && run.scorePercent != null && run.scorePercent < 90 && (
@@ -553,8 +642,8 @@ function ClientFixCard({
   // Re-teste pós-Apply (loop curto rumo a 90%+): o usuário clica e a gente roda
   // SÓ esse cenário contra o systemPrompt atual pra ver se a correção pegou.
   const [retestResult, setRetestResult] = useState<{
-    combined: 'pass' | 'partial' | 'fail';
-    judge: { passed: boolean; reason: string };
+    combined: 'pass' | 'partial' | 'fail' | 'erro';
+    judge: { passed: boolean | null; reason: string };
   } | null>(null);
 
   useEffect(() => {
@@ -567,6 +656,9 @@ function ClientFixCard({
   const hasSuggestion = !!scenario.suggestedFix && scenario.suggestedFix.patches.length > 0;
   const decisionMade = existingDecision !== null;
   const isPartial = scenario.combined === 'partial';
+  // A188: é o texto que SERÁ gravado que precisa estar inteiro, e ele muda
+  // enquanto o cliente edita. Por isso olha o editedDiff, não a sugestão crua.
+  const sugestaoInteira = regraTerminaEmFraseCompleta(editedDiff);
   const friendlyTitle = friendlyScenarioLabel(scenario.scenarioId, scenario.description);
 
   async function handleApply() {
@@ -852,6 +944,14 @@ function ClientFixCard({
               </div>
             )}
 
+            {/* A188: a régua da API roda aqui também, antes do clique. Sem
+                isso o cliente clicava e recebia um 422 técnico de volta. */}
+            {!decisionMade && !sugestaoInteira && (
+              <div className="mt-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded p-2">
+                ⚠ {AVISO_SUGESTAO_INCOMPLETA}
+              </div>
+            )}
+
             <div className="flex gap-2 mt-3 items-center">
               {!podeAgir ? (
                 <div className="text-[10px] text-neutral-500 italic flex-1">
@@ -859,13 +959,15 @@ function ClientFixCard({
                 </div>
               ) : !decisionMade ? (
                 <>
-                  <button
-                    onClick={handleApply}
-                    disabled={loadingAction !== null}
-                    className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loadingAction === 'apply' ? 'Aplicando…' : '✓ Aplicar correção'}
-                  </button>
+                  {sugestaoInteira && (
+                    <button
+                      onClick={handleApply}
+                      disabled={loadingAction !== null}
+                      className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loadingAction === 'apply' ? 'Aplicando…' : '✓ Aplicar correção'}
+                    </button>
+                  )}
                   <button
                     onClick={handleReject}
                     disabled={loadingAction !== null}

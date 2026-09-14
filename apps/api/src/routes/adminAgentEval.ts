@@ -51,13 +51,31 @@ import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 // V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
 // Q1: computeReverifyVerdict exportado pra teste unitário puro.
 import { executeAgentEvalRun, computeReverifyVerdict } from '../services/agentEvalRunner.js';
-import { enqueueEvalRun, resolveScenariosForRun } from '../services/agentEvalQueue.js';
+import {
+  enqueueEvalRun,
+  enqueueRegrade,
+  resolveScenariosForRun,
+} from '../services/agentEvalQueue.js';
+// P61 — regravar a nota sobre as respostas já gravadas, sem chamar LLM.
+import {
+  execucoesParaRegravar,
+  contarExecucoesParaRegravar,
+  resumirRegravacao,
+} from '../services/evalRegradeService.js';
+// P56 — piso de ruído do agente. No admin a faixa aparece com número; na tela
+// do cliente, só o estado derivado dela.
+import { carregarRuidoDoAgente } from '../services/evalRuidoService.js';
 // FASE 2.1 (#241): Slack notify reusável entre cron e route manual.
 import { notifySlackQualityIssue } from '../services/agentEvalCronService.js';
 import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services/slackNotifier.js';
 // FASE 2.2a (#243): aplicação cirúrgica de patches no system_prompt.
 // FASE 2.2c (#246): DuplicatePatchError pra rejeitar sugestão IA repetida.
-import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
+// A188: a mesma régua de "a regra fecha a frase?" que a porta do cliente usa.
+import {
+  applyPatch,
+  DuplicatePatchError,
+  regraTerminaEmFraseCompleta,
+} from '../services/agentPromptPatcher.js';
 // FASE 2.2d (#252): on-demand suggestion pra cenários partial
 import { suggestFix } from '../services/agentEvalRunner.js';
 // A083: toda escrita no prompt declara a origem e vira versão; reverter só
@@ -315,10 +333,13 @@ router.get(
               r.userMessage || defs.find((s) => s.id === r.scenarioId)?.userMessage || null,
           }))
         : undefined;
+      // P61: resumo da nota recalculada desta execução, quando existir.
+      const regravacao = await resumirRegravacao(run.id).catch(() => null);
       res.json({
         ...rest,
         results: enrichedResults,
         hasResults: results != null,
+        regravacao,
       });
     } catch (err: any) {
       logger.error('[agentEval] runs/:id erro:', err);
@@ -363,11 +384,16 @@ router.get(
           startedAt: true,
           completedAt: true,
           durationMs: true,
+          erros: true,
+          harnessVersion: true,
           error: true,
           agent: { select: { name: true } },
         },
       });
-      res.json({ total: runs.length, runs });
+      // P56: quanto a nota deste agente oscila sozinha, com o prompt parado.
+      // Sem isso, o painel lê 5 pontos de diferença como se fosse sinal.
+      const ruido = agentId ? await carregarRuidoDoAgente(agentId) : null;
+      res.json({ total: runs.length, runs, ruido });
     } catch (err: any) {
       logger.error('[agentEval] runs (list) erro:', err);
       res.status(500).json({ error: 'erro ao listar runs', message: err?.message });
@@ -668,6 +694,28 @@ router.post(
       const diffToApply = finalDiff || firstPatch.diff;
       const whereHint = firstPatch.where || '';
 
+      // ─── A188: REGRA CORTADA NÃO ENTRA NO PROMPT VIVO ─────────────
+      // A trava nasceu na porta do cliente, mas é por aqui que os fragmentos
+      // truncados chegaram aos prompts da Iza e da Marcia: o superadmin
+      // escreve no systemPrompt de qualquer cliente. O sugeridor corta o
+      // patch em 600 caracteres sem avisar, muitas vezes no meio da palavra.
+      // Vale também para o texto editado no admin, que chega pelo corpo.
+      if (!regraTerminaEmFraseCompleta(diffToApply)) {
+        logger.warn('[agentEval] apply-fix BLOQUEADO: regra cortada no meio', {
+          agentId: run.agentId,
+          scenarioId,
+          fim: diffToApply.slice(-40),
+        });
+        res.status(422).json({
+          error: 'regra_incompleta',
+          message:
+            'Esta correção está cortada no meio: o texto termina sem fechar a frase. ' +
+            'Edite a sugestão até ela terminar com ponto final e aplique de novo.',
+          fim: diffToApply.slice(-60),
+        });
+        return;
+      }
+
       // ─── REDE FINAL DO ISOLAMENTO DE TENANT ───────────────────────
       // Mesma trava do agentQuality.ts, e aqui ela pesa mais: o superadmin é da
       // ZappIQ e edita o agente de qualquer cliente. Era por este caminho que a
@@ -763,8 +811,8 @@ router.post(
       // Fail-soft: erro no re-verify NÃO falha o apply (fix já persistido).
       let reverify: {
         scenarioId: string;
-        before: 'pass' | 'partial' | 'fail' | null;
-        after: 'pass' | 'partial' | 'fail';
+        before: 'pass' | 'partial' | 'fail' | 'erro' | null;
+        after: 'pass' | 'partial' | 'fail' | 'erro';
         improved: boolean;
       } | { error: true } | null = null;
 
@@ -776,7 +824,7 @@ router.post(
           const priorResult = Array.isArray(run.results)
             ? (run.results as any[]).find((r: any) => r.scenarioId === scenarioId)
             : null;
-          const before: 'pass' | 'partial' | 'fail' | null =
+          const before: 'pass' | 'partial' | 'fail' | 'erro' | null =
             priorResult?.combined ?? null;
 
           // Re-run com o prompt recém-aplicado (1 LLM call)
@@ -789,7 +837,9 @@ router.post(
             },
             profile,
           );
-          const afterCombined = rerunResults[0]?.combined ?? 'fail';
+          // A171: 'erro' é falha técnica do re-teste. computeReverifyVerdict
+          // já trata: improved só quando o resultado novo é 'pass'.
+          const afterCombined = rerunResults[0]?.combined ?? 'erro';
           const verdict = computeReverifyVerdict(before, afterCombined);
 
           reverify = { scenarioId, ...verdict };
@@ -1073,6 +1123,120 @@ router.get(
     } catch (err: any) {
       logger.error('[agentEval] fix-decisions list erro:', err);
       res.status(500).json({ error: 'erro ao listar decisões', message: err?.message });
+    }
+  },
+);
+
+// ════════════════════════════════════════════════════════════════════
+// P61 — REGRAVAÇÃO: recalcular a nota sobre o que JÁ está gravado
+// ─────────────────────────────────────────────────────────────────
+// POST /api/admin/agent-eval/regrade
+//   body: { organizationId?, runIds?, dryRun }
+//
+// É o botão "Recalcular notas (gabarito v3)" do painel. Relê os resultados v2
+// já gravados com a régua nova e grava em eval_regrades. NÃO chama o agente,
+// NÃO chama o juiz e NÃO escreve em agent_eval_runs: custo zero e a execução
+// original fica intacta.
+//
+// O padrão é dryRun = true. Recalcular 3.712 cenários é barato, mas gravar
+// sem ver antes não é: o fundador roda a prévia, lê o resumo e só então
+// confirma com dryRun = false.
+// ════════════════════════════════════════════════════════════════════
+router.post(
+  '/regrade',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    try {
+      const organizationId = req.body?.organizationId
+        ? String(req.body.organizationId)
+        : undefined;
+      const runIds = Array.isArray(req.body?.runIds)
+        ? req.body.runIds.map(String)
+        : undefined;
+      // Só grava quem pedir explicitamente. Ausente ou qualquer outra coisa
+      // significa prévia.
+      const dryRun = req.body?.dryRun !== false;
+
+      const elegiveis = await execucoesParaRegravar({ organizationId, runIds });
+      if (elegiveis.length === 0) {
+        res.status(400).json({
+          error: 'nenhuma execução elegível',
+          message:
+            'Não há execução concluída com resultados gravados para recalcular com este filtro.',
+        });
+        return;
+      }
+
+      const jobId = await enqueueRegrade({ runIds: elegiveis, dryRun });
+
+      // Revisão do PR: o clique regrava um lote (TETO_DE_REGRAVACAO) e a
+      // resposta diz o que sobrou. Sem isto, quem clicava não sabia se tinha
+      // recalculado tudo ou só a primeira página.
+      const totalElegiveis = await contarExecucoesParaRegravar({ organizationId, runIds }).catch(
+        () => elegiveis.length,
+      );
+      const faltam = Math.max(0, totalElegiveis - elegiveis.length);
+
+      logger.info({
+        msg: 'agent_eval_regrade_pedida',
+        jobId,
+        execucoes: elegiveis.length,
+        faltam,
+        dryRun,
+        organizationId: organizationId ?? null,
+        pedidaPor: req.user?.userId ?? null,
+      });
+
+      const base = dryRun
+        ? 'Prévia em andamento: nada será gravado. Abra o resumo de uma execução para ver o efeito.'
+        : 'Recálculo em andamento. O resumo por execução fica disponível em seguida.';
+
+      res.status(202).json({
+        jobId,
+        execucoes: elegiveis.length,
+        totalElegiveis,
+        faltam,
+        dryRun,
+        runIds: elegiveis.slice(0, 50),
+        message:
+          faltam > 0
+            ? `${base} Ficaram ${faltam} execuções de fora deste lote: clique de novo para seguir.`
+            : base,
+        resumoUrl: '/api/admin/agent-eval/regrade/<runId>',
+      });
+    } catch (err: any) {
+      logger.error('[agentEval] regrade erro:', err);
+      res.status(500).json({ error: 'erro ao pedir a regravação', message: err?.message });
+    }
+  },
+);
+
+// ════════════════════════════════════════════════════════════════════
+// GET /api/admin/agent-eval/regrade/:runId — resumo de uma execução
+// ─────────────────────────────────────────────────────────────────
+// Nota antiga, nota regravada, quantas reprovações eram do gabarito e a
+// leitura por cenário. É o número que o fundador leva para a conversa.
+// ════════════════════════════════════════════════════════════════════
+router.get(
+  '/regrade/:runId',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    try {
+      const resumo = await resumirRegravacao(String(req.params.runId));
+      if (!resumo) {
+        res.status(404).json({
+          error: 'sem regravação para esta execução',
+          message:
+            'Esta execução ainda não foi recalculada com o gabarito atual. Rode o recálculo primeiro.',
+        });
+        return;
+      }
+      res.json(resumo);
+    } catch (err: any) {
+      logger.error('[agentEval] resumo da regravação erro:', err);
+      res.status(500).json({ error: 'erro ao ler a regravação', message: err?.message });
     }
   },
 );

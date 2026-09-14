@@ -51,24 +51,15 @@ import { getIo } from '../utils/socketRegistry.js';
 // inteiro (fila, socket, WhatsApp) só para isso.
 import { buildLiveProfileBlock, buildGreetingBlock } from '../agents/tenantLiveProfile.js';
 import { isFlagOn } from './featureFlags.js';
-
-/* ── Cleanup helpers (duplicados de agentOrchestrator pra evitar circular dep
- *    — alinhar com PR #71 caso o original mude). ──────────────────────── */
-function stripStructuredTags(text: string): string {
-  if (!text) return text;
-  return text
-    .replace(/<action_data>[\s\S]*?<\/action_data>/gi, '')
-    .replace(/<action>[\s\S]*?<\/action>/gi, '')
-    .replace(/<buttons>[\s\S]*?<\/buttons>/gi, '')
-    .replace(/<\/?reply>/gi, '')
-    .replace(/<\/?(action|action_data|buttons|reply)\b[^>]*>/gi, '')
-    .trim();
-}
-
-function stripLeakedPrefixes(text: string): string {
-  if (!text) return text;
-  return text.replace(/^(\s*\[(áudio|audio)( transcrito)?\]\s*)+/i, '').trim();
-}
+// A088: a MESMA limpeza do WhatsApp, do playground e do avaliador. Antes eram
+// cópias locais aqui, com um aviso de "alinhar caso o original mude" que
+// ninguém tinha como cumprir: as duas versões já tinham divergido.
+//
+// O que NÃO vem junto de propósito é o applyVozHumanaFilter. Ele roda no
+// WhatsApp e no avaliador, e ligá-lo no chat do site mudaria o texto que os
+// visitantes leem hoje. É decisão de produto, não de refatoração: fica de
+// fora deste PR.
+import { stripStructuredTags, stripLeakedPrefixes } from '../agents/replyText.js';
 
 /* ── Org/agent canonical da Iza (dogfood) ─────────────────────────────
  * Documentado em memory `project_zappiq_3_orgs_zappiq_naming.md`. */
@@ -603,10 +594,9 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     throw new Error('LLM_UNAVAILABLE');
   }
 
-  // 4. Strip tags estruturadas — o prompt da Iza pode retornar
-  //    <action>, <action_data>, <buttons>. No chat web, ignoramos essas
-  //    (não fazem sentido aqui) e usamos só o texto visível.
-  //    Reusa o mesmo cleanup do agentOrchestrator pra garantir paridade.
+  // 4. Limpeza das tags estruturadas: o prompt pode devolver <action>,
+  //    <action_data> e <buttons>, que não fazem sentido no chat do site. Fica
+  //    só o texto visível, pela mesma função que o WhatsApp usa.
   let reply = String(llmResp.text || '').trim();
   // Se houver <reply>…</reply>, prioriza esse conteúdo (mesma lógica do
   // parseAgentResponse interno).

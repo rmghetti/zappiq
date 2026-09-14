@@ -1,21 +1,25 @@
 /**
  * FEATURE 5a.2 — testes puros do shaping do playground "Testar minha IA".
  *
- * Mocamos as deps de limpeza (agentOrchestrator + vozHumanaFilter) pra isolar
- * a lógica DESTE módulo: (a) reuso da cadeia de limpeza, (b) usedContext
- * derivado das fontes, (c) validação do input. Isso evita puxar o mundo do
- * orchestrator (prisma/cache/whatsapp) só pra testar duas funções puras.
+ * Mocamos a dep de limpeza (agents/replyText) pra isolar a lógica DESTE
+ * módulo: (a) reuso da cadeia de limpeza, (b) usedContext derivado das
+ * fontes, (c) validação do input. Isso evita puxar o mundo do orchestrator
+ * (prisma/cache/whatsapp) só pra testar duas funções puras.
+ *
+ * A088: a cadeia de limpeza deixou de ser reimplementada em cada caminho e
+ * virou extractProductionReplyText, em agents/replyText.ts. O mock segue a
+ * mesma ideia: sentinela rastreável provando que o módulo REUSA a função.
  */
 import { describe, it, expect, vi } from 'vitest';
 
 // Cadeia de limpeza mockada com sentinelas rastreáveis: garante que o módulo
-// REUSA as mesmas funções do orchestrator, sem reimplementar.
-vi.mock('../agents/agentOrchestrator.js', () => ({
-  stripStructuredTags: (t: string) => t.replace('<TAG>', ''),
-  stripLeakedPrefixes: (t: string) => t.replace('[pfx]', ''),
-}));
-vi.mock('../agents/vozHumanaFilter.js', () => ({
-  applyVozHumanaFilter: (t: string) => t.replace(' — ', ', '),
+// REUSA a função de produção, sem reimplementar.
+vi.mock('../agents/replyText.js', () => ({
+  extractProductionReplyText: (t: string) => {
+    const cru = t ?? '';
+    const m = cru.match(/<reply>([\s\S]*?)<\/reply>/i);
+    return (m ? m[1] : cru).replace('<TAG>', '').replace('[pfx]', '').replace(' — ', ', ').trim();
+  },
 }));
 
 import {

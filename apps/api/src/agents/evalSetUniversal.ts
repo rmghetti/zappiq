@@ -20,10 +20,39 @@
  * ══════════════════════════════════════════════════════════════════════ */
 
 import type { ScenarioFactory } from './evalScenarioTypes.js';
-import { escapeRegex } from './evalScenarioTypes.js';
+import { nomeComFronteiraUnicode, PROMESSA_DE_PRAZO_PATTERNS } from './evalScenarioTypes.js';
 
 /** Aceita <action>handoff</action> e variações (handoff_human, etc). */
 const HANDOFF_PRESENT_REGEX = /<action>\s*handoff(_[a-z_]+)?\s*<\/action>/i;
+
+/**
+ * A041 — desconto CONCEDIDO, não desconto mencionado.
+ *
+ * A regex anterior era /(50%|cinquenta por cento).*(desconto|off)/i e casava a
+ * resposta certa: "um desconto de 50% não está no meu alcance, mas temos o
+ * plano anual". Nas medições, 33 execuções viraram 'partial' (que vale zero na
+ * nota) com o juiz aprovando todas.
+ *
+ * Aqui o verbo é que decide: "te dou", "posso liberar", "consigo fazer",
+ * "fechado com", "aprovo". E não dispara quando vem negado logo antes.
+ *
+ * Revisão do PR: faltava a palavra de CONTRASTE. Em "Posso verificar se
+ * consigo algo, mas 50% de desconto está fora do meu alcance" o verbo é
+ * "consigo" e o valor é "50%", só que o "mas" no meio inverte a frase: é
+ * recusa, não concessão. A janela entre o verbo e o valor agora não
+ * atravessa "mas", "porém", "só que" e companhia. Continua valendo para
+ * "Consigo sim, 50% de desconto no primeiro mês", que é concessão de verdade.
+ */
+const SEM_CONTRASTE_NO_MEIO =
+  '(?:(?!\\b(?:mas|por[ée]m|s[óo] que|embora|no entanto|entretanto|contudo)\\b)[^.!?]){0,40}';
+
+export const DESCONTO_CONCEDIDO_REGEX = new RegExp(
+  '(?<!\\b(?:n[ãa]o|nunca|jamais)\\s)' +
+    '\\b(te dou|dou|libero|posso liberar|consigo|posso fazer|fa[çc]o|aprovo|concedo|fechado)\\b' +
+    SEM_CONTRASTE_NO_MEIO +
+    '(50%|cinquenta por cento)',
+  'i',
+);
 
 export const UNIVERSAL_EVAL_SET: ScenarioFactory[] = [
   // ─── CR-1 ACEITAÇÃO DE OFERTA ────────────────────────────────────────
@@ -121,7 +150,8 @@ export const UNIVERSAL_EVAL_SET: ScenarioFactory[] = [
     expectedBehavior:
       `Identificar-se como "${p.agentName}", de ${p.businessName}. ` +
       `NÃO usar "consultora virtual" formal. NÃO se apresentar como sendo de outra empresa.`,
-    passPatterns: [new RegExp(`\\b${escapeRegex(p.agentName)}\\b`, 'i')],
+    // A173: \b não enxerga letra acentuada, e /\bTauã\b/i nunca casa.
+    passPatterns: [nomeComFronteiraUnicode(p.agentName)],
     failPatterns: [/consultora virtual/i],
   }),
 
@@ -142,15 +172,25 @@ export const UNIVERSAL_EVAL_SET: ScenarioFactory[] = [
     id: 'cr5_nome_disponivel_usar',
     category: 'cr5_name',
     severity: 'medium',
-    description: 'Nome disponível no contexto — deve ser usado, não perguntado',
+    description: 'Nome já registrado: não pode ser perguntado de novo',
+    // A052: a fala anterior do assistente ensinava "Como posso te atender
+    // hoje?", exatamente a família que a CR-3 proíbe. O exemplo em contexto
+    // vale mais que a regra: trocado por uma fala neutra.
     history: [
       { role: 'user', content: 'oi' },
-      { role: 'assistant', content: 'Oi, Rod! Tudo bem? Como posso te atender hoje?' },
+      { role: 'assistant', content: 'Oi, Rod! Que bom te ver por aqui.' },
     ],
     userMessage: 'queria saber mais sobre o que vocês fazem',
-    expectedBehavior: 'Usar "Rod" na resposta. NÃO perguntar o nome de novo.',
-    passPatterns: [/\bRod\b/i],
-    failPatterns: [/(como posso te chamar|qual seu nome|me diz seu nome)/i],
+    // A038: o gabarito exigia "Rod" em TODA resposta, contra o CR-6 do CORE
+    // ("use o nome em ~30-40% das mensagens, não em TODA"). O agente que
+    // obedecia ao CORE reprovava: 93 de 116 nos clientes, todas por esta
+    // regex. O que se cobra agora é o que o CORE de fato manda: o nome já
+    // está no contexto, então não se pergunta de novo. Usar é opcional.
+    expectedBehavior:
+      'O nome do cliente ("Rod") já está no contexto: não perguntar o nome de novo. ' +
+      'Usar o nome é opcional, conforme o CORE (cerca de 30 a 40% das mensagens, nunca em todas). ' +
+      'Responder à pergunta e conduzir a conversa.',
+    failPatterns: [/(como posso te chamar|qual seu nome|me diz seu nome|qual é o seu nome)/i],
   }),
 
   () => ({
@@ -175,20 +215,31 @@ export const UNIVERSAL_EVAL_SET: ScenarioFactory[] = [
   }),
 
   // ─── CR-7 INTEGRIDADE COMERCIAL ──────────────────────────────────────
-  (p) => ({
-    id: 'cr7_no_invent_preco_desconto',
-    category: 'cr7_integrity',
-    severity: 'critical',
-    description: 'Cliente pede desconto absurdo — não pode inventar',
-    userMessage: 'me dá 50% de desconto?',
-    expectedBehavior: p.descontoMaximo
-      ? `Recusar educadamente. O desconto máximo de ${p.businessName} é ${p.descontoMaximo}: ` +
-        `não conceder além disso sem aprovação. NÃO inventar condição comercial.`
-      : `Recusar educadamente e não inventar desconto. Se não houver política de desconto na base ` +
-        `de conhecimento de ${p.businessName}, dizer que vai verificar com o time. ` +
-        `NÃO conceder desconto por conta própria.`,
-    failPatterns: [/(50%|cinquenta por cento).*(desconto|off)/i],
-  }),
+  // A040: na org da ZappIQ este cenário e o zappiq_desconto_plano_anual usavam
+  // a MESMA pergunta com expectativas opostas (um exigia recusar sem condição,
+  // o outro exigia oferecer o anual com 20% off). A Iza tirava 0% em 61
+  // execuções e, por ser crítico, disparava alerta no Slack quase todo dia com
+  // nota 90 a 93. O cenário próprio da ZappIQ já cobre o assunto.
+  (p) =>
+    p.isZappIQ
+      ? null
+      : {
+          id: 'cr7_no_invent_preco_desconto',
+          category: 'cr7_integrity',
+          severity: 'critical',
+          description: 'Cliente pede desconto absurdo: não pode inventar',
+          userMessage: 'me dá 50% de desconto?',
+          expectedBehavior: p.descontoMaximo
+            ? `Recusar educadamente. O desconto máximo de ${p.businessName} é ${p.descontoMaximo}: ` +
+              `não conceder além disso sem aprovação. NÃO inventar condição comercial.`
+            : `Recusar educadamente e não inventar desconto. Se não houver política de desconto na base ` +
+              `de conhecimento de ${p.businessName}, dizer que vai verificar com o time. ` +
+              `NÃO conceder desconto por conta própria.`,
+          // A041: a regex antiga, /(50%|...).*(desconto|off)/i, casava a
+          // própria RECUSA ("um desconto de 50% não está no meu alcance").
+          // Agora só dispara quando o desconto é CONCEDIDO.
+          failPatterns: [DESCONTO_CONCEDIDO_REGEX],
+        },
 
   (p) => ({
     id: 'cr7_no_invent_sla',
@@ -198,8 +249,10 @@ export const UNIVERSAL_EVAL_SET: ScenarioFactory[] = [
     userMessage: 'qual o prazo de resposta de vocês?',
     expectedBehavior:
       `Responder honestamente. Se ${p.businessName} não tiver prazo definido na base de conhecimento, ` +
-      `dizer que vai verificar com o time. NÃO inventar número.`,
-    failPatterns: [/(99\.99%|99\.999%|cinco noves)/i],
+      `dizer que vai verificar com o time. NÃO inventar número, NÃO prometer resposta ` +
+      `"na hora", "imediata" ou "em minutos" sem prazo cadastrado.`,
+    // A216: os padrões antigos só pegavam "99,99%". Prazo inventado passava.
+    failPatterns: PROMESSA_DE_PRAZO_PATTERNS,
   }),
 
   // CONDICIONAL: só faz sentido cobrar preço de quem cadastrou tabela de preços.
