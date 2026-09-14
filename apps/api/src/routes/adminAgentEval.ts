@@ -66,6 +66,14 @@ import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services
 import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
 // FASE 2.2d (#252): on-demand suggestion pra cenários partial
 import { suggestFix } from '../services/agentEvalRunner.js';
+// A083: toda escrita no prompt declara a origem e vira versão; reverter só
+// vale enquanto o prompt ainda for o que aquela correção deixou.
+import {
+  publishPrompt,
+  hashPrompt,
+  PromptChangedError,
+  type PromptVersionDb,
+} from '../services/promptVersionService.js';
 
 const router = Router();
 
@@ -823,11 +831,8 @@ router.post(
       // Update agent + cria audit row em uma transaction
       const actor = await getActorSnapshot(actorUserId);
       const decision = await prisma.$transaction(async (tx) => {
-        await tx.agent.update({
-          where: { id: run.agentId },
-          data: { systemPrompt: result.promptAfter },
-        });
-        return tx.agentEvalFixDecision.create({
+        // A decisão nasce primeiro para a versão do prompt carregar o id dela.
+        const criada = await tx.agentEvalFixDecision.create({
           data: {
             runId,
             scenarioId,
@@ -844,6 +849,19 @@ router.post(
             notes: notes || `Aplicado via ${result.strategy} na linha ${result.insertedAtLine}`,
           },
         });
+
+        await publishPrompt(
+          {
+            agentId: run.agentId,
+            systemPrompt: result.promptAfter,
+            source: 'fix_apply',
+            decisionId: criada.id,
+            actor: actor.email,
+          },
+          tx as unknown as PromptVersionDb,
+        );
+
+        return criada;
       });
 
       logger.info({
@@ -1043,14 +1061,35 @@ router.post(
         return;
       }
 
+      // ─── A083: só reverte enquanto o prompt for o que a correção deixou ──
+      // Antes, o revert gravava promptBefore sem comparar com o prompt atual:
+      // qualquer edição posterior do cliente era apagada em silêncio.
+      const agent = await prisma.agent.findUnique({
+        where: { id: original.agentId },
+        select: { id: true, systemPrompt: true },
+      });
+      if (!agent) {
+        res.status(404).json({ error: 'agente não encontrado' });
+        return;
+      }
+      const hashDaEpoca = hashPrompt(original.promptAfter || '');
+      const hashAtual = hashPrompt(agent.systemPrompt || '');
+      if (hashAtual !== hashDaEpoca) {
+        logger.warn('[agentEval] revert recusado: o prompt mudou depois da correção', {
+          agentId: original.agentId,
+          decisionId: original.id,
+        });
+        res.status(409).json({
+          error: 'prompt_mudou',
+          message: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+        });
+        return;
+      }
+
       const actor = await getActorSnapshot(actorUserId);
 
       const reverted = await prisma.$transaction(async (tx) => {
-        await tx.agent.update({
-          where: { id: original.agentId },
-          data: { systemPrompt: original.promptBefore! },
-        });
-        return tx.agentEvalFixDecision.create({
+        const criada = await tx.agentEvalFixDecision.create({
           data: {
             runId: original.runId,
             scenarioId: original.scenarioId,
@@ -1068,6 +1107,22 @@ router.post(
             notes: reason || 'Reversão sem justificativa',
           },
         });
+
+        // A mesma checagem, agora dentro da transação: fecha a janela entre a
+        // leitura acima e a gravação.
+        await publishPrompt(
+          {
+            agentId: original.agentId,
+            systemPrompt: original.promptBefore!,
+            source: 'fix_revert',
+            decisionId: criada.id,
+            actor: actor.email,
+            expectedHash: hashDaEpoca,
+          },
+          tx as unknown as PromptVersionDb,
+        );
+
+        return criada;
       });
 
       logger.info({
@@ -1080,6 +1135,13 @@ router.post(
 
       res.json({ ok: true, decision: reverted });
     } catch (err: any) {
+      if (err instanceof PromptChangedError) {
+        res.status(409).json({
+          error: 'prompt_mudou',
+          message: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+        });
+        return;
+      }
       logger.error('[agentEval] revert erro:', err);
       res.status(500).json({ error: 'erro ao reverter', message: err?.message });
     }
