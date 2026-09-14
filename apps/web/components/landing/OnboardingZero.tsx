@@ -21,7 +21,7 @@ const MERCADO = [
 
 const ZAPPIQ = [
   'Formulário guiado de 30 a 90 minutos, você mesmo faz',
-  'Você mesmo sobe seus documentos (PDF, planilha, site)',
+  'Você mesmo sobe seus documentos (PDF, TXT, MD, CSV ou link do site)',
   'A Iza é calibrada automaticamente no painel',
   'Score de prontidão de 0 a 100, você vê em tempo real',
   'Em minutos você está atendendo cliente no WhatsApp',

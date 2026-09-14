@@ -140,7 +140,7 @@ const FAQ_WHATSAPP = [
   },
   {
     q: 'Os dados ficam seguros?',
-    a: 'Sim. Servidores no Brasil (AWS São Paulo), criptografia TLS 1.3 em trânsito, AES-256 em repouso. Conformidade LGPD com DPA padrão. Sem reuso para treinar modelos. ISO 27001 em processo de certificação.',
+    a: 'Sim. Banco de dados e servidores no Brasil (AWS São Paulo), criptografia TLS 1.3 em trânsito, AES-256 em repouso. O processamento de IA (os vetores do treino e as respostas do agente) acontece nos Estados Unidos, com salvaguardas contratuais; a lista está em /legal/subprocessadores. Conformidade LGPD com DPA padrão. Sem reuso para treinar modelos. ISO 27001 em processo de certificação.',
   },
 ];
 

@@ -19,8 +19,8 @@ const SEGMENTS = [
   {
     icon: Stethoscope,
     name: 'Clínicas e Consultórios',
-    pain: 'Pacientes desistem quando o WhatsApp demora. No-show consome até 25% do faturamento.',
-    solve: 'Agendamento automático 24/7, lembretes inteligentes e confirmação por IA.',
+    pain: 'Pacientes desistem quando o WhatsApp demora, e o horário livre continua vazio.',
+    solve: 'Agendamento 24/7: a IA consulta o horário livre e marca na agenda dentro da conversa.',
     color: 'from-blue-500 to-blue-600',
     bgLight: 'bg-blue-50',
     textAccent: 'text-blue-600',

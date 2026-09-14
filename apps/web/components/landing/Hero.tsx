@@ -404,7 +404,7 @@ export function Hero() {
             <p className="text-[17px] lg:text-[18.5px] text-muted leading-[1.55] max-w-[560px] mb-8">
               Não é um chatbot. É a sua <b className="text-ink">operação de atendimento e vendas</b> rodando sozinha no
               <b className="text-ink"> WhatsApp e Instagram</b>, 24/7, em texto e áudio. A IA monta o fluxo, cria a campanha,
-              atualiza o CRM na origem e se corrige sozinha. Ative em minutos e teste <b className="text-ink">14 dias grátis</b>.
+              atualiza o CRM na origem e aponta as próprias falhas para você aprovar a correção. Ative em minutos e teste <b className="text-ink">14 dias grátis</b>.
             </p>
 
             <div className="flex flex-wrap gap-3 mb-8">
@@ -424,7 +424,7 @@ export function Hero() {
                 <span className="text-g1 font-semibold">✓</span> Cancela quando quiser
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="text-g1 font-semibold">✓</span> Dados no Brasil
+                <span className="text-g1 font-semibold">✓</span> Banco de dados no Brasil, IA nos EUA
               </span>
             </div>
           </div>

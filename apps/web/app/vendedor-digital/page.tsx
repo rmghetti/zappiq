@@ -28,8 +28,8 @@ const CASES = [
     setor: 'Saúde',
     cliente: 'Sorriso & Cia (clínica odontologica)',
     metric1: { label: 'Agendamentos/mes via Iza', value: '184', change: '+220%' },
-    metric2: { label: 'No-show reduzido', value: '8%', change: '-65%' },
-    quote: 'A Iza confirma consulta no dia anterior, reagenda quando precisa. Recepcao foca em acolher quem ja chegou.',
+    metric2: { label: 'Tempo medio 1a resposta', value: '15s', change: '-98%' },
+    quote: 'A Iza marca a consulta dentro da conversa, no horario que esta livre de verdade. Recepcao foca em acolher quem ja chegou.',
     author: 'Dra. Leticia, fundadora',
   },
   {

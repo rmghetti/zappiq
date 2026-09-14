@@ -1,12 +1,17 @@
 'use client';
 
 /* ══════════════════════════════════════════════════════════════════════════
- * AgentQualityProactive: Seção Self-Healing (única no mundo)
+ * AgentQualityProactive: Seção Qualidade da IA
  * --------------------------------------------------------------------------
- * Apresenta o diferencial competitivo da ZappIQ: a única plataforma
- * conversacional do mundo que (a) detecta sozinha desvios/alucinações
- * do agente, (b) sugere correção, (c) deixa humano aprovar/editar/recusar,
- * (d) grava no system prompt automaticamente.
+ * Apresenta a Qualidade da IA: (a) uma bateria semanal de cenários de
+ * atendimento roda contra o agente, (b) o desvio vira uma correção escrita,
+ * (c) o humano aprova, edita ou recusa, (d) só depois do clique o texto entra
+ * nas instruções do agente.
+ *
+ * 14/09/2026: o texto desta seção prometia autocorreção sem humano, aprendizado
+ * com os próprios erros e detecção de alucinação em produção. Nada disso
+ * acontece: a bateria roda simulações, não conversas reais, e nenhuma correção
+ * entra no agente sem o clique de aprovar. Ver apps/web/lib/promessas.test.ts.
  *
  * Layout: fundo branco · caixas com borda escura · crítico em vermelho.
  * Posição na LandingPage: entre ROICalculator e TrustAndCompliance.
@@ -42,21 +47,21 @@ export function AgentQualityProactive() {
             >
               <Award size={14} className="text-amber-300" strokeWidth={2.2} />
               <span className="relative">
-                A IA que se corrige sozinha
+                A IA que mostra onde errou
                 <span className="absolute -right-3.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.85)] animate-pulse" />
               </span>
             </span>
           </div>
           <h2 className="text-[36px] lg:text-[44px] font-medium text-[#0F172A] leading-[1.08] tracking-[-0.025em] mb-4">
             A operação de atendimento que{' '}
-            <span className="text-grad">aprende com os próprios erros</span>, e te avisa antes
+            <span className="text-grad">mostra os próprios erros</span>, e te avisa antes
             de você descobrir
           </h2>
           <p className="text-[15px] lg:text-[16.5px] text-[#475569] leading-relaxed">
-            Na ZappIQ, a IA detecta sozinha os desvios e as alucinações do seu agente, sugere a
-            correção e deixa <b className="text-[#0F172A]">você decidir</b> se aprova, edita ou
-            recusa. Cada correção aprovada vira conhecimento: na próxima vez, o agente já
-            responde do jeito certo, sozinho.
+            Toda semana a ZappIQ roda uma bateria de cenários de atendimento no seu agente,
+            aponta onde ele saiu do esperado e escreve a correção. Quem decide é{' '}
+            <b className="text-[#0F172A]">você</b>: aprova, edita ou recusa. A correção aprovada
+            entra nas instruções do agente e passa a valer nas próximas conversas.
           </p>
         </div>
 
@@ -212,10 +217,10 @@ export function AgentQualityProactive() {
         >
           <div className="text-white">
             <div className="text-[15px] font-medium mb-1">
-              A IA se corrige sozinha. Você fica no comando.
+              A IA mostra o que corrigir. Você fica no comando.
             </div>
             <div className="text-[13px] opacity-85">
-              Iza identifica · sugere · você decide · plataforma aprende. Loop fechado.
+              Iza roda os cenários · aponta o desvio · sugere a correção · você decide.
             </div>
           </div>
           <Link

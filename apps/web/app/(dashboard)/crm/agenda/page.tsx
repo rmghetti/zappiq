@@ -1,11 +1,13 @@
 'use client';
 
 /**
- * Agenda interna (hub) — /crm/agenda.
+ * Agenda interna (hub): /crm/agenda.
  *
- * Fonte da verdade dos agendamentos. A IA grava aqui (via tools); o dono do
- * negócio gerencia (confirmar, cancelar, no-show, concluir); calendários
- * externos sincronizam com esta agenda. Visão de lista agrupada por dia.
+ * Fonte da verdade dos agendamentos. A IA consulta o horário livre e cria o
+ * compromisso (via tools). Ela não confirma, não lembra e não remarca: quem
+ * muda o estado é o dono do negócio, na mão (confirmar, cancelar, marcar que
+ * não compareceu, concluir). Calendários externos sincronizam com esta
+ * agenda. Visão de lista agrupada por dia.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';

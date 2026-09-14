@@ -1630,7 +1630,7 @@ export const GLOBAL_SURVEY_BLOCKS: SurveyBlock[] = [
           'Não enviar lembretes',
         ],
         required: false,
-        helpText: 'Lembretes reduzem no-show em até 80%. A IA envia automaticamente nos momentos configurados.',
+        helpText: 'Guarde aqui a sua política de lembrete. Hoje a IA usa essa informação para explicar a regra na conversa; o envio automático do lembrete ainda não existe.',
         category: 'confirmação',
       },
       {

@@ -132,15 +132,21 @@ export default function SubprocessadoresPage() {
         </div>
 
         <p>
-          Os dados primários da plataforma ficam no Brasil (região AWS sa-east-1, São Paulo).
-          Transferências internacionais, quando ocorrem (processamento de IA, pagamentos e e-mail),
-          seguem cláusulas contratuais e as salvaguardas da LGPD (Art. 33), conforme detalhado na{' '}
+          Os dados primários da plataforma ficam no Brasil (região AWS sa-east-1, São Paulo). O
+          processamento de IA é a exceção: todo treino vira vetor e toda resposta do agente é
+          gerada por provedores nos Estados Unidos, em todas as conversas. Essas transferências,
+          somadas às de pagamento e de e-mail, seguem cláusulas contratuais e as salvaguardas da
+          LGPD (Art. 33), conforme detalhado na{' '}
           <a href="/legal/privacidade">Política de Privacidade</a> e no{' '}
           <a href="/legal/dpa">DPA</a>.
         </p>
 
         <h2>Histórico de alterações</h2>
         <ul>
+          <li>
+            <strong>14/09/2026:</strong> texto sobre residência de dados corrigido. O processamento
+            de IA nos Estados Unidos não é eventual: acontece em todas as conversas.
+          </li>
           <li>
             <strong>20/08/2026:</strong> página criada, com a lista completa dos subprocessadores em
             uso nesta data.
