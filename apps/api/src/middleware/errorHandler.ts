@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { MulterError } from 'multer';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { MAX_UPLOAD_MB } from '../config/upload.js';
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -25,9 +26,6 @@ export class UnsupportedFileTypeError extends Error {
     this.name = 'UnsupportedFileTypeError';
   }
 }
-
-// Limite do multer na rota de documentos do Treinar IA (apps/api/src/routes/aiTraining.ts).
-export const UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 
 const MULTER_MENSAGENS: Record<string, string> = {
   LIMIT_PART_COUNT: 'o formulário tem partes demais.',
@@ -54,9 +52,11 @@ function respostaDoMulter(err: AppError): { statusCode: number; message: string 
   if (!(err instanceof MulterError)) return null;
 
   if (err.code === 'LIMIT_FILE_SIZE') {
+    // O número sai da MESMA constante que o multer usa para cortar o envio. Se
+    // alguém apertar o limite, a mensagem acompanha sozinha.
     return {
       statusCode: 413,
-      message: 'Arquivo maior que 20 MB. Divida o arquivo ou envie um menor.',
+      message: `Arquivo maior que ${MAX_UPLOAD_MB} MB. Divida o arquivo ou envie um menor.`,
     };
   }
 

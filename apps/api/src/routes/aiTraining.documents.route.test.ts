@@ -263,13 +263,17 @@ describe('POST /api/ai-training/documents, recusas de upload', () => {
     expect(ingestDocument).not.toHaveBeenCalled();
   });
 
-  it('arquivo acima do limite é recusado com 413, sem chegar ao vector store', async () => {
+  it('arquivo acima do limite é recusado com 413, com o limite REAL na mensagem', async () => {
     const grande = new Uint8Array(1024 * 1024 + 4096); // 1 MB + folga, acima do limite do teste
     const res = await enviar('contrato.pdf', 'application/pdf', grande);
     const body = await res.json();
 
     expect(res.status).toBe(413);
-    expect(body.error).toBe('Arquivo maior que 20 MB. Divida o arquivo ou envie um menor.');
+    // O limite aqui é 1 MB (a variável de ambiente lá em cima). A mensagem tem
+    // de dizer 1 MB, e não 20: até 14/09/2026 o número estava escrito à mão no
+    // errorHandler, então quem apertasse o limite por variável de ambiente
+    // mandava o cliente procurar um problema que não existia.
+    expect(body.error).toBe('Arquivo maior que 1 MB. Divida o arquivo ou envie um menor.');
     expect(ingestDocument).not.toHaveBeenCalled();
   });
 });

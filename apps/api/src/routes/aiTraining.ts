@@ -31,6 +31,7 @@ import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { authMiddleware } from '../middleware/auth.js';
 import { UnsupportedFileTypeError } from '../middleware/errorHandler.js';
+import { MAX_UPLOAD_BYTES } from '../config/upload.js';
 import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
@@ -104,14 +105,11 @@ const ALLOWED_MIMES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
 
-// 20 MB, suficiente para contratos e FAQs extensos. AI_TRAINING_MAX_UPLOAD_MB
-// existe só para o teste de rota poder provar o 413 sem trafegar 20 MB por
-// loopback; em produção a variável não é definida e vale o default.
-const MAX_UPLOAD_MB = Number(process.env.AI_TRAINING_MAX_UPLOAD_MB) || 20;
-
+// O limite vive em config/upload.ts, porque o errorHandler precisa do MESMO
+// número para escrever a mensagem de 413 que o cliente lê.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
+  limits: { fileSize: MAX_UPLOAD_BYTES },
   // Erro TIPADO: o errorHandler transforma em 415 com mensagem em português.
   // Antes era um Error cru, que virava 500 "Internal Server Error" e fazia o
   // cliente achar que a plataforma tinha caído.
