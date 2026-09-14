@@ -165,6 +165,23 @@ describe('detectarConflitos — desconto acima do teto (CR-7)', () => {
     });
     expect(c).toHaveLength(0);
   });
+
+  it('aceita desconto maior COM aprovação: é a exceção que o próprio CR-7 prevê', () => {
+    const c = detectarConflitos({
+      texto: 'O desconto máximo é 15% e só sai com aprovação do gerente.',
+    });
+    expect(c).toHaveLength(0);
+  });
+
+  it('não confunde "de" com o verbo "dê": falar de preço não é dar desconto', () => {
+    // O verificador normaliza acento, então "dê" e "de" ficam iguais. Sem
+    // cuidado, "sempre informe o valor de tabela e o desconto vigente" seria
+    // recusado, e o dono ficaria sem entender por quê.
+    const c = detectarConflitos({
+      texto: 'SEMPRE informe o valor de tabela e o desconto vigente da campanha.',
+    });
+    expect(c).toHaveLength(0);
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -183,6 +200,13 @@ describe('detectarConflitos — nome em toda mensagem (CR-6)', () => {
     });
     expect(c).toHaveLength(0);
   });
+
+  it('aceita a regra que PROÍBE repetir o nome em todas as mensagens', () => {
+    const c = detectarConflitos({
+      texto: 'Não use o nome do cliente em todas as mensagens, só na saudação.',
+    });
+    expect(c).toHaveLength(0);
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -194,6 +218,13 @@ describe('detectarConflitos — dado sensível (CR-8)', () => {
 
   it('aceita a regra que PROÍBE pedir CPF', () => {
     const c = detectarConflitos({ texto: 'Nunca peça o CPF do cliente pelo WhatsApp.' });
+    expect(c).toHaveLength(0);
+  });
+
+  it('não confunde o CLIENTE pedindo com o agente pedindo', () => {
+    const c = detectarConflitos({
+      texto: 'Se o cliente pedir para trocar a senha, mande o link da área de acesso.',
+    });
     expect(c).toHaveLength(0);
   });
 });

@@ -225,13 +225,20 @@ function frases(texto: string): string[] {
 
 const NEGACOES = /\b(nunca|jamais|nao|proibid[oa]|evite|sem autorizacao|sem aprovacao)\b/;
 
+/**
+ * O CR-7 não proíbe desconto grande: proíbe desconto grande SEM aprovação.
+ * Uma regra que já fala em aprovação está dentro da exceção que a própria
+ * regra base prevê, e recusá-la seria falso positivo.
+ */
+const RESSALVA_DE_APROVACAO = /\b(aprovacao|aprovad[oa]|autorizacao|autorizad[oa]|gerente|dono|diretor)\b/;
+
 /** Teto de desconto do CR-7, em porcentagem. */
 const TETO_DE_DESCONTO = 10;
 
 function conflitoDeDesconto(texto: string): Conflito | null {
   for (const frase of frases(texto)) {
     if (!frase.includes('desconto')) continue;
-    const negada = NEGACOES.test(frase);
+    const negada = NEGACOES.test(frase) || RESSALVA_DE_APROVACAO.test(frase);
 
     // (a) percentual acima do teto na mesma frase do desconto.
     for (const m of frase.matchAll(/(\d{1,3})\s*%/g)) {
@@ -249,9 +256,14 @@ function conflitoDeDesconto(texto: string): Conflito | null {
     }
 
     // (b) ordem genérica de sempre dar desconto, sem teto declarado.
+    //
+    // O verbo tem de ser inequívoco. "de" solto não entra na lista: a
+    // normalização tira o acento, então "dê" e "de" ficam iguais, e
+    // "sempre informe o valor DE tabela e o DESCONTO vigente" viraria
+    // recusa. A forma "dê desconto" é aceita só colada ao substantivo.
     if (
       !negada &&
-      /\b(sempre|obrigatoriamente)\b[^.]{0,60}\b(de|dê|ofereca|ofereça|conceda|garanta|libere)\b[^.]{0,30}desconto/.test(
+      /\b(sempre|obrigatoriamente)\b[^.]{0,60}(\b(ofereca|conceda|garanta|libere|aplique)\b[^.]{0,30}desconto|\bde\s+(um\s+|o\s+)?desconto)/.test(
         frase,
       )
     ) {
@@ -269,14 +281,17 @@ function conflitoDeDesconto(texto: string): Conflito | null {
 }
 
 function conflitoDeNome(texto: string): Conflito | null {
-  const t = normalizar(texto);
-  if (!t.includes('nome')) return null;
-  const universal =
-    /\bem (todas as|toda) (mensagens|mensagem|respostas|resposta|falas|fala)\b/.test(t) ||
-    /\b100% (das|de) (mensagens|respostas)\b/.test(t) ||
-    /\bsempre repita o nome\b/.test(t) ||
-    /\bem cada (mensagem|resposta)\b/.test(t);
-  if (!universal) return null;
+  const universalNaFrase = (f: string) =>
+    f.includes('nome') &&
+    (/\bem (todas as|toda) (mensagens|mensagem|respostas|resposta|falas|fala)\b/.test(f) ||
+      /\b100% (das|de) (mensagens|respostas)\b/.test(f) ||
+      /\bsempre repita o nome\b/.test(f) ||
+      /\bem cada (mensagem|resposta)\b/.test(f));
+
+  // A negação vale dentro da frase: "NÃO use o nome em todas as mensagens"
+  // é justamente o que o CR-6 pede, e não pode virar recusa.
+  const conflitante = frases(texto).some((f) => universalNaFrase(f) && !NEGACOES.test(f));
+  if (!conflitante) return null;
   return {
     tipo: 'nome_em_toda_mensagem',
     explicacao:
@@ -305,7 +320,10 @@ function conflitoDeDadoSensivel(texto: string): Conflito | null {
     if (NEGACOES.test(frase)) continue;
     const termo = TERMOS_SENSIVEIS.find((t) => frase.includes(t));
     if (!termo) continue;
-    if (!/\b(peca|peça|solicite|pergunte|exija|colete|pedir|solicitar)\b/.test(frase)) continue;
+    // Só imperativo: é o agente sendo MANDADO a pedir. "Se o cliente pedir
+    // para trocar a senha" tem "pedir" e "senha" na mesma frase, e quem
+    // pede ali é o cliente.
+    if (!/\b(peca|solicite|pergunte|exija|colete)\b/.test(frase)) continue;
     return {
       tipo: 'dado_sensivel',
       explicacao:
