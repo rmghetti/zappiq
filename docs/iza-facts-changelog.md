@@ -19,10 +19,11 @@
 ## Toda ação aberta tem data e prazo de 7 dias
 
 Desde 14/09/2026 (achado A229) cada ação aberta carrega a data em que foi
-aberta, e o CI falha quando ela passa de 7 dias:
+aberta, e o prazo padrão é de 7 dias:
 
 ```text
-- [ ] (aberto em 2026-09-14) CREATE fact `meta_tarifa_outubro` em pricing
+- [ ] (aberto em 2026-09-14) UPDATE fact `bandeira` em pricing
+- [ ] (aberto em 2026-09-14, vence em 2026-09-30) CREATE fact `meta_tarifa_outubro`
 - [x] (aberto em 2026-09-14, feito em 2026-09-16) UPDATE fact `posicionamento`
 ```
 
@@ -30,6 +31,21 @@ Por que o prazo existe: até aqui a trava só exigia EDITAR este arquivo. O
 resultado foram 13 ações abertas e nenhuma fechada, com a Iza oferecendo o
 Scale pelo preço de antes do Pricing V4 entre 03/05 e 25/05. Registrar sem
 executar virou ritual.
+
+**Quem o prazo reprova.** O relatório de ações vencidas é impresso em TODO PR,
+mas quem ele reprova depende da ação:
+
+- Ação **sem** `vence em`: o prazo é de 7 dias e só reprova o PR que toca
+  caminho da Iza (os paths sensíveis abaixo mais `docs/iza-facts-changelog.md`,
+  `apps/api/src/services/izaFactsService.ts`,
+  `apps/api/src/agents/evalSetZappIQ.ts` e
+  `apps/api/scripts/removerTabelaDePrecosDaIza.ts`). Nos demais PRs o relatório
+  sai como aviso e o check passa. A cobrança é de quem tem contexto para fechar
+  a ação, não do repositório inteiro.
+- Ação **com** `vence em AAAA-MM-DD`: a data substitui os 7 dias e reprova
+  QUALQUER PR a partir dela. Use quando o prazo é do mundo e não do
+  repositório. É o caso de `meta_tarifa_outubro`: a tarifa da Meta começa em
+  01/10 tenha ou não PR de Iza aberto, então a ação vence em 30/09.
 
 Se a ação não cabe em 7 dias, reabra com a data de hoje e escreva na própria
 linha por que prorrogou. Prorrogar é decisão consciente, não o padrão. Ação
@@ -269,9 +285,14 @@ cliente para /roadmap, /observabilidade ou /como-funciona-survey, que agora redi
    preço que não é de plano, como a tarifa da Meta de 01/10, continua valendo.
    Hoje a seção `pricing` de `iza_facts` está vazia em produção, então nada é
    perdido agora; a trava é para o futuro.
-3. O `scripts/check-iza-drift.sh` passou a falhar quando existe ação `- [ ]`
-   aberta há mais de 7 dias neste arquivo, ou sem data. Toda ação aberta agora
-   carrega `(aberto em AAAA-MM-DD)`.
+3. O `scripts/check-iza-drift.sh` passou a cobrar prazo das ações `- [ ]` deste
+   arquivo. Toda ação aberta carrega `(aberto em AAAA-MM-DD)`, e o padrão é 7
+   dias. O relatório sai em todo PR; a reprovação tem alcance estreito: ação
+   sem `vence em` só reprova PR que toca caminho da Iza, e ação com
+   `(aberto em ..., vence em AAAA-MM-DD)` reprova qualquer PR a partir daquela
+   data. A regra completa está em "Toda ação aberta tem data e prazo de 7
+   dias", no topo deste arquivo. O script também reprova cerca de código não
+   fechada, que antes engolia em silêncio toda ação escrita depois dela.
 4. Nasceu `apps/api/scripts/removerTabelaDePrecosDaIza.ts`, que tira do
    `agents.system_prompt` da Iza a lista `**Planos** (mensal): ...` e todo
    valor em reais, mantendo as regras de COMO falar de preço.
@@ -317,7 +338,7 @@ Starter?" → ela não oferece.
 
 **Ação no /admin/iza-knowledge** (após merge):
 - [ ] (aberto em 2026-09-14) UPDATE fact de pricing/bandeira: remover "sem cobrança por conversa", inserir a bandeira nova com o fair use (status: live). Backlog de 2026-08-20, prazo recontado em 14/09/2026 quando a regra de prazo nasceu.
-- [ ] (aberto em 2026-09-14) CREATE fact `meta_tarifa_outubro` em pricing (cobrança da Meta a partir de 01/10, a custo, medidor e teto; link /novidades-meta; status: live). Backlog de 2026-08-20. URGENTE: a tarifa começa em 01/10.
+- [ ] (aberto em 2026-09-14, vence em 2026-09-30) CREATE fact `meta_tarifa_outubro` em pricing (cobrança da Meta a partir de 01/10, a custo, medidor e teto; link /novidades-meta; status: live). Backlog de 2026-08-20. O vencimento é o dia anterior ao início da tarifa: a partir de 30/09 esta linha reprova qualquer PR do repositório.
 - [ ] (aberto em 2026-09-14) Smoke test no chat da Iza: perguntar "vocês cobram por conversa?" e "quanto vou pagar de WhatsApp em outubro?". Backlog de 2026-08-20.
 
 ### 2026-07-16 · PR #308 · Mira no catálogo comercial + cupom em todo produto pago
