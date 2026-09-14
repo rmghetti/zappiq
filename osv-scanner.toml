@@ -1,0 +1,154 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Exceções do portão de dependências (osv-scanner)
+# ---------------------------------------------------------------------------
+# Este arquivo é o ÚNICO lugar onde um alerta de dependência pode ser aceito.
+# Nada de `|| true` no CI: se um alerta novo aparecer, o job `osv` do ci.yml
+# fica vermelho até alguém corrigir a dependência ou escrever a exceção aqui,
+# com id, motivo, dono e prazo.
+#
+# Regras da casa:
+#   1. Toda entrada tem `reason` dizendo POR QUE o alerta não se aplica (ou o
+#      que impede a correção agora), QUEM é o dono e o que fecha a exceção.
+#   2. Toda entrada tem `ignoreUntil`. Prazo padrão: 30 dias. Vencido o prazo,
+#      o scanner volta a apontar e o CI fica vermelho de novo. É de propósito:
+#      exceção sem validade vira dívida invisível.
+#   3. Exceção é para alerta sem correção publicada, ou para correção que exige
+#      trabalho maior do que o PR em curso. Nunca para "dá trabalho".
+#
+# Formato (documentação: https://google.github.io/osv-scanner/configuration/):
+#
+#   [[IgnoredVulns]]
+#   id = "GHSA-xxxx-xxxx-xxxx"
+#   ignoreUntil = 2026-10-14T00:00:00Z     # sem aspas: é data TOML
+#   reason = "por que, quem é o dono, o que fecha"
+#
+#   [[PackageOverrides]]
+#   name = "pacote"
+#   ecosystem = "npm"
+#   ignore = true
+#   effectiveUntil = 2026-10-14T00:00:00Z
+#   reason = "..."
+#
+# O mesmo conjunto de ids está espelhado em `pnpm.auditConfig.ignoreGhsas` no
+# package.json da raiz, porque o `pnpm audit` não lê este arquivo. Mexeu aqui,
+# mexa lá.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Dependências de desenvolvimento ────────────────────────────────────────
+# O portão existe para proteger o que roda em produção. O osv-scanner lê o
+# lockfile inteiro, inclusive o que só existe na máquina de quem desenvolve e
+# no runner do CI (vitest, tsx, tipos, turbo). Esses pacotes não atendem
+# requisição de cliente nenhum. O `pnpm audit --prod` do mesmo CI já aplica o
+# mesmo recorte.
+[[PackageOverrides]]
+group = "dev"
+ignore = true
+reason = "Dependência só de desenvolvimento e de CI: não vai para a imagem da API nem para o build do web. O recorte de produção é coberto pelo pnpm audit --prod e pelo pip-audit do requirements.txt."
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Exceções abertas em 14/09/2026
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── next 14.2.18 (apps/web) ────────────────────────────────────────────────
+# Dono: Rodrigo (MACHIA).
+# Motivo: a correção completa é o next 15.5.24, ou seja, uma major. O apps/web
+#   roda na Vercel, que aplica mitigação de borda em parte destes alertas, e o
+#   salto de major mexe em App Router, em build e em todas as páginas. Não cabe
+#   no PR da rede de segurança do Treinar IA sem risco de derrubar a landing.
+# O que fecha: PR próprio de upgrade do Next, com preview verificado página a
+#   página. Meio do caminho barato e já identificado: o 14.2.35 fecha
+#   GHSA-f82v-jwr5-mffw (crítico), GHSA-mwv6-3258-q52c e GHSA-5j59-xgg2-r9c4
+#   sem sair da minor.
+# Prazo: 14/10/2026.
+
+[[IgnoredVulns]]
+id = "GHSA-2xp9-vwfh-vxw4"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção só no 15.5.24 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next com preview verificado."
+
+[[IgnoredVulns]]
+id = "GHSA-f82v-jwr5-mffw"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção no 14.2.25, dentro da minor. Dono: Rodrigo. É o primeiro a fechar no PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-p293-qw3h-jr36"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção só no 15.5.24 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next com preview verificado."
+
+[[IgnoredVulns]]
+id = "GHSA-36qx-fr4f-26g5"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-5j59-xgg2-r9c4"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção no 14.2.35, dentro da minor. Dono: Rodrigo. Fecha no PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-89xv-2m56-2m9x"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-8h8q-6873-q5fj"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-c4j6-fc7j-m34r"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção só no 15.5.16 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-h25m-26qc-wcjf"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção só no 15.0.8 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-m99w-x7hq-7vfj"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-mwv6-3258-q52c"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção no 14.2.34, dentro da minor. Dono: Rodrigo. Fecha no PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-p9j2-gv94-2wf4"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção só no 15.5.21 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+[[IgnoredVulns]]
+id = "GHSA-q4gf-8mx6-v5v3"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "next 14.2.18 no apps/web. Correção só no 15.5.15 (major). Dono: Rodrigo. Fecha com o PR de upgrade do Next."
+
+# ── OpenTelemetry no apps/api ──────────────────────────────────────────────
+# Dono: Rodrigo (MACHIA).
+# Motivo: os dois alertas dependem de configuração que a ZappIQ não usa.
+#   GHSA-q7rr-3cgh-j5r3 derruba o processo pelo servidor embutido do exporter
+#   Prometheus; apps/api/src/config/tracing.ts só usa exportadores OTLP por
+#   HTTP e não define OTEL_METRICS_EXPORTER, então esse servidor nunca sobe.
+#   GHSA-45rx-2jwx-cxfr derruba o processo pelo JaegerPropagator; o serviço usa
+#   o propagador padrão W3C e não define OTEL_PROPAGATORS.
+#   A correção exige pular de @opentelemetry/sdk-node 0.55 para 0.217 e de
+#   auto-instrumentations-node 0.52 para 0.75, o que reescreve a instrumentação
+#   inteira da API.
+# O que fecha: PR próprio de upgrade do OpenTelemetry do apps/api, com o
+#   serviço checado no Grafana Cloud depois do deploy. Se antes disso alguém
+#   ligar OTEL_METRICS_EXPORTER=prometheus ou OTEL_PROPAGATORS=jaeger, a
+#   exceção deixa de valer na hora.
+# Prazo: 14/10/2026.
+
+[[IgnoredVulns]]
+id = "GHSA-q7rr-3cgh-j5r3"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "@opentelemetry/sdk-node e auto-instrumentations-node no apps/api. O alerta é no servidor embutido do exporter Prometheus, que a ZappIQ não usa (só OTLP HTTP, sem OTEL_METRICS_EXPORTER). Dono: Rodrigo. Fecha com o PR de upgrade do OpenTelemetry."
+
+[[IgnoredVulns]]
+id = "GHSA-45rx-2jwx-cxfr"
+ignoreUntil = 2026-10-14T00:00:00Z
+reason = "@opentelemetry/propagator-jaeger no apps/api. O alerta é no JaegerPropagator, que a ZappIQ não registra (propagação padrão W3C, sem OTEL_PROPAGATORS). Dono: Rodrigo. Fecha com o PR de upgrade do OpenTelemetry."

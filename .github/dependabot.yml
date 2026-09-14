@@ -35,3 +35,31 @@ updates:
       - "docker"
       - "dependencies"
 
+
+  # Dependencias Python do servico RAG (services/rag/requirements.txt).
+  # Ficaram de fora ate 14/09/2026: por isso python-multipart 0.0.12 e fastapi
+  # 0.115.0 (starlette < 0.39) seguiram meses com alerta alto de negacao de
+  # servico por multipart, justamente no servico cujo /ingest recebe multipart.
+  - package-ecosystem: "pip"
+    directory: "/services/rag"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"
+      - "rag"
+
+  # Imagem base do servico RAG (services/rag/Dockerfile). A entrada docker que
+  # ja existia cobria so /apps/api.
+  - package-ecosystem: "docker"
+    directory: "/services/rag"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "docker"
+      - "dependencies"
+      - "rag"
