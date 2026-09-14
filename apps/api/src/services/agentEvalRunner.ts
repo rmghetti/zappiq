@@ -365,11 +365,25 @@ ${systemPromptExcerpt.slice(0, 2000)}
 
 // ─── Cenário runner ────────────────────────────────────────────────
 
-async function runScenario(
-  scenario: EvalScenario,
-  agent: { id: string; systemPrompt: string | null; name: string },
-  profile: JudgeProfile,
-): Promise<ScenarioResult> {
+/**
+ * System prompt que o teste de Qualidade entrega ao agente.
+ *
+ * Função pura e exportada porque o Raio-X do prompt (/admin/ai-xray) precisa
+ * mostrar este texto sem chamar o modelo. Antes a montagem morava dentro de
+ * runScenario e só existia durante uma execução paga do golden set.
+ *
+ * Repare no que ele NÃO tem, comparado ao prompt de produção: base de
+ * conhecimento, saudação do cliente, links do tenant, data e ferramentas. É o
+ * achado A036 do laudo, e sai do escuro na hora em que alguém olha o Raio-X.
+ */
+export function buildEvalSystemPrompt(
+  agent: { systemPrompt: string | null },
+  scenario: {
+    id: string;
+    userMessage?: string;
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  },
+): string {
   // FASE 2.1 fix (2026-05-13): mock condicional do bloco "Cliente atual".
   // Cenários cr5_nome_ausente_* testam o comportamento de PERGUNTAR nome —
   // injetar "Nome registrado: Rod" forçava o agent a usar o nome (falso pass)
@@ -377,7 +391,7 @@ async function runScenario(
   // 'nome_ausente', mock omite o nome.
   const nameMockEnabled = !scenario.id.includes('nome_ausente');
 
-  const systemPrompt = [
+  return [
     CORE_AGENT_RULES_V1,
     agent.systemPrompt || '(agente sem system_prompt customizado — só CORE rules)',
     '',
@@ -388,6 +402,14 @@ async function runScenario(
     'Mensagens trocadas até agora: ' + ((scenario.history?.length || 0) + 1),
     'Primeiro contato? ' + (!scenario.history?.length ? 'SIM' : 'NÃO'),
   ].join('\n');
+}
+
+async function runScenario(
+  scenario: EvalScenario,
+  agent: { id: string; systemPrompt: string | null; name: string },
+  profile: JudgeProfile,
+): Promise<ScenarioResult> {
+  const systemPrompt = buildEvalSystemPrompt(agent, scenario);
 
   const messages = (scenario.history || []).map((h) => ({
     role: h.role,
