@@ -57,7 +57,7 @@ vi.mock('../utils/logger.js', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { buildSystemPromptForContact } from './agentOrchestrator.js';
+import { buildSystemPromptForContact, buildAgentContextForContact } from './agentOrchestrator.js';
 import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 import {
   composeAgentContext,
@@ -519,4 +519,124 @@ describe('orçamento por bloco: partes somadas no máximo 20% acima do total de 
       expect(saida.partes[0].chars).toBeGreaterThan(5000);
     });
   }
+});
+
+/* ── 4. O caminho NOVO (flag contextoUnico ligada) bate com a fixture ── */
+
+describe('buildSystemPromptForContact com contextoUnico LIGADO: mesmo texto, agora pelo motor único', () => {
+  it('Vera (CMJ), perfil vivo ligado', async () => {
+    armarVera();
+    flags = { perfilVivo: true, contextoUnico: true };
+
+    const novo = await buildSystemPromptForContact(ENTRADA_VERA);
+
+    expect(novo).toBe(lerFixture('contexto-vera-perfil-vivo'));
+    // Prova de que foi o motor único: o Agent foi escolhido pela regra nova
+    // (papel por leadStatus, live, mais recente), com o select do carregador.
+    const chamada = agentFindFirst.mock.calls[0][0];
+    expect(chamada.where).toEqual({ organizationId: ORG_CMJ, role: 'comercial', status: 'live' });
+    expect(chamada.select).toEqual({ id: true, name: true, systemPrompt: true, role: true });
+  });
+
+  it('Vera (CMJ), perfil vivo desligado', async () => {
+    armarVera();
+    flags = { contextoUnico: true };
+
+    expect(await buildSystemPromptForContact(ENTRADA_VERA)).toBe(lerFixture('contexto-vera-sem-perfil-vivo'));
+  });
+
+  it('Vera (CMJ), A212 e base fora do ar', async () => {
+    armarVera();
+    flags = { perfilVivo: true, contextoUnico: true };
+
+    const novo = await buildSystemPromptForContact({
+      ...ENTRADA_VERA,
+      ragStatus: 'servico_fora',
+      temHistoricoNoContexto: false,
+    });
+
+    expect(novo).toBe(lerFixture('contexto-vera-a212-base-fora'));
+  });
+
+  it('Iza (ZappIQ), primeiro contato com iza_facts', async () => {
+    armarIza();
+    flags = { contextoUnico: true };
+
+    expect(await buildSystemPromptForContact(ENTRADA_IZA)).toBe(lerFixture('contexto-iza-primeiro-contato'));
+  });
+
+  it('buildAgentContextForContact devolve hash, partes e a marca do motor único', async () => {
+    armarVera();
+    flags = { perfilVivo: true, contextoUnico: true };
+
+    const saida = await buildAgentContextForContact(ENTRADA_VERA);
+    const fixture = lerFixture('contexto-vera-perfil-vivo');
+
+    expect(saida.viaContextoUnico).toBe(true);
+    expect(saida.systemPrompt).toBe(fixture);
+    expect(saida.hash).toBe(sha256(fixture));
+    expect(saida.partes.map((p) => p.nome)).toEqual([...NOMES_DAS_PARTES]);
+    expect(saida.contexto?.agente.id).toBe('agente-vera');
+    expect(saida.contexto?.contato).toMatchObject({ nome: 'João', totalMensagens: 7, primeiroContato: false });
+  });
+
+  it('com a flag DESLIGADA, o hash é o mesmo e as partes ficam vazias (caminho de antes)', async () => {
+    armarVera();
+    flags = { perfilVivo: true };
+
+    const saida = await buildAgentContextForContact(ENTRADA_VERA);
+
+    expect(saida.viaContextoUnico).toBe(false);
+    expect(saida.hash).toBe(sha256(lerFixture('contexto-vera-perfil-vivo')));
+    expect(saida.partes).toEqual([]);
+  });
+
+  it('a instrução do passo do Maestro entra depois do CORE com o motor único (A076)', async () => {
+    armarVera();
+    flags = { perfilVivo: true, contextoUnico: true };
+
+    const novo = await buildSystemPromptForContact({
+      ...ENTRADA_VERA,
+      instrucaoDeCanal: 'INSTRUÇÃO DO PASSO ATUAL DO FLUXO (Maestro): confirme o CEP.',
+    });
+
+    const fixture = lerFixture('contexto-vera-perfil-vivo');
+    const core = fixture.split('\n## IDENTIDADE')[0];
+    expect(novo.startsWith(core)).toBe(true);
+    expect(novo.indexOf('INSTRUÇÃO DO PASSO ATUAL')).toBe(core.length + 1);
+    expect(novo.indexOf('## IDENTIDADE')).toBeGreaterThan(novo.indexOf('INSTRUÇÃO DO PASSO ATUAL'));
+  });
+
+  it('sem Agent vivo, o motor único devolve ao fallback de sempre (promptEngine)', async () => {
+    contactFindUnique.mockResolvedValue(CONTATO_JOAO);
+    messageCount.mockResolvedValue(7);
+    agentFindFirst.mockResolvedValue(null);
+    flags = { contextoUnico: true };
+
+    const saida = await buildAgentContextForContact(ENTRADA_VERA);
+
+    expect(saida.viaContextoUnico).toBe(false);
+    // O fallback do promptEngine começa pelo CORE e traz o nome do agente das settings.
+    expect(saida.systemPrompt.startsWith(lerFixture('contexto-vera-perfil-vivo').split('\n## IDENTIDADE')[0])).toBe(true);
+    expect(saida.systemPrompt).toContain('# Cliente atual');
+  });
+
+  it('CONVERTED sem agente de suporte cai no comercial, não no prompt genérico (A069)', async () => {
+    contactFindUnique.mockResolvedValue({ leadStatus: 'CONVERTED', name: 'João', _count: { conversations: 3 } });
+    messageCount.mockResolvedValue(7);
+    agentFindFirst.mockImplementation(async (args: any) =>
+      args.where.role === 'comercial'
+        ? { id: 'agente-vera', name: 'Vera', role: 'comercial', systemPrompt: PROMPT_DA_VERA }
+        : null,
+    );
+    flags = { perfilVivo: true, contextoUnico: true };
+
+    const saida = await buildAgentContextForContact(ENTRADA_VERA);
+
+    expect(saida.viaContextoUnico).toBe(true);
+    expect(saida.contexto?.agente.role).toBe('comercial');
+    expect(saida.systemPrompt).toContain(PROMPT_DA_VERA);
+    expect(saida.systemPrompt).toContain('Status do lead: CONVERTED');
+    expect(agentFindFirst.mock.calls.map((c: any[]) => c[0].where.role)).toEqual(['suporte', 'comercial']);
+  });
 });

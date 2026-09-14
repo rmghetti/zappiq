@@ -69,12 +69,14 @@ function makeFakeDb(rows: any[] = []) {
 }
 
 describe('registro FLAGS', () => {
-  it('tem as seis flags previstas no plano', () => {
+  it('tem as oito flags previstas no plano', () => {
     expect(Object.keys(FLAGS).sort()).toEqual(
       [
         'compositorUnico',
+        'contextoUnico',
         'evalNoTier',
         'guardaComercial',
+        'modeloPorPolitica',
         'perfilVivo',
         'ragNoChatDoSite',
         'treinarSomenteAdmin',

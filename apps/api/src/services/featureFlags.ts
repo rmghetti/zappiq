@@ -29,7 +29,9 @@ export type FlagName =
   | 'guardaComercial'
   | 'ragNoChatDoSite'
   | 'evalNoTier'
-  | 'treinarSomenteAdmin';
+  | 'treinarSomenteAdmin'
+  | 'contextoUnico'
+  | 'modeloPorPolitica';
 
 export interface FlagDef {
   /** O que muda quando liga. Em português: isto aparece na tela do admin. */
@@ -72,6 +74,16 @@ export const FLAGS: Record<FlagName, FlagDef> = {
   treinarSomenteAdmin: {
     descricao:
       'Só ADMIN e SUPERADMIN podem aplicar, reverter ou disparar correções no prompt do agente.',
+    removeBy: '2026-12-31',
+  },
+  contextoUnico: {
+    descricao:
+      'WhatsApp, Instagram, chat do site, Testar minha IA, retomada do Maestro e Qualidade montam o prompt pelo mesmo motor de contexto (composeAgentContext).',
+    removeBy: '2026-12-31',
+  },
+  modeloPorPolitica: {
+    descricao:
+      'Modelo e ferramentas do turno decididos por resolveTurnPolicy, a mesma regra para todos os canais.',
     removeBy: '2026-12-31',
   },
 };

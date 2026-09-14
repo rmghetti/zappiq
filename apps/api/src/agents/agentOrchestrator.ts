@@ -51,8 +51,21 @@ import {
   buildGreetingBlock,
   type LiveProfileAgendamento,
 } from './tenantLiveProfile.js';
-import { isFlagOn } from '../services/featureFlags.js';
 import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
+// C1a (Passo 12): um só motor de contexto para todos os canais. A função
+// pura (composeAgentContext) e o carregador (agentContextLoader) entram
+// atrás do interruptor `contextoUnico`; a política de modelo e ferramentas
+// (resolveTurnPolicy) atrás de `modeloPorPolitica`. Desligados, tudo aqui é
+// byte a byte o de antes.
+import {
+  flagLigada,
+  montarContextoDoTurno,
+  carregarPoliticaDoTurno,
+  type ContextoDoTurno,
+  type ContatoDoTurno,
+} from './agentContextLoader.js';
+import { hashDoContexto, type OrigemDoTurno, type ParteDoContexto } from './composeAgentContext.js';
+import type { TurnPolicy } from './resolveTurnPolicy.js';
 // ZappIQ Maestro (#280) — flow runtime híbrido. Aditivo: só atua se a org tem
 // flag maestro.enabled + Flow ativo; senão devolve null e a Iza pura roda igual.
 import { resolveActiveFlowStep } from './flowRuntime.js';
@@ -769,7 +782,8 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // existia (ou o contrário). Ver resolveSchedulingRuntime.
     const agendamento = await resolveSchedulingRuntime(organizationId, orgSettings);
 
-    let systemPrompt = await buildSystemPromptForContact({
+    const contextoDoTurno = await buildAgentContextForContact({
+      origem: channel === 'instagram' ? 'instagram' : 'whatsapp',
       organizationId,
       contactId,
       contactPhone, // V4 #157 (PR #70) — pra REGRA 9 do prompt V7
@@ -780,12 +794,17 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       // A212: o histórico enviado ao modelo é só desta conversa. Contato que
       // volta depois de 72 h abre conversa nova e chega aqui sem passado.
       temHistoricoNoContexto: historyMessages.length > 1,
+      // Maestro (#280) pelo motor único (A076): a instrução do passo entra
+      // DEPOIS do CORE, que se declara imutável e prevalente.
+      instrucaoDeCanal: flowAiPrompt ? instrucaoDoPassoDoMaestro(flowAiPrompt) : undefined,
     });
+    let systemPrompt = contextoDoTurno.systemPrompt;
 
-    // Maestro (#280): se viemos de um nó-IA, injeta a instrução do passo NO TOPO
-    // do prompt (sem substituir CORE rules / identidade / iza_facts / RAG).
-    if (flowAiPrompt) {
-      systemPrompt = `INSTRUÇÃO DO PASSO ATUAL DO FLUXO (Maestro): ${flowAiPrompt}\n\n${systemPrompt}`;
+    // Maestro (#280), caminho de antes: se viemos de um nó-IA, injeta a
+    // instrução do passo NO TOPO do prompt. Só com o motor único desligado;
+    // ligado, ela já entrou depois do CORE (A076).
+    if (flowAiPrompt && !contextoDoTurno.viaContextoUnico) {
+      systemPrompt = `${instrucaoDoPassoDoMaestro(flowAiPrompt)}\n\n${systemPrompt}`;
     }
 
     // ── 8. Build history array (sem messageContent — routeIzaTurn adiciona) ───
@@ -798,7 +817,11 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // Ativado apenas quando o nó-IA tem tools do tipo 'webhook' configuradas.
     // Qualquer erro cai silenciosamente pro caminho normal (routeIzaTurn).
     // O no-tools path (e todos os caminhos não-flow) são byte-a-byte inalterados.
-    const { tier, forceProvider } = await pickTierAndOverride(organizationId, { ecoMode });
+    const { tier, forceProvider, politica } = await pickTierAndOverride(organizationId, {
+      ecoMode,
+      canal: channel === 'instagram' ? 'instagram' : 'whatsapp',
+      agendamentoAtivo: agendamento.ativo,
+    });
     if (flowStep?.next === 'ai' && Array.isArray(flowStep.aiTools) && flowStep.aiTools.length > 0) {
       const aiTools = flowStep.aiTools as WebhookToolConfig[];
       const webhookTools = aiTools.filter((t) => t && t.type === 'webhook');
@@ -901,9 +924,13 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // tipo ativo). O CMJ tinha o interruptor ligado com zero tipos e pagava
     // Sonnet em todo turno (A066, A165) para dizer que não agenda.
     const schedulingOn = agendamento.ativo;
-    const turnTools = schedulingOn
-      ? getToolsForContext({ hasScheduling: true, isIzaOrg: isZappIQOrg(organizationId) })
-      : undefined;
+    // Com `modeloPorPolitica` ligado, quem diz quais ferramentas entram é a
+    // política do turno (a mesma regra para todos os canais).
+    const turnTools = politica
+      ? toolsDaPolitica(politica, isZappIQOrg(organizationId))
+      : schedulingOn
+        ? getToolsForContext({ hasScheduling: true, isIzaOrg: isZappIQOrg(organizationId) })
+        : undefined;
 
     const turnResult = await routeIzaTurn({
       systemPrompt,
@@ -991,7 +1018,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
     // ── 11. Execute actions ─────────────────────────────
     if (parsed.action) {
-      await executeAction(organizationId, conversationId, contactId, contactPhone, parsed.action, parsed.actionData, io);
+      await executeAction(organizationId, conversationId, contactId, contactPhone, parsed.action, parsed.actionData, orgSettings, io);
     }
 
     // ── 12. Send reply via WhatsApp ─────────────────────
@@ -1183,6 +1210,23 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 const VALID_TIERS: LLMTier[] = ['STARTER', 'GROWTH', 'SCALE', 'BUSINESS', 'ENTERPRISE'];
 
 /**
+ * C1a: as ferramentas que a política do turno nomeou, como definições para
+ * o roteador. Lista vazia vira undefined: o izaTurnRouter trata os dois
+ * como "sem tools", e o teste dele tranca isso.
+ */
+export function toolsDaPolitica(politica: TurnPolicy, isIzaOrg: boolean): ToolDefinition[] | undefined {
+  if (!politica.tools.length) return undefined;
+  const nomes = new Set(politica.tools);
+  const defs = getToolsForContext({ hasScheduling: true, isIzaOrg }).filter((d) => nomes.has(d.name));
+  return defs.length ? defs : undefined;
+}
+
+/** O texto da instrução do passo do Maestro, o mesmo nos dois caminhos. */
+export function instrucaoDoPassoDoMaestro(aiPrompt: string): string {
+  return `INSTRUÇÃO DO PASSO ATUAL DO FLUXO (Maestro): ${aiPrompt}`;
+}
+
+/**
  * Intents que o classificador do passo 4 devolve e que valem como "intent
  * conhecida" pro Modo Econômico (PR-I): com uma delas em mãos, o SEGUNDO
  * classify (do izaTurnRouter) vira custo puro e é pulado. Ficam de fora:
@@ -1212,11 +1256,32 @@ export async function pickTierAndOverride(
      * forceProvider) e a escalada por intent segue possível no izaTurnRouter.
      */
     ecoMode?: boolean;
+    /** C1a: canal do turno, para a política de modelo e ferramentas. */
+    canal?: OrigemDoTurno;
+    /** C1a: agendamento REALMENTE de pé (resolveSchedulingRuntime().ativo). */
+    agendamentoAtivo?: boolean;
   },
 ): Promise<{
   tier?: LLMTier;
   forceProvider?: LLMProviderId;
+  /**
+   * C1a: presente só com o interruptor `modeloPorPolitica` ligado. Traz as
+   * ferramentas por nome e o motivo da decisão; quem chamou usa
+   * toolsDaPolitica para virar definições.
+   */
+  politica?: TurnPolicy;
 }> {
+  // C1a (Passo 12): com o interruptor ligado, a decisão é da função pura
+  // resolveTurnPolicy, provada igual à daqui em resolveTurnPolicy.test.ts.
+  if (await flagLigada(orgId, 'modeloPorPolitica')) {
+    const politica = await carregarPoliticaDoTurno(orgId, {
+      canal: opts?.canal ?? 'whatsapp',
+      ecoMode: opts?.ecoMode,
+      agendamentoAtivo: opts?.agendamentoAtivo ?? false,
+    });
+    return { tier: politica.tier, forceProvider: politica.override, politica };
+  }
+
   try {
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
@@ -1476,6 +1541,7 @@ async function executeAction(
   contactPhone: string,
   action: string,
   actionData: any,
+  orgSettings: any,
   io?: SocketIOServer
 ): Promise<void> {
   logger.info(`[Agent] Executing action: ${action}`, { organizationId, contactPhone });
@@ -1493,7 +1559,10 @@ async function executeAction(
         break;
 
       case 'handoff':
-        await handleHandoff(organizationId, conversationId, contactPhone, contactId, {}, io);
+        // A071: a tag <action>handoff</action> mandava o texto padrão da
+        // ZappIQ; o pedido de humano por intenção mandava a mensagem do
+        // cliente. Agora os dois gatilhos usam a mesma mensagem configurada.
+        await handleHandoff(organizationId, conversationId, contactPhone, contactId, orgSettings, io);
         break;
 
       case 'save_lead':
@@ -1687,7 +1756,7 @@ export async function resolveSchedulingRuntime(
 // Se não existir (ex.: org criada antes da migration ou seed falhou),
 // faz fallback pro promptEngine antigo — preserva back-compat.
 // ═══════════════════════════════════════════════════════════════════
-export async function buildSystemPromptForContact(input: {
+export interface BuildSystemPromptInput {
   organizationId: string;
   contactId: string;
   contactPhone?: string;
@@ -1713,7 +1782,96 @@ export async function buildSystemPromptForContact(input: {
    * conversa (A212). Só tem efeito com o interruptor ligado.
    */
   temHistoricoNoContexto?: boolean;
-}): Promise<string> {
+  /**
+   * C1a: canal do turno. Só o motor único usa (política e Raio-X); o caminho
+   * de antes não olha. Padrão 'whatsapp'.
+   */
+  origem?: OrigemDoTurno;
+  /**
+   * C1a: instrução de canal ou de passo do Maestro. Com o motor único, entra
+   * DEPOIS do CORE (A076). O caminho de antes ignora: quem chamou prefixa.
+   */
+  instrucaoDeCanal?: string;
+  /**
+   * C1a: contato já resolvido (Testar minha IA, A072). Com o motor único,
+   * dispensa o lookup por contactId; o caminho de antes ignora.
+   */
+  contato?: ContatoDoTurno;
+}
+
+export interface AgentContextResult {
+  systemPrompt: string;
+  /** sha256 do systemPrompt (Raio-X). Existe nos dois caminhos. */
+  hash: string;
+  /** Orçamento por bloco. Vazio no caminho de antes, que não fatia. */
+  partes: ParteDoContexto[];
+  /** true = montado pelo motor único (interruptor `contextoUnico`). */
+  viaContextoUnico: boolean;
+  /** O contexto completo, só no motor único. */
+  contexto?: ContextoDoTurno;
+}
+
+/**
+ * C1a: a casca. Com `contextoUnico` ligado, busca os dados pelo carregador
+ * e chama a função pura; sem Agent vivo, ou com o interruptor desligado,
+ * segue no caminho de sempre (buildSystemPromptLegado), caractere por
+ * caractere. O snapshot em composeAgentContext.snapshot.test.ts prova que
+ * ligar não muda o texto.
+ */
+export async function buildAgentContextForContact(
+  input: BuildSystemPromptInput,
+): Promise<AgentContextResult> {
+  // Os dois interruptores de uma vez: cada leitura pode ir ao Redis, e em
+  // série o turno pagaria duas idas. Ambos são fail-closed.
+  const [contextoUnico, perfilVivoLigado] = await Promise.all([
+    flagLigada(input.organizationId, 'contextoUnico'),
+    flagLigada(input.organizationId, 'perfilVivo'),
+  ]);
+  if (contextoUnico) {
+    const contexto = await montarContextoDoTurno({
+      origem: input.origem ?? 'whatsapp',
+      organizationId: input.organizationId,
+      orgSettings: input.orgSettings,
+      contato: input.contato,
+      contactId: input.contactId,
+      contactPhone: input.contactPhone,
+      ragContext: input.ragContext,
+      ragStatus: input.ragStatus,
+      agendamento: input.agendamento,
+      temHistoricoNoContexto: input.temHistoricoNoContexto,
+      instrucaoDeCanal: input.instrucaoDeCanal,
+      perfilVivoLigado,
+    });
+    if (contexto) {
+      return {
+        systemPrompt: contexto.systemPrompt,
+        hash: contexto.hash,
+        partes: contexto.partes,
+        viaContextoUnico: true,
+        contexto,
+      };
+    }
+    logger.warn('[Agent] motor único sem Agent vivo: seguindo no fallback de sempre', {
+      organizationId: input.organizationId,
+    });
+  }
+  const systemPrompt = await buildSystemPromptLegado(input, perfilVivoLigado);
+  return { systemPrompt, hash: hashDoContexto(systemPrompt), partes: [], viaContextoUnico: false };
+}
+
+export async function buildSystemPromptForContact(input: BuildSystemPromptInput): Promise<string> {
+  return (await buildAgentContextForContact(input)).systemPrompt;
+}
+
+/**
+ * O caminho de antes do C1a, intocado no texto. Some quando o interruptor
+ * for removido. O interruptor `perfilVivo` chega lido pela casca (uma ida
+ * ao cache para os dois interruptores, em vez de duas em série).
+ */
+async function buildSystemPromptLegado(
+  input: BuildSystemPromptInput,
+  perfilVivoLigado: boolean,
+): Promise<string> {
   const { organizationId, contactId, contactPhone, orgSettings, ragContext } = input;
   const ragStatus = input.ragStatus ?? 'ok';
   const ragBlock = [
@@ -1722,16 +1880,6 @@ export async function buildSystemPromptForContact(input: {
   ]
     .filter(Boolean)
     .join('\n');
-
-  // Interruptor por organização. Qualquer erro devolve false (o próprio
-  // featureFlags já é fail-closed; o try aqui cobre o mock de teste que
-  // rejeita). Desligado, tudo daqui para baixo é byte a byte o de antes.
-  let perfilVivoLigado = false;
-  try {
-    perfilVivoLigado = await isFlagOn(organizationId, 'perfilVivo');
-  } catch {
-    perfilVivoLigado = false;
-  }
 
   // V4 #157 (PR #70) — Lookup completo do Contact pra injetar nome no prompt.
   // Antes: lookup só pegava leadStatus → Iza não sabia o nome → sempre
