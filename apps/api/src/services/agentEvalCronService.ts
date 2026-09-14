@@ -308,7 +308,7 @@ export async function notifySlackQualityIssue(input: {
   }
 
   const messageMarkdown = [
-    `*${severity} — Qualidade do Agente exige revisão*`,
+    `*${severity}: Qualidade do Agente exige revisão*`,
     '',
     `*Agente:* ${input.agentName} (${input.organizationName})`,
     `*Motivo:* ${motivo}`,

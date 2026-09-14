@@ -300,6 +300,72 @@ describe('teto de 25 minutos por execução', () => {
     expect(cronServiceMock.notifySlackQualityIssue).not.toHaveBeenCalled();
   });
 
+  it('conclusão que vence o teto por milissegundos não deixa slackAlertStatus nulo', async () => {
+    execucaoQuePendura();
+
+    // A janela: gravarConclusao já gravou 'completed' e, milissegundos depois,
+    // o relógio de 25 minutos disparou. Nada mais a marcar como falha (o
+    // filtro de marcarFalha só pega 'pending'/'running')...
+    prismaMock.agentEvalRun.updateMany.mockResolvedValue({ count: 0 });
+    // ...e é a leitura do status EFETIVAMENTE gravado que revela a corrida.
+    prismaMock.agentEvalRun.findUnique
+      .mockResolvedValueOnce(runPendente())
+      .mockResolvedValueOnce({
+        id: 'run-1',
+        status: 'completed',
+        triggeredBy: 'client_manual',
+        slackAlertStatus: null,
+        results: [{ scenarioId: 'cr2', combined: 'fail', severity: 'critical' }],
+        passed: 1,
+        partial: 0,
+        failed: 1,
+        criticalFailed: 1,
+        scorePercent: 50,
+        durationMs: EVAL_RUN_TIMEOUT_MS,
+        totalScenarios: 2,
+      });
+    cronServiceMock.shouldAlertQuality.mockReturnValue(true);
+
+    const promessa = executeRunJob('run-1');
+    await vi.advanceTimersByTimeAsync(EVAL_RUN_TIMEOUT_MS + 1000);
+    await promessa;
+
+    // O alerta sai com os números que ficaram GRAVADOS na linha.
+    expect(cronServiceMock.notifySlackQualityIssue).toHaveBeenCalledTimes(1);
+    const alerta = cronServiceMock.notifySlackQualityIssue.mock.calls[0][0];
+    expect(alerta).toMatchObject({ runId: 'run-1', scorePercent: 50, criticalFailed: 1 });
+    expect(ultimoUpdate('slackAlertStatus')).toMatchObject({ slackAlertStatus: 'sent' });
+  });
+
+  it('linha que já estava failed não vira alerta de execução morta', async () => {
+    execucaoQuePendura();
+
+    prismaMock.agentEvalRun.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.agentEvalRun.findUnique
+      .mockResolvedValueOnce(runPendente())
+      .mockResolvedValueOnce({
+        id: 'run-1',
+        status: 'failed',
+        triggeredBy: 'client_manual',
+        slackAlertStatus: 'not_sent',
+        results: null,
+        passed: null,
+        partial: null,
+        failed: null,
+        criticalFailed: null,
+        scorePercent: null,
+        durationMs: null,
+        totalScenarios: 2,
+      });
+    cronServiceMock.shouldAlertQuality.mockReturnValue(true);
+
+    const promessa = executeRunJob('run-1');
+    await vi.advanceTimersByTimeAsync(EVAL_RUN_TIMEOUT_MS + 1000);
+    await promessa;
+
+    expect(cronServiceMock.notifySlackQualityIssue).not.toHaveBeenCalled();
+  });
+
   it('execução dentro do teto conclui normalmente', async () => {
     const terminar = execucaoQuePendura();
 

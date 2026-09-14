@@ -252,9 +252,12 @@ async function gravarConclusao(runId: string, saida: SaidaDaExecucao): Promise<b
 /**
  * Marca a execução como falha. Só age sobre linha ainda em aberto, para não
  * passar por cima de conclusão nem de falha já registrada.
+ *
+ * Devolve false quando NÃO marcou, e quem chama precisa desse false: significa
+ * que a linha já estava encerrada por outro caminho. Ver fecharCorridaComOTeto.
  */
-async function marcarFalha(runId: string, erro: string): Promise<void> {
-  await prisma.agentEvalRun
+async function marcarFalha(runId: string, erro: string): Promise<boolean> {
+  return prisma.agentEvalRun
     .updateMany({
       where: { id: runId, status: { in: ['pending', 'running'] } },
       data: {
@@ -264,7 +267,69 @@ async function marcarFalha(runId: string, erro: string): Promise<void> {
         slackAlertStatus: ALERTA_NAO_ENVIADO,
       },
     })
-    .catch(() => undefined);
+    .then(({ count }) => count > 0)
+    .catch(() => false);
+}
+
+/**
+ * Fecha a corrida entre a gravação da conclusão e o relógio do teto.
+ *
+ * A janela é estreita mas existe: gravarConclusao grava 'completed' e, antes
+ * da promessa voltar, o relógio de 25 minutos dispara. A execução cai no
+ * catch com a linha JÁ concluída. marcarFalha não toca nela (o filtro só pega
+ * 'pending'/'running') e o caminho normal do alerta ficou para trás, então a
+ * linha terminaria 'completed' com slackAlertStatus nulo para sempre. É
+ * exatamente o buraco de auditoria que o campo existe para fechar: sem ele,
+ * ninguém sabe se aquele resultado chegou a ser alertado.
+ *
+ * Por isso a decisão do alerta aqui lê o status EFETIVAMENTE gravado, e não o
+ * que o fluxo em memória supõe. Os números vêm da linha, que é a única fonte
+ * que sobreviveu à corrida.
+ */
+async function fecharCorridaComOTeto(
+  runId: string,
+  agent: { id: string; name: string; organization?: { name: string } | null },
+): Promise<void> {
+  const linha = await prisma.agentEvalRun
+    .findUnique({
+      where: { id: runId },
+      select: {
+        status: true,
+        triggeredBy: true,
+        slackAlertStatus: true,
+        results: true,
+        passed: true,
+        partial: true,
+        failed: true,
+        criticalFailed: true,
+        scorePercent: true,
+        durationMs: true,
+        totalScenarios: true,
+      },
+    })
+    .catch(() => null);
+
+  // Linha encerrada de qualquer outra forma (falha da varredura, falha já
+  // registrada) ou alerta já decidido: nada a fazer.
+  if (!linha || linha.status !== 'completed' || linha.slackAlertStatus) return;
+
+  logger.warn({ msg: 'agent_eval_run_conclusao_venceu_o_teto', runId, agentId: agent.id });
+
+  await alertarSePreciso({
+    run: { id: runId, triggeredBy: linha.triggeredBy, agentId: agent.id },
+    agentName: agent.name,
+    organizationName: agent.organization?.name || '(sem nome)',
+    results: Array.isArray(linha.results) ? (linha.results as Array<Record<string, any>>) : [],
+    summary: {
+      passed: linha.passed ?? 0,
+      partial: linha.partial ?? 0,
+      failed: linha.failed ?? 0,
+      criticalFailed: linha.criticalFailed ?? 0,
+      scorePercent: linha.scorePercent ?? 0,
+    },
+    durationMs: linha.durationMs ?? 0,
+    totalScenarios: linha.totalScenarios ?? 0,
+  });
 }
 
 /**
@@ -351,7 +416,7 @@ export async function executeRunJob(runId: string): Promise<void> {
     await alertarSePreciso({
       run: { id: runId, triggeredBy: run.triggeredBy, agentId: agent.id },
       agentName: agent.name,
-      organizationName: agent.organization?.name || '—',
+      organizationName: agent.organization?.name || '(sem nome)',
       results,
       summary,
       durationMs,
@@ -365,7 +430,14 @@ export async function executeRunJob(runId: string): Promise<void> {
       agentId: agent.id,
       error: String(err?.message || err),
     });
-    await marcarFalha(runId, estourouOTeto ? ERRO_TETO_EXECUCAO : String(err?.message || 'unknown'));
+    const marcou = await marcarFalha(
+      runId,
+      estourouOTeto ? ERRO_TETO_EXECUCAO : String(err?.message || 'unknown'),
+    );
+    // Não marcou: a linha já estava encerrada. Pode ter sido a conclusão
+    // vencendo o relógio do teto por milissegundos, e nesse caso o alerta
+    // ainda precisa ser decidido.
+    if (!marcou) await fecharCorridaComOTeto(runId, agent);
   }
 }
 
@@ -502,7 +574,11 @@ export async function sweepStuckEvalRuns(now: Date = new Date()): Promise<number
 // provedor que a concorrência 1 existia para evitar. A trava que vale para as
 // duas máquinas precisa morar no Redis, fora do BullMQ.
 
-/** Chave única da trava. Uma execução de teste por vez em TODA a frota. */
+/**
+ * Chave única da trava: uma execução por vez entre as que passam pela fila.
+ * A rota síncrona do superadmin (POST /admin/agent-eval/run) fica fora, porque
+ * roda dentro do próprio processo e nunca chega ao worker.
+ */
 export const TRAVA_GLOBAL_CHAVE = 'zappiq:agent-eval:lock';
 
 /**
