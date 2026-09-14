@@ -903,3 +903,55 @@ class ClientesApi {
 }
 
 export const clientesApi = new ClientesApi();
+
+// ─── Raio-X do prompt (Tarefa A3) ────────────────────────────────────────
+//
+// Mostra o que a IA recebe em cada canal, sem chamar modelo nenhum.
+// Fonte: apps/api/src/routes/adminAiXray.ts
+
+export type XrayCanal = 'whatsapp' | 'instagram' | 'site' | 'playground' | 'qualidade';
+
+export interface XrayFatia {
+  titulo: string;
+  texto: string;
+  chars: number;
+}
+
+export interface XrayFonte {
+  source: string;
+  similarity: number;
+}
+
+export interface XrayChecagem {
+  id: string;
+  rotulo: string;
+  ok: boolean;
+  detalhe: string;
+}
+
+export interface XrayTurno {
+  mensagem: string;
+  prompt_chars: number;
+  fatias: XrayFatia[];
+  fontes: XrayFonte[];
+  checagens: XrayChecagem[];
+}
+
+export interface XrayResposta {
+  organizationId: string;
+  canal: XrayCanal;
+  turnos: XrayTurno[];
+}
+
+class AiXrayApi {
+  /** POST /api/admin/ai-xray — monta o prompt de cada turno, sem gastar LLM. */
+  run(input: {
+    organizationId: string;
+    canal: XrayCanal;
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  }): Promise<XrayResposta> {
+    return api.post<XrayResposta>('/api/admin/ai-xray', input);
+  }
+}
+
+export const aiXrayApi = new AiXrayApi();

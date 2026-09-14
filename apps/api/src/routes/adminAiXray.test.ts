@@ -308,3 +308,4 @@ describe('POST /api/admin/ai-xray — o prompt de cada canal', () => {
     expect(res.body.canal).toBe('playground');
   });
 });
+

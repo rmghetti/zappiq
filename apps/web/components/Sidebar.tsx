@@ -18,6 +18,8 @@ import {
   Ticket,
   // Mira Prospects — inteligência de oportunidades (add-on)
   Crosshair,
+  // Raio-X do prompt (SUPERADMIN)
+  ScanSearch,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
@@ -74,6 +76,7 @@ const complianceItems = [
 // fique cortado pelo footer da sidebar em telas menores.
 const platformAdminItems = [
   { href: '/admin/agent-quality', label: 'Qualidade do Agente', icon: Activity }, // FASE 2 / V4
+  { href: '/admin/ai-xray', label: 'Raio-X da IA', icon: ScanSearch }, // Tarefa A3: o que a IA recebe em cada canal
   { href: '/admin/llm-health', label: 'LLM Health', icon: Bot },
   { href: '/admin/iza-conversations', label: 'Conversas Iza', icon: MessageSquare },
   { href: '/admin/quota-watch', label: 'Quota Watch', icon: Activity },
