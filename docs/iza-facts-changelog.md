@@ -94,6 +94,27 @@ Pra contornar (PRs cosméticos): adicione label `no-iza-impact` no PR.
 
 ## Entradas
 
+### 2026-09-14 · Blindagem das telas (A5) · Chat da landing avisa quando um atendente assume
+
+**O que mudou:** `apps/web/components/landing/WhatsAppButton.tsx` ganhou quatro
+linhas: quando o servidor devolve `paused: true` (um atendente humano assumiu a
+conversa no painel), o chat da landing mostra "Um atendente da equipe vai
+responder por aqui em instantes." em vez de tratar a resposta vazia como falha e
+mostrar o aviso de instabilidade. Nenhum outro texto do site mudou. Do lado do
+servidor, o chat do site passou a montar o histórico a partir do que foi gravado
+na conversa, ignorando o histórico enviado pelo navegador do visitante.
+
+**Impacto na Iza:** nenhum fato novo. A Iza não passa a falar nada diferente. O
+que muda é que ela deixa de receber turnos "assistant" forjados pelo visitante,
+ou seja, ela para de dar sequência a fala que ela nunca disse.
+
+**Ação no /admin/iza-knowledge** (após merge):
+- [ ] Nenhuma (mudança técnica sem impacto narrativo)
+
+**Smoke esperado:** no chat da landing, mandar uma mensagem e conferir que a
+resposta chega normalmente. Com a conversa pausada no painel, a tela mostra o
+aviso do atendente, e não o texto de instabilidade.
+
 ### 2026-09-14 · Raio-X do prompt · `getToneInstructions` exportada (sem mudança de texto)
 
 **O que mudou:** `apps/api/src/agents/promptEngine.ts` ganhou a palavra `export` na
