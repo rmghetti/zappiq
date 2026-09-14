@@ -38,6 +38,27 @@ vi.mock('../services/agentRulesService.js', () => ({
   blocoDeRegrasDaOrganizacao: vi.fn().mockResolvedValue(''),
 }));
 
+// O perfil vivo (A8) também consulta o interruptor por organização, dentro do
+// montador real. Sem este duble, cada montagem esperava o Redis recusar a
+// conexão e o primeiro teste do arquivo levava mais de 7 s. Desligado é o
+// que o teste já via com o Redis fora (isFlagOn devolve false no erro).
+vi.mock('../services/featureFlags.js', () => ({
+  isFlagOn: vi.fn().mockResolvedValue(false),
+}));
+
+// O montador real importa o motor de fluxos, e o agendador dele cria a fila
+// BullMQ no import, abrindo conexão com o Redis em segundo plano. Fila falsa:
+// nenhum teste daqui enfileira nada.
+vi.mock('bullmq', () => ({
+  Queue: class {
+    add = vi.fn();
+    on = vi.fn();
+  },
+  Worker: class {
+    on = vi.fn();
+  },
+}));
+
 vi.mock('../utils/logger.js', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));

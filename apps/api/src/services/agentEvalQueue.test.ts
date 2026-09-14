@@ -58,6 +58,20 @@ vi.mock('../agents/agentEvalSet.js', () => evalSetMock);
 // (as regras do alerta de reprovação repetida). A contagem de trechos do RAG
 // que ele importa puxaria o ragService e o cache; aqui ela não é usada.
 vi.mock('./aiReadinessService.js', () => ({ countRagChunksByNamespaceOrNull: vi.fn() }));
+// A fila é preguiçosa, mas os testes do enqueueEvalRun a criam de verdade
+// (getAgentEvalQueue) e o BullMQ abria conexão com o Redis em segundo plano.
+// O erro de conexão aparecia no meio dos testes seguintes. Fila falsa: os
+// testes só espiam o `add`.
+vi.mock('bullmq', () => ({
+  Queue: class {
+    add = vi.fn();
+    on = vi.fn();
+  },
+  Worker: class {
+    on = vi.fn();
+  },
+  DelayedError: class extends Error {},
+}));
 
 const {
   executeRunJob,

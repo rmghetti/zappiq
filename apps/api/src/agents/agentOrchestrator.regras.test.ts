@@ -46,6 +46,19 @@ vi.mock('../services/agentRulesService.js', () => ({
   blocoDeRegrasDaOrganizacao: (...args: any[]) => blocoDeRegras(...args),
 }));
 
+// O orquestrador importa o motor de fluxos, e o agendador dele cria a fila
+// BullMQ no import, abrindo conexão com o Redis em segundo plano. Fila falsa:
+// nenhum teste daqui enfileira nada.
+vi.mock('bullmq', () => ({
+  Queue: class {
+    add = vi.fn();
+    on = vi.fn();
+  },
+  Worker: class {
+    on = vi.fn();
+  },
+}));
+
 vi.mock('../utils/logger.js', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
