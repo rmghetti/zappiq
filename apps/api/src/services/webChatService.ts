@@ -161,13 +161,21 @@ export interface WebChatTurn {
 export interface WebChatRequest {
   sessionId: string;
   message: string;
-  history: WebChatTurn[];
+  /**
+   * A190: IGNORADO. Ficou no contrato para o widget publicado continuar
+   * mandando sem erro, mas o histórico que vai ao modelo é o que o servidor
+   * gravou nesta conversa. Turno 'assistant' vindo do navegador era fala do
+   * agente inventada pelo visitante.
+   */
+  history?: WebChatTurn[];
   /** Org dona do agente. Default = Iza canonical (mantém /iza-message igual). */
   organizationId?: string;
 }
 
 export interface WebChatResponse {
   reply: string;
+  /** A190: verdadeiro quando um atendente assumiu a conversa e o robô não respondeu. */
+  paused?: boolean;
   provider?: string;
   model?: string;
   latencyMs: number;
@@ -419,6 +427,47 @@ async function debitWebChatAttendanceShadow(
   }
 }
 
+/**
+ * A190: histórico e estado de atendimento lidos do banco, para a conversa da
+ * sessão. É o mesmo registro que o Inbox mostra, então o que o modelo vê é o
+ * que de fato aconteceu. INBOUND vira turno do visitante; OUTBOUND vira turno
+ * do agente (inclusive quando quem escreveu foi um atendente humano).
+ *
+ * Melhor esforço: se o banco falhar, o chat público segue sem histórico, que é
+ * o comportamento seguro (nunca inventa contexto).
+ */
+export async function carregarConversaDoServidor(
+  conversationId: string,
+): Promise<{ history: WebChatTurn[]; aiPaused: boolean }> {
+  try {
+    const [conversa, gravadas] = await Promise.all([
+      prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { aiPaused: true },
+      }),
+      prisma.message.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        take: MAX_HISTORY_TURNS,
+        select: { direction: true, content: true },
+      }),
+    ]);
+    const turnos = gravadas
+      .reverse()
+      .map((m: { direction: string; content: string | null }) => ({
+        role: m.direction === 'OUTBOUND' ? 'assistant' : 'user',
+        content: String(m.content || ''),
+      }));
+    return { history: sanitizeHistory(turnos), aiPaused: conversa?.aiPaused === true };
+  } catch (err) {
+    logger.warn('[webChat] histórico do servidor indisponível (segue sem histórico)', {
+      conversationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return { history: [], aiPaused: false };
+  }
+}
+
 /* ── Handler principal ────────────────────────────── */
 
 export async function processWebChatTurn(input: WebChatRequest): Promise<WebChatResponse> {
@@ -428,7 +477,6 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   if (!userMessage) {
     throw new Error('Mensagem vazia');
   }
-  const history = sanitizeHistory(input.history);
   const organizationId = input.organizationId || IZA_CANONICAL_ORG_ID;
   const isIzaCanonical = organizationId === IZA_CANONICAL_ORG_ID;
 
@@ -448,6 +496,14 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
       err: err instanceof Error ? err.message : String(err),
     });
   }
+
+  // A190: o histórico vem do que o servidor gravou nesta conversa, nunca do
+  // navegador do visitante. Lido ANTES do espelho INBOUND deste turno, senão a
+  // pergunta atual entraria duas vezes.
+  const doServidor = lead
+    ? await carregarConversaDoServidor(lead.conversationId)
+    : { history: [] as WebChatTurn[], aiPaused: false };
+  const history = doServidor.history;
 
   // 0.b Resposta Meta 2026: espelho INBOUND antes da LLM. Se a cascade cair,
   //     a pergunta do visitante já ficou registrada na conversa do CRM.
@@ -472,6 +528,17 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
         err: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  // A190: um atendente assumiu a conversa. A pergunta do visitante já ficou
+  // registrada acima para ele ler; o robô não fala por cima nem gasta modelo.
+  if (doServidor.aiPaused) {
+    logger.info('[webChat] conversa sob atendimento humano: robô não respondeu', {
+      sessionId,
+      organizationId,
+      conversationId: lead?.conversationId,
+    });
+    return { reply: '', paused: true, latencyMs: Date.now() - startedAt };
   }
 
   // 1. systemPrompt = CORE_AGENT_RULES_V1 + [FATOS ATUAIS só pra Iza] + prompt do
