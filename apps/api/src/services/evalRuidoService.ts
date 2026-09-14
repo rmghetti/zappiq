@@ -22,6 +22,7 @@
 
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
+import { HARNESS_VERSION } from '../agents/agentEvalSet.js';
 
 export interface PisoDeRuido {
   /** Desvio padrão da nota, com uma casa. 0 quando não há base. */
@@ -108,6 +109,9 @@ export function classificarMudanca(input: {
  * Fail-soft: erro no banco devolve piso vazio. Esta é uma informação de apoio
  * na tela; ela não pode derrubar a listagem de execuções.
  */
+/** Abaixo disto não há desvio nenhum a calcular: uma nota não oscila sozinha. */
+const MINIMO_PARA_PISO = 2;
+
 export async function carregarRuidoDoAgente(
   agentId: string,
   opts: { db?: any; limite?: number } = {},
@@ -120,17 +124,33 @@ export async function carregarRuidoDoAgente(
       select: { createdAt: true },
     });
 
-    const runs = await db.agentEvalRun.findMany({
-      where: {
-        agentId,
-        status: 'completed',
-        ...(ultimaVersao?.createdAt ? { startedAt: { gte: ultimaVersao.createdAt } } : {}),
-      },
-      orderBy: { startedAt: 'desc' },
-      take: opts.limite ?? 20,
-      select: { scorePercent: true },
-    });
+    const base = {
+      agentId,
+      status: 'completed',
+      ...(ultimaVersao?.createdAt ? { startedAt: { gte: ultimaVersao.createdAt } } : {}),
+    };
+    const consulta = (where: Record<string, unknown>) =>
+      db.agentEvalRun.findMany({
+        where,
+        orderBy: { startedAt: 'desc' },
+        take: opts.limite ?? 20,
+        select: { scorePercent: true },
+      });
 
+    // Revisão do PR: o piso de ruído mede a oscilação do MESMO agente sob a
+    // MESMA régua. Misturar nota de régua v2 com nota de régua v3 mede a troca
+    // da régua, não o agente, e infla justamente o número que serve para dizer
+    // ao cliente se a IA mudou de verdade.
+    //
+    // A queda para a consulta sem filtro existe porque a régua nova nasce sem
+    // histórico: no dia do deploy não há duas execuções v3 para comparar, e
+    // ficar sem piso nenhum seria pior do que um piso medido com a régua velha.
+    const daReguaAtual = await consulta({ ...base, harnessVersion: HARNESS_VERSION });
+    if (daReguaAtual.length >= MINIMO_PARA_PISO) {
+      return pisoDeRuido(daReguaAtual.map((r: any) => r.scorePercent));
+    }
+
+    const runs = await consulta(base);
     return pisoDeRuido(runs.map((r: any) => r.scorePercent));
   } catch (err: any) {
     logger.warn({

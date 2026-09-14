@@ -146,6 +146,7 @@ export default function AgentQualityPage() {
   } | null>(null);
   const [regravacaoResumo, setRegravacaoResumo] = useState<RegradeResumo | null>(null);
   const [regravacaoErro, setRegravacaoErro] = useState<string | null>(null);
+  const [buscandoResumo, setBuscandoResumo] = useState(false);
 
   const recalcularNotas = async (dryRun: boolean) => {
     setRegravando(true);
@@ -167,17 +168,38 @@ export default function AgentQualityPage() {
     }
   };
 
-  /** Lê o resumo da execução concluída mais recente, depois do recálculo. */
+  /**
+   * Lê o resumo da execução concluída mais recente, depois do recálculo.
+   *
+   * A rota devolve 202 e o trabalho roda na fila: pedir o resumo no mesmo
+   * segundo dá "ainda não foi recalculada" e parece erro. Três tentativas de
+   * 5 s cobrem a fila normal sem prender ninguém na tela.
+   */
+  const TENTATIVAS_DO_RESUMO = 3;
+  const ESPERA_ENTRE_TENTATIVAS_MS = 5000;
+
   const verResumoDaRegravacao = async () => {
     const ultima = runs.find((r) => r.status === 'completed');
     if (!ultima) return;
     setRegravacaoErro(null);
+    setBuscandoResumo(true);
     try {
-      setRegravacaoResumo(await agentQualityApi.getRegravacao(ultima.id));
-    } catch (err: any) {
-      setRegravacaoErro(
-        err?.message || 'Esta execução ainda não foi recalculada. Rode o recálculo primeiro.',
-      );
+      for (let tentativa = 1; tentativa <= TENTATIVAS_DO_RESUMO; tentativa++) {
+        try {
+          setRegravacaoResumo(await agentQualityApi.getRegravacao(ultima.id));
+          return;
+        } catch (err: any) {
+          if (tentativa === TENTATIVAS_DO_RESUMO) {
+            setRegravacaoErro(
+              err?.message || 'Esta execução ainda não foi recalculada. Rode o recálculo primeiro.',
+            );
+            return;
+          }
+          await new Promise((r) => setTimeout(r, ESPERA_ENTRE_TENTATIVAS_MS));
+        }
+      }
+    } finally {
+      setBuscandoResumo(false);
     }
   };
 
@@ -370,9 +392,12 @@ export default function AgentQualityPage() {
                 <div className="flex gap-2 mt-3 flex-wrap">
                   <button
                     onClick={verResumoDaRegravacao}
-                    className="px-3 py-1.5 text-xs font-medium rounded border border-sky-300 bg-white text-sky-900 hover:bg-sky-100"
+                    disabled={buscandoResumo}
+                    className="px-3 py-1.5 text-xs font-medium rounded border border-sky-300 bg-white text-sky-900 hover:bg-sky-100 disabled:opacity-50"
                   >
-                    Ver o resumo da última execução
+                    {buscandoResumo
+                      ? 'Buscando, o resumo aparece em instantes…'
+                      : 'Ver o resumo da última execução'}
                   </button>
                   {regravacaoPedido.dryRun && (
                     <button

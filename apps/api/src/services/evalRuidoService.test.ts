@@ -25,6 +25,7 @@ vi.mock('../utils/logger.js', () => ({
 const { pisoDeRuido, classificarMudanca, carregarRuidoDoAgente } = await import(
   './evalRuidoService.js'
 );
+const { HARNESS_VERSION } = await import('../agents/agentEvalSet.js');
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -141,5 +142,53 @@ describe('carregarRuidoDoAgente', () => {
     prismaMock.agentPromptVersion.findFirst.mockRejectedValue(new Error('down'));
     const r = await carregarRuidoDoAgente('agente-1');
     expect(r).toEqual({ desvio: 0, n: 0 });
+  });
+
+  /* Revisão do PR: o piso de ruído mede a oscilação do MESMO agente sob a
+   * MESMA régua. Misturar nota de régua v2 com nota de régua v3 mede a troca
+   * da régua, não o agente, e infla o piso justamente quando ele é usado para
+   * dizer ao cliente se a IA mudou de verdade. */
+  it('prefere as execuções medidas com a régua atual', async () => {
+    prismaMock.agentPromptVersion.findFirst.mockResolvedValue(null);
+    prismaMock.agentEvalRun.findMany.mockResolvedValue([
+      { scorePercent: 80 },
+      { scorePercent: 72 },
+      { scorePercent: 88 },
+    ]);
+
+    await carregarRuidoDoAgente('agente-1');
+
+    const where = prismaMock.agentEvalRun.findMany.mock.calls[0][0].where;
+    expect(where.harnessVersion).toBe(HARNESS_VERSION);
+  });
+
+  it('sem execução suficiente na régua atual, cai para o que houver', async () => {
+    prismaMock.agentPromptVersion.findFirst.mockResolvedValue(null);
+    prismaMock.agentEvalRun.findMany
+      .mockResolvedValueOnce([{ scorePercent: 80 }]) // só uma na régua nova
+      .mockResolvedValueOnce([
+        { scorePercent: 80 },
+        { scorePercent: 72 },
+        { scorePercent: 88 },
+      ]);
+
+    const r = await carregarRuidoDoAgente('agente-1');
+
+    expect(prismaMock.agentEvalRun.findMany).toHaveBeenCalledTimes(2);
+    const segunda = prismaMock.agentEvalRun.findMany.mock.calls[1][0].where;
+    expect(segunda.harnessVersion).toBeUndefined();
+    expect(r.n).toBe(3);
+  });
+
+  it('com execuções bastantes na régua atual, não consulta de novo', async () => {
+    prismaMock.agentPromptVersion.findFirst.mockResolvedValue(null);
+    prismaMock.agentEvalRun.findMany.mockResolvedValue([
+      { scorePercent: 80 },
+      { scorePercent: 72 },
+    ]);
+
+    await carregarRuidoDoAgente('agente-1');
+
+    expect(prismaMock.agentEvalRun.findMany).toHaveBeenCalledTimes(1);
   });
 });
