@@ -18,6 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   detectBlockedVertical,
+  detectarSinalDeCrise,
   isBlocked,
   listBlockedVerticals,
   BLOCKED_VERTICAL_LAYERS,
@@ -42,6 +43,14 @@ describe('blockedVerticalFilter — apostas', () => {
 
   it('detecta "cassino online"', () => {
     expect(detectBlockedVertical('vamos abrir um cassino online no Brasil', ZAPPIQ).blocked).toBe(true);
+  });
+
+  // A232: 'cassino' isolado desqualificava o lead de pousada na Praia do
+  // Cassino, em Rio Grande. A palavra sozinha não diz nada sobre apostas.
+  it('NÃO detecta "Cassino" isolado (Praia do Cassino é turismo)', () => {
+    expect(
+      detectBlockedVertical('Quero reservar na Praia do Cassino no feriado', ZAPPIQ).blocked,
+    ).toBe(false);
   });
 
   it('detecta "apostas esportivas"', () => {
@@ -142,6 +151,13 @@ describe('blockedVerticalFilter — MLM', () => {
     expect(detectBlockedVertical('sou consultora Hinode', ZAPPIQ).blocked).toBe(true);
   });
 
+  // A232: Polishop e Natura são varejo. O lojista que revende não está
+  // propondo marketing multinível, e desqualificá-lo é perder venda.
+  it('NÃO detecta lojista de marca de varejo (Polishop, Natura)', () => {
+    expect(detectBlockedVertical('Sou revendedora da Polishop', ZAPPIQ).blocked).toBe(false);
+    expect(detectBlockedVertical('Tenho uma loja Natura', ZAPPIQ).blocked).toBe(false);
+  });
+
   it('NÃO detecta "marketing" sozinho', () => {
     expect(detectBlockedVertical('precisamos de marketing digital', ZAPPIQ).blocked).toBe(false);
   });
@@ -232,8 +248,26 @@ describe('blockedVerticalFilter: compliance vale pra todo tenant, sem marca', ()
     expect(r.blocked).toBe(true);
     if (r.blocked) {
       expect(findForeignBrandLeaks(r.suggestedResponse)).toEqual([]);
-      expect(r.suggestedResponse).toContain('CMJ não atende');
+      expect(r.suggestedResponse).toContain('CMJ');
     }
+  });
+
+  // A232/A251: a saída do compliance deixou de ser recusa. O cliente final
+  // não é desqualificado por um template; a conversa vai para uma pessoa.
+  it('compliance manda para TRANSBORDO, não para recusa', () => {
+    const r = detectBlockedVertical('plataforma de conteúdo adulto', CLIENTE);
+    expect(r.blocked).toBe(true);
+    if (r.blocked) {
+      expect(r.action).toBe('transbordo');
+      expect(r.suggestedResponse).not.toMatch(/não atende(mos)?/i);
+      expect(r.suggestedResponse).toMatch(/pessoa|equipe|atendimento/i);
+    }
+  });
+
+  it('a política comercial da ZappIQ continua sendo RECUSA (é o nosso funil)', () => {
+    const r = detectBlockedVertical('tenho casa de apostas', ZAPPIQ);
+    expect(r.blocked).toBe(true);
+    if (r.blocked) expect(r.action).toBe('recusa');
   });
 
   it('sem businessName a mensagem fica neutra, ainda sem marca', () => {
@@ -241,19 +275,19 @@ describe('blockedVerticalFilter: compliance vale pra todo tenant, sem marca', ()
     expect(r.blocked).toBe(true);
     if (r.blocked) {
       expect(findForeignBrandLeaks(r.suggestedResponse)).toEqual([]);
-      expect(r.suggestedResponse).toContain('Não atendemos');
+      expect(r.suggestedResponse.length).toBeGreaterThan(10);
     }
   });
 
   it('nenhuma resposta a tenant de cliente carrega marca nossa', () => {
-    for (const frase of ['sou criadora de OnlyFans', 'site adulto', 'camgirl profissional']) {
+    for (const frase of ['sou criadora de OnlyFans', 'temos um site adulto', 'camgirl profissional']) {
       const r = detectBlockedVertical(frase, CLIENTE);
       if (r.blocked) expect(findForeignBrandLeaks(r.suggestedResponse)).toEqual([]);
     }
   });
 
   it('na org da ZappIQ a resposta pode (e deve) citar a ZappIQ', () => {
-    const r = detectBlockedVertical('plataforma de conteúdo adulto', ZAPPIQ);
+    const r = detectBlockedVertical('tenho casa de apostas', ZAPPIQ);
     expect(r.blocked).toBe(true);
     if (r.blocked) expect(r.suggestedResponse).toContain('ZappIQ');
   });
@@ -270,6 +304,12 @@ describe('blockedVerticalFilter — helpers', () => {
     expect(isBlocked('sou criadora de OnlyFans', CLIENTE)).toBe(true);
   });
 
+  it('a palavra solta não basta mais: o filtro exige operação declarada', () => {
+    expect(isBlocked('pornografia', CLIENTE)).toBe(false);
+    expect(isBlocked('conteúdo adulto', CLIENTE)).toBe(false);
+    expect(isBlocked('escort', CLIENTE)).toBe(false);
+  });
+
   it('listBlockedVerticals retorna 4 verticais', () => {
     const list = listBlockedVerticals();
     expect(list).toHaveLength(4);
@@ -284,5 +324,187 @@ describe('blockedVerticalFilter — helpers', () => {
     expect(BLOCKED_VERTICAL_LAYERS.apostas).toBe('politica-comercial-zappiq');
     expect(BLOCKED_VERTICAL_LAYERS['cripto-nao-regulada']).toBe('politica-comercial-zappiq');
     expect(BLOCKED_VERTICAL_LAYERS.mlm).toBe('politica-comercial-zappiq');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * A251 e A232 — corpus de NEGATIVOS por segmento.
+ *
+ * A camada compliance rodava para TODA organização, decidia por palavra
+ * solta e recusava o cliente final com um template fixo. Reprodução de
+ * 14/09/2026, com o módulo real: 7 de 7 frases legítimas bloqueadas numa
+ * org de cliente. Oficina, psicólogo, escola e advogado são segmentos que o
+ * próprio cadastro oferece.
+ *
+ * Estas frases são o contrato: nenhuma delas pode voltar a ser bloqueada.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('compliance — negativos por segmento (A251, A232)', () => {
+  const CORPUS: Array<{ segmento: string; frases: string[] }> = [
+    {
+      segmento: 'saúde e saúde mental',
+      frases: [
+        'Meu marido tem vício em pornografia, vocês atendem casal?',
+        'Quero tratar compulsão por pornografia',
+        'Preciso de terapia, estou com vício em pornografia',
+        'Meu filho acessou conteúdo adulto no celular, o que faço?',
+        'Vocês atendem adolescente com uso problemático de conteúdo adulto?',
+      ],
+    },
+    {
+      segmento: 'jurídico',
+      frases: [
+        'Fui vítima de pornografia de vingança, preciso de um advogado',
+        'Minha ex publicou fotos minhas num site adulto, quero processar',
+        'Fui exposta em site adulto sem autorização, tem o que fazer?',
+        'Quero processar quem divulgou conteúdo adulto meu',
+      ],
+    },
+    {
+      segmento: 'automotivo',
+      frases: [
+        'Quanto fica a revisão do meu Ford Escort 1998?',
+        'Vocês têm pastilha de freio para Escort 98?',
+        'Quero vender meu Ford Escort',
+        'Tem peça de Escort Hobby aí?',
+      ],
+    },
+    {
+      segmento: 'turismo e varejo',
+      frases: [
+        'Quero reservar uma pousada na Praia do Cassino',
+        'Sou revendedora da Polishop e quero vender pelo WhatsApp',
+        'Tenho uma loja Natura no centro',
+        'Produto para público adulto 30+',
+      ],
+    },
+    {
+      segmento: 'marketing',
+      frases: ['Vocês fazem gestão de conta de OnlyFans?'],
+    },
+  ];
+
+  for (const { segmento, frases } of CORPUS) {
+    for (const frase of frases) {
+      it(`[${segmento}] não bloqueia: "${frase}"`, () => {
+        expect(detectBlockedVertical(frase, CLIENTE).blocked).toBe(false);
+        // Também não pode bloquear na org da ZappIQ, onde valem as duas camadas.
+        expect(detectBlockedVertical(frase, ZAPPIQ).blocked).toBe(false);
+      });
+    }
+  }
+});
+
+describe('compliance — o que CONTINUA bloqueado (operação declarada)', () => {
+  const POSITIVOS = [
+    'temos um site adulto com 10 mil assinantes',
+    'tenho uma plataforma de conteúdo adulto',
+    'minha plataforma adulta precisa de atendimento',
+    'sou criadora de OnlyFans',
+    'sou camgirl profissional',
+    'quero vender conteúdo adulto pelo WhatsApp',
+    'montei um estúdio pornográfico',
+  ];
+
+  for (const frase of POSITIVOS) {
+    it(`bloqueia: "${frase}"`, () => {
+      const r = detectBlockedVertical(frase, CLIENTE);
+      expect(r.blocked).toBe(true);
+      if (r.blocked) {
+        expect(r.vertical).toBe('pornografia');
+        expect(r.layer).toBe('compliance');
+        expect(r.action).toBe('transbordo');
+      }
+    });
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * P62 — rede de crise emocional.
+ *
+ * A única regra da plataforma para ideação suicida vivia na seção de
+ * psicologia do prompt de segmento e não chegava a nenhum agente (A163,
+ * A155). Aqui ela vira guarda programática, que não depende do modelo
+ * obedecer. A detecção NÃO bloqueia: ela acrescenta.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('detectarSinalDeCrise — positivos, com e sem acento', () => {
+  const POSITIVOS = [
+    'quero me matar',
+    'vou me matar',
+    'nao aguento mais viver',
+    'não aguento mais viver',
+    'penso em acabar com tudo',
+    'quero tirar minha vida',
+    'quero tirar a própria vida',
+    'estou me machucando',
+    'tenho vontade de me machucar',
+    'penso em suicídio',
+    'penso em suicidio',
+    'tive ideação suicida essa semana',
+    'estou me cortando de novo',
+    'não quero mais viver',
+    'nao quero mais viver',
+    'queria morrer',
+    'prefiro morrer a continuar assim',
+    'automutilação voltou',
+    'pensei em me jogar na frente do carro',
+  ];
+
+  for (const frase of POSITIVOS) {
+    it(`detecta: "${frase}"`, () => {
+      const r = detectarSinalDeCrise(frase);
+      expect(r.crise).toBe(true);
+      if (r.crise) expect(r.regra).toBeTruthy();
+    });
+  }
+});
+
+describe('detectarSinalDeCrise — NEGATIVOS (expressão figurada)', () => {
+  const NEGATIVOS = [
+    'morrendo de rir com o vídeo de vocês',
+    'esse bolo mata a saudade da vó',
+    'quero algo pra matar a fome agora',
+    'vou me matar de trabalhar essa semana',
+    'preciso acabar com tudo isso que está pendente hoje',
+    'vou me matar de estudar pra prova',
+    'esse preço me mata',
+    'a fila estava de matar',
+    'quero cortar o cabelo',
+    'preciso cortar o plano pela metade',
+    'meu carro morreu na subida',
+    'vou morrer de fome até o almoço',
+    'quero matar a curiosidade sobre o produto',
+    'não aguento mais esperar o orçamento',
+    'não aguento mais esse calor',
+  ];
+
+  for (const frase of NEGATIVOS) {
+    it(`NÃO detecta: "${frase}"`, () => {
+      expect(detectarSinalDeCrise(frase).crise).toBe(false);
+    });
+  }
+
+  it('texto vazio, null e undefined não são crise', () => {
+    expect(detectarSinalDeCrise('').crise).toBe(false);
+    expect(detectarSinalDeCrise(null).crise).toBe(false);
+    expect(detectarSinalDeCrise(undefined).crise).toBe(false);
+  });
+});
+
+describe('detectarSinalDeCrise — LGPD', () => {
+  it('não devolve o texto da mensagem, só a regra que casou', () => {
+    const r = detectarSinalDeCrise('quero me matar, meu nome é Ana e moro na rua X');
+    expect(r.crise).toBe(true);
+    if (r.crise) {
+      expect(JSON.stringify(r)).not.toContain('Ana');
+      expect(JSON.stringify(r)).not.toContain('rua X');
+    }
+  });
+});
+
+describe('crise x compliance — a crise vem primeiro', () => {
+  it('pedido de ajuda com termo de compliance não vira recusa nem bloqueio', () => {
+    const frase = 'não aguento mais viver com esse vício em pornografia';
+    expect(detectarSinalDeCrise(frase).crise).toBe(true);
+    expect(detectBlockedVertical(frase, CLIENTE).blocked).toBe(false);
   });
 });

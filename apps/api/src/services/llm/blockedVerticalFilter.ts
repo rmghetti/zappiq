@@ -67,11 +67,26 @@ export const BLOCKED_VERTICAL_LAYERS: Record<BlockedVertical, BlockedVerticalLay
   mlm: 'politica-comercial-zappiq',
 };
 
+/**
+ * O que fazer com o que casou.
+ *
+ *   'recusa'     — desqualifica e encerra. Só vale na camada da política
+ *                  comercial da ZappIQ, no NOSSO funil.
+ *   'transbordo' — a IA para e uma pessoa assume, com registro e aviso ao
+ *                  dono. É o que a camada compliance faz desde 14/09/2026
+ *                  (A232, A251): na conta de um cliente quem escreve é o
+ *                  cliente final dele, e recusar cliente final com template
+ *                  fixo é o defeito, não o recurso.
+ */
+export type BlockedVerticalAction = 'recusa' | 'transbordo';
+
 export interface BlockedVerticalMatch {
   blocked: true;
   vertical: BlockedVertical;
   /** Camada que barrou (audit: distingue "é lei" de "é política nossa"). */
   layer: BlockedVerticalLayer;
+  /** Recusar ou passar para uma pessoa. Ver BlockedVerticalAction. */
+  action: BlockedVerticalAction;
   /** Template de resposta a enviar ao cliente (sem chamar LLM). */
   suggestedResponse: string;
   /** Trecho do input que casou com o pattern (audit). */
@@ -102,7 +117,8 @@ const PATTERNS: Array<{
       [
         '\\b(casa(s)?\\s+de\\s+apostas?)\\b',
         '\\b(cassino(s)?\\s+online)\\b',
-        '\\b(cassino(s)?)\\b',
+        // A232: '\\bcassino\\b' isolado desqualificava o lead de pousada na
+        // Praia do Cassino (Rio Grande). A palavra sozinha é topônimo.
         '\\b(apostas?\\s+esportiva(s)?)\\b',
         '\\b(bet365|sportingbet|bet\\s*nacional|sportsbet|betano)\\b',
         '\\b(bingo\\s+online)\\b',
@@ -134,12 +150,26 @@ const PATTERNS: Array<{
     vertical: 'pornografia',
     regex: new RegExp(
       [
-        '\\b(porn[oô]grafia|conte[uú]do\\s+adulto|conte[uú]do\\s+pornogr[aá]fico)\\b',
-        '\\b(only\\s*fans|onlyfans)\\b',
-        '\\b(privacy\\s+(br|brasil))\\b',
+        // A251/A232 — a camada compliance passou a exigir OPERAÇÃO DECLARADA.
+        //
+        // Antes bastava a palavra solta ('pornografia', 'conteúdo adulto',
+        // 'site adulto', 'escort', 'onlyfans'). O desenho partia de que quem
+        // escreve é um lead pedindo para usar a plataforma; na conta de um
+        // cliente quem escreve é o CLIENTE FINAL dele. Reprodução de
+        // 14/09/2026: 7 de 7 frases legítimas recusadas numa org de cliente,
+        // incluindo paciente com compulsão, vítima de exposição buscando
+        // advogado e dono de Ford Escort numa oficina.
+        //
+        // O que ficou: a pessoa dizendo que o NEGÓCIO DELA é esse.
+        '\\b(sou|somos)\\s+(criador(a)?|produtor(a)?|modelo)(es|as)?\\s+(de\\s+)?(conte[uú]do\\s+adulto|only\\s*fans|onlyfans|privacy\\s+(br|brasil))\\b',
         '\\b(camgirl|camboy|cam\\s+(girl|boy))\\b',
-        '\\b(escort(s)?|garota(s)?\\s+de\\s+programa)\\b',
-        '\\b(site\\s+adulto|plataforma\\s+adulta)\\b',
+        '\\b(tenho|temos|possuo|possu[ií]mos|gerencio|administro|abri|abrimos|montei|montamos|criei|criamos)\\s+(um[ao]?\\s+)?(site|plataforma|canal|perfil|produtora|est[uú]dio|neg[oó]cio)\\s+(adulto|adulta|pornogr[aá]fic[oa]|de\\s+conte[uú]do\\s+adulto)\\b',
+        '\\b(meu|minha|nosso|nossa)\\s+(site|plataforma|canal|perfil|produtora|est[uú]dio|neg[oó]cio|empresa)\\s+(adulto|adulta|pornogr[aá]fic[oa]|de\\s+conte[uú]do\\s+adulto)\\b',
+        // 'site' fica de FORA desta alternativa de propósito: 'publicaram
+        // minhas fotos num site adulto' é vítima pedindo advogado, não
+        // operação. Site só casa com posse declarada (tenho/meu), acima.
+        '\\b(plataforma|produtora|est[uú]dio)\\s+(de\\s+)?(conte[uú]do\\s+)?(adulto|adulta|pornogr[aá]fic[oa]|pornografia)\\b',
+        '\\b(vendo|vender|comercializo|comercializar|monetizo|monetizar|produzo|produzir)\\s+(conte[uú]do\\s+adulto|conte[uú]do\\s+pornogr[aá]fico)\\b',
       ].join('|'),
       'i',
     ),
@@ -154,7 +184,9 @@ const PATTERNS: Array<{
         '\\b(multin[ií]vel)\\b',
         '\\b(marketing\\s+de\\s+rede)\\b',
         '\\b(matriz\\s+(bin[aá]ria|tern[aá]ria|forçada))\\b',
-        '\\b(herbalife|amway|forever\\s+living|hinode|polishop|natura\\s+rede)\\b',
+        // A232: Polishop e Natura saíram. São VAREJO: o lojista que revende
+        // não está propondo multinível, e desqualificá-lo é perder venda.
+        '\\b(herbalife|amway|forever\\s+living|hinode)\\b',
         '\\b(plano\\s+de\\s+remunera[cç][aã]o\\s+multin[ií]vel)\\b',
       ].join('|'),
       'i',
@@ -191,18 +223,16 @@ const ZAPPIQ_POLICY_RESPONSES: Record<BlockedVertical, string> = {
  * Sem businessName, cai na 1ª pessoa do plural ("Não atendemos"), que é
  * neutra e serve pra qualquer negócio.
  */
-function complianceResponse(vertical: BlockedVertical, businessName?: string | null): string {
+function complianceResponse(_vertical: BlockedVertical, businessName?: string | null): string {
   const nome = typeof businessName === 'string' ? businessName.trim() : '';
-  const sujeito = nome ? `${nome} não atende` : 'Não atendemos';
+  const de = nome ? ` da ${nome}` : '';
 
-  const motivo: Record<BlockedVertical, string> = {
-    pornografia: `${sujeito} plataformas de conteúdo adulto. Recomendo buscar provedores especializados nesse segmento.`,
-    apostas: `${sujeito} o segmento de apostas no momento. Desejo sucesso no seu projeto.`,
-    'cripto-nao-regulada': `${sujeito} plataformas cripto não-reguladas no momento. Desejo sucesso no seu projeto.`,
-    mlm: `${sujeito} operações de MLM/marketing multinível no momento. Desejo sucesso no seu projeto.`,
-  };
-
-  return `Obrigada pelo contato! ${motivo[vertical]}`;
+  // Uma frase só, neutra, sem marca e sem recusa. Quem decide se atende é a
+  // pessoa que vai assumir a conversa, com o contexto do negócio na mão.
+  return (
+    'Obrigada pelo contato! Para esse assunto eu prefiro te passar para uma pessoa ' +
+    `da equipe${de}. Já avisei, e em instantes alguém continua com você por aqui.`
+  );
 }
 
 export interface DetectBlockedVerticalOptions {
@@ -247,13 +277,20 @@ export function detectBlockedVertical(
 
     const match = regex.exec(text);
     if (match) {
+      // A camada decide o que acontece: no NOSSO funil, recusa; na conta de
+      // um cliente, transbordo. A resposta acompanha a decisão.
+      const action: BlockedVerticalAction =
+        layer === 'politica-comercial-zappiq' ? 'recusa' : 'transbordo';
+
       return {
         blocked: true,
         vertical,
         layer,
-        suggestedResponse: isZappIQ
-          ? ZAPPIQ_POLICY_RESPONSES[vertical]
-          : complianceResponse(vertical, opts.businessName),
+        action,
+        suggestedResponse:
+          action === 'recusa'
+            ? ZAPPIQ_POLICY_RESPONSES[vertical]
+            : complianceResponse(vertical, opts.businessName),
         matchedSnippet: match[0],
       };
     }
@@ -280,4 +317,135 @@ export function isBlocked(
  */
 export function listBlockedVerticals(): BlockedVertical[] {
   return ['apostas', 'cripto-nao-regulada', 'pornografia', 'mlm'];
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Categoria 'crise' (P62, 14/09/2026)
+ * --------------------------------------------------------------------
+ * A única regra da plataforma para ideação suicida e autolesão vivia na
+ * seção de psicologia do modelo de segmento (nichePrompts). Ela nunca
+ * chegou a agente nenhum: o cadastro grava a chave com acento e o
+ * promptEngine caía no genérico (A163, A155). Nenhuma outra camada, CORE
+ * ou pré-filtro, tinha qualquer regra sobre isso.
+ *
+ * Aqui ela vira GUARDA PROGRAMÁTICA: não depende do modelo obedecer.
+ *
+ * Três diferenças em relação às verticais bloqueadas acima, e todas são
+ * de propósito:
+ *
+ *   1. NÃO BLOQUEIA. A resposta do agente continua saindo; a linha de
+ *      acolhimento é ACRESCENTADA. Trocar a resposta por um template
+ *      fixo é o defeito que A251 e A232 descrevem, e num momento de
+ *      crise ele seria pior: a pessoa recebe uma parede.
+ *
+ *   2. Vale para TODA organização, sempre. Não é política comercial nem
+ *      segmento: é a pessoa do outro lado.
+ *
+ *   3. NÃO devolve o trecho da mensagem. Indício de risco à vida é dado
+ *      sensível de saúde (LGPD, art. 5º II e art. 11). O que sai daqui é
+ *      o id da regra que casou, e é isso que vai para o registro.
+ *
+ * Falso positivo: a lista de negativos abaixo cobre a expressão figurada
+ * do português falado ('morrendo de rir', 'mata a saudade', 'matar a
+ * fome', 'me matar de trabalhar'). O que escapar dela recebe uma frase
+ * acolhedora e neutra, que não constrange quem não está em risco.
+ *
+ * TODO (A051 / P62): o avaliador (agentEvalRunner) não passa pelo
+ * pré-filtro, então a Qualidade não exercita este caminho. Enquanto o
+ * runner não for tocado (PR #371 está aberto sobre ele), a cobertura vem
+ * do cenário universal de crise em evalSetUniversal.ts, que checa a
+ * presença do CVV na resposta.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Linha de acolhimento. Uma frase, sem marca, sem diagnóstico e sem
+ * promessa: informa o CVV e mais nada. Quem promete o atendimento humano é
+ * o canal, que sabe se o transbordo de fato acontece ali.
+ */
+export const LINHA_DE_ACOLHIMENTO_CVV =
+  'Se você estiver passando por um momento difícil, o CVV atende de graça, 24 horas por dia: ligue 188 ou acesse cvv.org.br.';
+
+/** Complemento usado só onde o transbordo existe de verdade (canais reais). */
+export const LINHA_DE_TRANSBORDO_DE_CRISE =
+  'Já avisei uma pessoa da nossa equipe para continuar essa conversa com você.';
+
+/**
+ * Tira acento e baixa a caixa. A lista de padrões abaixo é escrita SEM
+ * acento por isso: 'suicidio' e 'suicídio' passam pela mesma regra, e não
+ * existe variante esquecida.
+ */
+export function normalizarParaCrise(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+/**
+ * Regras de crise, com id estável. O id é o que vai para o registro e para
+ * o log; o texto da mensagem, nunca.
+ *
+ * As negações ficam dentro da própria regra (lookahead), não numa lista
+ * separada, para que o negativo nasça junto do positivo que ele corrige.
+ */
+const REGRAS_DE_CRISE: Array<{ id: string; regex: RegExp }> = [
+  {
+    // 'vou me matar de trabalhar' e 'me matar de rir' são hipérbole. O
+    // lookahead corta qualquer 'me matar de <verbo/substantivo>'.
+    id: 'crise_me_matar',
+    regex: /\b(quero|vou|penso em|pensando em|pretendo|vontade de|planejei|planejo)\s+me\s+matar\b(?!\s+de\s+\S)/,
+  },
+  { id: 'crise_tirar_a_vida', regex: /\btirar\s+(a\s+)?(minha|sua|propria|a\s+propria)\s+vida\b/ },
+  { id: 'crise_por_fim_a_vida', regex: /\b(por|pôr|colocar)\s+(um\s+)?fim\s+(a|na|à)\s+(minha|essa)\s+vida\b/ },
+  {
+    id: 'crise_nao_aguento_viver',
+    regex: /\bnao\s+aguento\s+mais\s+(viver|essa\s+vida|a\s+vida)\b/,
+  },
+  { id: 'crise_nao_quero_viver', regex: /\bnao\s+quero\s+mais\s+(viver|estar\s+aqui|acordar)\b/ },
+  { id: 'crise_sem_sentido_viver', regex: /\bnao\s+(vejo|tem)\s+(mais\s+)?sentido\s+(em\s+)?viver\b/ },
+  {
+    // 'quero morrer', 'queria morrer', 'prefiro morrer'. Fora: 'morrendo
+    // de rir', 'morrer de fome', 'meu carro morreu'.
+    id: 'crise_quero_morrer',
+    regex: /\b(quero|queria|prefiro|preferia|melhor)\s+morrer\b(?!\s+de\s+\S)/,
+  },
+  {
+    // 'acabar com tudo' isolado é crise; seguido de 'isso', 'que' ou de um
+    // complemento de tarefa é o expediente de qualquer segunda-feira.
+    id: 'crise_acabar_com_tudo',
+    regex: /\bacabar\s+com\s+tudo\b(?!\s*(isso|que|de\s+uma\s+vez|ate|antes|hoje|amanha|agora\b\s+\S))/,
+  },
+  {
+    // 'me machucar na academia' e 'me machucar no treino' ficam de fora.
+    id: 'crise_me_machucar',
+    regex: /\bme\s+(machucar|machucando|ferir|cortar|cortando)\b(?!\s+(na|no|com\s+a\s+maquina)\b)/,
+  },
+  { id: 'crise_suicidio', regex: /\b(suicidio|suicida|suicidar|automutilacao|autolesao)\w*\b/ },
+  { id: 'crise_se_jogar', regex: /\bme\s+jogar\s+(na\s+frente|do\s+alto|da\s+janela|da\s+ponte)\b/ },
+  { id: 'crise_sumir_da_vida', regex: /\b(sumir|desaparecer)\s+(dessa|desta|da)\s+vida\b/ },
+];
+
+export type SinalDeCrise =
+  | { crise: true; regra: string }
+  | { crise: false };
+
+/**
+ * Detecta indício de risco à vida ou de autolesão.
+ *
+ * NÃO devolve o texto que casou: só o id da regra. Ver o cabeçalho desta
+ * seção para o porquê.
+ */
+export function detectarSinalDeCrise(texto: string | null | undefined): SinalDeCrise {
+  if (!texto || typeof texto !== 'string') return { crise: false };
+
+  const normalizado = normalizarParaCrise(texto);
+  for (const { id, regex } of REGRAS_DE_CRISE) {
+    if (regex.test(normalizado)) return { crise: true, regra: id };
+  }
+  return { crise: false };
+}
+
+/** Catálogo das regras de crise, para tela de admin e teste de cobertura. */
+export function listarRegrasDeCrise(): string[] {
+  return REGRAS_DE_CRISE.map((r) => r.id);
 }
