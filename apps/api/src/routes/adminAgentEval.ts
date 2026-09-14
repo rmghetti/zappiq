@@ -51,7 +51,13 @@ import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 // V5/FASE 2 (#241): runner extraído pra service compartilhado (cron + route).
 // Q1: computeReverifyVerdict exportado pra teste unitário puro.
 import { executeAgentEvalRun, computeReverifyVerdict } from '../services/agentEvalRunner.js';
-import { enqueueEvalRun, resolveScenariosForRun } from '../services/agentEvalQueue.js';
+import {
+  enqueueEvalRun,
+  enqueueRegrade,
+  resolveScenariosForRun,
+} from '../services/agentEvalQueue.js';
+// P61 — regravar a nota sobre as respostas já gravadas, sem chamar LLM.
+import { execucoesParaRegravar, resumirRegravacao } from '../services/evalRegradeService.js';
 // FASE 2.1 (#241): Slack notify reusável entre cron e route manual.
 import { notifySlackQualityIssue } from '../services/agentEvalCronService.js';
 import { sendSlackAlert, buildHeaderBlock, buildSectionBlock } from '../services/slackNotifier.js';
@@ -1075,6 +1081,104 @@ router.get(
     } catch (err: any) {
       logger.error('[agentEval] fix-decisions list erro:', err);
       res.status(500).json({ error: 'erro ao listar decisões', message: err?.message });
+    }
+  },
+);
+
+// ════════════════════════════════════════════════════════════════════
+// P61 — REGRAVAÇÃO: recalcular a nota sobre o que JÁ está gravado
+// ─────────────────────────────────────────────────────────────────
+// POST /api/admin/agent-eval/regrade
+//   body: { organizationId?, runIds?, dryRun }
+//
+// É o botão "Recalcular notas (gabarito v3)" do painel. Relê os resultados v2
+// já gravados com a régua nova e grava em eval_regrades. NÃO chama o agente,
+// NÃO chama o juiz e NÃO escreve em agent_eval_runs: custo zero e a execução
+// original fica intacta.
+//
+// O padrão é dryRun = true. Recalcular 3.712 cenários é barato, mas gravar
+// sem ver antes não é: o fundador roda a prévia, lê o resumo e só então
+// confirma com dryRun = false.
+// ════════════════════════════════════════════════════════════════════
+router.post(
+  '/regrade',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    try {
+      const organizationId = req.body?.organizationId
+        ? String(req.body.organizationId)
+        : undefined;
+      const runIds = Array.isArray(req.body?.runIds)
+        ? req.body.runIds.map(String)
+        : undefined;
+      // Só grava quem pedir explicitamente. Ausente ou qualquer outra coisa
+      // significa prévia.
+      const dryRun = req.body?.dryRun !== false;
+
+      const elegiveis = await execucoesParaRegravar({ organizationId, runIds });
+      if (elegiveis.length === 0) {
+        res.status(400).json({
+          error: 'nenhuma execução elegível',
+          message:
+            'Não há execução concluída com resultados gravados para recalcular com este filtro.',
+        });
+        return;
+      }
+
+      const jobId = await enqueueRegrade({ runIds: elegiveis, dryRun });
+
+      logger.info({
+        msg: 'agent_eval_regrade_pedida',
+        jobId,
+        execucoes: elegiveis.length,
+        dryRun,
+        organizationId: organizationId ?? null,
+        pedidaPor: req.user?.userId ?? null,
+      });
+
+      res.status(202).json({
+        jobId,
+        execucoes: elegiveis.length,
+        dryRun,
+        runIds: elegiveis.slice(0, 50),
+        message: dryRun
+          ? 'Prévia em andamento: nada será gravado. Abra o resumo de uma execução para ver o efeito.'
+          : 'Recálculo em andamento. O resumo por execução fica disponível em seguida.',
+        resumoUrl: '/api/admin/agent-eval/regrade/<runId>',
+      });
+    } catch (err: any) {
+      logger.error('[agentEval] regrade erro:', err);
+      res.status(500).json({ error: 'erro ao pedir a regravação', message: err?.message });
+    }
+  },
+);
+
+// ════════════════════════════════════════════════════════════════════
+// GET /api/admin/agent-eval/regrade/:runId — resumo de uma execução
+// ─────────────────────────────────────────────────────────────────
+// Nota antiga, nota regravada, quantas reprovações eram do gabarito e a
+// leitura por cenário. É o número que o fundador leva para a conversa.
+// ════════════════════════════════════════════════════════════════════
+router.get(
+  '/regrade/:runId',
+  authMiddleware as any,
+  requireRole('SUPERADMIN') as any,
+  async (req: Request, res: Response) => {
+    try {
+      const resumo = await resumirRegravacao(String(req.params.runId));
+      if (!resumo) {
+        res.status(404).json({
+          error: 'sem regravação para esta execução',
+          message:
+            'Esta execução ainda não foi recalculada com o gabarito atual. Rode o recálculo primeiro.',
+        });
+        return;
+      }
+      res.json(resumo);
+    } catch (err: any) {
+      logger.error('[agentEval] resumo da regravação erro:', err);
+      res.status(500).json({ error: 'erro ao ler a regravação', message: err?.message });
     }
   },
 );

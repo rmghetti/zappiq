@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS public.eval_regrades (
     "run_id"          TEXT NOT NULL,
     "agent_id"        TEXT NOT NULL,
     "scenario_id"     TEXT NOT NULL,
+    -- 'critical' | 'high' | 'medium': a tela mostra os críticos primeiro
+    "severity"        TEXT NOT NULL DEFAULT 'medium',
     -- 'pass' | 'partial' | 'fail' | 'erro' (o que a execução gravou na época)
     "veredito_antigo" TEXT NOT NULL,
     -- o mesmo vocabulário, relido pelo arnês desta linha
@@ -69,6 +71,10 @@ CREATE TABLE IF NOT EXISTS public.eval_regrades (
     -- em português, o que mudou e por quê (vai para a tela do fundador)
     "motivo"          TEXT NOT NULL,
     "harness_version" INTEGER NOT NULL,
+    -- true quando a regra nova e o veredito gravado do juiz DISCORDAM. É o
+    -- lote que o modo opcional --com-juiz reavalia, e o mesmo lote que o
+    -- fundador rotula na calibração (P56).
+    "discordante"     BOOLEAN NOT NULL DEFAULT false,
     -- true quando a regravação usou o juiz (modo --com-juiz), false quando foi
     -- só regra determinística. O padrão é sem juiz: custo zero.
     "com_juiz"        BOOLEAN NOT NULL DEFAULT false,

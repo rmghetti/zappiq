@@ -46,6 +46,10 @@ import {
   scenariosFailingTwice,
   shouldAlertQuality,
 } from './agentEvalCronService.js';
+// P61 — a regravação entra pela mesma fila e pela mesma trava global. Não por
+// ser cara (ela não chama LLM nenhuma), mas para não ler `results` de uma
+// execução que ainda está sendo gravada.
+import { regradeRun } from './evalRegradeService.js';
 
 export const AGENT_EVAL_QUEUE_NAME = 'agent-eval';
 
@@ -173,6 +177,35 @@ export async function enqueueEvalRun(runId: string): Promise<void> {
       .catch(() => undefined);
     throw err;
   }
+}
+
+/**
+ * Enfileira uma REGRAVAÇÃO (P61) de uma lista de execuções já gravadas.
+ *
+ * Devolve o id do job, que é o que a rota admin usa para o fundador
+ * acompanhar. Lista vazia é recusada: job sem trabalho só polui a fila.
+ */
+export async function enqueueRegrade(input: {
+  runIds: string[];
+  dryRun: boolean;
+  jobId?: string;
+}): Promise<string> {
+  if (!Array.isArray(input.runIds) || input.runIds.length === 0) {
+    throw new Error('nenhuma execução elegível para regravar');
+  }
+  const jobId = input.jobId ?? `regrade-${Date.now()}`;
+  await getAgentEvalQueue().add(
+    'regrade',
+    { tipo: 'regrade', runIds: input.runIds, dryRun: input.dryRun },
+    { jobId, removeOnComplete: true },
+  );
+  logger.info({
+    msg: 'agent_eval_regrade_enfileirada',
+    jobId,
+    execucoes: input.runIds.length,
+    dryRun: input.dryRun,
+  });
+  return jobId;
 }
 
 /**
@@ -664,8 +697,18 @@ export async function liberarTravaGlobal(
   }
 }
 
+/** Dados que a fila `agent-eval` carrega. Dois tipos de trabalho. */
+export interface DadosDoJobDeEval {
+  /** Execução paga do teste (padrão quando `tipo` vem ausente). */
+  runId?: string;
+  /** 'regrade' = releitura sem LLM das execuções já gravadas (P61). */
+  tipo?: 'execucao' | 'regrade';
+  runIds?: string[];
+  dryRun?: boolean;
+}
+
 /** O mínimo do job que o processador toca. */
-type JobDeExecucao = Pick<Job<{ runId?: string }>, 'id' | 'data' | 'moveToDelayed'>;
+type JobDeExecucao = Pick<Job<DadosDoJobDeEval>, 'id' | 'data' | 'moveToDelayed'>;
 
 /**
  * Corpo do processador da fila `agent-eval`.
@@ -681,24 +724,60 @@ type JobDeExecucao = Pick<Job<{ runId?: string }>, 'id' | 'data' | 'moveToDelaye
 export async function processarExecucaoNaFila(
   job: JobDeExecucao,
   token?: string,
+  cliente: ClienteDeTrava = redis,
 ): Promise<void> {
-  const runId = job.data?.runId;
-  if (!runId) {
+  const ehRegravacao = job.data?.tipo === 'regrade';
+  // A trava é uma só, e o valor dela identifica quem a segurou: o id da
+  // execução, ou o id do job de regravação.
+  const donoDaTrava = ehRegravacao ? String(job.id ?? 'regrade') : job.data?.runId;
+
+  if (!donoDaTrava) {
     logger.warn({ msg: 'agent_eval_job_sem_runid', jobId: job.id });
     return;
   }
 
-  if (!(await adquirirTravaGlobal(runId))) {
-    logger.info({ msg: 'agent_eval_trava_ocupada_job_adiado', runId, jobId: job.id });
+  if (!(await adquirirTravaGlobal(donoDaTrava, cliente))) {
+    logger.info({
+      msg: 'agent_eval_trava_ocupada_job_adiado',
+      runId: donoDaTrava,
+      jobId: job.id,
+    });
     await job.moveToDelayed(Date.now() + ESPERA_TRAVA_OCUPADA_MS, token);
     throw new DelayedError();
   }
 
   try {
-    await executeRunJob(runId);
+    if (ehRegravacao) {
+      await processarRegravacao(job.data?.runIds ?? [], job.data?.dryRun === true);
+    } else {
+      await executeRunJob(donoDaTrava);
+    }
   } finally {
-    await liberarTravaGlobal(runId);
+    await liberarTravaGlobal(donoDaTrava, cliente);
   }
+}
+
+/**
+ * Relê as execuções da lista, uma a uma.
+ *
+ * Falha numa execução (results corrompido, por exemplo) não derruba as
+ * outras: o fundador clicou uma vez e espera o resumo do que deu para reler.
+ */
+async function processarRegravacao(runIds: string[], dryRun: boolean): Promise<void> {
+  let relidas = 0;
+  for (const runId of runIds) {
+    try {
+      await regradeRun(runId, { dryRun });
+      relidas++;
+    } catch (err: any) {
+      logger.warn({
+        msg: 'agent_eval_regrade_falhou',
+        runId,
+        error: String(err?.message || err),
+      });
+    }
+  }
+  logger.info({ msg: 'agent_eval_regrade_concluida', pedidas: runIds.length, relidas, dryRun });
 }
 
 // ─── Worker ────────────────────────────────────────────────────────

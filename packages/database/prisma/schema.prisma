@@ -1519,6 +1519,8 @@ model EvalRegrade {
   run             AgentEvalRun @relation(fields: [runId], references: [id], onDelete: Cascade)
   agentId         String       @map("agent_id")
   scenarioId      String       @map("scenario_id")
+  /// 'critical' | 'high' | 'medium': a tela mostra os críticos primeiro
+  severity        String       @default("medium")
   /// 'pass' | 'partial' | 'fail' | 'erro' — o que a execução gravou na época
   vereditoAntigo  String       @map("veredito_antigo")
   /// o mesmo vocabulário, relido pelo arnês desta linha
@@ -1526,6 +1528,9 @@ model EvalRegrade {
   /// em português: o que mudou e por quê
   motivo          String
   harnessVersion  Int          @map("harness_version")
+  /// true quando a regra nova e o veredito gravado do juiz DISCORDAM: é o
+  /// lote do modo opcional --com-juiz e o da calibração do fundador (P56).
+  discordante     Boolean      @default(false)
   /// true quando a releitura usou o juiz (modo --com-juiz). Padrão: sem juiz.
   comJuiz         Boolean      @default(false) @map("com_juiz")
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
