@@ -31,6 +31,16 @@ import { getSystemPrompt } from './promptEngine.js';
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 import { applyVozHumanaFilter } from './vozHumanaFilter.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
+// Perfil vivo (A8): identidade, tom, horário e agendamento montados das
+// settings a cada turno, atrás do interruptor `perfilVivo`. Desligado, o
+// prompt é byte a byte o de antes.
+import {
+  buildLiveProfileBlock,
+  buildGreetingBlock,
+  type LiveProfileAgendamento,
+} from './tenantLiveProfile.js';
+import { isFlagOn } from '../services/featureFlags.js';
+import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
 // ZappIQ Maestro (#280) — flow runtime híbrido. Aditivo: só atua se a org tem
 // flag maestro.enabled + Flow ativo; senão devolve null e a Iza pura roda igual.
 import { resolveActiveFlowStep } from './flowRuntime.js';
@@ -1275,16 +1285,13 @@ export function stripLeakedPrefixes(text: string): string {
  *
  * Retorna '' quando não é primeiro contato ou não há saudação: o join com
  * .filter(Boolean) descarta o bloco vazio.
+ *
+ * 14/09/2026 (A8): o corpo mudou de casa para agents/tenantLiveProfile.ts, o
+ * módulo puro do perfil vivo. O chat do site precisa da MESMA saudação e não
+ * pode importar o orquestrador inteiro só para isso. O nome segue exportado
+ * daqui porque é assim que o resto do código (e o teste da saudação) chama.
  */
-export function buildGreetingBlock(isFirstContact: boolean, greetingMessage?: string | null): string {
-  const msg = (greetingMessage || '').trim();
-  if (!isFirstContact || !msg) return '';
-  return [
-    '# Saudação configurada pelo dono do negócio',
-    'Na PRIMEIRA mensagem desta conversa (primeiro contato), abra com esta saudação, adaptando levemente ao seu tom mas mantendo o sentido e as informações. Depois de saudar, já responda à mensagem do cliente na mesma resposta. NÃO repita esta saudação nas mensagens seguintes:',
-    msg,
-  ].join('\n');
-}
+export { buildGreetingBlock };
 
 // ── Execute Actions ─────────────────────────────────────
 async function executeAction(
@@ -1462,6 +1469,19 @@ export async function buildSystemPromptForContact(input: {
    * o campo (playground, eval, Maestro).
    */
   ragStatus?: ragService.RagSearchStatus;
+  /**
+   * Estado REAL do agendamento (tipo ativo E direito ao recurso), resolvido
+   * por quem chamou. Ausente = o bloco vivo não fala de agendamento, nem
+   * para prometer nem para proibir. Só tem efeito com o interruptor ligado.
+   */
+  agendamento?: LiveProfileAgendamento | null;
+  /**
+   * O histórico que o modelo vai receber tem mensagem anterior de verdade?
+   * A conversa fecha sozinha em 72 h e o contato que volta abre uma conversa
+   * NOVA: o contador de mensagens é do contato, mas o histórico é só desta
+   * conversa (A212). Só tem efeito com o interruptor ligado.
+   */
+  temHistoricoNoContexto?: boolean;
 }): Promise<string> {
   const { organizationId, contactId, contactPhone, orgSettings, ragContext } = input;
   const ragStatus = input.ragStatus ?? 'ok';
@@ -1471,6 +1491,16 @@ export async function buildSystemPromptForContact(input: {
   ]
     .filter(Boolean)
     .join('\n');
+
+  // Interruptor por organização. Qualquer erro devolve false (o próprio
+  // featureFlags já é fail-closed; o try aqui cobre o mock de teste que
+  // rejeita). Desligado, tudo daqui para baixo é byte a byte o de antes.
+  let perfilVivoLigado = false;
+  try {
+    perfilVivoLigado = await isFlagOn(organizationId, 'perfilVivo');
+  } catch {
+    perfilVivoLigado = false;
+  }
 
   // V4 #157 (PR #70) — Lookup completo do Contact pra injetar nome no prompt.
   // Antes: lookup só pegava leadStatus → Iza não sabia o nome → sempre
@@ -1507,6 +1537,19 @@ export async function buildSystemPromptForContact(input: {
   // V4 #157 — bloco "# Cliente atual" injetado SEMPRE antes do RAG.
   // Iza usa isso pra cumprir REGRA 9 (use o nome desde o "oi" se já tem).
   const isFirstContact = messageCount <= 1; // 1 = a mensagem inbound atual
+
+  // A212: o contador é do CONTATO, o histórico enviado ao modelo é só da
+  // CONVERSA. Conversa parada 72 h fecha sozinha e quem volta abre uma nova,
+  // então a IA ouvia "já tem histórico" sem receber uma linha dele: convite a
+  // inventar o que foi combinado. Com o interruptor ligado, a frase passa a
+  // dizer a verdade. Desligado, o texto é o de antes, caractere por caractere.
+  const historicoNoContexto = input.temHistoricoNoContexto !== false;
+  const linhaPrimeiroContato = isFirstContact
+    ? 'Primeiro contato? SIM'
+    : perfilVivoLigado && !historicoNoContexto
+      ? 'Primeiro contato? NÃO, mas o que foi conversado antes NÃO está aqui. Não pergunte o nome de novo e não afirme o que foi combinado antes: confirme com o cliente.'
+      : 'Primeiro contato? NÃO (já tem histórico — não pergunte nome de novo, use o que está acima)';
+
   const clienteBlock = [
     '# Cliente atual',
     contactName
@@ -1515,7 +1558,7 @@ export async function buildSystemPromptForContact(input: {
     contactPhone ? `Telefone: ${contactPhone}` : '',
     `Status do lead: ${leadStatus}`,
     `Mensagens trocadas até agora: ${messageCount}`,
-    `Primeiro contato? ${isFirstContact ? 'SIM' : 'NÃO (já tem histórico — não pergunte nome de novo, use o que está acima)'}`,
+    linhaPrimeiroContato,
   ].filter(Boolean).join('\n');
 
   // Saudação configurada pelo dono (settings.greetingMessage). Camada viva,
@@ -1544,6 +1587,18 @@ export async function buildSystemPromptForContact(input: {
   // o prompt seedado nasceu sem link nenhum. Ver tenantConversionUrls.ts.
   const linksBlock = buildTenantLinksBlock(orgSettings, orgSettings?.businessName);
 
+  // Perfil vivo (A8): identidade, tom, horário, "agora" e agendamento lidos
+  // das settings NESTE turno. Entra logo depois do prompt gravado, então o
+  // dado vivo vence o texto congelado, e antes dos links, da saudação e do
+  // RAG, para o prefixo estável seguir estável. Vazio com o interruptor
+  // desligado: o join com .filter(Boolean) descarta.
+  const perfilVivoBlock = perfilVivoLigado
+    ? buildLiveProfileBlock(orgSettings, null, {
+        now: new Date(),
+        agendamento: input.agendamento ?? null,
+      })
+    : '';
+
   // 2. Tentar carregar Agent live correspondente
   try {
     const agent = await prisma.agent.findFirst({
@@ -1562,6 +1617,9 @@ export async function buildSystemPromptForContact(input: {
         CORE_AGENT_RULES_V1,
         factsBlock, // Camada 2 — fatos da plataforma sincronizados em runtime
         agent.systemPrompt,
+        // Perfil vivo depois do prompt gravado: o que o cliente acabou de
+        // salvar precisa vencer o tom e o horário congelados no cadastro.
+        perfilVivoBlock,
         // Depois do systemPrompt de propósito: se um prompt antigo tiver link
         // congelado do seed, o bloco fresco vem por último e é o que vale.
         linksBlock,

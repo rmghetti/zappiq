@@ -1,0 +1,227 @@
+/* ══════════════════════════════════════════════════════════════════════
+ * O perfil vivo entra no prompt (e SÓ entra com o interruptor ligado).
+ * --------------------------------------------------------------------
+ * Duas garantias, nesta ordem de importância:
+ *
+ *   1. DESLIGADO, o prompt é byte a byte o de hoje. Fundir na main publica
+ *      a API na hora, para os 15 agentes em produção ao mesmo tempo. Um
+ *      teste que compara a string inteira é a única prova honesta de que
+ *      ninguém muda de comportamento sem alguém ligar de propósito.
+ *
+ *   2. LIGADO, o bloco entra no lugar combinado: logo depois do prompt do
+ *      agente e ANTES dos links, da saudação e do RAG. Posição é o que faz
+ *      o prefixo estável continuar estável (cache de prompt) e o que faz o
+ *      dado vivo vencer o texto congelado, que vem antes.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const agentFindFirst = vi.fn();
+const messageCount = vi.fn();
+const isFlagOn = vi.fn();
+
+vi.mock('@zappiq/database', () => ({
+  prisma: {
+    contact: {
+      findUnique: vi.fn().mockResolvedValue({
+        leadStatus: 'NEW',
+        name: 'João',
+        _count: { conversations: 1 },
+      }),
+    },
+    message: { count: (...args: any[]) => messageCount(...args) },
+    agent: { findFirst: (...args: any[]) => agentFindFirst(...args) },
+  },
+}));
+
+vi.mock('../services/izaFactsService.js', () => ({
+  getIzaFactsBlock: vi.fn().mockResolvedValue(''),
+  invalidateIzaFactsCache: vi.fn(),
+}));
+
+vi.mock('../services/featureFlags.js', () => ({
+  isFlagOn: (...args: any[]) => isFlagOn(...args),
+}));
+
+vi.mock('../utils/logger.js', () => ({
+  logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
+import { buildSystemPromptForContact } from './agentOrchestrator.js';
+import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
+import { TEXTO_HORARIO_AUSENTE } from './tenantLiveProfile.js';
+
+const ORG = 'org-do-cmj';
+const PROMPT_DO_AGENTE = '## IDENTIDADE\nVocê é Vera, atendente virtual da CMJ.';
+const AGORA_UTC = new Date('2026-09-16T17:00:00Z'); // quarta, 14:00 em São Paulo
+
+const SETTINGS = {
+  agentName: 'Vera',
+  businessName: 'CMJ',
+  tone: 'formal',
+  businessHoursConfig: {
+    timezone: 'America/Sao_Paulo',
+    days: {
+      0: null,
+      1: { open: '09:00', close: '18:00' },
+      2: { open: '09:00', close: '18:00' },
+      3: { open: '09:00', close: '18:00' },
+      4: { open: '09:00', close: '18:00' },
+      5: { open: '09:00', close: '18:00' },
+      6: null,
+    },
+  },
+  surveyAnswers: { identidade_empresa: { ide_site_url: 'cmj.com.br' } },
+};
+
+const ENTRADA = {
+  organizationId: ORG,
+  contactId: 'contato-1',
+  contactPhone: '5511999999999',
+  orgSettings: SETTINGS,
+  ragContext: '',
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.useFakeTimers();
+  vi.setSystemTime(AGORA_UTC);
+  agentFindFirst.mockResolvedValue({ systemPrompt: PROMPT_DO_AGENTE, name: 'Vera' });
+  messageCount.mockResolvedValue(7);
+  isFlagOn.mockResolvedValue(false);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('interruptor perfilVivo DESLIGADO: prompt byte a byte igual ao de hoje', () => {
+  it('a string inteira bate com a montagem atual, caractere por caractere', async () => {
+    const prompt = await buildSystemPromptForContact(ENTRADA);
+
+    const agora = AGORA_UTC.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const esperado = [
+      CORE_AGENT_RULES_V1,
+      PROMPT_DO_AGENTE,
+      '### Links oficiais de CMJ (use EXATAMENTE estes, sem inventar variações)\n- Site oficial: https://cmj.com.br',
+      '# Cliente atual',
+      'Nome registrado: João',
+      'Telefone: 5511999999999',
+      'Status do lead: NEW',
+      'Mensagens trocadas até agora: 7',
+      'Primeiro contato? NÃO (já tem histórico — não pergunte nome de novo, use o que está acima)',
+      '# Contexto recuperado (RAG)',
+      '(sem contexto relevante encontrado para esta query)',
+      '# Agora',
+      agora,
+    ].join('\n');
+
+    expect(prompt).toBe(esperado);
+  });
+
+  it('nada do bloco vivo aparece', async () => {
+    const prompt = await buildSystemPromptForContact(ENTRADA);
+    expect(prompt).not.toContain('# Como você atende nesta empresa');
+    expect(prompt).not.toContain('Agora: aberto');
+    expect(prompt).not.toContain(TEXTO_HORARIO_AUSENTE);
+  });
+
+  it('o interruptor é consultado pelo nome certo e pela organização certa', async () => {
+    await buildSystemPromptForContact(ENTRADA);
+    expect(isFlagOn).toHaveBeenCalledWith(ORG, 'perfilVivo');
+  });
+
+  it('erro ao ler o interruptor não derruba o turno (segue sem o bloco)', async () => {
+    isFlagOn.mockRejectedValue(new Error('redis fora'));
+    const prompt = await buildSystemPromptForContact(ENTRADA);
+    expect(prompt).toContain(PROMPT_DO_AGENTE);
+    expect(prompt).not.toContain('# Como você atende nesta empresa');
+  });
+});
+
+describe('interruptor perfilVivo LIGADO: o bloco entra no lugar combinado', () => {
+  beforeEach(() => {
+    isFlagOn.mockResolvedValue(true);
+  });
+
+  it('o bloco vem depois do prompt do agente e antes dos links, da saudação e do RAG', async () => {
+    messageCount.mockResolvedValue(1); // primeiro contato: a saudação existe
+    const prompt = await buildSystemPromptForContact({
+      ...ENTRADA,
+      orgSettings: { ...SETTINGS, greetingMessage: 'Olá, que bom te ver!' },
+    });
+
+    // lastIndexOf porque o CORE já cita "# Cliente atual" no texto dele: o que
+    // interessa aqui é a posição do bloco montado, que vem sempre depois.
+    const posPrompt = prompt.indexOf(PROMPT_DO_AGENTE);
+    const posBloco = prompt.indexOf('# Como você atende nesta empresa');
+    const posLinks = prompt.indexOf('### Links oficiais de CMJ');
+    const posCliente = prompt.lastIndexOf('# Cliente atual');
+    const posSaudacao = prompt.lastIndexOf('# Saudação configurada pelo dono do negócio');
+    const posRag = prompt.lastIndexOf('# Contexto recuperado (RAG)');
+
+    expect(posPrompt).toBeGreaterThanOrEqual(0);
+    expect(posBloco).toBeGreaterThan(posPrompt);
+    expect(posBloco).toBeLessThan(posLinks);
+    expect(posLinks).toBeLessThan(posCliente);
+    expect(posCliente).toBeLessThan(posSaudacao);
+    expect(posSaudacao).toBeLessThan(posRag);
+  });
+
+  it('o horário e o "agora" vêm do businessHoursConfig, calculados por código', async () => {
+    const prompt = await buildSystemPromptForContact(ENTRADA);
+    expect(prompt).toContain('Segunda a sexta: 09:00 às 18:00');
+    expect(prompt).toContain('Agora: aberto');
+  });
+
+  it('organização sem horário cadastrado recebe a trava, não "Domingo: Fechado"', async () => {
+    const prompt = await buildSystemPromptForContact({
+      ...ENTRADA,
+      orgSettings: { agentName: 'Vera', businessName: 'CMJ' },
+    });
+    expect(prompt).toContain(TEXTO_HORARIO_AUSENTE);
+    expect(prompt).not.toMatch(/Domingo:\s*Fechado/i);
+  });
+
+  it('sem agendamento resolvido pelo chamador, o bloco não fala de agendamento', async () => {
+    const prompt = await buildSystemPromptForContact(ENTRADA);
+    expect(prompt).not.toContain('- Agendamento:');
+  });
+
+  it('agendamento desligado: proíbe oferecer agendamento', async () => {
+    const prompt = await buildSystemPromptForContact({
+      ...ENTRADA,
+      agendamento: { ativo: false },
+    });
+    expect(prompt).toContain('não ofereça agendamento por aqui');
+  });
+
+  it('agendamento ligado: lista os tipos ativos reais', async () => {
+    const prompt = await buildSystemPromptForContact({
+      ...ENTRADA,
+      agendamento: { ativo: true, tipos: ['Avaliação'] },
+    });
+    expect(prompt).toContain('Agendamento: disponível para: Avaliação');
+  });
+});
+
+describe('"já tem histórico": a IA só ouve isso quando o histórico está no contexto (A212)', () => {
+  it('com o interruptor ligado e sem histórico no contexto, a frase muda', async () => {
+    isFlagOn.mockResolvedValue(true);
+    const prompt = await buildSystemPromptForContact({ ...ENTRADA, temHistoricoNoContexto: false });
+    expect(prompt).not.toContain('já tem histórico');
+    expect(prompt).toContain('o que foi conversado antes NÃO está aqui');
+  });
+
+  it('com o interruptor ligado e histórico presente, a frase antiga continua', async () => {
+    isFlagOn.mockResolvedValue(true);
+    const prompt = await buildSystemPromptForContact({ ...ENTRADA, temHistoricoNoContexto: true });
+    expect(prompt).toContain('já tem histórico');
+  });
+
+  it('com o interruptor desligado, nada muda mesmo sem histórico', async () => {
+    isFlagOn.mockResolvedValue(false);
+    const prompt = await buildSystemPromptForContact({ ...ENTRADA, temHistoricoNoContexto: false });
+    expect(prompt).toContain('já tem histórico');
+  });
+});
