@@ -39,7 +39,10 @@ import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
 import { computeAIReadiness, refreshAIReadiness } from '../services/aiReadinessService.js';
 import { countAnsweredQuestions } from '../services/knowledgeBaseBuilder.js';
-import { agendarReingestaoDoQuestionario } from '../services/surveyReingest.js';
+import {
+  agendarReingestaoDoQuestionario,
+  marcarSincronizacaoPendente,
+} from '../services/surveyReingest.js';
 import { logAuditEvent } from '../services/auditService.js';
 import { buildSystemPromptForContact, pickTierAndOverride } from '../agents/agentOrchestrator.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
@@ -1038,16 +1041,20 @@ router.put('/survey', validate(surveySchema), async (req: Request, res: Response
     const settings = (org?.settings as any) || {};
     const before = settings.surveyAnswers || {};
 
-    // 'pendente' já no salvamento: a tela precisa poder dizer "a IA ainda
-    // não recebeu" em vez de "salvo automaticamente" (A008). Os sources
-    // anteriores ficam registrados porque são eles que a IA tem AGORA.
-    const surveySync = {
-      status: 'pendente' as const,
-      at: new Date().toISOString(),
-      sources: Array.isArray(settings.surveySync?.sources) ? settings.surveySync.sources : undefined,
-    };
-    const merged = { ...settings, surveyAnswers, surveySync };
+    const merged = { ...settings, surveyAnswers };
     await prisma.organization.update({ where: { id: orgId }, data: { settings: merged } });
+
+    // 'pendente' já no salvamento: a tela precisa poder dizer "a IA ainda
+    // não recebeu" em vez de "salvo automaticamente" (A008). Gravado POR
+    // CHAVE (jsonb_set), e não dentro do JSON inteiro: o job da fila também
+    // escreve aqui, 30 segundos depois, e os dois não podem se apagar. Os
+    // sources anteriores seguem registrados: são os que a IA tem AGORA.
+    const surveySync = await marcarSincronizacaoPendente(orgId, {
+      sources: Array.isArray(settings.surveySync?.sources) ? settings.surveySync.sources : undefined,
+    }).catch((err: any) => {
+      logger.warn(`[AITraining] marcar sincronização pendente falhou: ${err?.message}`);
+      return null;
+    });
 
     // Agenda (ou reagenda) a reingestão. Falha aqui não derruba o salvamento:
     // a resposta do cliente já está gravada, e o estado fica 'pendente'.

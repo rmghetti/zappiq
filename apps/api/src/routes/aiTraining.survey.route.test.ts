@@ -45,9 +45,14 @@ vi.mock('../services/ragService.js', async () => {
 });
 
 const agendar = vi.fn().mockResolvedValue({ jobId: 'survey-reingest:org-do-teste', acao: 'criado' });
+const marcarPendente = vi.fn(async (_org: string, opts: any) => ({
+  status: 'pendente',
+  at: '2026-09-14T12:00:00.000Z',
+  sources: opts?.sources,
+}));
 vi.mock('../services/surveyReingest.js', () => ({
   agendarReingestaoDoQuestionario: (...a: any[]) => agendar(...a),
-  marcarSincronizacaoPendente: vi.fn(),
+  marcarSincronizacaoPendente: (...a: any[]) => (marcarPendente as any)(...a),
 }));
 
 vi.mock('../middleware/auth.js', () => ({
@@ -98,6 +103,7 @@ beforeEach(() => {
   ingestDocument.mockClear();
   deleteDocument.mockClear();
   agendar.mockClear();
+  marcarPendente.mockClear();
 });
 
 const RESPOSTAS = {
@@ -123,7 +129,9 @@ describe('PUT /api/ai-training/survey', () => {
     expect(update).toHaveBeenCalledTimes(1);
     const gravado = update.mock.calls[0][0].data.settings;
     expect(gravado.surveyAnswers).toEqual(RESPOSTAS);
-    expect(gravado.surveySync.status).toBe('pendente');
+    // O estado da sincronização é gravado POR CHAVE, fora do JSON inteiro.
+    expect(gravado.surveySync).toBeUndefined();
+    expect(marcarPendente).toHaveBeenCalledTimes(1);
     // Não pode apagar o que já está no ar: até o job rodar, a IA continua
     // com a versão anterior do questionário.
     expect(deleteDocument).not.toHaveBeenCalled();
@@ -160,8 +168,7 @@ describe('PUT /api/ai-training/survey', () => {
       body: JSON.stringify({ surveyAnswers: RESPOSTAS }),
     });
 
-    const gravado = update.mock.calls[0][0].data.settings;
-    expect(gravado.surveySync.sources).toEqual(['survey-identidade_empresa']);
+    expect(marcarPendente.mock.calls[0][1]).toEqual({ sources: ['survey-identidade_empresa'] });
   });
 
   it('agendamento que falha não derruba o salvamento do cliente', async () => {

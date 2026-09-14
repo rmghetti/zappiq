@@ -330,17 +330,33 @@ async function gravarEstado(
  */
 export async function marcarSincronizacaoPendente(
   organizationId: string,
-  deps: { db?: DepsDaReingestao['db']; agora?: () => Date } = {},
-): Promise<void> {
+  deps: {
+    db?: DepsDaReingestao['db'];
+    agora?: () => Date;
+    /**
+     * Sources que a IA tem AGORA. Quem acabou de ler as settings passa os
+     * dele e poupa uma consulta; quem não passa, a função busca.
+     */
+    sources?: string[];
+  } = {},
+): Promise<SurveySync> {
   const db = deps.db ?? (prisma as any);
   const agora = deps.agora ?? (() => new Date());
-  const atual = await db!.organization
-    .findUnique({ where: { id: organizationId }, select: { settings: true } })
-    .catch(() => null);
-  const sources = (atual?.settings as any)?.surveySync?.sources;
-  await gravarEstado(db!, organizationId, {
+
+  let sources = deps.sources;
+  if (!sources) {
+    const atual = await db!.organization
+      .findUnique({ where: { id: organizationId }, select: { settings: true } })
+      .catch(() => null);
+    const registrados = (atual?.settings as any)?.surveySync?.sources;
+    sources = Array.isArray(registrados) ? registrados : undefined;
+  }
+
+  const estado: SurveySync = {
     status: 'pendente',
     at: agora().toISOString(),
-    sources: Array.isArray(sources) ? sources : undefined,
-  });
+    sources: sources && sources.length ? sources : undefined,
+  };
+  await gravarEstado(db!, organizationId, estado);
+  return estado;
 }
