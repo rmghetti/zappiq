@@ -20,7 +20,7 @@
  *     - sugestão que ainda assim vazar marca é DESCARTADA (rede final).
  */
 
-import { llmRouter } from './llm/LLMRouter.js';
+import { llmRouter, type LLMOperation } from './llm/LLMRouter.js';
 import { classifyIntent, shouldEscalateToSonnet, type IzaIntent } from './llm/intentClassifier.js';
 import { logger } from '../utils/logger.js';
 import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
@@ -219,11 +219,26 @@ function auditDoEval(profile: JudgeProfile): { orgId: string | null; operation: 
   return { orgId: profile.organizationId ?? null, operation: 'eval' };
 }
 
+/**
+ * O juiz é usado por DOIS caminhos com donos diferentes:
+ *
+ *   - o teste da Qualidade (aqui), que é gasto de bastidor da casa e passa
+ *     `operation: 'eval'`;
+ *   - a simulação do Maestro (agents/flowSimulation.ts), que é recurso DO
+ *     CLIENTE: roda quando ele pede, e tem de continuar dentro do teto de
+ *     custo do trial e do disjuntor mensal da organização dele.
+ *
+ * Por isso a operação é argumento explícito, com padrão 'classify'. Quando ela
+ * era fixada em 'eval' aqui dentro, a simulação do cliente passava a gravar
+ * custo de bastidor e escapava dos dois orçamentos sem ninguém decidir isso.
+ */
 export async function runJudge(
   expectedBehavior: string,
   agentResponse: string,
   profile: JudgeProfile,
+  opts: { operation?: LLMOperation } = {},
 ): Promise<{ passed: boolean; confidence: number; reason: string }> {
+  const operation = opts.operation ?? 'classify';
   try {
     const userPrompt = `### Comportamento esperado
 ${expectedBehavior}
@@ -240,7 +255,8 @@ ${agentResponse}
           messages: [{ role: 'user', content: userPrompt }],
           maxTokens: 200,
           temperature: 0,
-          ...auditDoEval(profile),
+          orgId: profile.organizationId ?? null,
+          operation,
         }),
       ),
     );
@@ -489,12 +505,17 @@ async function runScenario(
   let intent: IzaIntent = 'normal';
   let preferProvider: 'anthropic-sonnet' | undefined;
   try {
-    intent = await classifyIntent(scenario.userMessage, messages.slice(0, -1) as any, {
-      // agentName fica de fora de propósito: o izaTurnRouter de produção
-      // também não passa, e o avaliador tem de espelhar produção 1:1.
-      ...auditDoEval(profile),
-      conversationId: null,
-    });
+    // Com tempo limite como as demais: a classificação também vai ao provedor
+    // pelo mesmo fetch sem AbortSignal, e pendurada aqui segurava a execução
+    // inteira antes de a primeira resposta do agente sequer ser pedida.
+    intent = await comTempoLimite(() =>
+      classifyIntent(scenario.userMessage, messages.slice(0, -1) as any, {
+        // agentName fica de fora de propósito: o izaTurnRouter de produção
+        // também não passa, e o avaliador tem de espelhar produção 1:1.
+        ...auditDoEval(profile),
+        conversationId: null,
+      }),
+    );
     if (shouldEscalateToSonnet(intent)) {
       // PR #216: preferProvider (com fallback) em vez de forceProvider (sem).
       // Bug anterior: Sonnet rate-limit derrubava 7 cenarios com "all providers
@@ -537,7 +558,11 @@ async function runScenario(
   }
   const deterministicPassed = missingPatterns.length === 0 && failedPatterns.length === 0;
 
-  const judge = await runJudge(scenario.expectedBehavior, response, profile);
+  // 'eval' explícito: aqui o juiz é gasto de bastidor da casa. O padrão da
+  // função é 'classify', que é o que a simulação do Maestro precisa.
+  const judge = await runJudge(scenario.expectedBehavior, response, profile, {
+    operation: 'eval',
+  });
 
   let combined: 'pass' | 'partial' | 'fail';
   if (deterministicPassed && judge.passed) combined = 'pass';

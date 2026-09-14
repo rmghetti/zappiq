@@ -69,8 +69,12 @@ export function ecoModeKey(orgId: string): string {
 
 /**
  * Soma o custo (USD) de uma chamada LLM no acumulador mensal da org.
- * Chamado pelo logLLMCall pra TODA org (a da casa inclusive: o acumulado
- * dela serve de telemetria; o breaker é que nunca arma pra ela).
+ * Chamado pelo logLLMCall para toda org (a da casa inclusive: o acumulado dela
+ * serve de telemetria; o breaker é que nunca arma pra ela), EXCETO nas
+ * operações de bastidor: 'eval', o teste da Qualidade, fica de fora porque
+ * quem o dispara é a casa, e armar o Modo Econômico do cliente por causa dele
+ * penalizaria o atendimento real. Ver OPERACOES_FORA_DO_ORCAMENTO em
+ * llmCallAudit.ts.
  * Fail-soft: cache.incrbyfloat devolve null em erro e nada propaga.
  */
 export async function recordMonthlyLlmCost(orgId: string, costUsd: number): Promise<void> {

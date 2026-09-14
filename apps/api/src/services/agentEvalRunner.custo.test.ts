@@ -36,7 +36,7 @@ vi.mock('../agents/coreAgentRules.js', () => ({
   CORE_RULES_VERSION: 'v2',
 }));
 
-const { executeAgentEvalRun } = await import('./agentEvalRunner.js');
+const { executeAgentEvalRun, runJudge } = await import('./agentEvalRunner.js');
 
 const PERFIL = {
   organizationId: 'org-do-cliente',
@@ -106,6 +106,32 @@ describe('o teste da Qualidade tem dono em toda chamada de LLM', () => {
   });
 });
 
+describe('o juiz não é gasto de bastidor fora do avaliador', () => {
+  it("sem operação explícita, runJudge grava 'classify'", async () => {
+    // É o caso da simulação do Maestro (agents/flowSimulation.ts), que é
+    // recurso DO CLIENTE: tem de continuar dentro do teto do trial e do
+    // disjuntor mensal da organização dele.
+    completeMock.mockResolvedValue({
+      text: JSON.stringify({ passed: true, confidence: 90, reason: 'ok' }),
+      usage: { inputTokens: 5, outputTokens: 5 },
+    });
+
+    await runJudge('atender bem', 'oi, tudo bem?', PERFIL);
+
+    const [req] = completeMock.mock.calls[0];
+    expect(req.operation).toBe('classify');
+    expect(req.orgId).toBe('org-do-cliente');
+  });
+
+  it("o avaliador passa 'eval' explicitamente", async () => {
+    await executeAgentEvalRun([CENARIO_QUE_REPROVA], AGENTE, PERFIL);
+
+    for (const [req] of completeMock.mock.calls) {
+      expect(req.operation).toBe('eval');
+    }
+  });
+});
+
 describe('chamada de LLM pendurada não trava a execução', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -122,5 +148,21 @@ describe('chamada de LLM pendurada não trava a execução', () => {
     expect(results[0].combined).toBe('fail');
     expect(results[0].judge.reason).toMatch(/tempo limite da chamada de LLM/i);
     expect(summary.failed).toBe(1);
+  });
+
+  it('a classificação de intenção pendurada também é cortada em 60 s', async () => {
+    // Ela ficou de fora do tempo limite na primeira versão, e é a PRIMEIRA
+    // chamada do cenário: pendurada ali, nem a resposta do agente era pedida.
+    classifyMock.mockImplementation(() => new Promise(() => {}));
+
+    const promessa = executeAgentEvalRun([CENARIO_QUE_REPROVA], AGENTE, PERFIL);
+    await vi.advanceTimersByTimeAsync(61_000);
+    const { results } = await promessa;
+
+    // O cenário seguiu com o tier padrão, que é o comportamento de erro já
+    // previsto para a classificação, em vez de segurar a execução inteira.
+    expect(results).toHaveLength(1);
+    expect(completeMock).toHaveBeenCalled();
+    expect(completeMock.mock.calls[0][0].preferProvider).toBeUndefined();
   });
 });

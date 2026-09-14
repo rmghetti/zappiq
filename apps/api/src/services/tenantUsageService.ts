@@ -92,10 +92,20 @@ function estimatedInfraCostUsd(planId: string): number {
 }
 
 // SQL builder puro (testável): soma o custo real de LLM por org e janela.
+//
+// `operation <> 'eval'` fica de fora do custo DO CLIENTE de propósito. O teste
+// da Qualidade roda por conta da casa (cron semanal e botão do painel), não por
+// conta do tráfego do cliente: em 90 dias foram cerca de USD 60 de eval contra
+// cerca de USD 10 de atendimento real, então somá-lo aqui multiplicaria por
+// seis o custo aparente de cada tenant e envenenaria a margem do painel. O
+// gasto continua gravado com a organização e visível no painel de LLM da casa
+// (routes/adminLlm.ts, que agrega a frota inteira e não filtra por operação).
+// A coluna é NOT NULL com default 'chat', então a comparação não perde linha.
 export function llmCostSql(): string {
   return `SELECT COALESCE(SUM(cost_usd_estimate), 0)::float8 AS cost
           FROM llm_call_logs
-          WHERE organization_id = $1 AND created_at >= $2 AND created_at < $3`;
+          WHERE organization_id = $1 AND created_at >= $2 AND created_at < $3
+            AND operation <> 'eval'`;
 }
 
 // Custo LLM REAL do período: SUM(cost_usd_estimate) da llm_call_logs (não mais o Redis de trial).
