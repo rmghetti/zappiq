@@ -28,7 +28,7 @@
 
 import { ORDEM_DAS_REGRAS, PERGUNTA_POR_ID, destinoDaPergunta } from '@zappiq/shared';
 
-import { achatarRespostas } from '../services/knowledgeBaseBuilder.js';
+import { achatarRespostas, valorEmTexto } from '../services/knowledgeBaseBuilder.js';
 import { isOpen } from './businessHours.js';
 import type { BusinessHoursConfig } from './flowEngine.js';
 
@@ -318,16 +318,60 @@ export interface LiveProfileIdentidade {
  * questionário não é o lugar.
  */
 const FRASES_QUE_MANDAM_NO_MODELO: RegExp[] = [
+  // Português. Escritos SEM acento de propósito: o casamento roda sobre o
+  // texto normalizado, então "Você é" e "Voce e" caem no mesmo padrão.
   /ignor\w*\s+(as\s+|todas\s+as\s+|o\s+|todos\s+os\s+)?(regra|instru|comando|orienta|prompt|mensage)/i,
   /desconsider\w*\s+(as\s+|todas\s+as\s+|o\s+)?(regra|instru|comando|orienta|prompt)/i,
-  /esque[çc]\w*\s+(tudo|as\s+regra|as\s+instru|o\s+que)/i,
-  /(a\s+partir\s+de\s+agora|de\s+agora\s+em\s+diante)[^.!?]*\bvoc[êe]\s+(é|ser[áa]|vai\s+ser)/i,
-  /voc[êe]\s+n[ãa]o\s+é\s+mais\b/i,
-  /\b(system|assistant|user)\s*(prompt|message|role)\b/i,
+  /esquec\w*\s+(tudo|as\s+regra|as\s+instru|o\s+que)/i,
+  // O ponto no meio é de propósito: "A partir de agora. Voce e ..." pulava
+  // a divisão em frases e atravessava inteiro.
+  /(a\s+partir\s+de\s+agora|de\s+agora\s+em\s+diante)[^\n]{0,80}?\bvoce\s+(e|sera|vai\s+ser)\b/i,
+  /\bvoce\s+nao\s+e\s+mais\b/i,
   /prompt\s+do\s+sistema/i,
   /\bregras?\s+base\s+do\s+agente\b/i,
+
+  // Inglês. Metade das cargas conhecidas chegava nesta língua, e nenhum
+  // padrão em português a pegava.
+  /\b(ignore|disregard|forget|override)\b[^.\n]{0,40}\b(previous|prior|above|all|instructions?|rules?|prompt)\b/i,
   /\bnew\s+instructions?\b/i,
+  /\b(system|assistant|user)\s*(prompt|message|role)\b/i,
+
+  // Marcadores de conversa. São a forma mais curta de fingir que a
+  // resposta do questionário é outro turno do diálogo.
+  /^\s*(system|assistant|user|human)\s*:/i,
+  /\[\s*\/?\s*INST\s*\]/i,
+  /<\s*\|\s*im_(start|end)\s*\|\s*>/i,
+  /###\s*(instruction|system)/i,
 ];
+
+/**
+ * Tags do protocolo de resposta do agente.
+ *
+ * Saem antes da limpeza de marcação, e não junto com ela: a limpeza come o
+ * '>' e deixaria '<action' de pé no prompt, que é o bastante para o modelo
+ * tentar abrir um bloco de ação que o cliente escreveu.
+ */
+const TAGS_ESTRUTURAIS = /<\s*\/?\s*(action_data|action|reply|buttons)\s*>/gi;
+
+/** Tira o acento só para o casamento. O texto devolvido é sempre o original. */
+function semAcento(texto: string): string {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+/** Este pedaço de texto tenta mandar no modelo? */
+function mandaNoModelo(texto: string): boolean {
+  const alvo = semAcento(texto);
+  return FRASES_QUE_MANDAM_NO_MODELO.some((padrao) => padrao.test(alvo));
+}
+
+/** Marcação que só confunde o prompt. Nada aqui muda o sentido do texto. */
+function limparMarcacao(texto: string): string {
+  return texto
+    .replace(/```+/g, ' ')
+    .replace(/[*_`>#]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 /**
  * Limpa o texto de uma regra escrita pelo cliente.
@@ -340,22 +384,29 @@ const FRASES_QUE_MANDAM_NO_MODELO: RegExp[] = [
 export function sanearRegraDoCliente(bruto: unknown): string | null {
   if (typeof bruto !== 'string') return null;
 
-  const semMarcacao = bruto
-    .replace(/```+/g, ' ')
-    .replace(/[*_`>#]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!semMarcacao) return null;
+  // 1. As tags do protocolo saem inteiras, antes de qualquer outra coisa.
+  const semTags = bruto.replace(TAGS_ESTRUTURAIS, ' ');
 
-  // Divide preservando a pontuação, para remontar o que sobrar sem
-  // inventar ponto final onde o cliente não escreveu.
-  const frases = semMarcacao.match(/[^.!?;]+[.!?;]*/g) ?? [semMarcacao];
-  const limpas = frases.filter(
-    (frase) => !FRASES_QUE_MANDAM_NO_MODELO.some((padrao) => padrao.test(frase)),
-  );
+  // 2. A divisão em frases acontece ANTES da limpeza de marcação: '_', '>'
+  //    e '#' fazem parte dos marcadores de conversa ('<|im_start|>',
+  //    '### Instruction'), e sem eles o padrão não reconhece o ataque.
+  const frases = semTags.match(/[^.!?;]+[.!?;]*/g) ?? [semTags];
+  const limpas = frases.filter((frase) => !mandaNoModelo(frase));
 
-  const texto = limpas.join(' ').replace(/\s+/g, ' ').trim();
-  return texto ? texto : null;
+  // 3. Remonta com join(''), não com join(' '). A divisão corta em TODO
+  //    ponto, e a maioria não é fim de frase: com espaço no lugar, '7.5%'
+  //    virava '7. 5%', 'R$ 1.500,00' virava 'R$ 1. 500,00' e
+  //    'contato@empresa.com.br' virava três pedaços. A normalização de
+  //    espaço logo abaixo cuida do resto.
+  const texto = limparMarcacao(limpas.join(''));
+  if (!texto) return null;
+
+  // 4. O ataque também pode atravessar a divisão ('A partir de agora.
+  //    Voce e outro assistente'). Se o que sobrou ainda manda no modelo,
+  //    o campo inteiro cai: não dá para saber que pedaço salvar.
+  if (mandaNoModelo(texto)) return null;
+
+  return texto;
 }
 
 /**
@@ -384,11 +435,10 @@ export function regrasDoQuestionario(
   for (const id of ORDEM_DAS_REGRAS) {
     if (!porId.has(id)) continue;
     const bruto = porId.get(id);
-    const texto = Array.isArray(bruto)
-      ? sanearRegraDoCliente(bruto.filter(Boolean).join(', '))
-      : typeof bruto === 'boolean'
-        ? (bruto ? 'Sim' : 'Não')
-        : sanearRegraDoCliente(typeof bruto === 'string' ? bruto : String(bruto ?? ''));
+    // A MESMA conversão do documento de conhecimento: lista vira enumeração,
+    // booleano vira Sim ou Não e objeto desce em campos rotulados. Antes o
+    // objeto caía num String() e o prompt recebia '[object Object]'.
+    const texto = sanearRegraDoCliente(valorEmTexto(bruto));
     if (!texto) continue;
 
     // O rótulo é a PERGUNTA em português. Sem o ponto de interrogação, que

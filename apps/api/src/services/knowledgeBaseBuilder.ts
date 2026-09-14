@@ -64,8 +64,12 @@ function rotuloLegivel(chave: string): string {
  * booleano vira Sim ou Não, porque 'true' não é resposta em português.
  *
  * Devolve null quando não sobrou nada de verdade para escrever.
+ *
+ * Exportada porque o bloco vivo do prompt precisa da MESMA conversão: lá
+ * um objeto virava a string '[object Object]' e a IA recebia isso como se
+ * fosse a regra da empresa.
  */
-function valorEmTexto(valor: unknown, profundidade = 0): string | null {
+export function valorEmTexto(valor: unknown, profundidade = 0): string | null {
   if (valor === null || valor === undefined) return null;
 
   if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não';
