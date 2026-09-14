@@ -45,5 +45,9 @@ jobs:
           fi
 
       - name: Run drift check
-        if: steps.label_check.outputs.skip != 'true'
+        # O label no-iza-impact pula SO a Parte 2 (paths sensiveis sem changelog).
+        # A Parte 1 (acoes vencidas, inclusive as com "vence em") roda sempre:
+        # o prazo e do mundo, nao do repositorio, e um label cosmetico nao o move.
+        env:
+          IZA_PULAR_PARTE2: ${{ steps.label_check.outputs.skip }}
         run: bash scripts/check-iza-drift.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"

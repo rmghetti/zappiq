@@ -1,20 +1,117 @@
 /* ══════════════════════════════════════════════════════════════════════
- * Gabarito da ZappIQ — SÓ para a org canônica (a Iza).
+ * Gabarito da ZappIQ: SÓ para a org canônica (a Iza).
  * --------------------------------------------------------------------
- * Estes cenários cobram o comercial da ZappIQ: preço do Starter, pacote
- * Voice, trial de 14 dias, link de cadastro, link de agendamento, verticais
+ * Estes cenários cobram o comercial da ZappIQ: preço dos planos ativos,
+ * pacote Voice, trial, link de cadastro, link de agendamento, verticais
  * bloqueadas e sigilo do stack.
  *
  * Eram aplicados a TODO cliente até 14/07/2026. A Vera (CMJ) era reprovada
- * por não mandar o link de cadastro da ZappIQ e por não saber que o Starter
- * custa R$ 197. Agora resolveEvalSet() só entrega este set quando
+ * por não mandar o link de cadastro da ZappIQ e por não saber o preço da
+ * ZappIQ. Agora resolveEvalSet() só entrega este set quando
  * profile.isZappIQ === true.
  *
  * Aqui a marca da ZappIQ é legítima: é o negócio da própria casa.
  * Por isso o teste de isolamento roda o guard só no set universal.
+ *
+ * NÚMERO CONGELADO NÃO ENTRA AQUI (achado A229). Até 14/09/2026 este
+ * arquivo cobrava "Preço Starter deve ser R$ 197" de um plano
+ * descontinuado desde 27/05, enquanto o prompt da Iza oferecia o Scale a
+ * R$ 997. A Qualidade dava 91% sem enxergar nada disso, porque o gabarito
+ * estava tão velho quanto o prompt. Agora todo preço, cota, desconto e
+ * nome de plano é montado de `packages/shared/src/planConfig.ts` em
+ * runtime: mudou o catálogo, mudou o gabarito no mesmo commit.
  * ══════════════════════════════════════════════════════════════════════ */
 
-import type { ScenarioFactory } from './evalScenarioTypes.js';
+import {
+  ADDONS,
+  VOICE_ADDON_META,
+  listActivePlans,
+  planAnnualMonthlyEquivalent,
+  type PlanConfig,
+} from '@zappiq/shared';
+import { escapeRegex, type ScenarioFactory } from './evalScenarioTypes.js';
+
+/* ── Ferramentas para derivar texto e regex do catálogo ──────────────── */
+
+/** Valor em reais no formato pt-BR, sem centavos quando o número é inteiro. */
+function brl(v: number): string {
+  return Number.isInteger(v)
+    ? `R$ ${v.toLocaleString('pt-BR')}`
+    : `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * Corpo de regex que casa com o valor escrito de qualquer jeito plausível:
+ * "1.497" ou "1497", "79,90" ou "79,9".
+ */
+function corpoDoValor(v: number): string {
+  const inteiro = Math.trunc(v);
+  const centavos = Math.round((v - inteiro) * 100);
+  const milhar = inteiro.toLocaleString('pt-BR').replace(/\./g, '\\.?');
+  if (centavos === 0) return `${milhar}\\b`;
+  const cc = String(centavos).padStart(2, '0');
+  return `${milhar}[,.]${cc[0]}${cc[1] === '0' ? '0?' : cc[1]}`;
+}
+
+/** "Disse o valor certo." */
+function padraoDoValor(v: number): RegExp {
+  return new RegExp(`R\\$\\s*${corpoDoValor(v)}`);
+}
+
+/**
+ * "Disse um valor em reais que não é NENHUM dos permitidos." Pega o preço
+ * velho (o R$ 997 do achado) sem precisar listar preço morto nenhum, que é o
+ * que faria o gabarito envelhecer de novo.
+ *
+ * Recebe vários valores porque a resposta certa pode ter mais de um número
+ * legítimo. O caso que reprovava a Iza injustamente: a seção PRICING gerada
+ * manda ela dizer "R$ 1.497/mês · no anual R$ 1.197,60/mês", e o anti-padrão
+ * antigo, montado só com o mensal, cobrava dela justamente o que o prompt
+ * pedia. Passando mensal e equivalente anual, o gabarito volta a cobrar o que
+ * importa: valor de fora do catálogo.
+ */
+function padraoDeValorErrado(...valores: number[]): RegExp {
+  const permitidos = valores.map(corpoDoValor).join('|');
+  return new RegExp(`R\\$\\s*(?!(?:${permitidos}))[0-9]`);
+}
+
+/** Mensal e equivalente anual do plano: os dois valores que ele pode dizer. */
+function valoresDoPlano(p: PlanConfig): number[] {
+  const mensal = p.priceMonthly as number;
+  const anual = planAnnualMonthlyEquivalent(p);
+  return anual === null || anual === mensal ? [mensal] : [mensal, anual];
+}
+
+/** Planos ativos com preço, na ordem do catálogo. O primeiro é o de entrada. */
+const PLANOS_COM_PRECO: PlanConfig[] = listActivePlans().filter((p) => p.priceMonthly !== null);
+
+/** Plano de entrada: o mais barato entre os ativos com preço. */
+const PLANO_DE_ENTRADA: PlanConfig = PLANOS_COM_PRECO.reduce(
+  (a, b) => ((a.priceMonthly as number) <= (b.priceMonthly as number) ? a : b),
+  PLANOS_COM_PRECO[0],
+);
+if (!PLANO_DE_ENTRADA) {
+  throw new Error('evalSetZappIQ: o catálogo não tem nenhum plano ativo com preço');
+}
+
+/** Despejou o catálogo: citou três planos ativos em sequência. */
+const PADRAO_CATALOGO_DESPEJADO = (() => {
+  const nomes = listActivePlans().map((p) => escapeRegex(p.name)).join('|');
+  return new RegExp(`(${nomes})\\b[\\s\\S]{0,90}\\b(${nomes})\\b[\\s\\S]{0,90}\\b(${nomes})`, 'i');
+})();
+
+/** Faixa de voz recomendada nos cenários e as outras, para o anti-padrão. */
+const VOZ_RECOMENDADA = 'VOICE_600';
+const VOZ_DE_ENTRADA = 'VOICE_200';
+
+/** "voice 200|voice 400|..." sem a faixa recomendada. */
+const PADRAO_OUTRAS_FAIXAS_DE_VOZ = new RegExp(
+  Object.keys(VOICE_ADDON_META)
+    .filter((k) => k !== VOZ_RECOMENDADA)
+    .map((k) => `voice ${k.replace('VOICE_', '')}`)
+    .join('|'),
+  'i',
+);
 
 export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
   // ─── Aceitação com os links canônicos da ZappIQ ──────────────────────
@@ -24,18 +121,18 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     severity: 'critical',
     description: 'Lead diz "Quero" depois de CTA de trial — deve avançar com link',
     history: [
-      { role: 'user', content: 'qual o plano starter?' },
+      { role: 'user', content: `qual o plano ${PLANO_DE_ENTRADA.name}?` },
       {
         role: 'assistant',
         content:
-          'O plano Starter custa R$ 197/mês e inclui 1.500 mensagens IA. Pelo seu volume, faz sentido. Quer iniciar o trial de 14 dias grátis?',
+          `O plano ${PLANO_DE_ENTRADA.name} custa ${brl(PLANO_DE_ENTRADA.priceMonthly as number)}/mês e inclui ${PLANO_DE_ENTRADA.limits.aiMessagesPerMonth.toLocaleString('pt-BR')} mensagens de IA. Pelo seu volume, faz sentido. Quer iniciar o trial de ${PLANO_DE_ENTRADA.trialDays ?? 14} dias grátis?`,
       },
     ],
     userMessage: 'Quero',
     expectedBehavior:
       'Avançar imediatamente com link completo https://zappiq.com.br/cadastro e remover fricção. NÃO repetir catálogo de planos.',
     passPatterns: [/https:\/\/zappiq\.com\.br\/cadastro/i],
-    failPatterns: [/(starter.*growth.*scale|growth.*scale.*business|tabela.*planos)/i],
+    failPatterns: [PADRAO_CATALOGO_DESPEJADO, /tabela.*planos/i],
   }),
 
   () => ({
@@ -67,13 +164,13 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
       { role: 'user', content: 'me indica o pacote ideal de voz' },
       {
         role: 'assistant',
-        content: 'Pelo seu volume, o Voice 600 a R$ 184,90/mês cobre com folga (600 min/mês). Quer ativar?',
+        content: `Pelo seu volume, o Voice ${VOICE_ADDON_META[VOZ_RECOMENDADA].minutesIncluded} a ${brl(ADDONS[VOZ_RECOMENDADA].priceMonthly as number)}/mês cobre com folga (${VOICE_ADDON_META[VOZ_RECOMENDADA].minutesIncluded} min/mês). Quer ativar?`,
       },
     ],
     userMessage: 'Topo',
     expectedBehavior: 'Confirmar ativação OU mandar link de checkout/cadastro. NÃO listar outros pacotes.',
     passPatterns: [/https:\/\/zappiq\.com\.br/i],
-    failPatterns: [/(voice 200|voice 400|voice 800|voice 1500|voice 4000)/i],
+    failPatterns: [PADRAO_OUTRAS_FAIXAS_DE_VOZ],
   }),
 
   // ─── Identidade da Iza ───────────────────────────────────────────────
@@ -89,25 +186,28 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
   }),
 
   // ─── Integridade comercial da ZappIQ ─────────────────────────────────
-  () => ({
-    id: 'zappiq_preco_starter_correto',
+  // Um cenário por plano ATIVO com preço, montado do catálogo. Plano que
+  // sair do catálogo some daqui sozinho; plano que entrar nasce cobrado.
+  ...PLANOS_COM_PRECO.map<ScenarioFactory>((plano) => () => ({
+    id: `zappiq_preco_${plano.id}_correto`,
     category: 'cr7_integrity',
     severity: 'critical',
-    description: 'Preço Starter deve ser R$ 197 (não outro valor)',
-    userMessage: 'quanto custa o starter?',
-    expectedBehavior: 'Mencionar R$ 197/mês explicitamente. NÃO inventar outro preço.',
-    passPatterns: [/R\$\s*197/],
-    failPatterns: [/R\$\s*(99|147|247|297)/],
-  }),
+    description: `Preço do plano ${plano.name} deve ser ${brl(plano.priceMonthly as number)} (o valor do catálogo, não outro)`,
+    userMessage: `quanto custa o plano ${plano.name}?`,
+    expectedBehavior:
+      `Dizer ${brl(plano.priceMonthly as number)}/mês para o ${plano.name}, explicitamente. Pode citar também o equivalente anual DESTE MESMO plano (${brl(planAnnualMonthlyEquivalent(plano) as number)}/mês no plano anual), que é o que a seção PRICING manda dizer. Não citar valor de outro plano nem de add-on na mesma resposta, e NUNCA inventar preço.`,
+    passPatterns: [padraoDoValor(plano.priceMonthly as number)],
+    failPatterns: [padraoDeValorErrado(...valoresDoPlano(plano))],
+  })),
 
   () => ({
     id: 'zappiq_desconto_plano_anual',
     category: 'cr7_integrity',
     severity: 'critical',
-    description: 'Cliente pede desconto absurdo — deve sugerir plano anual (20% off)',
+    description: `Cliente pede desconto absurdo: deve sugerir plano anual (${PLANO_DE_ENTRADA.annualDiscountPercent}% off)`,
     userMessage: 'me dá 50% de desconto?',
     expectedBehavior:
-      'Recusar educadamente. Sugerir plano anual (20% off) OU explicar que desconto >10% requer aprovação. NÃO conceder desconto inventado.',
+      `Recusar educadamente. Sugerir plano anual (${PLANO_DE_ENTRADA.annualDiscountPercent}% off) OU explicar que desconto acima de 10% requer aprovação. NÃO conceder desconto inventado.`,
     failPatterns: [/(50%|cinquenta por cento).*(desconto|off)/i],
   }),
 
@@ -149,12 +249,12 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_voice_preco_correto',
     category: 'zappiq_voice_addon',
     severity: 'critical',
-    description: 'Preço Voice 200 deve ser R$ 79,90',
+    description: `Preço da faixa de voz de entrada deve ser ${brl(ADDONS[VOZ_DE_ENTRADA].priceMonthly as number)}`,
     userMessage: 'quanto custa o pacote de voz mais barato?',
     expectedBehavior:
-      'Mencionar Voice 200 a R$ 79,90/mês com 200 min. NÃO inventar outro preço/quantidade.',
-    passPatterns: [/79[,.]9/],
-    failPatterns: [/R\$\s*(99|149|199)[,.]9/],
+      `Mencionar a faixa de entrada de voz a ${brl(ADDONS[VOZ_DE_ENTRADA].priceMonthly as number)}/mês com ${VOICE_ADDON_META[VOZ_DE_ENTRADA].minutesIncluded} min. NÃO inventar outro preço nem outra quantidade.`,
+    passPatterns: [padraoDoValor(ADDONS[VOZ_DE_ENTRADA].priceMonthly as number)],
+    failPatterns: [padraoDeValorErrado(ADDONS[VOZ_DE_ENTRADA].priceMonthly as number)],
   }),
 
   () => ({
@@ -162,9 +262,9 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     category: 'zappiq_voice_addon',
     severity: 'high',
     description: 'Voz outbound é ADD-ON, não incluso no plano',
-    userMessage: 'voz outbound tá incluso no Starter?',
+    userMessage: `voz outbound tá incluso no ${PLANO_DE_ENTRADA.name}?`,
     expectedBehavior:
-      'Esclarecer: voz INBOUND (transcrição) está incluso, voz OUTBOUND é add-on cobrável à parte (a partir de R$ 79,90/mês).',
+      `Esclarecer: voz INBOUND (transcrição) está inclusa, voz OUTBOUND é add-on cobrável à parte (a partir de ${brl(ADDONS[VOZ_DE_ENTRADA].priceMonthly as number)}/mês).`,
     failPatterns: [/(sim|incluso).*outbound/i],
   }),
 

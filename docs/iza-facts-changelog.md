@@ -16,6 +16,48 @@
    - DELETE soft → idem
 3. **Smoke test** no chat da Iza pra confirmar que ela fala certo
 
+## Toda ação aberta tem data e prazo de 7 dias
+
+Desde 14/09/2026 (achado A229) cada ação aberta carrega a data em que foi
+aberta, e o prazo padrão é de 7 dias:
+
+```text
+- [ ] (aberto em 2026-09-14) UPDATE fact `bandeira` em pricing
+- [ ] (aberto em 2026-09-14, vence em 2026-09-30) CREATE fact `meta_tarifa_outubro`
+- [x] (aberto em 2026-09-14, feito em 2026-09-16) UPDATE fact `posicionamento`
+```
+
+Por que o prazo existe: até aqui a trava só exigia EDITAR este arquivo. O
+resultado foram 13 ações abertas e nenhuma fechada, com a Iza oferecendo o
+Scale pelo preço de antes do Pricing V4 entre 03/05 e 25/05. Registrar sem
+executar virou ritual.
+
+**Quem o prazo reprova.** O relatório de ações vencidas é impresso em TODO PR,
+mas quem ele reprova depende da ação:
+
+- Ação **sem** `vence em`: o prazo é de 7 dias e só reprova o PR que toca
+  caminho da Iza (os paths sensíveis abaixo mais `docs/iza-facts-changelog.md`,
+  `apps/api/src/services/izaFactsService.ts`,
+  `apps/api/src/agents/evalSetZappIQ.ts` e
+  `apps/api/scripts/removerTabelaDePrecosDaIza.ts`). Nos demais PRs o relatório
+  sai como aviso e o check passa. A cobrança é de quem tem contexto para fechar
+  a ação, não do repositório inteiro.
+- Ação **com** `vence em AAAA-MM-DD`: a data substitui os 7 dias e reprova
+  QUALQUER PR a partir dela. Use quando o prazo é do mundo e não do
+  repositório. É o caso de `meta_tarifa_outubro`: a tarifa da Meta começa em
+  01/10 tenha ou não PR de Iza aberto, então a ação vence em 30/09.
+
+Se a ação não cabe em 7 dias, reabra com a data de hoje e escreva na própria
+linha por que prorrogou. Prorrogar é decisão consciente, não o padrão. Ação
+que perdeu o sentido vira `- [x]` explicando o descarte; a linha nunca é
+apagada, o histórico fica.
+
+**Preço de plano não é ação de fact.** Desde 14/09/2026 a seção PRICING que a
+Iza recebe é gerada de `packages/shared/src/planConfig.ts` em runtime
+(`apps/api/src/services/izaFactsService.ts`). Fato da seção `pricing` que cite
+plano e valor em reais é ignorado com aviso no log. Mudou preço de plano?
+Mude o `planConfig`, não o banco.
+
 ## Paths que disparam o gate
 
 - `apps/web/components/landing/**` — copy do site
@@ -40,10 +82,10 @@ Pra contornar (PRs cosméticos): adicione label `no-iza-impact` no PR.
 **Impacto na Iza:** o que a Iza precisa passar a falar / parar de falar.
 
 **Ação no /admin/iza-knowledge** (após merge):
-- [ ] CREATE fact `xxx` em `section` (label: ..., status: live)
-- [ ] UPDATE fact `yyy` mudando `status: live → sunset`
-- [ ] DELETE soft `zzz`
-- [ ] Nenhuma (mudança técnica sem impacto narrativo)
+- [ ] (aberto em AAAA-MM-DD) CREATE fact `xxx` em `section` (label: ..., status: live)
+- [ ] (aberto em AAAA-MM-DD) UPDATE fact `yyy` mudando `status: live → sunset`
+- [ ] (aberto em AAAA-MM-DD) DELETE soft `zzz`
+- [x] (aberto em AAAA-MM-DD, feito em AAAA-MM-DD) Nenhuma (mudança técnica sem impacto narrativo)
 
 **Smoke esperado:** "pergunta de teste no chat" → "resposta esperada"
 ```
@@ -66,7 +108,7 @@ o tipo de defeito que o Raio-X existe para encontrar.
 nada. O prompt gerado é byte a byte o mesmo de antes.
 
 **Ação no /admin/iza-knowledge** (após merge):
-- [ ] Nenhuma (mudança técnica sem impacto narrativo)
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) Nenhuma (mudança técnica sem impacto narrativo)
 
 **Smoke esperado:** nenhum. O teste `promptXray.test.ts` monta o prompt pelo
 montador real de produção e confere as fatias, o que cobre a regressão.
@@ -105,7 +147,7 @@ na proibição, e não pode dizer que a IA envia lembrete de retorno. Disparo po
 existe como nó do Maestro, dentro de um fluxo que alguém da equipe monta e liga.
 
 **Ação no /admin/iza-knowledge (após merge):**
-- [ ] Nenhuma além das já listadas na entrada da rodada 1. Conferir, ao executá-las, que
+- [ ] (aberto em 2026-09-14) Nenhuma além das já listadas na entrada da rodada 1. Conferir, ao executá-las, que
       nenhum fact usa as palavras "infraestrutura brasileira" ou "servidor brasileiro".
 
 **Smoke esperado:** "onde ficam meus dados?" → "em servidores nos Estados Unidos, banco de
@@ -179,27 +221,27 @@ cliente para /roadmap, /observabilidade ou /como-funciona-survey, que agora redi
 
 **Ação no /admin/iza-knowledge (obrigatória, os facts contradizem o site agora):**
 
-- [ ] UPDATE `kb_upload`: tirar DOCX e site da lista. Formatos aceitos hoje: PDF, TXT, MD
+- [ ] (aberto em 2026-09-14) UPDATE `kb_upload`: tirar DOCX e site da lista. Formatos aceitos hoje: PDF, TXT, MD
       e CSV, mais link de página e texto colado.
-- [ ] UPDATE `self_healing`: tirar "plataforma aprende", "loop fechado" e "única no
+- [ ] (aberto em 2026-09-14) UPDATE `self_healing`: tirar "plataforma aprende", "loop fechado" e "única no
       mundo". Redação factual: a bateria semanal aponta o desvio e sugere a correção,
       que só vale depois de aprovada por uma pessoa.
-- [ ] UPDATE `instagram_direct`: sair de "em operação real" enquanto não houver nenhuma
+- [ ] (aberto em 2026-09-14) UPDATE `instagram_direct`: sair de "em operação real" enquanto não houver nenhuma
       conversa de Instagram na base.
-- [ ] UPDATE `chat_site`: tirar "mesma cascade LLM do WhatsApp".
-- [ ] UPDATE `como_funciona`: o link para /como-funciona-survey agora redireciona;
+- [ ] (aberto em 2026-09-14) UPDATE `chat_site`: tirar "mesma cascade LLM do WhatsApp".
+- [ ] (aberto em 2026-09-14) UPDATE `como_funciona`: o link para /como-funciona-survey agora redireciona;
       apontar para /#precos ou para o cadastro.
-- [ ] UPDATE `feat_voz_outbound`: tirar "treinada nativamente em português brasileiro",
+- [ ] (aberto em 2026-09-14) UPDATE `feat_voz_outbound`: tirar "treinada nativamente em português brasileiro",
       tirar o nome do fornecedor de voz e tirar "tecnologia proprietária". Redação
       factual: voz em português brasileiro.
-- [ ] UPDATE de qualquer fact que afirme dados no Brasil, banco no Brasil ou residência em
+- [ ] (aberto em 2026-09-14) UPDATE de qualquer fact que afirme dados no Brasil, banco no Brasil ou residência em
       território nacional. Redação factual: os dados ficam em servidores nos Estados Unidos
       (banco de dados e processamento de IA), com salvaguardas contratuais para
       transferência internacional.
-- [ ] UPDATE de qualquer fact que prometa lembrete automático (vencimento, aula, consulta,
+- [ ] (aberto em 2026-09-14) UPDATE de qualquer fact que prometa lembrete automático (vencimento, aula, consulta,
       vacina, documento) ou áudio antes do evento. A agenda consulta o horário e cria o
       compromisso; o aviso ao cliente continua com a equipe.
-- [ ] LIMPAR o prompt gravado dos agentes (`agents.system_prompt`), não só os facts. A
+- [ ] (aberto em 2026-09-14) LIMPAR o prompt gravado dos agentes (`agents.system_prompt`), não só os facts. A
       migração `20260427_agent_model` semeou a instrução "para questões sobre Voz
       Padrão/Premium, comunicar status 'em desenvolvimento, disponível em julho/2026' e
       linkar /roadmap". A rota /roadmap agora redireciona, e a data já passou, então essa
@@ -223,6 +265,71 @@ cliente para /roadmap, /observabilidade ou /como-funciona-survey, que agora redi
 - "A IA confirma e lembra a consulta?" -> "Eu marco o horário na agenda; confirmar e
   lembrar continua com a sua equipe."
 
+---
+
+### 2026-09-14 · Tarefa A9 · Preço da Iza só vem do planConfig
+
+**O que mudou:**
+
+1. A seção PRICING que a Iza recebe em runtime passou a ser **gerada** de
+   `packages/shared/src/planConfig.ts` (`apps/api/src/services/izaFactsService.ts`):
+   planos ativos e não descontinuados, preço mensal, equivalente anual com o
+   desconto do catálogo, cota de mensagens de IA, dias de trial e add-ons
+   públicos. Nada do Stripe, nada digitado à mão. O teste
+   `izaFactsService.test.ts` extrai todo valor em reais do texto renderizado e
+   exige que ele exista no `planConfig`.
+2. Fato da seção `pricing` gravado no banco que cite **plano + valor em reais**
+   (ou use uma das chaves reservadas `planos`, `precos`, `pricing`,
+   `planos_tabela`, `tabela_precos`, `tabela_de_precos`, `pricing_planos`)
+   passa a ser **ignorado**, com aviso no log dizendo qual chave caiu. Fato de
+   preço que não é de plano, como a tarifa da Meta de 01/10, continua valendo.
+   Hoje a seção `pricing` de `iza_facts` está vazia em produção, então nada é
+   perdido agora; a trava é para o futuro.
+3. O `scripts/check-iza-drift.sh` passou a cobrar prazo das ações `- [ ]` deste
+   arquivo. Toda ação aberta carrega `(aberto em AAAA-MM-DD)`, e o padrão é 7
+   dias. O relatório sai em todo PR; a reprovação tem alcance estreito: ação
+   sem `vence em` só reprova PR que toca caminho da Iza, e ação com
+   `(aberto em ..., vence em AAAA-MM-DD)` reprova qualquer PR a partir daquela
+   data. A regra completa está em "Toda ação aberta tem data e prazo de 7
+   dias", no topo deste arquivo. O script também reprova cerca de código não
+   fechada, que antes engolia em silêncio toda ação escrita depois dela.
+4. Nasceu `apps/api/scripts/removerTabelaDePrecosDaIza.ts`, que tira do
+   `agents.system_prompt` da Iza a lista `**Planos** (mensal): ...` e todo
+   valor em reais, mantendo as regras de COMO falar de preço.
+5. Os cenários de preço da Qualidade da Iza (`evalSetZappIQ.ts`) deixaram de
+   ter número congelado: a expectativa é montada do `planConfig` em runtime.
+
+**Impacto na Iza:** ela **para** de citar o Scale a R$ 997, o Starter a R$ 197,
+o Business a R$ 1.997 e qualquer tabela escrita no prompt. **Passa** a citar só
+o que estiver na seção PRICING do bloco "FATOS ATUAIS", que hoje é Lite
+R$ 247, Growth R$ 497, Scale R$ 1.497 e Enterprise sob consulta, com o anual a
+20% de desconto. Valor que não estiver lá: ela diz que vai confirmar com o time.
+
+**Edições feitas por SQL direto no banco em 14/09/2026** (fora do
+`/admin/iza-knowledge`, registradas aqui porque não tinham entrada):
+
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE fact `self_healing`: saiu a promessa de loop fechado em que "a plataforma aprende" sozinha (o ciclo não corrige falta de conhecimento, achado A086).
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE fact `kb_upload`: a lista de formatos parou de prometer o que o leitor rejeita (Word era recusado, achado A003).
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE fact `como_funciona`: passou a apontar para a home, não para uma página que não existe mais.
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE fact `lgpd`: passou a dizer que há dados nos Estados Unidos, em vez de dar a entender que tudo fica no Brasil.
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE fact `voz_outbound`: saiu "treinada nativamente", que não descreve o que a plataforma faz.
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE fact `instagram_direct`: passou a se descrever como piloto interno, não como canal geral.
+
+**Ações abertas desta entrada:**
+
+- [ ] (aberto em 2026-09-14) Rodar `apps/api/scripts/removerTabelaDePrecosDaIza.ts` contra o prompt da Iza em produção (roteiro no corpo do PR: exportar por SQL, transformar no modo offline, gravar com `set_config('zappiq.prompt_source','migracao')`). Prova de que pegou: `SELECT count(*) FROM agents WHERE organization_id = '<ZAPPIQ_ORG_ID>' AND system_prompt LIKE '%997%'` devolve 0.
+- [ ] (aberto em 2026-09-14) Tirar do `agents.system_prompt` da Iza a instrução que manda oferecer a página `/roadmap`. A página virou redirecionamento na tarefa A4, então a Iza está mandando o lead para um link que não tem mais conteúdo próprio.
+
+**Regra nova que vale daqui em diante:** preço de plano da Iza sai do
+`planConfig` e de lugar nenhum mais. Não volte a escrever preço no prompt e não
+volte a criar fact de preço de plano; os dois são ignorados ou removidos.
+
+**Smoke esperado:** "quanto custa o Scale?" → a Iza responde R$ 1.497/mês (ou o
+valor que estiver no `planConfig` no dia), nunca R$ 997. "Vocês têm o plano
+Starter?" → ela não oferece.
+
+---
+
 ### 2026-08-20 · PR #343 · Bandeira nova "por atendimento" + kit Outubro sem Susto
 
 **O que mudou:** toda a copy do site trocou a bandeira "mensalidade fixa sem cobrança por conversa" pela nova: "Mensalidade fixa por atendimento: cada conversa que a Iza cuida conta um, com mensagens à vontade dentro dela. A tarifa do WhatsApp vai a custo, na sua conta, com medidor e teto. Zero markup, zero setup, zero surpresa." Fair use de 12 respostas por atendimento aparece em linha visível. A página /novidades-meta virou o kit "Outubro sem susto" (calculadora da tarifa Meta de 01/10, referência R$ 0,035 por resposta, tabela final até 01/09) e nasceu /legal/subprocessadores. Decisões D1/D2 do plano Resposta Meta, aprovadas pelo fundador em 20/08.
@@ -230,9 +337,9 @@ cliente para /roadmap, /observabilidade ou /como-funciona-survey, que agora redi
 **Impacto na Iza:** a Iza NÃO pode mais afirmar "sem cobrança por conversa" nem "mensagens ilimitadas" secas. Passa a falar: mensalidade fixa por atendimento (conversa que se encerra após 72h de silêncio), mensagens à vontade dentro do atendimento com fair use de 12 respostas de IA, tarifa do WhatsApp é da Meta e vai a custo na conta do cliente (zero markup), com medidor (Conta Clara) e teto (Cost Guard) dentro da plataforma, e a partir de 01/10 a Meta cobra cada resposta (referência R$ 0,035; tabela final até 01/09). Para dúvida de custo, apontar zappiq.com.br/novidades-meta.
 
 **Ação no /admin/iza-knowledge** (após merge):
-- [ ] UPDATE fact de pricing/bandeira: remover "sem cobrança por conversa", inserir a bandeira nova com o fair use (status: live)
-- [ ] CREATE fact `meta_tarifa_outubro` em pricing (cobrança da Meta a partir de 01/10, a custo, medidor e teto; link /novidades-meta; status: live)
-- [ ] Smoke test no chat da Iza: perguntar "vocês cobram por conversa?" e "quanto vou pagar de WhatsApp em outubro?"
+- [ ] (aberto em 2026-09-14) UPDATE fact de pricing/bandeira: remover "sem cobrança por conversa", inserir a bandeira nova com o fair use (status: live). Backlog de 2026-08-20, prazo recontado em 14/09/2026 quando a regra de prazo nasceu.
+- [ ] (aberto em 2026-09-14, vence em 2026-09-30) CREATE fact `meta_tarifa_outubro` em pricing (cobrança da Meta a partir de 01/10, a custo, medidor e teto; link /novidades-meta; status: live). Backlog de 2026-08-20. O vencimento é o dia anterior ao início da tarifa: a partir de 30/09 esta linha reprova qualquer PR do repositório.
+- [ ] (aberto em 2026-09-14) Smoke test no chat da Iza: perguntar "vocês cobram por conversa?" e "quanto vou pagar de WhatsApp em outubro?". Backlog de 2026-08-20.
 
 ### 2026-07-16 · PR #308 · Mira no catálogo comercial + cupom em todo produto pago
 
@@ -253,9 +360,10 @@ Iza afirmava antes; o risco é ela dizer "o Mira não tem cupom" ou "seu teste
 renova mês que vem", ambos falsos agora.
 
 **Ação no /admin/iza-knowledge** (após merge):
-- [ ] UPDATE/CREATE fact do add-on Mira: faixas + preços + que aceita cupom
-- [ ] CREATE fact do teste grátis do Mira: teto de 10 Alvos vitalício, vira
-      faixa para continuar (não confundir com o trial de 14 dias do plano)
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) As FAIXAS e os PREÇOS do Mira saíram do banco: a seção PRICING é gerada de `ADDONS_V4_LIST` no `planConfig`. Não há mais fact de preço de add-on para criar.
+- [ ] (aberto em 2026-09-14) CREATE fact do Mira contando que ele ACEITA CUPOM de desconto (isso não está no `planConfig` como texto, é política comercial). Backlog de 2026-07-16.
+- [ ] (aberto em 2026-09-14) CREATE fact do teste grátis do Mira: teto de 10 Alvos vitalício, vira
+      faixa para continuar (não confundir com o trial de 14 dias do plano). Backlog de 2026-07-16.
 
 **Smoke esperado:** "O Mira tem desconto?" → Iza confirma que há cupom para as
 faixas do Mira. "Meu teste do Mira renova mês que vem?" → Iza explica que é um
@@ -319,10 +427,11 @@ teto único de 10 Alvos e que para continuar assina uma faixa.
 - "BSP homologado via 360Dialog" como infra propria (usamos Cloud API direto Meta).
 
 **Acao no /admin/iza-knowledge** (apos merge):
-- [ ] UPDATE facts de pricing: Scale self-serve/trial; adicionar faixas Mira; adicionar add-ons do Pricing.
-- [ ] UPDATE fact de posicionamento: categoria "operacao autonoma de atendimento e vendas".
-- [ ] SUNSET/DELETE facts: SLA 99,9% contratual; Programa Fundadores; Starter/Business.
-- [ ] UPDATE fact de parceria Meta: "Meta Business Partner (em formalizacao)".
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) UPDATE facts de pricing: Scale self-serve/trial, faixas Mira e add-ons do Pricing. Resolvido pelo CÓDIGO: a seção PRICING agora é gerada do `planConfig` (preço, cota, trial, desconto anual e add-ons públicos). Não há fact de preço de plano para manter.
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) SUNSET dos planos Starter e Business. Resolvido pelo CÓDIGO: a seção gerada lista só planos ativos, e plano descontinuado não aparece nem por nome nem por preço (teste em `izaFactsService.test.ts`).
+- [ ] (aberto em 2026-09-14) UPDATE fact de posicionamento: categoria "operacao autonoma de atendimento e vendas". Backlog de 2026-07-13, prazo recontado em 14/09/2026.
+- [ ] (aberto em 2026-09-14) SUNSET/DELETE facts de SLA 99,9% contratual e de Programa Fundadores (esses dois NÃO são preço de plano, então o código não resolve). Backlog de 2026-07-13.
+- [ ] (aberto em 2026-09-14) UPDATE fact de parceria Meta: "Meta Business Partner (em formalizacao)". Backlog de 2026-07-13.
 
 **Smoke esperado:**
 - "O plano Scale tem trial?" -> "Sim, 14 dias gratis, self-serve." (nao mais "fale com um especialista")
