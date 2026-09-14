@@ -147,7 +147,7 @@ describe('isFlagOn', () => {
     expect(ligada).toBe(false);
   });
 
-  it('devolve false com o cache quebrado, mas ainda consulta o banco', async () => {
+  it('cache que lança derruba a leitura para desligado (padrão false em qualquer erro)', async () => {
     const cacheRuim = {
       get: vi.fn(async () => {
         throw new Error('redis fora do ar');
@@ -160,6 +160,12 @@ describe('isFlagOn', () => {
       db: db as any,
       cache: cacheRuim as any,
     });
+
+    // A flag está LIGADA no banco, e ainda assim a resposta é false: um cache
+    // que lança é erro, e erro nunca liga comportamento novo no cliente.
+    // O cache real (RedisCacheProvider) é fail-soft e devolve null em vez de
+    // lançar, então na prática este caminho é a rede de proteção.
+    expect(db.rows[0].enabled).toBe(true);
     expect(ligada).toBe(false);
   });
 });
