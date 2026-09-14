@@ -94,6 +94,51 @@ Pra contornar (PRs cosméticos): adicione label `no-iza-impact` no PR.
 
 ## Entradas
 
+### 2026-09-14 · Porta de entrada (C4) · CR-10: rede de crise entra no CORE
+
+**O que mudou:** `apps/api/src/agents/coreAgentRules.ts` ganhou a regra CR-10 e
+a versão subiu de `v2` para `v3`. A regra manda acolher em uma frase, informar o
+CVV (188, 24 horas, cvv.org.br) e chamar uma pessoa quando houver sinal de risco
+à vida ou de autolesão, e proíbe terapia por mensagem, diagnóstico, minimizar e
+oferecer produto nessa mensagem.
+
+Por que ela existe: até aqui a única regra de crise da plataforma vivia na seção
+de psicologia do modelo de segmento (`nichePrompts.ts`) e nunca chegou a agente
+nenhum, porque o cadastro grava a chave com acento e o `promptEngine` caía no
+modelo genérico (achados A163 e A155). O `nichePrompts.ts` NÃO foi tocado neste
+PR: a chave acentuada e a frase de convênios inventada já tinham sido corrigidas
+na tarefa A8.
+
+Esta regra é a SEGUNDA camada. A primeira é o pré-filtro determinístico
+(`blockedVerticalFilter` mais `crisisSafetyNet`), que acrescenta a linha do CVV à
+resposta, pausa a IA na conversa, avisa o dono e registra o evento sem o texto da
+mensagem. A camada do prompt existe para o que a regex não pega.
+
+Na mesma mudança, a camada `compliance` do pré-filtro deixou de recusar por
+palavra solta: ela passou a exigir operação declarada e a saída dela virou
+transbordo com registro e aviso ao dono (achados A251 e A232).
+
+**Também neste PR, em caminho sensível:**
+`apps/web/components/landing/Cadastro.tsx` passou a enviar o e-mail e o nome já
+digitados para `/api/signup/google`, para que o plano escolhido seja gravado em
+`signups` ANTES do redirecionamento ao Google (achado A242: o lead escolhia o
+Lite e a conta nascia GROWTH). Nenhuma palavra de copy da página mudou: a
+alteração é só no corpo da requisição.
+
+**Impacto na Iza:** a Iza recebe o CORE como qualquer outro agente, então ela
+passa a ter a CR-10. Nada muda no que ela fala sobre produto, preço ou plano, e
+nenhuma frase do site mudou. Nenhum fato da base precisa ser criado, alterado ou
+desativado.
+
+**Ação no /admin/iza-knowledge** (após merge):
+- [x] (aberto em 2026-09-14, feito em 2026-09-14) Nenhuma. A CR-10 é regra de
+      comportamento no CORE, não afirmação sobre o produto: não existe fato
+      correspondente em `iza_facts`.
+
+**Smoke esperado:** no Raio-X de qualquer agente, o bloco do CORE mostra
+"## CR-10" com "188" e "cvv.org.br", e `CORE_RULES_VERSION` no audit do turno
+aparece como `v3`.
+
 ### 2026-09-14 · Blindagem das telas (A5) · Chat da landing avisa quando um atendente assume
 
 **O que mudou:** `apps/web/components/landing/WhatsAppButton.tsx` ganhou quatro

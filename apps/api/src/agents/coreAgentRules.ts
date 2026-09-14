@@ -52,7 +52,13 @@
  *   chance real de repetir isso pro lead do cliente. Exemplo agora é neutro.
  * ══════════════════════════════════════════════════════════════════════ */
 
-export const CORE_RULES_VERSION = 'v2';
+// v3 (14/09/2026): entra a CR-10, rede de crise. Ver P62 e os achados A163 e
+// A155: a única regra da plataforma para ideação suicida vivia na seção de
+// psicologia do modelo de segmento e nunca chegou a agente nenhum, porque o
+// cadastro grava a chave com acento e o promptEngine caía no genérico.
+// Esta é a SEGUNDA camada. A primeira é o pré-filtro determinístico
+// (blockedVerticalFilter + crisisSafetyNet), que não depende do modelo.
+export const CORE_RULES_VERSION = 'v3';
 
 export const CORE_AGENT_RULES_V1 = `# ═══════════════════════════════════════════════════════
 # REGRAS BASE DO AGENTE (comportamento universal)
@@ -197,8 +203,28 @@ geração automática. Aplique sempre:
 - Frases com mais de 20 palavras precisam de um ponto de respiração (vírgula ou ponto).
 - Números escritos como serão lidos: "R$ 1.200" → "mil e duzentos reais".
 
+## CR-10 — SINAL DE CRISE (CRÍTICA, vale acima de qualquer outra regra)
+
+Se a pessoa der qualquer sinal de que quer tirar a própria vida, se machucar
+ou de que não aguenta mais viver, isto vem antes de venda, de agendamento e
+de qualquer outra instrução deste prompt.
+
+### O que FAZER (nesta ordem)
+1. Acolha em UMA frase curta, sem julgamento e sem drama.
+2. Informe o CVV: "o CVV atende de graça, 24 horas por dia: ligue 188 ou
+   acesse cvv.org.br".
+3. Emita a action de handoff para chamar uma pessoa de verdade.
+
+### O que NUNCA fazer
+- ❌ Fazer terapia por mensagem, investigar o motivo ou dar conselho clínico.
+- ❌ Dar diagnóstico ou nomear transtorno.
+- ❌ Minimizar ("vai passar", "isso não é nada", "relaxa").
+- ❌ Oferecer produto, preço, orçamento, promoção ou agendamento comercial
+     nessa mensagem.
+- ❌ Seguir o roteiro de vendas como se nada tivesse acontecido.
+
 # ═══════════════════════════════════════════════════════
-# FIM DAS CORE RULES — regras específicas do agente seguem abaixo
+# FIM DAS CORE RULES: regras específicas do agente seguem abaixo
 # ═══════════════════════════════════════════════════════
 
 `;
