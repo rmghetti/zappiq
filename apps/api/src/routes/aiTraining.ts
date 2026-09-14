@@ -30,6 +30,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { prisma } from '@zappiq/database';
 import { authMiddleware } from '../middleware/auth.js';
+import { UnsupportedFileTypeError } from '../middleware/errorHandler.js';
 import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
@@ -103,12 +104,20 @@ const ALLOWED_MIMES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
 
+// 20 MB — suficiente para contratos e FAQs extensos. AI_TRAINING_MAX_UPLOAD_MB
+// existe só para o teste de rota poder provar o 413 sem trafegar 20 MB por
+// loopback; em produção a variável não é definida e vale o default.
+const MAX_UPLOAD_MB = Number(process.env.AI_TRAINING_MAX_UPLOAD_MB) || 20;
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB — suficiente para contratos e FAQs extensos
+  limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
+  // Erro TIPADO: o errorHandler transforma em 415 com mensagem em português.
+  // Antes era um Error cru, que virava 500 "Internal Server Error" e fazia o
+  // cliente achar que a plataforma tinha caído.
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_MIMES.has(file.mimetype)) return cb(null, true);
-    cb(new Error(`Tipo de arquivo não suportado: ${file.mimetype}`));
+    cb(new UnsupportedFileTypeError());
   },
 });
 
