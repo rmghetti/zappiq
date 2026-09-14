@@ -87,6 +87,12 @@ bloqueioV6.addSubnet('64:ff9b::', 96, 'ipv6'); // NAT64: leva a qualquer IPv4
 bloqueioV6.addSubnet('fc00::', 7, 'ipv6'); // privado, cobre o fdaa::/16 do Fly
 bloqueioV6.addSubnet('fe80::', 10, 'ipv6'); // link-local
 bloqueioV6.addSubnet('ff00::', 8, 'ipv6'); // multicast
+// Faixas exóticas apontadas na re-revisão do PR #369: nenhuma alcança rede
+// interna no Fly hoje, mas custam uma linha cada e fecham o assunto.
+bloqueioV6.addSubnet('::ffff:0:0:0', 96, 'ipv6'); // IPv4 traduzido (RFC 2765, retirado do Linux)
+bloqueioV6.addSubnet('64:ff9b:1::', 48, 'ipv6'); // NAT64 de uso local (RFC 8215)
+bloqueioV6.addSubnet('2002::', 16, 'ipv6'); // 6to4: carrega um IPv4 embutido
+bloqueioV6.addSubnet('fec0::', 10, 'ipv6'); // site-local (obsoleto, ainda roteável em rede antiga)
 
 /**
  * Verdadeiro quando o endereço é de uso interno.

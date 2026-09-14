@@ -94,6 +94,13 @@ describe('enderecoEhInterno: IPv6 que carrega endereço IPv4 (P1)', () => {
     expect(enderecoEhInterno(maquinaDaUrl('http://[64:ff9b::a9fe:a9fe]/'))).toBe(true);
   });
 
+  it('reconhece as faixas exóticas: IPv4 traduzido, NAT64 local, 6to4 e site-local', () => {
+    expect(enderecoEhInterno(maquinaDaUrl('http://[::ffff:0:a9fe:a9fe]/'))).toBe(true);
+    expect(enderecoEhInterno(maquinaDaUrl('http://[64:ff9b:1::a9fe:a9fe]/'))).toBe(true);
+    expect(enderecoEhInterno(maquinaDaUrl('http://[2002:a9fe:a9fe::1]/'))).toBe(true);
+    expect(enderecoEhInterno(maquinaDaUrl('http://[fec0::1]/'))).toBe(true);
+  });
+
   it('continua reconhecendo a forma decimal que o DNS às vezes devolve', () => {
     expect(enderecoEhInterno('::ffff:169.254.169.254')).toBe(true);
   });
