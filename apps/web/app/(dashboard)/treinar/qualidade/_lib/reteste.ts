@@ -1,5 +1,5 @@
 /**
- * A049 — o re-teste na linguagem do dono do negócio.
+ * A049: o re-teste na linguagem do dono do negócio.
  * ============================================================================
  * O re-teste rodava UMA vez, não gravava nada, e a tela dizia "a correção
  * pegou" com base nessa única tentativa. Agora são três tentativas gravadas, e

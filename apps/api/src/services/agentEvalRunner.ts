@@ -445,7 +445,7 @@ em formato fraco e bullets soltos):
    ponto final. NUNCA pare no meio de uma palavra, de uma frase ou logo
    depois de "Exemplo INCORRETO:". Se não couber, encurte os exemplos.
 
-7. REGRAS BASE (A078 — a mais cara de violar): o pedido traz o resumo das
+7. REGRAS BASE (A078, a mais cara de violar): o pedido traz o resumo das
    REGRAS BASE DO AGENTE, que são imutáveis e prevalecem sobre qualquer
    patch. NUNCA proponha patch que as contradiga (desconto acima do teto,
    nome do cliente em todas as mensagens, pedir dado sensível). Um patch que
@@ -592,7 +592,7 @@ ${judgeReason}
 ### Trecho relevante do system prompt atual
 ${systemPromptExcerpt.slice(0, 2000)}
 
-### REGRAS BASE DO AGENTE (resumo — imutáveis, prevalecem sobre o patch)
+### REGRAS BASE DO AGENTE (resumo: imutáveis, prevalecem sobre o patch)
 ${resumirCoreParaSugeridor()}
 
 ### Regras já aprovadas pelo dono (fortaleça, não duplique)

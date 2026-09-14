@@ -1556,7 +1556,7 @@ model AgentEvalRun {
   coreRulesVersion String?   @map("core_rules_version")
   // Trigger: 'manual' | 'cron' | 'pre_release' | 'client_retest'
   triggeredBy      String    @default("manual") @map("triggered_by")
-  /// A049 — o re-teste do cliente vira execução GRAVADA e ligada à decisão
+  /// A049: o re-teste do cliente vira execução GRAVADA e ligada à decisão
   /// que o motivou. Antes ele rodava 1 amostra e não deixava rastro nenhum,
   /// então ninguém conseguia dizer se a correção pegou.
   fixDecisionId    String?   @map("fix_decision_id")

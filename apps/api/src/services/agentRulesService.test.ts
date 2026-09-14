@@ -89,7 +89,7 @@ describe('carregarRegrasAtivas', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('blocoDeRegrasDaOrganizacao — o interruptor manda', () => {
+describe('blocoDeRegrasDaOrganizacao: o interruptor manda', () => {
   it('desligado: string vazia e NENHUMA consulta ao banco', async () => {
     flagsMock.isFlagOn.mockResolvedValue(false);
     const bloco = await blocoDeRegrasDaOrganizacao('org-1');
@@ -118,7 +118,7 @@ describe('blocoDeRegrasDaOrganizacao — o interruptor manda', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('aplicarRegraDoCenario — o mesmo cenário SUBSTITUI (A081)', () => {
+describe('aplicarRegraDoCenario: o mesmo cenário SUBSTITUI (A081)', () => {
   it('desativa a regra anterior do cenário antes de criar a nova', async () => {
     prismaMock.agentRule.updateMany.mockResolvedValue({ count: 1 });
 
@@ -225,7 +225,7 @@ describe('aplicarRegraDoCenario — o mesmo cenário SUBSTITUI (A081)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('reverterRegra — cirúrgico (A083)', () => {
+describe('reverterRegra: cirúrgico (A083)', () => {
   it('desativa SÓ aquela regra, pelo id', async () => {
     prismaMock.agentRule.findFirst.mockResolvedValue(linha({ id: 'regra-7' }));
     prismaMock.agentRule.update.mockImplementation(async ({ data, where }: any) => ({
@@ -303,7 +303,7 @@ describe('reverterRegra — cirúrgico (A083)', () => {
  * caminho do prompt, onde nada tinha mudado: 200, sem desativar nada. Quem
  * chama precisa do fato ("existe, e está assim") para dar a resposta certa.
  * ══════════════════════════════════════════════════════════════════════ */
-describe('regraDaDecisao — acha a regra mesmo fora de ativa (PI-2)', () => {
+describe('regraDaDecisao: acha a regra mesmo fora de ativa (PI-2)', () => {
   it('não filtra por status na consulta', async () => {
     prismaMock.agentRule.findFirst.mockResolvedValue(linha({ status: 'substituida' }));
     const out = await regraDaDecisao('dec-1');

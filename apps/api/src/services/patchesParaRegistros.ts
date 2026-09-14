@@ -8,7 +8,7 @@
  *   • "# PATCH MANUAL AAAA-MM-DD HH:MM (cenário: X)" no fim do prompt,
  *     quando nenhum cabeçalho casou com a heurística (A079). É o caso de
  *     TODO prompt de cliente: a Marcia tem quatro.
- *   • "**REGRA INVIOLÁVEL #N — ...**" solto no meio do texto, com
+ *   • "**REGRA INVIOLÁVEL #N (título)...**" solto no meio do texto, com
  *     numeração do modelo (A043: cinco "#14" e três "#13" na Iza).
  *
  * Três decisões que este módulo fixa, e que o teste protege:

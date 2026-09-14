@@ -1,5 +1,5 @@
 /**
- * reteste.test.ts — o texto que o dono lê depois do re-teste (A049).
+ * reteste.test.ts: o texto que o dono lê depois do re-teste (A049).
  * ============================================================================
  * A tela antiga dizia "✓ Re-teste passou: a correção pegou" com base numa
  * única tentativa, e completava que o resultado "não fica gravado". As duas

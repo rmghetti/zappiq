@@ -70,7 +70,7 @@ import { suggestFix } from '../services/agentEvalRunner.js';
 import { carregarRuidoDoAgente, classificarMudanca } from '../services/evalRuidoService.js';
 // P61 — "Corrigimos o método de avaliação": o aviso da nota recalculada.
 import { resumirRegravacao } from '../services/evalRegradeService.js';
-// C3 (Passo 14) — a correção aprovada vira REGISTRO: uma regra ativa por
+// C3 (Passo 14): a correção aprovada vira REGISTRO: uma regra ativa por
 // cenário, substituição no lugar de acúmulo, e desfazer cirúrgico.
 import { isFlagOn } from '../services/featureFlags.js';
 import {
@@ -83,7 +83,7 @@ import {
   TETO_DE_REGRAS_ATIVAS,
 } from '../services/agentRulesService.js';
 import { detectarConflitos, limparTextoDaRegra } from '../agents/regrasDoAgente.js';
-// A049 — o re-teste roda 3 amostras e vira execução gravada.
+// A049: o re-teste roda 3 amostras e vira execução gravada.
 import {
   AMOSTRAS_DO_RETESTE,
   consolidarReteste,
@@ -1422,7 +1422,7 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
 });
 
 // ════════════════════════════════════════════════════════════════════
-// GET /agents/:agentId/rules — as regras aprovadas, por cenário
+// GET /agents/:agentId/rules: as regras aprovadas, por cenário
 // ─────────────────────────────────────────────────────────────────
 // P08: "uma lista legível das regras da sua IA, com a origem de cada uma e
 // botão de desfazer". Antes o dono não tinha onde ver o que já estava valendo
@@ -1472,7 +1472,7 @@ router.get('/agents/:agentId/rules', async (req: Request, res: Response) => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-// POST /rules/:ruleId/revert — desfazer UMA regra
+// POST /rules/:ruleId/revert: desfazer UMA regra
 // ─────────────────────────────────────────────────────────────────
 // A083. Desfazer deixa de ser "voltar o prompt inteiro para o texto de
 // antes" e passa a ser desativar uma linha. As outras regras continuam

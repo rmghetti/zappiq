@@ -26,7 +26,7 @@ import {
 } from './__fixtures__/promptComPatchesManuais.js';
 
 // ════════════════════════════════════════════════════════════════════
-describe('extrairPatches — a fixture do prompt da Marcia', () => {
+describe('extrairPatches: a fixture do prompt da Marcia', () => {
   const extraido = extrairPatches(PROMPT_COM_PATCHES_MANUAIS);
 
   it('acha os cinco "# PATCH MANUAL" e a regra solta no meio do texto', () => {
@@ -92,7 +92,7 @@ describe('extrairPatches — a fixture do prompt da Marcia', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('planejarRegistros — o mais recente vence, o truncado nunca', () => {
+describe('planejarRegistros: o mais recente vence, o truncado nunca', () => {
   const plano = planejarRegistros(extrairPatches(PROMPT_COM_PATCHES_MANUAIS).blocos);
 
   it('o cenário com DOIS patches fica com UMA regra ativa: a mais recente', () => {
@@ -188,7 +188,7 @@ describe('o nome do mock não atravessa a migração (A172)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('validarPromptLimpo — recusa antes de gravar', () => {
+describe('validarPromptLimpo: recusa antes de gravar', () => {
   it('recusa se a identidade sumiu', () => {
     const v = validarPromptLimpo(PROMPT_COM_PATCHES_MANUAIS, 'sobrou só isto aqui');
     expect(v.ok).toBe(false);
@@ -241,7 +241,7 @@ describe('validarPromptLimpo — recusa antes de gravar', () => {
  * cada emoji vale 2. O prompt da Marcia tem 3 caracteres astrais, então o
  * Postgres dizia 6288 e o script imprimia 6291. Como o roteiro diz "qualquer
  * divergência: ROLLBACK", o operador desfaria uma gravação correta. */
-describe('contarCaracteres — o mesmo número que o length() do Postgres', () => {
+describe('contarCaracteres: o mesmo número que o length() do Postgres', () => {
   it('conta pontos de código: o emoji vale 1, como no Postgres, e não 2 como no .length', () => {
     const texto = 'Bom dia 😀!';
     expect(texto.length).toBe(11); // o que o script imprimia

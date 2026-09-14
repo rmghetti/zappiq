@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════
- * A043 e A078 — o sugeridor passa a ver o CORE e as regras já ativas.
+ * A043 e A078: o sugeridor passa a ver o CORE e as regras já ativas.
  * --------------------------------------------------------------------
  * O suggestFix recebia 2.000 caracteres do prompt do cliente e mais nada.
  * Medido: na Iza (26.898 caracteres) só 1 das 12 regras aparecia nesse

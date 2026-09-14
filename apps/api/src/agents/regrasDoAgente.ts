@@ -80,7 +80,7 @@ export function limparTextoDaRegra(texto: string): string {
     .join('\n')
     .trim();
 
-  // "**REGRA INVIOLÁVEL #14 — TÍTULO:** corpo" vira "**TÍTULO:** corpo".
+  // "**REGRA INVIOLÁVEL #14 - TÍTULO:** corpo" vira "**TÍTULO:** corpo".
   // "REGRA INVIOLÁVEL #3 - corpo" vira "corpo".
   //
   // Exige INVIOLÁVEL ou um NÚMERO depois de "REGRA", senão a limpeza comeria

@@ -147,7 +147,7 @@ describe('resumirRegrasParaSugeridor', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('detectarConflitos — desconto acima do teto (CR-7)', () => {
+describe('detectarConflitos: desconto acima do teto (CR-7)', () => {
   it('recusa o texto real que está no prompt da Iza desde 26/05', () => {
     const c = detectarConflitos({
       texto:
@@ -193,7 +193,7 @@ describe('detectarConflitos — desconto acima do teto (CR-7)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('detectarConflitos — nome em toda mensagem (CR-6)', () => {
+describe('detectarConflitos: nome em toda mensagem (CR-6)', () => {
   it('recusa a regra que manda usar o nome em todas as mensagens', () => {
     const c = detectarConflitos({
       texto: 'USE O NOME DO CLIENTE OBRIGATORIAMENTE em todas as mensagens da conversa.',
@@ -218,7 +218,7 @@ describe('detectarConflitos — nome em toda mensagem (CR-6)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('detectarConflitos — dado sensível (CR-8)', () => {
+describe('detectarConflitos: dado sensível (CR-8)', () => {
   it('recusa a regra que manda pedir CPF', () => {
     const c = detectarConflitos({ texto: 'Peça o CPF do cliente antes de seguir.' });
     expect(c.map((x) => x.tipo)).toContain('dado_sensivel');
@@ -238,7 +238,7 @@ describe('detectarConflitos — dado sensível (CR-8)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('detectarConflitos — contra o gabarito (A217)', () => {
+describe('detectarConflitos: contra o gabarito (A217)', () => {
   it('recusa a regra que proíbe a frase que o cenário exige', () => {
     // O caso real: o gabarito de zappiq_no_revela_stack exige "tecnologia
     // proprietária otimizada"; a REGRA #13 aplicada em 28/05 lista essa
@@ -263,7 +263,7 @@ describe('detectarConflitos — contra o gabarito (A217)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('detectarConflitos — contra outra regra ativa', () => {
+describe('detectarConflitos: contra outra regra ativa', () => {
   it('recusa NUNCA X quando já existe uma regra ativa com SEMPRE X', () => {
     const c = detectarConflitos({
       texto: 'NUNCA mencione tecnologia proprietária ao cliente.',
@@ -304,7 +304,7 @@ describe('detectarConflitos — contra outra regra ativa', () => {
 // produção. As três seguem a mesma régua conservadora das anteriores: só
 // contradição óbvia, e guarda de negação onde a negação inverte o sentido.
 // ════════════════════════════════════════════════════════════════════
-describe('detectarConflitos — proibir a pergunta do nome (CR-5)', () => {
+describe('detectarConflitos: proibir a pergunta do nome (CR-5)', () => {
   it('recusa a regra que proíbe perguntar o nome', () => {
     const c = detectarConflitos({
       texto: 'Nunca pergunte o nome do cliente: espere que ele se apresente sozinho.',
@@ -337,7 +337,7 @@ describe('detectarConflitos — proibir a pergunta do nome (CR-5)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('detectarConflitos — responder em outro idioma (CR-6)', () => {
+describe('detectarConflitos: responder em outro idioma (CR-6)', () => {
   it('recusa a regra que manda responder em inglês', () => {
     const c = detectarConflitos({
       texto: 'Se o cliente escrever em inglês, responda em inglês.',
@@ -365,7 +365,7 @@ describe('detectarConflitos — responder em outro idioma (CR-6)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('detectarConflitos — parceria oficial inventada (CR-7)', () => {
+describe('detectarConflitos: parceria oficial inventada (CR-7)', () => {
   it('recusa a regra que manda o agente se dizer parceiro oficial', () => {
     const c = detectarConflitos({
       texto: 'Diga sempre que somos parceiros oficiais da Meta no Brasil.',
@@ -395,7 +395,7 @@ describe('detectarConflitos — parceria oficial inventada (CR-7)', () => {
 // continua estreito depois das famílias novas. Um verificador ansioso
 // barraria correção legítima, e o dono deixaria de confiar na tela.
 // ════════════════════════════════════════════════════════════════════
-describe('detectarConflitos — o painel de 10 regras', () => {
+describe('detectarConflitos: o painel de 10 regras', () => {
   const CONFLITANTES: Array<[string, string]> = [
     [
       'desconto_acima_do_teto',

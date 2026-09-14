@@ -229,7 +229,7 @@ const APPLY = '/runs/:runId/scenarios/:scenarioId/apply-fix';
 const paramsApply = { runId: 'run-1', scenarioId: 'cr5_nome_disponivel_usar' };
 
 // ════════════════════════════════════════════════════════════════════
-describe('apply-fix — verificador de conflito (A078, A217)', () => {
+describe('apply-fix: verificador de conflito (A078, A217)', () => {
   it('recusa com 422 regra_conflitante o desconto acima do teto do CORE', async () => {
     const res = makeRes();
     await getHandler('post', APPLY)(
@@ -290,7 +290,7 @@ describe('apply-fix — verificador de conflito (A078, A217)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('apply-fix — interruptor DESLIGADO: comportamento de hoje', () => {
+describe('apply-fix com o interruptor DESLIGADO: comportamento de hoje', () => {
   it('cola o patch no prompt e publica a versão, como sempre fez', async () => {
     const res = makeRes();
     await getHandler('post', APPLY)({ ...USER, params: paramsApply, body: {} }, res);
@@ -304,7 +304,7 @@ describe('apply-fix — interruptor DESLIGADO: comportamento de hoje', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('apply-fix — interruptor LIGADO: a correção vira registro (A081)', () => {
+describe('apply-fix com o interruptor LIGADO: a correção vira registro (A081)', () => {
   beforeEach(() => flagsMock.isFlagOn.mockResolvedValue(true));
 
   it('cria a regra do cenário e NÃO reescreve o system_prompt', async () => {
@@ -375,7 +375,7 @@ describe('apply-fix — interruptor LIGADO: a correção vira registro (A081)', 
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('GET /agents/:agentId/rules — as regras ativas por cenário', () => {
+describe('GET /agents/:agentId/rules: as regras ativas por cenário', () => {
   it('lista as ativas da própria organização', async () => {
     prismaMock.agentRule.findMany.mockResolvedValue([]);
     regrasMock.carregarRegrasAtivas.mockResolvedValue([
@@ -413,7 +413,7 @@ describe('GET /agents/:agentId/rules — as regras ativas por cenário', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('POST /rules/:ruleId/revert — desfazer por regra (A083)', () => {
+describe('POST /rules/:ruleId/revert: desfazer por regra (A083)', () => {
   it('desativa só aquela regra e não encosta no prompt', async () => {
     const res = makeRes();
     await getHandler('post', '/rules/:ruleId/revert')(
@@ -441,7 +441,7 @@ describe('POST /rules/:ruleId/revert — desfazer por regra (A083)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('POST /fix-decisions/:id/revert — quando a correção virou regra', () => {
+describe('POST /fix-decisions/:id/revert: quando a correção virou regra', () => {
   it('desfaz a regra e NÃO republica o prompt inteiro', async () => {
     prismaMock.agentEvalFixDecision.findFirst.mockResolvedValue({
       id: 'dec-1',
@@ -532,7 +532,7 @@ describe('POST /fix-decisions/:id/revert — quando a correção virou regra', (
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('re-test — 3 amostras gravadas (A049)', () => {
+describe('re-test: 3 amostras gravadas (A049)', () => {
   function respostas(...vereditos: string[]) {
     let i = 0;
     runnerMock.executeAgentEvalRun.mockImplementation(async () => {
@@ -698,7 +698,7 @@ describe('re-test — 3 amostras gravadas (A049)', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
-describe('GET /runs — o re-teste não vira execução na lista do cliente', () => {
+describe('GET /runs: o re-teste não vira execução na lista do cliente', () => {
   it('a listagem exclui triggered_by client_retest', async () => {
     prismaMock.agentEvalRun.findMany.mockResolvedValue([]);
     const res = makeRes();

@@ -215,7 +215,7 @@ class ClientAgentQualityApi {
     );
   }
 
-  /** GET /agents/:agentId/rules — as regras aprovadas, por cenário. */
+  /** GET /agents/:agentId/rules: as regras aprovadas, por cenário. */
   async getRules(
     agentId: string,
     opts: { incluirHistorico?: boolean } = {},
@@ -226,7 +226,7 @@ class ClientAgentQualityApi {
     );
   }
 
-  /** POST /rules/:ruleId/revert — desfaz UMA regra, sem tocar nas outras. */
+  /** POST /rules/:ruleId/revert: desfaz UMA regra, sem tocar nas outras. */
   async revertRule(ruleId: string): Promise<{ ok: boolean; regra: RegraDoAgente }> {
     return api.post(`/api/agent-quality/rules/${encodeURIComponent(ruleId)}/revert`, {});
   }
