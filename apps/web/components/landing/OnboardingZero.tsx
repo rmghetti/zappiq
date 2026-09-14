@@ -8,8 +8,7 @@
  * g→b→p no card ZappIQ, bloco âncora humana preservado.
  * ══════════════════════════════════════════════════════════════════════════ */
 
-import Link from 'next/link';
-import { X, Check, ArrowRight, Sparkles } from 'lucide-react';
+import { X, Check, Sparkles } from 'lucide-react';
 
 const MERCADO = [
   'Reunião de kickoff com consultor (R$ 1.500)',
@@ -97,15 +96,6 @@ export function OnboardingZero() {
               ))}
             </ul>
           </div>
-        </div>
-
-        <div className="mt-10 text-center">
-          <Link
-            href="/como-funciona-survey"
-            className="inline-flex items-center gap-1.5 text-[14px] font-medium text-accent hover:underline"
-          >
-            Ver como o survey funciona em detalhes <ArrowRight size={14} />
-          </Link>
         </div>
 
         {/* Âncora humana: card claro */}

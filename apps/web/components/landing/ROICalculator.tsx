@@ -28,7 +28,7 @@ export const PAYBACK_MIN_DAYS = 90;
 
 // V2-020 (Sprint 0 Blocker 6): Voz removida do ROI até backend pronto
 // (julho/2026). Quando voltar, re-introduzir VOICE_OUTBOUND_PRICE +
-// VoiceTier + slider correspondente. Ver /roadmap.
+// VoiceTier + slider correspondente.
 
 function recommendPlan(aiMessagesPerMonth: number, agents: number): PlanId {
   // Só planos ativos (Starter e Business foram descontinuados em 2026-05-27).
@@ -114,7 +114,7 @@ export function ROICalculator() {
     const recommendedId = recommendPlan(aiMessagesPerMonth, attendants);
     const plan: PlanConfig = PLAN_CONFIG[recommendedId];
     const basePlanPrice = plan.priceMonthly ?? 9900;
-    const zappiqCost = basePlanPrice; // Voz: roadmap jul/2026, ver /roadmap
+    const zappiqCost = basePlanPrice; // Voz ainda não entra na conta
 
     const attendantsNeededAfterAI = Math.max(
       1,
@@ -245,7 +245,7 @@ export function ROICalculator() {
             />
 
             {/* V2-020 (Sprint 0 Blocker 6): Voz removida do ROI calculator
-                até backend pronto (jul/2026). Ver /roadmap. */}
+                até o backend de voz ficar pronto. */}
 
             <p className="text-[10.5px] text-muted pt-4 border-t border-line leading-relaxed">
               <strong className="text-ink">Como a conta é feita:</strong> a Iza resolve {Math.round(AI_AUTOMATION_RATE * 100)}% dos atendimentos

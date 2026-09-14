@@ -25,7 +25,7 @@ const COLUMNS = [
       { label: 'Automações visuais', href: '/#plataforma-autonoma' },
       { label: 'Copiloto para atendentes', href: '/#plataforma-autonoma' },
       { label: 'Conformidade LGPD', href: '/#plataforma-autonoma' },
-      { label: 'Radar 360° Pro (add-on)', href: '/observabilidade' },
+      { label: 'Radar 360° Pro (add-on)', href: '/#precos' },
     ],
   },
   {
@@ -57,7 +57,6 @@ const COLUMNS = [
       { label: 'API Reference', href: 'https://docs.zappiq.com.br/api' },
       { label: 'Comparativo', href: '/comparativo' },
       { label: 'Demo interativo', href: '/demo' },
-      { label: 'Como funciona o Survey', href: '/como-funciona-survey' },
       { label: 'Selo ZappIQ', href: '/selo' },
       { label: 'Status da plataforma', href: 'https://status.zappiq.com.br' },
     ],

@@ -56,8 +56,8 @@ const PILLARS = [
       'Comparativo anônimo com o seu setor',
       'Exporta pra Power BI e Looker sem dor',
     ],
-    href: '/observabilidade',
-    cta: 'Conhecer Radar 360° Pro',
+    href: '/#precos',
+    cta: 'Ver o Radar 360° Pro nos planos',
   },
 ];
 
