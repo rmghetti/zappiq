@@ -86,9 +86,13 @@ function valoresDoPlano(p: PlanConfig): number[] {
 const PLANOS_COM_PRECO: PlanConfig[] = listActivePlans().filter((p) => p.priceMonthly !== null);
 
 /** Plano de entrada: o mais barato entre os ativos com preço. */
-const PLANO_DE_ENTRADA: PlanConfig = PLANOS_COM_PRECO.reduce((a, b) =>
-  (a.priceMonthly as number) <= (b.priceMonthly as number) ? a : b,
+const PLANO_DE_ENTRADA: PlanConfig = PLANOS_COM_PRECO.reduce(
+  (a, b) => ((a.priceMonthly as number) <= (b.priceMonthly as number) ? a : b),
+  PLANOS_COM_PRECO[0],
 );
+if (!PLANO_DE_ENTRADA) {
+  throw new Error('evalSetZappIQ: o catálogo não tem nenhum plano ativo com preço');
+}
 
 /** Despejou o catálogo: citou três planos ativos em sequência. */
 const PADRAO_CATALOGO_DESPEJADO = (() => {

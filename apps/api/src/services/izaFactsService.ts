@@ -333,7 +333,8 @@ function renderBlock(facts: IzaFact[]): string {
   const parts: string[] = [
     '# FATOS ATUAIS DA PLATAFORMA (sincronizado runtime — fonte de verdade)',
     '',
-    '> Esta seção é gerada automaticamente a partir do banco de dados em cada turno.',
+    '> Esta seção é gerada a cada turno: a seção de preços vem do catálogo comercial,',
+    '> as demais vêm do banco de dados.',
     '> Os fatos abaixo SOBREESCREVEM qualquer informação conflitante nas seções fixas',
     '> que vêm depois. Se um canal está LIVE aqui, ele ESTÁ disponível — mesmo que',
     '> outras seções mais antigas digam o contrário.',

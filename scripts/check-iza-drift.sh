@@ -285,6 +285,13 @@ fi
 # PARTE 2 - PATHS SENSIVEIS SEM ENTRADA NO CHANGELOG
 # ============================================================================
 
+# Label no-iza-impact (passado pelo workflow como IZA_PULAR_PARTE2): pula so a
+# Parte 2. A Parte 1 ja rodou acima e vale mesmo com o label.
+if [ "${IZA_PULAR_PARTE2:-}" = "true" ]; then
+  echo "[drift] label no-iza-impact: Parte 2 pulada. PASS."
+  exit 0
+fi
+
 if [ -z "${CHANGED_FILES}" ]; then
   echo "[drift] Nenhum arquivo mudou. PASS."
   exit 0
