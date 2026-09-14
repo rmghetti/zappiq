@@ -127,6 +127,12 @@ export async function carregarRuidoDoAgente(
     const base = {
       agentId,
       status: 'completed',
+      // Rodada 3 do PR #375: o re-teste do cliente nasce 'completed' com
+      // nota nula. Ocupava vaga no `take` e contava no mínimo para o piso,
+      // que então "existia" com uma nota só e nunca caía para o histórico.
+      // A nota nula sai pelos dois lados: pela origem e pelo próprio campo.
+      triggeredBy: { not: 'client_retest' },
+      scorePercent: { not: null },
       ...(ultimaVersao?.createdAt ? { startedAt: { gte: ultimaVersao.createdAt } } : {}),
     };
     const consulta = (where: Record<string, unknown>) =>

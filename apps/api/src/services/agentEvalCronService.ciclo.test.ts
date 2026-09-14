@@ -112,6 +112,8 @@ function bancoComMemoria(linhasIniciais: Array<Record<string, any>> = []) {
       if (where?.status?.in && !where.status.in.includes(l.status)) return false;
       if (typeof where?.status === 'string' && where.status !== l.status) return false;
       if (where?.startedAt?.gte && !(l.startedAt >= where.startedAt.gte)) return false;
+      // Rodada 3 do PR #375: o re-teste do cliente não é avaliação do dia.
+      if (where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not) return false;
       return true;
     }).length;
   });
@@ -214,6 +216,52 @@ describe('podeAgendarAvaliacao: teto por organização', () => {
     ]);
 
     expect(await podeAgendarAvaliacao('org-a', AGORA)).toBe(true);
+  });
+
+  // Rodada 3 do PR #375. O re-teste do cliente nasce 'completed' com 3
+  // amostras de UM cenário. Um re-teste entre 00:00 e 04:50 UTC contava como
+  // "já avaliada hoje" e a organização perdia a avaliação do dia.
+  it('um re-teste do cliente feito hoje NÃO conta como avaliação do dia', async () => {
+    bancoComMemoria([
+      {
+        id: 'run-reteste',
+        organizationId: 'org-a',
+        status: 'completed',
+        triggeredBy: 'client_retest',
+        startedAt: new Date('2026-09-14T00:10:00Z'),
+      },
+    ]);
+
+    expect(await podeAgendarAvaliacao('org-a', AGORA)).toBe(true);
+  });
+});
+
+describe('ciclo por mudança: o "desde" ignora o re-teste do cliente', () => {
+  // Rodada 3 do PR #375. `ultima` pegava a execução 'completed' mais recente,
+  // e o re-teste é uma delas: qualquer re-teste avançava o "desde" e escondia
+  // mudanças de base feitas entre a última execução de verdade e o re-teste.
+  it('o "desde" é a conclusão da última execução de VERDADE, não do re-teste', async () => {
+    const semanal = new Date('2026-09-11T04:30:00Z');
+    const reteste = new Date('2026-09-14T03:50:00Z');
+    const linhas = [
+      { agentId: 'ag-1', status: 'completed', triggeredBy: 'client_retest', startedAt: reteste, completedAt: reteste },
+      { agentId: 'ag-1', status: 'completed', triggeredBy: 'cron', startedAt: semanal, completedAt: semanal },
+    ];
+    // findFirst honra o filtro: se o código não excluir o re-teste, ele vem.
+    prismaMock.agentEvalRun.findFirst.mockImplementation(async ({ where }: any) => {
+      const [primeira] = linhas
+        .filter((l) => l.agentId === where.agentId && l.status === where.status)
+        .filter((l) => !(where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not))
+        .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+      return primeira ? { completedAt: primeira.completedAt, startedAt: primeira.startedAt } : null;
+    });
+    prismaMock.agent.findMany.mockResolvedValue([agente('ag-1', 'org-a')]);
+
+    await runAgentEvalOnChangeCycle(AGORA);
+
+    expect(prismaMock.auditLog.count).toHaveBeenCalledTimes(1);
+    const where = prismaMock.auditLog.count.mock.calls[0][0].where;
+    expect(where.createdAt).toEqual({ gt: semanal });
   });
 });
 

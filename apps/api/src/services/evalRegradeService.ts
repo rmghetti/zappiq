@@ -436,6 +436,10 @@ function filtroDeRegravacao(filtro: { organizationId?: string; runIds?: string[]
     status: 'completed',
     evalSetVersion: 'v2',
     results: { not: null as any },
+    // Rodada 3 do PR #375: o re-teste do cliente nasce 'completed', v2, com
+    // 3 amostras sem scenarioId e nota nula. Regravá-lo não faz sentido, e
+    // ele ocupava vaga do lote de 50 e contava no que "ainda falta".
+    triggeredBy: { not: 'client_retest' },
     ...(filtro.runIds && filtro.runIds.length > 0 ? { id: { in: filtro.runIds } } : {}),
     ...(filtro.organizationId ? { agent: { organizationId: filtro.organizationId } } : {}),
   };
