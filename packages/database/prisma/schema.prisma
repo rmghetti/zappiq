@@ -1374,6 +1374,9 @@ model Agent {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
   evalRuns        AgentEvalRun[]
+  // Correções aprovadas pelo dono, como REGISTRO (não como texto colado no
+  // prompt). Uma ativa por cenário: ver agent_rules.
+  rules           AgentRule[]
   // Histórico imutável do system_prompt. Quem numera é o gatilho do Postgres
   // (agents_versiona_prompt), não a aplicação: escrita feita fora do produto
   // também vira versão, com source 'fora_do_app'.
@@ -1471,6 +1474,53 @@ model PrefilterEvent {
   @@map("prefilter_events")
 }
 
+// ═══════════════════════════════════════════════════════════
+// AgentRule: a correção aprovada pelo dono vira REGISTRO.
+// -----------------------------------------------------------
+// Achados A079, A081, A083, A188: a correção morava como texto colado
+// dentro de agents.system_prompt, escolhido por heurística. Caía no bloco
+// errado, acumulava (a Iza cresceu 65% em 30 aplicações, com cinco regras
+// "#14" diferentes), vinha cortada no meio e reverter apagava tudo o que
+// veio depois.
+//
+// Agora: uma linha por regra, UMA ATIVA POR CENÁRIO (índice único parcial
+// no banco, não só no código). Aplicar de novo o mesmo cenário substitui;
+// reverter desativa só aquela linha. O bloco "# Regras aprovadas pelo dono"
+// é montado a cada turno a partir das ativas, atrás do interruptor
+// `regrasComoRegistros`.
+//
+// RLS ligada e sem grant para anon/authenticated: é comportamento de
+// produto, só a API lê.
+// ═══════════════════════════════════════════════════════════
+model AgentRule {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id")
+  agentId        String   @map("agent_id")
+  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  /// Cenário do gabarito que a regra corrige. Null = regra escrita à mão.
+  scenarioId     String?  @map("scenario_id")
+  texto          String
+  /// 'sugestao_ia' | 'editada' | 'manual'
+  origem         String
+  /// 'ativa' | 'substituida' | 'revertida'
+  status         String   @default("ativa")
+  /// Por que saiu de 'ativa': 'substituida_por_nova' | 'revertida_pelo_dono' | 'truncada'
+  motivo         String?
+  /// Versão de agent_prompt_versions vigente quando a regra nasceu.
+  versaoDoPromptDeOrigem Int? @map("versao_do_prompt_de_origem")
+  /// Decisão que criou a regra. Sem FK: a decisão pode ser expurgada por
+  /// LGPD e a regra que o dono aprovou continua valendo.
+  decisionId     String?  @map("decision_id")
+  createdBy      String?  @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([organizationId, status, createdAt])
+  @@index([agentId, status])
+  @@index([decisionId])
+  @@map("agent_rules")
+}
+
 // FASE 1.B task #240 — Onboarding journey D+1/D+3/D+7 state.
 // Idempotência: 1 row por (org, stage). Reusa templates existentes
 // (trialSavingsFollowup, trialMidway, trialLastDay) wireados via
@@ -1504,8 +1554,12 @@ model AgentEvalRun {
   evalSetVersion   String    @map("eval_set_version")
   // Versão do CORE rules usada (ex: 'v1') — pra rastrear quando CORE muda
   coreRulesVersion String?   @map("core_rules_version")
-  // Trigger: 'manual' | 'cron' | 'pre_release'
+  // Trigger: 'manual' | 'cron' | 'pre_release' | 'client_retest'
   triggeredBy      String    @default("manual") @map("triggered_by")
+  /// A049 — o re-teste do cliente vira execução GRAVADA e ligada à decisão
+  /// que o motivou. Antes ele rodava 1 amostra e não deixava rastro nenhum,
+  /// então ninguém conseguia dizer se a correção pegou.
+  fixDecisionId    String?   @map("fix_decision_id")
   // Scenarios rodados (subset filter aplicado) — null = todos
   scenarioFilter   Json?     @map("scenario_filter")
   // Métricas agregadas
@@ -1540,6 +1594,7 @@ model AgentEvalRun {
 
   @@index([agentId, startedAt])
   @@index([status])
+  @@index([fixDecisionId])
   @@map("agent_eval_runs")
 }
 
