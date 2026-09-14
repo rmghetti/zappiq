@@ -506,6 +506,16 @@ export interface ContextoDoSugeridor {
    * pede DUAS quando a primeira resposta volta cortada).
    */
   pularSugestao?: boolean;
+  /**
+   * O bloco "# Regras aprovadas pelo dono" já montado, para o prompt que o
+   * AGENTE recebe no teste (não só o sugeridor). Rodada 3 do PR #375: com
+   * `regrasComoRegistros` ligado, aplicar cria o registro e não toca no
+   * prompt; sem este bloco o re-teste e a execução semanal mediam o agente
+   * SEM a regra recém-aprovada. Quem chama é quem tem banco: monta com
+   * `blocoDeRegrasDaOrganizacao(orgId, { agentId })` e passa. Vazio ou
+   * ausente, o prompt é byte a byte o de antes.
+   */
+  regrasBlock?: string;
 }
 
 export async function suggestFix(
@@ -682,6 +692,12 @@ export function buildEvalSystemPrompt(
     userMessage?: string;
     history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   },
+  /**
+   * O bloco "# Regras aprovadas pelo dono", quando o interruptor está ligado.
+   * Entra na MESMA posição do orquestrador (depois do prompt do agente, antes
+   * do bloco do cliente). Vazio, não muda um byte do prompt.
+   */
+  regrasBlock?: string,
 ): string {
   // FASE 2.1 fix (2026-05-13): mock condicional do bloco "Cliente atual".
   // Cenários cr5_nome_ausente_* testam o comportamento de PERGUNTAR nome —
@@ -699,6 +715,10 @@ export function buildEvalSystemPrompt(
   return [
     CORE_AGENT_RULES_V1,
     agent.systemPrompt || '(agente sem system_prompt customizado — só CORE rules)',
+    // As regras aprovadas pelo dono, pelo mesmo motivo do orquestrador: o
+    // que ele aprovou esta semana vence o texto do dia do cadastro. Só entra
+    // quando existe, para o prompt sem regra continuar idêntico ao de hoje.
+    ...(regrasBlock ? [regrasBlock] : []),
     '',
     '# Cliente atual (eval test mock)',
     nameMockEnabled
@@ -774,7 +794,7 @@ async function runScenario(
   profile: JudgeProfile,
   contexto: ContextoDoSugeridor = {},
 ): Promise<ScenarioResult> {
-  const systemPrompt = buildEvalSystemPrompt(agent, scenario);
+  const systemPrompt = buildEvalSystemPrompt(agent, scenario, contexto.regrasBlock);
 
   const messages = (scenario.history || []).map((h) => ({
     role: h.role,
