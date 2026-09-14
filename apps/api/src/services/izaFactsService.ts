@@ -25,6 +25,17 @@
  * ══════════════════════════════════════════════════════════════════════════ */
 
 import { prisma } from '@zappiq/database';
+import {
+  PLAN_CONFIG,
+  PLAN_IDS,
+  ADDONS,
+  ADDONS_V4_LIST,
+  VOICE_ADDON_META,
+  listActivePlans,
+  planAnnualMonthlyEquivalent,
+  type PlanConfig,
+  type AddonV4,
+} from '@zappiq/shared';
 import { logger } from '../utils/logger.js';
 
 interface IzaFact {
@@ -74,6 +85,175 @@ async function loadFactsFromDb(): Promise<IzaFact[]> {
   return rows;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+ * Seção PRICING: gerada do catálogo, nunca do banco (achado A229).
+ * --------------------------------------------------------------------
+ * O prompt da Iza carregava uma tabela de planos gravada à mão em 16/06
+ * com Scale a R$ 997 e planos já descontinuados, enquanto a seção
+ * `pricing` de `iza_facts` estava VAZIA. Duas fontes de verdade para
+ * preço, e a que falava com o lead era a errada.
+ *
+ * Agora a fonte é uma só: `packages/shared/src/planConfig.ts`. Preço,
+ * cota, desconto anual e add-on saem de lá em runtime. Nada do Stripe
+ * (lá moram ids de preço, não a política comercial) e nada digitado aqui.
+ *
+ * QUAL CHAVE DO BANCO PERDE: qualquer fato da seção `pricing` que cite um
+ * plano (Lite, Starter, Growth, Scale, Business, Enterprise) junto com um
+ * valor em reais, além das chaves reservadas listadas em
+ * CHAVES_DE_PRECO_RESERVADAS. Esses fatos são descartados com aviso no
+ * log. Fato de preço que NÃO é de plano (por exemplo a tarifa da Meta de
+ * 01/10) continua valendo e é renderizado normalmente.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Chaves da seção `pricing` que o código passou a mandar. Um registro com
+ * uma destas chaves é ignorado mesmo que não tenha valor em reais.
+ */
+const CHAVES_DE_PRECO_RESERVADAS = new Set([
+  'planos',
+  'precos',
+  'pricing',
+  'planos_tabela',
+  'tabela_precos',
+  'tabela_de_precos',
+  'pricing_planos',
+]);
+
+/** Nomes nus dos planos, sem o sufixo "(legado)" que o catálogo usa. */
+const NOMES_DE_PLANOS = PLAN_IDS.map((id) => PLAN_CONFIG[id].name.split(' ')[0]);
+
+/**
+ * "Business" também é o sobrenome de WhatsApp Business e de Meta Business
+ * Partner. Tiramos essas expressões antes de procurar nome de plano, senão
+ * um fato legítimo de canal ou de parceria cairia junto.
+ */
+const COMPOSTOS_QUE_NAO_SAO_PLANO =
+  /\b(?:whatsapp|meta|instagram|facebook|google)\s+business(?:\s+partner)?\b/gi;
+
+/** Valor em reais no formato pt-BR, sem centavos quando o número é inteiro. */
+function brl(v: number): string {
+  return Number.isInteger(v)
+    ? `R$ ${v.toLocaleString('pt-BR')}`
+    : `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** Corta o sufixo descritivo do nome do catálogo (o que vem depois do traço). */
+function nomeCurto(nome: string): string {
+  return nome.split(/\s+[—–-]\s+/)[0].trim();
+}
+
+/**
+ * Este fato da seção `pricing` fala de preço de PLANO? Se fala, o código
+ * vence e o registro do banco é ignorado.
+ */
+export function ehFatoDePrecoDePlano(f: Pick<IzaFact, 'section' | 'fact_key' | 'label' | 'description'>): boolean {
+  if (f.section !== 'pricing') return false;
+  if (CHAVES_DE_PRECO_RESERVADAS.has(f.fact_key)) return true;
+
+  const texto = `${f.fact_key} ${f.label} ${f.description ?? ''}`.replace(
+    COMPOSTOS_QUE_NAO_SAO_PLANO,
+    ' ',
+  );
+  const temValorEmReais = /R\$\s*[0-9]/.test(texto);
+  if (!temValorEmReais) return false;
+
+  return NOMES_DE_PLANOS.some((nome) => new RegExp(`\\b${nome}\\b`, 'i').test(texto));
+}
+
+/** Planos ativos onde este add-on pode ser contratado, pelo nome do catálogo. */
+function planosDoAddon(availableFor: readonly string[]): string {
+  const ativos = listActivePlans().filter((p) => availableFor.includes(p.id));
+  if (ativos.length === 0) return '';
+  return ` (contrata no ${ativos.map((p) => p.name).join(', ')})`;
+}
+
+/** Uma linha por plano ativo: preço, equivalente anual, cota e trial. */
+function linhaDoPlano(p: PlanConfig): string {
+  if (p.priceMonthly === null) {
+    return `- **${p.name}**: sob consulta, o time comercial fecha o valor · mensagens de IA sem teto fixo`;
+  }
+  const partes = [`${brl(p.priceMonthly)}/mês`];
+  const anual = planAnnualMonthlyEquivalent(p);
+  if (anual !== null && p.annualDiscountPercent > 0) {
+    partes.push(`no anual ${brl(anual)}/mês (${p.annualDiscountPercent}% de desconto)`);
+  }
+  if (p.limits.aiMessagesPerMonth > 0) {
+    partes.push(`${p.limits.aiMessagesPerMonth.toLocaleString('pt-BR')} mensagens de IA por mês`);
+  }
+  if (p.trialDays && p.trialDays > 0) {
+    partes.push(`${p.trialDays} dias grátis`);
+  }
+  return `- **${p.name}**: ${partes.join(' · ')}`;
+}
+
+/**
+ * Famílias de add-on que a ZappIQ vende em público (as mesmas do seletor da
+ * página de preços). A lista diz QUAIS famílias são públicas; o preço de
+ * cada item continua vindo do catálogo.
+ */
+const FAMILIAS_PUBLICAS: AddonV4['family'][] = ['MIRA', 'IMPULSO', 'FEATURE', 'CHANNEL'];
+
+function linhasDosAddonsPublicos(): string[] {
+  const idsAtivos = new Set(listActivePlans().map((p) => p.id));
+
+  const linhas = ADDONS_V4_LIST.filter(
+    (a) =>
+      a.pricingMode === 'recurring_monthly' &&
+      FAMILIAS_PUBLICAS.includes(a.family) &&
+      a.availableFor.some((id) => idsAtivos.has(id)),
+  ).map((a) => `- **${nomeCurto(a.name)}**: ${brl(a.amountBrl)}/mês${planosDoAddon(a.availableFor)}`);
+
+  const radar = ADDONS.RADAR_360;
+  if (radar?.priceMonthly != null) {
+    linhas.push(`- **${nomeCurto(radar.name)}**: ${brl(radar.priceMonthly)}/mês${planosDoAddon(radar.availableFor)}`);
+  }
+
+  // Voz outbound tem seis faixas no catálogo. Para o lead, a faixa de
+  // entrada basta; o resto sai na proposta.
+  const precosDeVoz = Object.keys(VOICE_ADDON_META)
+    .map((k) => ADDONS[k]?.priceMonthly)
+    .filter((v): v is number => typeof v === 'number');
+  if (precosDeVoz.length > 0) {
+    linhas.push(`- **Voz nativa (outbound)**: a partir de ${brl(Math.min(...precosDeVoz))}/mês`);
+  }
+
+  return linhas;
+}
+
+/**
+ * Bloco de preços da Iza, inteiro derivado do `planConfig`.
+ *
+ * Função pura: não lê banco, não lê Stripe, não guarda estado. É o que o
+ * teste cobra valor por valor.
+ */
+export function renderSecaoPrecosDoPlanConfig(): string {
+  const ativos = listActivePlans();
+  const descontoPadrao = PLAN_CONFIG.GROWTH.annualDiscountPercent;
+
+  return [
+    '## PRICING (gerado do catálogo comercial a cada turno)',
+    '',
+    '> Estes são os ÚNICOS preços que você pode dizer ao cliente. Eles saem do',
+    '> catálogo oficial da ZappIQ e mudam junto com ele. Se um valor não estiver',
+    '> aqui, diga que vai confirmar com o time e NÃO chute. Nunca repita preço de',
+    '> memória, de conversa antiga ou de qualquer tabela escrita em outro lugar',
+    '> deste prompt: se divergir, o que vale é esta lista.',
+    '',
+    '### Planos ativos',
+    ...ativos.map(linhaDoPlano),
+    '',
+    `> O plano anual tem ${descontoPadrao}% de desconto sobre o mensal.`,
+    '> Só existem os planos acima. Qualquer outro nome de plano que apareça numa',
+    '> conversa está fora do catálogo: não ofereça e não cite preço para ele.',
+    '',
+    '### Add-ons públicos',
+    ...linhasDosAddonsPublicos(),
+    '',
+    '> Add-on é cobrado à parte da mensalidade do plano.',
+    '',
+  ].join('\n');
+}
+
 function renderFact(f: IzaFact): string {
   const badge = `[${STATUS_BADGE[f.status] || f.status.toUpperCase()}]`;
   const linkPart = f.url
@@ -84,10 +264,16 @@ function renderFact(f: IzaFact): string {
 }
 
 function renderBlock(facts: IzaFact[]): string {
-  if (!facts.length) return '';
-
   const bySection = new Map<string, IzaFact[]>();
   for (const f of facts) {
+    // Preço de plano vindo do banco perde para o catálogo, sempre.
+    if (ehFatoDePrecoDePlano(f)) {
+      logger.warn(
+        '[izaFacts] fato de preço de plano ignorado: a seção PRICING vem do planConfig',
+        { fact_key: f.fact_key, section: f.section, label: f.label },
+      );
+      continue;
+    }
     if (!bySection.has(f.section)) bySection.set(f.section, []);
     bySection.get(f.section)!.push(f);
   }
@@ -108,10 +294,21 @@ function renderBlock(facts: IzaFact[]): string {
   ];
 
   for (const section of SECTION_ORDER) {
+    // A seção de preços é gerada do catálogo e sai SEMPRE, mesmo quando o
+    // banco não tem nenhum fato ativo: a Iza nunca pode ficar sem preço.
+    if (section === 'pricing') {
+      parts.push(renderSecaoPrecosDoPlanConfig());
+    }
+
     const items = bySection.get(section);
     if (!items || items.length === 0) continue;
-    parts.push(`## ${SECTION_TITLES[section] || section.toUpperCase()}`);
-    parts.push('');
+    if (section === 'pricing') {
+      parts.push('### Outros fatos de preço (banco)');
+      parts.push('');
+    } else {
+      parts.push(`## ${SECTION_TITLES[section] || section.toUpperCase()}`);
+      parts.push('');
+    }
     for (const f of items.sort((a, b) => a.order_idx - b.order_idx)) {
       parts.push(renderFact(f));
     }
@@ -120,6 +317,12 @@ function renderBlock(facts: IzaFact[]): string {
 
   return parts.join('\n');
 }
+
+/**
+ * Exposto só para teste: renderiza o bloco a partir de uma lista de fatos,
+ * sem tocar no banco nem no cache.
+ */
+export const renderBlockParaTeste = renderBlock;
 
 /**
  * Retorna o bloco "# FATOS ATUAIS" formatado pra injeção no system prompt.
