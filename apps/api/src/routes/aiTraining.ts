@@ -38,7 +38,11 @@ import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
 import { computeAIReadiness, refreshAIReadiness } from '../services/aiReadinessService.js';
-import { buildKnowledgeBase, surveyDocFilename, countAnsweredQuestions } from '../services/knowledgeBaseBuilder.js';
+import { countAnsweredQuestions } from '../services/knowledgeBaseBuilder.js';
+import {
+  agendarReingestaoDoQuestionario,
+  marcarSincronizacaoPendente,
+} from '../services/surveyReingest.js';
 import { logAuditEvent } from '../services/auditService.js';
 import { buildSystemPromptForContact, pickTierAndOverride } from '../agents/agentOrchestrator.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
@@ -1010,53 +1014,144 @@ router.get('/survey', async (req: Request, res: Response, next: NextFunction) =>
       niche: settings.niche || 'geral',
       segmento: settings.segmento || settings.niche || 'geral',
       subsegmentos: Array.isArray(settings.subsegmentos) ? settings.subsegmentos : [],
+      // Estado da última sincronização com a IA (A008). Sem isto, a tela
+      // dizia 'salvo automaticamente' mesmo quando a ingestão falhava.
+      surveySync: settings.surveySync ?? null,
     });
   } catch (err) {
     next(err);
   }
 });
 
-// PUT /api/ai-training/survey — salva o conjunto completo de respostas +
-// re-ingere o documento de conhecimento no RAG + loga.
+/** Teto de uma resposta. Caixa de texto de questionário, não anexo (A118). */
+export const MAX_CHARS_POR_RESPOSTA = 8_000;
+
+/** Teto do questionário inteiro. Ele viaja no JSON de settings da organização. */
+export const MAX_BYTES_DO_QUESTIONARIO = 200 * 1024;
+
+/** O que passou do teto, se passou. Null quando o envio cabe. */
+export interface ExcessoDoQuestionario {
+  erro: 'resposta_longa_demais' | 'questionario_grande_demais';
+  mensagem: string;
+  campo?: string;
+}
+
+/**
+ * Mede o questionário antes de gravar.
+ *
+ * Sem isto o autosave aceitava qualquer coisa: uma colagem de documento
+ * inteiro numa caixa de texto ia parar no JSON de settings da organização,
+ * que é lido em todo turno de conversa.
+ */
+export function medirQuestionario(
+  surveyAnswers: Record<string, any>,
+): ExcessoDoQuestionario | null {
+  const grande = primeiraRespostaLongaDemais(surveyAnswers);
+  if (grande) {
+    return {
+      erro: 'resposta_longa_demais',
+      campo: grande,
+      mensagem:
+        `Uma das respostas passou de ${MAX_CHARS_POR_RESPOSTA.toLocaleString('pt-BR')} caracteres. ` +
+        'Resuma o texto nesta caixa e, se precisar do conteúdo inteiro, envie o arquivo em Documentos.',
+    };
+  }
+
+  const bytes = Buffer.byteLength(JSON.stringify(surveyAnswers ?? {}), 'utf8');
+  if (bytes > MAX_BYTES_DO_QUESTIONARIO) {
+    return {
+      erro: 'questionario_grande_demais',
+      mensagem:
+        'O questionário inteiro passou de 200 KB. Encurte as respostas mais longas e ' +
+        'envie o material extenso em Documentos, que é onde ele é indexado.',
+    };
+  }
+
+  return null;
+}
+
+/** Devolve o id do primeiro campo que estourou o teto, em qualquer nível. */
+function primeiraRespostaLongaDemais(valor: unknown, chave = '', nivel = 0): string | null {
+  if (typeof valor === 'string') return valor.length > MAX_CHARS_POR_RESPOSTA ? chave : null;
+  // 24 níveis: o corte é contra ciclo e recursão absurda, não contra profundidade
+  // legítima; o teto de 8.000 tem de valer em qualquer nível (re-revisão do #373).
+  if (nivel > 24 || !valor || typeof valor !== 'object') return null;
+
+  if (Array.isArray(valor)) {
+    for (const item of valor) {
+      const achado = primeiraRespostaLongaDemais(item, chave, nivel + 1);
+      if (achado) return achado;
+    }
+    return null;
+  }
+
+  for (const [sub, conteudo] of Object.entries(valor as Record<string, unknown>)) {
+    const achado = primeiraRespostaLongaDemais(conteudo, sub, nivel + 1);
+    if (achado) return achado;
+  }
+  return null;
+}
+
+// PUT /api/ai-training/survey: salva o conjunto completo de respostas e
+// AGENDA a reingestão. A ingestão não acontece mais aqui dentro: o autosave
+// da tela dispara a cada 1,5 s e cada requisição reembedava o questionário
+// inteiro, sem trava, com duas ingestões podendo terminar fora de ordem
+// (A007, A118). Agora um job por organização junta a rajada e lê do banco.
 const surveySchema = z.object({ surveyAnswers: z.record(z.any()) });
 router.put('/survey', validate(surveySchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
     const { surveyAnswers } = req.body as { surveyAnswers: Record<string, any> };
 
+    const excesso = medirQuestionario(surveyAnswers);
+    if (excesso) {
+      res.status(422).json({ error: excesso.erro, message: excesso.mensagem, campo: excesso.campo });
+      return;
+    }
+
+    // A leitura serve SÓ para o 'antes' da auditoria. A gravação não pode
+    // sair daqui: entre esta leitura e a escrita cabem outras requisições.
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
-      select: { settings: true, name: true },
+      select: { settings: true },
     });
-    const settings = (org?.settings as any) || {};
-    const before = settings.surveyAnswers || {};
+    const before = ((org?.settings as any) || {}).surveyAnswers || {};
 
-    const niche = settings.niche || 'geral';
-    const currentFilename = surveyDocFilename(niche);
-    // Se o niche mudou desde o último save, o filename muda junto — o doc
-    // antigo viraria órfão no RAG (a IA leria a qualificação desatualizada).
-    const previousFilename: string | undefined = settings.surveyDocFilename;
+    // Gravação POR CHAVE, dentro de uma instrução só. Ler settings inteiro,
+    // fundir e regravar apagava o businessHoursConfig e o llm_routing que
+    // outra requisição gravou no meio, e desfazia o surveySync que o job da
+    // fila acabara de escrever (A155, A156).
+    await prisma.$executeRaw`
+      UPDATE organizations
+         SET settings = jsonb_set(COALESCE(settings, '{}'::jsonb), '{surveyAnswers}', ${JSON.stringify(surveyAnswers)}::jsonb, true)
+       WHERE id = ${orgId}
+    `;
 
-    const merged = { ...settings, surveyAnswers, surveyDocFilename: currentFilename };
-    await prisma.organization.update({ where: { id: orgId }, data: { settings: merged } });
+    // Leitura FRESCA, depois da escrita: os sources registrados são os que a
+    // IA tem AGORA, e o job da fila pode tê-los trocado desde a leitura de
+    // cima. Reaproveitar o settings antigo repõe uma lista vencida.
+    const depois = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { settings: true },
+    });
+    const sourcesAtuais = ((depois?.settings as any) || {}).surveySync?.sources;
 
-    // Re-ingere o doc de conhecimento (filename estável → substitui versão anterior)
-    const businessName = settings.businessName || org?.name || 'Empresa';
-    const kb = buildKnowledgeBase({ businessName, niche, surveyAnswers });
-    await ragService
-      .ingestDocument(orgId, {
-        filename: currentFilename,
-        content: Buffer.from(kb),
-        mimeType: 'text/plain',
-        metadata: { titulo: 'Questionário de qualificação' },
-      })
-      .catch((err: any) => logger.warn(`[AITraining] RAG re-sync survey falhou: ${err.message}`));
+    // 'pendente' já no salvamento: a tela precisa poder dizer "a IA ainda
+    // não recebeu" em vez de "salvo automaticamente" (A008). Também por
+    // chave, pelo mesmo motivo da gravação acima.
+    const surveySync = await marcarSincronizacaoPendente(orgId, {
+      sources: Array.isArray(sourcesAtuais) ? sourcesAtuais : undefined,
+    }).catch((err: any) => {
+      logger.warn(`[AITraining] marcar sincronização pendente falhou: ${err?.message}`);
+      return null;
+    });
 
-    if (previousFilename && previousFilename !== currentFilename) {
-      await ragService
-        .deleteDocument(orgId, previousFilename)
-        .catch((err: any) => logger.warn(`[AITraining] RAG remove survey antigo falhou: ${err.message}`));
-    }
+    // Agenda (ou reagenda) a reingestão. Falha aqui não derruba o salvamento:
+    // a resposta do cliente já está gravada, e o estado fica 'pendente'.
+    const agendamento = await agendarReingestaoDoQuestionario(orgId).catch((err: any) => {
+      logger.warn(`[AITraining] agendar reingestão do questionário falhou: ${err?.message}`);
+      return null;
+    });
 
     const answeredCount = countAnsweredQuestions(surveyAnswers);
     await logTraining(req, 'kb.survey.update', 'survey', undefined,
@@ -1064,7 +1159,13 @@ router.put('/survey', validate(surveySchema), async (req: Request, res: Response
       { before: { answered: countAnsweredQuestions(before) }, after: { answered: answeredCount } });
 
     const readiness = await refreshAIReadiness(orgId).catch(() => null);
-    res.json({ surveyAnswers, answeredCount, readiness });
+    res.json({
+      surveyAnswers,
+      answeredCount,
+      readiness,
+      surveySync,
+      reingestaoAgendada: Boolean(agendamento),
+    });
   } catch (err) {
     next(err);
   }

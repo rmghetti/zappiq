@@ -7,7 +7,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { signToken, signRefreshToken } from '../utils/token.js';
 import { logger } from '../utils/logger.js';
 import * as ragService from '../services/ragService.js';
-import { buildKnowledgeBase, surveyDocFilename } from '../services/knowledgeBaseBuilder.js';
+import { agendarReingestaoDoQuestionario } from '../services/surveyReingest.js';
 import { ensureLiveAgentForOrg } from '../services/agentProvisioningService.js';
 import { seedDefaultPipelineStages } from '../services/pipelineStageProvisioningService.js';
 
@@ -211,14 +211,15 @@ router.post('/complete', validate(onboardingSchema), async (req: Request, res: R
       logger.warn('[Onboarding] wire signup/crm_account falhou (não bloqueante):', err?.message),
     );
 
-    // Process survey answers -> RAG (async, non-blocking)
+    // Respostas do questionário: o cadastro AGENDA a ingestão, não ingere
+    // aqui dentro. É o mesmo caminho do Treinar IA, então o documento nasce
+    // no formato novo (um por seção, com o texto das perguntas) e o cadastro
+    // não fica esperando o serviço de indexação subir. As respostas já estão
+    // gravadas em settings acima, e o job lê de lá.
     if (surveyAnswers && Object.keys(surveyAnswers).length > 0) {
-      const knowledgeBase = buildKnowledgeBase({ businessName, niche, surveyAnswers });
-      ragService.ingestDocument(result.org.id, {
-        filename: surveyDocFilename(niche),
-        content: Buffer.from(knowledgeBase),
-        mimeType: 'text/plain',
-      }).catch((err: any) => logger.warn('[Onboarding] RAG ingestion failed:', err.message));
+      agendarReingestaoDoQuestionario(result.org.id).catch((err: any) =>
+        logger.warn('[Onboarding] agendar ingestão do questionário falhou:', err?.message),
+      );
     }
 
     // Index website (async, non-blocking)

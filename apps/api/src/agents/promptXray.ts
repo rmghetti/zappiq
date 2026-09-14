@@ -158,8 +158,16 @@ function identidadeEmpresa(settings: Record<string, any> | null | undefined): Re
   return (settings?.surveyAnswers?.identidade_empresa as Record<string, any>) || {};
 }
 
-/** Prefixo do documento gerado a partir do questionário do cadastro. */
-const PREFIXO_QUESTIONARIO = 'onboarding-survey-';
+/**
+ * Prefixos do documento gerado a partir do questionário.
+ *
+ * São dois porque o formato mudou em 14/09/2026: o questionário virou um
+ * documento por seção ('survey-precos_condicoes'), e o arquivo único
+ * antigo ('onboarding-survey-clinica.txt') segue no vetor de quem ainda
+ * não foi reingerido. O Raio-X precisa reconhecer os dois, senão ele
+ * acusaria falta de fonte de preço justo em quem já foi migrado.
+ */
+const PREFIXOS_QUESTIONARIO = ['survey-', 'onboarding-survey-'];
 
 /** Frases que o CR-3 do CORE proíbe o agente de usar. */
 const FRASES_PROIBIDAS_CR3 = [
@@ -459,7 +467,9 @@ function checarPrecoNaBase(
   }
 
   const tabela = texto(identidadeEmpresa(settings).pre_tabela_precos);
-  const veioQuestionario = sources.some((s) => s.source.startsWith(PREFIXO_QUESTIONARIO));
+  const veioQuestionario = sources.some((s) =>
+    PREFIXOS_QUESTIONARIO.some((prefixo) => s.source.startsWith(prefixo)),
+  );
   const idsDeQaDePreco = qaAtivos
     .filter((q) => normalizar(q.question).includes('preco'))
     .map((q) => `qa-${q.id}.txt`);
@@ -474,7 +484,7 @@ function checarPrecoNaBase(
     id: 'preco_na_base',
     rotulo: 'Pergunta de preço traz a fonte de preço',
     ok,
-    detalhe: `Fontes aceitas: o documento do questionário ("${PREFIXO_QUESTIONARIO}*.txt" com a tabela de preços preenchida) ou um Q&A cuja pergunta contenha "preço"${
+    detalhe: `Fontes aceitas: o documento do questionário (${PREFIXOS_QUESTIONARIO.map((p) => `"${p}*"`).join(' ou ')}, com a tabela de preços preenchida) ou um Q&A cuja pergunta contenha "preço"${
       idsDeQaDePreco.length ? ` (${idsDeQaDePreco.join(', ')})` : ''
     }. Fontes recuperadas: ${sources.length ? sources.map((s) => s.source).join(', ') : 'nenhuma'}.${motivo}`,
   };
