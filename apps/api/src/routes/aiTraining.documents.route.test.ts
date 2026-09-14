@@ -263,6 +263,34 @@ describe('POST /api/ai-training/documents, recusas de upload', () => {
     expect(ingestDocument).not.toHaveBeenCalled();
   });
 
+  it('planilha Excel de verdade continua recusada com 415', async () => {
+    // Word e Excel passam pelo filtro de mime mas o indexador devolve 415 e
+    // nenhum documento é criado. Enquanto não houver extração, param aqui.
+    const res = await enviar(
+      'tabela.xlsx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      new Uint8Array([80, 75]),
+    );
+
+    expect(res.status).toBe(415);
+    expect(ingestDocument).not.toHaveBeenCalled();
+  });
+
+  it('.csv que o Windows rotula como Excel PASSA pelo filtro', async () => {
+    // O navegador manda o mime do programa que abre a extensão, não o do
+    // conteúdo: no Windows um .csv chega como application/vnd.ms-excel. Antes
+    // de 14/09/2026 o filtro recusava, e o cliente que mandou o arquivo certo
+    // levava 415 sem ter como entender o motivo. Aqui só provamos que ele
+    // atravessa o filtro; o que o handler faz depois é outro teste.
+    const res = await enviar(
+      'tabela-de-precos.csv',
+      'application/vnd.ms-excel',
+      new Uint8Array([110, 111, 109, 101, 10]),
+    );
+
+    expect(res.status).not.toBe(415);
+  });
+
   it('arquivo acima do limite é recusado com 413, com o limite REAL na mensagem', async () => {
     const grande = new Uint8Array(1024 * 1024 + 4096); // 1 MB + folga, acima do limite do teste
     const res = await enviar('contrato.pdf', 'application/pdf', grande);
