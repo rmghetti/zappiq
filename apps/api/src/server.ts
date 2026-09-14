@@ -64,6 +64,7 @@ import channelHealthRoutes from './routes/channelHealth.js'; // PR-D Resposta Me
 import dsrRoutes from './routes/dataSubjectRequests.js';
 import adminWhatsappRoutes from './routes/adminWhatsapp.js';
 import adminOrganizationsRoutes from './routes/adminOrganizations.js'; // PR #218.1 — montar endpoint admin orgs (era órfão)
+import adminFeatureFlagsRoutes from './routes/adminFeatureFlags.js'; // A2 14/09/2026: interruptores por organização
 import adminCouponsRoutes from './routes/adminCoupons.js'; // 2026-07-08 — cupons de desconto (SUPERADMIN)
 import adminLlmRoutes from './routes/adminLlm.js'; // V2-025 Observability DAY 1
 import adminLeadsIzaRoutes from './routes/adminLeadsIza.js'; // 2026-05-11 leads + iza-conversations
@@ -297,6 +298,12 @@ app.use('/api/onboarding', onboardingRoutes);
 
 // ── Admin diagnostics (auth via header X-Admin-Secret == META_APP_SECRET) ─
 app.use('/api/admin/whatsapp', adminWhatsappRoutes);
+// Interruptores por organização. Montado ANTES do adminOrganizations porque
+// aquele router tem GET /:orgId: manter a ordem evita qualquer disputa de rota
+// no dia em que alguém acrescentar um handler mais guloso lá dentro.
+// A guarda (authMiddleware + requireRole('SUPERADMIN')) mora dentro do router,
+// mesmo desenho do adminOrganizations.
+app.use('/api/admin/organizations', adminFeatureFlagsRoutes);
 app.use('/api/admin/organizations', adminOrganizationsRoutes); // PR #218.1 — montar admin orgs pra OrgSwitcher
 app.use('/api/admin/coupons', adminCouponsRoutes); // 2026-07-08 — cupons de desconto (SUPERADMIN)
 app.use('/api/admin', adminLlmRoutes); // V2-025: GET /api/admin/llm-status

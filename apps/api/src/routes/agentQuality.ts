@@ -48,6 +48,15 @@ import {
   shouldAlertQuality,
 } from '../services/agentEvalCronService.js';
 import { applyPatch, DuplicatePatchError } from '../services/agentPromptPatcher.js';
+// A083: quem grava o prompt declara a origem da mudança e o histórico vira
+// versão no banco. Reverter passa a exigir que o prompt ainda seja o que a
+// correção deixou. Se mudou, apagaria tudo o que veio depois.
+import {
+  publishPrompt,
+  hashPrompt,
+  PromptChangedError,
+  type PromptVersionDb,
+} from '../services/promptVersionService.js';
 // FASE 2.2d (#252): on-demand suggestion pra cenários partial.
 // AGENT_EVAL_SET já importado mais acima (FASE 2.2b) — só adicionamos suggestFix.
 import { suggestFix } from '../services/agentEvalRunner.js';
@@ -154,6 +163,121 @@ router.get('/agents', async (req: Request, res: Response) => {
   } catch (err: any) {
     logger.error('[agentQuality] /agents erro:', err);
     res.status(500).json({ error: 'erro ao listar agentes', message: err?.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════
+// GET /agents/:agentId/versions: histórico do prompt (sem o texto)
+// ─────────────────────────────────────────────────────────────────
+// A lista serve para o cliente enxergar o que mudou, quando e por quem.
+// O texto fica fora de propósito: prompt de cliente tem milhares de chars
+// e a listagem carregaria dezenas deles por requisição sem necessidade.
+// ════════════════════════════════════════════════════════════════════
+const VERSOES_POR_PAGINA = 100;
+
+router.get('/agents/:agentId/versions', async (req: Request, res: Response) => {
+  const orgId = req.user!.organizationId;
+  const { agentId } = req.params;
+
+  try {
+    const agent = await loadAgentScoped(agentId, orgId);
+    if (!agent) {
+      res.status(404).json({ error: 'agente não encontrado' });
+      return;
+    }
+
+    // Quem conta os caracteres é o banco. Com findMany + select do
+    // systemPrompt, cem versões de um prompt como o da Iza (26.886 chars)
+    // viajavam do Postgres até aqui só para virar um `.length` e serem
+    // jogadas fora. O escopo por organização já foi feito no loadAgentScoped
+    // acima; aqui o agentId entra como parâmetro, nunca concatenado.
+    const linhas = await prisma.$queryRaw<
+      Array<{
+        version: number;
+        source: string;
+        hash: string;
+        created_by: string | null;
+        created_at: Date;
+        chars: number;
+      }>
+    >`SELECT version, source, hash, created_by, created_at, length(system_prompt) AS chars
+        FROM agent_prompt_versions
+       WHERE agent_id = ${agent.id}
+       ORDER BY version DESC
+       LIMIT ${VERSOES_POR_PAGINA}`;
+
+    res.json({
+      agentId: agent.id,
+      agentName: agent.name,
+      total: linhas.length,
+      versions: linhas.map((v) => ({
+        version: v.version,
+        source: v.source,
+        hash: v.hash,
+        created_by: v.created_by,
+        created_at: new Date(v.created_at).toISOString(),
+        chars: Number(v.chars ?? 0),
+      })),
+    });
+  } catch (err: any) {
+    logger.error('[agentQuality] versions erro:', err);
+    res.status(500).json({ error: 'erro ao listar versões', message: err?.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════
+// GET /agents/:agentId/versions/:version: uma versão, com o texto
+// ════════════════════════════════════════════════════════════════════
+router.get('/agents/:agentId/versions/:version', async (req: Request, res: Response) => {
+  const orgId = req.user!.organizationId;
+  const { agentId } = req.params;
+  const version = Number(req.params.version);
+
+  if (!Number.isInteger(version) || version < 1) {
+    res.status(400).json({ error: 'versão inválida' });
+    return;
+  }
+
+  try {
+    const agent = await loadAgentScoped(agentId, orgId);
+    if (!agent) {
+      res.status(404).json({ error: 'agente não encontrado' });
+      return;
+    }
+
+    const linha = await prisma.agentPromptVersion.findFirst({
+      where: { agentId: agent.id, version },
+      select: {
+        version: true,
+        source: true,
+        hash: true,
+        createdBy: true,
+        createdAt: true,
+        systemPrompt: true,
+        decisionId: true,
+      },
+    });
+    if (!linha) {
+      res.status(404).json({ error: 'versão não encontrada' });
+      return;
+    }
+
+    res.json({
+      agentId: agent.id,
+      version: {
+        version: linha.version,
+        source: linha.source,
+        hash: linha.hash,
+        created_by: linha.createdBy,
+        created_at: linha.createdAt.toISOString(),
+        decision_id: linha.decisionId,
+        chars: (linha.systemPrompt || '').length,
+        systemPrompt: linha.systemPrompt,
+      },
+    });
+  } catch (err: any) {
+    logger.error('[agentQuality] version erro:', err);
+    res.status(500).json({ error: 'erro ao carregar versão', message: err?.message });
   }
 });
 
@@ -572,11 +696,9 @@ router.post(
 
       const actor = await getActorSnapshot(actorUserId);
       const decision = await prisma.$transaction(async (tx) => {
-        await tx.agent.update({
-          where: { id: run.agentId },
-          data: { systemPrompt: result.promptAfter },
-        });
-        return tx.agentEvalFixDecision.create({
+        // A decisão nasce primeiro para a versão do prompt já carregar o id
+        // dela: no histórico dá para ir da versão à correção que a gerou.
+        const criada = await tx.agentEvalFixDecision.create({
           data: {
             runId,
             scenarioId,
@@ -593,6 +715,19 @@ router.post(
             notes: notes || `Aplicado via ${result.strategy} na linha ${result.insertedAtLine}`,
           },
         });
+
+        await publishPrompt(
+          {
+            agentId: run.agentId,
+            systemPrompt: result.promptAfter,
+            source: 'fix_apply',
+            decisionId: criada.id,
+            actor: actor.email,
+          },
+          tx as unknown as PromptVersionDb,
+        );
+
+        return criada;
       });
 
       logger.info({
@@ -781,13 +916,38 @@ router.post('/fix-decisions/:decisionId/revert', async (req: Request, res: Respo
       return;
     }
 
+    // ─── A083: reverter é cirúrgico, não é voltar no tempo ────────────
+    // Antes, o revert gravava promptBefore sem olhar o que existia no
+    // agente. Se o cliente tivesse editado o prompt depois (ou outra
+    // correção tivesse entrado), tudo isso sumia em silêncio. Agora só
+    // reverte enquanto o prompt ainda for exatamente o que esta correção
+    // deixou. Mudou? O caminho é o histórico de versões.
+    const agent = await loadAgentScoped(original.agentId, orgId);
+    if (!agent) {
+      res.status(404).json({ error: 'agente não encontrado' });
+      return;
+    }
+    const hashDaEpoca = hashPrompt(original.promptAfter || '');
+    const hashAtual = hashPrompt(agent.systemPrompt || '');
+    if (hashAtual !== hashDaEpoca) {
+      logger.warn('[agentQuality] revert recusado: o prompt mudou depois da correção', {
+        orgId,
+        agentId: original.agentId,
+        decisionId: original.id,
+      });
+      // A frase legível vai em `error`: é o campo que o front mostra na
+      // tela (apps/web/lib/api.ts). O código estável fica em `code`, para
+      // o programa decidir o que fazer.
+      res.status(409).json({
+        error: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+        code: 'prompt_mudou',
+      });
+      return;
+    }
+
     const actor = await getActorSnapshot(actorUserId);
     const revertDecision = await prisma.$transaction(async (tx) => {
-      await tx.agent.update({
-        where: { id: original.agentId },
-        data: { systemPrompt: original.promptBefore! },
-      });
-      return tx.agentEvalFixDecision.create({
+      const criada = await tx.agentEvalFixDecision.create({
         data: {
           runId: original.runId,
           scenarioId: original.scenarioId,
@@ -804,6 +964,22 @@ router.post('/fix-decisions/:decisionId/revert', async (req: Request, res: Respo
           revertedFromId: original.id,
         },
       });
+
+      // expectedHash: a mesma checagem, agora DENTRO da transação. Fecha a
+      // janela entre a leitura acima e a gravação.
+      await publishPrompt(
+        {
+          agentId: original.agentId,
+          systemPrompt: original.promptBefore!,
+          source: 'fix_revert',
+          decisionId: criada.id,
+          actor: actor.email,
+          expectedHash: hashDaEpoca,
+        },
+        tx as unknown as PromptVersionDb,
+      );
+
+      return criada;
     });
 
     logger.info({
@@ -816,6 +992,13 @@ router.post('/fix-decisions/:decisionId/revert', async (req: Request, res: Respo
 
     res.json({ ok: true, decision: revertDecision });
   } catch (err: any) {
+    if (err instanceof PromptChangedError) {
+      res.status(409).json({
+        error: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
+        code: 'prompt_mudou',
+      });
+      return;
+    }
     logger.error('[agentQuality] revert erro:', err);
     res.status(500).json({ error: 'erro ao reverter', message: err?.message });
   }
