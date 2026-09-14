@@ -47,13 +47,20 @@ import {
 export const AGENT_EVAL_QUEUE_NAME = 'agent-eval';
 
 /**
- * Teto por execução, usado como lockDuration do worker (o BullMQ 5 não tem
- * mais opção `timeout` de job). Passado esse tempo sem renovar o lock, o job é
- * considerado travado e não fica segurando a fila de concorrência 1.
+ * Teto por execução, contado por um relógio de verdade dentro de
+ * executeRunJob (Promise.race). Estourou, a linha vira 'failed'.
  *
- * O pior caso medido (38 minutos) fica de fora de propósito. O corte fino é o
- * tempo limite de 60 s por chamada de LLM, no agentEvalRunner; a rede de baixo
- * é a varredura horária, que marca a linha como falha.
+ * O mesmo valor é passado como `lockDuration` do worker, mas atenção ao que
+ * o lock faz de VERDADE: ele só protege contra máquina morta. Enquanto o
+ * processador está vivo o BullMQ RENOVA o lock sozinho, então lockDuration
+ * nunca interrompeu execução nenhuma. A execução de 38 minutos de 11/09 teria
+ * rodado inteira, segurando a fila de concorrência 1 o tempo todo.
+ *
+ * Três camadas, cada uma para um modo de falha diferente:
+ *   - 60 s por chamada de LLM (agentEvalRunner): corte fino do provedor lento;
+ *   - 25 min por execução (aqui): teto do teste inteiro;
+ *   - varredura horária (sweepStuckEvalRuns): rede para máquina morta, que é
+ *     o único caso em que ninguém sobrou para gravar a falha.
  */
 export const EVAL_RUN_TIMEOUT_MS = 25 * 60 * 1000;
 
@@ -62,6 +69,49 @@ export const EVAL_RUN_STUCK_AFTER_MS = 60 * 60 * 1000;
 
 /** Erro gravado pela varredura. Texto estável: a UI mostra para o cliente. */
 export const ERRO_TEMPO_LIMITE = 'tempo limite: execução em running há mais de 1 hora';
+
+/** Erro gravado quando o teto de 25 minutos estoura. A UI mostra ao cliente. */
+export const ERRO_TETO_EXECUCAO = 'tempo limite da execução (25 min)';
+
+/**
+ * slackAlertStatus de execução que terminou em FALHA: não houve resultado
+ * para avaliar, então não houve alerta a mandar. Gravar isto (em vez de
+ * deixar nulo) mantém verdadeira a regra "slackAlertStatus é sempre gravado
+ * quando a execução termina", que é o que permite auditar o campo depois.
+ */
+const ALERTA_NAO_ENVIADO = 'not_sent';
+
+/** Estouro do teto de 25 minutos. Interno: vira 'failed' na própria linha. */
+class EvalRunTimeoutError extends Error {
+  constructor() {
+    super(ERRO_TETO_EXECUCAO);
+    this.name = 'EvalRunTimeoutError';
+  }
+}
+
+/**
+ * Corre `trabalho` contra um relógio real.
+ *
+ * A execução perdedora NÃO é cancelada: o LLMRouter chama os provedores com
+ * fetch cru, sem AbortSignal, então não há o que abortar. O que garantimos é
+ * que ela para de segurar a fila e a decisão sobre a linha. A chegada atrasada
+ * dela é tratada pelo filtro de status em gravarConclusao.
+ */
+function comTetoDeExecucao<T>(trabalho: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new EvalRunTimeoutError()), ms);
+    trabalho.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
 
 /** Painel para onde o alerta do Slack aponta, conforme quem disparou. */
 const PAINEL_CLIENTE = '/treinar/qualidade';
@@ -114,6 +164,7 @@ export async function enqueueEvalRun(runId: string): Promise<void> {
           status: 'failed',
           error: ERRO_NAO_ENFILEIRADA,
           completedAt: new Date(),
+          slackAlertStatus: ALERTA_NAO_ENVIADO,
         },
       })
       .catch(() => undefined);
@@ -150,12 +201,77 @@ export function resolveScenariosForRun(
   return base;
 }
 
+/** Saída do runner, do jeito que a gravação da conclusão precisa. */
+interface SaidaDaExecucao {
+  results: Array<Record<string, any>>;
+  durationMs: number;
+  summary: {
+    passed: number;
+    partial: number;
+    failed: number;
+    criticalFailed: number;
+    scorePercent: number;
+  };
+}
+
+/**
+ * Grava a CONCLUSÃO da execução. Devolve false quando não gravou.
+ *
+ * O filtro `status: 'running'` é a trava contra a chegada atrasada: quando o
+ * teto de 25 minutos estoura, a linha já foi para 'failed' e a execução segue
+ * correndo no provedor. Sem o filtro, ela voltaria minutos depois e regravaria
+ * 'completed' por cima da falha que o cliente já viu na tela. O mesmo filtro
+ * protege a linha que a varredura horária encerrou.
+ */
+async function gravarConclusao(runId: string, saida: SaidaDaExecucao): Promise<boolean> {
+  try {
+    const { count } = await prisma.agentEvalRun.updateMany({
+      where: { id: runId, status: 'running' },
+      data: {
+        status: 'completed',
+        ...saida.summary,
+        results: saida.results as any,
+        completedAt: new Date(),
+        durationMs: saida.durationMs,
+      },
+    });
+    return count > 0;
+  } catch (err: any) {
+    logger.error({
+      msg: 'agent_eval_run_conclusao_nao_gravada',
+      runId,
+      error: String(err?.message || err),
+    });
+    return false;
+  }
+}
+
+/**
+ * Marca a execução como falha. Só age sobre linha ainda em aberto, para não
+ * passar por cima de conclusão nem de falha já registrada.
+ */
+async function marcarFalha(runId: string, erro: string): Promise<void> {
+  await prisma.agentEvalRun
+    .updateMany({
+      where: { id: runId, status: { in: ['pending', 'running'] } },
+      data: {
+        status: 'failed',
+        error: erro,
+        completedAt: new Date(),
+        slackAlertStatus: ALERTA_NAO_ENVIADO,
+      },
+    })
+    .catch(() => undefined);
+}
+
 /**
  * Executa uma linha de AgentEvalRun de ponta a ponta.
  *
  * Idempotente: execução que já saiu de 'pending'/'running' não roda de novo,
  * porque repetir custa dinheiro de LLM. Nunca lança: o erro vira status
  * 'failed' na própria linha, que é o que a tela do cliente lê.
+ *
+ * Tem teto de 25 minutos (EVAL_RUN_TIMEOUT_MS), contado por relógio real.
  */
 export async function executeRunJob(runId: string): Promise<void> {
   const run = await prisma.agentEvalRun.findUnique({
@@ -200,22 +316,26 @@ export async function executeRunJob(runId: string): Promise<void> {
       scenarios: scenarios.length,
     });
 
-    const { results, durationMs, summary } = await executeAgentEvalRun(
+    // A conclusão é gravada por ESTA continuação, e não depois do race: se o
+    // teto estourar, a execução continua correndo no provedor e volta aqui
+    // atrasada. É o filtro de status em gravarConclusao que a barra.
+    const execucao = executeAgentEvalRun(
       scenarios,
       { id: agent.id, name: agent.name, systemPrompt: agent.systemPrompt || '' },
       profile,
-    );
+    ).then(async (saida) => ({ saida, gravou: await gravarConclusao(runId, saida) }));
 
-    await prisma.agentEvalRun.update({
-      where: { id: runId },
-      data: {
-        status: 'completed',
-        ...summary,
-        results: results as any,
-        completedAt: new Date(),
-        durationMs,
-      },
-    });
+    const { saida, gravou } = await comTetoDeExecucao(execucao, EVAL_RUN_TIMEOUT_MS);
+
+    if (!gravou) {
+      // A linha saiu de 'running' enquanto o teste rodava (varredura horária,
+      // por exemplo). O resultado é descartado de propósito: a tela do cliente
+      // já mostrou outra coisa, e alertar agora seria alerta de execução morta.
+      logger.warn({ msg: 'agent_eval_run_conclusao_ignorada', runId, agentId: agent.id });
+      return;
+    }
+
+    const { results, durationMs, summary } = saida;
 
     logger.info({
       msg: 'agent_eval_run_concluido',
@@ -235,29 +355,23 @@ export async function executeRunJob(runId: string): Promise<void> {
       totalScenarios: scenarios.length,
     });
   } catch (err: any) {
+    const estourouOTeto = err instanceof EvalRunTimeoutError;
     logger.error({
-      msg: 'agent_eval_run_falhou',
+      msg: estourouOTeto ? 'agent_eval_run_teto_estourado' : 'agent_eval_run_falhou',
       runId,
       agentId: agent.id,
       error: String(err?.message || err),
     });
-    await prisma.agentEvalRun
-      .update({
-        where: { id: runId },
-        data: {
-          status: 'failed',
-          error: String(err?.message || 'unknown'),
-          completedAt: new Date(),
-        },
-      })
-      .catch(() => undefined);
+    await marcarFalha(runId, estourouOTeto ? ERRO_TETO_EXECUCAO : String(err?.message || 'unknown'));
   }
 }
 
 /**
- * Decide e registra o alerta. slackAlertStatus é gravado SEMPRE ('skipped',
- * 'sent' ou 'failed'): no caminho do cron ele nunca era gravado, e os 173
- * ciclos anteriores ficaram com o campo nulo, sem como saber se alertaram.
+ * Decide e registra o alerta. slackAlertStatus é gravado SEMPRE que a execução
+ * termina: 'skipped' (nada a alertar), 'sent', 'failed' (o envio quebrou) ou
+ * 'not_sent' (a execução em si falhou, então não houve o que alertar). No
+ * caminho do cron ele nunca era gravado, e os 173 ciclos anteriores ficaram
+ * com o campo nulo, sem como saber se alertaram.
  */
 async function alertarSePreciso(input: {
   run: { id: string; triggeredBy: string; agentId: string };
@@ -367,6 +481,7 @@ export async function sweepStuckEvalRuns(now: Date = new Date()): Promise<number
       status: 'failed',
       error: ERRO_TEMPO_LIMITE,
       completedAt: now,
+      slackAlertStatus: ALERTA_NAO_ENVIADO,
     },
   });
 

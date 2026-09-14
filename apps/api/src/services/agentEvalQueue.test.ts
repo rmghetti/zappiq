@@ -16,7 +16,7 @@
  *   ✓ a varredura marca 'failed' só o que passou de 1 hora
  * ============================================================================
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { prismaMock, runnerMock, cronServiceMock, profileMock, evalSetMock } = vi.hoisted(() => ({
   prismaMock: {
@@ -52,7 +52,9 @@ const {
   enqueueEvalRun,
   getAgentEvalQueue,
   EVAL_RUN_STUCK_AFTER_MS,
+  EVAL_RUN_TIMEOUT_MS,
   ERRO_TEMPO_LIMITE,
+  ERRO_TETO_EXECUCAO,
   ERRO_NAO_ENFILEIRADA,
 } = await import('./agentEvalQueue.js');
 
@@ -95,12 +97,27 @@ function ultimoUpdate(campo: string): any {
   return calls.length ? calls[calls.length - 1] : undefined;
 }
 
+/**
+ * Chamadas de updateMany que gravaram um campo. A gravação final da execução
+ * (conclusão e falha) usa updateMany de propósito: é o filtro de status que
+ * impede a conclusão atrasada de regravar por cima da falha por tempo limite.
+ */
+function updateManysCom(campo: string): any[] {
+  return prismaMock.agentEvalRun.updateMany.mock.calls
+    .filter((c: any[]) => c[0]?.data && campo in c[0].data)
+    .map((c: any[]) => c[0]);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.agentEvalRun.findUnique.mockResolvedValue(runPendente());
   prismaMock.agentEvalRun.findFirst.mockResolvedValue(null);
   prismaMock.agentEvalRun.update.mockResolvedValue({});
-  prismaMock.agentEvalRun.updateMany.mockResolvedValue({ count: 0 });
+  // Banco falso: gravação endereçada a UMA linha (id no filtro) pega; a
+  // varredura, que não filtra por id, não acha nada por padrão.
+  prismaMock.agentEvalRun.updateMany.mockImplementation(async ({ where }: any) =>
+    where?.id ? { count: 1 } : { count: 0 },
+  );
   profileMock.resolveTenantAgentProfile.mockResolvedValue({
     organizationId: 'org-1',
     isZappIQ: false,
@@ -122,17 +139,20 @@ describe('executeRunJob — corpo único da execução', () => {
   it('leva a execução de pending a completed com o resumo gravado', async () => {
     await executeRunJob('run-1');
 
-    const porStatus = updatesCom('status');
-    // Primeiro marca 'running' (é o que a tela do cliente mostra), depois conclui.
-    expect(porStatus[0]).toMatchObject({ status: 'running' });
-    const concluida = porStatus[porStatus.length - 1];
-    expect(concluida).toMatchObject({
+    // Primeiro marca 'running' (é o que a tela do cliente mostra)...
+    expect(updatesCom('status')[0]).toMatchObject({ status: 'running' });
+
+    // ...e a conclusão é gravada com o filtro de status, para não passar por
+    // cima de uma linha que a varredura ou o teto já deram por encerrada.
+    const [conclusao] = updateManysCom('status');
+    expect(conclusao.where).toEqual({ id: 'run-1', status: 'running' });
+    expect(conclusao.data).toMatchObject({
       status: 'completed',
       scorePercent: 100,
       passed: 2,
       durationMs: 12_345,
     });
-    expect(concluida.completedAt).toBeInstanceOf(Date);
+    expect(conclusao.data.completedAt).toBeInstanceOf(Date);
   });
 
   it('avalia o agente com o perfil da organização DELE', async () => {
@@ -186,10 +206,18 @@ describe('executeRunJob — corpo único da execução', () => {
 
     await executeRunJob('run-1');
 
-    expect(ultimoUpdate('status')).toMatchObject({
-      status: 'failed',
-      error: 'provedor fora do ar',
-    });
+    const [falha] = updateManysCom('status');
+    expect(falha.data).toMatchObject({ status: 'failed', error: 'provedor fora do ar' });
+    // Nunca por cima de linha já encerrada (completed ou failed da varredura).
+    expect(falha.where).toEqual({ id: 'run-1', status: { in: ['pending', 'running'] } });
+  });
+
+  it("execução que falhou também grava slackAlertStatus ('not_sent')", async () => {
+    runnerMock.executeAgentEvalRun.mockRejectedValue(new Error('provedor fora do ar'));
+
+    await executeRunJob('run-1');
+
+    expect(updateManysCom('status')[0].data).toMatchObject({ slackAlertStatus: 'not_sent' });
   });
 
   it('execução já concluída não roda de novo', async () => {
@@ -208,6 +236,80 @@ describe('executeRunJob — corpo único da execução', () => {
 
     await expect(executeRunJob('sumiu')).resolves.toBeUndefined();
     expect(runnerMock.executeAgentEvalRun).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * O teto de 25 minutos não existia: `lockDuration` só protege contra máquina
+ * morta, e o BullMQ RENOVA o lock enquanto o processador está vivo. Uma
+ * execução de 38 minutos, como a de 11/09, rodava inteira e ainda segurava a
+ * fila de concorrência 1. Agora há um relógio de verdade.
+ */
+describe('teto de 25 minutos por execução', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** Execução que só termina quando o teste mandar. */
+  function execucaoQuePendura() {
+    let terminar: (saida: unknown) => void = () => undefined;
+    runnerMock.executeAgentEvalRun.mockImplementation(
+      () => new Promise((resolve) => { terminar = resolve; }),
+    );
+    return (saida: unknown) => terminar(saida);
+  }
+
+  it('a régua é de 25 minutos', () => {
+    expect(EVAL_RUN_TIMEOUT_MS).toBe(25 * 60 * 1000);
+  });
+
+  it('estourou o teto: a linha vira failed com a mensagem do teto', async () => {
+    execucaoQuePendura();
+
+    const promessa = executeRunJob('run-1');
+    await vi.advanceTimersByTimeAsync(EVAL_RUN_TIMEOUT_MS + 1000);
+    await promessa;
+
+    const [falha] = updateManysCom('status');
+    expect(falha.data).toMatchObject({
+      status: 'failed',
+      error: 'tempo limite da execução (25 min)',
+    });
+    expect(ERRO_TETO_EXECUCAO).toBe('tempo limite da execução (25 min)');
+  });
+
+  it('o completed atrasado NÃO sobrescreve a falha por tempo limite', async () => {
+    const terminar = execucaoQuePendura();
+
+    const promessa = executeRunJob('run-1');
+    await vi.advanceTimersByTimeAsync(EVAL_RUN_TIMEOUT_MS + 1000);
+    await promessa;
+
+    // A linha já está 'failed': daqui em diante o filtro não acha nada.
+    prismaMock.agentEvalRun.updateMany.mockResolvedValue({ count: 0 });
+
+    // A execução termina 10 minutos depois, como acontece de verdade: o
+    // provedor não foi cancelado, só deixou de segurar a fila.
+    terminar({ results: [{ scenarioId: 'cr1', combined: 'pass' }], durationMs: 1, summary: RESUMO_LIMPO });
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+
+    const tardia = updateManysCom('status').find((c) => c.data.status === 'completed');
+    expect(tardia, 'a conclusão atrasada tem de ser TENTADA, com filtro').toBeDefined();
+    expect(tardia.where).toEqual({ id: 'run-1', status: 'running' });
+    // E, como não achou linha 'running', não alertou o Slack por uma
+    // execução que o cliente já viu como falha.
+    expect(cronServiceMock.notifySlackQualityIssue).not.toHaveBeenCalled();
+  });
+
+  it('execução dentro do teto conclui normalmente', async () => {
+    const terminar = execucaoQuePendura();
+
+    const promessa = executeRunJob('run-1');
+    await vi.advanceTimersByTimeAsync(60_000);
+    terminar({ results: [{ scenarioId: 'cr1', combined: 'pass' }], durationMs: 60_000, summary: RESUMO_LIMPO });
+    await promessa;
+
+    const [gravacao] = updateManysCom('status');
+    expect(gravacao.data).toMatchObject({ status: 'completed' });
   });
 });
 
