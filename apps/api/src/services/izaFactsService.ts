@@ -257,14 +257,49 @@ function linhasDosAddonsPublicos(): string[] {
     );
   }
 
-  // Voz outbound tem seis faixas no catálogo. Para o lead, a faixa de
-  // entrada basta; o resto sai na proposta.
-  const precosDeVoz = Object.keys(VOICE_ADDON_META)
-    .map((k) => ADDONS[k]?.priceMonthly)
-    .filter((v): v is number => typeof v === 'number');
-  if (precosDeVoz.length > 0) {
-    linhas.push(`- **Voz nativa (outbound)**: a partir de ${brl(Math.min(...precosDeVoz))}/mês`);
-  }
+  linhas.push(...linhasDasFaixasDeVoz());
+
+  return linhas;
+}
+
+/**
+ * As seis faixas de voz outbound, uma por linha, com minutos, mensalidade e
+ * overage por minuto.
+ *
+ * Antes saía uma linha só: "Voz nativa (outbound): a partir de R$ 79,90/mês".
+ * Isso bastava enquanto a tabela de voz vivia no prompt gravado da Iza. Quando
+ * a remediação do preço congelado passou a mexer nesse prompt, "a partir de"
+ * virou a ÚNICA coisa que ela sabia sobre voz, e cotar Voice 400 a 4000 ficou
+ * impossível. O catálogo tem todos os dados; a seção passa a dizer todos.
+ *
+ * Preço vem de `ADDONS[<faixa>].priceMonthly`; minutos, overage e trial vêm de
+ * `VOICE_ADDON_META`. Faixa sem preço no catálogo é PULADA, nunca inventada.
+ */
+function linhasDasFaixasDeVoz(): string[] {
+  const faixas = Object.keys(VOICE_ADDON_META)
+    .map((chave) => ({ chave, meta: VOICE_ADDON_META[chave], addon: ADDONS[chave] }))
+    .filter((f) => f.addon && typeof f.addon.priceMonthly === 'number')
+    .sort((a, b) => a.meta.minutesIncluded - b.meta.minutesIncluded);
+
+  if (faixas.length === 0) return [];
+
+  const linhas = faixas.map((f) => {
+    const minutos = f.meta.minutesIncluded.toLocaleString('pt-BR');
+    const partes = [
+      `${brl(f.addon.priceMonthly as number)}/mês`,
+      `${minutos} min por mês`,
+      `minuto excedente ${brl(f.meta.overagePerMinBrl)}`,
+    ];
+    if (f.meta.trialDays > 0 && f.meta.trialMinutes > 0) {
+      partes.push(`${f.meta.trialDays} dias de teste com ${f.meta.trialMinutes} min grátis`);
+    }
+    return `- **${nomeCurto(f.addon.name)}** (voz nativa outbound): ${partes.join(' · ')}${planosDoAddon(f.addon.availableFor)}`;
+  });
+
+  const maiorFaixa = faixas[faixas.length - 1].meta.minutesIncluded;
+  linhas.push(
+    `> Voz outbound é add-on. Acima de ${maiorFaixa.toLocaleString('pt-BR')} minutos por mês a conversa vira Enterprise: não cote faixa que não esteja nesta lista.`,
+  );
 
   return linhas;
 }

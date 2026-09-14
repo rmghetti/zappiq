@@ -288,6 +288,72 @@ cliente para /roadmap, /observabilidade ou /como-funciona-survey, que agora redi
 
 ---
 
+### 2026-09-14 · Tarefa A9, rodada 2 · Preço vigente fica, preço morto sai
+
+**Por que existiu uma rodada 2:** a preparação da migração em produção rodou o
+script da rodada 1 sobre o prompt REAL da Iza (27 mil caracteres, exportado do
+banco) e ele fez três estragos e travou por um motivo falso.
+
+**O que mudou:**
+
+1. `apps/api/src/agents/izaPrecoRemediation.ts` parou de apagar TODO valor em
+   reais. Agora vira ponteiro só o valor que o catálogo não diz mais. Preço de
+   plano DESCONTINUADO é sempre morto, mesmo quando o mesmo número existe vivo
+   noutro canto do catálogo (R$ 197 é o Starter, morto, e o Impulso Start,
+   vivo): foi "Starter R$ 197" que abriu o A229, então na dúvida o número sai.
+2. A expressão de valor em reais passou a aceitar até quatro casas decimais.
+   Com duas, `R$ 0,0197/msg` do prompt real virava
+   `[preço vigente, ver a seção PRICING]97/msg`, texto corrompido em produção.
+3. Linha que ENSINA formato de preço ("Valores SEMPRE em formato de moeda
+   completo (ex: ...)", "cento e oitenta e quatro reais em vez de R$ 184,90")
+   mantém exemplo numérico: o valor morto ali vira um valor VIGENTE do
+   catálogo, não o ponteiro. Regra de formato sem exemplo é regra sem
+   demonstração.
+4. A trava deixou de recusar o prompt real. Os minutos das faixas de voz
+   passaram a sair do catálogo (era `| >4.000 | Enterprise (sob consulta) |`
+   que travava, e 4.000 são minutos, não preço), preço vigente perto de nome de
+   plano passa, número com a unidade escrita junto passa, e a mensagem de
+   recusa passou a dizer a verdade sobre o que fazer.
+5. A seção PRICING gerada passou a listar **as seis faixas de voz** com
+   mensalidade, minutos inclusos, minuto excedente e teste grátis, em vez de
+   "Voz nativa (outbound): a partir de R$ 79,90/mês". Preço vem de
+   `ADDONS[<faixa>].priceMonthly` e minutos/overage/trial de `VOICE_ADDON_META`,
+   os dois em `planConfig.ts`. Faixa sem preço no catálogo é pulada, nunca
+   inventada.
+6. O roteiro de aplicação em produção mudou de lugar e de conteúdo: agora está
+   no cabeçalho de `apps/api/scripts/removerTabelaDePrecosDaIza.ts`, com
+   `created_by` (a coluna `actor` não existe em `agent_prompt_versions`) e
+   `updated_at` (não `"updatedAt"`, que é a grafia do Prisma e não a do banco).
+
+**Impacto na Iza:** ela **continua** sem citar Scale a R$ 997, Starter a R$ 197
+e Business a R$ 1.997. E **volta** a conseguir cotar voz faixa a faixa (Voice
+200 a Voice 4.000, com o minuto excedente de cada uma), agora por duas vias: o
+catálogo gerado a cada turno e a tabela de voz que ficou no prompt gravado,
+porque os preços dela são os vigentes.
+
+**Ações abertas desta entrada:**
+
+- [ ] (aberto em 2026-09-14) Ao rodar a migração em produção, conferir no diff
+  impresso pelo script que TODO valor listado como "fica o valor VIGENTE" bate
+  com a seção PRICING do dia, e que nenhum valor listado como "sai o valor
+  MORTO" volta ao texto pela mão de alguém.
+- [ ] (aberto em 2026-09-14) Decidir o que fazer com o que sobra da tabela de
+  planos no prompt gravado: os nomes Starter e Business continuam listados (sem
+  preço) e a cota do Scale ali ainda diz 25.000 mensagens, enquanto o catálogo
+  diz 80.000. Isso é texto, não preço, e está fora do que o script mexe.
+- [ ] (aberto em 2026-09-14) A REGRA 7 (excedente) ficou sem preço: o R$ 197 do
+  pacote de 10.000 mensagens IA (`ADDONS.EXTRA_AI_MESSAGES`, vigente) colide com
+  o Starter morto e virou ponteiro, mas a seção PRICING gerada não lista as
+  famílias `AI_MSG` e `BROADCAST`. Antes de incluir, decidir 197 x 179:
+  `ADDONS.EXTRA_AI_MESSAGES` diz R$ 197 e `ADDONS_V4_LIST.AI_MSG_PACK_10K` diz
+  R$ 179 para o mesmo pacote. Até lá a Iza diz que confirma com o time.
+
+**Smoke esperado:** "quanto custa o pacote de voz de 1.500 minutos?" → a Iza
+responde R$ 379,90/mês com minuto excedente de R$ 0,22 (ou o que estiver no
+`planConfig` no dia). "E acima de 4.000 minutos?" → ela manda para Enterprise.
+
+---
+
 ### 2026-09-14 · Tarefa A9 · Preço da Iza só vem do planConfig
 
 **O que mudou:**
@@ -338,7 +404,7 @@ R$ 247, Growth R$ 497, Scale R$ 1.497 e Enterprise sob consulta, com o anual a
 
 **Ações abertas desta entrada:**
 
-- [ ] (aberto em 2026-09-14) Rodar `apps/api/scripts/removerTabelaDePrecosDaIza.ts` contra o prompt da Iza em produção (roteiro no corpo do PR: exportar por SQL, transformar no modo offline, gravar com `set_config('zappiq.prompt_source','migracao')`). Prova de que pegou: `SELECT count(*) FROM agents WHERE organization_id = '<ZAPPIQ_ORG_ID>' AND system_prompt LIKE '%997%'` devolve 0.
+- [ ] (aberto em 2026-09-14) Rodar `apps/api/scripts/removerTabelaDePrecosDaIza.ts` contra o prompt da Iza em produção. O roteiro que vale é o do CABEÇALHO do script, não o do corpo do PR #367: aquele citava uma coluna `actor` que não existe em `agent_prompt_versions` (é `created_by`) e a grafia `"updatedAt"` para a data de `agents` (é `updated_at`). Prova de que pegou: `SELECT count(*) FROM agents WHERE organization_id = '<ZAPPIQ_ORG_ID>' AND system_prompt LIKE '%997%'` devolve 0.
 - [ ] (aberto em 2026-09-14) Tirar do `agents.system_prompt` da Iza a instrução que manda oferecer a página `/roadmap`. A página virou redirecionamento na tarefa A4, então a Iza está mandando o lead para um link que não tem mais conteúdo próprio.
 
 **Regra nova que vale daqui em diante:** preço de plano da Iza sai do

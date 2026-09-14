@@ -21,6 +21,7 @@ import {
   PLAN_IDS,
   ADDONS,
   ADDONS_V4_LIST,
+  VOICE_ADDON_META,
   listActivePlans,
   listLegacyPlans,
   planAnnualMonthlyEquivalent,
@@ -62,6 +63,10 @@ function valoresAutorizadosDoPlanConfig(): Set<number> {
     if (a.priceMonthly !== null) set.add(a.priceMonthly);
   }
   for (const a of ADDONS_V4_LIST) set.add(a.amountBrl);
+  // O overage por minuto de voz também é catálogo: mora em VOICE_ADDON_META,
+  // que é o mesmo planConfig.ts. Sem ele a Iza sabe o preço do pacote e não
+  // sabe o que acontece quando o cliente estoura os minutos.
+  for (const m of Object.values(VOICE_ADDON_META)) set.add(m.overagePerMinBrl);
   return set;
 }
 
@@ -92,6 +97,51 @@ function fato(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   warn.mockClear();
+});
+
+/*
+ * RODADA 2. A seção gerada só dizia "Voz nativa (outbound): a partir de
+ * R$ 79,90/mês". Com a tabela de voz saindo do prompt gravado (a rodada 1
+ * apagava todo valor em reais), a Iza ficava sem NENHUMA forma de cotar
+ * Voice 400 a 4000, às vésperas do treinamento em que ela é a vitrine.
+ * Agora o catálogo inteiro de voz sai na seção: pacote, minutos, preço
+ * mensal e overage por minuto.
+ */
+describe('renderSecaoPrecosDoPlanConfig: catálogo de voz completo', () => {
+  it('lista os seis pacotes de voz com preço e overage por minuto', () => {
+    const texto = renderSecaoPrecosDoPlanConfig();
+
+    for (const chave of Object.keys(VOICE_ADDON_META)) {
+      const meta = VOICE_ADDON_META[chave];
+      const preco = ADDONS[chave]?.priceMonthly;
+      expect(preco, `faixa ${chave} sem preço no catálogo`).toBeTypeOf('number');
+
+      const linha = texto
+        .split('\n')
+        .find((l) => l.includes(`${meta.minutesIncluded.toLocaleString('pt-BR')} min`));
+      expect(linha, `faixa ${chave} não apareceu na seção`).toBeDefined();
+      expect(extrairValoresEmReais(linha!)).toContain(preco);
+      expect(extrairValoresEmReais(linha!)).toContain(meta.overagePerMinBrl);
+    }
+  });
+
+  it('não vende mais a voz como "a partir de"', () => {
+    const texto = renderSecaoPrecosDoPlanConfig();
+    const linhasDeVoz = texto.split('\n').filter((l) => /voz|voice/i.test(l));
+
+    expect(linhasDeVoz.length).toBeGreaterThanOrEqual(6);
+    expect(linhasDeVoz.join(' ')).not.toContain('a partir de');
+  });
+
+  it('diz onde acaba o catálogo de voz, com o teto do próprio catálogo', () => {
+    const texto = renderSecaoPrecosDoPlanConfig();
+    const maiorFaixa = Math.max(
+      ...Object.values(VOICE_ADDON_META).map((m) => m.minutesIncluded),
+    );
+
+    expect(texto).toContain(`${maiorFaixa.toLocaleString('pt-BR')} minutos`);
+    expect(texto.toLowerCase()).toContain('enterprise');
+  });
 });
 
 describe('renderSecaoPrecosDoPlanConfig', () => {
