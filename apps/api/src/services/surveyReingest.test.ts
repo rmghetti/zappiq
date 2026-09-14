@@ -34,6 +34,8 @@ class FilaFalsa {
   jobs = new Map<string, { nome: string; dados: any; delay: number; estado: string }>();
   adds = 0;
   removes = 0;
+  /** Ids cujo remove() estoura: o job virou 'active' depois do getState(). */
+  removeEstoura = new Set<string>();
 
   async getJob(jobId: string) {
     const job = this.jobs.get(jobId);
@@ -46,7 +48,9 @@ class FilaFalsa {
         return job.estado;
       },
       async remove() {
-        if (job.estado === 'active') throw new Error('Job is active and cannot be removed');
+        if (job.estado === 'active' || self.removeEstoura.has(jobId)) {
+          throw new Error('Job is active and cannot be removed');
+        }
         jobs.delete(jobId);
         self.removes += 1;
       },
@@ -124,10 +128,12 @@ const RESPOSTAS = {
   precos_condicoes: { pre_tabela_precos: 'Pão francês R$ 18 o quilo' },
 };
 
-function bancoFalso(settings: Record<string, any>) {
+function bancoFalso(settings: Record<string, any>, legadoNoVetor: string[] = []) {
   const gravados: any[] = [];
+  const consultas: Array<{ sql: string; valores: any[] }> = [];
   return {
     gravados,
+    consultas,
     db: {
       organization: {
         findUnique: vi.fn(async () => ({ id: ORG, name: 'Padaria', settings })),
@@ -135,6 +141,10 @@ function bancoFalso(settings: Record<string, any>) {
       $executeRaw: vi.fn(async (_texto: TemplateStringsArray, ...valores: any[]) => {
         gravados.push(valores);
         return 1;
+      }),
+      $queryRaw: vi.fn(async (texto: TemplateStringsArray, ...valores: any[]) => {
+        consultas.push({ sql: texto.join('?'), valores });
+        return legadoNoVetor.map((source) => ({ source }));
       }),
     },
   };
@@ -270,6 +280,42 @@ describe('execução da reingestão', () => {
   });
 });
 
+describe('reagendamento não pode se perder quando o job muda de estado', () => {
+  it('remove que estoura na corrida cai no :proximo em vez de derrubar o salvamento', async () => {
+    const fila = new FilaFalsa();
+    await agendarReingestaoDoQuestionario(ORG, { fila: fila as any });
+    // O getState() ainda diz 'delayed', mas entre ele e o remove() o BullMQ
+    // já pegou o job para executar. Isto é corrida, não estado impossível.
+    fila.removeEstoura.add(jobIdDaReingestao(ORG));
+
+    const resultado = await agendarReingestaoDoQuestionario(ORG, { fila: fila as any });
+
+    expect(resultado.acao).toBe('criado');
+    expect(resultado.jobId).toBe(`${jobIdDaReingestao(ORG)}:proximo`);
+    expect(fila.jobs.size).toBe(2);
+  });
+
+  it('com os dois ids travados, devolve em_execucao sem estourar', async () => {
+    const fila = new FilaFalsa();
+    await agendarReingestaoDoQuestionario(ORG, { fila: fila as any });
+    await agendarReingestaoDoQuestionario(ORG, { fila: fila as any });
+    fila.jobs.get(jobIdDaReingestao(ORG))!.estado = 'active';
+    fila.removeEstoura.add(jobIdDaReingestao(ORG));
+
+    // Força o segundo id a existir e também recusar a remoção.
+    fila.jobs.set(`${jobIdDaReingestao(ORG)}:proximo`, {
+      nome: NOME_DO_JOB_DE_REINGESTAO,
+      dados: { organizationId: ORG },
+      delay: ATRASO_DA_REINGESTAO_MS,
+      estado: 'delayed',
+    });
+    fila.removeEstoura.add(`${jobIdDaReingestao(ORG)}:proximo`);
+
+    const resultado = await agendarReingestaoDoQuestionario(ORG, { fila: fila as any });
+    expect(resultado.acao).toBe('em_execucao');
+  });
+});
+
 describe('limpeza do formato antigo acontece uma vez só', () => {
   it('organização já migrada não fica tentando apagar o arquivo único a cada salvamento', async () => {
     const apagar = vi.fn(async () => ({ ok: true }));
@@ -292,5 +338,72 @@ describe('limpeza do formato antigo acontece uma vez só', () => {
     });
 
     expect(apagar).not.toHaveBeenCalled();
+  });
+
+  it('organização que TROCOU de segmento perde o arquivo único do segmento antigo', async () => {
+    // Estava em padaria, hoje está em restaurante. O nome derivado do
+    // segmento de hoje nunca alcançaria o arquivo gravado no de ontem, e
+    // settings.surveyDocFilename nem sempre existe. A lista vem do vetor.
+    const { db, consultas } = bancoFalso({ niche: 'restaurante', surveyAnswers: RESPOSTAS }, [
+      'onboarding-survey-padaria.txt',
+    ]);
+    const apagar = vi.fn(async () => ({ ok: true }));
+
+    await executarReingestaoDoQuestionario(ORG, {
+      db: db as any,
+      ingerir: vi.fn(async () => ({ ok: true })),
+      apagar,
+      subirVersao: vi.fn(async () => 2),
+    });
+
+    expect(apagar).toHaveBeenCalledWith(ORG, 'onboarding-survey-padaria.txt');
+    // E a consulta é por PREFIXO, dentro do namespace da organização.
+    expect(consultas).toHaveLength(1);
+    expect(consultas[0].sql).toContain('rag_chunks');
+    expect(consultas[0].sql).toContain('LIKE');
+    expect(consultas[0].valores).toContain('onboarding-survey%');
+  });
+
+  it('organização já migrada não consulta o vetor atrás de legado', async () => {
+    const { db, consultas } = bancoFalso(
+      {
+        niche: 'padaria',
+        surveyAnswers: RESPOSTAS,
+        surveySync: {
+          status: 'ok',
+          at: '2026-09-13T10:00:00.000Z',
+          sources: ['survey-identidade_empresa', 'survey-precos_condicoes'],
+        },
+      },
+      ['onboarding-survey-padaria.txt'],
+    );
+
+    await executarReingestaoDoQuestionario(ORG, {
+      db: db as any,
+      ingerir: vi.fn(async () => ({ ok: true })),
+      apagar: vi.fn(async () => ({ ok: true })),
+      subirVersao: vi.fn(async () => 2),
+    });
+
+    expect(consultas).toHaveLength(0);
+  });
+
+  it('consulta do legado que falha não derruba a reingestão', async () => {
+    const { db } = bancoFalso({ niche: 'padaria', surveyAnswers: RESPOSTAS });
+    db.$queryRaw = vi.fn(async () => {
+      throw new Error('relation "rag_chunks" does not exist');
+    }) as any;
+    const apagar = vi.fn(async () => ({ ok: true }));
+
+    const resultado = await executarReingestaoDoQuestionario(ORG, {
+      db: db as any,
+      ingerir: vi.fn(async () => ({ ok: true })),
+      apagar,
+      subirVersao: vi.fn(async () => 2),
+    });
+
+    expect(resultado.status).toBe('ok');
+    // O nome derivado do segmento de hoje continua sendo tentado.
+    expect(apagar).toHaveBeenCalledWith(ORG, 'onboarding-survey-padaria.txt');
   });
 });

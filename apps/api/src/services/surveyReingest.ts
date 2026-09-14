@@ -97,17 +97,24 @@ export async function agendarReingestaoDoQuestionario(
     const estado = await existente.getState().catch(() => 'desconhecido');
 
     if (estado === 'delayed' || estado === 'waiting' || estado === 'paused') {
-      await existente.remove();
-      await adicionar(fila, jobId, organizationId, delay);
-      return { jobId, acao: 'reagendado' };
+      // O remove() pode estourar mesmo com o estado acima: entre o getState()
+      // e ele, o BullMQ pode ter pegado o job para executar. Sem o try, essa
+      // corrida virava exceção na rota e o salvamento ficava sem reingestão.
+      if (await removeu(existente, jobId, organizationId)) {
+        await adicionar(fila, jobId, organizationId, delay);
+        return { jobId, acao: 'reagendado' };
+      }
+      continue;
     }
 
     if (estado === 'completed' || estado === 'failed') {
       // O id fica ocupado pelo job terminado. Sem remover, o `add` seria
       // silenciosamente ignorado e a resposta nova nunca chegaria à IA.
-      await existente.remove();
-      await adicionar(fila, jobId, organizationId, delay);
-      return { jobId, acao: 'recriado' };
+      if (await removeu(existente, jobId, organizationId)) {
+        await adicionar(fila, jobId, organizationId, delay);
+        return { jobId, acao: 'recriado' };
+      }
+      continue;
     }
 
     // 'active': não dá para remover. Tenta o próximo id do laço.
@@ -115,6 +122,26 @@ export async function agendarReingestaoDoQuestionario(
 
   logger.warn({ msg: 'survey_reingest_ja_em_execucao', organizationId });
   return { jobId: base, acao: 'em_execucao' };
+}
+
+/** Tenta remover o job. False (sem estourar) quando a fila recusou. */
+async function removeu(
+  job: JobDeReingestao,
+  jobId: string,
+  organizationId: string,
+): Promise<boolean> {
+  try {
+    await job.remove();
+    return true;
+  } catch (err: any) {
+    logger.warn({
+      msg: 'survey_reingest_remocao_do_job_recusada',
+      organizationId,
+      jobId,
+      error: String(err?.message ?? err),
+    });
+    return false;
+  }
 }
 
 async function adicionar(
@@ -166,11 +193,59 @@ export interface DepsDaReingestao {
   db?: {
     organization: { findUnique: (args: any) => Promise<any> };
     $executeRaw: (query: TemplateStringsArray, ...valores: any[]) => Promise<unknown>;
+    $queryRaw?: (query: TemplateStringsArray, ...valores: any[]) => Promise<unknown>;
   };
   ingerir?: typeof ragService.ingestDocument;
   apagar?: typeof ragService.deleteDocument;
   subirVersao?: typeof ragService.bumpConfigVersion;
   agora?: () => Date;
+  /** Sources do formato antigo que ainda estão no vetor desta organização. */
+  listarLegado?: (organizationId: string) => Promise<string[]>;
+}
+
+/** Todo documento do formato antigo começa assim, com o segmento no fim. */
+export const PREFIXO_LEGADO_DO_QUESTIONARIO = 'onboarding-survey';
+
+/**
+ * Os documentos do formato antigo que esta organização ainda tem no vetor.
+ *
+ * O nome do arquivo antigo carrega o SEGMENTO do dia em que foi gravado.
+ * Quem trocou de segmento depois tem no vetor o arquivo do segmento ANTIGO,
+ * que o nome derivado do segmento de hoje nunca alcança, e settings
+ * .surveyDocFilename nem sempre foi registrado. Por isso a lista sai do
+ * próprio vetor, por prefixo.
+ *
+ * A tabela rag_chunks vive no mesmo Postgres do resto do schema (é assim que
+ * o AI Readiness e a tela de Documentos já a consultam). Falha aqui não é
+ * fatal: sem a lista, segue valendo a limpeza pelo nome derivado.
+ */
+export async function listarSourcesDoFormatoAntigo(
+  organizationId: string,
+  db: DepsDaReingestao['db'],
+): Promise<string[]> {
+  const consultar = db?.$queryRaw;
+  if (!consultar) return [];
+
+  const namespace = ragService.namespaceFor(organizationId);
+  const prefixo = `${PREFIXO_LEGADO_DO_QUESTIONARIO}%`;
+  try {
+    const linhas = (await consultar`
+      SELECT DISTINCT source
+        FROM rag_chunks
+       WHERE namespace = ${namespace}
+         AND source LIKE ${prefixo}
+    `) as Array<{ source?: unknown }>;
+    return (Array.isArray(linhas) ? linhas : [])
+      .map((l) => l?.source)
+      .filter((s): s is string => typeof s === 'string' && s.length > 0);
+  } catch (err: any) {
+    logger.warn({
+      msg: 'survey_reingest_lista_de_legado_falhou',
+      organizationId,
+      error: String(err?.message ?? err),
+    });
+    return [];
+  }
 }
 
 export interface ResultadoDaReingestao {
@@ -196,6 +271,8 @@ export async function executarReingestaoDoQuestionario(
   const apagar = deps.apagar ?? ragService.deleteDocument;
   const subirVersao = deps.subirVersao ?? ragService.bumpConfigVersion;
   const agora = deps.agora ?? (() => new Date());
+  const listarLegado =
+    deps.listarLegado ?? ((orgId: string) => listarSourcesDoFormatoAntigo(orgId, db));
 
   const org = await db.organization.findUnique({
     where: { id: organizationId },
@@ -235,8 +312,16 @@ export async function executarReingestaoDoQuestionario(
     const legado =
       typeof settings.surveyDocFilename === 'string' ? settings.surveyDocFilename : undefined;
     if (legado) aRemover.push(legado);
-    // Mesmo sem o registro em settings, o nome do arquivo antigo é derivado
-    // do segmento. Apagar por nome é idempotente: se não existir, não faz nada.
+
+    // O que está MESMO no vetor com o prefixo antigo, inclusive o arquivo de
+    // um segmento que a organização já trocou.
+    for (const source of await listarLegado(organizationId)) {
+      if (!aRemover.includes(source)) aRemover.push(source);
+    }
+
+    // Mesmo sem o registro em settings e sem a consulta acima, o nome do
+    // arquivo antigo é derivado do segmento. Apagar por nome é idempotente:
+    // se não existir, não faz nada.
     const legadoPorSegmento = surveyDocFilename(niche);
     if (!aRemover.includes(legadoPorSegmento)) aRemover.push(legadoPorSegmento);
   }
