@@ -45,6 +45,9 @@ import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
 // alerta da guarda vai para o log e para o registro que o Raio-X lê.
 import { postProcessReply } from './postProcessReply.js';
 import { registrarAlertasDeSaida } from '../services/alertasDeSaida.js';
+// C1b (Passo 2, A167, A193): o transbordo de verdade (pausa no banco,
+// WAITING e aviso à equipe) mora num módulo que o chat do site também usa.
+import { marcarTransbordo, mensagemDeEspera } from '../services/transbordoHumano.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
 // Perfil vivo (A8): identidade, tom, horário e agendamento montados das
 // settings a cada turno, atrás do interruptor `perfilVivo`. Desligado, o
@@ -138,19 +141,110 @@ export async function deliverAgentReply(input: {
   conversationId: string;
   text: string;
   buttons?: Array<{ id: string; title: string }> | null;
+  /**
+   * C1b: a confiança gravada na mensagem. 1.0 = texto fixo, sem modelo
+   * (aviso de transbordo, erro técnico, opt-out). Padrão 0.95, o da
+   * resposta do agente.
+   */
+  aiConfidence?: number;
+  /** Socket para o aviso em tempo real ao Inbox. Padrão: o do processo. */
+  io?: SocketIOServer;
 }): Promise<SendReplyResult> {
   const { organizationId, conversationId, text, buttons } = input;
-  if (buttons && buttons.length > 0) {
-    return sendReplyInteractive({
-      organizationId,
-      conversationId,
-      kind: 'button',
-      body: text,
-      options: buttons,
+  const envio =
+    buttons && buttons.length > 0
+      ? await sendReplyInteractive({
+          organizationId,
+          conversationId,
+          kind: 'button',
+          body: text,
+          options: buttons,
+        })
+      : await sendReplyText({ organizationId, conversationId, content: text });
+
+  // C1b (Passo 2, A167): o envio e a gravação moram no MESMO lugar. Antes,
+  // quatro respostas (aviso de transbordo, resposta a mídia, falha de áudio
+  // e aviso de erro técnico) chegavam ao cliente sem entrar em messages: o
+  // Inbox mostrava o pedido sem resposta e o turno seguinte não sabia o que
+  // tinha sido prometido.
+  await registrarSaidaDoAgente({
+    organizationId,
+    conversationId,
+    content: text,
+    tipo: 'TEXT',
+    aiConfidence: input.aiConfidence ?? 0.95,
+    envio,
+    io: input.io,
+  });
+  return envio;
+}
+
+/**
+ * C1b (Passo 2): grava a mensagem que o agente mandou e avisa o Inbox em
+ * tempo real. Chamada por deliverAgentReply e pelo envio em áudio (TTS),
+ * que sai pela Cloud API do WhatsApp e não pelo despachante.
+ *
+ * Grava o id externo devolvido pelo canal (mesmo mapeamento do
+ * processMessageSendJob): wamid vira whatsappMessageId, o mid do Instagram
+ * vira externalMessageId. Com isso os callbacks de entrega e leitura
+ * alcançam também as respostas da IA.
+ *
+ * Nunca lança: a mensagem já saiu. Uma falha de banco aqui não pode virar
+ * um segundo envio (o aviso de erro técnico do catch geral).
+ */
+export async function registrarSaidaDoAgente(p: {
+  organizationId: string;
+  conversationId: string;
+  content: string;
+  tipo: 'TEXT' | 'AUDIO';
+  aiConfidence: number;
+  envio?: SendReplyResult | null;
+  io?: SocketIOServer;
+}): Promise<void> {
+  let gravada: { id: string; createdAt: Date } | null = null;
+  try {
+    gravada = await prisma.message.create({
+      data: {
+        direction: 'OUTBOUND',
+        type: p.tipo as any,
+        content: p.content,
+        status: 'SENT',
+        conversationId: p.conversationId,
+        isFromBot: true,
+        aiConfidence: p.aiConfidence,
+        ...(p.envio?.externalMessageId
+          ? p.envio.channel === 'instagram'
+            ? { externalMessageId: p.envio.externalMessageId }
+            : { whatsappMessageId: p.envio.externalMessageId }
+          : {}),
+      },
+    });
+  } catch (err) {
+    logger.error('[Agent] a mensagem saiu mas não foi gravada (fail-soft)', {
+      organizationId: p.organizationId,
+      conversationId: p.conversationId,
+      err: err instanceof Error ? err.message : String(err),
     });
   }
-  return sendReplyText({ organizationId, conversationId, content: text });
+
+  const io = p.io ?? getIo();
+  if (io) {
+    io.to(`org:${p.organizationId}`).emit('new_message', {
+      conversationId: p.conversationId,
+      message: {
+        id: gravada?.id,
+        content: p.content,
+        direction: 'OUTBOUND',
+        isFromBot: true,
+        createdAt: (gravada?.createdAt ? new Date(gravada.createdAt) : new Date()).toISOString(),
+      },
+    });
+  }
 }
+
+/** O aviso que o cliente recebe quando o turno inteiro falha (A193). */
+export const TEXTO_DE_ERRO_TECNICO =
+  'Olá! Estou com uma dificuldade técnica momentânea. Em breve um atendente entrará em contato. Desculpe o inconveniente! 🙏';
 
 /* ══════════════════════════════════════════════════════════════════════
  * Rede de crise nas SAÍDAS ANTECIPADAS do turno (P62, I3 da revisão)
@@ -193,18 +287,8 @@ async function fecharSaidaAntecipadaComAcolhimento(params: {
   if (!jaRespondeu) {
     const texto = acrescentarAcolhimento('', { comTransbordo: true });
     try {
-      await deliverAgentReply({ organizationId, conversationId, text: texto });
-      await prisma.message.create({
-        data: {
-          direction: 'OUTBOUND',
-          type: 'TEXT',
-          content: texto,
-          status: 'SENT',
-          conversationId,
-          isFromBot: true,
-          aiConfidence: 1.0, // determinística: regex, sem LLM
-        },
-      });
+      // Envia e grava no mesmo lugar (C1b). Determinística: regex, sem LLM.
+      await deliverAgentReply({ organizationId, conversationId, text: texto, aiConfidence: 1.0 });
     } catch (err) {
       logger.error('[Agent] acolhimento em saída antecipada falhou (fail-soft)', {
         err: String(err),
@@ -318,18 +402,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     if (autoReplyTemplate) {
       logger.info(`[Agent] AUTOREPLY mode active for ${contactPhone}`);
       try {
-        await deliverAgentReply({ organizationId, conversationId, text: autoReplyTemplate });
-        await prisma.message.create({
-          data: {
-            direction: 'OUTBOUND',
-            type: 'TEXT',
-            content: autoReplyTemplate,
-            status: 'SENT',
-            conversationId,
-            isFromBot: true,
-            aiConfidence: 1.0,
-          },
-        });
+        await deliverAgentReply({ organizationId, conversationId, text: autoReplyTemplate, aiConfidence: 1.0, io });
         // Pausa AI pra esse contato — proximas mensagens nao geram autoreply
         // de novo, ficam aguardando atendimento humano.
         const pauseKey = `ai_paused:${organizationId}:${contactPhone}`;
@@ -421,6 +494,8 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
           organizationId,
           conversationId,
           text: 'Não consegui processar seu áudio agora. Pode me mandar em texto?',
+          aiConfidence: 1.0,
+          io,
         });
         return;
       }
@@ -428,7 +503,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
     // ── 2.5. Handle outros não-textos (image, document, video, location) ─
     if (messageType !== 'text' && messageType !== 'button_reply' && messageType !== 'list_reply') {
-      await handleNonTextMessage(organizationId, conversationId, messageType);
+      await handleNonTextMessage(organizationId, conversationId, messageType, io);
       return;
     }
 
@@ -468,33 +543,11 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         'Pronto, você foi descadastrado e não vai mais receber nossas mensagens de marketing. Se mudar de ideia, é só nos escrever.';
 
       try {
-        // Channel-agnostic (WhatsApp / Instagram) — mesma via da resposta normal.
-        await sendReplyText({ organizationId, conversationId, content: optOutReply });
-        await prisma.message.create({
-          data: {
-            direction: 'OUTBOUND',
-            type: 'TEXT',
-            content: optOutReply,
-            status: 'SENT',
-            conversationId,
-            isFromBot: true,
-            aiConfidence: 1.0,
-          },
-        });
+        // Channel-agnostic (WhatsApp / Instagram), mesma via da resposta
+        // normal, que também grava e avisa o Inbox (C1b).
+        await deliverAgentReply({ organizationId, conversationId, text: optOutReply, aiConfidence: 1.0, io });
       } catch (err) {
         logger.error('[Agent] Falha ao enviar confirmação de opt-out', { err });
-      }
-
-      if (io) {
-        io.to(`org:${organizationId}`).emit('new_message', {
-          conversationId,
-          message: {
-            content: optOutReply,
-            direction: 'OUTBOUND',
-            isFromBot: true,
-            createdAt: new Date().toISOString(),
-          },
-        });
       }
 
       // Curto-circuito: não seguimos pro motor de venda / LLM.
@@ -650,29 +703,8 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       const degradedReply = sinalDeCriseDoTurno.crise
         ? acrescentarAcolhimento(textoFixo, { comTransbordo: true })
         : textoFixo;
-      await deliverAgentReply({ organizationId, conversationId, text: degradedReply });
-      await prisma.message.create({
-        data: {
-          direction: 'OUTBOUND',
-          type: 'TEXT',
-          content: degradedReply,
-          status: 'SENT',
-          conversationId,
-          isFromBot: true,
-          aiConfidence: 1.0, // mensagem fixa, sem LLM
-        },
-      });
-      if (io) {
-        io.to(`org:${organizationId}`).emit('new_message', {
-          conversationId,
-          message: {
-            content: degradedReply,
-            direction: 'OUTBOUND',
-            isFromBot: true,
-            createdAt: new Date().toISOString(),
-          },
-        });
-      }
+      // Mensagem fixa, sem LLM. Envia, grava e avisa o Inbox (C1b).
+      await deliverAgentReply({ organizationId, conversationId, text: degradedReply, aiConfidence: 1.0, io });
       if (sinalDeCriseDoTurno.crise) {
         await fecharSaidaAntecipadaComAcolhimento({
           organizationId, conversationId, canal: canalDoTurno,
@@ -905,25 +937,8 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
               ? acrescentarAcolhimento(agenticTextoLimpo, { comTransbordo: true })
               : agenticTextoLimpo;
           if (agenticReplyText) {
-            await sendReplyText({ organizationId, conversationId, content: agenticReplyText });
-            await prisma.message.create({
-              data: {
-                direction: 'OUTBOUND',
-                type: 'TEXT',
-                content: agenticReplyText,
-                status: 'SENT',
-                conversationId,
-                isFromBot: true,
-                aiConfidence: 0.95,
-              },
-            });
+            await deliverAgentReply({ organizationId, conversationId, text: agenticReplyText, aiConfidence: 0.95, io });
             logger.info('[Maestro] caminho agêntico OK', { organizationId, conversationId, toolsUsed: agentResult.toolsUsed });
-            if (io) {
-              io.to(`org:${organizationId}`).emit('new_message', {
-                conversationId,
-                message: { content: agenticReplyText, direction: 'OUTBOUND', isFromBot: true, createdAt: new Date().toISOString() },
-              });
-            }
             if (sinalDeCriseDoTurno.crise) {
               await fecharSaidaAntecipadaComAcolhimento({
                 organizationId, conversationId, canal: canalDoTurno,
@@ -995,21 +1010,13 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         snippet: turnResult.matchedSnippet,
       });
       // FASE 4 (#251): channel-aware. WhatsApp e Instagram convergem aqui.
-      await sendReplyText({
+      // Resposta determinística (regex): envia, grava e avisa o Inbox (C1b).
+      await deliverAgentReply({
         organizationId,
         conversationId,
-        content: turnResult.response,
-      });
-      await prisma.message.create({
-        data: {
-          direction: 'OUTBOUND',
-          type: 'TEXT',
-          content: turnResult.response,
-          status: 'SENT',
-          conversationId,
-          isFromBot: true,
-          aiConfidence: 1.0, // resposta determinística (regex match)
-        },
+        text: turnResult.response,
+        aiConfidence: 1.0,
+        io,
       });
       // A251 e A232: na conta de um cliente, quem escreve é o cliente final
       // dele. A camada compliance deixou de recusar e passou a transbordar,
@@ -1144,8 +1151,19 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
               voice: voiceCfg.voice,
             });
             if (ttsResult.mediaId) {
-              await waService.sendAudio(contactPhone, ttsResult.mediaId, waCreds);
+              const envioDoAudio: any = await waService.sendAudio(contactPhone, ttsResult.mediaId, waCreds);
               sentAsAudio = true;
+              // O áudio sai pela Cloud API, fora do despachante: grava aqui,
+              // no mesmo lugar em que envia (C1b, Passo 2).
+              await registrarSaidaDoAgente({
+                organizationId,
+                conversationId,
+                content: parsed.replyText,
+                tipo: 'AUDIO',
+                aiConfidence: parsed.action ? 0.9 : 0.95,
+                envio: { channel: 'whatsapp', externalMessageId: envioDoAudio?.messages?.[0]?.id },
+                io,
+              });
               logger.info('[Agent] Resposta enviada como ÁUDIO (TTS)', {
                 contactPhone, minutesEstimate: ttsResult.minutesEstimate,
               });
@@ -1164,36 +1182,18 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       // FASE 4 (#251) fecho — era waService.sendText/sendButtons direto com
       // contactPhone (`ig:<igsid>` ia pra Cloud API do WhatsApp e o Direct
       // ficava mudo). Agora o dispatcher roteia pelo conversation.channel.
-      let sendResult: SendReplyResult | null = null;
+      // C1b: deliverAgentReply grava a mensagem (com o id externo do canal)
+      // e avisa o Inbox, no mesmo lugar em que envia.
       if (!sentAsAudio) {
-        sendResult = await deliverAgentReply({
+        await deliverAgentReply({
           organizationId,
           conversationId,
           text: parsed.replyText,
           buttons: parsed.buttons,
+          aiConfidence: parsed.action ? 0.9 : 0.95,
+          io,
         });
       }
-
-      // Save outbound message. Grava o id externo devolvido pelo canal (mesmo
-      // mapeamento do processMessageSendJob): wamid → whatsappMessageId,
-      // mid do IG → externalMessageId. Com isso os callbacks de status
-      // (delivered/read) passam a alcançar também as respostas da IA.
-      await prisma.message.create({
-        data: {
-          direction: 'OUTBOUND',
-          type: sentAsAudio ? 'AUDIO' as any : 'TEXT',
-          content: parsed.replyText,
-          status: 'SENT',
-          conversationId,
-          isFromBot: true,
-          aiConfidence: parsed.action ? 0.9 : 0.95,
-          ...(sendResult?.externalMessageId
-            ? sendResult.channel === 'instagram'
-              ? { externalMessageId: sendResult.externalMessageId }
-              : { whatsappMessageId: sendResult.externalMessageId }
-            : {}),
-        },
-      });
     }
 
     // ── 12.5. Crise: a IA para e uma pessoa assume ──────
@@ -1211,17 +1211,9 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     }
 
     // ── 13. Real-time dashboard push ────────────────────
-    if (io) {
-      io.to(`org:${organizationId}`).emit('new_message', {
-        conversationId,
-        message: {
-          content: parsed.replyText,
-          direction: 'OUTBOUND',
-          isFromBot: true,
-          createdAt: new Date().toISOString(),
-        },
-      });
-    }
+    // C1b: o aviso ao Inbox saiu junto com a gravação, dentro de
+    // deliverAgentReply (e de registrarSaidaDoAgente no áudio), com o id da
+    // mensagem gravada. Antes ele saía aqui mesmo quando nada era enviado.
 
     // ── 14. CRM sync (Onda 1) — IA preenche o pipeline ──────────────
     // Fail-soft: nunca bloqueia a resposta. Roda DEPOIS do envio. Mapeia o
@@ -1241,12 +1233,16 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
   } catch (err) {
     logger.error('[Agent] Error processing message:', err);
 
-    // Fallback message — pelo canal da conversa (WA ou IG), nunca waService direto.
-    await deliverAgentReply({
-      organizationId,
-      conversationId,
-      text: 'Olá! Estou com uma dificuldade técnica momentânea. Em breve um atendente entrará em contato. Desculpe o inconveniente! 🙏',
-    }).catch(() => {});
+    // C1b (A193): o aviso promete que um atendente vai entrar em contato,
+    // então alguém tem de ser chamado DE VERDADE: a IA pausa no banco, a
+    // conversa vai para WAITING e a equipe é avisada. Só depois disso o
+    // texto fixo sai, pelo canal da conversa, e fica gravado. Uma mensagem
+    // só: o aviso de erro faz as vezes da mensagem de espera.
+    await handleHandoff(organizationId, conversationId, contactPhone, contactId, orgSettings, io, {
+      mensagem: TEXTO_DE_ERRO_TECNICO,
+    }).catch((erroDoTransbordo) =>
+      logger.error('[Agent] transbordo do erro geral falhou', { err: String(erroDoTransbordo) }),
+    );
   }
 }
 
@@ -1641,32 +1637,33 @@ async function handleHandoff(
   contactPhone: string,
   contactId: string,
   orgSettings: any,
-  io?: SocketIOServer
+  io?: SocketIOServer,
+  opts: {
+    /**
+     * C1b (A193): o texto que o cliente recebe no lugar da mensagem de
+     * espera. O catch geral passa o aviso de erro técnico: uma mensagem só.
+     */
+    mensagem?: string;
+  } = {},
 ): Promise<void> {
   logger.info(`[Agent] Handoff triggered for ${contactPhone}`, { organizationId });
 
-  // Pause AI for 1 hour
-  await cache.set(`ai_paused:${organizationId}:${contactPhone}`, '1', 3600);
+  // C1b (A167): a pausa deixou de expirar sozinha em 1 hora. Vai para o
+  // banco (aiPaused) e para o espelho no cache pelo prazo das pausas
+  // humanas; a IA volta quando a equipe devolve a conversa no Inbox
+  // ("Retomar", PUT /resume-ai, ou desatribuir). WAITING e aviso à equipe
+  // como antes. Fail-soft por etapa, dentro de marcarTransbordo.
+  await marcarTransbordo({ organizationId, conversationId, contactId, contactPhone, io });
 
-  // Update conversation status
-  await prisma.conversation.updateMany({
-    where: { contactId, organizationId, status: { in: ['OPEN', 'ASSIGNED'] } },
-    data: { status: 'WAITING' },
+  // A mensagem de espera (ou o aviso de erro) sai pelo canal da conversa e
+  // fica gravada (deliverAgentReply grava no mesmo lugar em que envia).
+  await deliverAgentReply({
+    organizationId,
+    conversationId,
+    text: opts.mensagem ?? mensagemDeEspera(orgSettings),
+    aiConfidence: 1.0,
+    io,
   });
-
-  // Notify agents
-  if (io) {
-    io.to(`org:${organizationId}`).emit('notification', {
-      type: 'warning',
-      title: 'Transbordo solicitado',
-      message: `Cliente ${contactPhone} precisa de atendimento humano`,
-    });
-  }
-
-  // Send holding message
-  const holdMsg = orgSettings?.handoffMessage ||
-    'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido! 😊';
-  await deliverAgentReply({ organizationId, conversationId, text: holdMsg });
 }
 
 // ── Handle Non-Text Messages ────────────────────────────
@@ -1679,6 +1676,7 @@ async function handleNonTextMessage(
   organizationId: string,
   conversationId: string,
   msgType: string,
+  io?: SocketIOServer,
 ): Promise<void> {
   const responses: Record<string, string> = {
     // audio nunca chega aqui em prod (Whisper trata antes), mas mantém fallback
@@ -1691,7 +1689,8 @@ async function handleNonTextMessage(
   };
 
   const reply = responses[msgType] || 'Recebi sua mensagem. Me conta em texto o que você precisa.';
-  await deliverAgentReply({ organizationId, conversationId, text: reply });
+  // C1b (A167): envia e grava no mesmo lugar.
+  await deliverAgentReply({ organizationId, conversationId, text: reply, aiConfidence: 1.0, io });
 }
 
 // ── Token por org (self-serve multi-tenant) ─────────────

@@ -24,6 +24,7 @@ vi.mock('bullmq', () => ({
 
 const enforceAiReplyQuotaStub = vi.fn();
 const getTrialLlmStageStub = vi.fn();
+const assertTrialCostCapStub = vi.fn();
 vi.mock('../middleware/planLimits.js', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -31,7 +32,7 @@ vi.mock('../middleware/planLimits.js', async (importOriginal) => {
     enforceAiReplyQuota: (...a: unknown[]) => enforceAiReplyQuotaStub(...a),
     recordAttendanceShadow: vi.fn(async () => undefined),
     getTrialLlmStage: (...a: unknown[]) => getTrialLlmStageStub(...a),
-    assertTrialCostCap: vi.fn(async () => ({ allowed: true, spentUsd: 0, capUsd: 15 })),
+    assertTrialCostCap: (...a: unknown[]) => assertTrialCostCapStub(...a),
     consumeTrialContactReplyBudget: vi.fn(async () => ({ allowed: true, count: 1 })),
   };
 });
@@ -204,6 +205,9 @@ beforeEach(() => {
 
   enforceAiReplyQuotaStub.mockResolvedValue({ allowed: true, mode: 'audit_only' });
   getTrialLlmStageStub.mockResolvedValue({ capped: false, stage: 'OTHER', capUsd: 0 });
+  assertTrialCostCapStub.mockResolvedValue({ allowed: true, spentUsd: 0, capUsd: 15 });
+  transcribeAudioMock.mockResolvedValue({ text: '', error: 'falhou', latencyMs: 1 });
+  sendAudioMock.mockResolvedValue({ messages: [{ id: 'wamid-audio' }] });
   resolveActiveFlowStepMock.mockResolvedValue(null);
   classifyMock.mockResolvedValue('{"intent":"faq","consulta":""}');
   sendReplyTextMock.mockResolvedValue({ channel: 'whatsapp', externalMessageId: 'wamid-out' });
@@ -260,5 +264,280 @@ describe('Passo 1: WhatsApp pelo pós-processador único', () => {
 
     expect(routeIzaTurnMock).not.toHaveBeenCalled();
     expect(textosEnviados()).toEqual(['Temos sim, chegou ontem.']);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Passo 2: toda saída que chama o envio grava a mensagem (A167, A193)
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/** Quantas vezes o orquestrador mandou algo ao cliente, por qualquer via. */
+function totalDeEnvios(): number {
+  return (
+    sendReplyTextMock.mock.calls.length +
+    sendReplyInteractiveMock.mock.calls.length +
+    sendAudioMock.mock.calls.length
+  );
+}
+
+/** As mensagens OUTBOUND gravadas no turno. */
+function registrosDeSaida(): any[] {
+  return prismaMock.message.create.mock.calls
+    .map((c: any[]) => c[0].data)
+    .filter((d: any) => d.direction === 'OUTBOUND');
+}
+
+const CRISE = 'não aguento mais viver, não vejo sentido em continuar';
+
+const SAIDAS: Array<{ nome: string; preparar: () => void; entrada?: Record<string, unknown> }> = [
+  {
+    nome: 'modo autoreply',
+    preparar: () => {
+      process.env.IZA_AUTOREPLY_TEMPLATE = 'Recebemos sua mensagem.';
+    },
+  },
+  {
+    nome: 'falha ao transcrever o áudio',
+    preparar: () => undefined,
+    entrada: { messageType: 'audio', mediaId: 'media-1' },
+  },
+  { nome: 'resposta a imagem (não texto)', preparar: () => undefined, entrada: { messageType: 'image' } },
+  { nome: 'opt-out (SAIR)', preparar: () => undefined, entrada: { messageContent: 'SAIR' } },
+  {
+    nome: 'pedido de humano (aviso de transbordo)',
+    preparar: () => classifyMock.mockResolvedValue('{"intent":"request_human","consulta":""}'),
+    entrada: { messageContent: 'quero falar com um atendente' },
+  },
+  {
+    nome: 'cap de custo do trial (mensagem degradada)',
+    preparar: () => {
+      getTrialLlmStageStub.mockResolvedValue({ capped: true, stage: 'TRIAL', capUsd: 15 });
+      assertTrialCostCapStub.mockResolvedValue({ allowed: false, spentUsd: 16, capUsd: 15 });
+    },
+  },
+  {
+    nome: 'quota estourada com sinal de crise (acolhimento)',
+    preparar: () =>
+      enforceAiReplyQuotaStub.mockResolvedValue({ allowed: false, mode: 'enforce', current: 9, limit: 9, planId: 'GROWTH' }),
+    entrada: { messageContent: CRISE },
+  },
+  {
+    nome: 'caminho agêntico do Maestro',
+    preparar: () => {
+      resolveActiveFlowStepMock.mockResolvedValue({
+        next: 'ai',
+        effects: [],
+        aiPrompt: 'Consulte o estoque.',
+        aiTools: [{ type: 'webhook', name: 'estoque', url: 'https://x' }],
+      });
+      runAgenticTurnMock.mockResolvedValue({ text: 'Temos sim.', toolsUsed: ['estoque'] });
+    },
+  },
+  {
+    nome: 'vertical bloqueada (template do pré-filtro)',
+    preparar: () =>
+      routeIzaTurnMock.mockResolvedValue({
+        kind: 'blocked',
+        vertical: 'apostas',
+        response: 'Não trabalhamos com isso.',
+        matchedSnippet: 'aposta',
+        action: 'recusa',
+      }),
+  },
+  { nome: 'resposta normal do agente', preparar: () => undefined },
+  {
+    nome: 'resposta com botões',
+    preparar: () => respostaDoModelo('Qual você prefere?<buttons>[{"id":"a","title":"Ver planos"}]</buttons>'),
+  },
+  {
+    nome: 'resposta em áudio (TTS)',
+    preparar: () => undefined,
+    entrada: {
+      messageType: 'audio',
+      mediaId: 'media-1',
+      orgSettings: {
+        businessName: 'CMJ',
+        agentName: 'Vera',
+        whatsappPhoneNumberId: 'phone-1',
+        voice_routing: { enabled: true, trigger: 'mirror_input' },
+      },
+    },
+  },
+  {
+    nome: 'tag de transbordo na resposta (aviso + resposta)',
+    preparar: () => respostaDoModelo('<reply>Vou chamar alguém da equipe.</reply><action>handoff</action>'),
+  },
+  {
+    nome: 'erro geral do turno (aviso de erro técnico)',
+    preparar: () => routeIzaTurnMock.mockRejectedValue(new Error('provedor fora')),
+  },
+];
+
+vi.mock('../services/llm/textToSpeech.js', () => ({
+  generateAndUploadSpeech: vi.fn(async () => ({ mediaId: 'tts-media', minutesEstimate: 0.1 })),
+}));
+
+describe('Passo 2: 0 envios sem registro', () => {
+  for (const saida of SAIDAS) {
+    it(`${saida.nome}: cada envio tem a sua mensagem gravada`, async () => {
+      if (saida.nome === 'resposta em áudio (TTS)') {
+        transcribeAudioMock.mockResolvedValue({ text: 'quanto custa?', latencyMs: 5 });
+      }
+      saida.preparar();
+
+      await processIncomingMessage(inputBase(saida.entrada ?? {}));
+
+      const envios = totalDeEnvios();
+      expect(envios, 'o caminho precisa mandar alguma coisa').toBeGreaterThan(0);
+      expect(registrosDeSaida().length, `envios=${envios}`).toBe(envios);
+      for (const r of registrosDeSaida()) {
+        expect(r).toMatchObject({ direction: 'OUTBOUND', isFromBot: true, conversationId: 'conv-1' });
+        expect(String(r.content).length).toBeGreaterThan(0);
+      }
+    });
+  }
+
+  it('cada mensagem gravada vai para o Inbox em tempo real (new_message), uma vez', async () => {
+    await processIncomingMessage(inputBase());
+    const eventos = emitMock.mock.calls.filter((c: any[]) => c[0] === 'new_message');
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0][1]).toMatchObject({
+      conversationId: 'conv-1',
+      message: { content: 'A consultoria dura 3 meses.', direction: 'OUTBOUND', isFromBot: true },
+    });
+    expect(eventos[0][1].message.id).toBeTruthy();
+  });
+
+  it('o registro guarda o id externo devolvido pelo canal (status de entrega alcança a IA)', async () => {
+    await processIncomingMessage(inputBase());
+    expect(registrosDeSaida()[0]).toMatchObject({ whatsappMessageId: 'wamid-out' });
+
+    vi.clearAllMocks();
+    sendReplyTextMock.mockResolvedValue({ channel: 'instagram', externalMessageId: 'ig-mid' });
+    respostaDoModelo('Oi!');
+    await processIncomingMessage(inputBase({ channel: 'instagram' }));
+    expect(registrosDeSaida()[0]).toMatchObject({ externalMessageId: 'ig-mid' });
+  });
+
+  it('as quatro saídas do A167 gravam o texto exato que o cliente recebeu', async () => {
+    const casos: Array<{ entrada: Record<string, unknown>; preparar?: () => void; texto: RegExp }> = [
+      { entrada: { messageType: 'audio', mediaId: 'm' }, texto: /Não consegui processar seu áudio/ },
+      { entrada: { messageType: 'document' }, texto: /Recebi seu documento/ },
+      {
+        entrada: { messageContent: 'quero falar com um atendente' },
+        preparar: () => classifyMock.mockResolvedValue('{"intent":"request_human","consulta":""}'),
+        texto: /especialistas/,
+      },
+      {
+        entrada: {},
+        preparar: () => routeIzaTurnMock.mockRejectedValue(new Error('provedor fora')),
+        texto: /dificuldade técnica/,
+      },
+    ];
+    for (const caso of casos) {
+      vi.clearAllMocks();
+      // O transbordo do caso anterior deixou a pausa no cache (é o que ele
+      // deve fazer): cada caso começa de uma conversa sem pausa.
+      cacheStore.clear();
+      classifyMock.mockResolvedValue('{"intent":"faq","consulta":""}');
+      respostaDoModelo('A consultoria dura 3 meses.');
+      caso.preparar?.();
+      await processIncomingMessage(inputBase(caso.entrada));
+      const gravados = registrosDeSaida().map((r) => String(r.content));
+      expect(gravados.some((t) => caso.texto.test(t)), `gravados: ${JSON.stringify(gravados)}`).toBe(true);
+      expect(textosEnviados()).toEqual(gravados);
+    }
+  });
+});
+
+describe('Passo 2: o erro geral chama o transbordo de verdade (A193)', () => {
+  beforeEach(() => {
+    routeIzaTurnMock.mockRejectedValue(new Error('provedor fora'));
+  });
+
+  it('pausa a IA e marca WAITING ANTES de mandar o aviso ao cliente', async () => {
+    await processIncomingMessage(inputBase());
+
+    expect(prismaMock.conversation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'WAITING', aiPaused: true } }),
+    );
+    const ordemDaPausa = prismaMock.conversation.updateMany.mock.invocationCallOrder[0];
+    const ordemDoAviso = sendReplyTextMock.mock.invocationCallOrder[0];
+    expect(ordemDaPausa).toBeLessThan(ordemDoAviso);
+  });
+
+  it('avisa a equipe (notificação) e manda UMA mensagem só: o aviso de erro técnico, gravado', async () => {
+    await processIncomingMessage(inputBase());
+
+    const notificacoes = emitMock.mock.calls.filter((c: any[]) => c[0] === 'notification');
+    expect(notificacoes).toHaveLength(1);
+    expect(notificacoes[0][1]).toMatchObject({ type: 'warning', title: 'Transbordo solicitado' });
+    expect(textosEnviados()).toHaveLength(1);
+    expect(textosEnviados()[0]).toMatch(/dificuldade técnica/);
+    expect(registrosDeSaida()).toHaveLength(1);
+  });
+
+  it('banco fora no meio do transbordo não impede o aviso ao cliente', async () => {
+    prismaMock.conversation.updateMany.mockRejectedValue(new Error('db down'));
+    await processIncomingMessage(inputBase());
+    expect(textosEnviados()).toHaveLength(1);
+  });
+});
+
+describe('Passo 2: o transbordo não expira sozinho em 1 hora (A167)', () => {
+  beforeEach(() => {
+    classifyMock.mockResolvedValue('{"intent":"request_human","consulta":""}');
+  });
+
+  it('a pausa vai para o banco (aiPaused) e o espelho no cache não vence em 1 hora', async () => {
+    const { cache } = await import('../services/cloud/index.js');
+
+    await processIncomingMessage(inputBase({ messageContent: 'quero falar com um atendente' }));
+
+    expect(prismaMock.conversation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'WAITING', aiPaused: true } }),
+    );
+    const setDaPausa = (cache.set as any).mock.calls.find((c: any[]) => String(c[0]).startsWith('ai_paused:'));
+    expect(setDaPausa).toBeTruthy();
+    expect(setDaPausa[2]).toBeGreaterThan(3600);
+  });
+
+  it('passada 1 hora, com o cache vazio, a IA continua calada: quem manda é conversation.aiPaused', async () => {
+    cacheStore.clear();
+    prismaMock.conversation.findUnique.mockResolvedValue({ aiPaused: true, status: 'WAITING', assignedToId: null });
+
+    await processIncomingMessage(inputBase({ messageContent: 'alguém aí?' }));
+
+    expect(routeIzaTurnMock).not.toHaveBeenCalled();
+    expect(totalDeEnvios()).toBe(0);
+  });
+});
+
+describe('Passo 2: amarra estática do orquestrador', () => {
+  // O comportamento está provado acima, caminho por caminho. Esta amarra
+  // impede que um caminho NOVO volte a enviar por fora da função que grava.
+  it('o despachante só é chamado dentro de deliverAgentReply, e a gravação só em registrarSaidaDoAgente', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const codigo = readFileSync(fileURLToPath(new URL('./agentOrchestrator.ts', import.meta.url)), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+    const corpo = (nome: string) => {
+      const inicio = codigo.indexOf(`export async function ${nome}(`);
+      const fim = codigo.indexOf('\n}\n', inicio);
+      return codigo.slice(inicio, fim);
+    };
+    const contar = (texto: string, re: RegExp) => (texto.match(re) ?? []).length;
+
+    const envio = /\bsendReply(Text|Interactive)\(/g;
+    expect(contar(codigo, envio)).toBe(contar(corpo('deliverAgentReply'), envio));
+    const gravacao = /prisma\.message\.create\(/g;
+    expect(contar(codigo, gravacao)).toBe(1);
+    expect(contar(corpo('registrarSaidaDoAgente'), gravacao)).toBe(1);
+    // O áudio (TTS) é o único envio fora do despachante, e grava logo em seguida.
+    const depoisDoAudio = codigo.slice(codigo.indexOf('waService.sendAudio('));
+    expect(depoisDoAudio.indexOf('registrarSaidaDoAgente(')).toBeGreaterThan(0);
+    expect(depoisDoAudio.indexOf('registrarSaidaDoAgente(')).toBeLessThan(600);
   });
 });
