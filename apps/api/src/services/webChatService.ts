@@ -63,6 +63,7 @@ import {
   type ContatoDoTurno,
   type ContextoDoTurno,
 } from '../agents/agentContextLoader.js';
+import { buildRagBlock } from '../agents/composeAgentContext.js';
 import * as ragService from './ragService.js';
 // C3: correção aprovada pelo dono é registro (agent_rules), montado em bloco.
 import { blocoDeRegrasDaOrganizacao } from './agentRulesService.js';
@@ -292,6 +293,12 @@ export function buildWebChatSystemPrompt(input: {
    * correção aprovada vale na mensagem seguinte.
    */
   regrasBlock?: string;
+  /**
+   * C1b (Passo 4, A068): a base de conhecimento, só com `ragNoChatDoSite`
+   * ligado (a MESMA flag que o motor único lê). Vazio sem a flag ou sem
+   * trecho: o prompt é o de antes, caractere por caractere.
+   */
+  ragBlock?: string;
 }): string {
   const { orgPrompt, factsBlock, isIzaCanonical } = input;
   return [
@@ -303,8 +310,30 @@ export function buildWebChatSystemPrompt(input: {
     input.perfilVivoBlock || '',
     input.regrasBlock || '',
     input.saudacaoBlock || '',
+    // A base antes da instrução de canal, que segue sendo a última.
+    input.ragBlock || '',
     buildWebChatChannelInstruction(isIzaCanonical),
   ].filter(Boolean).join('\n\n');
+}
+
+/**
+ * A busca na base para o chat do site, a mesma do WhatsApp. Fail-soft: a
+ * falha vira o aviso de base fora do ar (A028), nunca erro para o visitante.
+ */
+async function buscarNaBaseDoSite(
+  organizationId: string,
+  mensagem: string,
+): Promise<{ context: string; status: ragService.RagSearchStatus }> {
+  try {
+    const busca = await ragService.searchDetailed(organizationId, mensagem, 5);
+    return { context: busca.context, status: busca.status };
+  } catch (err) {
+    logger.warn('[webChat] base indisponível neste turno (segue sem ela)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return { context: '', status: 'servico_fora' };
+  }
 }
 
 /**
@@ -770,6 +799,16 @@ async function montarSystemPromptDoSite(input: {
     });
   }
 
+  // C1b (Passo 4, A068): a base no caminho de antes, atrás da MESMA flag do
+  // motor único (`ragNoChatDoSite`). Desligada, nenhuma busca é feita e o
+  // prompt é o de antes. O CMJ fica desligado até o dono revisar os
+  // documentos internos da base (A197).
+  let ragBlock = '';
+  if (consultarBase) {
+    const busca = await buscarNaBaseDoSite(organizationId, userMessage);
+    ragBlock = buildRagBlock(busca.context, busca.status);
+  }
+
   return {
     systemPrompt: buildWebChatSystemPrompt({
       orgPrompt,
@@ -778,6 +817,7 @@ async function montarSystemPromptDoSite(input: {
       perfilVivoBlock,
       regrasBlock,
       saudacaoBlock,
+      ragBlock,
     }),
     agenteNome: null,
   };

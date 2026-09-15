@@ -145,6 +145,39 @@ describe('contextoUnico DESLIGADO: o chat do site como antes', () => {
   });
 });
 
+describe('contextoUnico DESLIGADO com ragNoChatDoSite: a MESMA flag vale no caminho de antes (C1b, Passo 4)', () => {
+  it('a base é consultada e entra antes da instrução de canal, que segue no fim', async () => {
+    flags = { ragNoChatDoSite: true };
+
+    await processWebChatTurn({ sessionId: 's1', message: 'quanto custa a serra?', organizationId: ORG, history: [] } as any);
+
+    expect(searchDetailed).toHaveBeenCalledWith(ORG, 'quanto custa a serra?', 5);
+    const prompt = promptEnviado();
+    const rag = prompt.indexOf('# Contexto recuperado (RAG)\n[catalogo.pdf] A serra circular custa R$ 890.');
+    expect(rag).toBeGreaterThan(0);
+    expect(prompt.indexOf('# CANAL DE COMUNICAÇÃO')).toBeGreaterThan(rag);
+    expect(prompt.endsWith(buildWebChatChannelInstruction(false))).toBe(true);
+  });
+
+  it('busca sem trecho: nenhum cabeçalho vazio (nota 6)', async () => {
+    flags = { ragNoChatDoSite: true };
+    searchDetailed.mockResolvedValue({ context: '', sources: [], status: 'sem_resultado', fromCache: false });
+
+    await processWebChatTurn({ sessionId: 's1', message: 'oi', organizationId: ORG, history: [] } as any);
+
+    expect(promptEnviado()).not.toContain('# Contexto recuperado (RAG)');
+  });
+
+  it('base fora do ar vira o aviso honesto (A028) também no caminho de antes', async () => {
+    flags = { ragNoChatDoSite: true };
+    searchDetailed.mockResolvedValue({ context: '', sources: [], status: 'servico_fora', fromCache: false });
+
+    await processWebChatTurn({ sessionId: 's1', message: 'oi', organizationId: ORG, history: [] } as any);
+
+    expect(promptEnviado()).toContain('base de conhecimento indisponível neste momento');
+  });
+});
+
 describe('contextoUnico LIGADO: o mesmo motor do WhatsApp', () => {
   beforeEach(() => {
     flags = { contextoUnico: true };

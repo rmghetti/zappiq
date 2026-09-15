@@ -23,7 +23,7 @@ import {
 } from '../middleware/planLimits.js';
 // C1b (Passo 3): o visitante que voltou vê a resposta humana que chegou
 // enquanto ele estava fora. A sessão é a mesma que o widget guarda.
-import { mensagensDaEquipe } from '../services/webChatVisitante.js';
+import { mensagensDaEquipe, configDoWidget } from '../services/webChatVisitante.js';
 import { sessaoNormalizada } from '../services/webChatSala.js';
 
 const router = Router();
@@ -212,6 +212,30 @@ router.post('/org/:organizationId/message', webChatLimiter, async (req: Request,
       });
     }
     return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+/* GET /api/web-chat/org/:organizationId/config
+ * C1b (Passo 4, A247): nome e saudação do widget, lidos do Treinar IA (o
+ * agente e settings.greetingMessage). Os atributos da tag colada no site
+ * viram só reserva. Atrás do interruptor `perfilVivo` (desligado, devolve
+ * nulos e o widget fica como hoje). Leve e com cache curto: o script roda
+ * em toda página do site do cliente. Erro nunca vira 500: devolve nulos.
+ */
+router.get('/org/:organizationId/config', leituraDoWidgetLimiter, async (req: Request, res: Response) => {
+  const organizationId = orgDaUrl(req.params.organizationId);
+  if (!organizationId) return res.status(404).json({ error: 'not_found' });
+  try {
+    const config = await getWebChatOrgConfig(organizationId);
+    if (!config.exists || !config.enabled) return res.status(404).json({ error: 'not_found' });
+    res.set('Cache-Control', 'public, max-age=60');
+    return res.json(await configDoWidget(organizationId));
+  } catch (err: any) {
+    logger.warn('[webChat] configuração do widget falhou (o widget usa a reserva)', {
+      organizationId,
+      err: err?.message,
+    });
+    return res.json({ nome: null, saudacao: null });
   }
 });
 

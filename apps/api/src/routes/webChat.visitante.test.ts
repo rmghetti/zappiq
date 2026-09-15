@@ -119,3 +119,33 @@ describe('POST do chat: o transbordo volta para o widget (Passo 3)', () => {
     expect(res.body).toMatchObject({ reply: 'Vou chamar alguém.', transbordo: true, paused: false });
   });
 });
+
+describe('GET configuração do widget (Passo 4, A247)', () => {
+  const handler = getHandler('get', '/org/:organizationId/config');
+
+  it('devolve nome e saudação do Treinar IA, com cache curto', async () => {
+    visitanteMock.configDoWidget.mockResolvedValue({ nome: 'Vera', saudacao: 'Olá! Aqui é a Vera, da CMJ.' });
+    const res = mockRes();
+    await handler({ params: { organizationId: 'org-1' } }, res, vi.fn());
+
+    expect(visitanteMock.configDoWidget).toHaveBeenCalledWith('org-1');
+    expect(res.body).toEqual({ nome: 'Vera', saudacao: 'Olá! Aqui é a Vera, da CMJ.' });
+    expect(res.headers['Cache-Control']).toBe('public, max-age=60');
+  });
+
+  it('organização com o chat do site desligado: 404 genérico', async () => {
+    webChatServiceMock.getWebChatOrgConfig.mockResolvedValue({ exists: false, enabled: false });
+    const res = mockRes();
+    await handler({ params: { organizationId: 'org-x' } }, res, vi.fn());
+    expect(res.statusCode).toBe(404);
+    expect(visitanteMock.configDoWidget).not.toHaveBeenCalled();
+  });
+
+  it('banco fora: devolve nulos (o widget usa os atributos da tag), nunca 500', async () => {
+    webChatServiceMock.getWebChatOrgConfig.mockRejectedValue(new Error('db down'));
+    const res = mockRes();
+    await handler({ params: { organizationId: 'org-1' } }, res, vi.fn());
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ nome: null, saudacao: null });
+  });
+});

@@ -168,11 +168,18 @@ export function buildClienteAtualBlock(contato: AgentContextInput['contato']): s
     .join('\n');
 }
 
-/** O bloco '# Contexto recuperado (RAG)', com o aviso de serviço fora (A028). */
+/**
+ * O bloco '# Contexto recuperado (RAG)', com o aviso de serviço fora (A028).
+ *
+ * C1b (nota 6 da revisão de 14/09): sem trecho da base, o bloco some
+ * inteiro. O cabeçalho sozinho ensinava o modelo a achar que consultou e
+ * não achou. Com a base fora do ar, o aviso é conteúdo e continua indo.
+ * Só o motor único usa esta função; o caminho de antes não muda.
+ */
 export function buildRagBlock(rag: string, ragStatus: RagSearchStatus = 'ok'): string {
-  return ['# Contexto recuperado (RAG)', ragStatus === 'servico_fora' ? TEXTO_BASE_INDISPONIVEL : rag]
-    .filter(Boolean)
-    .join('\n');
+  const conteudo = ragStatus === 'servico_fora' ? TEXTO_BASE_INDISPONIVEL : (rag || '').trim() ? rag : '';
+  if (!conteudo) return '';
+  return ['# Contexto recuperado (RAG)', conteudo].join('\n');
 }
 
 /**

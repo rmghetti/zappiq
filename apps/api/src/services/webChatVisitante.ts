@@ -19,6 +19,8 @@
 
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
+import { flagLigada, resolveAgentForTurn } from '../agents/agentContextLoader.js';
+import { origensDaOrganizacao } from '../config/origensPermitidas.js';
 
 /** Quantas mensagens da equipe o widget recebe de uma vez. */
 export const MAX_MENSAGENS_DA_EQUIPE = 50;
@@ -77,4 +79,129 @@ export async function mensagensDaEquipe(
     });
     return [];
   }
+}
+
+/* ── Passo 4 (A247, A241): identidade e origens do widget ─────────────── */
+
+/** Cache curto: o script roda em toda página do site, e o dono vê a mudança em 1 minuto. */
+export const CONFIG_DO_WIDGET_TTL_MS = 60_000;
+
+/** Teto da saudação que vai para o widget (a tela do Treinar IA não limita). */
+export const MAX_SAUDACAO_DO_WIDGET = 500;
+
+/** Teto do nome no cabeçalho do widget. */
+const MAX_NOME_DO_WIDGET = 60;
+
+export interface ConfigDoWidget {
+  /** Nome do agente, do Treinar IA. null = o widget usa o atributo da tag. */
+  nome: string | null;
+  /** settings.greetingMessage. null = o widget usa o atributo ou a reserva neutra. */
+  saudacao: string | null;
+}
+
+const NADA: ConfigDoWidget = { nome: null, saudacao: null };
+
+type Cacheado<T> = { valor: T; ate: number };
+const cacheDaConfig = new Map<string, Cacheado<ConfigDoWidget>>();
+const cacheDasOrigens = new Map<string, Cacheado<string[]>>();
+
+/** Para os testes. */
+export function limparCacheDoWidget(): void {
+  cacheDaConfig.clear();
+  cacheDasOrigens.clear();
+}
+
+async function carregarSettingsPadrao(organizationId: string): Promise<Record<string, any>> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { settings: true },
+  });
+  return (org?.settings as Record<string, any>) ?? {};
+}
+
+function textoCortado(valor: unknown, max: number): string | null {
+  if (typeof valor !== 'string') return null;
+  const t = valor.trim();
+  if (!t) return null;
+  return t.length <= max ? t : t.slice(0, max).trimEnd();
+}
+
+export interface DependenciasDaConfig {
+  perfilVivoLigado?: (organizationId: string) => Promise<boolean>;
+  carregarAgente?: (organizationId: string) => Promise<{ name: string } | null>;
+  carregarSettings?: (organizationId: string) => Promise<Record<string, any>>;
+}
+
+/**
+ * Nome e saudação do widget, do Treinar IA (A247).
+ *
+ * Atrás do interruptor `perfilVivo` ("o perfil do agente passa a ser lido do
+ * que o cliente preencheu"): desligado, o servidor devolve nulos e o widget
+ * segue com os atributos da tag colada no site, exatamente como hoje. O
+ * agente é o do seletor único (resolveAgentForTurn), o mesmo que responde.
+ *
+ * Nunca lança: banco fora devolve nulos, e o widget usa a reserva.
+ */
+export async function configDoWidget(
+  organizationId: string,
+  deps: DependenciasDaConfig = {},
+): Promise<ConfigDoWidget> {
+  const agora = Date.now();
+  const cacheado = cacheDaConfig.get(organizationId);
+  if (cacheado && cacheado.ate > agora) return cacheado.valor;
+
+  const perfilVivoLigado = deps.perfilVivoLigado ?? ((org: string) => flagLigada(org, 'perfilVivo'));
+  const carregarAgente = deps.carregarAgente ?? ((org: string) => resolveAgentForTurn(org, 'NEW'));
+  const carregarSettings = deps.carregarSettings ?? carregarSettingsPadrao;
+
+  let valor: ConfigDoWidget = NADA;
+  try {
+    if (await perfilVivoLigado(organizationId)) {
+      const [agente, settings] = await Promise.all([
+        carregarAgente(organizationId).catch(() => null),
+        carregarSettings(organizationId),
+      ]);
+      valor = {
+        nome: textoCortado(agente?.name, MAX_NOME_DO_WIDGET) ?? textoCortado(settings.agentName, MAX_NOME_DO_WIDGET),
+        saudacao: textoCortado(settings.greetingMessage, MAX_SAUDACAO_DO_WIDGET),
+      };
+    }
+  } catch (err) {
+    logger.warn('[webChat] configuração do widget indisponível (o widget usa a reserva)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    valor = NADA;
+  }
+
+  cacheDaConfig.set(organizationId, { valor, ate: agora + CONFIG_DO_WIDGET_TTL_MS });
+  return valor;
+}
+
+/**
+ * As origens que a organização cadastrou para o widget
+ * (settings.webChatAllowedOrigins), já limpas, com cache curto (A241).
+ * Vazia quando não há a chave ou o banco falha: aí vale só a lista fixa do
+ * código, que é o comportamento de hoje.
+ */
+export async function origensDoWidget(
+  organizationId: string,
+  deps: Pick<DependenciasDaConfig, 'carregarSettings'> = {},
+): Promise<string[]> {
+  const agora = Date.now();
+  const cacheado = cacheDasOrigens.get(organizationId);
+  if (cacheado && cacheado.ate > agora) return cacheado.valor;
+
+  const carregarSettings = deps.carregarSettings ?? carregarSettingsPadrao;
+  let valor: string[] = [];
+  try {
+    valor = origensDaOrganizacao(await carregarSettings(organizationId));
+  } catch (err) {
+    logger.warn('[webChat] origens do widget indisponíveis (vale a lista fixa)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+  cacheDasOrigens.set(organizationId, { valor, ate: agora + CONFIG_DO_WIDGET_TTL_MS });
+  return valor;
 }

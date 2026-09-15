@@ -29,9 +29,23 @@ const WIDGET_JS = String.raw`
     return;
   }
   var API_BASE = CUR.getAttribute('data-api') || 'https://zappiq-api.fly.dev';
-  var AGENT_NAME = CUR.getAttribute('data-name') || 'assistente';
-  var GREETING = CUR.getAttribute('data-greeting') ||
-    ('Oi! Sou a ' + AGENT_NAME + '. Como posso ajudar?');
+
+  /* C1b (A247): nome e saudação vêm do Treinar IA (GET .../config); os
+   * atributos da tag colada no site são só reserva. Sem nenhum dos dois,
+   * uma saudação neutra e curta, sem gênero fixo e sem a fórmula de call
+   * center que a CR-3 proíbe e o cenário cr3 da Qualidade reprova. */
+  function identidadeDoWidget(servidor, attrNome, attrSaudacao) {
+    var nome = (servidor && servidor.nome) || attrNome || '';
+    var saudacao = (servidor && servidor.saudacao) || attrSaudacao ||
+      (nome ? 'Olá! Aqui é ' + nome + '. Me conta o que você precisa.' : 'Olá! Me conta o que você precisa.');
+    return { nome: nome || 'Atendimento', saudacao: saudacao };
+  }
+
+  var ATTR_NAME = CUR.getAttribute('data-name');
+  var ATTR_GREETING = CUR.getAttribute('data-greeting');
+  var identidade = identidadeDoWidget(null, ATTR_NAME, ATTR_GREETING);
+  var AGENT_NAME = identidade.nome;
+  var GREETING = identidade.saudacao;
   var COLOR = CUR.getAttribute('data-color') || '#050E1F';
   var ACCENT = CUR.getAttribute('data-accent') || '#C9A961';
   var MAX_HISTORY_TURNS = 20;
@@ -186,7 +200,7 @@ const WIDGET_JS = String.raw`
   panel.setAttribute('role', 'dialog');
   panel.innerHTML =
     '<div id="zqwc-header">' +
-      '<div><div class="zqwc-title">' + AGENT_NAME + '</div>' +
+      '<div><div class="zqwc-title"></div>' +
       '<div class="zqwc-status"><span class="zqwc-dot"></span>Online agora</div></div>' +
       '<button id="zqwc-close" type="button" aria-label="Fechar">✕</button>' +
     '</div>' +
@@ -196,6 +210,9 @@ const WIDGET_JS = String.raw`
       '<button id="zqwc-send" type="submit" aria-label="Enviar"><svg viewBox="0 0 24 24" width="15" height="15" fill="none"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
     '</form>';
   shadow.appendChild(panel);
+
+  // O nome entra por textContent: vem do Treinar IA ou da tag, nunca vira HTML.
+  panel.querySelector('.zqwc-title').textContent = AGENT_NAME;
 
   var msgsEl = panel.querySelector('#zqwc-msgs');
   var formEl = panel.querySelector('#zqwc-form');
@@ -323,6 +340,30 @@ const WIDGET_JS = String.raw`
     tag.onerror = function () { canalLigado = false; };
     document.head.appendChild(tag);
   }
+
+  /* Troca nome e saudação pelos do Treinar IA quando a configuração chega.
+   * A saudação só é trocada se ainda for a única fala da conversa: conversa
+   * em andamento não é reescrita. */
+  function aplicarIdentidade(cfg) {
+    var nova = identidadeDoWidget(cfg, ATTR_NAME, ATTR_GREETING);
+    var saudacaoAntiga = GREETING;
+    AGENT_NAME = nova.nome;
+    GREETING = nova.saudacao;
+    var titulo = panel.querySelector('.zqwc-title');
+    if (titulo) titulo.textContent = AGENT_NAME;
+    fab.setAttribute('aria-label', 'Abrir chat com ' + AGENT_NAME);
+    if (messages.length === 1 && messages[0].role === 'bot' && messages[0].text === saudacaoAntiga &&
+        saudacaoAntiga !== GREETING) {
+      messages[0].text = GREETING;
+      saveMsgs(messages);
+      paintMessages();
+    }
+  }
+
+  fetch(API_BASE + '/api/web-chat/org/' + ORG_ID + '/config')
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (cfg) { if (cfg) aplicarIdentidade(cfg); })
+    .catch(function () {});
 
   function ensureGreeting() {
     if (messages.length === 0) {

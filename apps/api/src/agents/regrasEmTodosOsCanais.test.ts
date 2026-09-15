@@ -453,12 +453,20 @@ describe('regrasComoRegistros E contextoUnico desligados: cada canal é o de ant
     expect(agentRuleFindMany).not.toHaveBeenCalled();
   });
 
+  /**
+   * O caminho de antes escreve o cabeçalho '# Contexto recuperado (RAG)'
+   * mesmo sem trecho da base; o motor único deixou de escrever (C1b, nota 6
+   * da revisão de 14/09). É a única diferença entre os dois com a base vazia.
+   */
+  const comCabecalhoVazioDeAntes = (texto: string) =>
+    texto.replace('\n# Agora\n', '\n# Contexto recuperado (RAG)\n# Agora\n');
+
   it('WhatsApp: o caminho de antes, igual ao motor puro sem regras', async () => {
     const r = await systemDoWhatsApp();
 
     expect(r.viaContextoUnico).toBe(false);
     expect(r.systemPrompt).toBe(
-      composeAgentContext({
+      comCabecalhoVazioDeAntes(composeAgentContext({
         origem: 'whatsapp',
         agente: AGENTE,
         organizacao: { id: ORG, nome: 'CMJ', settings: SETTINGS, ehZappIQ: false },
@@ -466,7 +474,7 @@ describe('regrasComoRegistros E contextoUnico desligados: cada canal é o de ant
         blocos: { izaFacts: '', perfilVivo: '', links: buildTenantLinksBlock(SETTINGS, 'CMJ'), rag: '' },
         agora: AGORA,
         ragStatus: 'sem_resultado',
-      }).systemPrompt,
+      }).systemPrompt),
     );
   });
 
@@ -475,7 +483,7 @@ describe('regrasComoRegistros E contextoUnico desligados: cada canal é o de ant
 
     expect(r.viaContextoUnico).toBe(false);
     expect(r.systemPrompt).toBe(
-      composeAgentContext({
+      comCabecalhoVazioDeAntes(composeAgentContext({
         origem: 'playground',
         agente: AGENTE,
         organizacao: { id: ORG, nome: 'CMJ', settings: SETTINGS, ehZappIQ: false },
@@ -483,7 +491,7 @@ describe('regrasComoRegistros E contextoUnico desligados: cada canal é o de ant
         blocos: { izaFacts: '', perfilVivo: '', links: buildTenantLinksBlock(SETTINGS, 'CMJ'), rag: '' },
         agora: AGORA,
         ragStatus: 'sem_resultado',
-      }).systemPrompt,
+      }).systemPrompt),
     );
   });
 

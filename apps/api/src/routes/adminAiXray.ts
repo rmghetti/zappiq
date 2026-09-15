@@ -45,7 +45,7 @@ import {
   montarContextoDoTurno,
   type ContatoDoTurno,
 } from '../agents/agentContextLoader.js';
-import { hashDoContexto, type ParteDoContexto } from '../agents/composeAgentContext.js';
+import { hashDoContexto, buildRagBlock, type ParteDoContexto } from '../agents/composeAgentContext.js';
 import {
   buildWebChatSystemPrompt,
   loadOrgSystemPrompt,
@@ -274,6 +274,8 @@ async function montarPrompt(input: {
         perfilVivoBlock,
         regrasBlock,
         saudacaoBlock,
+        // C1b (Passo 4): a base no caminho de antes, atrás da mesma flag.
+        ragBlock: flags.ragNoChatDoSite ? buildRagBlock(ragContext, ragStatus) : '',
       }),
     );
   }
@@ -406,7 +408,9 @@ router.post(
       // ragNoChatDoSite (A197), e a Qualidade consulta sempre (A036).
       const usaRag =
         CANAIS_COM_RAG.includes(canal) ||
-        (canal === 'site' && contextoUnico && ragNoChatDoSite) ||
+        // C1b (Passo 4): o site consulta a base com ragNoChatDoSite nos DOIS
+        // motores, como o chat do site faz.
+        (canal === 'site' && ragNoChatDoSite) ||
         (canal === 'qualidade' && contextoUnico);
       const agora = new Date();
       const turnos: Array<Record<string, unknown>> = [];

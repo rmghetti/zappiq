@@ -80,3 +80,53 @@ export function origemPermitidaNoWidget(input: {
   const normalizada = origemNormalizada(input.origin);
   return Boolean(normalizada && input.origensDaOrganizacao.includes(normalizada));
 }
+
+/** `/api/web-chat/org/<id>/...` vira `<id>`. Qualquer outra rota: null. */
+export function orgDaRotaDoWidget(path: string | undefined | null): string | null {
+  const m = /^\/api\/web-chat\/org\/([^/]{1,40})(?:\/|$)/.exec(String(path ?? ''));
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
+}
+
+export interface OpcoesDeCors {
+  origin: boolean | ((origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => void);
+  credentials: boolean;
+}
+
+/**
+ * O CORS da API, com a exceção do widget (A241).
+ *
+ * Toda rota segue a checagem fixa de sempre. Só as rotas públicas do widget
+ * de uma organização (`/api/web-chat/org/<id>/...`) aceitam, além dela, as
+ * origens que ESSA organização cadastrou. Origem fora das duas listas cai
+ * na checagem fixa e é recusada como hoje (antes de chegar à rota, então o
+ * modelo nem é chamado).
+ */
+export function criarDelegadoDeCors(deps: {
+  padroesFixos: Array<string | RegExp>;
+  checagemFixa: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => void;
+  origensDoWidget: (organizationId: string) => Promise<string[]>;
+}) {
+  return (
+    req: { path?: string; headers?: Record<string, unknown> },
+    cb: (err: Error | null, opcoes?: OpcoesDeCors) => void,
+  ): void => {
+    const padrao: OpcoesDeCors = { origin: deps.checagemFixa, credentials: true };
+    const org = orgDaRotaDoWidget(req.path);
+    const origin = typeof req.headers?.origin === 'string' ? req.headers.origin : undefined;
+    if (!org || !origin || origemCasaComPadroes(origin, deps.padroesFixos)) return cb(null, padrao);
+
+    deps
+      .origensDoWidget(org)
+      .then((lista) => {
+        const normalizada = origemNormalizada(origin);
+        if (normalizada && lista.includes(normalizada)) return cb(null, { origin: true, credentials: true });
+        return cb(null, padrao);
+      })
+      .catch(() => cb(null, padrao));
+  };
+}

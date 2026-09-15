@@ -23,7 +23,12 @@ import { initQueues, closeQueues } from './services/queueService.js';
 import { initFlowTimerWorker } from './services/flowScheduler.js';
 import { setIo } from './utils/socketRegistry.js';
 import { setupSocketAdapter } from './utils/socketAdapter.js';
-import { padroesDeOrigemFixos, origemCasaComPadroes } from './config/origensPermitidas.js';
+import {
+  padroesDeOrigemFixos,
+  origemCasaComPadroes,
+  origemPermitidaNoWidget,
+  criarDelegadoDeCors,
+} from './config/origensPermitidas.js';
 import { prisma } from '@zappiq/database';
 
 // Routes
@@ -79,6 +84,7 @@ import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-p
 import webChatWidgetRoutes from './routes/webChatWidget.js'; // widget.js embedável pra sites de clientes (ex.: CMJ)
 import { registrarCanalDoVisitante } from './services/webChatSocket.js'; // C1b: canal de volta do chat do site
 import { getWebChatOrgConfig } from './services/webChatService.js';
+import { origensDoWidget } from './services/webChatVisitante.js';
 import adminIzaFactsRoutes from './routes/adminIzaFacts.js'; // FASE 4 P7+ Admin Camada 2 CRUD
 import adminAiXrayRoutes from './routes/adminAiXray.js'; // Tarefa A3: Raio-X do que a IA recebe, sem chamar o modelo
 import adminKbSurveyRoutes from './routes/adminKbSurvey.js'; // Tarefa B3: reingerir o questionário por organização
@@ -179,9 +185,16 @@ io.on('connection', (socket) => {
 // Cada visitante entra só na sala da própria sessão; é por ela que a resposta
 // humana do Inbox chega ao widget (channelDispatcher, canal 'site'). O JWT
 // acima vale só para o namespace do painel ('/').
+// C1b (Passo 4, A241): a origem vale pela lista fixa (reserva, a de hoje) OU
+// pelas origens que a organização cadastrou em settings.webChatAllowedOrigins.
 registrarCanalDoVisitante(io, {
   configDaOrg: getWebChatOrgConfig,
-  origemPermitida: async (origin) => !origin || origemCasaComPadroes(origin, ALLOWED_ORIGIN_PATTERNS),
+  origemPermitida: async (origin, organizationId) =>
+    origemPermitidaNoWidget({
+      origin,
+      padroesFixos: ALLOWED_ORIGIN_PATTERNS,
+      origensDaOrganizacao: await origensDoWidget(organizationId),
+    }),
 });
 
 // ── BullMQ Queues ──────────────────────────────
@@ -214,7 +227,19 @@ app.use('/api/webhook/asaas', express.raw({ type: 'application/json', limit: '2m
 
 // ── Global Middleware ────────────────────────────
 app.use(helmet());
-app.use(cors({ origin: corsOriginCheck, credentials: true }));
+// C1b (Passo 4, A241): toda rota segue a checagem fixa de sempre; só as rotas
+// públicas do widget de uma organização aceitam também as origens que ela
+// cadastrou (settings.webChatAllowedOrigins). Fora das duas listas, recusa
+// como hoje, antes de chegar à rota.
+app.use(
+  cors(
+    criarDelegadoDeCors({
+      padroesFixos: ALLOWED_ORIGIN_PATTERNS,
+      checagemFixa: corsOriginCheck,
+      origensDoWidget,
+    }) as any,
+  ),
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('short', { stream: { write: (msg: string) => logger.info(msg.trim()) } }));
 

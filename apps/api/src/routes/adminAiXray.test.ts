@@ -817,3 +817,16 @@ describe('POST /api/admin/ai-xray: alertas da guarda de marca (C1b, A189)', () =
     expect(res.body.alertas_de_saida).toEqual([]);
   });
 });
+
+describe('POST /api/admin/ai-xray: base do site no caminho de antes (C1b, Passo 4)', () => {
+  it('com ragNoChatDoSite e o motor de antes, o site consulta a base e mostra o bloco', async () => {
+    isFlagOn.mockImplementation(async (_org: string, flag: string) => flag === 'ragNoChatDoSite');
+
+    const res = await chamar({ ...corpoValido, canal: 'site' });
+
+    expect(searchWithSources).toHaveBeenCalledWith('org-1', 'vocês abrem domingo?', 5);
+    const turno = res.body.turnos[0];
+    expect(turno.motor).toBe('antes');
+    expect(promptDoTurno(res)).toContain('# Contexto recuperado (RAG)\nTrecho da base: o rodízio custa R$ 89.');
+  });
+});

@@ -61,3 +61,89 @@ describe('mensagensDaEquipe (Passo 3: o visitante que voltou vê a resposta huma
     await expect(mensagensDaEquipe('org-1', 'sessao-1', db)).resolves.toEqual([]);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Passo 4 (A247): nome e saudação do widget vêm do Treinar IA.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+const { configDoWidget, limparCacheDoWidget, CONFIG_DO_WIDGET_TTL_MS, origensDoWidget } = await import(
+  './webChatVisitante.js'
+);
+
+describe('configDoWidget (Passo 4, A247)', () => {
+  const perfilVivoLigado = vi.fn();
+  const carregarAgente = vi.fn();
+  const carregarSettings = vi.fn();
+  const deps = {
+    perfilVivoLigado: (...a: any[]) => perfilVivoLigado(...a),
+    carregarAgente: (...a: any[]) => carregarAgente(...a),
+    carregarSettings: (...a: any[]) => carregarSettings(...a),
+  };
+
+  beforeEach(() => {
+    limparCacheDoWidget();
+    perfilVivoLigado.mockResolvedValue(true);
+    carregarAgente.mockResolvedValue({ name: 'Vera' });
+    carregarSettings.mockResolvedValue({ agentName: 'Vera', greetingMessage: '  Olá! Aqui é a Vera, da CMJ.  ' });
+  });
+
+  it('com o perfil vivo ligado, nome do agente e saudação do Treinar IA', async () => {
+    await expect(configDoWidget('org-1', deps)).resolves.toEqual({
+      nome: 'Vera',
+      saudacao: 'Olá! Aqui é a Vera, da CMJ.',
+    });
+  });
+
+  it('sem agente vivo, o nome vem do que o dono gravou nas settings', async () => {
+    carregarAgente.mockResolvedValue(null);
+    carregarSettings.mockResolvedValue({ agentName: 'Tauã' });
+    await expect(configDoWidget('org-1', deps)).resolves.toEqual({ nome: 'Tauã', saudacao: null });
+  });
+
+  it('com o perfil vivo DESLIGADO, nada vem do servidor: o widget segue com os atributos da tag (como hoje)', async () => {
+    perfilVivoLigado.mockResolvedValue(false);
+    await expect(configDoWidget('org-1', deps)).resolves.toEqual({ nome: null, saudacao: null });
+    expect(carregarAgente).not.toHaveBeenCalled();
+  });
+
+  it('cache curto por organização: a segunda leitura não vai ao banco', async () => {
+    await configDoWidget('org-1', deps);
+    await configDoWidget('org-1', deps);
+    expect(carregarSettings).toHaveBeenCalledTimes(1);
+    expect(CONFIG_DO_WIDGET_TTL_MS).toBeLessThanOrEqual(60_000);
+  });
+
+  it('saudação longa é cortada; banco fora devolve nulos (o widget usa a reserva)', async () => {
+    carregarSettings.mockResolvedValue({ greetingMessage: 'a'.repeat(900) });
+    const r = await configDoWidget('org-2', deps);
+    expect(r.saudacao!.length).toBeLessThanOrEqual(500);
+
+    carregarSettings.mockRejectedValue(new Error('db down'));
+    await expect(configDoWidget('org-3', deps)).resolves.toEqual({ nome: null, saudacao: null });
+  });
+});
+
+describe('origensDoWidget (Passo 4, A241)', () => {
+  beforeEach(() => limparCacheDoWidget());
+
+  it('lê settings.webChatAllowedOrigins da organização, limpo, com cache curto', async () => {
+    const carregarSettings = vi.fn(async () => ({
+      webChatAllowedOrigins: ['https://Clinica.com.br/', 'lixo', 'https://www.clinica.com.br'],
+    }));
+    const lista = await origensDoWidget('org-1', { carregarSettings });
+    expect(lista).toEqual(['https://clinica.com.br', 'https://www.clinica.com.br']);
+    await origensDoWidget('org-1', { carregarSettings });
+    expect(carregarSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('sem a chave ou com banco fora: lista vazia (vale só a lista fixa, como hoje)', async () => {
+    await expect(origensDoWidget('org-2', { carregarSettings: async () => ({}) })).resolves.toEqual([]);
+    await expect(
+      origensDoWidget('org-3', {
+        carregarSettings: async () => {
+          throw new Error('db down');
+        },
+      }),
+    ).resolves.toEqual([]);
+  });
+});

@@ -116,3 +116,50 @@ describe('widget.js: canal de volta da equipe (C1b)', () => {
     expect(vistas).toEqual(['m1']);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * C1b (Passo 4, A247): nome e saudação do Treinar IA; a tag é reserva.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+describe('widget.js: identidade do Treinar IA (C1b, A247)', () => {
+  const identidade = () =>
+    pegaFuncao<{ nome: string; saudacao: string }>('identidadeDoWidget')() as unknown as (
+      servidor: unknown,
+      attrNome: string | null,
+      attrSaudacao: string | null,
+    ) => { nome: string; saudacao: string };
+
+  it('o que vem do servidor (Treinar IA) vence os atributos da tag', () => {
+    expect(identidade()({ nome: 'Vera', saudacao: 'Olá! Aqui é a Vera, da CMJ.' }, 'Outra', 'Oi da tag')).toEqual({
+      nome: 'Vera',
+      saudacao: 'Olá! Aqui é a Vera, da CMJ.',
+    });
+  });
+
+  it('servidor sem valor (interruptor desligado ou erro): a tag vale, como hoje', () => {
+    expect(identidade()({ nome: null, saudacao: null }, 'Vera', 'Oi! Sou a Vera, do CMJ.')).toEqual({
+      nome: 'Vera',
+      saudacao: 'Oi! Sou a Vera, do CMJ.',
+    });
+    expect(identidade()(null, 'Vera', 'Oi da tag').saudacao).toBe('Oi da tag');
+  });
+
+  it('sem nada: saudação neutra curta, sem a fórmula que a Qualidade reprova e sem gênero fixo', () => {
+    const comNome = identidade()(null, 'Vera', null).saudacao;
+    const semNome = identidade()(null, null, null);
+    for (const s of [comNome, semNome.saudacao]) {
+      expect(s).not.toMatch(/como posso (te )?ajudar/i);
+      expect(s).not.toMatch(/em que posso ser útil/i);
+      expect(s).not.toMatch(/\bSou a\b/);
+    }
+    expect(comNome).toBe('Olá! Aqui é Vera. Me conta o que você precisa.');
+    expect(semNome).toEqual({ nome: 'Atendimento', saudacao: 'Olá! Me conta o que você precisa.' });
+  });
+
+  it('o script lê a configuração da organização e não monta mais a fórmula antiga', () => {
+    expect(scriptServido).toContain("'/api/web-chat/org/' + ORG_ID + '/config'");
+    expect(scriptServido).not.toContain("'. Como posso ajudar?'");
+    // O nome entra por textContent, nunca por innerHTML.
+    expect(scriptServido).toContain("panel.querySelector('.zqwc-title').textContent = AGENT_NAME");
+  });
+});
