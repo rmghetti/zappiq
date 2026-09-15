@@ -244,6 +244,22 @@ describe('nota 1: evalNoTier, o modelo da faixa do plano', () => {
     expect(results[0].combined).toBe('inconclusivo');
   });
 
+  // Rodada 1 do PR #378, item 9: o motivo da escolha do modelo fica no
+  // resultado (é assim que o dono vê que a faixa do plano não valeu).
+  it('item 9: o motivo da política fica gravado em cada resultado', async () => {
+    completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA());
+    const motivo = 'evalNoTier ligado, mas a família google está sem chave: cascata padrão';
+    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL, {
+      politica: { modelo: 'anthropic-sonnet', motivo },
+    });
+    expect(results[0].motivoDoModelo).toBe(motivo);
+
+    completeMock.mockReset();
+    completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA());
+    const semPolitica = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL);
+    expect(semPolitica.results[0].motivoDoModelo).toBeNull();
+  });
+
   it('override contratual vira forceProvider; escalada por intenção vira preferProvider', () => {
     expect(pedidoDoAgente({ override: 'openai-mini', modelo: 'openai-mini', motivo: 'x' }, true)).toEqual({
       params: { forceProvider: 'openai-mini' },
@@ -353,6 +369,54 @@ describe('Passo 2 (A039, A208): o juiz com evidência, de outra família', () =>
     expect(escolherProvedorDoJuiz('google-gemini-flash', new Set(['anthropic', 'google']))).toBe('anthropic-sonnet');
     expect(escolherProvedorDoJuiz('anthropic-sonnet', new Set(['anthropic']))).toBeNull();
     expect([...familiasConfiguradas({ OPENAI_API_KEY: 'x', ANTHROPIC_API_KEY: '' })]).toEqual(['openai']);
+  });
+
+  // Rodada 1 do PR #378, item 11: o juiz pede evidência curta (cerca de 300
+  // caracteres) e, numa execução nova, veredito sem evidência ou cortado antes
+  // do veredito vira inconclusivo. A regra determinística não decide sozinha.
+  it('item 11: o prompt do juiz pede evidência de no máximo cerca de 300 caracteres', async () => {
+    completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA());
+    await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL);
+    expect(String(completeMock.mock.calls[1][0].system)).toMatch(/no máximo 300 caracteres/);
+  });
+
+  it('item 11: JSON cortado no meio da evidência vira inconclusivo, fora da nota, sem sugestão', async () => {
+    completeMock
+      .mockResolvedValueOnce(resposta('Claro, já chamo uma pessoa.'))
+      .mockResolvedValueOnce(resposta('{"evidencia": "A resposta diz que vai chamar uma pes'));
+
+    const { results, summary, placar } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL);
+
+    expect(results[0].combined).toBe('inconclusivo');
+    expect(results[0].inconclusivo?.motivo).toBe('juiz_indeterminado');
+    expect(results[0].inconclusivo?.explicacao).not.toContain('—');
+    expect(results[0].judge.passed).toBeNull();
+    expect(results[0].juiz).toEqual({ provider: 'anthropic-sonnet', model: 'claude-sonnet-4-6' });
+    expect(results[0].suggestedFix).toBeUndefined();
+    expect(completeMock).toHaveBeenCalledTimes(2);
+    expect(summary.passed + summary.failed + summary.partial).toBe(0);
+    expect(summary.erros).toBe(1);
+    expect(placar.inconclusivos).toBe(1);
+  });
+
+  it('item 11: {passed:true} sem evidência também é inconclusivo (não passa pela regra sozinha)', async () => {
+    completeMock
+      .mockResolvedValueOnce(resposta('Claro, já chamo uma pessoa.'))
+      .mockResolvedValueOnce(resposta('{"passed": true, "confidence": 90, "reason": "ok"}'));
+
+    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL);
+
+    // A regra determinística tinha passado (nenhum failPattern casou), e mesmo
+    // assim o cenário não é aprovado: sem evidência não há veredito novo.
+    expect(results[0].deterministic.passed).toBe(true);
+    expect(results[0].combined).toBe('inconclusivo');
+    expect(results[0].inconclusivo?.motivo).toBe('juiz_indeterminado');
+  });
+
+  it('item 11: com evidência e veredito, o caminho normal segue igual', async () => {
+    completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA());
+    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL);
+    expect(results[0].combined).toBe('pass');
   });
 
   it('leitura tolerante: formato antigo, cortado e ilegível', () => {

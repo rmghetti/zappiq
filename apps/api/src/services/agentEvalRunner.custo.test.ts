@@ -65,6 +65,8 @@ beforeEach(() => {
   // O juiz reprova, então o runner também gera sugestão: as 4 chamadas.
   completeMock.mockResolvedValue({
     text: JSON.stringify({
+      // Rodada 1 do PR #378, item 11: sem evidência o veredito novo não vale.
+      evidencia: 'a resposta não conduz',
       passed: false,
       confidence: 80,
       reason: 'não conduziu',

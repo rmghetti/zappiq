@@ -177,6 +177,12 @@ export interface ScenarioResult {
   /** C2 (Passo 1): ids dos trechos da base que entraram no contexto. */
   fontes: string[];
   /**
+   * Rodada 1 do PR #378, item 9: por que o agente foi pedido a este modelo
+   * (a política da faixa do plano, ou a volta à cascata padrão quando a
+   * família está sem chave ou com o disjuntor aberto). null sem política.
+   */
+  motivoDoModelo?: string | null;
+  /**
    * C2 (Passo 5): as repetições do caso de conhecimento (aprova só se todas
    * passarem). Ausente quando o cenário rodou uma vez só.
    */
@@ -222,8 +228,12 @@ export interface ScenarioResult {
 /** C2: o veredito de um cenário. */
 export type VereditoDoCenario = 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
 
-/** C2 (Passo 1): por que o cenário ficou inconclusivo. */
-export type MotivoInconclusivo = 'modelo_diferente' | 'base_nao_consultada';
+/**
+ * C2 (Passo 1): por que o cenário ficou inconclusivo. Rodada 1 do PR #378,
+ * item 11: 'juiz_indeterminado' é o juiz sem veredito legível ou sem
+ * evidência numa execução nova.
+ */
+export type MotivoInconclusivo = 'modelo_diferente' | 'base_nao_consultada' | 'juiz_indeterminado';
 
 /** C2 (Passo 1, A226): provedor e modelo efetivamente usados numa chamada. */
 export interface ModeloUsado {
@@ -686,7 +696,9 @@ resposta do agente.
 
 Como avaliar:
 1. Escreva primeiro a EVIDÊNCIA: cite o trecho da resposta (e, quando for o
-   caso, o trecho da base) que sustenta a sua conclusão. Só depois decida.
+   caso, o trecho da base) que sustenta a sua conclusão.
+   A evidência tem no máximo 300 caracteres. Só depois decida. Sem
+   evidência, o veredito não vale.
 2. O que está nos trechos recebidos ou no histórico NÃO é invenção. Nunca
    reprove o agente por usar informação que ele recebeu.
 3. Aprovado: a resposta atende substancialmente o comportamento esperado.
@@ -1341,6 +1353,7 @@ export function detectarFalhaTecnica(input: {
 function esqueletoDoResultado(
   scenario: EvalScenario,
   rastro: { ragStatus: RagSearchStatus | null; fontes: string[]; promptHash?: string },
+  motivoDoModelo: string | null = null,
 ): ScenarioResult {
   return {
     scenarioId: scenario.id,
@@ -1363,6 +1376,7 @@ function esqueletoDoResultado(
     sugeridor: null,
     fontes: rastro.fontes,
     ragStatus: rastro.ragStatus,
+    motivoDoModelo,
     ...(rastro.promptHash ? { promptHash: rastro.promptHash } : {}),
   };
 }
@@ -1390,6 +1404,9 @@ const EXPLICACAO_INCONCLUSIVO: Record<MotivoInconclusivo, string> = {
   base_nao_consultada:
     'Este caso de conhecimento não foi avaliado: o teste desta empresa ainda não consulta a ' +
     'base de conhecimento. Ele passa a contar quando o teste usar a base.',
+  juiz_indeterminado:
+    'O avaliador não devolveu um veredito legível com evidência. O cenário não aprova nem ' +
+    'reprova: fica fora da nota. Não é erro do seu agente.',
 };
 
 /**
@@ -1587,11 +1604,38 @@ async function umaAmostra(
   const familiaDoAgente = familiaDoProvedor(resp.provider ?? pedido);
   const juizMesmaFamilia = juiz ? familiaDoProvedor(juiz.provider) === familiaDoAgente : null;
 
-  // A050: juiz INDETERMINADO não reprova. Quem decide, nesse caso, é a regra
-  // determinística sozinha.
+  // A050: juiz INDETERMINADO não reprova. Rodada 1 do PR #378, item 11: e
+  // também não aprova pela regra determinística sozinha. Veredito ilegível
+  // (JSON cortado antes do veredito) ou sem evidência numa execução nova
+  // vira inconclusivo, fora da nota; conta no portão de falha do provedor.
+  if (veredito.passed === null || !veredito.evidencia) {
+    logger.warn('[agentEvalRunner] juiz sem veredito ou sem evidência: inconclusivo', {
+      scenarioId: scenario.id,
+      semVeredito: veredito.passed === null,
+      semEvidencia: !veredito.evidencia,
+    });
+    return {
+      ...base,
+      deterministic,
+      combined: 'inconclusivo',
+      juiz,
+      juizMesmaFamilia,
+      judge: {
+        passed: null,
+        confidence: 0,
+        reason: EXPLICACAO_INCONCLUSIVO.juiz_indeterminado,
+        evidencia: veredito.evidencia,
+        causa: null,
+      },
+      inconclusivo: {
+        motivo: 'juiz_indeterminado',
+        explicacao: EXPLICACAO_INCONCLUSIVO.juiz_indeterminado,
+      },
+    };
+  }
+
   let combined: 'pass' | 'partial' | 'fail';
-  if (veredito.passed === null) combined = deterministic.passed ? 'pass' : 'fail';
-  else if (deterministic.passed && veredito.passed) combined = 'pass';
+  if (deterministic.passed && veredito.passed) combined = 'pass';
   else if (!deterministic.passed && !veredito.passed) combined = 'fail';
   else combined = 'partial';
 
@@ -1666,7 +1710,7 @@ async function runScenario(
     fontes: doCenario?.fontes ?? [],
     promptHash: doCenario?.hash,
   };
-  const esqueleto = esqueletoDoResultado(scenario, rastro);
+  const esqueleto = esqueletoDoResultado(scenario, rastro, politica?.motivo ?? null);
 
   // ─── C2 (P13, A037): caso de conhecimento só conta com a base no teste ───
   // Os casos gerados do conteúdo do cliente respondem com a BASE. Rodar sem
@@ -1776,12 +1820,16 @@ export function computeSummary(results: ScenarioResult[]): RunSummary {
   const failed = results.filter((r) => r.combined === 'fail').length;
 
   // A171 + C2 (Passo 1): 'erros' conta o que o PROVEDOR impediu de avaliar,
-  // e é o que alimenta o portão dos 20%: falha técnica e resposta servida
-  // por um modelo diferente do pedido (a cascata caiu na reserva). O caso de
-  // conhecimento sem base no teste não entra aqui: não é defeito do
+  // e é o que alimenta o portão dos 20%: falha técnica, resposta servida
+  // por um modelo diferente do pedido (a cascata caiu na reserva) e, na
+  // rodada 1 do PR #378 (item 11), o juiz sem veredito ou sem evidência. O
+  // caso de conhecimento sem base no teste não entra aqui: não é defeito do
   // provedor, e contá-lo derrubaria a execução inteira pelo portão.
   const erros = results.filter(
-    (r) => r.combined === 'erro' || (r.combined === 'inconclusivo' && r.inconclusivo?.motivo === 'modelo_diferente'),
+    (r) =>
+      r.combined === 'erro' ||
+      (r.combined === 'inconclusivo' &&
+        (r.inconclusivo?.motivo === 'modelo_diferente' || r.inconclusivo?.motivo === 'juiz_indeterminado')),
   ).length;
 
   // A245: todo cenário crítico que NÃO passou conta como crítico. Falha

@@ -42,6 +42,9 @@ import {
 } from '../agents/agentContextLoader.js';
 import { NOME_FICTICIO_DO_TESTE, type EvalScenario } from '../agents/evalScenarioTypes.js';
 import { PROVEDOR_DA_CASCATA_PADRAO } from '../agents/resolveTurnPolicy.js';
+import { familiaDoProvedor, familiasConfiguradas } from './agentEvalRunner.js';
+import { breakerIsOpen } from './llm/redisBreaker.js';
+import type { LLMProviderId } from './llm/LLMRouter.js';
 import type {
   ContextoDoCenario,
   ExtrasDoMontador,
@@ -186,9 +189,44 @@ export function criarMontadorDeContextoDoEval(
  * Rodada 1 do PR #378, item 1: o interruptor `juizDeOutraFamilia` é lido
  * aqui também, na mesma leitura, e viaja na política (`juizOutraFamilia`).
  * Com os dois desligados a política é null, como antes.
+ *
+ * Rodada 1 do PR #378, item 9: se a família do modelo escolhido não tem
+ * chave (o Gemini está parado desde 10/07) ou o disjuntor do provedor está
+ * aberto, a política volta à cascata padrão e o motivo vai no resultado.
+ * Antes, toda resposta vinha pela reserva e ficava inconclusiva.
  */
+export interface DepsDaPolitica {
+  /** As famílias com chave configurada. Padrão: o ambiente. */
+  familias?: () => Set<string>;
+  /** O disjuntor do provedor está aberto? Padrão: o breaker no Redis. */
+  disjuntorAberto?: (id: LLMProviderId) => Promise<boolean>;
+}
+
+/** Por que o modelo da faixa não pode ser pedido agora, ou null se pode. */
+async function motivoDeIndisponibilidade(
+  modelo: LLMProviderId,
+  deps: DepsDaPolitica,
+): Promise<string | null> {
+  const familia = familiaDoProvedor(modelo);
+  const familias = (deps.familias ?? familiasConfiguradas)();
+  if (familia && !familias.has(familia)) return `a família ${familia} está sem chave (${modelo})`;
+  try {
+    if (await (deps.disjuntorAberto ?? breakerIsOpen)(modelo)) {
+      return `o disjuntor de ${modelo} está aberto`;
+    }
+  } catch (err) {
+    // A leitura do disjuntor é fail-open, como no roteador: erro não bloqueia.
+    logger.warn('[agentEvalContext] leitura do disjuntor falhou: segue a faixa do plano', {
+      modelo,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return null;
+}
+
 export function criarPoliticaDaQualidade(
   organizationId: string,
+  deps: DepsDaPolitica = {},
 ): () => Promise<PoliticaDaQualidade | null> {
   let lida: Promise<PoliticaDaQualidade | null> | null = null;
   return () => {
@@ -211,6 +249,16 @@ export function criarPoliticaDaQualidade(
           agendamentoAtivo: false,
           evalNaFaixaDoPlano: true,
         });
+        const indisponivel = await motivoDeIndisponibilidade(p.modelo, deps);
+        if (indisponivel) {
+          const motivo = `evalNoTier ligado, mas ${indisponivel}: cascata padrão`;
+          logger.warn('[agentEvalContext] Qualidade fora da faixa do plano', {
+            organizationId,
+            modeloDaFaixa: p.modelo,
+            motivo,
+          });
+          return { modelo: PROVEDOR_DA_CASCATA_PADRAO, motivo, juizOutraFamilia };
+        }
         logger.info('[agentEvalContext] Qualidade na faixa do plano', {
           organizationId,
           modelo: p.modelo,

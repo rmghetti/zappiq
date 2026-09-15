@@ -268,7 +268,7 @@ describe('C2: trechos, fontes e a política da faixa do plano', () => {
       trialConverted: true,
       stripeSubscriptionId: 'sub_1',
     });
-    const p = await criarPoliticaDaQualidade(ORG)();
+    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic']) })();
     expect(p).toMatchObject({ tier: 'SCALE', modelo: 'anthropic-sonnet', juizOutraFamilia: true });
   });
 
@@ -283,7 +283,7 @@ describe('C2: trechos, fontes e a política da faixa do plano', () => {
       trialConverted: true,
       stripeSubscriptionId: 'sub_1',
     });
-    const p = await criarPoliticaDaQualidade(ORG)();
+    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic']) })();
     expect(p?.juizOutraFamilia).toBe(false);
   });
 
@@ -298,11 +298,83 @@ describe('C2: trechos, fontes e a política da faixa do plano', () => {
       trialConverted: true,
       stripeSubscriptionId: 'sub_1',
     });
-    const politica = criarPoliticaDaQualidade(ORG);
+    const politica = criarPoliticaDaQualidade(ORG, { familias: () => new Set(['google', 'anthropic']) });
     const p1 = await politica();
     const p2 = await politica();
     expect(p1).toMatchObject({ tier: 'GROWTH', modelo: 'google-gemini-flash' });
     expect(p2).toBe(p1);
     expect(isFlagOn.mock.calls.filter((c) => c[1] === 'evalNoTier')).toHaveLength(1);
+  });
+});
+
+/* Rodada 1 do PR #378, item 9: evalNoTier ligado numa organização cujo modelo
+ * da faixa é de uma família SEM chave (o Gemini está parado desde 10/07) ou
+ * com o disjuntor aberto. Antes, toda resposta vinha pela reserva e ficava
+ * inconclusiva; agora a política volta à cascata padrão e diz por quê. */
+describe('item 9: evalNoTier com a família do modelo indisponível', () => {
+  const ORG_GROWTH = {
+    plan: 'GROWTH',
+    settings: {},
+    trialStartedAt: null,
+    trialEndsAt: null,
+    isTrialActive: false,
+    trialConverted: true,
+    stripeSubscriptionId: 'sub_1',
+  };
+
+  it('Gemini sem chave: cascata padrão, sem tier, com o motivo', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue(ORG_GROWTH);
+    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic', 'openai']) })();
+    expect(p).toEqual({
+      modelo: 'anthropic-sonnet',
+      motivo: expect.stringMatching(/família google.*sem chave.*cascata padrão/),
+      juizOutraFamilia: false,
+    });
+    expect(p?.tier).toBeUndefined();
+    expect(p?.override).toBeUndefined();
+  });
+
+  it('Gemini com chave mas disjuntor aberto: cascata padrão, com o motivo', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue(ORG_GROWTH);
+    const p = await criarPoliticaDaQualidade(ORG, {
+      familias: () => new Set(['google', 'anthropic']),
+      disjuntorAberto: async (id: string) => id === 'google-gemini-flash',
+    })();
+    expect(p?.modelo).toBe('anthropic-sonnet');
+    expect(p?.tier).toBeUndefined();
+    expect(p?.motivo).toMatch(/disjuntor.*google-gemini-flash.*cascata padrão/);
+  });
+
+  it('família com chave e disjuntor fechado: a faixa do plano vale', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue(ORG_GROWTH);
+    const p = await criarPoliticaDaQualidade(ORG, {
+      familias: () => new Set(['google']),
+      disjuntorAberto: async () => false,
+    })();
+    expect(p).toMatchObject({ tier: 'GROWTH', modelo: 'google-gemini-flash' });
+  });
+
+  it('override contratual para família sem chave também volta à cascata', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue({ ...ORG_GROWTH, plan: 'SCALE', settings: { llm_routing: { forceProvider: 'openai-mini' } } });
+    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic']) })();
+    expect(p?.modelo).toBe('anthropic-sonnet');
+    expect(p?.override).toBeUndefined();
+    expect(p?.motivo).toMatch(/família openai/);
+  });
+
+  it('a leitura do disjuntor que quebra não derruba a política: segue a faixa do plano', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue(ORG_GROWTH);
+    const p = await criarPoliticaDaQualidade(ORG, {
+      familias: () => new Set(['google']),
+      disjuntorAberto: async () => {
+        throw new Error('redis fora');
+      },
+    })();
+    expect(p).toMatchObject({ tier: 'GROWTH', modelo: 'google-gemini-flash' });
   });
 });

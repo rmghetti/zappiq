@@ -69,7 +69,8 @@ function comJuizQueAprovaTudo(respostaDoAgente: string) {
   completeMock.mockImplementation(async (params: any) => {
     const system = String(params?.system ?? '');
     const texto = system.includes('avaliador imparcial')
-      ? '{"passed": true, "confidence": 95, "reason": "parece boa"}'
+      // Rodada 1 do PR #378, item 11: sem evidência o veredito novo não vale.
+      ? '{"evidencia": "a resposta parece boa", "passed": true, "confidence": 95, "reason": "parece boa"}'
       : system.includes('engenheiro de prompts')
         ? '{"summary":"x","patches":[{"where":"novo","diff":"+ regra."}],"confidence":80}'
         : respostaDoAgente;

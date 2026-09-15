@@ -64,7 +64,7 @@ export const FLAGS: Record<FlagName, FlagDef> = {
   },
   evalNoTier: {
     descricao:
-      'A avaliação de qualidade passa a respeitar a faixa do plano: responde com o modelo que a produção usaria para a organização (em trial, a faixa de entrada) e segue a cota de testes manuais da faixa. Com o Gemini fora do ar, organização Starter ou Growth fica com as respostas inconclusivas.',
+      'A avaliação de qualidade passa a respeitar a faixa do plano: responde com o modelo que a produção usaria para a organização (em trial, a faixa de entrada) e segue a cota de testes manuais da faixa. Se a família do modelo estiver sem chave ou com o disjuntor aberto, o teste volta à cascata padrão e registra o motivo no resultado.',
     removeBy: '2027-03-31',
   },
   treinarSomenteAdmin: {

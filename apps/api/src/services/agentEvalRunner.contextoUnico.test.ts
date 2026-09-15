@@ -86,7 +86,8 @@ beforeEach(() => {
   // 1ª chamada: agente responde; 2ª: juiz aprova.
   completeMock
     .mockResolvedValueOnce(resposta('<reply>Custa R$ 890.</reply>'))
-    .mockResolvedValueOnce(resposta('{"passed": true, "confidence": 90, "reason": "ok"}'));
+    // Rodada 1 do PR #378, item 11: sem evidência o veredito novo não vale.
+    .mockResolvedValueOnce(resposta('{"evidencia": "diz R$ 890", "passed": true, "confidence": 90, "reason": "ok"}'));
 });
 
 describe('sem montador: o prompt de antes', () => {

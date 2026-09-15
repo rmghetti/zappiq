@@ -479,7 +479,10 @@ export interface AgentEvalRunDetailScenario {
   /** Motivo legível da falha técnica, quando combined='erro'. */
   falhaTecnica?: string;
   /** C2: por que ficou inconclusivo. */
-  inconclusivo?: { motivo: 'modelo_diferente' | 'base_nao_consultada'; explicacao: string };
+  inconclusivo?: {
+    motivo: 'modelo_diferente' | 'base_nao_consultada' | 'juiz_indeterminado';
+    explicacao: string;
+  };
   deterministic: { passed: boolean; failedPatterns: string[]; missingPatterns: string[] };
   /** A050 — passed null = avaliação indeterminada (não é reprovação). */
   judge: {

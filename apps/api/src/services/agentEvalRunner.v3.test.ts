@@ -192,13 +192,19 @@ describe('A050 — o juiz passa a ser lido com tolerância', () => {
     expect(j.passed).toBeNull();
   });
 
-  it('juiz indeterminado não derruba o cenário que passou na regra', async () => {
+  // Rodada 1 do PR #378, item 11: o juiz indeterminado continua não
+  // reprovando, mas também não deixa a regra determinística aprovar
+  // sozinha: o cenário fica inconclusivo, fora da nota.
+  it('juiz indeterminado não derruba nem aprova o cenário: fica inconclusivo, fora da nota', async () => {
     completeMock
       .mockResolvedValueOnce(resposta('resposta boa do agente'))
       .mockResolvedValueOnce(resposta('texto solto sem json'));
 
-    const { results } = await executeAgentEvalRun([CENARIO] as any, AGENTE, PERFIL as any);
-    expect(results[0].combined).toBe('pass');
+    const { results, summary } = await executeAgentEvalRun([CENARIO] as any, AGENTE, PERFIL as any);
+    expect(results[0].combined).toBe('inconclusivo');
+    expect(results[0].inconclusivo?.motivo).toBe('juiz_indeterminado');
+    expect(summary.failed).toBe(0);
+    expect(summary.criticalFailed).toBe(0);
   });
 
   it('erro na chamada do juiz é falha técnica, não reprovação', async () => {
