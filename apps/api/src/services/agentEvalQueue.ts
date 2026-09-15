@@ -37,6 +37,8 @@ import { logger } from '../utils/logger.js';
 // global vive FORA do BullMQ de propósito: ver adquirirTravaGlobal.
 import redis from '../utils/redis.js';
 import { resolveEvalSet, HARNESS_VERSION } from '../agents/agentEvalSet.js';
+// C2 (P13): no máximo 8 casos de conhecimento por execução, em rodízio.
+import { aplicarRodizio, semanaDoRodizio } from '../agents/evalSetConhecimento.js';
 import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
@@ -239,6 +241,13 @@ export async function enqueueRegrade(input: {
 export function resolveScenariosForRun(
   profile: TenantAgentProfile,
   scenarioFilter: unknown,
+  /**
+   * C2 (P13): o relógio do rodízio dos casos de conhecimento. A execução
+   * passa o started_at da própria linha, e a rota que cria a linha usa
+   * "agora": as duas contas caem na mesma semana, então o total gravado na
+   * criação é o total que roda.
+   */
+  opts: { agora?: Date } = {},
 ): EvalScenario[] {
   const base = resolveEvalSet(profile);
   const filtro = (scenarioFilter ?? {}) as {
@@ -247,15 +256,18 @@ export function resolveScenariosForRun(
     criticalOnly?: unknown;
   };
 
+  // Ids pedidos um a um (re-teste, admin) não passam pelo rodízio: quem
+  // pediu um caso de conhecimento pelo id quer aquele caso.
   if (Array.isArray(filtro.scenarioIds) && filtro.scenarioIds.length > 0) {
     const ids = new Set(filtro.scenarioIds.map(String));
     return base.filter((s) => ids.has(s.id));
   }
-  if (filtro.criticalOnly === true) return base.filter((s) => s.severity === 'critical');
-  if (typeof filtro.category === 'string' && filtro.category) {
-    return base.filter((s) => s.category === filtro.category);
+  let lista = base;
+  if (filtro.criticalOnly === true) lista = base.filter((s) => s.severity === 'critical');
+  else if (typeof filtro.category === 'string' && filtro.category) {
+    lista = base.filter((s) => s.category === filtro.category);
   }
-  return base;
+  return aplicarRodizio(lista, semanaDoRodizio(opts.agora ?? new Date()));
 }
 
 /** Saída do runner, do jeito que a gravação da conclusão precisa. */
@@ -475,7 +487,9 @@ export async function executeRunJob(runId: string): Promise<void> {
     // Perfil da org DO AGENTE, nunca a de quem disparou: é o que impede o
     // gabarito da ZappIQ de cair sobre o agente do cliente.
     const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId: agent.id });
-    const scenarios = resolveScenariosForRun(profile, run.scenarioFilter);
+    const scenarios = resolveScenariosForRun(profile, run.scenarioFilter, {
+      agora: run.startedAt ? new Date(run.startedAt) : new Date(),
+    });
 
     logger.info({
       msg: 'agent_eval_run_iniciado',

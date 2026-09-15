@@ -26,6 +26,33 @@
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
+// C2 (P13): as respostas do questionário em qualquer profundidade, com a
+// mesma conversão de valor do documento de conhecimento.
+import { achatarRespostas, valorEmTexto } from '../services/knowledgeBaseBuilder.js';
+import { normalizarHorario } from './tenantLiveProfile.js';
+
+/** Uma pergunta e resposta ATIVA, como o dono cadastrou. */
+export interface QaAtivo {
+  id: string;
+  pergunta: string;
+  resposta: string;
+}
+
+/**
+ * Os campos factuais do questionário que viram cenário de conhecimento
+ * (C2, P13). null = o dono não preencheu.
+ */
+export interface FatosDoQuestionario {
+  precos: string | null;
+  /** O horário OFICIAL: o das configurações, com fuso; o questionário é reserva. */
+  horario: string | null;
+  descontoMaximo: string | null;
+  pagamento: string | null;
+  endereco: string | null;
+}
+
+/** Teto de perguntas e respostas lidas para o gabarito. O rodízio usa 8 por vez. */
+const TETO_DE_QA_NO_PERFIL = 200;
 
 export interface TenantAgentProfile {
   organizationId: string;
@@ -61,6 +88,15 @@ export interface TenantAgentProfile {
   /** systemPrompt que roda de fato (null se a org não tem Agent seedado). */
   systemPrompt: string | null;
   agentId: string | null;
+
+  /**
+   * C2 (P13): as perguntas e respostas ATIVAS da organização. Cada uma vira
+   * um cenário de conhecimento. Opcional: perfil montado à mão (teste, Raio-X)
+   * sem este campo simplesmente não gera caso de Q&A.
+   */
+  qaAtivos?: QaAtivo[];
+  /** C2 (P13): preço, horário, desconto máximo, pagamento e endereço. */
+  fatos?: FatosDoQuestionario;
 }
 
 const DEFAULT_AGENT_NAME = 'Assistente';
@@ -145,6 +181,10 @@ export async function resolveTenantAgentProfile(
   const servicos = texto(ident.com_lista_servicos);
   const precos = texto(ident.pre_tabela_precos);
 
+  // C2 (P13): os campos factuais em qualquer ramo do JSON do questionário.
+  const fatos = lerFatosDoQuestionario(settings, precos);
+  const qaAtivos = await carregarQaAtivos(organizationId);
+
   return {
     organizationId,
     isZappIQ,
@@ -163,5 +203,71 @@ export async function resolveTenantAgentProfile(
     identityDrift,
     systemPrompt: agent?.systemPrompt ?? null,
     agentId: agent?.id ?? null,
+    qaAtivos,
+    fatos,
   };
+}
+
+/** Primeiro valor preenchido de uma pergunta, em qualquer ramo do questionário. */
+function respostaDoCampo(respostas: Map<string, unknown>, campo: string): string | null {
+  const bruto = respostas.get(campo);
+  if (bruto === undefined || bruto === null) return null;
+  return texto(typeof bruto === 'string' ? bruto : valorEmTexto(bruto));
+}
+
+/**
+ * Os fatos do questionário que viram pergunta de teste. O horário vem
+ * PRIMEIRO das configurações (é o que a IA usa em produção, com fuso); a
+ * resposta do questionário é só reserva, porque a pergunta é espelho
+ * (surveyDestino: fato_oficial).
+ */
+export function lerFatosDoQuestionario(
+  settings: Record<string, any>,
+  precosDoPerfil: string | null,
+): FatosDoQuestionario {
+  const respostas = new Map<string, unknown>();
+  for (const { id, valor } of achatarRespostas(settings?.surveyAnswers ?? {})) {
+    if (!respostas.has(id)) respostas.set(id, valor);
+  }
+  let horarioOficial: string | null = null;
+  try {
+    horarioOficial = texto(normalizarHorario(settings).texto);
+  } catch {
+    horarioOficial = null;
+  }
+  return {
+    precos: precosDoPerfil ?? respostaDoCampo(respostas, 'pre_tabela_precos'),
+    horario: horarioOficial ?? respostaDoCampo(respostas, 'ide_horarios_funcionamento'),
+    descontoMaximo: respostaDoCampo(respostas, 'pre_desconto_maximo'),
+    pagamento: respostaDoCampo(respostas, 'pre_formas_pagamento'),
+    endereco: respostaDoCampo(respostas, 'ide_endereco_principal'),
+  };
+}
+
+/**
+ * As perguntas e respostas ativas, na ordem de prioridade do dono.
+ * Fail-soft: banco fora devolve lista vazia e o gabarito segue sem elas.
+ */
+async function carregarQaAtivos(organizationId: string): Promise<QaAtivo[]> {
+  try {
+    const linhas = await prisma.qAPair.findMany({
+      where: { organizationId, isActive: true },
+      select: { id: true, question: true, answer: true },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+      take: TETO_DE_QA_NO_PERFIL,
+    });
+    return (linhas ?? [])
+      .map((l: { id: string; question: string; answer: string }) => ({
+        id: l.id,
+        pergunta: String(l.question ?? '').trim(),
+        resposta: String(l.answer ?? '').trim(),
+      }))
+      .filter((q: QaAtivo) => q.pergunta && q.resposta);
+  } catch (err) {
+    logger.warn('[tenantAgentProfile] Q&A indisponíveis: gabarito segue sem eles', {
+      organizationId,
+      err: String(err),
+    });
+    return [];
+  }
 }

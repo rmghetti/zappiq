@@ -784,3 +784,48 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     expect(where.triggeredBy).toEqual({ not: 'client_retest' });
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * C2 (Passo 13, P13): rodízio dos casos de conhecimento na execução.
+ * No máximo 8 por execução; os ids pedidos um a um não entram no rodízio;
+ * a execução usa o started_at da própria linha como relógio.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('resolveScenariosForRun: rodízio dos casos de conhecimento (C2)', () => {
+  const caso = (id: string, origem: 'qa' | 'questionario') => ({
+    id,
+    severity: 'high',
+    category: 'kb_conhecimento',
+    natureza: 'conhecimento',
+    conhecimento: { origem },
+  });
+  const FIXOS = [{ id: 'cr1', severity: 'critical', category: 'cr1_acceptance', natureza: 'comportamento' }];
+  const GERADOS = Array.from({ length: 12 }, (_, i) => caso(`kb_qa_${i}`, 'qa'));
+
+  it('uma execução completa leva no máximo 8 casos gerados, e todos os fixos', async () => {
+    const { resolveScenariosForRun } = await import('./agentEvalQueue.js');
+    evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...GERADOS]);
+    const lista = resolveScenariosForRun({} as any, {}, { agora: new Date('2026-09-14T12:00:00Z') });
+    expect(lista.filter((c: any) => c.conhecimento)).toHaveLength(8);
+    expect(lista.map((c: any) => c.id)).toContain('cr1');
+  });
+
+  it('ids pedidos um a um não passam pelo rodízio (re-teste de um caso fora da vez)', async () => {
+    const { resolveScenariosForRun } = await import('./agentEvalQueue.js');
+    evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...GERADOS]);
+    const lista = resolveScenariosForRun({} as any, { scenarioIds: ['kb_qa_11'] });
+    expect(lista.map((c: any) => c.id)).toEqual(['kb_qa_11']);
+  });
+
+  it('a execução usa o started_at da linha: o total da criação é o total que roda', async () => {
+    const { executeRunJob } = await import('./agentEvalQueue.js');
+    evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...GERADOS]);
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(
+      runPendente({ startedAt: new Date('2026-09-14T12:00:00Z') }),
+    );
+
+    await executeRunJob('run-1');
+
+    const cenarios = runnerMock.executeAgentEvalRun.mock.calls[0][0];
+    expect(cenarios.filter((c: any) => c.conhecimento)).toHaveLength(8);
+  });
+});

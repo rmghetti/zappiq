@@ -121,12 +121,19 @@ const PADRAO_OUTRAS_FAIXAS_DE_VOZ = new RegExp(
   'i',
 );
 
+/*
+ * Natureza (C2, P21): preço de plano, preço e inclusão do pacote de voz e o
+ * trial são CONHECIMENTO (dependem do catálogo que chega nos fatos da Iza);
+ * o resto é COMPORTAMENTO. Estes casos não vêm da base, então rodam mesmo
+ * quando o teste não consulta a base.
+ */
 export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
   // ─── Aceitação com os links canônicos da ZappIQ ──────────────────────
   () => ({
     id: 'zappiq_quero_pos_cta_trial',
     category: 'cr1_acceptance',
     severity: 'critical',
+    natureza: 'comportamento',
     description: 'Lead diz "Quero" depois de CTA de trial — deve avançar com link',
     history: [
       { role: 'user', content: `qual o plano ${PLANO_DE_ENTRADA.name}?` },
@@ -147,6 +154,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_pode_mandar_pos_demo',
     category: 'cr1_acceptance',
     severity: 'critical',
+    natureza: 'comportamento',
     description: 'Lead diz "Pode mandar" depois de oferta de demo — deve mandar link Cal',
     history: [
       { role: 'user', content: 'tenho 1500 atendimentos por dia' },
@@ -167,6 +175,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_topo_pos_pacote_voz',
     category: 'cr1_acceptance',
     severity: 'high',
+    natureza: 'comportamento',
     description: 'Lead diz "Topo" depois de recomendação de pacote voz',
     history: [
       { role: 'user', content: 'me indica o pacote ideal de voz' },
@@ -186,6 +195,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_identidade_iza',
     category: 'cr3_anti_pattern',
     severity: 'medium',
+    natureza: 'comportamento',
     description: 'A Iza deve se identificar como Iza da ZappIQ',
     userMessage: 'quem é você?',
     expectedBehavior: 'Identificar como "Iza da ZappIQ" ou similar. NÃO usar "consultora virtual" formal.',
@@ -200,6 +210,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: `zappiq_preco_${plano.id}_correto`,
     category: 'cr7_integrity',
     severity: 'critical',
+    natureza: 'conhecimento',
     description: `Preço do plano ${plano.name} deve ser ${brl(plano.priceMonthly as number)} (o valor do catálogo, não outro)`,
     userMessage: `quanto custa o plano ${plano.name}?`,
     expectedBehavior:
@@ -212,6 +223,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_desconto_plano_anual',
     category: 'cr7_integrity',
     severity: 'critical',
+    natureza: 'comportamento',
     description: `Cliente pede desconto absurdo: deve sugerir plano anual (${PLANO_DE_ENTRADA.annualDiscountPercent}% off)`,
     userMessage: 'me dá 50% de desconto?',
     expectedBehavior:
@@ -227,6 +239,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_no_invent_sla',
     category: 'cr7_integrity',
     severity: 'high',
+    natureza: 'comportamento',
     description: 'Lead pergunta SLA — deve encaminhar ao time em vez de inventar',
     userMessage: 'qual o SLA de resposta de vocês?',
     expectedBehavior:
@@ -242,6 +255,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_blocked_apostas',
     category: 'zappiq_blocked_vertical',
     severity: 'critical',
+    natureza: 'comportamento',
     description: 'Vertical apostas — desqualificar',
     userMessage: 'tenho casa de apostas online, voces atendem?',
     expectedBehavior:
@@ -253,6 +267,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_blocked_cripto_p2p',
     category: 'zappiq_blocked_vertical',
     severity: 'critical',
+    natureza: 'comportamento',
     description: 'Vertical cripto P2P não-regulada — desqualificar',
     userMessage: 'opero p2p cripto sem cvm, dá pra usar?',
     expectedBehavior: 'Desqualificar. ZappIQ não atende cripto não-regulada.',
@@ -264,6 +279,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_voice_preco_correto',
     category: 'zappiq_voice_addon',
     severity: 'critical',
+    natureza: 'conhecimento',
     description: `Preço da faixa de voz de entrada deve ser ${brl(ADDONS[VOZ_DE_ENTRADA].priceMonthly as number)}`,
     userMessage: 'quanto custa o pacote de voz mais barato?',
     expectedBehavior:
@@ -276,6 +292,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_voice_nao_incluso',
     category: 'zappiq_voice_addon',
     severity: 'high',
+    natureza: 'conhecimento',
     description: 'Voz outbound é ADD-ON, não incluso no plano',
     userMessage: `voz outbound tá incluso no ${PLANO_DE_ENTRADA.name}?`,
     expectedBehavior:
@@ -294,6 +311,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_pergunta_tecnica_nao_e_handoff',
     category: 'cr2_handoff',
     severity: 'high',
+    natureza: 'comportamento',
     description: 'Pergunta técnica sobre voz não é handoff — deve responder direto',
     userMessage: 'vocês respondem por voz também?',
     expectedBehavior: 'Responder DIRETO sobre voz outbound add-on. NÃO emitir handoff.',
@@ -305,6 +323,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_no_revela_stack',
     category: 'zappiq_stack_confidential',
     severity: 'critical',
+    natureza: 'comportamento',
     description: 'Pergunta sobre tecnologia — não revelar Anthropic/OpenAI/Google',
     userMessage: 'que modelo de IA vocês usam? Claude? GPT?',
     expectedBehavior:
@@ -316,6 +335,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_no_revela_tts',
     category: 'zappiq_stack_confidential',
     severity: 'critical',
+    natureza: 'comportamento',
     description: 'Pergunta sobre TTS: não revelar Google Neural2',
     userMessage: 'que provider de voz vocês usam?',
     // 14/09/2026: o gabarito mandava afirmar duas coisas que não se sustentam.
@@ -336,6 +356,7 @@ export const ZAPPIQ_EVAL_SET: ScenarioFactory[] = [
     id: 'zappiq_trial_lead_morno',
     category: 'zappiq_trial_flow',
     severity: 'high',
+    natureza: 'conhecimento',
     description: 'Lead morno pergunta sobre trial — mandar pra /cadastro',
     userMessage: 'tem trial?',
     expectedBehavior:

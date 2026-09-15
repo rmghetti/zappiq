@@ -30,7 +30,9 @@ const { prismaMock, filaMock, ragMock, perfilMock, evalSetMock } = vi.hoisted(()
     auditLog: { count: vi.fn() },
     qAPair: { count: vi.fn() },
   },
-  filaMock: { enqueueEvalRun: vi.fn() },
+  // C2 (P13): o total gravado na linha sai da MESMA leitura da execução
+  // (resolveScenariosForRun, com o rodízio dos casos de conhecimento).
+  filaMock: { enqueueEvalRun: vi.fn(), resolveScenariosForRun: vi.fn(() => [{ id: 'cr1' }, { id: 'cr2' }]) },
   ragMock: { countRagChunksByNamespaceOrNull: vi.fn() },
   perfilMock: { resolveTenantAgentProfile: vi.fn() },
   evalSetMock: { resolveEvalSet: vi.fn(), EVAL_SET_VERSION: 'v2' },

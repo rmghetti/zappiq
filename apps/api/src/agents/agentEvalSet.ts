@@ -29,6 +29,8 @@ import type { TenantAgentProfile } from './tenantAgentProfile.js';
 import type { EvalScenario, EvalCategory } from './evalScenarioTypes.js';
 import { UNIVERSAL_EVAL_SET } from './evalSetUniversal.js';
 import { ZAPPIQ_EVAL_SET } from './evalSetZappIQ.js';
+// C2 (P13): casos de conhecimento gerados do que o cliente cadastrou.
+import { cenariosDeConhecimento, avisoDePrecoEmDoisLugares } from './evalSetConhecimento.js';
 
 export const EVAL_SET_VERSION = 'v2';
 
@@ -57,7 +59,12 @@ export const HARNESS_VERSION = 3;
 /** Versões geradas sob o gabarito contaminado (pré-isolamento de tenant). */
 export const LEGACY_EVAL_SET_VERSIONS = ['v1', 'v1.1'];
 
-export type { EvalScenario, EvalCategory } from './evalScenarioTypes.js';
+export type {
+  EvalScenario,
+  EvalCategory,
+  NaturezaDoCenario,
+  AcaoDeTreino,
+} from './evalScenarioTypes.js';
 
 /**
  * Monta o gabarito para um tenant.
@@ -74,9 +81,15 @@ export function resolveEvalSet(profile: TenantAgentProfile): EvalScenario[] {
     ? [...UNIVERSAL_EVAL_SET, ...ZAPPIQ_EVAL_SET]
     : UNIVERSAL_EVAL_SET;
 
-  return factories
+  const fixos = factories
     .map((factory) => factory(profile))
     .filter((s): s is EvalScenario => s !== null);
+
+  // C2 (P13): TODOS os casos de conhecimento do tenant. O rodízio de até 8
+  // por execução é aplicado na hora de montar a execução
+  // (resolveScenariosForRun), e não aqui: quem procura um cenário pelo id
+  // (re-teste, sugestão, aplicar) precisa achar qualquer um deles.
+  return [...fixos, ...cenariosDeConhecimento(profile)];
 }
 
 /**
@@ -85,16 +98,40 @@ export function resolveEvalSet(profile: TenantAgentProfile): EvalScenario[] {
  */
 export function getSkippedScenarios(profile: TenantAgentProfile): Array<{ reason: string }> {
   const skipped: Array<{ reason: string }> = [];
-  // A org da ZappIQ tem o próprio cenário de preço (zappiq_preco_starter_correto),
-  // alimentado pelo prompt da Iza e pelos iza_facts, então não faz sentido pedir
-  // que ela preencha a tabela de preços do survey.
-  if (!profile.temPrecos && !profile.isZappIQ) {
+  // C2 (P13): a parte de CONHECIMENTO nasce do que o dono cadastrou. Sem
+  // pergunta e resposta e sem preço, horário, pagamento e endereço no
+  // questionário, não há o que testar, e a tela mostra "sem base cadastrada"
+  // em vez de uma nota que não mede nada (o agente sem conteúdo tirava 77%).
+  //
+  // A org da ZappIQ tem os próprios casos de conhecimento (preço dos planos,
+  // voz e trial, do catálogo): não faz sentido pedir que ela preencha o
+  // questionário para ser testada.
+  if (!profile.isZappIQ && cenariosDeConhecimento(profile).length === 0) {
     skipped.push({
       reason:
-        'Teste de preço não rodou: cadastre a tabela de preços em Treinar IA > Questionário para o agente ser avaliado nisso.',
+        'A parte de conhecimento do negócio não rodou: cadastre perguntas e respostas ou preencha ' +
+        'preço, horário, formas de pagamento e endereço em Treinar IA para o agente ser testado no ' +
+        'que sabe do seu negócio.',
     });
   }
   return skipped;
+}
+
+/**
+ * Avisos sobre o que foi cadastrado, para a tela da Qualidade (C2).
+ *
+ * Hoje um só: o preço em dois lugares com valores diferentes (A086). O
+ * prompt da Vera, editado à mão em 09/09, diz R$ 6.300 e o questionário diz
+ * R$ 35.000: o agente responde qualquer um dos dois e o juiz chamava de
+ * inventado o que estava no prompt.
+ */
+export function avisosDoTeste(profile: TenantAgentProfile): string[] {
+  if (profile.isZappIQ) return [];
+  const aviso = avisoDePrecoEmDoisLugares(
+    profile.systemPrompt,
+    profile.fatos?.precos ?? profile.precos,
+  );
+  return aviso ? [aviso] : [];
 }
 
 export function getScenariosByCategory(

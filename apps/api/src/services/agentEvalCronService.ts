@@ -52,7 +52,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { sendSlackAlert, buildSectionBlock } from './slackNotifier.js';
 import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
-import { resolveEvalSet, EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
+import { EVAL_SET_VERSION } from '../agents/agentEvalSet.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 // Fonte única da regra de acesso (a mesma do requireActivePlan e do /auth/me).
 import { computeAccessState, type AccessInput } from './accountAccess.js';
@@ -62,7 +62,7 @@ import { computeAccessState, type AccessInput } from './accountAccess.js';
 // diferença entre pular quem não treinou e pular quem o banco não respondeu.
 import { countRagChunksByNamespaceOrNull } from './aiReadinessService.js';
 // Fila única da execução, compartilhada com as duas rotas /run-async.
-import { enqueueEvalRun } from './agentEvalQueue.js';
+import { enqueueEvalRun, resolveScenariosForRun } from './agentEvalQueue.js';
 
 // ─── Org da Iza (agente do SUPERADMIN / Cliente Zero) ──────────
 // Fonte única do id (config/zappiqOrg.ts). Antes esta constante vivia copiada
@@ -506,9 +506,10 @@ export async function runAgentEvalCronCycle(
       }
 
       // O gabarito é resolvido aqui só para gravar totalScenarios na linha; a
-      // execução resolve de novo, a partir do mesmo perfil.
+      // execução resolve de novo, a partir do mesmo perfil. C2 (P13): pela
+      // MESMA leitura da execução, com o rodízio dos casos de conhecimento.
       const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId: agent.id });
-      const scenarios = resolveEvalSet(profile);
+      const scenarios = resolveScenariosForRun(profile, {});
 
       const run = await prisma.agentEvalRun.create({
         data: {
@@ -660,7 +661,7 @@ export async function runAgentEvalOnChangeCycle(
       }
 
       const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId: agent.id });
-      const scenarios = resolveEvalSet(profile);
+      const scenarios = resolveScenariosForRun(profile, {});
 
       const run = await prisma.agentEvalRun.create({
         data: {

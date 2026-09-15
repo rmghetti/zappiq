@@ -39,6 +39,7 @@ import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
 import {
   resolveEvalSet,
   getSkippedScenarios,
+  avisosDoTeste,
   EVAL_SET_VERSION,
   HARNESS_VERSION,
 } from '../agents/agentEvalSet.js';
@@ -239,8 +240,12 @@ router.get('/agents', async (req: Request, res: Response) => {
       testScope: {
         agentName: profile.agentName,
         businessName: profile.businessName,
-        totalScenarios: resolveEvalSet(profile).length,
+        // C2 (P13): o total da execução, já com o rodízio de até 8 casos de
+        // conhecimento, e não o gabarito inteiro.
+        totalScenarios: resolveScenariosForRun(profile, {}).length,
         skipped: getSkippedScenarios(profile),
+        // C2 (A086): o preço em dois lugares com valores diferentes.
+        avisos: avisosDoTeste(profile),
       },
     });
   } catch (err: any) {
