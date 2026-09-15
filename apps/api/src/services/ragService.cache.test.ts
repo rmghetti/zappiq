@@ -310,3 +310,30 @@ describe('searchDetailed: status (A028)', () => {
     expect(await search('org-1', 'pergunta', 5)).toBe('contexto');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// C2 (Passo 13, A226): o teste da Qualidade grava QUAIS trechos entraram.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('searchDetailed: ids dos trechos (C2)', () => {
+  it('devolve o id de cada trecho que entrou, na ordem da busca', async () => {
+    post.mockResolvedValue(resposta('trecho A', 'trecho B'));
+    const r = await searchDetailed('org-1', 'pergunta com ids', 5);
+    expect(r.trechoIds).toEqual(['0', '1']);
+  });
+
+  it('os ids sobrevivem ao cache', async () => {
+    post.mockResolvedValue(resposta('trecho A', 'trecho B'));
+    await searchDetailed('org-1', 'pergunta cacheada', 5);
+    const doCache = await searchDetailed('org-1', 'pergunta cacheada', 5);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(doCache.fromCache).toBe(true);
+    expect(doCache.trechoIds).toEqual(['0', '1']);
+  });
+
+  it('serviço fora: nenhum id', async () => {
+    post.mockRejectedValue(new Error('timeout'));
+    const r = await searchDetailed('org-1', 'fora', 5);
+    expect(r.trechoIds).toEqual([]);
+  });
+});

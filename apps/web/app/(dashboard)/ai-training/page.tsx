@@ -49,6 +49,8 @@ import { DocumentDetailModal } from '../../../components/ai-training/DocumentDet
 import { ClipboardPaste, CalendarClock } from 'lucide-react';
 import { SaibaMais } from '../../../components/shared/SaibaMais';
 import { TourLauncher } from '../../../components/shared/GuidedTour';
+// C2 (Passo 5, P21): a Qualidade abre esta aba com a pergunta já escrita.
+import { lerPerguntaPreenchida } from '../../../lib/perguntaPreenchida';
 
 // ── Tipos alinhados ao service backend ───────────────────
 interface Readiness {
@@ -938,6 +940,15 @@ function QAPanel({ onChange }: { onChange: () => void }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // C2 (Passo 5, P21): "Cadastrar esta informação" na Qualidade abre esta aba
+  // com a pergunta que o agente não soube responder. O dono só escreve a
+  // resposta. Lido uma vez, na abertura.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const pergunta = lerPerguntaPreenchida(window.location.search);
+    if (pergunta) setQuestion((atual) => atual || pergunta);
+  }, []);
 
   const handleCreate = async () => {
     if (!question.trim() || !answer.trim()) return;

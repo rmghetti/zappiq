@@ -88,3 +88,28 @@ describe('consolidarReteste', () => {
     expect(r.avaliadas).toBe(0);
   });
 });
+
+// C2 (Passo 1, A226): amostra servida por um modelo de reserva é
+// INCONCLUSIVA. Não aprova nem reprova: sai do denominador, como a falha
+// técnica.
+describe('amostra inconclusiva (modelo de reserva) fica fora da conta', () => {
+  it('duas aprovações e uma inconclusiva: funcionou, com 2 avaliadas', () => {
+    const r = consolidarReteste([
+      { amostra: 1, combined: 'pass', resposta: 'a', motivoDoJuiz: '' },
+      { amostra: 2, combined: 'inconclusivo', resposta: 'b', motivoDoJuiz: '' },
+      { amostra: 3, combined: 'pass', resposta: 'c', motivoDoJuiz: '' },
+    ]);
+    expect(r.veredito).toBe('funcionou');
+    expect(r.avaliadas).toBe(2);
+    expect(r.erros).toBe(1);
+  });
+
+  it('só uma avaliável: indefinido, sem declarar nada', () => {
+    const r = consolidarReteste([
+      { amostra: 1, combined: 'fail', resposta: 'a', motivoDoJuiz: '' },
+      { amostra: 2, combined: 'inconclusivo', resposta: 'b', motivoDoJuiz: '' },
+      { amostra: 3, combined: 'inconclusivo', resposta: 'c', motivoDoJuiz: '' },
+    ]);
+    expect(r.veredito).toBe('indefinido');
+  });
+});

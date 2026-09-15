@@ -28,13 +28,21 @@ describe('buildEvalSystemPrompt', () => {
         '## IDENTIDADE\nVocê é a Vera do CMJ.',
         '',
         '# Cliente atual (eval test mock)',
-        'Nome registrado: Rod',
+        'Nome registrado: Cliente Teste',
         'Telefone: +5511999999999',
         'Status do lead: NEW',
         'Mensagens trocadas até agora: 1',
         'Primeiro contato? SIM',
       ].join('\n'),
     );
+  });
+
+  // Nota 2 da revisão de 14/09 (A172): o contato fictício não tem nome de
+  // gente. "Rod" vazava para as sugestões e dali para o prompt de produção.
+  it('o contato fictício é um marcador, não nome de gente', () => {
+    const prompt = buildEvalSystemPrompt(agente, { id: 'cr5_nome_disponivel_usar' });
+    expect(prompt).toContain('Nome registrado: Cliente Teste');
+    expect(prompt).not.toMatch(/\bRod\b/);
   });
 
   it('omite o nome falso nos cenários que testam justamente a falta de nome', () => {
@@ -45,7 +53,8 @@ describe('buildEvalSystemPrompt', () => {
     expect(prompt).toContain(
       'Nome registrado: (ainda não capturado, peça no primeiro turno conforme REGRA 9)',
     );
-    expect(prompt).not.toContain('Nome registrado: Rod');
+    expect(prompt).not.toContain('Nome registrado: Cliente Teste');
+    expect(prompt).not.toMatch(/\bRod\b/);
   });
 
   it('conta o histórico e deixa de anunciar primeiro contato', () => {
@@ -88,7 +97,7 @@ describe('buildEvalSystemPrompt', () => {
         bloco,
         '',
         '# Cliente atual (eval test mock)',
-        'Nome registrado: Rod',
+        'Nome registrado: Cliente Teste',
         'Telefone: +5511999999999',
         'Status do lead: NEW',
         'Mensagens trocadas até agora: 1',

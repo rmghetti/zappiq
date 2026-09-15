@@ -25,9 +25,25 @@
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import { extractProductionReplyText } from '../agents/replyText.js';
-import { resolveEvalSet, HARNESS_VERSION } from '../agents/agentEvalSet.js';
+import { resolveEvalSet } from '../agents/agentEvalSet.js';
+// C2 (P13): a MESMA régua determinística do avaliador (padrões e checagem
+// por valor dos casos de conhecimento).
+import { checagemDeterministica } from '../agents/evalSetConhecimento.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import type { EvalScenario } from '../agents/evalScenarioTypes.js';
+
+/**
+ * A régua com que a regravação RELÊ os resultados, e o número gravado em
+ * eval_regrades.harness_version.
+ *
+ * C2 (14/09/2026): era o HARNESS_VERSION do avaliador. O avaliador passou à
+ * régua 4 (juiz de outra família com evidência, casos de conhecimento,
+ * inconclusivo), mas a regravação continua sendo a releitura determinística
+ * da régua 3 sobre respostas gravadas. Manter o número 3 aqui é o que deixa
+ * as regravações já feitas (e o aviso "nota recalculada" que o cliente lê)
+ * visíveis depois do deploy.
+ */
+export const REGUA_DA_REGRAVACAO = 3;
 
 /** O que a execução gravou na época, na parte que a releitura precisa. */
 export interface ResultadoGravado {
@@ -81,6 +97,10 @@ const MARCAS_DE_FALHA_TECNICA = [
 const MARCA_DE_JUIZ_ILEGIVEL = /Judge response unparseable/i;
 
 function normalizarVereditoAntigo(c: unknown): VereditoAntigo {
+  // C2 (Passo 1): 'inconclusivo' (resposta de um modelo de reserva, ou caso
+  // de conhecimento sem base no teste) não aprovou nem reprovou. Na régua da
+  // regravação ele vale o mesmo que a falha técnica: fora da nota.
+  if (c === 'inconclusivo') return 'erro';
   return c === 'pass' || c === 'partial' || c === 'erro' ? c : 'fail';
 }
 
@@ -115,7 +135,7 @@ export function regradeResult(
   // ─── 1. Falha técnica: fora da nota, como no arnês v3 ────────────
   const respostaCrua = String(gravado.response ?? '');
   const tinhaMarcaTecnica = MARCAS_DE_FALHA_TECNICA.some((p) => p.test(motivoAntigo));
-  if (respostaCrua.trim().length === 0 || tinhaMarcaTecnica) {
+  if (respostaCrua.trim().length === 0 || tinhaMarcaTecnica || gravado.combined === 'inconclusivo') {
     return {
       ...base,
       vereditoNovo: 'erro',
@@ -132,10 +152,13 @@ export function regradeResult(
   const resposta = extractProductionReplyText(respostaCrua);
   const usouReply = resposta !== respostaCrua.trim();
 
-  // ─── 3. Regras determinísticas do gabarito v3 ────────────────────
-  const faltando = (cenario.passPatterns ?? []).filter((p) => !p.test(resposta));
-  const proibidos = (cenario.failPatterns ?? []).filter((p) => p.test(resposta));
-  const regraAprovou = faltando.length === 0 && proibidos.length === 0;
+  // ─── 3. Regras determinísticas do gabarito ───────────────────────
+  // A mesma função do avaliador: padrões e, no caso de conhecimento, a
+  // checagem por valor.
+  const regua = checagemDeterministica(cenario, resposta);
+  const faltando = regua.missingPatterns;
+  const proibidos = regua.failedPatterns;
+  const regraAprovou = regua.passed;
 
   // ─── 4. Juiz: o que já está gravado, sem nova chamada ────────────
   // Juiz ilegível gravado como reprovação vira INDETERMINADO (A050): quem
@@ -271,10 +294,22 @@ export async function regradeRun(
       scorePercent: true,
       startedAt: true,
       results: true,
+      harnessVersion: true,
       agent: { select: { id: true, name: true, organizationId: true } },
     },
   });
   if (!run) throw new Error(`execução ${runId} não encontrada`);
+
+  // Rodada 1 do PR #378, item 2d: a regravação é a releitura da régua 3.
+  // Uma execução medida com a régua 4 ou posterior (juiz com evidência,
+  // casos de conhecimento, inconclusivo) não pode ganhar "nota recalculada"
+  // pela régua velha: o número sairia de duas medidas diferentes.
+  if (typeof run.harnessVersion === 'number' && run.harnessVersion > REGUA_DA_REGRAVACAO) {
+    throw new Error(
+      `A execução ${runId} foi medida com a régua ${run.harnessVersion}; ` +
+        `a regravação relê só execuções da régua ${REGUA_DA_REGRAVACAO} ou anterior.`,
+    );
+  }
 
   const perfil = await resolveTenantAgentProfile(run.agent.organizationId, {
     agentId: run.agent.id,
@@ -302,7 +337,7 @@ export async function regradeRun(
             runId_scenarioId_harnessVersion: {
               runId,
               scenarioId: l.scenarioId,
-              harnessVersion: HARNESS_VERSION,
+              harnessVersion: REGUA_DA_REGRAVACAO,
             },
           },
           create: {
@@ -313,7 +348,7 @@ export async function regradeRun(
             vereditoAntigo: l.vereditoAntigo,
             vereditoNovo: l.vereditoNovo,
             motivo: l.motivo,
-            harnessVersion: HARNESS_VERSION,
+            harnessVersion: REGUA_DA_REGRAVACAO,
             discordante: l.discordante,
             comJuiz: false,
           },
@@ -341,7 +376,7 @@ export async function regradeRun(
     agentId: run.agentId,
     agentName: run.agent.name,
     startedAt: new Date(run.startedAt).toISOString(),
-    harnessVersion: HARNESS_VERSION,
+    harnessVersion: REGUA_DA_REGRAVACAO,
     notaAntiga: run.scorePercent ?? null,
     notaRegravada: notaDasLeituras(leituras),
     totalCenarios: leituras.length,
@@ -371,7 +406,7 @@ export async function resumirRegravacao(
   const db = opts.db ?? prisma;
 
   const linhas = await db.evalRegrade.findMany({
-    where: { runId, harnessVersion: HARNESS_VERSION },
+    where: { runId, harnessVersion: REGUA_DA_REGRAVACAO },
     orderBy: { scenarioId: 'asc' },
   });
   if (!linhas || linhas.length === 0) return null;
@@ -403,7 +438,7 @@ export async function resumirRegravacao(
     agentId: run.agentId,
     agentName: run.agent.name,
     startedAt: new Date(run.startedAt).toISOString(),
-    harnessVersion: HARNESS_VERSION,
+    harnessVersion: REGUA_DA_REGRAVACAO,
     notaAntiga: run.scorePercent ?? null,
     notaRegravada: notaDasLeituras(leituras),
     totalCenarios: leituras.length,
@@ -440,6 +475,10 @@ function filtroDeRegravacao(filtro: { organizationId?: string; runIds?: string[]
     // 3 amostras sem scenarioId e nota nula. Regravá-lo não faz sentido, e
     // ele ocupava vaga do lote de 50 e contava no que "ainda falta".
     triggeredBy: { not: 'client_retest' },
+    // Rodada 1 do PR #378, item 2d: só a régua 3 ou anterior (NULL é a
+    // execução de antes do PR #371, que nunca gravou régua). Uma execução da
+    // régua 4 entraria na fila só para regradeRun recusá-la.
+    OR: [{ harnessVersion: null }, { harnessVersion: { lt: REGUA_DA_REGRAVACAO + 1 } }],
     ...(filtro.runIds && filtro.runIds.length > 0 ? { id: { in: filtro.runIds } } : {}),
     ...(filtro.organizationId ? { agent: { organizationId: filtro.organizationId } } : {}),
   };

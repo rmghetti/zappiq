@@ -254,3 +254,38 @@ describe('resolveTurnPolicy: canais com regra própria hoje', () => {
     }
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Nota 1 da revisão de 14/09 (tarefa C2): a flag `evalNoTier`.
+ * Ligada, a Qualidade usa o modelo que a política de PRODUÇÃO escolheria
+ * para a organização, pela mesma regra (sem duplicar a escolha). Desligada,
+ * a cascata padrão de hoje. Ferramentas continuam de fora na Qualidade.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('resolveTurnPolicy: Qualidade na faixa do plano (evalNoTier)', () => {
+  it('ligada: o mesmo tier, override e modelo que o WhatsApp teria, caso a caso', () => {
+    for (const caso of MATRIZ) {
+      const producao = resolveTurnPolicy({ ...entradaPura(caso, 'whatsapp'), agendamentoAtivo: false });
+      const qualidade = resolveTurnPolicy({ ...entradaPura(caso, 'qualidade'), evalNaFaixaDoPlano: true });
+      expect(qualidade.tier, caso.nome).toBe(producao.tier);
+      expect(qualidade.override, caso.nome).toBe(producao.override);
+      expect(qualidade.modelo, caso.nome).toBe(producao.modelo);
+      expect(qualidade.tools, caso.nome).toEqual([]);
+    }
+  });
+
+  it('desligada: a cascata padrão de hoje, sem tier', () => {
+    const p = resolveTurnPolicy({ ...entradaPura(MATRIZ[0], 'qualidade'), evalNaFaixaDoPlano: false });
+    expect(p.tier).toBeUndefined();
+    expect(p.modelo).toBe('anthropic-sonnet');
+  });
+
+  it('a Qualidade na faixa nunca recebe ferramentas, nem com o agendamento de pé', () => {
+    const p = resolveTurnPolicy({
+      ...entradaPura(MATRIZ[0], 'qualidade'),
+      evalNaFaixaDoPlano: true,
+      agendamentoAtivo: true,
+    });
+    expect(p.tools).toEqual([]);
+    expect(p.modelo).toBe('google-gemini-flash');
+  });
+});

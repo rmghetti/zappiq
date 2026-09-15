@@ -29,6 +29,8 @@ describe('rotuloDaAmostra', () => {
     expect(rotuloDaAmostra('fail')).toBe('reprovou');
     // Falha do provedor não é culpa do agente, e a palavra precisa dizer isso.
     expect(rotuloDaAmostra('erro')).toBe('falha técnica');
+    // C2 (A226): resposta de um modelo de reserva não aprova nem reprova.
+    expect(rotuloDaAmostra('inconclusivo')).toBe('modelo de reserva, não conta');
   });
 });
 

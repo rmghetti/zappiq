@@ -20,7 +20,12 @@
  *     - sugestão que ainda assim vazar marca é DESCARTADA (rede final).
  */
 
-import { llmRouter, type LLMOperation } from './llm/LLMRouter.js';
+import {
+  llmRouter,
+  type LLMOperation,
+  type LLMProviderId,
+  type LLMTier,
+} from './llm/LLMRouter.js';
 import { classifyIntent, shouldEscalateToSonnet, type IzaIntent } from './llm/intentClassifier.js';
 import { logger } from '../utils/logger.js';
 import { CORE_AGENT_RULES_V1 } from '../agents/coreAgentRules.js';
@@ -33,6 +38,15 @@ import {
   type RegraDoAgente,
 } from '../agents/regrasDoAgente.js';
 import type { EvalScenario } from '../agents/agentEvalSet.js';
+// Nota 2 da revisão de 14/09 (A172): o contato do teste não tem nome de gente.
+import {
+  NOME_FICTICIO_DO_TESTE,
+  type AcaoDeTreino,
+  type NaturezaDoCenario,
+} from '../agents/evalScenarioTypes.js';
+// C2 (P13): a régua determinística com a checagem por valor, a mesma da
+// regravação.
+import { checagemDeterministica, extrairValores } from '../agents/evalSetConhecimento.js';
 import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
 // A088: a MESMA extração que o WhatsApp usa. Antes o avaliador lia resp.text
 // cru e julgava a resposta dobrada, com as tags dentro.
@@ -55,6 +69,13 @@ export interface ContextoDoCenario {
   partes: ParteDoContexto[];
   /** Estado da busca na base da organização testada. */
   ragStatus: RagSearchStatus;
+  /**
+   * C2 (Passo 2, A039): o texto dos trechos da base que o agente recebeu. O
+   * juiz vê OS MESMOS trechos, para separar "inventou" de "estava na base".
+   */
+  trechos?: string;
+  /** C2 (Passo 1, A226): os ids dos trechos que entraram, para o resultado. */
+  fontes?: string[];
 }
 
 /**
@@ -96,6 +117,12 @@ export interface ScenarioResult {
     passed: boolean;
     failedPatterns: string[];
     missingPatterns: string[];
+    /**
+     * Rodada 1 do PR #378, item 4: os valores em reais que vieram nos trechos
+     * da base que o agente recebeu naquela amostra. Contam como permitidos na
+     * checagem "valor fora da tabela". Só nos casos de conhecimento.
+     */
+    reaisDosTrechos?: string[];
   };
   judge: {
     /**
@@ -107,6 +134,10 @@ export interface ScenarioResult {
     passed: boolean | null;
     confidence: number; // 0-1
     reason: string;
+    /** C2 (Passo 2): o trecho que sustenta o veredito, escrito ANTES dele. */
+    evidencia?: string;
+    /** C2 (Passo 2, P21): a causa da reprovação, segundo o juiz. */
+    causa?: CausaDoJuiz | null;
   };
   /**
    * A171 — 'erro' é falha TÉCNICA do teste (provedor fora, tempo limite,
@@ -115,15 +146,59 @@ export interface ScenarioResult {
    * com nota 0: em 16/06 uma correção nascida de 25 respostas vazias foi
    * aplicada no prompt da Iza e continua lá.
    */
-  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  combined: VereditoDoCenario;
   /** Motivo legível da falha técnica, em português. Só quando combined='erro'. */
   falhaTecnica?: string;
   /**
-   * C1a (A036): estado da base da organização no turno testado. Só existe
-   * quando o cenário rodou pelo motor único. 'servico_fora' diz que a base
+   * C2 (Passo 1, A226): por que o cenário ficou INCONCLUSIVO. Não aprova nem
+   * reprova e fica fora da nota:
+   *   modelo_diferente    a resposta veio de um modelo diferente do pedido
+   *                       (fallback): mediria outro modelo;
+   *   base_nao_consultada caso de conhecimento com o teste sem a base.
+   */
+  inconclusivo?: { motivo: MotivoInconclusivo; explicacao: string };
+  /** C2 (Passo 3, P21): conhecimento ou comportamento, fixa por cenário. */
+  natureza: NaturezaDoCenario;
+  /** C2 (A221): o histórico simulado, para a tela mostrar a conversa inteira. */
+  history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /** C2 (Passo 1, A226): quem respondeu. null quando nem chegou a responder. */
+  agente: ModeloUsado | null;
+  /** C2 (Passo 1): o provedor que o teste PEDIU para o agente. */
+  modeloPedido: string | null;
+  /** C2 (Passo 1 e 2): quem julgou. null quando o juiz não foi chamado. */
+  juiz: ModeloUsado | null;
+  /**
+   * C2 (Passo 2, A208): o juiz saiu da mesma família do agente. Acontece
+   * quando só uma família está configurada, ou quando a outra caiu.
+   */
+  juizMesmaFamilia: boolean | null;
+  /** C2 (Passo 1): quem escreveu a sugestão. null quando não houve pedido. */
+  sugeridor: ModeloUsado | null;
+  /** C2 (Passo 1): ids dos trechos da base que entraram no contexto. */
+  fontes: string[];
+  /**
+   * Rodada 1 do PR #378, item 9: por que o agente foi pedido a este modelo
+   * (a política da faixa do plano, ou a volta à cascata padrão quando a
+   * família está sem chave ou com o disjuntor aberto). null sem política.
+   */
+  motivoDoModelo?: string | null;
+  /**
+   * C2 (Passo 5): as repetições do caso de conhecimento (aprova só se todas
+   * passarem). Ausente quando o cenário rodou uma vez só.
+   */
+  amostras?: Array<{
+    combined: VereditoDoCenario;
+    response: string;
+    judge: { passed: boolean | null; reason: string; evidencia?: string };
+    agente: ModeloUsado | null;
+  }>;
+  /**
+   * C1a (A036): estado da base da organização no turno testado. C2 (Passo
+   * 1): presente em TODO resultado; null quando o teste não consultou a base
+   * (interruptor contextoUnico desligado). 'servico_fora' diz que a base
    * caiu; não é o mesmo que "não há base".
    */
-  ragStatus?: RagSearchStatus;
+  ragStatus: RagSearchStatus | null;
   /** C1a: sha256 do prompt que o agente testado recebeu. Liga o teste ao Raio-X. */
   promptHash?: string;
   /**
@@ -139,7 +214,93 @@ export interface ScenarioResult {
       diff: string; // patch em markdown
     }>;
     confidence: number; // 0-1
+    /**
+     * C2 (Passo 3, P21): reprovação de conhecimento por falta de informação
+     * não vira regra de prompt (regra não cria informação, A086). Vem a ação
+     * de treino no lugar, e `patches` vazio.
+     */
+    acaoDeTreino?: AcaoDeTreino;
+    /** C2 (Passo 1): o modelo que escreveu a sugestão. */
+    modelo?: ModeloUsado | null;
   };
+}
+
+/** C2: o veredito de um cenário. */
+export type VereditoDoCenario = 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
+
+/**
+ * C2 (Passo 1): por que o cenário ficou inconclusivo. Rodada 1 do PR #378,
+ * item 11: 'juiz_indeterminado' é o juiz sem veredito legível ou sem
+ * evidência numa execução nova.
+ */
+export type MotivoInconclusivo = 'modelo_diferente' | 'base_nao_consultada' | 'juiz_indeterminado';
+
+/** C2 (Passo 1, A226): provedor e modelo efetivamente usados numa chamada. */
+export interface ModeloUsado {
+  provider: string;
+  model: string;
+}
+
+/** C2 (Passo 2, P21): a causa de uma reprovação, segundo o juiz. */
+export type CausaDoJuiz = 'faltou_informacao' | 'ignorou_informacao' | 'comportamento';
+
+/**
+ * C2, nota 1 da revisão de 14/09: o modelo que a política de produção
+ * escolheria para a organização (resolveTurnPolicy com origem 'qualidade' e
+ * o interruptor evalNoTier ligado). null = a cascata padrão de hoje.
+ */
+export interface PoliticaDaQualidade {
+  tier?: LLMTier;
+  override?: LLMProviderId;
+  /** O provedor primário que o agente vai pedir. */
+  modelo: LLMProviderId;
+  motivo: string;
+  /**
+   * Rodada 1 do PR #378, item 1: o interruptor `juizDeOutraFamilia` da
+   * organização, lido junto com a política, uma vez por execução. Ligado, o
+   * juiz é pedido a outra família de modelo; desligado ou ausente, o juiz
+   * vai pela cascata padrão (Sonnet), como hoje.
+   */
+  juizOutraFamilia?: boolean;
+}
+
+/** C2 (Passo 3): uma das duas partes do placar. */
+export interface ParteDoPlacar {
+  /**
+   * avaliado     há nota;
+   * sem_base     nenhum caso desta natureza na execução (conhecimento: o dono
+   *              não cadastrou nada que vire pergunta);
+   * sem_cenarios nenhum cenário desta natureza (execução filtrada);
+   * nao_testado  havia casos, mas nenhum pôde ser avaliado.
+   */
+  estado: 'avaliado' | 'sem_base' | 'sem_cenarios' | 'nao_testado';
+  total: number;
+  avaliados: number;
+  aprovados: number;
+  percent: number | null;
+  /** Só em nao_testado: por que nada foi avaliado. */
+  motivo?: 'base_nao_consultada' | 'falha_tecnica';
+}
+
+/**
+ * C2 (Passo 3, P21): a nota em duas partes, gravada em agent_eval_runs.placar.
+ * A nota única (scorePercent) continua existindo para o histórico.
+ */
+export interface Placar {
+  versao: 1;
+  conhecimento: ParteDoPlacar;
+  comportamento: ParteDoPlacar;
+  /** Cenários inconclusivos da execução (fora das duas partes e da nota). */
+  inconclusivos: number;
+  /**
+   * Rodada 1 do PR #378, item 1: quem julgou esta execução, para o P56
+   * comparar só execuções do mesmo juiz. `familia` é a única família que
+   * julgou ('anthropic', 'openai', 'google'), 'misto' quando houve mais de
+   * uma, null quando nenhum cenário chegou ao juiz. `outraFamilia` diz se
+   * o juiz foi de família diferente da do agente em todos os cenários
+   * julgados (null sem juiz).
+   */
+  juiz: { familia: string | null; outraFamilia: boolean | null };
 }
 
 export interface RunSummary {
@@ -431,6 +592,270 @@ ${agentResponse}
   };
 }
 
+// ─── Juiz com evidência, de outra família (C2, Passo 2) ────────────
+
+/**
+ * A família de um provedor. É o que decide se o juiz "corrige a prova do
+ * próprio modelo" (A208): Sonnet julgando Sonnet tende a aprovar o estilo que
+ * ele mesmo produz e a não ver as falhas que o agente não vê.
+ */
+export function familiaDoProvedor(provider: string | null | undefined): string | null {
+  const p = String(provider ?? '');
+  if (p.startsWith('anthropic')) return 'anthropic';
+  if (p.startsWith('openai')) return 'openai';
+  if (p.startsWith('google')) return 'google';
+  return null;
+}
+
+/**
+ * As famílias com chave configurada no ambiente. Sem a chave, o provedor
+ * devolve erro de cliente e o roteador NÃO cai para o próximo: pedir o juiz
+ * a quem não tem chave derrubaria o cenário inteiro.
+ */
+export function familiasConfiguradas(amb: Record<string, string | undefined> = process.env): Set<string> {
+  const f = new Set<string>();
+  if (amb.ANTHROPIC_API_KEY) f.add('anthropic');
+  if (amb.OPENAI_API_KEY) f.add('openai');
+  if (amb.GOOGLE_API_KEY) f.add('google');
+  return f;
+}
+
+/**
+ * Ordem de preferência do juiz. OpenAI primeiro: é a família que o roteador
+ * já usa como reserva e a que respondeu nos meses medidos; o Gemini está
+ * parado desde 10/07 (A098).
+ */
+const ORDEM_DO_JUIZ: LLMProviderId[] = ['openai-mini', 'anthropic-sonnet', 'google-gemini-flash'];
+
+/**
+ * O provedor do juiz: o primeiro da ordem que é de OUTRA família e tem chave.
+ * null quando não há outra família configurada: aí o juiz vai pela cascata
+ * padrão e o resultado registra juizMesmaFamilia.
+ */
+export function escolherProvedorDoJuiz(
+  provedorDoAgente: string | null | undefined,
+  configuradas: Set<string> = familiasConfiguradas(),
+): LLMProviderId | null {
+  const doAgente = familiaDoProvedor(provedorDoAgente) ?? 'anthropic';
+  for (const p of ORDEM_DO_JUIZ) {
+    const f = familiaDoProvedor(p)!;
+    if (f !== doAgente && configuradas.has(f)) return p;
+  }
+  return null;
+}
+
+/** Teto de saída do juiz com evidência: a evidência vem antes e é mais longa. */
+export const MAX_TOKENS_DO_JUIZ_COM_EVIDENCIA = 700;
+
+/** O que o juiz com evidência precisa ver (A039). */
+export interface EntradaDoJuiz {
+  expectedBehavior: string;
+  /** A mensagem do cliente no turno testado. */
+  pergunta: string;
+  historico?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /** Os trechos da base que o AGENTE recebeu. Vazio = nenhum. */
+  trechos?: string;
+  /** O teste consultou a base desta empresa? */
+  baseConsultada: boolean;
+  resposta: string;
+  natureza: NaturezaDoCenario;
+}
+
+export interface VereditoDoJuiz {
+  passed: boolean | null;
+  confidence: number;
+  reason: string;
+  evidencia: string;
+  causa: CausaDoJuiz | null;
+  provider: string | null;
+  model: string | null;
+}
+
+function buildJudgeSystemComEvidencia(profile: JudgeProfile): string {
+  const contexto = profile.isZappIQ
+    ? `Você está avaliando a ${profile.agentName}, agente da ${profile.businessName}.`
+    : [
+        `Você está avaliando ${profile.agentName}, o agente de IA de ${profile.businessName}` +
+          (profile.niche ? ` (segmento: ${profile.niche})` : '') +
+          `.`,
+        ``,
+        `REGRA INEGOCIÁVEL DE ISOLAMENTO:`,
+        `${profile.agentName} representa EXCLUSIVAMENTE ${profile.businessName}.`,
+        `- NUNCA reprove ${profile.agentName} por não mencionar outra empresa, marca, produto,`,
+        `  preço, plano ou link que não seja de ${profile.businessName}.`,
+        `- Dizer que é de ${profile.businessName} é o comportamento CORRETO, nunca um erro.`,
+      ].join('\n');
+
+  return `Você é um avaliador imparcial de respostas de agentes de IA de atendimento.
+
+${contexto}
+
+Você recebe a mensagem do cliente, o histórico da conversa, os trechos da base
+de conhecimento que o agente RECEBEU neste teste, o comportamento esperado e a
+resposta do agente.
+
+Como avaliar:
+1. Escreva primeiro a EVIDÊNCIA: cite o trecho da resposta (e, quando for o
+   caso, o trecho da base) que sustenta a sua conclusão.
+   A evidência tem no máximo 300 caracteres. Só depois decida. Sem
+   evidência, o veredito não vale.
+2. O que está nos trechos recebidos ou no histórico NÃO é invenção. Nunca
+   reprove o agente por usar informação que ele recebeu.
+3. Aprovado: a resposta atende substancialmente o comportamento esperado.
+   Reprovado: faz o que não deveria, ou deixa de fazer o que deveria.
+
+Causa (só quando reprovar; aprovando, use null):
+- "faltou_informacao": a resposta certa dependia de uma informação que NÃO
+  estava nos trechos recebidos nem no histórico.
+- "ignorou_informacao": a informação estava nos trechos recebidos e o agente
+  não usou, ou contradisse.
+- "comportamento": o problema é de conduta (tom, encaminhamento, formato,
+  pedir dado, inventar), não de informação.
+
+Formato EXATO (um JSON só, sem markdown, com a evidência PRIMEIRO):
+{"evidencia": "...", "causa": "faltou_informacao" | "ignorou_informacao" | "comportamento" | null, "veredito": "aprovado" | "reprovado", "confianca": 0-100, "motivo": "frase curta em português para o dono do negócio"}`;
+}
+
+function textoDoHistorico(h: EntradaDoJuiz['historico'], agentName: string): string {
+  if (!h || h.length === 0) return '(sem histórico: é a primeira mensagem)';
+  return h.map((t) => `${t.role === 'user' ? 'Cliente' : agentName}: ${t.content}`).join('\n');
+}
+
+function textoDosTrechos(e: EntradaDoJuiz): string {
+  if (!e.baseConsultada) return '(este teste não consultou a base desta empresa: o agente não recebeu trecho nenhum)';
+  const t = String(e.trechos ?? '').trim();
+  return t ? t.slice(0, 6000) : '(a busca na base não trouxe nenhum trecho para esta mensagem)';
+}
+
+const CAUSAS_VALIDAS: CausaDoJuiz[] = ['faltou_informacao', 'ignorou_informacao', 'comportamento'];
+
+/** Último recurso da leitura: cada campo por expressão, no texto cortado. */
+function lerCamposSoltos(raw: string): Record<string, any> | null {
+  const t = String(raw ?? '');
+  const campo = (nome: string) =>
+    t.match(new RegExp(`"${nome}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`))?.[1];
+  const veredito = campo('veredito');
+  const passed = t.match(/"passed"\s*:\s*(true|false)/)?.[1];
+  if (!veredito && !passed) return null;
+  return {
+    veredito,
+    ...(passed ? { passed: passed === 'true' } : {}),
+    evidencia: campo('evidencia'),
+    causa: campo('causa'),
+    motivo: campo('motivo'),
+  };
+}
+
+/** Lê o veredito do juiz com evidência, aceitando o formato antigo também. */
+export function lerVereditoComEvidencia(raw: string): Omit<VereditoDoJuiz, 'provider' | 'model'> {
+  // Leitura tolerante (A050): o JSON inteiro, a cerca de código, o primeiro
+  // objeto balanceado ou o objeto cortado. Se nem assim sair um objeto (o
+  // corte caiu no meio de uma CHAVE), os campos são lidos um a um: o
+  // veredito costuma estar lá antes do corte.
+  const parsed = lerRespostaDoJuiz(raw) ?? lerCamposSoltos(raw);
+  let passed: boolean | null = null;
+  if (parsed) {
+    const v = String(parsed.veredito ?? '').toLowerCase();
+    if (v.startsWith('aprov')) passed = true;
+    else if (v.startsWith('reprov')) passed = false;
+    else if (typeof parsed.passed === 'boolean') passed = parsed.passed;
+  }
+  if (!parsed || passed === null) {
+    return {
+      passed: null,
+      confidence: 0,
+      reason: 'Avaliação indeterminada: o avaliador não devolveu um veredito legível.',
+      evidencia: '',
+      causa: null,
+    };
+  }
+  const evidencia = String(parsed.evidencia ?? '').trim().slice(0, 800);
+  const motivo = String(parsed.motivo ?? parsed.reason ?? '').trim();
+  const causaBruta = String(parsed.causa ?? '').trim() as CausaDoJuiz;
+  const confianca = Number(parsed.confianca ?? parsed.confidence);
+  return {
+    passed,
+    confidence: Math.min(100, Math.max(0, Number.isFinite(confianca) ? confianca : 50)) / 100,
+    reason: (motivo || evidencia || (passed ? 'Aprovado.' : 'Reprovado.')).slice(0, 500),
+    evidencia,
+    // Aprovado não tem causa; causa fora da lista vira null.
+    causa: passed ? null : CAUSAS_VALIDAS.includes(causaBruta) ? causaBruta : null,
+  };
+}
+
+/**
+ * O juiz da Qualidade (C2, Passo 2; A039, A208).
+ *
+ * Vê a pergunta, o histórico e OS MESMOS trechos da base que o agente viu, e
+ * escreve a evidência antes do veredito, com a causa quando reprova. É de
+ * outra família de modelo sempre que houver chave para isso: primeiro pede
+ * ao provedor escolhido, sem reserva; se ele falhar, vai pela cascata padrão
+ * e o resultado diz qual modelo julgou de fato.
+ *
+ * Erro de chamada sobe para quem chamou (falha técnica do cenário).
+ */
+export async function julgarComEvidencia(
+  entrada: EntradaDoJuiz,
+  profile: JudgeProfile,
+  opts: {
+    provedorDoAgente?: string | null;
+    /**
+     * Rodada 1 do PR #378, item 1: só com o interruptor `juizDeOutraFamilia`
+     * da organização ligado o juiz é pedido a outra família. Sem ele, a
+     * cascata padrão (Sonnet), e o resultado grava juizMesmaFamilia.
+     */
+    permitirOutraFamilia?: boolean;
+  } = {},
+): Promise<VereditoDoJuiz> {
+  const userPrompt = `### Mensagem do cliente
+${entrada.pergunta}
+
+### Histórico da conversa (turnos anteriores)
+${textoDoHistorico(entrada.historico, profile.agentName)}
+
+### Trechos da base que o agente recebeu
+${textoDosTrechos(entrada)}
+
+### Comportamento esperado
+${entrada.expectedBehavior}
+
+### Resposta do agente
+${entrada.resposta}
+
+### Avaliação (JSON, com a evidência primeiro)`;
+
+  const pedido = {
+    system: buildJudgeSystemComEvidencia(profile),
+    messages: [{ role: 'user' as const, content: userPrompt }],
+    maxTokens: MAX_TOKENS_DO_JUIZ_COM_EVIDENCIA,
+    temperature: 0,
+    ...auditDoEval(profile),
+  };
+
+  const preferido = opts.permitirOutraFamilia === true ? escolherProvedorDoJuiz(opts.provedorDoAgente) : null;
+  let resp: Awaited<ReturnType<typeof llmRouter.complete>> | null = null;
+  if (preferido) {
+    try {
+      resp = await comTempoLimite(() => llmRouter.complete({ ...pedido, forceProvider: preferido }));
+    } catch (err: any) {
+      logger.warn('[agentEvalRunner] juiz de outra família falhou: segue pela cascata padrão', {
+        preferido,
+        err: err?.message,
+      });
+      resp = null;
+    }
+  }
+  if (!resp) {
+    resp = await withRetry(() => comTempoLimite(() => llmRouter.complete(pedido)));
+  }
+
+  const lido = lerVereditoComEvidencia(String(resp.text ?? ''));
+  if (lido.passed === null) {
+    logger.warn('[agentEvalRunner] juiz indeterminado', { trecho: String(resp.text ?? '').slice(0, 120) });
+  }
+  return { ...lido, provider: resp.provider ?? null, model: resp.model ?? null };
+}
+
 // ─── Sugestão automática (Nível 1) ─────────────────────────────────
 
 /**
@@ -570,6 +995,88 @@ export interface ContextoDoSugeridor {
    * Ausente, null ou devolvendo null: o prompt de antes (buildEvalSystemPrompt).
    */
   montarContexto?: MontadorDeContexto | null;
+  /**
+   * C2, nota 1 da revisão de 14/09: o modelo da faixa do plano (interruptor
+   * `evalNoTier`). Pode vir pronto ou como função preguiçosa (lida uma vez por
+   * execução, no primeiro cenário): quem chama cria sem IO, e a execução que
+   * nunca chega a rodar não lê interruptor nenhum. null ou ausente: a cascata
+   * padrão de hoje.
+   */
+  politica?: PoliticaDaQualidade | null | (() => Promise<PoliticaDaQualidade | null>);
+  /**
+   * C2 (P13): roda cada cenário uma vez só, mesmo o de conhecimento. É o
+   * re-teste, que já faz as próprias três amostras.
+   */
+  semRepeticoes?: boolean;
+  /**
+   * C2 (Passo 3, P21): o diagnóstico do cenário que falhou. Reprovação de
+   * CONHECIMENTO com causa 'faltou_informacao' não vira regra: o sugeridor
+   * devolve a ação de treino, sem chamar modelo nenhum.
+   */
+  diagnostico?: {
+    natureza?: NaturezaDoCenario | null;
+    causa?: CausaDoJuiz | null;
+    /** A ação do PRÓPRIO caso (scenario.conhecimento.acaoDeTreino). */
+    acaoDeTreino?: AcaoDeTreino | null;
+    /** Rodada 1 do PR #378, item 7: de onde o caso gerado nasceu. */
+    origem?: 'qa' | 'questionario' | null;
+    fonte?: string | null;
+    userMessage?: string | null;
+  };
+}
+
+/**
+ * C2 (Passo 3, P21): a ação de treino quando a reprovação é de conhecimento
+ * por falta de informação, ou null quando o caso pede ajuste de conduta.
+ */
+export function acaoDeTreinoPorFaltaDeInformacao(
+  d: ContextoDoSugeridor['diagnostico'],
+): AcaoDeTreino | null {
+  if (!d || d.natureza !== 'conhecimento' || d.causa !== 'faltou_informacao') return null;
+  // Rodada 1 do PR #378, item 7: a ação só vem do PRÓPRIO caso. Antes, o
+  // cenário de conhecimento do catálogo da Iza (zappiq_preco_*, voice_*,
+  // trial) caía para {tipo:'qa', pergunta: mensagem} e perdia a sugestão de
+  // conduta; agora ele segue para o sugeridor, como sempre.
+  if (!d.acaoDeTreino) return null;
+  // Caso GERADO (Q&A ou questionário): a informação existe por construção.
+  // Se faltou, está cadastrada mas não chegou ao agente: a ação é revisar o
+  // texto cadastrado, sem pré-preencher pergunta nova.
+  if (d.origem === 'qa' || d.origem === 'questionario') {
+    return acaoDeRevisao(d.origem, String(d.fonte ?? ''), d.acaoDeTreino);
+  }
+  return d.acaoDeTreino;
+}
+
+/** A ação de cadastrar do caso vira a ação de revisar o que já está cadastrado. */
+function acaoDeRevisao(origem: 'qa' | 'questionario', fonte: string, base: AcaoDeTreino): AcaoDeTreino {
+  if (base.tipo === 'revisar') return base;
+  if (base.tipo === 'qa') return { tipo: 'revisar', origem, fonte, pergunta: base.pergunta };
+  return {
+    tipo: 'revisar',
+    origem,
+    fonte,
+    secao: base.secao,
+    ...(base.campo ? { campo: base.campo } : {}),
+    ...(base.rotulo ? { rotulo: base.rotulo } : {}),
+  };
+}
+
+function resumoDaAcaoDeTreino(acao: AcaoDeTreino): string {
+  if (acao.tipo === 'qa') {
+    return 'Faltou informação na base para responder: cadastre a resposta desta pergunta em Treinar IA.';
+  }
+  if (acao.tipo === 'questionario') {
+    return `Faltou informação na base para responder: preencha ${acao.rotulo ?? 'este campo'} no questionário, em Treinar IA.`;
+  }
+  // revisar: a informação existe, mas não chegou ao agente neste teste.
+  const oQue =
+    acao.origem === 'qa'
+      ? 'A resposta desta pergunta está cadastrada'
+      : `O campo ${acao.rotulo ?? 'do questionário'} está cadastrado no questionário`;
+  return (
+    `${oQue}, mas não chegou ao agente neste teste: revise o texto cadastrado em Treinar IA. ` +
+    'Se o texto estiver certo, a base de busca precisa ser reindexada.'
+  );
 }
 
 export async function suggestFix(
@@ -584,6 +1091,22 @@ export async function suggestFix(
   // A guarda fica AQUI, e não em quem chama, porque quem chama é o runner
   // interno: bastava alguém esquecer o if para a conta voltar a dobrar.
   if (contexto.pularSugestao) return undefined;
+
+  // C2 (Passo 3, P21, A086): regra não cria informação. Reprovação de
+  // conhecimento por falta de informação devolve a AÇÃO DE TREINO (cadastrar
+  // a pergunta e resposta, ou preencher o questionário), e nenhum patch.
+  // Antes, 155 de 163 reprovações desse tipo receberam uma regra de prompt
+  // como remédio, e o erro voltava na execução seguinte.
+  const acao = acaoDeTreinoPorFaltaDeInformacao(contexto.diagnostico);
+  if (acao) {
+    return {
+      summary: resumoDaAcaoDeTreino(acao),
+      patches: [],
+      confidence: 1,
+      acaoDeTreino: acao,
+      modelo: null,
+    };
+  }
 
   const primeira = await pedirPatch(
     scenarioId,
@@ -717,6 +1240,8 @@ ${
         summary: String(parsed.summary || '').slice(0, 200),
         patches: limpos,
         confidence: Math.min(100, Math.max(0, Number(parsed.confidence) || 50)) / 100,
+        // C2 (Passo 1, A226): quem escreveu a sugestão.
+        modelo: out.provider ? { provider: out.provider, model: out.model ?? '' } : null,
       };
     }
     return undefined;
@@ -755,7 +1280,7 @@ export function buildEvalSystemPrompt(
 ): string {
   // FASE 2.1 fix (2026-05-13): mock condicional do bloco "Cliente atual".
   // Cenários cr5_nome_ausente_* testam o comportamento de PERGUNTAR nome —
-  // injetar "Nome registrado: Rod" forçava o agent a usar o nome (falso pass)
+  // injetar o nome registrado forçava o agent a usar o nome (falso pass)
   // e quebrava esses cenários (falso fail). Solução: se scenarioId contém
   // 'nome_ausente', mock omite o nome.
   const nameMockEnabled = !scenario.id.includes('nome_ausente');
@@ -776,7 +1301,7 @@ export function buildEvalSystemPrompt(
     '',
     '# Cliente atual (eval test mock)',
     nameMockEnabled
-      ? 'Nome registrado: Rod'
+      ? `Nome registrado: ${NOME_FICTICIO_DO_TESTE}`
       : 'Nome registrado: (ainda não capturado, peça no primeiro turno conforme REGRA 9)',
     'Telefone: +5511999999999',
     'Status do lead: NEW',
@@ -819,6 +1344,43 @@ export function detectarFalhaTecnica(input: {
   return null;
 }
 
+/**
+ * C2 (Passo 1, A226): o esqueleto de TODO resultado, com todas as chaves que
+ * a execução nova grava. Erro, inconclusivo e avaliado partem daqui: 100% dos
+ * cenários de uma execução nova têm agente, juiz, sugeridor, fontes e
+ * ragStatus, nem que seja null.
+ */
+function esqueletoDoResultado(
+  scenario: EvalScenario,
+  rastro: { ragStatus: RagSearchStatus | null; fontes: string[]; promptHash?: string },
+  motivoDoModelo: string | null = null,
+): ScenarioResult {
+  return {
+    scenarioId: scenario.id,
+    category: scenario.category,
+    severity: scenario.severity,
+    description: scenario.description,
+    natureza: scenario.natureza ?? 'comportamento',
+    userMessage: scenario.userMessage,
+    history: scenario.history ?? [],
+    response: '',
+    responseLatencyMs: 0,
+    responseTokens: {},
+    deterministic: { passed: false, failedPatterns: [], missingPatterns: [] },
+    judge: { passed: null, confidence: 0, reason: '' },
+    combined: 'erro',
+    agente: null,
+    modeloPedido: null,
+    juiz: null,
+    juizMesmaFamilia: null,
+    sugeridor: null,
+    fontes: rastro.fontes,
+    ragStatus: rastro.ragStatus,
+    motivoDoModelo,
+    ...(rastro.promptHash ? { promptHash: rastro.promptHash } : {}),
+  };
+}
+
 /** Resultado de cenário que não pôde ser avaliado. Fora da nota, sem sugestão. */
 function resultadoComErro(
   scenario: EvalScenario,
@@ -826,15 +1388,7 @@ function resultadoComErro(
   extra: Partial<ScenarioResult> = {},
 ): ScenarioResult {
   return {
-    scenarioId: scenario.id,
-    category: scenario.category,
-    severity: scenario.severity,
-    description: scenario.description,
-    userMessage: scenario.userMessage,
-    response: '',
-    responseLatencyMs: 0,
-    responseTokens: {},
-    deterministic: { passed: false, failedPatterns: [], missingPatterns: [] },
+    ...esqueletoDoResultado(scenario, { ragStatus: null, fontes: [] }),
     judge: { passed: null, confidence: 0, reason: motivo },
     combined: 'erro',
     falhaTecnica: motivo,
@@ -842,11 +1396,291 @@ function resultadoComErro(
   };
 }
 
+/** Texto do cenário inconclusivo, para a tela do cliente. */
+const EXPLICACAO_INCONCLUSIVO: Record<MotivoInconclusivo, string> = {
+  modelo_diferente:
+    'A resposta veio de um modelo de reserva, e não do modelo pedido para o teste. ' +
+    'Ela não aprova nem reprova: fica fora da nota.',
+  base_nao_consultada:
+    'Este caso de conhecimento não foi avaliado: o teste desta empresa ainda não consulta a ' +
+    'base de conhecimento. Ele passa a contar quando o teste usar a base.',
+  juiz_indeterminado:
+    'O avaliador não devolveu um veredito legível com evidência. O cenário não aprova nem ' +
+    'reprova: fica fora da nota. Não é erro do seu agente.',
+};
+
+/**
+ * O provedor que o teste PEDE para o agente, na mesma ordem de produção
+ * (izaTurnRouter): override contratual, depois a escalada por intenção,
+ * depois o tier da faixa do plano. Sem política (evalNoTier desligado), a
+ * cascata padrão de hoje, que começa em Sonnet.
+ */
+const PROVEDOR_DA_CASCATA_PADRAO: LLMProviderId = 'anthropic-sonnet';
+
+export function pedidoDoAgente(
+  politica: PoliticaDaQualidade | null,
+  escalar: boolean,
+): {
+  params: { forceProvider?: LLMProviderId; preferProvider?: LLMProviderId; tier?: LLMTier };
+  pedido: LLMProviderId;
+} {
+  if (politica?.override) {
+    return { params: { forceProvider: politica.override }, pedido: politica.override };
+  }
+  if (escalar) {
+    // PR #216: preferProvider (com reserva) em vez de forceProvider (sem).
+    return { params: { preferProvider: 'anthropic-sonnet' }, pedido: 'anthropic-sonnet' };
+  }
+  if (politica?.tier) {
+    return { params: { tier: politica.tier }, pedido: politica.modelo };
+  }
+  return { params: {}, pedido: politica?.modelo ?? PROVEDOR_DA_CASCATA_PADRAO };
+}
+
+/** Uma passada do cenário: resposta, régua, juiz e o rastro dos modelos. */
+interface AmostraDoCenario {
+  combined: VereditoDoCenario;
+  response: string;
+  responseLatencyMs: number;
+  responseTokens: { input?: number; output?: number };
+  deterministic: ScenarioResult['deterministic'];
+  judge: ScenarioResult['judge'];
+  agente: ModeloUsado | null;
+  modeloPedido: string | null;
+  juiz: ModeloUsado | null;
+  juizMesmaFamilia: boolean | null;
+  falhaTecnica?: string;
+  inconclusivo?: ScenarioResult['inconclusivo'];
+}
+
+async function umaAmostra(
+  scenario: EvalScenario,
+  systemPrompt: string,
+  profile: JudgeProfile,
+  politica: PoliticaDaQualidade | null,
+  doCenario: ContextoDoCenario | null,
+): Promise<AmostraDoCenario> {
+  const messages = (scenario.history || []).map((h) => ({
+    role: h.role,
+    content: h.content,
+  }));
+  messages.push({ role: 'user', content: scenario.userMessage });
+
+  // V5 fix (2026-05-26): eval runner DEVE espelhar prod 1:1. Roda
+  // classifyIntent + shouldEscalateToSonnet ANTES da chamada principal,
+  // mesma cascata do izaTurnRouter.
+  let escalar = false;
+  try {
+    // Com tempo limite como as demais: a classificação também vai ao provedor
+    // pelo mesmo fetch sem AbortSignal.
+    const intent: IzaIntent = await comTempoLimite(() =>
+      classifyIntent(scenario.userMessage, messages.slice(0, -1) as any, {
+        // agentName fica de fora de propósito: o izaTurnRouter de produção
+        // também não passa, e o avaliador tem de espelhar produção 1:1.
+        ...auditDoEval(profile),
+        conversationId: null,
+      }),
+    );
+    escalar = shouldEscalateToSonnet(intent);
+  } catch (err: any) {
+    logger.warn('[agentEvalRunner] classifyIntent falhou no eval — usando default tier', {
+      scenarioId: scenario.id,
+      err: err?.message,
+    });
+  }
+
+  const { params, pedido } = pedidoDoAgente(politica, escalar);
+
+  const t0 = Date.now();
+  const resp = await withRetry(() =>
+    comTempoLimite(() =>
+      llmRouter.complete({
+        system: systemPrompt,
+        messages: messages as any,
+        maxTokens: 800,
+        temperature: 0.3,
+        ...params,
+        ...auditDoEval(profile),
+      }),
+    ),
+  );
+  const responseLatencyMs = Date.now() - t0;
+  const responseTokens = { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens };
+  const agente: ModeloUsado | null = resp.provider
+    ? { provider: resp.provider, model: resp.model ?? '' }
+    : null;
+
+  // A088: a mesma extração da produção. O cliente final lê o conteúdo de
+  // <reply>; o avaliador lia o texto cru, com a resposta dobrada e as tags.
+  const response = extractProductionReplyText(resp.text);
+
+  const base = {
+    response,
+    responseLatencyMs,
+    responseTokens,
+    agente,
+    modeloPedido: pedido,
+    juiz: null,
+    juizMesmaFamilia: null,
+    deterministic: { passed: false, failedPatterns: [] as string[], missingPatterns: [] as string[] },
+  };
+
+  // A171: falha técnica sai da nota AQUI, antes do juiz e antes do sugeridor.
+  const falha = detectarFalhaTecnica({ response, stopReason: resp.stopReason });
+  if (falha) {
+    logger.warn('[agentEvalRunner] cenário sem resposta avaliável', {
+      scenarioId: scenario.id,
+      motivo: falha,
+    });
+    return {
+      ...base,
+      combined: 'erro',
+      judge: { passed: null, confidence: 0, reason: falha },
+      falhaTecnica: falha,
+    };
+  }
+
+  // C2 (Passo 1, A226): resposta servida por um modelo diferente do pedido
+  // (a cascata caiu na reserva) mede OUTRO modelo. Não aprova nem reprova, e
+  // não gasta juiz nem sugestão. Foi sobre execuções assim (72% das
+  // respostas em Haiku ou gpt-4o-mini) que 29 das 30 correções da Iza nasceram.
+  if (resp.provider && resp.provider !== pedido) {
+    return {
+      ...base,
+      combined: 'inconclusivo',
+      judge: { passed: null, confidence: 0, reason: EXPLICACAO_INCONCLUSIVO.modelo_diferente },
+      inconclusivo: {
+        motivo: 'modelo_diferente',
+        explicacao:
+          `${EXPLICACAO_INCONCLUSIVO.modelo_diferente} Pedido: ${pedido}. ` +
+          `Respondeu: ${resp.provider}${resp.model ? ` (${resp.model})` : ''}.`,
+      },
+    };
+  }
+
+  // C2 (P13): os padrões de sempre mais a checagem por valor, a mesma régua
+  // da regravação. Rodada 1 do PR #378, item 4: os valores em reais dos
+  // trechos que o agente recebeu nesta amostra também são permitidos.
+  const deterministic = checagemDeterministica(scenario, response, {
+    reaisExtras: doCenario ? extrairValores(doCenario.trechos ?? '').reais : undefined,
+  });
+
+  // A171: chamada do juiz que quebra é falha TÉCNICA do teste, não erro do
+  // agente.
+  let veredito: VereditoDoJuiz;
+  try {
+    veredito = await julgarComEvidencia(
+      {
+        expectedBehavior: scenario.expectedBehavior,
+        pergunta: scenario.userMessage,
+        historico: scenario.history,
+        trechos: doCenario?.trechos ?? '',
+        baseConsultada: Boolean(doCenario),
+        resposta: response,
+        natureza: scenario.natureza ?? 'comportamento',
+      },
+      profile,
+      {
+        provedorDoAgente: resp.provider ?? pedido,
+        // Item 1 da rodada 1 do #378: outra família só com o interruptor.
+        permitirOutraFamilia: politica?.juizOutraFamilia === true,
+      },
+    );
+  } catch (err: any) {
+    const motivo = `O avaliador não respondeu a tempo (${String(err?.message || 'falha na chamada')}).`;
+    logger.warn('[agentEvalRunner] juiz falhou', { scenarioId: scenario.id, err: err?.message });
+    return {
+      ...base,
+      deterministic,
+      combined: 'erro',
+      judge: { passed: null, confidence: 0, reason: motivo },
+      falhaTecnica: motivo,
+    };
+  }
+
+  const juiz: ModeloUsado | null = veredito.provider
+    ? { provider: veredito.provider, model: veredito.model ?? '' }
+    : null;
+  const familiaDoAgente = familiaDoProvedor(resp.provider ?? pedido);
+  const juizMesmaFamilia = juiz ? familiaDoProvedor(juiz.provider) === familiaDoAgente : null;
+
+  // A050: juiz INDETERMINADO não reprova. Rodada 1 do PR #378, item 11: e
+  // também não aprova pela regra determinística sozinha. Veredito ilegível
+  // (JSON cortado antes do veredito) ou sem evidência numa execução nova
+  // vira inconclusivo, fora da nota; conta no portão de falha do provedor.
+  if (veredito.passed === null || !veredito.evidencia) {
+    logger.warn('[agentEvalRunner] juiz sem veredito ou sem evidência: inconclusivo', {
+      scenarioId: scenario.id,
+      semVeredito: veredito.passed === null,
+      semEvidencia: !veredito.evidencia,
+    });
+    return {
+      ...base,
+      deterministic,
+      combined: 'inconclusivo',
+      juiz,
+      juizMesmaFamilia,
+      judge: {
+        passed: null,
+        confidence: 0,
+        reason: EXPLICACAO_INCONCLUSIVO.juiz_indeterminado,
+        evidencia: veredito.evidencia,
+        causa: null,
+      },
+      inconclusivo: {
+        motivo: 'juiz_indeterminado',
+        explicacao: EXPLICACAO_INCONCLUSIVO.juiz_indeterminado,
+      },
+    };
+  }
+
+  let combined: 'pass' | 'partial' | 'fail';
+  if (deterministic.passed && veredito.passed) combined = 'pass';
+  else if (!deterministic.passed && !veredito.passed) combined = 'fail';
+  else combined = 'partial';
+
+  return {
+    ...base,
+    deterministic,
+    combined,
+    juiz,
+    juizMesmaFamilia,
+    judge: {
+      passed: veredito.passed,
+      confidence: veredito.confidence,
+      reason: veredito.reason,
+      evidencia: veredito.evidencia,
+      causa: veredito.causa,
+    },
+  };
+}
+
+/**
+ * Junta as repetições de um caso (C2, P13): aprova só se TODAS passarem.
+ * Falha técnica em qualquer uma deixa o caso fora da nota; inconclusivo
+ * também. A amostra que representa o caso é a primeira que não passou (é
+ * ela que explica a reprovação) ou a última, quando todas passaram.
+ */
+function consolidarAmostras(amostras: AmostraDoCenario[]): {
+  combined: VereditoDoCenario;
+  representante: AmostraDoCenario;
+} {
+  const erro = amostras.find((a) => a.combined === 'erro');
+  if (erro) return { combined: 'erro', representante: erro };
+  const inconclusiva = amostras.find((a) => a.combined === 'inconclusivo');
+  if (inconclusiva) return { combined: 'inconclusivo', representante: inconclusiva };
+  const naoPassou = amostras.find((a) => a.combined !== 'pass');
+  if (!naoPassou) return { combined: 'pass', representante: amostras[amostras.length - 1] };
+  const combined = amostras.some((a) => a.combined === 'fail') ? 'fail' : 'partial';
+  return { combined, representante: naoPassou };
+}
+
 async function runScenario(
   scenario: EvalScenario,
   agent: { id: string; systemPrompt: string | null; name: string },
   profile: JudgeProfile,
   contexto: ContextoDoSugeridor = {},
+  politica: PoliticaDaQualidade | null = null,
 ): Promise<ScenarioResult> {
   // C1a: o contexto de produção quando o montador existe e o interruptor da
   // organização está ligado. Erro no montador não derruba o cenário: cai no
@@ -871,197 +1705,141 @@ async function runScenario(
   const systemPrompt = doCenario
     ? doCenario.systemPrompt
     : buildEvalSystemPrompt(agent, scenario, contexto.regrasBlock);
-  const rastroDoContexto = doCenario
-    ? { ragStatus: doCenario.ragStatus, promptHash: doCenario.hash }
-    : {};
+  const rastro = {
+    ragStatus: doCenario ? doCenario.ragStatus : null,
+    fontes: doCenario?.fontes ?? [],
+    promptHash: doCenario?.hash,
+  };
+  const esqueleto = esqueletoDoResultado(scenario, rastro, politica?.motivo ?? null);
 
-  const messages = (scenario.history || []).map((h) => ({
-    role: h.role,
-    content: h.content,
-  }));
-  messages.push({ role: 'user', content: scenario.userMessage });
-
-  // V5 fix (2026-05-26): eval runner DEVE espelhar prod 1:1. Antes chamava
-  // llmRouter.complete direto, sem classify — ou seja, eval testava Gemini
-  // Starter puro enquanto prod já escalava pra Sonnet em intent crítica
-  // (handoff/objection/enterprise/purchase_intent/price_question). Resultado:
-  // cenários como zappiq_voice_preco_correto sempre apareciam como 'partial'
-  // no eval (Gemini reflex "começa em R$ X"), mesmo com Sonnet acertando
-  // em prod. Agora roda classifyIntent + shouldEscalateToSonnet ANTES da
-  // chamada principal — mesma cascata do izaTurnRouter.
-  let intent: IzaIntent = 'normal';
-  let preferProvider: 'anthropic-sonnet' | undefined;
-  try {
-    // Com tempo limite como as demais: a classificação também vai ao provedor
-    // pelo mesmo fetch sem AbortSignal, e pendurada aqui segurava a execução
-    // inteira antes de a primeira resposta do agente sequer ser pedida.
-    intent = await comTempoLimite(() =>
-      classifyIntent(scenario.userMessage, messages.slice(0, -1) as any, {
-        // agentName fica de fora de propósito: o izaTurnRouter de produção
-        // também não passa, e o avaliador tem de espelhar produção 1:1.
-        ...auditDoEval(profile),
-        conversationId: null,
-      }),
-    );
-    if (shouldEscalateToSonnet(intent)) {
-      // PR #216: preferProvider (com fallback) em vez de forceProvider (sem).
-      // Bug anterior: Sonnet rate-limit derrubava 7 cenarios com "all providers
-      // exhausted". Agora cai pra Haiku/Gemini se Sonnet falhar.
-      preferProvider = 'anthropic-sonnet';
-    }
-  } catch (err: any) {
-    logger.warn('[agentEvalRunner] classifyIntent falhou no eval — usando default tier', {
-      scenarioId: scenario.id,
-      err: err?.message,
-    });
+  // ─── C2 (P13, A037): caso de conhecimento só conta com a base no teste ───
+  // Os casos gerados do conteúdo do cliente respondem com a BASE. Rodar sem
+  // ela é repetir o cr7_preco_da_base_correto (26 reprovações em 26, porque o
+  // agente testado não via a tabela). Sem base no teste, o caso fica
+  // inconclusivo, sem chamar modelo nenhum; com a base fora do ar, é falha
+  // técnica.
+  if (scenario.conhecimento && !doCenario) {
+    return {
+      ...esqueleto,
+      combined: 'inconclusivo',
+      judge: { passed: null, confidence: 0, reason: EXPLICACAO_INCONCLUSIVO.base_nao_consultada },
+      inconclusivo: {
+        motivo: 'base_nao_consultada',
+        explicacao: EXPLICACAO_INCONCLUSIVO.base_nao_consultada,
+      },
+    };
+  }
+  if (scenario.conhecimento && doCenario?.ragStatus === 'servico_fora') {
+    const motivo =
+      'A base de conhecimento estava fora do ar durante o teste: não dá para avaliar o que o agente sabe.';
+    return {
+      ...esqueleto,
+      combined: 'erro',
+      judge: { passed: null, confidence: 0, reason: motivo },
+      falhaTecnica: motivo,
+    };
   }
 
-  const t0 = Date.now();
-  const resp = await withRetry(() =>
-    comTempoLimite(() =>
-      llmRouter.complete({
-        system: systemPrompt,
-        messages: messages as any,
-        maxTokens: 800,
-        temperature: 0.3,
-        preferProvider,
-        ...auditDoEval(profile),
-      }),
-    ),
-  );
-  const responseLatencyMs = Date.now() - t0;
-
-  // A088: a mesma extração da produção. O cliente final lê o conteúdo de
-  // <reply>; o avaliador lia o texto cru, com a resposta dobrada e as tags.
-  const response = extractProductionReplyText(resp.text);
-
-  // A171: falha técnica sai da nota AQUI, antes do juiz e antes do sugeridor.
-  // Gastar juiz e sugestão sobre uma resposta vazia foi o que produziu, em
-  // 16/06, uma correção aplicada no prompt da Iza a partir de 25 respostas
-  // vazias, com o sugeridor inventando a causa.
-  const falha = detectarFalhaTecnica({
-    response,
-    stopReason: resp.stopReason,
-    providerPedido: preferProvider ?? null,
-    providerUsado: resp.provider ?? null,
-  });
-  if (falha) {
-    logger.warn('[agentEvalRunner] cenário sem resposta avaliável', {
-      scenarioId: scenario.id,
-      motivo: falha,
-    });
-    return resultadoComErro(scenario, falha, {
-      responseLatencyMs,
-      responseTokens: { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens },
-      ...rastroDoContexto,
-    });
+  // C2 (P13): o caso de conhecimento roda 2 vezes e aprova só se as duas
+  // passarem. O re-teste pede uma passada só: ele já faz as próprias três.
+  const repeticoes = contexto.semRepeticoes ? 1 : Math.max(1, Math.trunc(scenario.repeticoes ?? 1));
+  const amostras: AmostraDoCenario[] = [];
+  for (let i = 0; i < repeticoes; i++) {
+    const a = await umaAmostra(scenario, systemPrompt, profile, politica, doCenario);
+    amostras.push(a);
+    // Falha técnica ou inconclusivo já decidem o caso: não gasta outra passada.
+    if (a.combined === 'erro' || a.combined === 'inconclusivo') break;
   }
+  const { combined, representante } = consolidarAmostras(amostras);
 
-  const passPatterns = scenario.passPatterns || [];
-  const failPatterns = scenario.failPatterns || [];
-  const missingPatterns: string[] = [];
-  const failedPatterns: string[] = [];
-  for (const p of passPatterns) {
-    if (!p.test(response)) missingPatterns.push(p.toString());
-  }
-  for (const p of failPatterns) {
-    if (p.test(response)) failedPatterns.push(p.toString());
-  }
-  const deterministicPassed = missingPatterns.length === 0 && failedPatterns.length === 0;
-
-  // 'eval' explícito: aqui o juiz é gasto de bastidor da casa. O padrão da
-  // função é 'classify', que é o que a simulação do Maestro precisa.
-  //
-  // A171: chamada do juiz que quebra é falha TÉCNICA do teste, não erro do
-  // agente. Antes virava reprovação com o texto "Judge error: ..." indo parar
-  // na tela do cliente, em inglês.
-  let judge: { passed: boolean | null; confidence: number; reason: string };
-  try {
-    judge = await runJudge(scenario.expectedBehavior, response, profile, { operation: 'eval' });
-  } catch (err: any) {
-    const motivo = `O avaliador não respondeu a tempo (${String(err?.message || 'falha na chamada')}).`;
-    logger.warn('[agentEvalRunner] juiz falhou', { scenarioId: scenario.id, err: err?.message });
-    return resultadoComErro(scenario, motivo, {
-      response,
-      responseLatencyMs,
-      responseTokens: { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens },
-      deterministic: { passed: deterministicPassed, failedPatterns, missingPatterns },
-      ...rastroDoContexto,
-    });
-  }
-
-  // A050: juiz INDETERMINADO não reprova. Quem decide, nesse caso, é a regra
-  // determinística sozinha. Antes o indeterminado entrava como reprovação.
-  let combined: 'pass' | 'partial' | 'fail';
-  if (judge.passed === null) combined = deterministicPassed ? 'pass' : 'fail';
-  else if (deterministicPassed && judge.passed) combined = 'pass';
-  else if (!deterministicPassed && !judge.passed) combined = 'fail';
-  else combined = 'partial';
-
-  // Nível 1 auto-suggest: gera sugestão pra TODA NÃO-aprovação (fail + partial).
-  // Mudanca 2026-05-25: parciais tambem ganham sugestao e botao Aplicar — o
-  // objetivo e fechar o loop curto e empurrar o score em direcao a 90%+ (sem
-  // depender do usuario lembrar de pedir sob demanda pra desvios menores).
+  // Nível 1 auto-suggest: sugestão para TODA não-aprovação (fail + partial).
+  // C2 (P21): reprovação de conhecimento por falta de informação recebe a
+  // ação de treino, sem modelo nenhum (suggestFix decide pelo diagnóstico).
   let suggestedFix: ScenarioResult['suggestedFix'] = undefined;
   if (combined === 'fail' || combined === 'partial') {
     suggestedFix = await suggestFix(
       scenario.id,
       scenario.expectedBehavior,
-      response,
-      judge.reason,
+      representante.response,
+      representante.judge.reason,
       agent.systemPrompt || '(sem prompt customizado)',
       profile,
-      contexto,
+      {
+        ...contexto,
+        diagnostico: {
+          natureza: scenario.natureza ?? 'comportamento',
+          causa: representante.judge.causa ?? null,
+          acaoDeTreino: scenario.conhecimento?.acaoDeTreino ?? null,
+          origem: scenario.conhecimento?.origem ?? null,
+          fonte: scenario.conhecimento?.fonte ?? null,
+          userMessage: scenario.userMessage,
+        },
+      },
     );
   }
 
   return {
-    scenarioId: scenario.id,
-    category: scenario.category,
-    severity: scenario.severity,
-    description: scenario.description,
-    userMessage: scenario.userMessage,
-    response,
-    responseLatencyMs,
-    responseTokens: {
-      input: resp.usage?.inputTokens,
-      output: resp.usage?.outputTokens,
-    },
-    suggestedFix,
-    deterministic: {
-      passed: deterministicPassed,
-      failedPatterns,
-      missingPatterns,
-    },
-    judge,
+    ...esqueleto,
+    response: representante.response,
+    responseLatencyMs: representante.responseLatencyMs,
+    responseTokens: representante.responseTokens,
+    deterministic: representante.deterministic,
+    judge: representante.judge,
     combined,
-    ...rastroDoContexto,
+    agente: representante.agente,
+    modeloPedido: representante.modeloPedido,
+    juiz: representante.juiz,
+    juizMesmaFamilia: representante.juizMesmaFamilia,
+    sugeridor: suggestedFix?.modelo ?? null,
+    ...(representante.falhaTecnica ? { falhaTecnica: representante.falhaTecnica } : {}),
+    ...(representante.inconclusivo ? { inconclusivo: representante.inconclusivo } : {}),
+    ...(suggestedFix ? { suggestedFix } : {}),
+    ...(repeticoes > 1
+      ? {
+          amostras: amostras.map((a) => ({
+            combined: a.combined,
+            response: a.response,
+            judge: { passed: a.judge.passed, reason: a.judge.reason, evidencia: a.judge.evidencia },
+            agente: a.agente,
+          })),
+        }
+      : {}),
   };
 }
 
 // ─── Score compute ─────────────────────────────────────────────────
 
+/** Cenário que não entra no denominador da nota: erro técnico ou inconclusivo. */
+function foraDaNota(r: { combined: string }): boolean {
+  return r.combined === 'erro' || r.combined === 'inconclusivo';
+}
+
 export function computeSummary(results: ScenarioResult[]): RunSummary {
   const passed = results.filter((r) => r.combined === 'pass').length;
   const partial = results.filter((r) => r.combined === 'partial').length;
   const failed = results.filter((r) => r.combined === 'fail').length;
-  const erros = results.filter((r) => r.combined === 'erro').length;
 
-  // A245: o indicador "Críticos" contava só 'fail', e 'fail' exige que a regra
-  // automática E o juiz reprovem juntos. Qualquer divergência virava 'Parcial'.
-  // Medido nos clientes: 138 desvios críticos rotulados Parcial, 1 reprovado,
-  // e o indicador "Críticos" marcando 0 em 26 de 28 execuções.
-  //
-  // Agora todo cenário crítico que NÃO passou conta como crítico. Falha
-  // técnica fica de fora: ela não diz nada sobre o agente.
-  const criticalFailed = results.filter(
-    (r) => r.severity === 'critical' && r.combined !== 'pass' && r.combined !== 'erro',
+  // A171 + C2 (Passo 1): 'erros' conta o que o PROVEDOR impediu de avaliar,
+  // e é o que alimenta o portão dos 20%: falha técnica, resposta servida
+  // por um modelo diferente do pedido (a cascata caiu na reserva) e, na
+  // rodada 1 do PR #378 (item 11), o juiz sem veredito ou sem evidência. O
+  // caso de conhecimento sem base no teste não entra aqui: não é defeito do
+  // provedor, e contá-lo derrubaria a execução inteira pelo portão.
+  const erros = results.filter(
+    (r) =>
+      r.combined === 'erro' ||
+      (r.combined === 'inconclusivo' &&
+        (r.inconclusivo?.motivo === 'modelo_diferente' || r.inconclusivo?.motivo === 'juiz_indeterminado')),
   ).length;
 
-  // A171: o denominador é o que foi possível avaliar. Contar cenário quebrado
-  // como reprovação derrubava a nota por defeito do provedor: em 15/06, 25
-  // respostas vazias deram nota 0.
-  const avaliaveis = results.length - erros;
+  // A245: todo cenário crítico que NÃO passou conta como crítico. Falha
+  // técnica e inconclusivo ficam de fora: não dizem nada sobre o agente.
+  const criticalFailed = results.filter(
+    (r) => r.severity === 'critical' && r.combined !== 'pass' && !foraDaNota(r),
+  ).length;
+
+  // A171: o denominador é o que foi possível avaliar.
+  const avaliaveis = results.filter((r) => !foraDaNota(r)).length;
 
   return {
     passed,
@@ -1070,6 +1848,72 @@ export function computeSummary(results: ScenarioResult[]): RunSummary {
     criticalFailed,
     erros,
     scorePercent: avaliaveis > 0 ? Math.round((passed / avaliaveis) * 100) : 0,
+  };
+}
+
+/**
+ * C2 (Passo 3, P21): a nota em duas partes, Conhecimento do negócio e
+ * Comportamento, com a mesma régua da nota única (parcial conta zero,
+ * erro e inconclusivo ficam fora). Pura.
+ *
+ * Agente sem nenhum caso de conhecimento mostra 'sem_base' na parte de
+ * conhecimento, e não uma porcentagem: antes, o agente sem conteúdo
+ * nenhum tirava 77% num teste que não media conhecimento.
+ */
+export function computePlacar(
+  results: Array<
+    Pick<ScenarioResult, 'combined' | 'inconclusivo'> & {
+      natureza?: NaturezaDoCenario;
+      juiz?: ModeloUsado | null;
+      juizMesmaFamilia?: boolean | null;
+    }
+  >,
+): Placar {
+  const parte = (lista: typeof results, vazio: ParteDoPlacar['estado']): ParteDoPlacar => {
+    const total = lista.length;
+    const avaliados = lista.filter((r) => !foraDaNota(r));
+    const aprovados = avaliados.filter((r) => r.combined === 'pass').length;
+    if (total === 0) return { estado: vazio, total: 0, avaliados: 0, aprovados: 0, percent: null };
+    if (avaliados.length === 0) {
+      return {
+        estado: 'nao_testado',
+        total,
+        avaliados: 0,
+        aprovados: 0,
+        percent: null,
+        motivo: lista.some((r) => r.inconclusivo?.motivo === 'base_nao_consultada')
+          ? 'base_nao_consultada'
+          : 'falha_tecnica',
+      };
+    }
+    return {
+      estado: 'avaliado',
+      total,
+      avaliados: avaliados.length,
+      aprovados,
+      percent: Math.round((aprovados / avaliados.length) * 100),
+    };
+  };
+  const conhecimento = results.filter((r) => r.natureza === 'conhecimento');
+  const comportamento = results.filter((r) => r.natureza !== 'conhecimento');
+
+  // Rodada 1 do PR #378, item 1: a família do juiz desta execução.
+  const julgados = results.filter((r) => r.juiz?.provider);
+  const familias = new Set(julgados.map((r) => familiaDoProvedor(r.juiz!.provider) ?? 'desconhecida'));
+  const juiz: Placar['juiz'] =
+    julgados.length === 0
+      ? { familia: null, outraFamilia: null }
+      : {
+          familia: familias.size === 1 ? [...familias][0] : 'misto',
+          outraFamilia: julgados.every((r) => r.juizMesmaFamilia === false),
+        };
+
+  return {
+    versao: 1,
+    conhecimento: parte(conhecimento, 'sem_base'),
+    comportamento: parte(comportamento, 'sem_cenarios'),
+    inconclusivos: results.filter((r) => r.combined === 'inconclusivo').length,
+    juiz,
   };
 }
 
@@ -1087,8 +1931,8 @@ export function computeSummary(results: ScenarioResult[]): RunSummary {
  * @returns { scenarioId, before, after, improved } — improved = after === 'pass'.
  */
 export function computeReverifyVerdict(
-  before: 'pass' | 'partial' | 'fail' | 'erro' | null,
-  afterResult: 'pass' | 'partial' | 'fail' | 'erro',
+  before: VereditoDoCenario | null,
+  afterResult: VereditoDoCenario,
 ): { before: typeof before; after: typeof afterResult; improved: boolean } {
   return {
     before,
@@ -1116,18 +1960,35 @@ export async function executeAgentEvalRun(
    * A043: as regras já aprovadas e o bloco vivo, para o sugeridor fortalecer
    * a regra existente em vez de escrever a sexta versão dela. Quem chama é
    * quem tem banco; o avaliador não vai buscar sozinho. C1a: e o montador do
-   * contexto de produção (`montarContexto`), no mesmo objeto.
+   * contexto de produção (`montarContexto`), no mesmo objeto. C2: e a
+   * política da faixa do plano (`politica`, interruptor evalNoTier).
    */
   contexto: ContextoDoSugeridor = {},
-): Promise<{ results: ScenarioResult[]; durationMs: number; summary: RunSummary }> {
+): Promise<{ results: ScenarioResult[]; durationMs: number; summary: RunSummary; placar: Placar }> {
   const t0 = Date.now();
   const results: ScenarioResult[] = [];
+  // C2, nota 1: a política é lida UMA vez por execução, e só se algum
+  // cenário for rodar. Falha na leitura: a cascata padrão de hoje.
+  let politica: PoliticaDaQualidade | null | undefined;
+  const politicaDaExecucao = async (): Promise<PoliticaDaQualidade | null> => {
+    if (politica !== undefined) return politica;
+    try {
+      politica =
+        typeof contexto.politica === 'function' ? await contexto.politica() : contexto.politica ?? null;
+    } catch (err: any) {
+      logger.warn('[agentEvalRunner] política da faixa do plano indisponível: cascata padrão', {
+        err: err?.message,
+      });
+      politica = null;
+    }
+    return politica ?? null;
+  };
   let isFirst = true;
   for (const s of scenarios) {
     if (!isFirst) await sleep(THROTTLE_BETWEEN_SCENARIOS_MS);
     isFirst = false;
     try {
-      const r = await runScenario(s, agent, profile, contexto);
+      const r = await runScenario(s, agent, profile, contexto, await politicaDaExecucao());
       results.push(r);
     } catch (err: any) {
       // A171: cenário que quebra é FALHA TÉCNICA, não reprovação. Eram 90
@@ -1144,5 +2005,5 @@ export async function executeAgentEvalRun(
   }
   const durationMs = Date.now() - t0;
   const summary = computeSummary(results);
-  return { results, durationMs, summary };
+  return { results, durationMs, summary, placar: computePlacar(results) };
 }

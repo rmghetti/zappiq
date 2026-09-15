@@ -37,12 +37,18 @@ import { logger } from '../utils/logger.js';
 // global vive FORA do BullMQ de propósito: ver adquirirTravaGlobal.
 import redis from '../utils/redis.js';
 import { resolveEvalSet, HARNESS_VERSION } from '../agents/agentEvalSet.js';
+// C2 (P13): no máximo 8 casos de conhecimento por execução, em rodízio.
+import {
+  aplicarRodizio,
+  semanaDoRodizio,
+  TETO_DE_CASOS_DE_CONHECIMENTO,
+} from '../agents/evalSetConhecimento.js';
 import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { executeAgentEvalRun } from './agentEvalRunner.js';
 // C1a (A036): contexto de produção no teste, atrás do interruptor contextoUnico.
-import { criarMontadorDeContextoDoEval } from './agentEvalContext.js';
+import { criarMontadorDeContextoDoEval, criarPoliticaDaQualidade } from './agentEvalContext.js';
 import { blocoDeRegrasDaOrganizacao, carregarRegrasAtivas } from './agentRulesService.js';
 import {
   notifySlackQualityIssue,
@@ -239,6 +245,13 @@ export async function enqueueRegrade(input: {
 export function resolveScenariosForRun(
   profile: TenantAgentProfile,
   scenarioFilter: unknown,
+  /**
+   * C2 (P13): o relógio do rodízio dos casos de conhecimento. A execução
+   * passa o started_at da própria linha, e a rota que cria a linha usa
+   * "agora": as duas contas caem na mesma semana, então o total gravado na
+   * criação é o total que roda.
+   */
+  opts: { agora?: Date } = {},
 ): EvalScenario[] {
   const base = resolveEvalSet(profile);
   const filtro = (scenarioFilter ?? {}) as {
@@ -247,21 +260,41 @@ export function resolveScenariosForRun(
     criticalOnly?: unknown;
   };
 
+  // Ids pedidos um a um (re-teste, admin): quem pediu um caso de
+  // conhecimento pelo id quer aquele caso, e um id só nunca é cortado.
+  //
+  // Rodada 1 do PR #378, item 8: acima do teto, os ids kb_* passam pelo
+  // MESMO rodízio da execução completa (questionário primeiro, Q&A pela
+  // semana). Escolha conservadora: corta e registra, em vez de 400, para o
+  // pedido continuar rodando e o custo ficar no teto. Antes, 200 ids kb_*
+  // no /run-async do cliente rodavam os 200.
   if (Array.isArray(filtro.scenarioIds) && filtro.scenarioIds.length > 0) {
     const ids = new Set(filtro.scenarioIds.map(String));
-    return base.filter((s) => ids.has(s.id));
+    const pedidos = base.filter((s) => ids.has(s.id));
+    const lista = aplicarRodizio(pedidos, semanaDoRodizio(opts.agora ?? new Date()));
+    if (lista.length !== pedidos.length) {
+      logger.warn({
+        msg: 'agent_eval_casos_de_conhecimento_cortados',
+        pedidos: pedidos.filter((s) => s.conhecimento).length,
+        teto: TETO_DE_CASOS_DE_CONHECIMENTO,
+      });
+    }
+    return lista;
   }
-  if (filtro.criticalOnly === true) return base.filter((s) => s.severity === 'critical');
-  if (typeof filtro.category === 'string' && filtro.category) {
-    return base.filter((s) => s.category === filtro.category);
+  let lista = base;
+  if (filtro.criticalOnly === true) lista = base.filter((s) => s.severity === 'critical');
+  else if (typeof filtro.category === 'string' && filtro.category) {
+    lista = base.filter((s) => s.category === filtro.category);
   }
-  return base;
+  return aplicarRodizio(lista, semanaDoRodizio(opts.agora ?? new Date()));
 }
 
 /** Saída do runner, do jeito que a gravação da conclusão precisa. */
 interface SaidaDaExecucao {
   results: Array<Record<string, any>>;
   durationMs: number;
+  /** C2 (Passo 3, P21): a nota em duas partes. */
+  placar?: unknown;
   summary: {
     passed: number;
     partial: number;
@@ -296,12 +329,32 @@ export function passouDoTetoDeErros(erros: number, totalScenarios: number): bool
   return erros / totalScenarios > TETO_DE_ERROS_TECNICOS;
 }
 
+/**
+ * Rodada 1 do PR #378, item 10: o denominador do portão dos 20% é o que o
+ * provedor de fato tentou. O caso de conhecimento que ficou inconclusivo por
+ * base_nao_consultada nunca foi ao provedor (o teste nem chamou modelo), e
+ * contá-lo diluía a fração de erro: 2 erros em 10 cenários com 4 sem base
+ * eram 20% (passa) quando na verdade eram 2 em 6 (33%).
+ */
+export function denominadorDoPortao(
+  results: Array<{ combined?: string; inconclusivo?: { motivo?: string } | null }>,
+  totalScenarios: number,
+): number {
+  const semBase = (results ?? []).filter(
+    (r) => r.combined === 'inconclusivo' && r.inconclusivo?.motivo === 'base_nao_consultada',
+  ).length;
+  return Math.max(0, totalScenarios - semBase);
+}
+
 async function gravarConclusao(
   runId: string,
   saida: SaidaDaExecucao,
   totalScenarios: number,
 ): Promise<ResultadoDaGravacao> {
-  const falhaTecnica = passouDoTetoDeErros(saida.summary.erros, totalScenarios);
+  const falhaTecnica = passouDoTetoDeErros(
+    saida.summary.erros,
+    denominadorDoPortao(saida.results, totalScenarios),
+  );
   try {
     const { count } = await prisma.agentEvalRun.updateMany({
       where: { id: runId, status: 'running' },
@@ -314,6 +367,7 @@ async function gravarConclusao(
             slackAlertStatus: ALERTA_NAO_ENVIADO,
             harnessVersion: HARNESS_VERSION,
             results: saida.results as any,
+            placar: (saida.placar ?? undefined) as any,
             completedAt: new Date(),
             durationMs: saida.durationMs,
           }
@@ -324,6 +378,9 @@ async function gravarConclusao(
             // nota de agosto com a de setembro é comparar duas réguas sem saber.
             harnessVersion: HARNESS_VERSION,
             results: saida.results as any,
+            // C2 (Passo 3, P21): Conhecimento do negócio e Comportamento,
+            // calculados e gravados separadamente. A nota única segue acima.
+            placar: (saida.placar ?? undefined) as any,
             completedAt: new Date(),
             durationMs: saida.durationMs,
           },
@@ -475,7 +532,9 @@ export async function executeRunJob(runId: string): Promise<void> {
     // Perfil da org DO AGENTE, nunca a de quem disparou: é o que impede o
     // gabarito da ZappIQ de cair sobre o agente do cliente.
     const profile = await resolveTenantAgentProfile(agent.organizationId, { agentId: agent.id });
-    const scenarios = resolveScenariosForRun(profile, run.scenarioFilter);
+    const scenarios = resolveScenariosForRun(profile, run.scenarioFilter, {
+      agora: run.startedAt ? new Date(run.startedAt) : new Date(),
+    });
 
     logger.info({
       msg: 'agent_eval_run_iniciado',
@@ -535,6 +594,9 @@ export async function executeRunJob(runId: string): Promise<void> {
       regrasBlock,
       regrasAtivas,
       montarContexto: criarMontadorDeContextoDoEval(agenteDaRun, agent.organizationId),
+      // C2, nota 1: com evalNoTier ligado, o modelo da faixa do plano. Lido
+      // uma vez, no primeiro cenário; desligado, a cascata padrão de hoje.
+      politica: criarPoliticaDaQualidade(agent.organizationId),
     }).then(async (saida) => ({
       saida,
       gravacao: await gravarConclusao(runId, saida, scenarios.length),
@@ -626,6 +688,10 @@ async function alertarSePreciso(input: {
   // Rodada 4 do PR #375: o re-teste do cliente também nasce 'completed', mas
   // as amostras dele não têm scenarioId. Contado como "anterior", a
   // comparação dava vazio e o alerta do cenário reprovado duas vezes sumia.
+  //
+  // Rodada 1 do PR #378, item 2c: a anterior é da MESMA régua desta
+  // execução. Reprovar na régua 3 e na régua 4 não é "duas vezes" sob a
+  // mesma medida.
   const anterior = await prisma.agentEvalRun
     .findFirst({
       where: {
@@ -633,6 +699,7 @@ async function alertarSePreciso(input: {
         status: 'completed',
         id: { not: run.id },
         triggeredBy: { not: 'client_retest' },
+        harnessVersion: HARNESS_VERSION,
       },
       orderBy: { startedAt: 'desc' },
       select: { results: true },

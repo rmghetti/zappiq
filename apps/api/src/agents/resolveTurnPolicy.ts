@@ -55,6 +55,13 @@ export interface TurnPolicyInput {
   llmRouting: LlmRoutingLido | null | undefined;
   /** Agendamento REALMENTE de pé (resolveSchedulingRuntime().ativo). */
   agendamentoAtivo: boolean;
+  /**
+   * Nota 1 da revisão de 14/09 (tarefa C2): interruptor `evalNoTier` da
+   * organização. Ligado e canal 'qualidade', o teste usa o tier e o override
+   * que a produção escolheria (a MESMA regra, sem cópia). Desligado ou
+   * ausente, a Qualidade segue na cascata padrão, como hoje.
+   */
+  evalNaFaixaDoPlano?: boolean;
 }
 
 export interface TurnPolicy {
@@ -152,7 +159,7 @@ export function resolveTurnPolicy(input: TurnPolicyInput): TurnPolicy {
   if (input.canal === 'maestro_retomada') {
     tier = input.plano && TIERS_VALIDOS.includes(input.plano as LLMTier) ? (input.plano as LLMTier) : undefined;
     motivo = tier ? `retomada do Maestro: tier do plano ${tier}` : 'retomada do Maestro: plano sem tier, cascata padrão';
-  } else if (input.canal === 'qualidade' || input.canal === 'site') {
+  } else if ((input.canal === 'qualidade' && !input.evalNaFaixaDoPlano) || input.canal === 'site') {
     motivo = `${input.canal === 'site' ? 'chat do site' : 'Qualidade'}: cascata padrão, sem tier (como hoje)`;
   } else {
     const decisao = tierEOverride(input);

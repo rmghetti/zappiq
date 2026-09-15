@@ -17,6 +17,9 @@ const prismaMock: any = {
   agentEvalFixDecision: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
   agentPromptVersion: { findFirst: vi.fn(), findMany: vi.fn() },
   agentEvalRun: { findUnique: vi.fn(), update: vi.fn() },
+  // Nota 3 da revisão de 14/09: o revert do superadmin procura antes a regra
+  // da decisão (correção que virou registro). Aqui nenhuma decisão tem regra.
+  agentRule: { findFirst: vi.fn(async () => null) },
   user: { findUnique: vi.fn() },
   $executeRaw: vi.fn(async () => 1),
   $transaction: vi.fn(async (fn: any) => fn(prismaMock)),
@@ -99,6 +102,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.$transaction.mockImplementation(async (fn: any) => fn(prismaMock));
   prismaMock.$executeRaw.mockResolvedValue(1);
+  prismaMock.agentRule.findFirst.mockResolvedValue(null);
   prismaMock.user.findUnique.mockResolvedValue({
     id: 'su-1',
     email: 'super@zappiq.com.br',

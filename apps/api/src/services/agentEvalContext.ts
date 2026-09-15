@@ -12,7 +12,7 @@
  * cenário ganha o MESMO contexto que a produção monta, com três diferenças
  * de propósito:
  *   - a data é FIXA (DATA_FIXA_DO_EVAL), para o teste ser reproduzível;
- *   - o contato é o mock de sempre (Rod, +5511999999999, NEW), com o
+ *   - o contato é o mock de sempre (Cliente Teste, +5511999999999, NEW), com o
  *     nome omitido nos cenários que testam justamente a falta de nome;
  *   - a busca na base é feita com a MENSAGEM DO CENÁRIO, no namespace da
  *     organização testada, pelo mesmo ragService.searchDetailed da produção.
@@ -34,9 +34,23 @@
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import * as ragService from './ragService.js';
-import { flagLigada, montarContextoDoTurno, type ContatoDoTurno } from '../agents/agentContextLoader.js';
-import type { EvalScenario } from '../agents/evalScenarioTypes.js';
-import type { ContextoDoCenario, ExtrasDoMontador, MontadorDeContexto } from './agentEvalRunner.js';
+import {
+  flagLigada,
+  montarContextoDoTurno,
+  carregarPoliticaDoTurno,
+  type ContatoDoTurno,
+} from '../agents/agentContextLoader.js';
+import { NOME_FICTICIO_DO_TESTE, type EvalScenario } from '../agents/evalScenarioTypes.js';
+import { PROVEDOR_DA_CASCATA_PADRAO } from '../agents/resolveTurnPolicy.js';
+import { familiaDoProvedor, familiasConfiguradas } from './agentEvalRunner.js';
+import { breakerIsOpen } from './llm/redisBreaker.js';
+import type { LLMProviderId } from './llm/LLMRouter.js';
+import type {
+  ContextoDoCenario,
+  ExtrasDoMontador,
+  MontadorDeContexto,
+  PoliticaDaQualidade,
+} from './agentEvalRunner.js';
 
 /** Segunda-feira, 12:00 em São Paulo. Fixa: o mesmo cenário dá o mesmo prompt. */
 export const DATA_FIXA_DO_EVAL = new Date('2026-09-14T15:00:00Z');
@@ -52,7 +66,7 @@ export const PROMPT_AUSENTE = '(agente sem system_prompt customizado — só COR
 export function contatoDoCenario(scenario: Pick<EvalScenario, 'id' | 'history'>): ContatoDoTurno {
   const turnos = scenario.history?.length ?? 0;
   return {
-    nome: scenario.id.includes('nome_ausente') ? null : 'Rod',
+    nome: scenario.id.includes('nome_ausente') ? null : NOME_FICTICIO_DO_TESTE,
     leadStatus: 'NEW',
     primeiroContato: turnos === 0,
     totalMensagens: turnos + 1,
@@ -110,10 +124,13 @@ export function criarMontadorDeContextoDoEval(
     // a última rede.
     let ragContext = '';
     let ragStatus: ragService.RagSearchStatus = 'sem_resultado';
+    // C2 (Passo 1, A226): os ids dos trechos que entraram, para o resultado.
+    let fontes: string[] = [];
     try {
       const busca = await ragService.searchDetailed(organizationId, scenario.userMessage, 5);
       ragContext = busca.context;
       ragStatus = busca.status;
+      fontes = Array.isArray(busca.trechoIds) ? busca.trechoIds : [];
     } catch (err) {
       logger.warn('[agentEvalContext] busca na base falhou: cenário segue com servico_fora', {
         organizationId,
@@ -152,6 +169,105 @@ export function criarMontadorDeContextoDoEval(
       hash: contexto.hash,
       partes: contexto.partes,
       ragStatus,
+      // C2 (Passo 2, A039): o juiz vê OS MESMOS trechos que o agente viu.
+      trechos: ragContext,
+      fontes,
     };
+  };
+}
+
+/**
+ * C2, nota 1 da revisão de 14/09: o modelo da faixa do plano para a
+ * Qualidade, atrás do interruptor `evalNoTier`.
+ *
+ * Devolve uma função PREGUIÇOSA: criar não faz IO, e o avaliador lê uma vez
+ * por execução, no primeiro cenário. Interruptor desligado (o padrão): a
+ * cascata padrão de hoje. Ligado: a MESMA decisão que a produção toma para
+ * a organização (resolveTurnPolicy, canal 'qualidade'), sem ferramentas,
+ * sem cópia da regra de escolha.
+ *
+ * Rodada 1 do PR #378, item 1: o interruptor `juizDeOutraFamilia` é lido
+ * aqui também, na mesma leitura, e viaja na política (`juizOutraFamilia`).
+ * Com os dois desligados a política é null, como antes.
+ *
+ * Rodada 1 do PR #378, item 9: se a família do modelo escolhido não tem
+ * chave (o Gemini está parado desde 10/07) ou o disjuntor do provedor está
+ * aberto, a política volta à cascata padrão e o motivo vai no resultado.
+ * Antes, toda resposta vinha pela reserva e ficava inconclusiva.
+ */
+export interface DepsDaPolitica {
+  /** As famílias com chave configurada. Padrão: o ambiente. */
+  familias?: () => Set<string>;
+  /** O disjuntor do provedor está aberto? Padrão: o breaker no Redis. */
+  disjuntorAberto?: (id: LLMProviderId) => Promise<boolean>;
+}
+
+/** Por que o modelo da faixa não pode ser pedido agora, ou null se pode. */
+async function motivoDeIndisponibilidade(
+  modelo: LLMProviderId,
+  deps: DepsDaPolitica,
+): Promise<string | null> {
+  const familia = familiaDoProvedor(modelo);
+  const familias = (deps.familias ?? familiasConfiguradas)();
+  if (familia && !familias.has(familia)) return `a família ${familia} está sem chave (${modelo})`;
+  try {
+    if (await (deps.disjuntorAberto ?? breakerIsOpen)(modelo)) {
+      return `o disjuntor de ${modelo} está aberto`;
+    }
+  } catch (err) {
+    // A leitura do disjuntor é fail-open, como no roteador: erro não bloqueia.
+    logger.warn('[agentEvalContext] leitura do disjuntor falhou: segue a faixa do plano', {
+      modelo,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return null;
+}
+
+export function criarPoliticaDaQualidade(
+  organizationId: string,
+  deps: DepsDaPolitica = {},
+): () => Promise<PoliticaDaQualidade | null> {
+  let lida: Promise<PoliticaDaQualidade | null> | null = null;
+  return () => {
+    if (!lida) {
+      lida = (async () => {
+        const [naFaixaDoPlano, juizOutraFamilia] = await Promise.all([
+          flagLigada(organizationId, 'evalNoTier'),
+          flagLigada(organizationId, 'juizDeOutraFamilia'),
+        ]);
+        if (!naFaixaDoPlano) {
+          if (!juizOutraFamilia) return null;
+          return {
+            modelo: PROVEDOR_DA_CASCATA_PADRAO,
+            motivo: 'evalNoTier desligado: cascata padrão',
+            juizOutraFamilia: true,
+          };
+        }
+        const p = await carregarPoliticaDoTurno(organizationId, {
+          canal: 'qualidade',
+          agendamentoAtivo: false,
+          evalNaFaixaDoPlano: true,
+        });
+        const indisponivel = await motivoDeIndisponibilidade(p.modelo, deps);
+        if (indisponivel) {
+          const motivo = `evalNoTier ligado, mas ${indisponivel}: cascata padrão`;
+          logger.warn('[agentEvalContext] Qualidade fora da faixa do plano', {
+            organizationId,
+            modeloDaFaixa: p.modelo,
+            motivo,
+          });
+          return { modelo: PROVEDOR_DA_CASCATA_PADRAO, motivo, juizOutraFamilia };
+        }
+        logger.info('[agentEvalContext] Qualidade na faixa do plano', {
+          organizationId,
+          modelo: p.modelo,
+          motivo: p.motivo,
+          juizOutraFamilia,
+        });
+        return { tier: p.tier, override: p.override, modelo: p.modelo, motivo: p.motivo, juizOutraFamilia };
+      })();
+    }
+    return lida;
   };
 }

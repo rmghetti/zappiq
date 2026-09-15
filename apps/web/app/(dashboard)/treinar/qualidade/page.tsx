@@ -49,6 +49,22 @@ import {
   ROTULO_NAO_AVALIADA,
   TEXTO_FALHA_TECNICA,
 } from './_lib/execucao';
+// C2 (Passo 5): os dois termômetros e a lista completa de cenários, com o
+// texto testado fora do componente.
+import { termometrosDaExecucao, type Termometro } from './_lib/placar';
+import {
+  rotuloDoVeredito,
+  EXPLICACAO_PARCIAL,
+  respostaParaExibir,
+  diagnosticoLegivel,
+  acaoDeTreinoDo,
+  rotuloDoBotaoDaAcao,
+  tituloDoCartaoDaAcao,
+  podeCadastrarInformacao,
+  linkDaAcaoDeTreino,
+  textoDoAvisoDeTreino,
+  ordenarParaALista,
+} from './_lib/cenarios';
 // A049: o texto do re-teste com 3 amostras, testado fora do componente.
 import {
   tituloDoVeredito,
@@ -183,8 +199,8 @@ export default function QualidadeIAClientePage() {
           </p>
           <p className="text-amber-800 text-sm mt-2">
             Não precisa estar com o treinamento 100%: a auditoria avalia o agente como ele
-            está hoje. A nota mede o comportamento em situações comuns de atendimento; ela
-            ainda não mede o conteúdo que você cadastrou.
+            está hoje. A nota tem duas partes: o comportamento em situações comuns de
+            atendimento e o que o agente sabe do que você cadastrou.
           </p>
         </div>
       </div>
@@ -207,9 +223,10 @@ export default function QualidadeIAClientePage() {
           <SaibaMais featureKey="qualidade.overview" />
         </div>
         <p className="text-sm text-neutral-600 mt-1">
-          Diagnóstico contínuo de como o seu agente está respondendo. Rodamos cenários reais
-          (descontentamento, intenção de compra, encaminhamento) e a IA propõe correções que
-          você decide aplicar ou recusar.
+          Diagnóstico contínuo de como o seu agente está respondendo. Testamos situações comuns
+          de atendimento (cliente insatisfeito, intenção de compra, pedido de falar com uma
+          pessoa) e perguntas geradas do que você cadastrou. Quando falta informação, mostramos
+          o que cadastrar; quando é conduta, a IA propõe uma correção que você aplica ou recusa.
         </p>
       </div>
 
@@ -259,6 +276,15 @@ export default function QualidadeIAClientePage() {
 
       {/* Cenários que não rodam por falta de treino: troca "você tirou X%" por
           "complete isto pra ser avaliado nisso também" (Onda 2 item 10, isolamento de tenant). */}
+      {/* C2 (A086): o preço em dois lugares com valores diferentes. */}
+      {testScope?.avisos && testScope.avisos.length > 0 && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900 space-y-1">
+          {testScope.avisos.map((a, i) => (
+            <p key={i}>⚠ {a}</p>
+          ))}
+        </div>
+      )}
+
       {testScope && testScope.skipped.length > 0 && (
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-900">
           <div className="font-medium mb-1">
@@ -427,6 +453,13 @@ function RunDetailPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run.id, isRunning, failedScenarios.length]);
 
+  // C2 (Passo 3 e 5, P21): Conhecimento do negócio e Comportamento. Execução
+  // antiga, sem placar, continua mostrando só a nota única.
+  const termometros = termometrosDaExecucao(run.placar);
+  // P21: o aviso de treino só aparece com reprovação de conhecimento por
+  // falta de informação, e diz o que falta.
+  const avisoDeTreino = textoDoAvisoDeTreino(run.results || []);
+
   return (
     <div className="bg-white border border-neutral-200 rounded">
       {/* Card de saúde */}
@@ -481,6 +514,14 @@ function RunDetailPanel({
             {TEXTO_FALHA_TECNICA}
           </div>
         )}
+        {/* C2 (Passo 5): os dois termômetros. A nota geral acima continua
+            existindo para o histórico. */}
+        {!isRunning && !falhaTecnica && termometros && (
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <TermometroCard t={termometros.conhecimento} />
+            <TermometroCard t={termometros.comportamento} />
+          </div>
+        )}
         {/* KPIs simplificados */}
         {!isRunning && !falhaTecnica && run.totalScenarios > 0 && (
           <div className="mt-4">
@@ -498,6 +539,16 @@ function RunDetailPanel({
                 <KPISmall label="Não avaliados" value={String(run.erros)} tint="amber" />
               )}
             </div>
+            {/* A055: parcial vale zero na nota, e a tela passa a dizer isso. */}
+            <p className="text-[11px] text-neutral-500 mt-2">{EXPLICACAO_PARCIAL}</p>
+            {!!run.placar?.inconclusivos && (
+              <p className="text-[11px] text-neutral-500 mt-1">
+                {run.placar.inconclusivos === 1
+                  ? '1 cenário ficou inconclusivo e está fora da nota.'
+                  : `${run.placar.inconclusivos} cenários ficaram inconclusivos e estão fora da nota.`}{' '}
+                Veja o motivo na lista completa abaixo.
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -538,17 +589,16 @@ function RunDetailPanel({
         </div>
       )}
 
-      {/* Nudge proativo: nota baixa → completar treinamento eleva o resultado */}
-      {!isRunning && run.scorePercent != null && run.scorePercent < 90 && (
+      {/* P21: aviso de treino ESPECÍFICO, só com reprovação de conhecimento por
+          falta de informação. O genérico antigo aparecia em toda nota abaixo
+          de 90, mesmo quando o problema era de conduta. */}
+      {!isRunning && avisoDeTreino && (
         <div className="px-5 pt-4">
           <div className="p-3 bg-indigo-50 border border-indigo-200 rounded flex items-start gap-2.5">
             <span className="text-base leading-none mt-0.5">💡</span>
             <div className="text-sm text-indigo-900">
-              A nota mede o comportamento do agente em situações comuns de atendimento, com
-              cenários iguais para todos os clientes. Ela <strong>ainda não mede o conteúdo
-              que você cadastrou</strong>. Mesmo assim vale completar o treinamento: é ele que
-              dá ao agente a informação para responder certo.
-              <a href="/ai-training" className="underline font-medium ml-1">Completar treinamento →</a>
+              O agente errou por falta de informação na base. {avisoDeTreino}
+              <a href="/ai-training" className="underline font-medium ml-1">Cadastrar em Treinar IA →</a>
             </div>
           </div>
         </div>
@@ -578,7 +628,7 @@ function RunDetailPanel({
         <h3 className="text-sm font-semibold text-neutral-900 mb-3 flex items-center gap-1.5">
           {failedScenarios.length === 0 && !isRunning
             ? '✅ Nenhum desvio identificado nessa execução.'
-            : `Comportamentos para revisar (${failedScenarios.length})`}
+            : `Para revisar (${failedScenarios.length})`}
           <SaibaMais featureKey="qualidade.cenarios-revisar" />
         </h3>
         {failedScenarios.length === 0 && !isRunning && (
@@ -600,6 +650,147 @@ function RunDetailPanel({
           ))}
         </div>
       </div>
+
+      {/* C2 (A244, A221): a lista COMPLETA de cenários da execução, aprovados
+          inclusive, com a conversa inteira, a resposta e a evidência do
+          avaliador. Antes a tela mostrava só reprovados e parciais. */}
+      {!isRunning && (run.results?.length ?? 0) > 0 && (
+        <TodosOsCenarios results={run.results || []} />
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// TermometroCard: uma das duas partes do placar (C2, Passo 5)
+// ════════════════════════════════════════════════════════════════════
+const COR_DO_TERMOMETRO: Record<Termometro['nivel'], { texto: string; barra: string; borda: string }> = {
+  good: { texto: 'text-green-800', barra: 'bg-green-500', borda: 'border-green-200' },
+  attention: { texto: 'text-amber-900', barra: 'bg-amber-500', borda: 'border-amber-200' },
+  critical: { texto: 'text-red-900', barra: 'bg-red-500', borda: 'border-red-200' },
+  unknown: { texto: 'text-neutral-700', barra: 'bg-neutral-300', borda: 'border-neutral-200' },
+};
+
+function TermometroCard({ t }: { t: Termometro }) {
+  const cor = COR_DO_TERMOMETRO[t.nivel];
+  return (
+    <div className={`p-3 border rounded bg-white ${cor.borda}`}>
+      <div className="text-[11px] uppercase tracking-wide text-neutral-500 mb-1">{t.titulo}</div>
+      <div className={`text-xl font-semibold ${cor.texto}`}>{t.valor}</div>
+      {t.percent != null && (
+        <div className="mt-1.5 h-1.5 w-full bg-neutral-100 rounded">
+          <div className={`h-1.5 rounded ${cor.barra}`} style={{ width: `${Math.max(2, t.percent)}%` }} />
+        </div>
+      )}
+      <div className="text-xs text-neutral-600 mt-1.5">{t.detalhe}</div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// InteracaoTestada: a conversa simulada inteira (C2, A221, A088)
+// ════════════════════════════════════════════════════════════════════
+function InteracaoTestada({ scenario }: { scenario: AgentEvalRunDetailScenario }) {
+  const historico = scenario.history ?? [];
+  const resposta = respostaParaExibir(scenario.response);
+  return (
+    <div className="p-3 bg-white border border-neutral-200 rounded space-y-2">
+      <div className="text-[10px] uppercase tracking-wide text-neutral-500 flex items-center gap-1.5">
+        Interação testada
+        <SaibaMais featureKey="qualidade.interacao-testada" />
+      </div>
+      {historico.length > 0 && (
+        <div>
+          <div className="text-[10px] font-semibold text-neutral-600 mb-0.5">💬 Conversa antes da pergunta</div>
+          <div className="space-y-1">
+            {historico.map((h, i) => (
+              <div key={i} className="text-[11px] text-neutral-700 bg-neutral-50 p-1.5 rounded border border-neutral-200">
+                <strong>{h.role === 'user' ? 'Cliente' : 'Agente'}:</strong> {respostaParaExibir(h.content)}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {scenario.userMessage && (
+        <div>
+          <div className="text-[10px] font-semibold text-neutral-600 mb-0.5">📨 Mensagem enviada</div>
+          <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 bg-neutral-50 p-2 rounded border border-neutral-200">
+            {scenario.userMessage}
+          </pre>
+        </div>
+      )}
+      {resposta && (
+        <div>
+          <div className="text-[10px] font-semibold text-neutral-600 mb-0.5">🤖 Resposta do agente</div>
+          <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 bg-neutral-50 p-2 rounded border border-neutral-200 max-h-64 overflow-y-auto">
+            {resposta}
+          </pre>
+        </div>
+      )}
+      {scenario.judge?.evidencia && (
+        <div>
+          <div className="text-[10px] font-semibold text-neutral-600 mb-0.5">🔎 Evidência do avaliador</div>
+          <p className="text-[11px] text-neutral-800 bg-neutral-50 p-2 rounded border border-neutral-200">
+            {scenario.judge.evidencia}
+          </p>
+        </div>
+      )}
+      <div className="text-[11px] text-neutral-700">
+        <strong>Diagnóstico:</strong> {diagnosticoLegivel(scenario)}
+      </div>
+      {historico.length > 0 || scenario.userMessage ? (
+        <p className="text-[10px] text-neutral-500">
+          Conversa simulada: o contato do teste é fictício (&quot;Cliente Teste&quot;), não é um cliente seu.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// TodosOsCenarios: a lista completa da execução (C2, A244)
+// ════════════════════════════════════════════════════════════════════
+function TodosOsCenarios({ results }: { results: AgentEvalRunDetailScenario[] }) {
+  const lista = ordenarParaALista(results);
+  const aprovados = results.filter((r) => r.combined === 'pass').length;
+  const corDoVeredito: Record<string, string> = {
+    pass: 'bg-green-50 text-green-800 border-green-200',
+    partial: 'bg-amber-50 text-amber-900 border-amber-200',
+    fail: 'bg-red-50 text-red-800 border-red-200',
+    inconclusivo: 'bg-neutral-100 text-neutral-700 border-neutral-300',
+    erro: 'bg-neutral-100 text-neutral-700 border-neutral-300',
+  };
+  return (
+    <div className="px-5 pb-5">
+      <details className="border border-neutral-200 rounded">
+        <summary className="cursor-pointer p-3 text-sm font-semibold text-neutral-900 hover:bg-neutral-50">
+          Todos os cenários desta execução ({results.length}, {aprovados} aprovados)
+        </summary>
+        <ul className="divide-y divide-neutral-100">
+          {lista.map((r) => (
+            <li key={r.scenarioId}>
+              <details>
+                <summary className="cursor-pointer px-3 py-2 flex items-center gap-2 flex-wrap hover:bg-neutral-50">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${corDoVeredito[r.combined] || corDoVeredito.erro}`}>
+                    {rotuloDoVeredito(r.combined)}
+                  </span>
+                  {r.natureza && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-neutral-200 text-neutral-600">
+                      {r.natureza === 'conhecimento' ? 'Conhecimento' : 'Comportamento'}
+                    </span>
+                  )}
+                  <span className="text-xs text-neutral-800">
+                    {friendlyScenarioLabel(r.scenarioId, r.description)}
+                  </span>
+                </summary>
+                <div className="px-3 pb-3">
+                  <InteracaoTestada scenario={r} />
+                </div>
+              </details>
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
 }
@@ -785,6 +976,9 @@ function ClientFixCard({
   }, [initialDiff, scenario.scenarioId]);
 
   const hasSuggestion = !!scenario.suggestedFix && scenario.suggestedFix.patches.length > 0;
+  // C2 (P21): reprovação de CONHECIMENTO por falta de informação não tem
+  // patch: tem ação de treino. O cartão vira "cadastre esta informação".
+  const acao = acaoDeTreinoDo(scenario);
   const decisionMade = existingDecision !== null;
   const isPartial = scenario.combined === 'partial';
   // A188: é o texto que SERÁ gravado que precisa estar inteiro, e ele muda
@@ -932,39 +1126,55 @@ function ClientFixCard({
           </div>
           <div className="text-sm font-medium text-neutral-900">{friendlyTitle}</div>
           <div className="text-xs text-neutral-600 mt-1">
-            <strong>Diagnóstico:</strong> {scenario.judge.reason}
+            {/* A151: diagnóstico sempre em português. */}
+            <strong>Diagnóstico:</strong> {diagnosticoLegivel(scenario)}
           </div>
         </div>
         <span className="text-xs text-blue-600 hover:underline self-center flex-shrink-0">ver ▾</span>
       </summary>
 
       <div className="px-3 pb-3 pt-1 bg-neutral-50">
-        {/* FASE 2.2c (#246): contexto completo da interação testada: pergunta enviada + resposta do agente. */}
+        {/* C2 (A221, A088): a conversa inteira, a resposta sem tags e a
+            evidência do avaliador. */}
         {(scenario.userMessage || scenario.response) && (
-          <div className="mb-3 p-3 bg-white border border-neutral-200 rounded">
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500 mb-2 flex items-center gap-1.5">
-              Interação testada
-              <SaibaMais featureKey="qualidade.interacao-testada" />
+          <div className="mb-3">
+            <InteracaoTestada scenario={scenario} />
+          </div>
+        )}
+        {acao ? (
+          <div className="p-3 bg-indigo-50 border border-indigo-200 rounded">
+            <div className="text-xs font-semibold text-indigo-900 mb-1">
+              📚 {tituloDoCartaoDaAcao(acao)}
             </div>
-            {scenario.userMessage && (
-              <div className="mb-2">
-                <div className="text-[10px] font-semibold text-neutral-600 mb-0.5">📨 Mensagem enviada</div>
-                <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 bg-neutral-50 p-2 rounded border border-neutral-200">
-                  {scenario.userMessage}
-                </pre>
-              </div>
-            )}
-            {scenario.response && (
-              <div>
-                <div className="text-[10px] font-semibold text-neutral-600 mb-0.5">🤖 Resposta do agente</div>
-                <pre className="whitespace-pre-wrap font-mono text-[11px] text-neutral-800 bg-neutral-50 p-2 rounded border border-neutral-200 max-h-64 overflow-y-auto">
-                  {scenario.response}
-                </pre>
+            <p className="text-xs text-indigo-900 mb-2">
+              {scenario.suggestedFix?.summary ||
+                'Faltou informação na base para responder. Cadastre a resposta e rode o teste de novo.'}{' '}
+              {acao.tipo === 'revisar'
+                ? 'Regra de comportamento não resolve isso: o que faz o agente acertar é o texto cadastrado chegar até ele.'
+                : 'Regra de comportamento não resolve falta de informação: cadastrar é o que faz o agente acertar.'}
+            </p>
+            {podeCadastrarInformacao(scenario) ? (
+              podeAgir ? (
+                <a
+                  href={linkDaAcaoDeTreino(acao)}
+                  className="inline-block px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded"
+                >
+                  {rotuloDoBotaoDaAcao(acao)}
+                </a>
+              ) : (
+                <div className="text-[10px] text-neutral-500 italic">
+                  Só um administrador da empresa cadastra informação no Treinar IA.
+                </div>
+              )
+            ) : (
+              <div className="text-[10px] text-neutral-600">
+                O botão não aparece nesta execução: a base de conhecimento estava fora do ar ou o
+                teste ainda não consulta a base da sua empresa. Confira em Treinar IA se esta
+                informação já está cadastrada.
               </div>
             )}
           </div>
-        )}
-        {!hasSuggestion ? (
+        ) : !hasSuggestion ? (
           <div className="p-3 bg-blue-50 border border-blue-200 rounded">
             <div className="text-xs text-blue-900 mb-2">
               {isPartial ? (

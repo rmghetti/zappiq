@@ -39,6 +39,7 @@ import { CORE_RULES_VERSION } from '../agents/coreAgentRules.js';
 import {
   resolveEvalSet,
   getSkippedScenarios,
+  avisosDoTeste,
   EVAL_SET_VERSION,
   HARNESS_VERSION,
 } from '../agents/agentEvalSet.js';
@@ -50,7 +51,10 @@ import { assertNoForeignBrand, ForeignBrandLeakError } from '../agents/tenantIso
 import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
 // C1a (A036): o cenário roda com o contexto de produção quando o
 // interruptor contextoUnico da organização está ligado.
-import { criarMontadorDeContextoDoEval } from '../services/agentEvalContext.js';
+import {
+  criarMontadorDeContextoDoEval,
+  criarPoliticaDaQualidade,
+} from '../services/agentEvalContext.js';
 import { enqueueEvalRun, resolveScenariosForRun } from '../services/agentEvalQueue.js';
 import {
   applyPatch,
@@ -85,7 +89,19 @@ import {
   TetoDeRegrasError,
   TETO_DE_REGRAS_ATIVAS,
 } from '../services/agentRulesService.js';
-import { detectarConflitos, limparTextoDaRegra } from '../agents/regrasDoAgente.js';
+import {
+  detectarConflitos,
+  limparTextoDaRegra,
+  sanearTextoDaRegra,
+} from '../agents/regrasDoAgente.js';
+// C2, nota 1: com evalNoTier ligado, a cota de testes é a da faixa do plano.
+import {
+  cotaDeExecucoesDaFaixa,
+  decidirCotaDeExecucoes,
+  faixaDaCota,
+} from '../services/cotaDaQualidade.js';
+import { decideLlmCostStage } from '../middleware/planLimits.js';
+import { isZappIQOrg } from '../config/zappiqOrg.js';
 // A049: o re-teste roda 3 amostras e vira execução gravada.
 import {
   AMOSTRAS_DO_RETESTE,
@@ -95,6 +111,17 @@ import {
 
 const router = Router();
 router.use(authMiddleware as any);
+
+/**
+ * Nota 7 da revisão de 14/09: a reversão perdeu a corrida para outra
+ * reversão da mesma regra. A transação volta inteira e a tela recebe 409.
+ */
+class ReversaoConcorrenteError extends Error {
+  constructor() {
+    super('Esta correção acabou de ser desfeita por outra pessoa. Atualize a página.');
+    this.name = 'ReversaoConcorrenteError';
+  }
+}
 
 // ─── Cooldown: cliente roda no máximo 1 eval / 24h por agent ────────
 const RUN_COOLDOWN_HOURS = 24;
@@ -224,8 +251,12 @@ router.get('/agents', async (req: Request, res: Response) => {
       testScope: {
         agentName: profile.agentName,
         businessName: profile.businessName,
-        totalScenarios: resolveEvalSet(profile).length,
+        // C2 (P13): o total da execução, já com o rodízio de até 8 casos de
+        // conhecimento, e não o gabarito inteiro.
+        totalScenarios: resolveScenariosForRun(profile, {}).length,
         skipped: getSkippedScenarios(profile),
+        // C2 (A086): o preço em dois lugares com valores diferentes.
+        avisos: avisosDoTeste(profile),
       },
     });
   } catch (err: any) {
@@ -394,36 +425,100 @@ router.post('/run-async', requireRole('ADMIN', 'SUPERADMIN'), async (req: Reques
       return;
     }
 
-    // Trava 2, cooldown: bloqueia se o CLIENTE já CONCLUIU um teste nas
-    // últimas 24 h.
+    // Trava 2, cota: bloqueia quando o CLIENTE já CONCLUIU os testes que
+    // cabem na janela.
     //
-    // A048: antes contava qualquer execução 'manual' ou 'client_manual' com
-    // status diferente de 'failed'. Duas consequências medidas: execução presa
-    // em 'running' por reinício de máquina travava o botão por um dia, e teste
-    // disparado pelo superadmin gastava o direito do cliente. Agora conta só o
-    // que ele mesmo rodou e concluiu. Execução 'failed' não gasta nada: o
-    // cliente pode tentar de novo na hora.
-    const cutoff = new Date(Date.now() - RUN_COOLDOWN_HOURS * 3600 * 1000);
-    const recent = await prisma.agentEvalRun.findFirst({
-      where: {
-        agentId,
-        triggeredBy: 'client_manual',
-        status: 'completed',
-        startedAt: { gte: cutoff },
-      },
-      orderBy: { startedAt: 'desc' },
-      select: { id: true, startedAt: true, status: true },
-    });
-    if (recent) {
-      const nextAvailable = new Date(recent.startedAt.getTime() + RUN_COOLDOWN_HOURS * 3600 * 1000);
-      res.status(429).json({
-        error: 'cooldown',
-        reason: 'aguardando_24h',
-        message: `Você já executou um teste nas últimas ${RUN_COOLDOWN_HOURS}h. Próximo disponível em ${formatarHorarioDeBrasilia(nextAvailable)}.`,
-        nextAvailableAt: nextAvailable.toISOString(),
-        lastRunId: recent.id,
+    // C2, nota 1 da revisão de 14/09: com o interruptor `evalNoTier` ligado,
+    // a cota é a da faixa do plano (services/cotaDaQualidade.ts), lida pela
+    // mesma régua da política de modelo (trial e estágio NOVO na faixa de
+    // entrada). Desligado, a regra de hoje, dentro do `if` abaixo.
+    let naFaixaDoPlano = false;
+    try {
+      naFaixaDoPlano = await isFlagOn(orgId, 'evalNoTier');
+    } catch {
+      naFaixaDoPlano = false;
+    }
+    if (naFaixaDoPlano) {
+      const org = await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: {
+          plan: true,
+          trialStartedAt: true,
+          trialEndsAt: true,
+          isTrialActive: true,
+          trialConverted: true,
+          stripeSubscriptionId: true,
+        },
       });
-      return;
+      const faixa = faixaDaCota({
+        plano: org?.plan ?? null,
+        estagioDoTrial: org ? decideLlmCostStage(org as any) : 'OTHER',
+        ehZappIQ: isZappIQOrg(orgId),
+      });
+      const cota = cotaDeExecucoesDaFaixa(faixa);
+      const agora = new Date();
+      const concluidas = await prisma.agentEvalRun.findMany({
+        where: {
+          agentId,
+          triggeredBy: 'client_manual',
+          status: 'completed',
+          startedAt: { gte: new Date(agora.getTime() - cota.janelaHoras * 3600 * 1000) },
+        },
+        orderBy: { startedAt: 'asc' },
+        select: { id: true, startedAt: true },
+      });
+      const decisao = decidirCotaDeExecucoes({
+        cota,
+        iniciosNaJanela: concluidas.map((r) => r.startedAt),
+        agora,
+      });
+      if (!decisao.liberado) {
+        const plural = cota.execucoes === 1 ? '1 teste' : `${cota.execucoes} testes`;
+        res.status(429).json({
+          error: 'cooldown',
+          reason: 'cota_da_faixa',
+          message:
+            `O seu plano permite ${plural} a cada ${cota.janelaHoras}h, e você já usou. ` +
+            `Próximo disponível em ${formatarHorarioDeBrasilia(decisao.proximaEm)}.`,
+          nextAvailableAt: decisao.proximaEm.toISOString(),
+          lastRunId: concluidas[concluidas.length - 1]?.id ?? null,
+        });
+        return;
+      }
+    }
+
+    if (!naFaixaDoPlano) {
+      // Trava 2, cooldown: bloqueia se o CLIENTE já CONCLUIU um teste nas
+      // últimas 24 h.
+      //
+      // A048: antes contava qualquer execução 'manual' ou 'client_manual' com
+      // status diferente de 'failed'. Duas consequências medidas: execução presa
+      // em 'running' por reinício de máquina travava o botão por um dia, e teste
+      // disparado pelo superadmin gastava o direito do cliente. Agora conta só o
+      // que ele mesmo rodou e concluiu. Execução 'failed' não gasta nada: o
+      // cliente pode tentar de novo na hora.
+      const cutoff = new Date(Date.now() - RUN_COOLDOWN_HOURS * 3600 * 1000);
+      const recent = await prisma.agentEvalRun.findFirst({
+        where: {
+          agentId,
+          triggeredBy: 'client_manual',
+          status: 'completed',
+          startedAt: { gte: cutoff },
+        },
+        orderBy: { startedAt: 'desc' },
+        select: { id: true, startedAt: true, status: true },
+      });
+      if (recent) {
+        const nextAvailable = new Date(recent.startedAt.getTime() + RUN_COOLDOWN_HOURS * 3600 * 1000);
+        res.status(429).json({
+          error: 'cooldown',
+          reason: 'aguardando_24h',
+          message: `Você já executou um teste nas últimas ${RUN_COOLDOWN_HOURS}h. Próximo disponível em ${formatarHorarioDeBrasilia(nextAvailable)}.`,
+          nextAvailableAt: nextAvailable.toISOString(),
+          lastRunId: recent.id,
+        });
+        return;
+      }
     }
 
     const scenarioIds = Array.isArray(req.body?.scenarios) ? req.body.scenarios : undefined;
@@ -603,25 +698,46 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
     // Rodada 4 do PR #375: a anterior é execução completa. O re-teste do
     // cliente tem nota nula; entre duas completas, ele virava a "anterior" e
     // o estado caía para 'sem_base'.
-    const ruido = await carregarRuidoDoAgente(run.agentId);
+    //
+    // Rodada 1 do PR #378, item 2a: a anterior é da MESMA régua desta
+    // execução (harness_version), e o piso de ruído também. A régua 4 nasce
+    // sem histórico: comparar a primeira v4 com a última v3 mede a troca da
+    // régua, não o agente. Sem anterior da mesma régua, mas com histórico de
+    // outra, o estado é sem_base com a frase da régua.
+    const reguaDaExecucao = run.harnessVersion ?? null;
+    const ruido = await carregarRuidoDoAgente(run.agentId, { harnessVersion: reguaDaExecucao });
+    const filtroDaAnterior = {
+      agentId: run.agentId,
+      status: 'completed',
+      id: { not: run.id },
+      startedAt: { lt: run.startedAt },
+      triggeredBy: { not: 'client_retest' },
+    };
     const anterior = await prisma.agentEvalRun
       .findFirst({
-        where: {
-          agentId: run.agentId,
-          status: 'completed',
-          id: { not: run.id },
-          startedAt: { lt: run.startedAt },
-          triggeredBy: { not: 'client_retest' },
-        },
+        where: { ...filtroDaAnterior, harnessVersion: reguaDaExecucao },
         orderBy: { startedAt: 'desc' },
         select: { scorePercent: true },
       })
       .catch(() => null);
-    const estado = classificarMudanca({
-      nota: run.scorePercent ?? null,
-      notaAnterior: anterior?.scorePercent ?? null,
-      ruido,
-    });
+    let estado: ReturnType<typeof classificarMudanca>;
+    if (anterior) {
+      estado = classificarMudanca({
+        nota: run.scorePercent ?? null,
+        notaAnterior: anterior.scorePercent ?? null,
+        ruido,
+      });
+    } else {
+      const deOutraRegua = await prisma.agentEvalRun
+        .findFirst({ where: filtroDaAnterior, orderBy: { startedAt: 'desc' }, select: { id: true } })
+        .catch(() => null);
+      estado = deOutraRegua
+        ? {
+            estado: 'sem_base',
+            explicacao: 'A régua do teste mudou; a comparação volta na próxima execução.',
+          }
+        : classificarMudanca({ nota: run.scorePercent ?? null, notaAnterior: null, ruido });
+    }
 
     res.json({
       ...rest,
@@ -687,16 +803,27 @@ router.post(
         scenarioResult.judge?.reason || 'Cenário parcial — usuário pediu sugestão de melhoria',
         run.agent.systemPrompt || '',
         profile,
-        // A043: o sugeridor vê o CORE (sempre) e as regras já aprovadas
-        // deste agente, para fortalecer a existente em vez de escrever a
-        // sexta versão dela.
-        { regrasAtivas: await carregarRegrasAtivas({ organizationId: orgId, agentId: run.agentId }) },
+        {
+          // A043: o sugeridor vê o CORE (sempre) e as regras já aprovadas
+          // deste agente, para fortalecer a existente em vez de escrever a
+          // sexta versão dela.
+          regrasAtivas: await carregarRegrasAtivas({ organizationId: orgId, agentId: run.agentId }),
+          // C2 (Passo 3, P21): reprovação de conhecimento por falta de
+          // informação recebe a ação de treino, e não uma regra de prompt.
+          diagnostico: {
+            natureza: scenarioResult.natureza ?? scenarioDef.natureza,
+            causa: scenarioResult.judge?.causa ?? null,
+            acaoDeTreino: scenarioDef.conhecimento?.acaoDeTreino ?? null,
+            userMessage: scenarioDef.userMessage,
+          },
+        },
       );
       if (!suggestion) {
         res.status(500).json({ error: 'IA não conseguiu gerar sugestão' });
         return;
       }
-      results[idx] = { ...scenarioResult, suggestedFix: suggestion };
+      // C2 (Passo 1, A226): quem escreveu a sugestão fica no resultado.
+      results[idx] = { ...scenarioResult, suggestedFix: suggestion, sugeridor: suggestion.modelo ?? null };
       await prisma.agentEvalRun.update({
         where: { id: runId },
         data: { results: results as any },
@@ -755,8 +882,23 @@ router.post(
       }
 
       const firstPatch = suggestion.patches[0];
-      const diffToApply = finalDiff || firstPatch.diff;
       const whereHint = firstPatch.where || '';
+
+      // ─── Notas 2 e 4 da revisão de 14/09: SANEAMENTO ANTES DE TUDO ──
+      // O nome fictício do teste vira "[nome]" (A172) e tag do protocolo
+      // (<reply>, <action>, <buttons>) e frase que manda no modelo saem. Vale
+      // nos dois caminhos (registro e patch no prompt), e todas as guardas
+      // abaixo leem o texto JÁ saneado, que é o que vai ser gravado.
+      const diffToApply = sanearTextoDaRegra(finalDiff || firstPatch.diff);
+      if (!diffToApply.trim()) {
+        res.status(422).json({
+          error: 'regra_sem_texto',
+          message:
+            'Esta correção não tem uma regra de atendimento para gravar: o texto era só instrução ' +
+            'para a IA ou marcação do sistema. Reescreva dizendo o que o agente deve fazer com o cliente.',
+        });
+        return;
+      }
 
       // ─── A188: REGRA CORTADA NÃO ENTRA NO PROMPT VIVO ─────────────
       // O sugeridor corta o patch em 600 caracteres sem avisar: 170 de 324
@@ -993,6 +1135,20 @@ router.post(
         res.status(422).json({ error: 'teto_de_regras', message: err.message });
         return;
       }
+      // Nota 7 da revisão de 14/09: duas aprovações do mesmo cenário ao
+      // mesmo tempo batiam no índice único parcial e davam 500. A decisão
+      // desta requisição foi desfeita junto com a transação.
+      if (err?.code === 'regra_concorrente') {
+        logger.warn('[agentQuality] apply-fix recusado: aprovação simultânea do mesmo cenário', {
+          runId, scenarioId, orgId,
+        });
+        res.status(409).json({ error: 'regra_concorrente', message: err.message });
+        return;
+      }
+      if (err?.code === 'regra_sem_texto') {
+        res.status(422).json({ error: 'regra_sem_texto', message: err.message });
+        return;
+      }
       if (err instanceof DuplicatePatchError) {
         logger.warn('[agentQuality] apply-fix rejeitado (DUPLICATE_PATCH)', {
           runId, scenarioId, orgId,
@@ -1083,6 +1239,7 @@ router.post(
         systemPrompt: run.agent.systemPrompt || '',
       };
       const montarContexto = criarMontadorDeContextoDoEval(agenteDoReteste, orgId);
+      const politica = criarPoliticaDaQualidade(orgId);
 
       const amostras: AmostraDoReteste[] = [];
       for (let i = 1; i <= AMOSTRAS_DO_RETESTE; i++) {
@@ -1093,7 +1250,9 @@ router.post(
           // O re-teste lê o veredito e joga o resto fora. Sem esta marca, cada
           // amostra reprovada pedia uma sugestão nova (às vezes duas) que
           // ninguém ia ver: o clique custava até 15 chamadas em vez de 9.
-          { pularSugestao: true, regrasBlock, montarContexto },
+          // C2: uma passada por amostra (o re-teste já faz três), e o modelo
+          // da faixa do plano quando o interruptor evalNoTier está ligado.
+          { pularSugestao: true, semRepeticoes: true, regrasBlock, montarContexto, politica },
         );
         const r = results[0];
         amostras.push({
@@ -1321,6 +1480,16 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
 
     if (regraViva) {
       const revertida = await prisma.$transaction(async (tx) => {
+        // Nota 7 da revisão de 14/09: desativar PRIMEIRO, e só depois
+        // registrar a decisão. A escrita da regra é condicional ao status;
+        // quando duas reversões correm juntas, a segunda não acha mais a
+        // regra ativa, devolve null e a transação inteira volta, sem deixar
+        // uma decisão 'reverted' com regra nula.
+        const regra = await reverterRegra(
+          { ruleId: regraViva.id, organizationId: orgId, actor: actorDaRegra.email },
+          tx as any,
+        );
+        if (!regra) throw new ReversaoConcorrenteError();
         const criada = await tx.agentEvalFixDecision.create({
           data: {
             runId: original.runId,
@@ -1339,10 +1508,6 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
             revertedFromId: original.id,
           },
         });
-        const regra = await reverterRegra(
-          { ruleId: regraViva.id, organizationId: orgId, actor: actorDaRegra.email },
-          tx as any,
-        );
         return { decision: criada, regra };
       });
 
@@ -1440,6 +1605,10 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
         error: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
         code: 'prompt_mudou',
       });
+      return;
+    }
+    if (err instanceof ReversaoConcorrenteError) {
+      res.status(409).json({ error: err.message, code: 'regra_nao_ativa' });
       return;
     }
     logger.error('[agentQuality] revert erro:', err);

@@ -992,7 +992,7 @@ function ResultBadge({
   combined,
   severity,
 }: {
-  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  combined: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
   severity: string;
 }) {
   const combinedLabel =
@@ -1003,7 +1003,10 @@ function ResultBadge({
         : // A171: falha técnica do teste não é erro do agente.
           combined === 'erro'
           ? 'Não avaliado'
-          : 'Reprovado';
+          : // C2 (A226): modelo de reserva ou caso sem base no teste.
+            combined === 'inconclusivo'
+            ? 'Inconclusivo'
+            : 'Reprovado';
   const severityLabel =
     severity === 'critical' ? 'crítica' : severity === 'high' ? 'alta' : 'média';
   const color =
@@ -1011,7 +1014,7 @@ function ResultBadge({
       ? 'bg-green-100 text-green-800 border-green-200'
       : combined === 'partial'
         ? 'bg-orange-100 text-orange-800 border-orange-200'
-        : combined === 'erro'
+        : combined === 'erro' || combined === 'inconclusivo'
           ? 'bg-neutral-100 text-neutral-700 border-neutral-300'
           : 'bg-red-100 text-red-800 border-red-200';
   return (
@@ -1079,7 +1082,9 @@ function FixSuggestionCard({
         notes: notes.trim() || undefined,
       });
       setActionSuccess(
-        `✓ Aplicado via ${result.strategy} na linha ${result.insertedAtLine}. Prompt: ${result.decision.id.slice(0, 8)}...`,
+        result.comoRegistro
+          ? `✓ Aprovada como regra do cenário (o prompt não foi alterado). Decisão: ${result.decision.id.slice(0, 8)}...`
+          : `✓ Aplicado via ${result.strategy} na linha ${result.insertedAtLine}. Prompt: ${result.decision.id.slice(0, 8)}...`,
       );
       // Captura veredito da re-verificação automática (pode ser null se não disponível)
       if ((result as any).reverify !== undefined) {
@@ -1201,7 +1206,24 @@ function FixSuggestionCard({
             )}
           </div>
         )}
-        {!hasSuggestion ? (
+        {scenario.suggestedFix?.acaoDeTreino ? (
+          // C2 (P21): reprovação de conhecimento por falta de informação não
+          // tem patch, tem ação de treino. Sem este ramo, o botão de gerar
+          // sugestão devolvia a mesma ação, sem patch, a cada clique.
+          <div className="p-3 bg-indigo-50 border border-indigo-200 rounded text-xs text-indigo-900">
+            <strong>Ação de treino:</strong> {scenario.suggestedFix.summary}{' '}
+            {scenario.suggestedFix.acaoDeTreino.tipo === 'qa'
+              ? `(cadastrar a resposta para "${scenario.suggestedFix.acaoDeTreino.pergunta}")`
+              : scenario.suggestedFix.acaoDeTreino.tipo === 'revisar'
+                ? `(revisar ${
+                    scenario.suggestedFix.acaoDeTreino.rotulo ??
+                    (scenario.suggestedFix.acaoDeTreino.pergunta
+                      ? `a resposta para "${scenario.suggestedFix.acaoDeTreino.pergunta}"`
+                      : 'o cadastrado')
+                  }: está cadastrado, mas não chegou ao agente)`
+                : `(preencher ${scenario.suggestedFix.acaoDeTreino.rotulo ?? 'o questionário'})`}
+          </div>
+        ) : !hasSuggestion ? (
           <GenerateSuggestionButton
             runId={runId}
             scenarioId={scenario.scenarioId}
@@ -1410,7 +1432,7 @@ function GenerateSuggestionButton({
 }: {
   runId: string;
   scenarioId: string;
-  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  combined: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
   onGenerated: () => void;
 }) {
   const [loading, setLoading] = useState(false);

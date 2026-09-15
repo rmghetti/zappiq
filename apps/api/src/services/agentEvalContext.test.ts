@@ -42,6 +42,7 @@ vi.mock('../utils/logger.js', () => ({
 
 import {
   criarMontadorDeContextoDoEval,
+  criarPoliticaDaQualidade,
   contatoDoCenario,
   DATA_FIXA_DO_EVAL,
   PROMPT_AUSENTE,
@@ -79,9 +80,9 @@ beforeEach(() => {
 });
 
 describe('contatoDoCenario: o mock de sempre', () => {
-  it('Rod, telefone fixo, NEW, primeiro contato sem histórico', () => {
+  it('marcador Cliente Teste (não é nome de gente), telefone fixo, NEW, primeiro contato sem histórico', () => {
     expect(contatoDoCenario({ id: 'cr1_x' })).toEqual({
-      nome: 'Rod',
+      nome: 'Cliente Teste',
       leadStatus: 'NEW',
       primeiroContato: true,
       totalMensagens: 1,
@@ -125,7 +126,7 @@ describe('criarMontadorDeContextoDoEval', () => {
     expect(p.startsWith(CORE_AGENT_RULES_V1)).toBe(true);
     expect(p).toContain(AGENTE.systemPrompt);
     expect(p).toContain('### Links oficiais de CMJ');
-    expect(p).toContain('# Cliente atual\nNome registrado: Rod\nTelefone: +5511999999999\nStatus do lead: NEW\nMensagens trocadas até agora: 1\nPrimeiro contato? SIM');
+    expect(p).toContain('# Cliente atual\nNome registrado: Cliente Teste\nTelefone: +5511999999999\nStatus do lead: NEW\nMensagens trocadas até agora: 1\nPrimeiro contato? SIM');
     expect(p).toContain('# Contexto recuperado (RAG)\n[tabela.pdf] Serra circular: R$ 890.');
     expect(p).toContain(`# Agora\n${textoDoAgora(DATA_FIXA_DO_EVAL)}`);
     expect(ctx!.ragStatus).toBe('ok');
@@ -214,5 +215,170 @@ describe('criarMontadorDeContextoDoEval: as regras aprovadas pelo dono (rodada 2
 
     expect(ctx!.systemPrompt).not.toContain('# Regras aprovadas pelo dono');
     expect(agentRuleFindMany).not.toHaveBeenCalled();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// C2 (Passo 13): os trechos e os ids que o avaliador grava e mostra ao juiz,
+// e o modelo da faixa do plano (nota 1, interruptor evalNoTier).
+// ════════════════════════════════════════════════════════════════════
+describe('C2: trechos, fontes e a política da faixa do plano', () => {
+  it('o contexto do cenário leva os trechos (para o juiz) e os ids (para o resultado)', async () => {
+    flags = { contextoUnico: true };
+    searchDetailed.mockResolvedValue({
+      context: '[tabela.pdf] Serra circular: R$ 890.',
+      sources: [{ source: 'tabela.pdf', similarity: 0.8, snippet: 'serra' }],
+      status: 'ok',
+      fromCache: false,
+      trechoIds: ['chunk-1', 'chunk-2'],
+    });
+    const ctx = await criarMontadorDeContextoDoEval(AGENTE, ORG)(CENARIO as any);
+    expect(ctx!.trechos).toBe('[tabela.pdf] Serra circular: R$ 890.');
+    expect(ctx!.fontes).toEqual(['chunk-1', 'chunk-2']);
+  });
+
+  it('evalNoTier desligado: a política é null e ninguém lê o plano', async () => {
+    const politica = criarPoliticaDaQualidade(ORG);
+    expect(isFlagOn).not.toHaveBeenCalled();
+    expect(await politica()).toBeNull();
+    expect(orgFindUnique).not.toHaveBeenCalled();
+  });
+
+  // Rodada 1 do PR #378, item 1: o interruptor do juiz de outra família é
+  // lido junto, uma vez por execução, e viaja na mesma política.
+  it('juizDeOutraFamilia ligado com evalNoTier desligado: cascata padrão para o agente, juiz de outra família', async () => {
+    flags = { juizDeOutraFamilia: true };
+    const politica = criarPoliticaDaQualidade(ORG);
+    const p1 = await politica();
+    const p2 = await politica();
+    expect(p1).toEqual({ modelo: 'anthropic-sonnet', motivo: expect.stringMatching(/cascata padrão/), juizOutraFamilia: true });
+    expect(p2).toBe(p1);
+    expect(orgFindUnique).not.toHaveBeenCalled();
+    expect(isFlagOn.mock.calls.filter((c) => c[1] === 'juizDeOutraFamilia')).toHaveLength(1);
+  });
+
+  it('os dois ligados: tier do plano E juiz de outra família na mesma política', async () => {
+    flags = { evalNoTier: true, juizDeOutraFamilia: true };
+    orgFindUnique.mockResolvedValue({
+      plan: 'SCALE',
+      settings: {},
+      trialStartedAt: null,
+      trialEndsAt: null,
+      isTrialActive: false,
+      trialConverted: true,
+      stripeSubscriptionId: 'sub_1',
+    });
+    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic']), disjuntorAberto: async () => false })();
+    expect(p).toMatchObject({ tier: 'SCALE', modelo: 'anthropic-sonnet', juizOutraFamilia: true });
+  });
+
+  it('evalNoTier ligado e juiz desligado: a política diz juizOutraFamilia false', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue({
+      plan: 'SCALE',
+      settings: {},
+      trialStartedAt: null,
+      trialEndsAt: null,
+      isTrialActive: false,
+      trialConverted: true,
+      stripeSubscriptionId: 'sub_1',
+    });
+    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic']), disjuntorAberto: async () => false })();
+    expect(p?.juizOutraFamilia).toBe(false);
+  });
+
+  it('evalNoTier ligado: o tier que a produção escolheria para o plano, lido uma vez', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue({
+      plan: 'GROWTH',
+      settings: {},
+      trialStartedAt: null,
+      trialEndsAt: null,
+      isTrialActive: false,
+      trialConverted: true,
+      stripeSubscriptionId: 'sub_1',
+    });
+    // O disjuntor é injetado: o padrão iria ao Redis, e o teste não é sobre isso.
+    const politica = criarPoliticaDaQualidade(ORG, {
+      familias: () => new Set(['google', 'anthropic']),
+      disjuntorAberto: async () => false,
+    });
+    const p1 = await politica();
+    const p2 = await politica();
+    expect(p1).toMatchObject({ tier: 'GROWTH', modelo: 'google-gemini-flash' });
+    expect(p2).toBe(p1);
+    expect(isFlagOn.mock.calls.filter((c) => c[1] === 'evalNoTier')).toHaveLength(1);
+  });
+});
+
+/* Rodada 1 do PR #378, item 9: evalNoTier ligado numa organização cujo modelo
+ * da faixa é de uma família SEM chave (o Gemini está parado desde 10/07) ou
+ * com o disjuntor aberto. Antes, toda resposta vinha pela reserva e ficava
+ * inconclusiva; agora a política volta à cascata padrão e diz por quê. */
+describe('item 9: evalNoTier com a família do modelo indisponível', () => {
+  const ORG_GROWTH = {
+    plan: 'GROWTH',
+    settings: {},
+    trialStartedAt: null,
+    trialEndsAt: null,
+    isTrialActive: false,
+    trialConverted: true,
+    stripeSubscriptionId: 'sub_1',
+  };
+
+  it('Gemini sem chave: cascata padrão, sem tier, com o motivo', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue(ORG_GROWTH);
+    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic', 'openai']) })();
+    expect(p).toEqual({
+      modelo: 'anthropic-sonnet',
+      motivo: expect.stringMatching(/família google.*sem chave.*cascata padrão/),
+      juizOutraFamilia: false,
+    });
+    expect(p?.tier).toBeUndefined();
+    expect(p?.override).toBeUndefined();
+  });
+
+  it('Gemini com chave mas disjuntor aberto: cascata padrão, com o motivo', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue(ORG_GROWTH);
+    const p = await criarPoliticaDaQualidade(ORG, {
+      familias: () => new Set(['google', 'anthropic']),
+      disjuntorAberto: async (id: string) => id === 'google-gemini-flash',
+    })();
+    expect(p?.modelo).toBe('anthropic-sonnet');
+    expect(p?.tier).toBeUndefined();
+    expect(p?.motivo).toMatch(/disjuntor.*google-gemini-flash.*cascata padrão/);
+  });
+
+  it('família com chave e disjuntor fechado: a faixa do plano vale', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue(ORG_GROWTH);
+    const p = await criarPoliticaDaQualidade(ORG, {
+      familias: () => new Set(['google']),
+      disjuntorAberto: async () => false,
+    })();
+    expect(p).toMatchObject({ tier: 'GROWTH', modelo: 'google-gemini-flash' });
+  });
+
+  it('override contratual para família sem chave também volta à cascata', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue({ ...ORG_GROWTH, plan: 'SCALE', settings: { llm_routing: { forceProvider: 'openai-mini' } } });
+    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic']) })();
+    expect(p?.modelo).toBe('anthropic-sonnet');
+    expect(p?.override).toBeUndefined();
+    expect(p?.motivo).toMatch(/família openai/);
+  });
+
+  it('a leitura do disjuntor que quebra não derruba a política: segue a faixa do plano', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue(ORG_GROWTH);
+    const p = await criarPoliticaDaQualidade(ORG, {
+      familias: () => new Set(['google']),
+      disjuntorAberto: async () => {
+        throw new Error('redis fora');
+      },
+    })();
+    expect(p).toMatchObject({ tier: 'GROWTH', modelo: 'google-gemini-flash' });
   });
 });

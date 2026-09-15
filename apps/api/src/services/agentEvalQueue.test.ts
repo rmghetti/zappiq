@@ -563,6 +563,42 @@ describe('A171 — execução majoritariamente quebrada é falha técnica, não 
     const [gravacao] = updateManysCom('status');
     expect(gravacao.data).toMatchObject({ status: 'completed', scorePercent: 100 });
   });
+
+  // Rodada 1 do PR #378, item 10: o caso de conhecimento que nem foi ao
+  // provedor (base_nao_consultada) sai do denominador do portão. Com 10
+  // cenários, 4 deles sem base e 2 erros: 2 de 6 (33%) e não 2 de 10 (20%).
+  it('item 10: o denominador do portão exclui os casos base_nao_consultada', async () => {
+    const { denominadorDoPortao } = await import('./agentEvalQueue.js');
+    evalSetMock.resolveEvalSet.mockReturnValue(
+      Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, category: 'x', severity: 'high' })),
+    );
+    const results = [
+      ...Array.from({ length: 4 }, (_, i) => ({ scenarioId: `c${i}`, combined: 'pass' })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        scenarioId: `c${4 + i}`,
+        combined: 'inconclusivo',
+        inconclusivo: { motivo: 'base_nao_consultada', explicacao: 'x' },
+      })),
+      { scenarioId: 'c8', combined: 'erro' },
+      { scenarioId: 'c9', combined: 'erro' },
+    ];
+    expect(denominadorDoPortao(results, 10)).toBe(6);
+    // O inconclusivo por modelo diferente continua no denominador (é do provedor).
+    expect(
+      denominadorDoPortao([{ combined: 'inconclusivo', inconclusivo: { motivo: 'modelo_diferente' } }], 3),
+    ).toBe(3);
+
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results,
+      durationMs: 1000,
+      summary: { ...RESUMO_LIMPO, passed: 4, erros: 2 },
+    });
+
+    await executeRunJob('run-1');
+
+    const [gravacao] = updateManysCom('status');
+    expect(gravacao.data).toMatchObject({ status: 'failed', error: ERRO_FALHA_TECNICA_DO_PROVEDOR });
+  });
 });
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -688,6 +724,8 @@ describe('executeRunJob entrega o bloco de regras do agente ao avaliador', () =>
       regrasBlock: '',
       regrasAtivas: [],
       montarContexto: expect.any(Function),
+      // C2, nota 1: o modelo da faixa do plano, preguiçoso (evalNoTier).
+      politica: expect.any(Function),
     });
   });
 
@@ -723,6 +761,8 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     agentId: 'agent-1',
     status: 'completed',
     triggeredBy: 'cron',
+    // A mesma régua da execução que está rodando (HARNESS_VERSION do dublê).
+    harnessVersion: 3,
     startedAt: new Date('2026-09-07T04:30:00Z'),
     results: [
       { scenarioId: 'cr1', combined: 'fail' },
@@ -734,6 +774,7 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     agentId: 'agent-1',
     status: 'completed',
     triggeredBy: 'client_retest',
+    harnessVersion: 3,
     startedAt: new Date('2026-09-10T15:00:00Z'),
     results: [
       { amostra: 1, combined: 'pass', resposta: 'oi', motivoDoJuiz: 'ok' },
@@ -742,6 +783,8 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     ],
   };
 
+  let linhas: any[] = [];
+
   beforeEach(async () => {
     const real = await vi.importActual<typeof import('./agentEvalCronService.js')>(
       './agentEvalCronService.js',
@@ -749,13 +792,14 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     cronServiceMock.scenariosFailingTwice.mockImplementation(real.scenariosFailingTwice);
     cronServiceMock.shouldAlertQuality.mockImplementation(real.shouldAlertQuality);
 
-    const linhas = [SEMANAL_ANTERIOR, RETESTE_NO_MEIO];
+    linhas = [SEMANAL_ANTERIOR, RETESTE_NO_MEIO];
     // O banco falso honra o `where`: sem o filtro, o re-teste (mais novo) vem.
     prismaMock.agentEvalRun.findFirst.mockImplementation(async ({ where }: any) => {
       const [primeira] = linhas
         .filter((l) => l.agentId === where.agentId && l.status === where.status)
         .filter((l) => !(where?.id?.not && l.id === where.id.not))
         .filter((l) => !(where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not))
+        .filter((l) => !('harnessVersion' in where) || l.harnessVersion === where.harnessVersion)
         .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
       return primeira ? { results: primeira.results } : null;
     });
@@ -782,5 +826,138 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     expect(cronServiceMock.notifySlackQualityIssue.mock.calls[0][0].repetidos).toEqual(['cr1']);
     const where = prismaMock.agentEvalRun.findFirst.mock.calls[0][0].where;
     expect(where.triggeredBy).toEqual({ not: 'client_retest' });
+    // Rodada 1 do PR #378, item 2c: a anterior é da MESMA régua.
+    expect(where.harnessVersion).toBe(3);
+  });
+
+  it('a anterior de OUTRA régua não conta: reprovar na v3 e na v4 não é "duas vezes" na mesma régua', async () => {
+    linhas = [{ ...SEMANAL_ANTERIOR, harnessVersion: 2 }, RETESTE_NO_MEIO];
+
+    await executeRunJob('run-semanal-2');
+
+    expect(cronServiceMock.scenariosFailingTwice).toHaveReturnedWith([]);
+    expect(cronServiceMock.notifySlackQualityIssue).not.toHaveBeenCalled();
+    expect(ultimoUpdate('slackAlertStatus')).toMatchObject({ slackAlertStatus: 'skipped' });
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * C2 (Passo 13, P13): rodízio dos casos de conhecimento na execução.
+ * No máximo 8 por execução; os ids pedidos um a um não entram no rodízio;
+ * a execução usa o started_at da própria linha como relógio.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('resolveScenariosForRun: rodízio dos casos de conhecimento (C2)', () => {
+  const caso = (id: string, origem: 'qa' | 'questionario') => ({
+    id,
+    severity: 'high',
+    category: 'kb_conhecimento',
+    natureza: 'conhecimento',
+    conhecimento: { origem },
+  });
+  const FIXOS = [{ id: 'cr1', severity: 'critical', category: 'cr1_acceptance', natureza: 'comportamento' }];
+  const GERADOS = Array.from({ length: 12 }, (_, i) => caso(`kb_qa_${i}`, 'qa'));
+
+  it('uma execução completa leva no máximo 8 casos gerados, e todos os fixos', async () => {
+    const { resolveScenariosForRun } = await import('./agentEvalQueue.js');
+    evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...GERADOS]);
+    const lista = resolveScenariosForRun({} as any, {}, { agora: new Date('2026-09-14T12:00:00Z') });
+    expect(lista.filter((c: any) => c.conhecimento)).toHaveLength(8);
+    expect(lista.map((c: any) => c.id)).toContain('cr1');
+  });
+
+  it('ids pedidos um a um não passam pelo rodízio (re-teste de um caso fora da vez)', async () => {
+    const { resolveScenariosForRun } = await import('./agentEvalQueue.js');
+    evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...GERADOS]);
+    const lista = resolveScenariosForRun({} as any, { scenarioIds: ['kb_qa_11'] });
+    expect(lista.map((c: any) => c.id)).toEqual(['kb_qa_11']);
+  });
+
+  // Rodada 1 do PR #378, item 8: ids kb_* pedidos um a um também respeitam o
+  // teto (e o rodízio). Escolha conservadora: corta e registra, em vez de
+  // 400, para o pedido do cliente continuar rodando e o custo ficar no teto.
+  it('item 8: 200 ids kb_* pedidos um a um rodam no máximo o teto, e o corte é registrado', async () => {
+    const { resolveScenariosForRun } = await import('./agentEvalQueue.js');
+    const { logger } = await import('../utils/logger.js');
+    const muitos = Array.from({ length: 200 }, (_, i) => caso(`kb_qa_${i}`, 'qa'));
+    evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...muitos]);
+
+    const lista = resolveScenariosForRun(
+      {} as any,
+      { scenarioIds: muitos.map((c) => c.id) },
+      { agora: new Date('2026-09-14T12:00:00Z') },
+    );
+
+    expect(lista.filter((c: any) => c.conhecimento)).toHaveLength(8);
+    expect(lista).toHaveLength(8);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ msg: 'agent_eval_casos_de_conhecimento_cortados', pedidos: 200, teto: 8 }),
+    );
+  });
+
+  it('item 8: no corte, o questionário entra antes do Q&A (o mesmo rodízio da execução completa)', async () => {
+    const { resolveScenariosForRun } = await import('./agentEvalQueue.js');
+    const q = [
+      caso('kb_questionario_pre_tabela_precos', 'questionario'),
+      caso('kb_questionario_ide_horarios_funcionamento', 'questionario'),
+    ];
+    evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...GERADOS, ...q]);
+    const lista = resolveScenariosForRun(
+      {} as any,
+      { scenarioIds: [...GERADOS.map((c) => c.id), ...q.map((c) => c.id), 'cr1'] },
+      { agora: new Date('2026-09-14T12:00:00Z') },
+    );
+    const ids = lista.map((c: any) => c.id);
+    expect(ids).toContain('cr1');
+    expect(ids).toContain('kb_questionario_pre_tabela_precos');
+    expect(ids).toContain('kb_questionario_ide_horarios_funcionamento');
+    expect(lista.filter((c: any) => c.conhecimento)).toHaveLength(8);
+  });
+
+  it('a execução usa o started_at da linha: o total da criação é o total que roda', async () => {
+    const { executeRunJob } = await import('./agentEvalQueue.js');
+    evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...GERADOS]);
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(
+      runPendente({ startedAt: new Date('2026-09-14T12:00:00Z') }),
+    );
+
+    await executeRunJob('run-1');
+
+    const cenarios = runnerMock.executeAgentEvalRun.mock.calls[0][0];
+    expect(cenarios.filter((c: any) => c.conhecimento)).toHaveLength(8);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * C2 (Passo 3, P21): a conclusão grava o placar dividido junto com a nota
+ * única, e o avaliador recebe a política da faixa do plano (nota 1).
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('executeRunJob grava o placar e entrega a política (C2)', () => {
+  const PLACAR = {
+    versao: 1,
+    conhecimento: { estado: 'sem_base', total: 0, avaliados: 0, aprovados: 0, percent: null },
+    comportamento: { estado: 'avaliado', total: 2, avaliados: 2, aprovados: 2, percent: 100 },
+    inconclusivos: 0,
+  };
+
+  it('a linha concluída recebe o placar, e a nota única continua', async () => {
+    const { executeRunJob } = await import('./agentEvalQueue.js');
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results: [{ scenarioId: 'cr1', combined: 'pass' }],
+      durationMs: 10,
+      summary: RESUMO_LIMPO,
+      placar: PLACAR,
+    });
+
+    await executeRunJob('run-1');
+
+    const conclusao = updateManysCom('status').find((c) => c.data.status === 'completed');
+    expect(conclusao.data.placar).toEqual(PLACAR);
+    expect(conclusao.data.scorePercent).toBe(RESUMO_LIMPO.scorePercent);
+  });
+
+  it('o avaliador recebe a política da faixa do plano como função preguiçosa', async () => {
+    const { executeRunJob } = await import('./agentEvalQueue.js');
+    await executeRunJob('run-1');
+    expect(typeof runnerMock.executeAgentEvalRun.mock.calls[0][3].politica).toBe('function');
   });
 });

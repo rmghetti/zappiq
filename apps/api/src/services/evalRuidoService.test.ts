@@ -162,10 +162,14 @@ describe('carregarRuidoDoAgente', () => {
     expect(where.harnessVersion).toBe(HARNESS_VERSION);
   });
 
-  it('sem execução suficiente na régua atual, cai para o que houver', async () => {
+  // Rodada 1 do PR #378, item 2b (crítico B): a queda para o histórico
+  // misturado saiu. Com uma execução só na régua, o piso tem n = 1 e o
+  // estado do cliente fica 'sem_base' (n < 3) até a régua ter histórico.
+  // Misturar régua 3 com régua 4 media a troca da régua, não o agente.
+  it('sem execução suficiente na régua, NÃO cai para o histórico misturado', async () => {
     prismaMock.agentPromptVersion.findFirst.mockResolvedValue(null);
     prismaMock.agentEvalRun.findMany
-      .mockResolvedValueOnce([{ scorePercent: 80 }]) // só uma na régua nova
+      .mockResolvedValueOnce([{ scorePercent: 80 }]) // só uma na régua
       .mockResolvedValueOnce([
         { scorePercent: 80 },
         { scorePercent: 72 },
@@ -174,10 +178,21 @@ describe('carregarRuidoDoAgente', () => {
 
     const r = await carregarRuidoDoAgente('agente-1');
 
-    expect(prismaMock.agentEvalRun.findMany).toHaveBeenCalledTimes(2);
-    const segunda = prismaMock.agentEvalRun.findMany.mock.calls[1][0].where;
-    expect(segunda.harnessVersion).toBeUndefined();
-    expect(r.n).toBe(3);
+    expect(prismaMock.agentEvalRun.findMany).toHaveBeenCalledTimes(1);
+    expect(r.n).toBe(1);
+    expect(classificarMudanca({ nota: 80, notaAnterior: 70, ruido: r }).estado).toBe('sem_base');
+  });
+
+  it('a régua é a da execução pedida: uma execução antiga (v3) lê o piso das v3', async () => {
+    prismaMock.agentPromptVersion.findFirst.mockResolvedValue(null);
+    prismaMock.agentEvalRun.findMany.mockResolvedValue([{ scorePercent: 80 }, { scorePercent: 70 }]);
+
+    await carregarRuidoDoAgente('agente-1', { harnessVersion: 3 });
+    expect(prismaMock.agentEvalRun.findMany.mock.calls[0][0].where.harnessVersion).toBe(3);
+
+    // Execução sem régua gravada (as anteriores ao PR #371): só as sem régua.
+    await carregarRuidoDoAgente('agente-1', { harnessVersion: null });
+    expect(prismaMock.agentEvalRun.findMany.mock.calls[1][0].where.harnessVersion).toBeNull();
   });
 
   // Rodada 3 do PR #375. O re-teste do cliente nasce 'completed' com nota
@@ -205,9 +220,10 @@ describe('carregarRuidoDoAgente', () => {
 
     const r = await carregarRuidoDoAgente('agente-1');
 
-    // Só UMA execução de verdade na régua atual: cai para o histórico inteiro.
-    expect(prismaMock.agentEvalRun.findMany).toHaveBeenCalledTimes(2);
-    expect(r.n).toBe(4);
+    // Só UMA execução de verdade na régua atual, e nenhuma queda para o
+    // histórico de outra régua (item 2b da rodada 1 do #378).
+    expect(prismaMock.agentEvalRun.findMany).toHaveBeenCalledTimes(1);
+    expect(r.n).toBe(1);
     const where = prismaMock.agentEvalRun.findMany.mock.calls[0][0].where;
     expect(where.triggeredBy).toEqual({ not: 'client_retest' });
     expect(where.scorePercent).toEqual({ not: null });

@@ -196,6 +196,56 @@ describe('regradeResult — releitura de um resultado gravado', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
+// C2 (Passo 13): a regravação lê os vereditos novos da execução e aplica a
+// mesma régua determinística do avaliador (padrões e checagem por valor).
+describe('regradeResult no C2', () => {
+  it("resultado 'inconclusivo' (modelo de reserva) fica fora da nota, como a falha técnica", () => {
+    const r = regradeResult(
+      { scenarioId: 'cr5_nome_disponivel_usar', combined: 'inconclusivo', response: '' } as any,
+      cenario('cr5_nome_disponivel_usar'),
+    );
+    expect(r.vereditoAntigo).toBe('erro');
+    expect(r.vereditoNovo).toBe('erro');
+  });
+
+  it('caso de conhecimento: a releitura aplica a checagem por valor', () => {
+    const caso = {
+      id: 'kb_qa_1',
+      category: 'kb_conhecimento',
+      natureza: 'conhecimento',
+      severity: 'high',
+      description: 'x',
+      userMessage: 'taxa?',
+      expectedBehavior: 'taxa de R$ 12',
+      conhecimento: {
+        origem: 'qa',
+        fonte: '1',
+        referencia: 'R$ 12',
+        valoresEsperados: ['n:12'],
+        exigencia: 'todos',
+        reaisPermitidos: ['12'],
+        acaoDeTreino: { tipo: 'qa', pergunta: 'taxa?' },
+      },
+    } as any;
+    const errado = regradeResult(
+      { scenarioId: 'kb_qa_1', combined: 'pass', response: 'A taxa é R$ 20.', judge: { passed: true } } as any,
+      caso,
+    );
+    expect(errado.vereditoNovo).toBe('fail');
+    expect(errado.motivo).toMatch(/valor em reais fora da tabela: 20/);
+    const certo = regradeResult(
+      { scenarioId: 'kb_qa_1', combined: 'pass', response: 'A taxa é R$ 12.', judge: { passed: true } } as any,
+      caso,
+    );
+    expect(certo.vereditoNovo).toBe('pass');
+  });
+
+  it('a régua da regravação continua a v3 (as linhas já gravadas seguem visíveis)', async () => {
+    const { REGUA_DA_REGRAVACAO } = await import('./evalRegradeService.js');
+    expect(REGUA_DA_REGRAVACAO).toBe(3);
+  });
+});
+
 describe('regradeRun — percorre uma execução gravada', () => {
   const RESULTS = [
     gravado(), // cr5 reprovado por causa do gabarito → vira pass
@@ -275,6 +325,33 @@ describe('regradeRun — percorre uma execução gravada', () => {
     const r = await regradeRun('run-1');
     expect(r.porCenario).toEqual([]);
     expect(r.notaRegravada).toBe(0);
+  });
+
+  // Rodada 1 do PR #378, item 2d (crítico B): a regravação relê pela régua
+  // 3. Uma execução medida com a régua 4 (juiz com evidência, casos de
+  // conhecimento, inconclusivo) não pode ganhar "nota recalculada" v3.
+  it('recusa execução medida com a régua 4 ou posterior, com mensagem clara', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravada({ harnessVersion: 4 }));
+
+    await expect(regradeRun('run-1')).rejects.toThrow(/régua 4/);
+    await expect(regradeRun('run-1')).rejects.toThrow(/regravação relê só execuções da régua 3 ou anterior/);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravada({ harnessVersion: 5 }));
+    await expect(regradeRun('run-1', { dryRun: true })).rejects.toThrow(/régua 5/);
+  });
+
+  it('execução da régua 3 ou sem régua gravada segue sendo relida', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravada({ harnessVersion: 3 }));
+    await expect(regradeRun('run-1', { dryRun: true })).resolves.toMatchObject({ runId: 'run-1' });
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravada({ harnessVersion: null }));
+    await expect(regradeRun('run-1', { dryRun: true })).resolves.toMatchObject({ runId: 'run-1' });
+  });
+
+  it('a leitura da execução pede a régua gravada', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravada());
+    await regradeRun('run-1', { dryRun: true });
+    expect(prismaMock.agentEvalRun.findUnique.mock.calls[0][0].select.harnessVersion).toBe(true);
   });
 
   it('execução inexistente devolve erro claro', async () => {
@@ -466,6 +543,33 @@ describe('execucoesParaRegravar', () => {
     const ids = await execucoesParaRegravar({ organizationId: 'org-1' });
 
     expect(ids).toEqual(['r1']);
+  });
+
+  // Rodada 1 do PR #378, item 2d: o lote também não seleciona execução da
+  // régua 4 ou posterior, senão cada uma entraria na fila só para falhar.
+  it('execução da régua 4 ou posterior fica fora do lote; sem régua ou régua 3 entram', async () => {
+    const linhas = [
+      { id: 'nula', triggeredBy: 'cron', harnessVersion: null },
+      { id: 'v3', triggeredBy: 'cron', harnessVersion: 3 },
+      { id: 'v4', triggeredBy: 'cron', harnessVersion: 4 },
+    ];
+    // O banco falso honra o OR da régua: NULL ou menor que 4.
+    prismaMock.agentEvalRun.findMany.mockImplementation(async ({ where }: any) =>
+      linhas
+        .filter((l) => {
+          if (!Array.isArray(where?.OR)) return true;
+          return where.OR.some((cond: any) =>
+            cond.harnessVersion === null
+              ? l.harnessVersion === null
+              : typeof cond.harnessVersion?.lt === 'number' && l.harnessVersion !== null && l.harnessVersion < cond.harnessVersion.lt,
+          );
+        })
+        .map((l) => ({ id: l.id })),
+    );
+
+    const ids = await execucoesParaRegravar({ organizationId: 'org-1' });
+
+    expect(ids).toEqual(['nula', 'v3']);
   });
 });
 

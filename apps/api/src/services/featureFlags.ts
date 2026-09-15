@@ -31,7 +31,8 @@ export type FlagName =
   | 'treinarSomenteAdmin'
   | 'regrasComoRegistros'
   | 'contextoUnico'
-  | 'modeloPorPolitica';
+  | 'modeloPorPolitica'
+  | 'juizDeOutraFamilia';
 
 export interface FlagDef {
   /** O que muda quando liga. Em português: isto aparece na tela do admin. */
@@ -63,7 +64,7 @@ export const FLAGS: Record<FlagName, FlagDef> = {
   },
   evalNoTier: {
     descricao:
-      'A avaliação de qualidade passa a respeitar a faixa do plano (quantas execuções e com qual modelo). Ainda sem leitor no código: só passa a valer com a tarefa C2.',
+      'A avaliação de qualidade passa a respeitar a faixa do plano: responde com o modelo que a produção usaria para a organização (em trial, a faixa de entrada) e segue a cota de testes manuais da faixa. Se a família do modelo estiver sem chave ou com o disjuntor aberto, o teste volta à cascata padrão e registra o motivo no resultado.',
     removeBy: '2027-03-31',
   },
   treinarSomenteAdmin: {
@@ -85,6 +86,11 @@ export const FLAGS: Record<FlagName, FlagDef> = {
     descricao:
       'Modelo e ferramentas do turno decididos por resolveTurnPolicy, a mesma regra para todos os canais.',
     removeBy: '2026-12-31',
+  },
+  juizDeOutraFamilia: {
+    descricao:
+      'O juiz da Qualidade passa a ser de outra família de modelo que a do agente (OpenAI quando o agente responde em Anthropic), para não corrigir a própria prova. Desligado, o juiz é o da cascata padrão (Sonnet), como hoje, e o resultado grava juizMesmaFamilia.',
+    removeBy: '2027-03-31',
   },
 };
 

@@ -20,7 +20,66 @@ export type EvalCategory =
   | 'zappiq_blocked_vertical'
   | 'zappiq_voice_addon'
   | 'zappiq_stack_confidential'
-  | 'zappiq_trial_flow';
+  | 'zappiq_trial_flow'
+  // C2 (P13): casos gerados do conteúdo do cliente (Q&A e questionário).
+  | 'kb_conhecimento';
+
+/**
+ * Natureza FIXA do cenário (P21, tarefa C2).
+ *
+ *   conhecimento   a resposta certa depende de informação do negócio (preço,
+ *                  horário, o que o dono cadastrou). Reprovação por falta de
+ *                  informação vira AÇÃO DE TREINO, não regra de prompt:
+ *                  regra não cria informação (A086).
+ *   comportamento  a conduta do agente (encaminhar, não inventar, formato,
+ *                  tom). Reprovação vira sugestão de ajuste, como sempre.
+ *
+ * É fixa por cenário, e não decidida pelo juiz, para a nota das duas partes
+ * não mudar de lado a cada execução.
+ */
+export type NaturezaDoCenario = 'conhecimento' | 'comportamento';
+
+/**
+ * O que o dono faz quando o agente não sabia responder (P21): cadastrar uma
+ * pergunta e resposta, ou preencher um campo do questionário.
+ *
+ * Rodada 1 do PR #378, item 7: 'revisar' é a ação dos casos GERADOS. Neles a
+ * informação existe por construção (o caso nasceu do Q&A ou do questionário);
+ * quando o juiz diz que faltou, ela está cadastrada mas não chegou ao agente.
+ * O dono revisa o texto cadastrado, sem pré-preencher pergunta nova.
+ */
+export type AcaoDeTreino =
+  | { tipo: 'qa'; pergunta: string }
+  | { tipo: 'questionario'; secao: string; campo?: string; rotulo?: string }
+  | {
+      tipo: 'revisar';
+      origem: 'qa' | 'questionario';
+      /** Id do Q&A ou chave do campo do questionário. */
+      fonte: string;
+      pergunta?: string;
+      secao?: string;
+      campo?: string;
+      rotulo?: string;
+    };
+
+/**
+ * Um caso de conhecimento gerado do que o cliente cadastrou (P13). A
+ * checagem determinística é por valor (evalSetConhecimento.ts).
+ */
+export interface CasoDeConhecimento {
+  origem: 'qa' | 'questionario';
+  /** Id do Q&A ou chave do campo do questionário. */
+  fonte: string;
+  /** A resposta cadastrada, inteira. Vai para o juiz como referência. */
+  referencia: string;
+  /** Valores que a resposta do agente precisa conter ('n:1500', 'h:8:00'). */
+  valoresEsperados: string[];
+  /** 'todos' (Q&A) ou 'algum' (tabela de preços, pagamento, endereço). */
+  exigencia: 'todos' | 'algum';
+  /** Valores em reais que o agente pode citar (tabela e respostas cadastradas). */
+  reaisPermitidos: string[];
+  acaoDeTreino: AcaoDeTreino;
+}
 
 export interface EvalScenario {
   /** ID único e estável (snake_case) — usado em filtros e audit. */
@@ -37,6 +96,16 @@ export interface EvalScenario {
   passPatterns?: RegExp[];
   failPatterns?: RegExp[];
   severity: 'critical' | 'high' | 'medium';
+  /** C2 (P21): conhecimento ou comportamento. Fixa por cenário. */
+  natureza: NaturezaDoCenario;
+  /** C2 (P13): presente só nos casos gerados do conteúdo do cliente. */
+  conhecimento?: CasoDeConhecimento;
+  /**
+   * C2 (P13): quantas vezes o cenário roda na mesma execução. Aprova só se
+   * todas passarem: uma amostra a temperatura 0,3 não separa acerto de sorte.
+   * Ausente = 1.
+   */
+  repeticoes?: number;
 }
 
 /**
@@ -50,6 +119,17 @@ export interface EvalScenario {
  *          não roda e não entra na conta do score.
  */
 export type ScenarioFactory = (profile: TenantAgentProfile) => EvalScenario | null;
+
+/**
+ * Nome do contato fictício do teste (nota 2 da revisão de 14/09, A172).
+ *
+ * Era "Rod", nome de gente. O sugeridor copiava o dado do teste nos
+ * exemplos ("Oi, Rod!"), doze correções assim foram aplicadas e o agente
+ * passou a saudar clientes reais de "Rod". Um marcador que não é nome de
+ * pessoa não se confunde com cliente de verdade, e é trocado por "[nome]"
+ * antes de qualquer correção ser gravada (regrasDoAgente.ts).
+ */
+export const NOME_FICTICIO_DO_TESTE = 'Cliente Teste';
 
 /** Escapa texto do tenant pra usar dentro de RegExp sem quebrar. */
 export function escapeRegex(s: string): string {

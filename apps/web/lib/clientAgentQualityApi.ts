@@ -63,6 +63,11 @@ export interface TestScope {
   businessName: string;
   totalScenarios: number;
   skipped: SkippedScenario[];
+  /**
+   * C2 (A086): avisos sobre o que foi cadastrado. Hoje, o preço em dois
+   * lugares com valores diferentes (texto do agente x questionário).
+   */
+  avisos?: string[];
 }
 
 export interface ClientAgentListResponse {
@@ -91,7 +96,8 @@ export interface ClientCooldownError {
 /** Uma passada do cenário no re-teste (A049: agora são três). */
 export interface AmostraDoReteste {
   amostra: number;
-  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  /** C2: 'inconclusivo' = resposta de um modelo de reserva (A226). */
+  combined: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
   resposta: string;
   motivoDoJuiz: string;
 }
@@ -286,7 +292,7 @@ export const QUALITY_LABELS: Record<QualityHealth, { label: string; color: strin
  * pro cliente. Mantém ID original como fallback quando não há mapeamento.
  */
 const SCENARIO_FRIENDLY: Record<string, string> = {
-  // ── Gabarito universal: os 17 cenários que rodam para todo cliente ──
+  // ── Gabarito universal: os cenários que rodam para todo cliente ──
   // A151: metade da lista antiga era de um gabarito que não roda mais, e
   // nenhum destes estava aqui. O cliente lia "cr7_no_invent_sla" na tela.
   cr1_aceitacao_pos_oferta: 'Cliente disse que quer: o agente avança',
@@ -294,6 +300,9 @@ const SCENARIO_FRIENDLY: Record<string, string> = {
   cr2_quero_humano_explicito: 'Pedido de falar com uma pessoa',
   cr2_humano_por_favor: 'Pedido curto de falar com uma pessoa',
   cr2_pergunta_operacional_nao_e_handoff: 'Pergunta simples respondida na hora certa',
+  // C2 (A244): o cenário de reclamação que a tela prometia e não existia.
+  cr2_cliente_insatisfeito: 'Cliente insatisfeito: o agente acolhe e resolve ou chama uma pessoa',
+  crise_acolhimento_cvv: 'Sinal de crise: o agente acolhe, informa o CVV e chama uma pessoa',
   cr3_no_como_posso_ajudar: 'Saudação sem fórmula de call center',
   cr3_no_consultora_virtual: 'O agente se apresenta pelo próprio nome',
   cr4_no_audio_brackets: 'Resposta a áudio sem colchetes na tela',
@@ -302,10 +311,28 @@ const SCENARIO_FRIENDLY: Record<string, string> = {
   cr6_resposta_concisa: 'Resposta curta, do tamanho do WhatsApp',
   cr7_no_invent_preco_desconto: 'Desconto não é inventado',
   cr7_no_invent_sla: 'Prazo de resposta não é inventado',
+  // Saiu do gabarito na tarefa C2 (virou caso de conhecimento do
+  // questionário); o rótulo fica para as execuções antigas.
   cr7_preco_da_base_correto: 'Preço vem da tabela cadastrada',
   cr8_no_pede_cpf: 'CPF não é pedido pelo WhatsApp',
   cr8_no_pede_cartao: 'Dados de cartão não são pedidos',
   cr9_nao_assume_marca_de_terceiro: 'O agente não se diz de outra empresa',
+
+  // ── Gabarito da ZappIQ: só na organização da casa (a Iza) ──
+  zappiq_quero_pos_cta_trial: 'Lead aceitou o teste grátis: a Iza manda o link de cadastro',
+  zappiq_pode_mandar_pos_demo: 'Lead aceitou a demonstração: a Iza manda o link de agendamento',
+  zappiq_topo_pos_pacote_voz: 'Lead aceitou o pacote de voz: a Iza avança sem listar outros',
+  zappiq_identidade_iza: 'A Iza se apresenta como Iza, da ZappIQ',
+  zappiq_desconto_plano_anual: 'Desconto pedido: a Iza oferece o plano anual, sem inventar',
+  zappiq_no_invent_sla: 'Prazo de resposta da ZappIQ não é inventado',
+  zappiq_blocked_apostas: 'Apostas: a Iza recusa com educação',
+  zappiq_blocked_cripto_p2p: 'Cripto sem regulação: a Iza recusa com educação',
+  zappiq_voice_preco_correto: 'Preço do pacote de voz vem do catálogo',
+  zappiq_voice_nao_incluso: 'Voz ativa é pacote à parte, não vem no plano',
+  zappiq_pergunta_tecnica_nao_e_handoff: 'Pergunta técnica respondida sem chamar uma pessoa',
+  zappiq_no_revela_stack: 'A Iza não revela qual modelo de IA usa',
+  zappiq_no_revela_tts: 'A Iza não revela o fornecedor de voz',
+  zappiq_trial_lead_morno: 'Pergunta sobre teste grátis: 14 dias e o link de cadastro',
 
   // ── Gabarito antigo: ainda aparece em execuções já gravadas ──
   cr3_anti_pattern: 'Uso de jargão proibido',
@@ -319,6 +346,35 @@ const SCENARIO_FRIENDLY: Record<string, string> = {
   small_talk_redirect: 'Redirecionamento de conversa informal',
 };
 
+/**
+ * C2 (P13): os casos gerados do conteúdo do cliente. O id carrega a origem:
+ * kb_qa_<id do Q&A> ou kb_questionario_<campo do questionário>.
+ */
+const CAMPO_DO_QUESTIONARIO: Record<string, string> = {
+  pre_tabela_precos: 'Preço: resposta vem da tabela cadastrada',
+  ide_horarios_funcionamento: 'Horário de atendimento cadastrado',
+  pre_formas_pagamento: 'Formas de pagamento cadastradas',
+  ide_endereco_principal: 'Endereço cadastrado',
+};
+
+/** Tira o travessão das descrições antigas do gabarito (A151). */
+function semTravessao(texto: string): string {
+  return texto.replace(/\s*—\s*/g, ': ');
+}
+
 export function friendlyScenarioLabel(scenarioId: string, fallback?: string): string {
-  return SCENARIO_FRIENDLY[scenarioId] || fallback || scenarioId;
+  const fixo = SCENARIO_FRIENDLY[scenarioId];
+  if (fixo) return fixo;
+  if (scenarioId.startsWith('kb_questionario_')) {
+    return CAMPO_DO_QUESTIONARIO[scenarioId.slice('kb_questionario_'.length)] ?? 'Informação do questionário';
+  }
+  if (scenarioId.startsWith('kb_qa_')) {
+    // A descrição do caso já é 'Pergunta cadastrada: "..."'.
+    return fallback ? semTravessao(fallback) : 'Pergunta cadastrada por você';
+  }
+  // Rodada 1 do PR #378, item 14: o id do plano em qualquer caixa (o catálogo
+  // usa maiúsculas hoje, mas o rótulo não depende disso).
+  const plano = scenarioId.match(/^zappiq_preco_([A-Za-z0-9_]+)_correto$/);
+  if (plano) return `Preço do plano ${plano[1].toUpperCase().replace(/_/g, ' ')} vem do catálogo`;
+  return fallback ? semTravessao(fallback) : scenarioId;
 }

@@ -86,7 +86,8 @@ beforeEach(() => {
   // 1ª chamada: agente responde; 2ª: juiz aprova.
   completeMock
     .mockResolvedValueOnce(resposta('<reply>Custa R$ 890.</reply>'))
-    .mockResolvedValueOnce(resposta('{"passed": true, "confidence": 90, "reason": "ok"}'));
+    // Rodada 1 do PR #378, item 11: sem evidência o veredito novo não vale.
+    .mockResolvedValueOnce(resposta('{"evidencia": "diz R$ 890", "passed": true, "confidence": 90, "reason": "ok"}'));
 });
 
 describe('sem montador: o prompt de antes', () => {
@@ -94,7 +95,10 @@ describe('sem montador: o prompt de antes', () => {
     const { results } = await executeAgentEvalRun([CENARIO], AGENTE, PERFIL);
 
     expect(systemDoAgente()).toBe(buildEvalSystemPrompt(AGENTE, CENARIO));
-    expect(results[0].ragStatus).toBeUndefined();
+    // C2 (Passo 1): a chave existe em todo resultado; null diz que o teste
+    // não consultou a base, e não que o dado se perdeu.
+    expect(results[0].ragStatus).toBeNull();
+    expect(results[0].fontes).toEqual([]);
     expect(results[0].promptHash).toBeUndefined();
     expect(results[0].combined).toBe('pass');
   });

@@ -216,7 +216,9 @@ describe('cota diária por organização (A115)', () => {
 
   it('a cota é por organização e por rota, na chave do dia', async () => {
     for (let i = 1; i <= 8; i++) await rodaRota('post', RE_TEST, pedido('ADMIN'));
-    const dia = new Date().toISOString().slice(0, 10);
+    // O dia da chave é o de Brasília (cotaDiaria.ts). Com o UTC, este teste
+    // falhava toda noite entre 21h e meia-noite, quando os dois dias diferem.
+    const dia = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
     expect([...contadores.keys()]).toContain(`zappiq:quota:org-1:re-test:${dia}`);
     // Outra organização começa do zero.
     const outra = pedido('ADMIN');

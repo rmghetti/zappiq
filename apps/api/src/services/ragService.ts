@@ -214,12 +214,28 @@ export interface RagSearchOutcome {
   sources: RagSource[];
   status: RagSearchStatus;
   fromCache: boolean;
+  /**
+   * C2 (Passo 13, A226): o id de cada trecho que entrou no contexto, na
+   * ordem da busca. O teste da Qualidade grava isto no resultado do cenário
+   * para dizer, depois, com que parte da base o agente respondeu. Entrada de
+   * cache gravada antes deste campo devolve lista vazia.
+   */
+  trechoIds: string[];
 }
 
 interface CachedOutcome {
   context: string;
   sources: RagSource[];
   status: 'ok' | 'sem_resultado';
+  trechoIds: string[];
+}
+
+/** Os ids dos trechos devolvidos pelo /query, na ordem. Puro. */
+export function parseQueryChunkIds(data: unknown): string[] {
+  const results = (data as { results?: RagQueryResult[] } | null)?.results ?? [];
+  return results
+    .map((r) => (r && (typeof r.id === 'string' || typeof r.id === 'number') ? String(r.id) : ''))
+    .filter((id) => id.length > 0);
 }
 
 function parseCached(raw: string): CachedOutcome | null {
@@ -230,6 +246,7 @@ function parseCached(raw: string): CachedOutcome | null {
       context: parsed.context,
       sources: Array.isArray(parsed.sources) ? parsed.sources : [],
       status: parsed.status === 'sem_resultado' ? 'sem_resultado' : 'ok',
+      trechoIds: Array.isArray(parsed.trechoIds) ? parsed.trechoIds.map(String) : [],
     };
   } catch {
     return null;
@@ -269,11 +286,16 @@ export async function searchDetailed(
 
     const context = parseQueryContext(data);
     const sources = parseQuerySources(data);
+    const trechoIds = parseQueryChunkIds(data);
     const status: 'ok' | 'sem_resultado' = sources.length > 0 ? 'ok' : 'sem_resultado';
 
     // Resultado vazio TAMBÉM é cacheado (A032): antes, toda saudação repetia a
     // busca paga porque só o resultado cheio entrava no cache.
-    await cache.set(cacheKey, JSON.stringify({ context, sources, status }), CACHE_TTL_SECONDS);
+    await cache.set(
+      cacheKey,
+      JSON.stringify({ context, sources, status, trechoIds }),
+      CACHE_TTL_SECONDS,
+    );
 
     // debug, não info: é uma linha por turno de TODA conversa de TODA org.
     logger.debug('[RAG] busca concluída', {
@@ -284,7 +306,7 @@ export async function searchDetailed(
       trechos: sources.length,
     });
 
-    return { context, sources, status, fromCache: false };
+    return { context, sources, status, fromCache: false, trechoIds };
   } catch (err: any) {
     // error, não warn: a IA vai responder SEM nada do treinamento do cliente.
     // E o status NÃO é cacheado: a próxima mensagem tenta o serviço de novo.
@@ -293,7 +315,7 @@ export async function searchDetailed(
       status: 'servico_fora',
       erro: err?.message,
     });
-    return { context: '', sources: [], status: 'servico_fora', fromCache: false };
+    return { context: '', sources: [], status: 'servico_fora', fromCache: false, trechoIds: [] };
   }
 }
 

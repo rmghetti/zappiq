@@ -25,7 +25,8 @@ export const AMOSTRAS_DO_RETESTE = 3;
 export interface AmostraDoReteste {
   /** 1, 2, 3: a ordem em que rodou. */
   amostra: number;
-  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  /** C2: 'inconclusivo' = a resposta veio de um modelo de reserva (A226). */
+  combined: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
   resposta: string;
   motivoDoJuiz: string;
 }
@@ -84,7 +85,10 @@ export function consolidarReteste(amostras: AmostraDoReteste[]): ResumoDoReteste
   const aprovadas = lista.filter((a) => a.combined === 'pass').length;
   const reprovadas = lista.filter((a) => a.combined === 'fail').length;
   const parciais = lista.filter((a) => a.combined === 'partial').length;
-  const erros = lista.filter((a) => a.combined === 'erro').length;
+  // C2 (Passo 1, A226): a amostra inconclusiva (resposta de um modelo de
+  // reserva) sai do denominador junto com a falha técnica: não aprova nem
+  // reprova.
+  const erros = lista.filter((a) => a.combined === 'erro' || a.combined === 'inconclusivo').length;
   const avaliadas = lista.length - erros;
 
   const base = { aprovadas, reprovadas, parciais, erros, avaliadas };

@@ -20,11 +20,13 @@ const CMJ_ORG_ID = 'cmr4x0zmn007msdhtqn6lfkia';
 
 const mockOrgFind = vi.fn();
 const mockAgentFind = vi.fn();
+const mockQaFind = vi.fn();
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
     organization: { findUnique: (...a: any[]) => mockOrgFind(...a) },
     agent: { findFirst: (...a: any[]) => mockAgentFind(...a) },
+    qAPair: { findMany: (...a: any[]) => mockQaFind(...a) },
   },
 }));
 
@@ -36,6 +38,7 @@ const { resolveTenantAgentProfile } = await import('./tenantAgentProfile.js');
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockQaFind.mockResolvedValue([]);
 });
 
 describe('resolveTenantAgentProfile — org de cliente', () => {
@@ -186,5 +189,83 @@ describe('resolveTenantAgentProfile — o que o cliente treinou', () => {
     const p = await resolveTenantAgentProfile(CMJ_ORG_ID);
     expect(p.temServicos).toBe(false);
     expect(p.temPrecos).toBe(false);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// C2 (Passo 13, P13): o perfil carrega o que vira cenário de conhecimento.
+// ════════════════════════════════════════════════════════════════════
+describe('resolveTenantAgentProfile: Q&A ativos e fatos do questionário (C2)', () => {
+  it('carrega só os Q&A ATIVOS da organização, na ordem de prioridade', async () => {
+    mockOrgFind.mockResolvedValue({ id: CMJ_ORG_ID, name: 'CMJ', settings: {} });
+    mockAgentFind.mockResolvedValue({ id: 'ag1', name: 'Vera', systemPrompt: 'x' });
+    mockQaFind.mockResolvedValue([
+      { id: 'qa1', question: ' Qual o prazo? ', answer: 'Até 5 dias úteis.' },
+      { id: 'qa2', question: 'sem resposta', answer: '   ' },
+    ]);
+
+    const p = await resolveTenantAgentProfile(CMJ_ORG_ID);
+
+    const consulta = mockQaFind.mock.calls[0][0];
+    expect(consulta.where).toEqual({ organizationId: CMJ_ORG_ID, isActive: true });
+    expect(consulta.orderBy).toEqual([{ priority: 'desc' }, { createdAt: 'asc' }]);
+    // O vazio não vira caso de teste.
+    expect(p.qaAtivos).toEqual([{ id: 'qa1', pergunta: 'Qual o prazo?', resposta: 'Até 5 dias úteis.' }]);
+  });
+
+  it('lê preço, horário, desconto, pagamento e endereço em qualquer ramo do questionário', async () => {
+    mockOrgFind.mockResolvedValue({
+      id: CMJ_ORG_ID,
+      name: 'CMJ',
+      settings: {
+        surveyAnswers: {
+          identidade_empresa: {
+            pre_tabela_precos: 'Programa: R$ 35.000/mês',
+            ide_endereco_principal: 'Av. Paulista, 1000',
+          },
+          precos_condicoes: {
+            pre_formas_pagamento: ['Pix', 'Boleto bancário'],
+            pre_desconto_maximo: 'Até 5%',
+          },
+          ide_horarios_funcionamento: 'Seg-Sex 9h às 18h',
+        },
+      },
+    });
+    mockAgentFind.mockResolvedValue({ id: 'ag1', name: 'Vera', systemPrompt: 'x' });
+
+    const p = await resolveTenantAgentProfile(CMJ_ORG_ID);
+
+    expect(p.fatos?.precos).toBe('Programa: R$ 35.000/mês');
+    expect(p.fatos?.endereco).toBe('Av. Paulista, 1000');
+    expect(p.fatos?.pagamento).toMatch(/Pix/);
+    expect(p.fatos?.pagamento).toMatch(/Boleto/);
+    expect(p.fatos?.descontoMaximo).toBe('Até 5%');
+    expect(p.fatos?.horario).toBe('Seg-Sex 9h às 18h');
+  });
+
+  it('o horário OFICIAL é o das configurações, não o texto do questionário', async () => {
+    mockOrgFind.mockResolvedValue({
+      id: CMJ_ORG_ID,
+      name: 'CMJ',
+      settings: {
+        businessHours: { weekdays: '08:00-17:00' },
+        surveyAnswers: { identidade_empresa: { ide_horarios_funcionamento: 'Seg-Sex 9h às 18h' } },
+      },
+    });
+    mockAgentFind.mockResolvedValue({ id: 'ag1', name: 'Vera', systemPrompt: 'x' });
+
+    const p = await resolveTenantAgentProfile(CMJ_ORG_ID);
+    expect(p.fatos?.horario).toMatch(/08:00/);
+    expect(p.fatos?.horario).not.toMatch(/9h/);
+  });
+
+  it('Q&A indisponível (banco fora) não derruba o perfil: segue sem eles', async () => {
+    mockOrgFind.mockResolvedValue({ id: CMJ_ORG_ID, name: 'CMJ', settings: {} });
+    mockAgentFind.mockResolvedValue({ id: 'ag1', name: 'Vera', systemPrompt: 'x' });
+    mockQaFind.mockRejectedValue(new Error('banco fora'));
+
+    const p = await resolveTenantAgentProfile(CMJ_ORG_ID);
+    expect(p.qaAtivos).toEqual([]);
+    expect(p.agentName).toBe('Vera');
   });
 });

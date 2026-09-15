@@ -21,6 +21,7 @@ import { logger } from '../utils/logger.js';
 import { isFlagOn } from './featureFlags.js';
 import {
   montarBlocoDeRegras,
+  sanearTextoDaRegra,
   TETO_DE_REGRAS_ATIVAS,
   type OrigemDaRegra,
   type RegraDoAgente,
@@ -66,6 +67,49 @@ export class TetoDeRegrasError extends Error {
     );
     this.name = 'TetoDeRegrasError';
   }
+}
+
+/**
+ * O texto não sobreviveu ao saneamento (notas 2 e 4 da revisão de 14/09):
+ * era só tag do protocolo ou instrução para o modelo. Quem chama responde
+ * 422 com a frase.
+ */
+export class RegraSemTextoError extends Error {
+  readonly code = 'regra_sem_texto';
+  constructor() {
+    super(
+      'Esta correção não tem uma regra de atendimento para gravar: o texto era só instrução ' +
+        'para a IA ou marcação do sistema. Reescreva dizendo o que o agente deve fazer com o cliente.',
+    );
+    this.name = 'RegraSemTextoError';
+  }
+}
+
+/**
+ * Duas aprovações do MESMO cenário ao mesmo tempo (nota 7 da revisão de
+ * 14/09). O índice único parcial agent_rules_ativa_por_cenario_key barra a
+ * segunda ativa e o Prisma devolve P2002; antes isso virava 500. Quem chama
+ * responde 409 com a frase.
+ */
+export class RegraConcorrenteError extends Error {
+  readonly code = 'regra_concorrente';
+  constructor() {
+    super(
+      'Outra aprovação deste mesmo caso de teste terminou agora há pouco. Atualize a página ' +
+        'para ver a regra que ficou valendo.',
+    );
+    this.name = 'RegraConcorrenteError';
+  }
+}
+
+/** Erro do Prisma de violação de unicidade (o índice parcial do cenário). */
+function ehViolacaoDeUnicidade(err: unknown): boolean {
+  return Boolean(err && typeof err === 'object' && (err as { code?: unknown }).code === 'P2002');
+}
+
+/** Erro do Prisma de linha não encontrada no UPDATE condicional. */
+function ehLinhaNaoEncontrada(err: unknown): boolean {
+  return Boolean(err && typeof err === 'object' && (err as { code?: unknown }).code === 'P2025');
 }
 
 /* ── Leitura ─────────────────────────────────────────────────────── */
@@ -180,8 +224,14 @@ export async function aplicarRegraDoCenario(
   input: AplicarRegraInput,
   db: AgentRulesDb = dbPadrao(),
 ): Promise<AplicarRegraResult> {
-  const texto = String(input.texto ?? '').trim();
-  if (!texto) throw new Error('aplicarRegraDoCenario: texto da regra é obrigatório');
+  if (!String(input.texto ?? '').trim()) {
+    throw new Error('aplicarRegraDoCenario: texto da regra é obrigatório');
+  }
+  // Notas 2 e 4 da revisão de 14/09: o nome fictício do teste vira "[nome]",
+  // e tag do protocolo e frase que manda no modelo não são gravadas. É aqui,
+  // no serviço, para valer nas duas portas (a do cliente e a do superadmin).
+  const texto = sanearTextoDaRegra(String(input.texto)).trim();
+  if (!texto) throw new RegraSemTextoError();
 
   const corpo = async (tx: AgentRulesDb): Promise<AplicarRegraResult> => {
     // O teto conta as ativas ANTES. Substituir uma regra que já existe não
@@ -211,19 +261,27 @@ export async function aplicarRegraDoCenario(
       substituiu = r.count;
     }
 
-    const regra = await tx.agentRule.create({
-      data: {
-        organizationId: input.organizationId,
-        agentId: input.agentId,
-        scenarioId: input.scenarioId,
-        texto,
-        origem: input.origem,
-        status: 'ativa',
-        decisionId: input.decisionId ?? null,
-        createdBy: input.createdBy ?? null,
-        versaoDoPromptDeOrigem: input.versaoDoPromptDeOrigem ?? null,
-      },
-    });
+    let regra: any;
+    try {
+      regra = await tx.agentRule.create({
+        data: {
+          organizationId: input.organizationId,
+          agentId: input.agentId,
+          scenarioId: input.scenarioId,
+          texto,
+          origem: input.origem,
+          status: 'ativa',
+          decisionId: input.decisionId ?? null,
+          createdBy: input.createdBy ?? null,
+          versaoDoPromptDeOrigem: input.versaoDoPromptDeOrigem ?? null,
+        },
+      });
+    } catch (err) {
+      // Nota 7: a outra aprovação do mesmo cenário ganhou a corrida. O índice
+      // único parcial é a rede de baixo; aqui ele vira frase, não 500.
+      if (ehViolacaoDeUnicidade(err)) throw new RegraConcorrenteError();
+      throw err;
+    }
 
     return { regra: regra as RegraGravada, substituiu };
   };
@@ -268,14 +326,25 @@ export async function reverterRegra(
   });
   if (!atual) return null;
 
-  const revertida = await db.agentRule.update({
-    where: { id: input.ruleId },
-    data: {
-      status: 'revertida',
-      motivo: 'revertida_pelo_dono',
-      updatedAt: new Date(),
-    },
-  });
+  // Nota 7 da revisão de 14/09: a escrita é CONDICIONAL ao status. Duas
+  // reversões ao mesmo tempo liam a regra ativa e as duas gravavam; a
+  // segunda, na rota, ainda criava uma decisão 'reverted' com regra null. Com
+  // o status no WHERE, a segunda espera a primeira terminar, não acha mais a
+  // linha 'ativa' e devolve null (quem chama responde 409).
+  let revertida: any;
+  try {
+    revertida = await db.agentRule.update({
+      where: { id: input.ruleId, status: 'ativa' },
+      data: {
+        status: 'revertida',
+        motivo: 'revertida_pelo_dono',
+        updatedAt: new Date(),
+      },
+    });
+  } catch (err) {
+    if (ehLinhaNaoEncontrada(err)) return null;
+    throw err;
+  }
 
   logger.info('[agentRulesService] regra desfeita', {
     organizationId: input.organizationId,

@@ -15,6 +15,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  aspasFechadas,
   extrairPatches,
   planejarRegistros,
   validarPromptLimpo,
@@ -187,6 +188,17 @@ describe('o nome do mock não atravessa a migração (A172)', () => {
     );
     expect(blocos[0].texto).toContain('Rodrigo da Rodoviária');
   });
+
+  // Rodada 1 do PR #378: com o `\b` ASCII, "Rodízio" virava "[nome]ízio".
+  it('não encosta em Rodízio nem Rodão (acento logo depois de "Rod")', () => {
+    const { blocos } = extrairPatches(
+      '## IDENTIDADE\nVocê é a Antonella.\n\n' +
+        '# PATCH MANUAL 2026-08-01 09:00 (cenário: cr2)\n' +
+        'Quando pedirem o Rodízio ou o Rodão, confirme o horário. Oi, Rod.\n',
+    );
+    expect(blocos[0].texto).toContain('Quando pedirem o Rodízio ou o Rodão, confirme o horário.');
+    expect(blocos[0].texto).toContain('Oi, [nome].');
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -348,5 +360,77 @@ describe('lerArgumentosDaMigracao: o que o script vai fazer, antes de conectar',
     expect(USO_DA_MIGRACAO).toContain('--in');
     // Escrito como escape para esta linha não entrar no grep do travessão.
     expect(USO_DA_MIGRACAO).not.toContain('\u2014');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+/* Revisão de 14/09 (nota 5 da tarefa C2). A régua do A188 contava TODO
+ * apóstrofo como aspa. "Ofereça um copo d'água" tem um apóstrofo só, a
+ * contagem dava ímpar e a regra inteira era marcada como truncada: saía do
+ * prompt e virava 'substituida'. Apóstrofo dentro da palavra (letra dos dois
+ * lados) não é aspa de citação e não entra na conta. */
+describe('aspasFechadas: só aspa de citação conta, apóstrofo não', () => {
+  it("\"copo d'água\" com ponto final é regra inteira", () => {
+    expect(aspasFechadas("Ofereça um copo d'água enquanto o cliente espera.")).toBe(true);
+  });
+
+  it('apóstrofo no meio da palavra não desequilibra as aspas simples de citação', () => {
+    const texto =
+      "Exemplo CORRETO: 'Temos chá de pau-d'arco, sim.' Exemplo INCORRETO: 'Não sei.'";
+    expect(aspasFechadas(texto)).toBe(true);
+  });
+
+  it('aspa de citação aberta continua sendo sinal de corte', () => {
+    expect(aspasFechadas('pergunte com esta frase exata: "Como posso te chamar?')).toBe(false);
+    expect(aspasFechadas("Exemplo CORRETO: 'Oi, tudo certo por aí?")).toBe(false);
+  });
+
+  it("o bloco com d'água não é marcado como truncado na migração", () => {
+    const { blocos } = extrairPatches(
+      '## IDENTIDADE\nVocê é a Marcia.\n\n' +
+        '# PATCH MANUAL 2026-09-01 10:00 (cenário: cr9)\n' +
+        "Ofereça um copo d'água a quem espera na recepção.\n",
+    );
+    expect(blocos[0].truncada).toBe(false);
+  });
+});
+
+/* Nota 9 da tarefa C2: validarPromptLimpo media com .length (UTF-16) e
+ * escrevia "caracteres". O resto do script já conta pontos de código, o que
+ * o Postgres devolve em length(). A frase de recusa tem de usar a mesma
+ * régua, senão o operador compara dois números que nunca batem. */
+describe('validarPromptLimpo mede em pontos de código, como o resto do script', () => {
+  it('a frase de recusa traz o tamanho em pontos de código, e não o .length', () => {
+    const antes = '## IDENTIDADE\n' + 'Atendimento com carinho 😀. '.repeat(20);
+    const depois = '## IDENTIDADE\n😀';
+    const v = validarPromptLimpo(antes, depois);
+    expect(v.ok).toBe(false);
+    const frase = v.motivos.join(' ');
+    expect(frase).toContain(`${contarCaracteres(antes)} para ${contarCaracteres(depois)} caracteres`);
+    expect(antes.length).not.toBe(contarCaracteres(antes));
+    expect(frase).not.toContain(`${antes.length} para`);
+  });
+
+  it('com a lista de blocos, a conta também é em pontos de código', () => {
+    const antes =
+      '## IDENTIDADE\n' +
+      'Linha 😀 do prompt original. '.repeat(30) +
+      '\n\n# PATCH MANUAL 2026-09-01 10:00 (cenário: cr9)\nRegra 😀 inteira.\n';
+    const { blocos } = extrairPatches(antes);
+    const depois = '## IDENTIDADE';
+    const v = validarPromptLimpo(antes, depois, blocos);
+    expect(v.ok).toBe(false);
+    const frase = v.motivos.join(' ');
+    expect(frase).toMatch(/blocos removidos explicam/);
+    expect(frase).toContain(`(${contarCaracteres(antes)} para ${contarCaracteres(depois)} caracteres`);
+    const removido = blocos.reduce(
+      (soma, b) => soma + contarCaracteres(b.titulo) + contarCaracteres(b.texto) + 2,
+      0,
+    );
+    expect(frase).toContain(`somam ${removido})`);
+
+    // O prompt limpo de verdade continua aprovado.
+    const limpo = extrairPatches(antes);
+    expect(validarPromptLimpo(antes, limpo.promptLimpo, limpo.blocos).ok).toBe(true);
   });
 });

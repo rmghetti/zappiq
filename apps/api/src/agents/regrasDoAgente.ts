@@ -28,6 +28,10 @@
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
+// Nota 4 da revisão de 14/09 (tarefa C2): o mesmo saneamento das regras do
+// questionário (tags do protocolo e frase que manda no modelo).
+import { sanearTextoPreservandoForma } from './tenantLiveProfile.js';
+import { NOME_FICTICIO_DO_TESTE, escapeRegex } from './evalScenarioTypes.js';
 
 /** Cabeçalho do bloco montado no prompt. Lugar fixo, nome em português. */
 export const TITULO_BLOCO_DE_REGRAS = '# Regras aprovadas pelo dono';
@@ -95,6 +99,52 @@ export function limparTextoDaRegra(texto: string): string {
   return semNumeracao.replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/* ── Saneamento (notas 2 e 4 da revisão de 14/09) ─────────────────── */
+
+const MARCADOR_DO_NOME = '[nome]';
+
+/**
+ * Fronteira de palavra que enxerga letra acentuada (rodada 1 do PR #378).
+ *
+ * O `\b` do JavaScript só conhece [A-Za-z0-9_]: em "Rodízio" o "í" conta
+ * como fronteira, e o prato do questionário da Antonella virava
+ * "[nome]ízio" na regra gravada. Aqui o vizinho é qualquer letra (\p{L}),
+ * número ou sublinhado, com a flag `u`.
+ */
+function palavraInteira(palavra: string): RegExp {
+  return new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegex(palavra)}(?![\\p{L}\\p{N}_])`, 'gu');
+}
+
+const ROD_REGEX = palavraInteira('Rod');
+const NOME_DO_TESTE_REGEX = palavraInteira(NOME_FICTICIO_DO_TESTE);
+
+/**
+ * O nome fictício do teste vira "[nome]" (A172, nota 2).
+ *
+ * Troca o "Rod" antigo (palavra inteira, R maiúsculo) e o marcador novo.
+ * "Rodrigo", "Rodoviária", "Rodízio", "Rodão" e "rodada" ficam intactos.
+ * É a régua única: a gravação da regra, o bloco do prompt e o script de
+ * migração dos patches (patchesParaRegistros.ts) passam todos por aqui.
+ */
+export function trocarNomeFicticioDoTeste(texto: string): string {
+  return String(texto ?? '')
+    .replace(ROD_REGEX, MARCADOR_DO_NOME)
+    .replace(NOME_DO_TESTE_REGEX, MARCADOR_DO_NOME);
+}
+
+/**
+ * O texto de uma correção pronto para ser GRAVADO e para entrar no bloco.
+ *
+ * Três redes, na ordem: o nome fictício do teste vira "[nome]" (nota 2), as
+ * tags do protocolo saem (<reply>, <action>, <buttons>) e a frase que manda
+ * no modelo cai (nota 4), com o mesmo detector das regras do questionário.
+ * Regra limpa atravessa byte a byte. Devolve '' quando não sobra nada, e
+ * quem grava recusa.
+ */
+export function sanearTextoDaRegra(texto: string): string {
+  return sanearTextoPreservandoForma(trocarNomeFicticioDoTeste(texto)) ?? '';
+}
+
 /* ── Montagem do bloco ───────────────────────────────────────────── */
 
 /**
@@ -123,7 +173,16 @@ export function montarBlocoDeRegras(regras: RegraDoAgente[]): string {
   const noTeto =
     ativas.length > TETO_DE_REGRAS_ATIVAS ? ativas.slice(-TETO_DE_REGRAS_ATIVAS) : ativas;
 
-  const itens = noTeto.map((r, i) => `${i + 1}. ${limparTextoDaRegra(r.texto)}`);
+  // Nota 4: o saneamento roda também aqui, e não só na gravação. Regra
+  // gravada antes dele (ou por outro caminho) não leva tag nem injeção ao
+  // prompt; a que não sobreviver ao saneamento sai do bloco, e a numeração
+  // continua sequencial.
+  const textos = noTeto
+    .map((r) => sanearTextoDaRegra(limparTextoDaRegra(r.texto)))
+    .filter((t) => t.length > 0);
+  if (textos.length === 0) return '';
+
+  const itens = textos.map((t, i) => `${i + 1}. ${t}`);
 
   return [
     TITULO_BLOCO_DE_REGRAS,
@@ -436,6 +495,40 @@ const VERBO_DE_QUEM_RECEBE =
   'e gerad[oa]s?|sera gerad[oa]s?|expira|expiram)';
 
 /**
+ * Verbo no infinitivo que fecha uma oração de FINALIDADE ("peça o e-mail
+ * PARA ENVIAR a senha provisória"): quem envia é a empresa, e o termo
+ * sensível que vem depois não é objeto do pedido.
+ */
+const INFINITIVO_DE_ENTREGA =
+  '(?:enviar|mandar|passar|gerar|redefinir|resetar|trocar|liberar|confirmar|informar|' +
+  'dizer|compartilhar|repassar|recuperar|criar)';
+
+/**
+ * O trecho entre o verbo de pedido e o primeiro item: até 25 caracteres, sem
+ * ponto, vírgula ou ponto e vírgula, sem atravessar um segundo imperativo
+ * ("e envie") nem uma oração de finalidade ("para enviar", "para que").
+ */
+const PRIMEIRO_TRECHO =
+  `(?:(?!\\b(?:e|ou)\\s+${OUTRO_IMPERATIVO}\\b)` +
+  `(?!\\bpara\\s+(?:que\\b|${INFINITIVO_DE_ENTREGA}\\b))[^.,;!?]){0,25}`;
+
+/**
+ * Um item de lista depois da vírgula ("peça nome, CPF e e-mail"). Item de
+ * lista é substantivo: se aparece um imperativo, a vírgula abriu outra
+ * ordem ("pergunte o e-mail, depois envie a senha") e a lista acabou.
+ */
+const ITEM_DA_LISTA =
+  `(?:(?!\\b(?:${OUTRO_IMPERATIVO}|${VERBO_DE_PEDIDO})\\b)` +
+  `(?!\\bpara\\s+(?:que\\b|${INFINITIVO_DE_ENTREGA}\\b))[^.,;!?]){0,25}`;
+
+/** Até cinco itens separados por vírgula entre o verbo e o termo. */
+const ATE_O_TERMO = `${PRIMEIRO_TRECHO}(?:,\\s*${ITEM_DA_LISTA}){0,5}`;
+
+/** O termo sensível, desde que não seja o sujeito do que o cliente recebe. */
+const TERMO_PEDIDO =
+  `\\b(${TERMO_SENSIVEL})` + `(?![a-z0-9 -]{0,20}\\b${VERBO_DE_QUEM_RECEBE}\\b)`;
+
+/**
  * O agente sendo mandado a pedir o dado: o verbo de pedido e, logo depois
  * (até 25 caracteres, sem ponto, vírgula ou ponto e vírgula no meio), o
  * termo sensível como objeto do pedido.
@@ -445,15 +538,41 @@ const VERBO_DE_QUEM_RECEBE =
  * "solicite o CNPJ e o token de acesso chega por e-mail" levavam 422 falso,
  * com o interruptor desligado.
  *
- * Limite conhecido, de propósito: lista separada por vírgula ("peça nome,
- * CPF e e-mail") passa. O verificador é estreito (só contradição óbvia) e a
- * regra base CR-8 continua no prompt de todo agente.
+ * Nota 6 da revisão de 14/09 (tarefa C2): a lista separada por vírgula
+ * ("peça nome, CPF e e-mail") passava, porque a janela parava na primeira
+ * vírgula. Agora a janela atravessa até cinco itens de lista, e cada item
+ * para num imperativo novo. E a oração de finalidade ("peça o e-mail para
+ * enviar a senha") deixou de ser lida como pedido da senha.
  */
 const MANDA_PEDIR_DADO_SENSIVEL = new RegExp(
+  `\\b${VERBO_DE_PEDIDO}\\b${ATE_O_TERMO}${TERMO_PEDIDO}`,
+);
+
+/** O cliente como sujeito de quem fornece o dado. */
+const SUJEITO_CLIENTE = '(?:(?:o|a|ao|seu|sua)\\s+cliente|ele|ela|a\\s+pessoa)';
+
+/** "informar a senha", "digitar o CPF": o cliente entregando o dado. */
+const FORNECER_NO_INFINITIVO =
+  '(?:informar|enviar|mandar|passar|digitar|fornecer|confirmar|dizer|compartilhar|repassar|escrever)';
+
+/** "que informe a senha", "que envie o CPF". */
+const FORNECER_NO_SUBJUNTIVO =
+  '(?:informe|envie|mande|passe|digite|forneca|confirme|diga|compartilhe|repasse|escreva)';
+
+/**
+ * Pedido INDIRETO (nota 6 da tarefa C2): "peça para o cliente informar a
+ * senha", "solicite ao cliente que envie o número do cartão". O verbo de
+ * pedido fica longe do termo, e quem fornece o dado é o cliente. O sujeito
+ * é exigido no "para + infinitivo": sem ele, "peça o e-mail para enviar a
+ * senha" (a empresa envia) viraria recusa.
+ */
+const MANDA_O_CLIENTE_FORNECER = new RegExp(
   `\\b${VERBO_DE_PEDIDO}\\b` +
-    `(?:(?!\\b(?:e|ou)\\s+${OUTRO_IMPERATIVO}\\b)[^.,;!?]){0,25}` +
-    `\\b(${TERMO_SENSIVEL})` +
-    `(?![a-z0-9 -]{0,20}\\b${VERBO_DE_QUEM_RECEBE}\\b)`,
+    `(?:(?!\\b(?:e|ou)\\s+${OUTRO_IMPERATIVO}\\b)[^.;!?]){0,40}?` +
+    `(?:\\bque\\s+(?:${SUJEITO_CLIENTE}\\s+)?${FORNECER_NO_SUBJUNTIVO}` +
+    `|\\bpara\\s+${SUJEITO_CLIENTE}\\s+${FORNECER_NO_INFINITIVO}` +
+    `|\\b${SUJEITO_CLIENTE}\\s+para\\s+${FORNECER_NO_INFINITIVO})\\b` +
+    `${ATE_O_TERMO}${TERMO_PEDIDO}`,
 );
 
 function conflitoDeDadoSensivel(texto: string): Conflito | null {
@@ -462,7 +581,7 @@ function conflitoDeDadoSensivel(texto: string): Conflito | null {
     // Só imperativo: é o agente sendo MANDADO a pedir. "Se o cliente pedir
     // para trocar a senha" tem "pedir" e "senha" na mesma frase, e quem
     // pede ali é o cliente.
-    const pedido = MANDA_PEDIR_DADO_SENSIVEL.exec(frase);
+    const pedido = MANDA_PEDIR_DADO_SENSIVEL.exec(frase) ?? MANDA_O_CLIENTE_FORNECER.exec(frase);
     if (!pedido) continue;
     return {
       tipo: 'dado_sensivel',

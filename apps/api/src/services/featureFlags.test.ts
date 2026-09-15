@@ -69,12 +69,14 @@ function makeFakeDb(rows: any[] = []) {
 }
 
 describe('registro FLAGS', () => {
-  it('tem as oito flags previstas no plano (compositorUnico saiu: contextoUnico faz o papel)', () => {
+  it('tem as nove flags previstas (compositorUnico saiu: contextoUnico faz o papel; juizDeOutraFamilia entrou na rodada 1 do #378)', () => {
     expect(Object.keys(FLAGS).sort()).toEqual(
       [
         'contextoUnico',
         'evalNoTier',
         'guardaComercial',
+        // Rodada 1 do PR #378: o juiz de outra família nasce desligado.
+        'juizDeOutraFamilia',
         'modeloPorPolitica',
         'perfilVivo',
         'ragNoChatDoSite',
@@ -84,6 +86,13 @@ describe('registro FLAGS', () => {
         'treinarSomenteAdmin',
       ].sort(),
     );
+  });
+
+  it('juizDeOutraFamilia: descrição em português e prazo 2027-03-31', () => {
+    expect(FLAGS.juizDeOutraFamilia.removeBy).toBe('2027-03-31');
+    expect(FLAGS.juizDeOutraFamilia.descricao).toMatch(/juiz/i);
+    expect(FLAGS.juizDeOutraFamilia.descricao).toMatch(/família/);
+    expect(FLAGS.juizDeOutraFamilia.descricao).not.toContain('—');
   });
 
   it('nenhuma flag tem prazo de remoção vencido (força a limpeza)', () => {

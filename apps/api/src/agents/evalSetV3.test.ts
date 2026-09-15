@@ -68,8 +68,10 @@ function determinístico(s: EvalScenario, resposta: string): boolean {
 }
 
 describe('versão do arnês', () => {
-  it('o gabarito corrigido é a versão 3', () => {
-    expect(HARNESS_VERSION).toBe(3);
+  // O gabarito corrigido nasceu na versão 3. A tarefa C2 (14/09/2026) mudou o
+  // juiz, a natureza dos cenários e os casos de conhecimento: é a versão 4.
+  it('a régua do avaliador é a versão 4 (C2)', () => {
+    expect(HARNESS_VERSION).toBe(4);
   });
 });
 
@@ -83,7 +85,7 @@ describe('A038 + A052 — cr5_nome_disponivel_usar alinhado ao CR-6', () => {
   });
 
   it('continua aprovando quem usa o nome (usar é opcional, não proibido)', () => {
-    expect(determinístico(cr5(), 'Claro, Rod! A gente cuida de consultoria.')).toBe(true);
+    expect(determinístico(cr5(), 'Claro, Cliente Teste! A gente cuida de consultoria.')).toBe(true);
   });
 
   it('reprova quem pergunta o nome de novo', () => {
@@ -94,6 +96,15 @@ describe('A038 + A052 — cr5_nome_disponivel_usar alinhado ao CR-6', () => {
     const fala = (cr5().history ?? []).map((h) => h.content).join('\n');
     expect(fala).not.toMatch(/como posso (te )?(ajudar|atender)/i);
     expect(fala).not.toMatch(/em que posso ser útil/i);
+  });
+
+  // Nota 2 da revisão de 14/09 (A172): o histórico e o gabarito usam o
+  // marcador do teste, não um nome de gente que o sugeridor copiava.
+  it('o histórico e o gabarito não trazem mais "Rod"', () => {
+    const fala = (cr5().history ?? []).map((h) => h.content).join('\n');
+    expect(fala).not.toMatch(/\bRod\b/);
+    expect(fala).toContain('Cliente Teste');
+    expect(cr5().expectedBehavior).not.toMatch(/\bRod\b/);
   });
 
   it('o comportamento esperado não exige mais o nome em toda resposta', () => {

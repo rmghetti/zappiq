@@ -363,8 +363,13 @@ export interface AgentEvalRunRow {
   /** A171 — cenários que não puderam ser avaliados (falha técnica), fora da nota. */
   erros?: number | null;
   scorePercent: number | null;
-  /** Versão do arnês que mediu. 3 = régua de 14/09/2026. */
+  /** Versão do arnês que mediu. 3 = régua de 14/09/2026; 4 = tarefa C2. */
   harnessVersion?: number | null;
+  /**
+   * C2 (Passo 3, P21): a nota em duas partes. Nulo nas execuções antigas,
+   * que continuam mostrando só a nota única.
+   */
+  placar?: PlacarDaExecucao | null;
   /** P56 — piso de ruído do agente: quanto a nota oscila com prompt constante. */
   ruido?: { desvio: number; n: number } | null;
   startedAt: string;
@@ -372,6 +377,48 @@ export interface AgentEvalRunRow {
   durationMs: number | null;
   error: string | null;
   agent?: { name: string };
+}
+
+/** C2 (Passo 3): uma das duas partes do placar, como a API grava. */
+export interface ParteDoPlacar {
+  estado: 'avaliado' | 'sem_base' | 'sem_cenarios' | 'nao_testado';
+  total: number;
+  avaliados: number;
+  aprovados: number;
+  percent: number | null;
+  motivo?: 'base_nao_consultada' | 'falha_tecnica';
+}
+
+/** C2 (Passo 3): Conhecimento do negócio e Comportamento. */
+export interface PlacarDaExecucao {
+  versao: 1;
+  conhecimento: ParteDoPlacar;
+  comportamento: ParteDoPlacar;
+  inconclusivos: number;
+}
+
+/**
+ * C2 (P21): o que o dono faz quando faltou informação na base.
+ * Rodada 1 do PR #378, item 7: 'revisar' é a ação dos casos gerados (a
+ * informação está cadastrada, mas não chegou ao agente naquele teste).
+ */
+export type AcaoDeTreino =
+  | { tipo: 'qa'; pergunta: string }
+  | { tipo: 'questionario'; secao: string; campo?: string; rotulo?: string }
+  | {
+      tipo: 'revisar';
+      origem: 'qa' | 'questionario';
+      fonte: string;
+      pergunta?: string;
+      secao?: string;
+      campo?: string;
+      rotulo?: string;
+    };
+
+/** C2 (Passo 1): provedor e modelo usados numa chamada. */
+export interface ModeloUsado {
+  provider: string;
+  model: string;
 }
 
 export interface AgentEvalRunsResponse {
@@ -423,19 +470,57 @@ export interface AgentEvalRunDetailScenario {
   /** FASE 2.2c (#246): mensagem enviada ao agente — contexto completo na UI. Opcional pra runs antigas. */
   userMessage?: string;
   response: string;
-  /** A171 — 'erro' é falha TÉCNICA do teste: fica fora da nota e sem sugestão. */
-  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  /**
+   * A171: 'erro' é falha TÉCNICA do teste, fica fora da nota e sem sugestão.
+   * C2: 'inconclusivo' é resposta de um modelo de reserva, ou caso de
+   * conhecimento sem a base no teste. Não aprova nem reprova.
+   */
+  combined: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
   /** Motivo legível da falha técnica, quando combined='erro'. */
   falhaTecnica?: string;
+  /** C2: por que ficou inconclusivo. */
+  inconclusivo?: {
+    motivo: 'modelo_diferente' | 'base_nao_consultada' | 'juiz_indeterminado';
+    explicacao: string;
+  };
   deterministic: { passed: boolean; failedPatterns: string[]; missingPatterns: string[] };
   /** A050 — passed null = avaliação indeterminada (não é reprovação). */
-  judge: { passed: boolean | null; confidence: number; reason: string };
+  judge: {
+    passed: boolean | null;
+    confidence: number;
+    reason: string;
+    /** C2 (Passo 2): o trecho que sustenta o veredito. */
+    evidencia?: string;
+    causa?: 'faltou_informacao' | 'ignorou_informacao' | 'comportamento' | null;
+  };
   /** Nível 1 auto-suggest — gerado quando combined='fail'. */
   suggestedFix?: {
     summary: string;
     patches: Array<{ where: string; diff: string }>;
     confidence: number;
+    /** C2 (P21): falta de informação vira ação de treino, sem patch. */
+    acaoDeTreino?: AcaoDeTreino;
+    modelo?: ModeloUsado | null;
   };
+  /** C2 (P21): conhecimento ou comportamento. Ausente nas execuções antigas. */
+  natureza?: 'conhecimento' | 'comportamento';
+  /** C2 (A221): o histórico simulado da conversa. */
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /** C2 (Passo 1, A226): quem respondeu, quem julgou, quem sugeriu. */
+  agente?: ModeloUsado | null;
+  juiz?: ModeloUsado | null;
+  juizMesmaFamilia?: boolean | null;
+  sugeridor?: ModeloUsado | null;
+  modeloPedido?: string | null;
+  /** C2: estado da base no teste (null = o teste não consultou a base). */
+  ragStatus?: 'ok' | 'sem_resultado' | 'servico_fora' | null;
+  fontes?: string[];
+  /** C2 (P13): as repetições do caso de conhecimento. */
+  amostras?: Array<{
+    combined: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
+    response: string;
+    judge: { passed: boolean | null; reason: string; evidencia?: string };
+  }>;
 }
 
 export interface AgentEvalFixDecision {
@@ -596,7 +681,15 @@ class AgentQualityApi {
     runId: string,
     scenarioId: string,
     opts: { finalDiff?: string; notes?: string } = {},
-  ): Promise<{ ok: boolean; decision: AgentEvalFixDecision; strategy: string; insertedAtLine: number }> {
+  ): Promise<{
+    ok: boolean;
+    decision: AgentEvalFixDecision;
+    /** Só no caminho do patch no prompt (interruptor regrasComoRegistros desligado). */
+    strategy?: string;
+    insertedAtLine?: number;
+    /** Nota 3 de 14/09: com o interruptor ligado, a correção vira regra e o prompt não muda. */
+    comoRegistro?: boolean;
+  }> {
     return api.post(
       `/api/admin/agent-eval/runs/${encodeURIComponent(runId)}/scenarios/${encodeURIComponent(scenarioId)}/apply-fix`,
       opts,

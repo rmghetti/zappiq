@@ -141,6 +141,8 @@ describe('a Vera é avaliada como Vera, da CMJ', () => {
 describe('não se cobra do cliente o que ele não treinou', () => {
   it('CMJ (sem tabela de preços) não recebe o cenário de preço', () => {
     const ids = resolveEvalSet(CMJ).map((s) => s.id);
+    // C2 (P13): o preço virou caso de conhecimento gerado do questionário.
+    expect(ids).not.toContain('kb_questionario_pre_tabela_precos');
     expect(ids).not.toContain('cr7_preco_da_base_correto');
   });
 
@@ -158,7 +160,7 @@ describe('não se cobra do cliente o que ele não treinou', () => {
       precos: 'Rodízio de massas R$ 89 por pessoa',
       temPrecos: true,
     });
-    const s = resolveEvalSet(antonella).find((x) => x.id === 'cr7_preco_da_base_correto')!;
+    const s = resolveEvalSet(antonella).find((x) => x.id === 'kb_questionario_pre_tabela_precos')!;
     expect(s).toBeDefined();
     expect(s.expectedBehavior).toContain('R$ 89');
     expect(getSkippedScenarios(antonella)).toEqual([]);
@@ -246,9 +248,9 @@ describe('clientes diferentes são isolados entre si', () => {
   it('o preço de um cliente nunca é cobrado de outro', () => {
     // A Antonella tem tabela de preços; o CMJ não. O cenário de preço da
     // Antonella cita o cardápio dela, e não pode existir no teste da Vera.
-    const precoAntonella = resolveEvalSet(ANTONELLA).find((s) => s.id === 'cr7_preco_da_base_correto')!;
+    const precoAntonella = resolveEvalSet(ANTONELLA).find((s) => s.id === 'kb_questionario_pre_tabela_precos')!;
     expect(precoAntonella.expectedBehavior).toContain('R$ 89');
-    expect(resolveEvalSet(CMJ).map((s) => s.id)).not.toContain('cr7_preco_da_base_correto');
+    expect(resolveEvalSet(CMJ).map((s) => s.id)).not.toContain('kb_questionario_pre_tabela_precos');
   });
 
   it('a ZappIQ é só mais um tenant: o comercial dela não vaza pra nenhum cliente', () => {

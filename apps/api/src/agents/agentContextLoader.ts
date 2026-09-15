@@ -294,6 +294,8 @@ export interface CarregarPoliticaInput {
   canal: OrigemDoTurno;
   ecoMode?: boolean;
   agendamentoAtivo: boolean;
+  /** Nota 1 da tarefa C2: a Qualidade na faixa do plano (`evalNoTier`). */
+  evalNaFaixaDoPlano?: boolean;
 }
 
 /**
@@ -328,6 +330,7 @@ export async function carregarPoliticaDoTurno(
         ecoMode: false,
         llmRouting: null,
         agendamentoAtivo: input.agendamentoAtivo,
+        evalNaFaixaDoPlano: input.evalNaFaixaDoPlano,
       });
     }
     const settings = (org.settings as Record<string, any>) ?? {};
@@ -339,6 +342,7 @@ export async function carregarPoliticaDoTurno(
       ecoMode: input.ecoMode === true,
       llmRouting: settings.llm_routing ?? null,
       agendamentoAtivo: input.agendamentoAtivo,
+      evalNaFaixaDoPlano: input.evalNaFaixaDoPlano,
     });
   } catch (err: any) {
     logger.warn(`[AgentContext] política do turno falhou: ${err?.message}. Cascata padrão`, {
