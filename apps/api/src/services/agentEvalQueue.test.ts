@@ -563,6 +563,42 @@ describe('A171 — execução majoritariamente quebrada é falha técnica, não 
     const [gravacao] = updateManysCom('status');
     expect(gravacao.data).toMatchObject({ status: 'completed', scorePercent: 100 });
   });
+
+  // Rodada 1 do PR #378, item 10: o caso de conhecimento que nem foi ao
+  // provedor (base_nao_consultada) sai do denominador do portão. Com 10
+  // cenários, 4 deles sem base e 2 erros: 2 de 6 (33%) e não 2 de 10 (20%).
+  it('item 10: o denominador do portão exclui os casos base_nao_consultada', async () => {
+    const { denominadorDoPortao } = await import('./agentEvalQueue.js');
+    evalSetMock.resolveEvalSet.mockReturnValue(
+      Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, category: 'x', severity: 'high' })),
+    );
+    const results = [
+      ...Array.from({ length: 4 }, (_, i) => ({ scenarioId: `c${i}`, combined: 'pass' })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        scenarioId: `c${4 + i}`,
+        combined: 'inconclusivo',
+        inconclusivo: { motivo: 'base_nao_consultada', explicacao: 'x' },
+      })),
+      { scenarioId: 'c8', combined: 'erro' },
+      { scenarioId: 'c9', combined: 'erro' },
+    ];
+    expect(denominadorDoPortao(results, 10)).toBe(6);
+    // O inconclusivo por modelo diferente continua no denominador (é do provedor).
+    expect(
+      denominadorDoPortao([{ combined: 'inconclusivo', inconclusivo: { motivo: 'modelo_diferente' } }], 3),
+    ).toBe(3);
+
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results,
+      durationMs: 1000,
+      summary: { ...RESUMO_LIMPO, passed: 4, erros: 2 },
+    });
+
+    await executeRunJob('run-1');
+
+    const [gravacao] = updateManysCom('status');
+    expect(gravacao.data).toMatchObject({ status: 'failed', error: ERRO_FALHA_TECNICA_DO_PROVEDOR });
+  });
 });
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -834,6 +870,47 @@ describe('resolveScenariosForRun: rodízio dos casos de conhecimento (C2)', () =
     evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...GERADOS]);
     const lista = resolveScenariosForRun({} as any, { scenarioIds: ['kb_qa_11'] });
     expect(lista.map((c: any) => c.id)).toEqual(['kb_qa_11']);
+  });
+
+  // Rodada 1 do PR #378, item 8: ids kb_* pedidos um a um também respeitam o
+  // teto (e o rodízio). Escolha conservadora: corta e registra, em vez de
+  // 400, para o pedido do cliente continuar rodando e o custo ficar no teto.
+  it('item 8: 200 ids kb_* pedidos um a um rodam no máximo o teto, e o corte é registrado', async () => {
+    const { resolveScenariosForRun } = await import('./agentEvalQueue.js');
+    const { logger } = await import('../utils/logger.js');
+    const muitos = Array.from({ length: 200 }, (_, i) => caso(`kb_qa_${i}`, 'qa'));
+    evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...muitos]);
+
+    const lista = resolveScenariosForRun(
+      {} as any,
+      { scenarioIds: muitos.map((c) => c.id) },
+      { agora: new Date('2026-09-14T12:00:00Z') },
+    );
+
+    expect(lista.filter((c: any) => c.conhecimento)).toHaveLength(8);
+    expect(lista).toHaveLength(8);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ msg: 'agent_eval_casos_de_conhecimento_cortados', pedidos: 200, teto: 8 }),
+    );
+  });
+
+  it('item 8: no corte, o questionário entra antes do Q&A (o mesmo rodízio da execução completa)', async () => {
+    const { resolveScenariosForRun } = await import('./agentEvalQueue.js');
+    const q = [
+      caso('kb_questionario_pre_tabela_precos', 'questionario'),
+      caso('kb_questionario_ide_horarios_funcionamento', 'questionario'),
+    ];
+    evalSetMock.resolveEvalSet.mockReturnValue([...FIXOS, ...GERADOS, ...q]);
+    const lista = resolveScenariosForRun(
+      {} as any,
+      { scenarioIds: [...GERADOS.map((c) => c.id), ...q.map((c) => c.id), 'cr1'] },
+      { agora: new Date('2026-09-14T12:00:00Z') },
+    );
+    const ids = lista.map((c: any) => c.id);
+    expect(ids).toContain('cr1');
+    expect(ids).toContain('kb_questionario_pre_tabela_precos');
+    expect(ids).toContain('kb_questionario_ide_horarios_funcionamento');
+    expect(lista.filter((c: any) => c.conhecimento)).toHaveLength(8);
   });
 
   it('a execução usa o started_at da linha: o total da criação é o total que roda', async () => {

@@ -38,7 +38,11 @@ import { logger } from '../utils/logger.js';
 import redis from '../utils/redis.js';
 import { resolveEvalSet, HARNESS_VERSION } from '../agents/agentEvalSet.js';
 // C2 (P13): no máximo 8 casos de conhecimento por execução, em rodízio.
-import { aplicarRodizio, semanaDoRodizio } from '../agents/evalSetConhecimento.js';
+import {
+  aplicarRodizio,
+  semanaDoRodizio,
+  TETO_DE_CASOS_DE_CONHECIMENTO,
+} from '../agents/evalSetConhecimento.js';
 import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
@@ -256,11 +260,26 @@ export function resolveScenariosForRun(
     criticalOnly?: unknown;
   };
 
-  // Ids pedidos um a um (re-teste, admin) não passam pelo rodízio: quem
-  // pediu um caso de conhecimento pelo id quer aquele caso.
+  // Ids pedidos um a um (re-teste, admin): quem pediu um caso de
+  // conhecimento pelo id quer aquele caso, e um id só nunca é cortado.
+  //
+  // Rodada 1 do PR #378, item 8: acima do teto, os ids kb_* passam pelo
+  // MESMO rodízio da execução completa (questionário primeiro, Q&A pela
+  // semana). Escolha conservadora: corta e registra, em vez de 400, para o
+  // pedido continuar rodando e o custo ficar no teto. Antes, 200 ids kb_*
+  // no /run-async do cliente rodavam os 200.
   if (Array.isArray(filtro.scenarioIds) && filtro.scenarioIds.length > 0) {
     const ids = new Set(filtro.scenarioIds.map(String));
-    return base.filter((s) => ids.has(s.id));
+    const pedidos = base.filter((s) => ids.has(s.id));
+    const lista = aplicarRodizio(pedidos, semanaDoRodizio(opts.agora ?? new Date()));
+    if (lista.length !== pedidos.length) {
+      logger.warn({
+        msg: 'agent_eval_casos_de_conhecimento_cortados',
+        pedidos: pedidos.filter((s) => s.conhecimento).length,
+        teto: TETO_DE_CASOS_DE_CONHECIMENTO,
+      });
+    }
+    return lista;
   }
   let lista = base;
   if (filtro.criticalOnly === true) lista = base.filter((s) => s.severity === 'critical');
@@ -310,12 +329,32 @@ export function passouDoTetoDeErros(erros: number, totalScenarios: number): bool
   return erros / totalScenarios > TETO_DE_ERROS_TECNICOS;
 }
 
+/**
+ * Rodada 1 do PR #378, item 10: o denominador do portão dos 20% é o que o
+ * provedor de fato tentou. O caso de conhecimento que ficou inconclusivo por
+ * base_nao_consultada nunca foi ao provedor (o teste nem chamou modelo), e
+ * contá-lo diluía a fração de erro: 2 erros em 10 cenários com 4 sem base
+ * eram 20% (passa) quando na verdade eram 2 em 6 (33%).
+ */
+export function denominadorDoPortao(
+  results: Array<{ combined?: string; inconclusivo?: { motivo?: string } | null }>,
+  totalScenarios: number,
+): number {
+  const semBase = (results ?? []).filter(
+    (r) => r.combined === 'inconclusivo' && r.inconclusivo?.motivo === 'base_nao_consultada',
+  ).length;
+  return Math.max(0, totalScenarios - semBase);
+}
+
 async function gravarConclusao(
   runId: string,
   saida: SaidaDaExecucao,
   totalScenarios: number,
 ): Promise<ResultadoDaGravacao> {
-  const falhaTecnica = passouDoTetoDeErros(saida.summary.erros, totalScenarios);
+  const falhaTecnica = passouDoTetoDeErros(
+    saida.summary.erros,
+    denominadorDoPortao(saida.results, totalScenarios),
+  );
   try {
     const { count } = await prisma.agentEvalRun.updateMany({
       where: { id: runId, status: 'running' },
