@@ -992,7 +992,7 @@ function ResultBadge({
   combined,
   severity,
 }: {
-  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  combined: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
   severity: string;
 }) {
   const combinedLabel =
@@ -1003,7 +1003,10 @@ function ResultBadge({
         : // A171: falha técnica do teste não é erro do agente.
           combined === 'erro'
           ? 'Não avaliado'
-          : 'Reprovado';
+          : // C2 (A226): modelo de reserva ou caso sem base no teste.
+            combined === 'inconclusivo'
+            ? 'Inconclusivo'
+            : 'Reprovado';
   const severityLabel =
     severity === 'critical' ? 'crítica' : severity === 'high' ? 'alta' : 'média';
   const color =
@@ -1011,7 +1014,7 @@ function ResultBadge({
       ? 'bg-green-100 text-green-800 border-green-200'
       : combined === 'partial'
         ? 'bg-orange-100 text-orange-800 border-orange-200'
-        : combined === 'erro'
+        : combined === 'erro' || combined === 'inconclusivo'
           ? 'bg-neutral-100 text-neutral-700 border-neutral-300'
           : 'bg-red-100 text-red-800 border-red-200';
   return (
@@ -1412,7 +1415,7 @@ function GenerateSuggestionButton({
 }: {
   runId: string;
   scenarioId: string;
-  combined: 'pass' | 'partial' | 'fail' | 'erro';
+  combined: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
   onGenerated: () => void;
 }) {
   const [loading, setLoading] = useState(false);

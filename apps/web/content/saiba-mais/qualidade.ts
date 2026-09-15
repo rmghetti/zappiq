@@ -30,16 +30,16 @@ export const qualidadeContent: SaibaMaisContent[] = [
     titulo: 'Saúde do agente',
     clientSafe: true,
     oQueE:
-      'É a nota geral do agente na última bateria de testes, resumida em três níveis: Bom (90% ou mais dos cenários passaram), Atenção (entre 70% e 89%) e Crítico (menos de 70%). O percentual exato aparece do lado, como detalhe.',
+      'É a nota do agente na última bateria de testes, resumida em três níveis: Bom (90% ou mais dos cenários passaram), Atenção (entre 70% e 89%) e Crítico (menos de 70%). Logo abaixo, a nota aparece dividida em duas partes: Conhecimento do negócio e Comportamento.',
     paraQueServe:
       'Serve pra você saber de cara, sem entrar em nenhum detalhe técnico, se o agente está pronto pra atender sozinho ou se precisa de ajuste antes de continuar confiando nele com clientes reais.',
     comoImplementar: [
       'Veja o card no topo da tela de Qualidade da IA, logo depois de escolher o agente.',
       'Se estiver em "Atenção" ou "Crítico", desça até "Comportamentos para revisar" pra ver o que causou a nota baixa.',
-      'Leia a nota pelo que ela mede: o comportamento do agente em situações comuns de atendimento, com cenários iguais para todos os clientes. Ela ainda não mede o conteúdo que você cadastrou no treinamento.',
+      'Leia as duas partes separadas. Conhecimento do negócio testa perguntas geradas do que você cadastrou: suas perguntas e respostas e os campos de preço, horário, formas de pagamento e endereço do questionário. Comportamento testa situações comuns de atendimento, iguais para todos os clientes. Sem nada cadastrado, a parte de conhecimento mostra "Sem base cadastrada" em vez de uma nota.',
     ],
     exemploResultado:
-      'Numa clínica de estética, o agente aparece em "Crítico" (62%) porque reprovou em cenários de transbordo para humano e de cliente insatisfeito. A dona abre "Comportamentos para revisar", aplica as correções desses dois cenários e acompanha a nota na execução seguinte.',
+      'Numa clínica de estética, o agente aparece com Comportamento em 62%, porque reprovou em transbordo para humano e em cliente insatisfeito, e Conhecimento do negócio em 50%, porque não soube o preço da limpeza de pele. A dona aplica as correções de comportamento, cadastra o preço que faltava e acompanha as duas partes na execução seguinte.',
     relacionados: ['qualidade.overview', 'qualidade.kpis-cenarios'],
   },
   {
@@ -47,13 +47,13 @@ export const qualidadeContent: SaibaMaisContent[] = [
     titulo: 'Comportamentos para revisar',
     clientSafe: true,
     oQueE:
-      'É a lista dos cenários de teste que o agente não passou, ou passou só parcialmente, na última execução. Cada cenário é uma simulação de conversa, não é um cliente real, criada pra testar uma situação específica: um cliente insatisfeito, alguém pedindo pra falar com um humano, uma pergunta sobre preço.',
+      'É a lista dos cenários de teste que o agente não passou, ou passou só parcialmente, na última execução. Cada cenário é uma simulação de conversa, não é um cliente real, criada pra testar uma situação específica: um cliente insatisfeito, alguém pedindo pra falar com um humano, uma pergunta que você cadastrou. Logo abaixo fica a lista completa da execução, com os aprovados também.',
     paraQueServe:
       'Serve pra você ver exatamente onde o agente errou e decidir, um por um, se aplica a correção que a IA sugere ou se recusa porque aquilo não se aplica ao seu negócio.',
     comoImplementar: [
       'Clique em cada linha da lista pra abrir o detalhe do cenário.',
-      'Leia o diagnóstico e a interação testada (a mensagem simulada e a resposta que o agente deu de verdade).',
-      'Aplique a correção sugerida, edite o texto antes de aplicar, ou recuse.',
+      'Leia o diagnóstico e a interação testada (a conversa simulada, a resposta que o agente deu de verdade e a evidência do avaliador).',
+      'Se o agente errou por falta de informação, use "Cadastrar esta informação": ele abre o Treinar IA com a pergunta já escrita. Se o problema foi de conduta, aplique a correção sugerida, edite o texto antes de aplicar, ou recuse.',
     ],
     exemploResultado:
       'Num escritório de contabilidade, aparecem três comportamentos pra revisar: o agente não encaminhou um cliente irritado pra um humano, usou um termo técnico difícil de entender e não confirmou o CNPJ antes de dar uma informação sensível. O dono trata os três em cinco minutos.',
@@ -134,13 +134,13 @@ export const qualidadeContent: SaibaMaisContent[] = [
     titulo: 'Interação testada',
     clientSafe: true,
     oQueE:
-      'É o registro da conversa simulada usada naquele teste: a mensagem que a IA mandou fingindo ser um cliente, e a resposta que o seu agente deu de verdade. Não é uma conversa com um cliente real, é uma simulação criada só pra avaliar o agente.',
+      'É o registro da conversa simulada usada naquele teste: as mensagens anteriores, a mensagem que a IA mandou fingindo ser um cliente, a resposta que o seu agente deu de verdade e o trecho que o avaliador usou para decidir. O contato do teste é fictício ("Cliente Teste"): não é uma conversa com um cliente real.',
     paraQueServe:
       'Serve pra você ler com os próprios olhos o que o agente respondeu e julgar se concorda com o diagnóstico da IA, antes de decidir aplicar ou recusar a correção.',
     comoImplementar: [
       'Abra um cenário na lista de "Comportamentos para revisar".',
       'Leia "Mensagem enviada" (o que o cliente simulado perguntou) e "Resposta do agente" (o que o seu agente respondeu de verdade).',
-      'Compare com o diagnóstico escrito acima, que explica por que aquilo foi considerado errado.',
+      'Compare com a evidência do avaliador e com o diagnóstico, que explicam por que aquilo foi aprovado ou reprovado.',
     ],
     exemploResultado:
       'Numa imobiliária, a interação testada mostra o cliente simulado perguntando sobre a taxa de condomínio e o agente respondendo um valor sem confirmar de qual imóvel se tratava. Ao ler a troca, o dono entende na hora por que aquilo foi marcado como reprovado.',
@@ -168,7 +168,7 @@ export const qualidadeContent: SaibaMaisContent[] = [
     titulo: 'Aprovados, Parciais, Reprovados e Críticos',
     clientSafe: true,
     oQueE:
-      'São os quatro números que resumem o resultado da execução. Aprovados é o que o agente respondeu certo. Parciais é quando o agente acertou parte da resposta mas deixou passar algum detalhe. Reprovados é quando o agente errou o comportamento esperado. Críticos é o subconjunto dos reprovados que envolve um risco mais sério, como prometer algo errado ou não encaminhar um cliente insatisfeito pra um humano.',
+      'São os quatro números que resumem o resultado da execução. Aprovados é o que o agente respondeu certo. Parciais é quando o agente acertou parte da resposta mas deixou passar algum detalhe, e parcial conta como não aprovado na nota: o cenário só soma quando a regra automática e o avaliador aprovam juntos. Reprovados é quando o agente errou o comportamento esperado. Críticos é o subconjunto dos reprovados que envolve um risco mais sério, como prometer algo errado ou não encaminhar um cliente insatisfeito pra um humano.',
     paraQueServe:
       'Serve pra você priorizar: comece sempre pelos Críticos, porque são os que têm mais chance de custar um cliente ou gerar um problema real, e só depois olhe os Parciais.',
     comoImplementar: [

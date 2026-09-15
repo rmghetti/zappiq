@@ -12,7 +12,7 @@
  */
 
 export type VereditoDoReteste = 'funcionou' | 'nao_funcionou' | 'indefinido';
-export type VereditoDaAmostra = 'pass' | 'partial' | 'fail' | 'erro';
+export type VereditoDaAmostra = 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
 
 /** Quantas vezes o servidor roda o cenário num re-teste (AMOSTRAS_DO_RETESTE). */
 export const AMOSTRAS_DO_RETESTE = 3;
@@ -36,6 +36,8 @@ export function rotuloDaAmostra(combined: VereditoDaAmostra): string {
   if (combined === 'pass') return 'passou';
   if (combined === 'partial') return 'parcial';
   if (combined === 'fail') return 'reprovou';
+  // C2 (A226): a resposta veio de um modelo de reserva; não conta.
+  if (combined === 'inconclusivo') return 'modelo de reserva, não conta';
   return 'falha técnica';
 }
 

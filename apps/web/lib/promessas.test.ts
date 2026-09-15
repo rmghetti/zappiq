@@ -181,7 +181,7 @@ const REGRAS: Regra[] = [
   {
     nome: '"boa parte da nota vem" do conteúdo cadastrado',
     motivo:
-      'A nota da Qualidade roda cenários iguais para todos os clientes e mede comportamento, não o conteúdo que o cliente cadastrou.',
+      'A nota da Qualidade tem duas partes (tarefa C2): a de conhecimento só conta quando o teste consulta a base da organização, e o peso dela depende do que o cliente cadastrou. "Boa parte da nota" promete uma proporção que o produto não garante.',
     padrao: /boa parte da nota vem/i,
   },
   {
