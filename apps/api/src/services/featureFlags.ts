@@ -31,7 +31,8 @@ export type FlagName =
   | 'treinarSomenteAdmin'
   | 'regrasComoRegistros'
   | 'contextoUnico'
-  | 'modeloPorPolitica';
+  | 'modeloPorPolitica'
+  | 'guardaDeMarca';
 
 export interface FlagDef {
   /** O que muda quando liga. Em português: isto aparece na tela do admin. */
@@ -85,6 +86,11 @@ export const FLAGS: Record<FlagName, FlagDef> = {
     descricao:
       'Modelo e ferramentas do turno decididos por resolveTurnPolicy, a mesma regra para todos os canais.',
     removeBy: '2026-12-31',
+  },
+  guardaDeMarca: {
+    descricao:
+      'A guarda de marca passa a SEGURAR a resposta do agente que cita a ZappIQ para o cliente de outro negócio (sai a resposta segura do canal, sem botões e sem ações além do transbordo). Desligada, a guarda só alerta: o texto sai como veio e o alerta vai para o log, o Testar minha IA, o Raio-X e a Qualidade. Ligar por organização depois de ler os alertas.',
+    removeBy: '2027-03-31',
   },
 };
 

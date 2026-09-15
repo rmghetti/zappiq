@@ -926,6 +926,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
                 canal: canalDoTurno,
                 organizacao: organizacaoDaSaida,
                 agente: agenteDaSaida,
+                guardaLigada: flagsDoTurno.guardaDeMarca,
               })
             : null;
           if (saidaAgentica) {
@@ -1054,12 +1055,16 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // ── 10. Parse structured response ───────────────────
     // C1b (Passo 1): o pós-processador único lê as tags, limpa o texto e
     // roda a guarda de marca. A ação executada segue sendo a PRIMEIRA, como
-    // antes; as demais ficam no log.
+    // antes; as demais ficam no log. Rodada 1 do PR #379: a guarda só segura
+    // a resposta com o interruptor `guardaDeMarca` da organização (lido na
+    // leitura única do turno); desligado, ela só alerta. Resposta segurada
+    // não leva botões nem ações além do handoff (o pós-processador descarta).
     const saida = postProcessReply({
       bruto: turnResult.response.text,
       canal: canalDoTurno,
       organizacao: organizacaoDaSaida,
       agente: agenteDaSaida,
+      guardaLigada: flagsDoTurno.guardaDeMarca,
     });
     await registrarAlertasDeSaida({
       organizationId,

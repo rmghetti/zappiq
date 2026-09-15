@@ -254,8 +254,9 @@ export async function generateAiResumeReply(
 
     // C1b (A189): o mesmo pós-processador de todos os canais. Nenhuma tag
     // chega ao cliente, o filtro de voz vale aqui também, e a guarda de
-    // marca devolve texto vazio (a resposta segura da retomada é o
-    // silêncio), que cai no fail-closed logo abaixo.
+    // marca, com o interruptor `guardaDeMarca` ligado (rodada 1 do PR #379),
+    // devolve texto vazio (a resposta segura da retomada é o silêncio), que
+    // cai no fail-closed logo abaixo. Desligado, só alerta.
     const saida = postProcessReply({
       bruto: resp.text,
       canal: 'maestro_retomada',
@@ -265,6 +266,7 @@ export async function generateAiResumeReply(
         nome: ctx.businessName ?? null,
       },
       agente: { nome: agenteNome },
+      guardaLigada: flags.guardaDeMarca,
     });
     await registrarAlertasDeSaida({
       organizationId,

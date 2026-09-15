@@ -103,7 +103,22 @@ for (const motor of ['caminho leve (contextoUnico desligado)', 'motor único (co
       );
     });
 
-    it('marca da ZappIQ na retomada de um cliente: nada é enviado (null) e o alerta é registrado', async () => {
+    it('marca da ZappIQ na retomada, guarda DESLIGADA (padrão): o texto sai intacto e o alerta é registrado (rodada 1)', async () => {
+      complete.mockResolvedValue({ text: 'Oi João! Aqui é a Vera, da ZappIQ.' });
+      await expect(generateAiResumeReply(ENTRADA)).resolves.toBe('Oi João! Aqui é a Vera, da ZappIQ.');
+      expect(prefilterCreate).toHaveBeenCalledTimes(1);
+      expect((prefilterCreate.mock.calls[0] as any[])[0].data).toMatchObject({
+        organizationId: 'org-cliente',
+        conversationId: 'conversa-1',
+        canal: 'maestro_retomada',
+        categoria: 'guarda-de-marca',
+        regra: 'ZappIQ',
+        acao: 'alerta',
+      });
+    });
+
+    it('marca da ZappIQ na retomada, guarda LIGADA: nada é enviado (null) e o alerta é registrado', async () => {
+      flags.guardaDeMarca = true;
       complete.mockResolvedValue({ text: 'Oi João! Aqui é a Vera, da ZappIQ.' });
       await expect(generateAiResumeReply(ENTRADA)).resolves.toBeNull();
       expect(prefilterCreate).toHaveBeenCalledTimes(1);
@@ -113,6 +128,7 @@ for (const motor of ['caminho leve (contextoUnico desligado)', 'motor único (co
         canal: 'maestro_retomada',
         categoria: 'guarda-de-marca',
         regra: 'ZappIQ',
+        acao: 'resposta_segura',
       });
     });
   });

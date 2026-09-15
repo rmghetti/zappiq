@@ -284,6 +284,9 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
 
     // C1b (A189): o mesmo pós-processador dos outros canais, com a guarda de
     // marca sobre a resposta real e o alerta registrado para o Raio-X.
+    // Rodada 1 do PR #379: a guarda só troca a resposta com o interruptor
+    // `guardaDeMarca` (da leitura única acima); desligado, o dono vê o
+    // alerta em `alertas` e o texto como o cliente leria.
     const result = buildPlaygroundResult({
       rawLlmText: rawText,
       sources,
@@ -293,6 +296,7 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
         nome: orgSettings?.businessName ?? null,
       },
       agente: { nome: contexto.contexto?.agente?.name ?? orgSettings?.agentName ?? null },
+      guardaLigada: flags.guardaDeMarca,
     });
     await registrarAlertasDeSaida({
       organizationId: orgId,

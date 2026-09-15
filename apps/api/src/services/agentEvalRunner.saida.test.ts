@@ -30,6 +30,7 @@ vi.mock('../utils/logger.js', () => ({
 }));
 
 const { executeAgentEvalRun } = await import('./agentEvalRunner.js');
+const { MACHIA_ORG_ID } = await import('../config/zappiqOrg.js');
 
 const PERFIL = {
   organizationId: 'org-do-cliente',
@@ -94,6 +95,25 @@ describe('Qualidade: guarda de marca como alerta', () => {
     const { results } = await executeAgentEvalRun([CENARIO], AGENTE, PERFIL, { pularSugestao: true });
 
     expect(results[0].response).toBe('Aqui é a Vera, da CMJ.');
+    expect(results[0].alertasDeSaida).toBeUndefined();
+    expect(prefilterCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('Qualidade: marca licenciada (rodada 1 do PR #379)', () => {
+  it('MACHIA (faz a ZappIQ): citar a ZappIQ não gera alerta nem registro', async () => {
+    completeMock
+      .mockResolvedValueOnce(resposta('<reply>A MACHIA desenvolve a ZappIQ, nossa plataforma.</reply>'))
+      .mockResolvedValueOnce(resposta('{"passed": true, "confidence": 90, "reason": "ok"}'));
+
+    const { results } = await executeAgentEvalRun(
+      [CENARIO],
+      { ...AGENTE, name: 'Mach' },
+      { ...PERFIL, organizationId: MACHIA_ORG_ID, agentName: 'Mach', businessName: 'MACHIA' },
+      { pularSugestao: true },
+    );
+
+    expect(results[0].response).toBe('A MACHIA desenvolve a ZappIQ, nossa plataforma.');
     expect(results[0].alertasDeSaida).toBeUndefined();
     expect(prefilterCreate).not.toHaveBeenCalled();
   });

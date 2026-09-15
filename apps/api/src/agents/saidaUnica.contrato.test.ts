@@ -61,5 +61,20 @@ describe('todo canal de resposta chama postProcessReply', () => {
       const onde = canal === 'Testar minha IA' ? semComentarios(ler('../routes/aiTraining.ts')) : codigo;
       expect(onde).toMatch(/\bregistrarAlertasDeSaida\(/);
     });
+
+    // Rodada 1 do PR #379: a guarda só segura a resposta com o interruptor
+    // `guardaDeMarca` da organização, lido na leitura única do turno e
+    // passado ao pós-processador. Um canal que esqueça de passar nasce
+    // "só alerta" para sempre (fail-safe), mas o contrato é passar.
+    if (canal === 'Qualidade') {
+      it(`${canal}: nunca liga a guarda (o cenário de marca reprova pelo juiz, o texto fica como veio)`, () => {
+        expect(codigo).not.toMatch(/\bguardaLigada\b/);
+      });
+    } else {
+      it(`${canal}: passa o interruptor guardaDeMarca ao pós-processador (guardaLigada)`, () => {
+        const onde = canal === 'Testar minha IA' ? semComentarios(ler('../routes/aiTraining.ts')) : codigo;
+        expect(onde).toMatch(/guardaLigada:\s*\w+\.guardaDeMarca\b/);
+      });
+    }
   }
 });

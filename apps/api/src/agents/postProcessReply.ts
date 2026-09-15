@@ -18,9 +18,17 @@
  *      filtro de voz, exatamente o que ele faz hoje);
  *   2. as tags de ação LIDAS, com os dados e os botões;
  *   3. a guarda de marca sobre o texto real. Vazou a marca ZappIQ para o
- *      cliente de outro negócio: o texto não sai, sai a resposta segura do
- *      canal, e o alerta volta para quem chamou registrar. "Iza" sozinha não
- *      segura nada: é nome comum de gente.
+ *      cliente de outro negócio: o alerta volta para quem chamou registrar
+ *      (log, Testar minha IA, Raio-X, Qualidade). "Iza" sozinha não dispara
+ *      nada: é nome comum de gente.
+ *
+ * Rodada 1 de correção do PR #379: segurar a resposta é comportamento novo,
+ * visível ao cliente, e a regra da casa exige interruptor. A guarda nasce
+ * SÓ ALERTANDO. Com o interruptor `guardaDeMarca` da organização ligado
+ * (`guardaLigada: true`, lido uma vez por turno em lerFlagsDoTurno), o
+ * texto não sai: sai a resposta segura do canal, sem botões e sem ações
+ * além do handoff. Organizações com a marca licenciada (a MACHIA, que faz
+ * a ZappIQ) podem citar a ZappIQ como a org canônica: nem alerta.
  *
  * Os cinco consumidores (WhatsApp e Instagram, chat do site, Testar minha
  * IA, retomada do Maestro e Qualidade) passam por aqui. O teste de
@@ -30,6 +38,7 @@
 
 import { extractProductionReplyText } from './replyText.js';
 import { findForeignBrandLeaks } from './tenantIsolationGuard.js';
+import { temMarcaLicenciada } from '../config/zappiqOrg.js';
 import type { OrigemDoTurno } from './composeAgentContext.js';
 
 /** Onde a resposta vai parar. Os mesmos canais do motor único de contexto. */
@@ -94,6 +103,14 @@ export interface PostProcessInput {
   };
   /** O agente que respondeu. O nome dele nunca é vazamento. */
   agente?: { nome?: string | null } | null;
+  /**
+   * O interruptor `guardaDeMarca` da organização, lido UMA vez por turno
+   * (lerFlagsDoTurno) por quem chama. Ausente ou false: a guarda só ALERTA
+   * e o texto sai como veio, com botões e ações. true: a guarda segura a
+   * resposta (resposta segura do canal, sem botões, sem ações além do
+   * handoff). A Qualidade nunca troca o texto, ligada ou não.
+   */
+  guardaLigada?: boolean;
 }
 
 export interface TagsDaResposta {
@@ -106,7 +123,11 @@ export interface TagsDaResposta {
 export interface PostProcessOutput {
   /** O texto que sai para o cliente. Pode ser vazio. */
   texto: string;
-  /** As ações pedidas pelo modelo, na ordem, sem repetir. */
+  /**
+   * As ações pedidas pelo modelo, na ordem, sem repetir. Resposta segurada
+   * pela guarda (bloqueada) só mantém o handoff: quem pediu uma pessoa
+   * recebe uma; as outras ações vinham de um texto que o cliente não leu.
+   */
   acoes: string[];
   tags: TagsDaResposta;
   /** Alertas para o log e para o Raio-X. Vazio quando nada disparou. */
@@ -170,7 +191,7 @@ export function postProcessReply(input: PostProcessInput): PostProcessOutput {
   const bruto = String(input.bruto ?? '');
 
   const limpo = extractProductionReplyText(bruto);
-  const acoes = lerAcoes(bruto);
+  const acoesLidas = lerAcoes(bruto);
   const tags: TagsDaResposta = {
     actionData: lerJson(bruto.match(/<action_data>([\s\S]*?)<\/action_data>/i)?.[1]),
     buttons: lerBotoes(bruto.match(/<buttons>([\s\S]*?)<\/buttons>/i)?.[1]),
@@ -180,24 +201,36 @@ export function postProcessReply(input: PostProcessInput): PostProcessOutput {
   let texto = limpo;
   let bloqueada = false;
 
-  if (!input.organizacao.ehZappIQ && limpo) {
+  // Quem pode citar a ZappIQ: a org canônica (a Iza é a identidade dela) e
+  // as organizações com a marca licenciada (a MACHIA, que faz a ZappIQ).
+  const podeCitarAMarca = input.organizacao.ehZappIQ || temMarcaLicenciada(input.organizacao.id);
+
+  if (!podeCitarAMarca && limpo) {
     const vazamentos = findForeignBrandLeaks(limpo, { allow: termosPermitidos(input) });
-    // Só a marca ZappIQ, inequívoca, segura a resposta. "Iza" sozinha é nome
+    // Só a marca ZappIQ, inequívoca, dispara a guarda. "Iza" sozinha é nome
     // comum de gente (a cliente atendida, a profissional da clínica) e, sem
-    // a marca junto, não prova vazamento: bloquear ali calaria conversa real
+    // a marca junto, não prova vazamento: alertar ali acusaria conversa real
     // de quem se chama Iza. Com a marca presente, a Iza entra no alerta.
     const temAMarca = vazamentos.some((v) => v.term === TERMO_DA_MARCA);
     if (temAMarca) {
       for (const v of vazamentos) alertas.push(`${PREFIXO_ALERTA_DE_MARCA}${v.term}`);
-      // Na Qualidade nada vai ao cliente: o teste existe justamente para
-      // achar o vazamento. Trocar pelo texto seguro esconderia a reprovação
-      // do cenário de marca. O alerta segue junto do resultado.
-      if (input.canal !== 'qualidade') {
+      // Segurar a resposta só com o interruptor da organização ligado
+      // (rodada 1 do PR #379): desligado, a guarda só alerta e o texto sai
+      // como veio. Na Qualidade nada vai ao cliente: o teste existe
+      // justamente para achar o vazamento, e trocar pelo texto seguro
+      // esconderia a reprovação do cenário de marca. O alerta segue junto.
+      if (input.guardaLigada === true && input.canal !== 'qualidade') {
         texto = RESPOSTA_SEGURA_DO_CANAL[input.canal];
         bloqueada = true;
       }
     }
   }
+
+  // Resposta segurada: os botões eram do texto que o cliente não leu, e as
+  // ações também, com uma exceção: o handoff. O cliente que pediu uma
+  // pessoa recebe uma, mesmo com a resposta trocada.
+  if (bloqueada) tags.buttons = null;
+  const acoes = bloqueada ? acoesLidas.filter((acao) => acao === 'handoff') : acoesLidas;
 
   return { texto, acoes, tags, alertas, bloqueada };
 }

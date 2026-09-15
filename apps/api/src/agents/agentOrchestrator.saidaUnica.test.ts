@@ -138,6 +138,14 @@ vi.mock('../utils/socketRegistry.js', () => ({ getIo: vi.fn(() => ioMock) }));
 
 const { processIncomingMessage } = await import('./agentOrchestrator.js');
 const { TEXTO_SEGURO_AO_CLIENTE } = await import('./postProcessReply.js');
+const { extractProductionReplyText } = await import('./replyText.js');
+const { MACHIA_ORG_ID } = await import('../config/zappiqOrg.js');
+const { AI_PAUSE_TTL_SECONDS } = await import('../routes/conversations.handoff.js');
+
+/** Liga interruptores da organização na leitura única do turno. */
+function ligarInterruptores(...flags: string[]) {
+  prismaMock.orgFeatureFlag.findMany.mockResolvedValue(flags.map((flag) => ({ flag, enabled: true })));
+}
 
 function inputBase(over: Record<string, unknown> = {}) {
   return {
@@ -216,7 +224,27 @@ beforeEach(() => {
 });
 
 describe('Passo 1: WhatsApp pelo pós-processador único', () => {
-  it('marca da ZappIQ na resposta de um cliente: sai a resposta segura, nunca o vazamento', async () => {
+  /** A frase real do CMJ que a revisão de 15/09 viu a guarda segurar. */
+  const CMJ_USA_A_PLATAFORMA = 'Sim, nosso atendimento usa a plataforma ZappIQ';
+
+  it('guarda DESLIGADA (padrão): a frase com a marca sai INTACTA e o alerta é registrado (rodada 1, item 1a)', async () => {
+    respostaDoModelo(CMJ_USA_A_PLATAFORMA);
+    await processIncomingMessage(inputBase());
+
+    expect(textosEnviados()).toEqual([CMJ_USA_A_PLATAFORMA]);
+    expect(prismaMock.prefilterEvent.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.prefilterEvent.create.mock.calls[0][0].data).toMatchObject({
+      organizationId: 'org-cliente',
+      conversationId: 'conv-1',
+      canal: 'whatsapp',
+      categoria: 'guarda-de-marca',
+      regra: 'ZappIQ',
+      acao: 'alerta',
+    });
+  });
+
+  it('guarda LIGADA (interruptor guardaDeMarca): sai a resposta segura, nunca o vazamento', async () => {
+    ligarInterruptores('guardaDeMarca');
     respostaDoModelo('Aqui é a Vera, da ZappIQ, a plataforma que a CMJ usa.');
     await processIncomingMessage(inputBase());
 
@@ -232,12 +260,60 @@ describe('Passo 1: WhatsApp pelo pós-processador único', () => {
     });
   });
 
-  it('Instagram: mesma guarda, canal registrado como instagram', async () => {
+  it('Instagram: mesma guarda (ligada), canal registrado como instagram', async () => {
+    ligarInterruptores('guardaDeMarca');
     respostaDoModelo('Somos da ZappIQ.');
     await processIncomingMessage(inputBase({ channel: 'instagram' }));
 
     expect(textosEnviados()).toEqual([TEXTO_SEGURO_AO_CLIENTE]);
     expect(prismaMock.prefilterEvent.create.mock.calls[0][0].data.canal).toBe('instagram');
+  });
+
+  it('Instagram com a guarda desligada: o texto sai intacto, só o alerta', async () => {
+    respostaDoModelo('Somos da ZappIQ.');
+    await processIncomingMessage(inputBase({ channel: 'instagram' }));
+
+    expect(textosEnviados()).toEqual(['Somos da ZappIQ.']);
+    expect(prismaMock.prefilterEvent.create.mock.calls[0][0].data).toMatchObject({ canal: 'instagram', acao: 'alerta' });
+  });
+
+  /* A MACHIA faz a ZappIQ (rodada 1, item 1b): o perfil vivo dela leva ao
+   * prompt a resposta do questionário que cita a ZappIQ, e a resposta do
+   * agente cita a ZappIQ de volta. Nada disso é vazamento. */
+  const MACHIA_SETTINGS = {
+    businessName: 'MACHIA',
+    agentName: 'Mach',
+    surveyAnswers: {
+      identidade_empresa: {
+        reg_pode_responder: 'As frentes e ofertas da MACHIA (Radar, Build, ZappIQ, Academy) e como contratar.',
+      },
+    },
+  };
+  const RESPOSTA_DA_MACHIA =
+    'A MACHIA desenvolve a ZappIQ, nossa plataforma de atendimento com IA. Veja os planos em https://zappiq.com.br/precos';
+
+  for (const guarda of ['desligada', 'ligada']) {
+    it(`MACHIA (marca licenciada), guarda ${guarda}, perfil vivo citando a ZappIQ: a resposta sai inteira, sem alerta`, async () => {
+      ligarInterruptores('perfilVivo', ...(guarda === 'ligada' ? ['guardaDeMarca'] : []));
+      respostaDoModelo(RESPOSTA_DA_MACHIA);
+
+      await processIncomingMessage(inputBase({ organizationId: MACHIA_ORG_ID, orgSettings: MACHIA_SETTINGS }));
+
+      // O perfil vivo levou a resposta do questionário (com a ZappIQ) ao prompt.
+      const prompt = String((routeIzaTurnMock.mock.calls[0][0] as any).systemPrompt);
+      expect(prompt).toContain('Radar, Build, ZappIQ, Academy');
+      expect(textosEnviados()).toEqual([extractProductionReplyText(RESPOSTA_DA_MACHIA)]);
+      expect(textosEnviados()[0]).toMatch(/ZappIQ/);
+      expect(prismaMock.prefilterEvent.create).not.toHaveBeenCalled();
+    });
+  }
+
+  it('CMJ com o MESMO perfil vivo e a mesma frase: continua sendo alerta (a licença é da organização, não do texto)', async () => {
+    ligarInterruptores('perfilVivo');
+    respostaDoModelo(RESPOSTA_DA_MACHIA);
+    await processIncomingMessage(inputBase({ orgSettings: { ...MACHIA_SETTINGS, businessName: 'CMJ', agentName: 'Vera' } }));
+    expect(prismaMock.prefilterEvent.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.prefilterEvent.create.mock.calls[0][0].data).toMatchObject({ regra: 'ZappIQ', acao: 'alerta' });
   });
 
   it('resposta limpa sai como sempre saiu, sem alerta', async () => {
@@ -510,6 +586,42 @@ describe('Passo 2: o transbordo não expira sozinho em 1 hora (A167)', () => {
 
     expect(routeIzaTurnMock).not.toHaveBeenCalled();
     expect(totalDeEnvios()).toBe(0);
+  });
+});
+
+describe('rodada 1, item 3: resposta segurada pela guarda não executa ação, exceto o handoff', () => {
+  const COM_NOME = '<action>set_contact_name</action><action_data>{"name":"Ana"}</action_data>Ana, usamos a ZappIQ.';
+
+  it('guarda ligada e resposta trocada: set_contact_name NÃO grava o nome', async () => {
+    ligarInterruptores('guardaDeMarca');
+    respostaDoModelo(COM_NOME);
+    await processIncomingMessage(inputBase());
+
+    expect(textosEnviados()).toEqual([TEXTO_SEGURO_AO_CLIENTE]);
+    const gravacoesDeNome = prismaMock.contact.update.mock.calls.filter((c: any[]) => c[0]?.data?.name !== undefined);
+    expect(gravacoesDeNome).toEqual([]);
+  });
+
+  it('guarda ligada e resposta trocada: o handoff segue valendo (a IA pausa, a equipe é avisada)', async () => {
+    ligarInterruptores('guardaDeMarca');
+    respostaDoModelo('<action>handoff</action>Vou te passar para a equipe da ZappIQ.');
+    await processIncomingMessage(inputBase());
+
+    expect(prismaMock.conversation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'WAITING', aiPaused: true } }),
+    );
+    const notificacoes = emitMock.mock.calls.filter((c: any[]) => c[0] === 'notification');
+    expect(notificacoes).toHaveLength(1);
+  });
+
+  it('guarda desligada (padrão): o texto saiu como veio e a ação é executada', async () => {
+    respostaDoModelo(COM_NOME);
+    await processIncomingMessage(inputBase());
+
+    expect(textosEnviados()).toEqual(['Ana, usamos a ZappIQ.']);
+    expect(prismaMock.contact.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'contact-1' }, data: { name: 'Ana' } }),
+    );
   });
 });
 

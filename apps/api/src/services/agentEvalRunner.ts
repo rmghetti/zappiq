@@ -945,7 +945,9 @@ async function runScenario(
   // A088: a mesma extração da produção. O cliente final lê o conteúdo de
   // <reply>; o avaliador lia o texto cru, com a resposta dobrada e as tags.
   // C1b: agora pelo pós-processador único, que devolve o MESMO texto e o
-  // alerta da guarda de marca.
+  // alerta da guarda de marca. A Qualidade nunca liga a guarda (sem
+  // `guardaLigada`): o cenário de marca precisa ver o vazamento para
+  // reprovar pelo juiz; o alerta vai junto do resultado.
   const saida = postProcessReply({
     bruto: resp.text,
     canal: 'qualidade',

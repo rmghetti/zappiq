@@ -17,6 +17,7 @@ const conversationUpdateMany = vi.fn(async () => ({ count: 1 }));
 const contactUpsert = vi.fn(async () => ({ id: 'contato-1' }));
 const prefilterCreate = vi.fn(async () => ({ id: 'ev-1' }));
 const orgFindUnique = vi.fn();
+const flagFindMany = vi.fn(async () => [] as any[]);
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -36,7 +37,7 @@ vi.mock('@zappiq/database', () => ({
       findFirst: vi.fn(async () => ({ id: 'a1', name: 'Vera', role: 'comercial', systemPrompt: 'Você é a Vera.' })),
     },
     agentRule: { findMany: vi.fn(async () => []) },
-    orgFeatureFlag: { findMany: vi.fn(async () => []), findUnique: vi.fn(async () => null) },
+    orgFeatureFlag: { findMany: (...a: any[]) => (flagFindMany as any)(...a), findUnique: vi.fn(async () => null) },
     prefilterEvent: { create: (...a: any[]) => (prefilterCreate as any)(...a) },
     $queryRawUnsafe: vi.fn(async () => [{ system_prompt: 'Você é a Vera.' }]),
   },
@@ -67,6 +68,7 @@ vi.mock('../utils/logger.js', () => ({
 
 const { processWebChatTurn } = await import('./webChatService.js');
 const { TEXTO_SEGURO_AO_CLIENTE } = await import('../agents/postProcessReply.js');
+const { MACHIA_ORG_ID } = await import('../config/zappiqOrg.js');
 
 const ORG = 'org-do-cmj';
 
@@ -84,7 +86,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   orgFindUnique.mockResolvedValue({ settings: { agentName: 'Vera', businessName: 'CMJ' } });
   contactUpsert.mockResolvedValue({ id: 'contato-1' });
+  flagFindMany.mockResolvedValue([]);
 });
+
+/** Liga interruptores da organização na leitura única do turno. */
+function ligarInterruptores(...flags: string[]) {
+  flagFindMany.mockResolvedValue(flags.map((flag) => ({ flag, enabled: true })));
+}
 
 describe('o chat do site usa o pós-processador único', () => {
   it('o filtro de voz vale no site: sem travessão e sem conectivo de redação', async () => {
@@ -109,7 +117,24 @@ describe('o chat do site usa o pós-processador único', () => {
     expect(prefilterCreate).not.toHaveBeenCalled();
   });
 
-  it('marca da ZappIQ na resposta de um cliente: o visitante recebe a resposta segura e o alerta é registrado', async () => {
+  it('guarda DESLIGADA (padrão): a frase do CMJ com a marca sai INTACTA ao visitante e o alerta é registrado (rodada 1)', async () => {
+    responde('Sim, nosso atendimento usa a plataforma ZappIQ');
+    const r = await processWebChatTurn({ sessionId: 's1', message: 'vocês usam o quê?', organizationId: ORG });
+    expect(r.reply).toBe('Sim, nosso atendimento usa a plataforma ZappIQ');
+    expect(outboundGravada().content).toBe(r.reply);
+    expect(prefilterCreate).toHaveBeenCalledTimes(1);
+    expect((prefilterCreate.mock.calls[0] as any[])[0].data).toMatchObject({
+      organizationId: ORG,
+      conversationId: 'conversa-1',
+      canal: 'site',
+      categoria: 'guarda-de-marca',
+      regra: 'ZappIQ',
+      acao: 'alerta',
+    });
+  });
+
+  it('guarda LIGADA (interruptor guardaDeMarca): o visitante recebe a resposta segura e o alerta é registrado', async () => {
+    ligarInterruptores('guardaDeMarca');
     responde('Aqui é a Vera, da ZappIQ, a plataforma que a CMJ usa.');
     const r = await processWebChatTurn({ sessionId: 's1', message: 'quem é você?', organizationId: ORG });
     expect(r.reply).toBe(TEXTO_SEGURO_AO_CLIENTE);
@@ -123,6 +148,15 @@ describe('o chat do site usa o pós-processador único', () => {
       regra: 'ZappIQ',
       acao: 'resposta_segura',
     });
+  });
+
+  it('MACHIA (marca licenciada): "A MACHIA desenvolve a ZappIQ" sai inteira, sem alerta, com a guarda ligada', async () => {
+    ligarInterruptores('guardaDeMarca');
+    orgFindUnique.mockResolvedValue({ settings: { agentName: 'Mach', businessName: 'MACHIA' } });
+    responde('A MACHIA desenvolve a ZappIQ, nossa plataforma. Veja os planos em https://zappiq.com.br/precos');
+    const r = await processWebChatTurn({ sessionId: 's1', message: 'o que é a ZappIQ?', organizationId: MACHIA_ORG_ID });
+    expect(r.reply).toBe('A MACHIA desenvolve a ZappIQ, nossa plataforma. Veja os planos em https://zappiq.com.br/precos');
+    expect(prefilterCreate).not.toHaveBeenCalled();
   });
 });
 

@@ -131,6 +131,7 @@ beforeEach(() => {
     modeloPorPolitica: flags.modeloPorPolitica === true,
     perfilVivo: flags.perfilVivo === true,
     regrasComoRegistros: flags.regrasComoRegistros === true,
+    guardaDeMarca: flags.guardaDeMarca === true,
   }));
   orgFindUnique.mockResolvedValue({ settings: { scheduling: { enabled: true } } });
   searchDetailed.mockResolvedValue({ context: '', sources: [], status: 'sem_resultado', fromCache: false });
@@ -266,5 +267,41 @@ describe('nota 1 (C1b): o Testar minha IA lê os interruptores uma vez', () => {
     const flagsPassadas = await lerFlagsDoTurno.mock.results[0].value;
     expect(buildAgentContextForContact.mock.calls[0][0].flags).toEqual(flagsPassadas);
     expect(pickTierAndOverride.mock.calls[0][1].flags).toEqual(flagsPassadas);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Rodada 1 do PR #379: a guarda de marca no Testar minha IA nasce só
+ * alertando. O dono vê o alerta no resultado; o texto só é trocado com o
+ * interruptor `guardaDeMarca` da organização ligado.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+describe('rodada 1: a guarda de marca no Testar minha IA', () => {
+  const CMJ_USA_A_PLATAFORMA = 'Sim, nosso atendimento usa a plataforma ZappIQ';
+
+  beforeEach(() => {
+    routeIzaTurn.mockResolvedValue({
+      kind: 'llm',
+      response: { text: `<reply>${CMJ_USA_A_PLATAFORMA}</reply>`, provider: 'google-gemini-flash', model: 'flash' },
+    });
+  });
+
+  it('guarda DESLIGADA (padrão): a resposta sai intacta, com o alerta no resultado e sem bloqueio', async () => {
+    const { status, body } = await testar({ message: 'vocês usam o quê?' });
+    expect(status).toBe(200);
+    expect(body.reply).toBe(CMJ_USA_A_PLATAFORMA);
+    expect(body.alertas).toEqual(['guarda_de_marca:ZappIQ']);
+    expect(body.bloqueada).toBe(false);
+  });
+
+  it('guarda LIGADA: o dono vê que a guarda segurou e o que o cliente receberia', async () => {
+    flags.guardaDeMarca = true;
+    const { RESPOSTA_SEGURA_DO_CANAL } = await import('../agents/postProcessReply.js');
+    const { status, body } = await testar({ message: 'vocês usam o quê?' });
+    expect(status).toBe(200);
+    expect(body.reply).toBe(RESPOSTA_SEGURA_DO_CANAL.playground);
+    expect(body.reply).not.toMatch(/zappiq/i);
+    expect(body.alertas).toEqual(['guarda_de_marca:ZappIQ']);
+    expect(body.bloqueada).toBe(true);
   });
 });

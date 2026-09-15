@@ -15,8 +15,9 @@ import { postProcessReply, type PostProcessInput } from '../agents/postProcessRe
 
 /**
  * Sem a organização em mãos, o teste trata quem chamou como cliente sem
- * nome: a guarda de marca roda do mesmo jeito (a ZappIQ é a única exceção,
- * e ela sempre chega identificada pela rota).
+ * nome: a guarda de marca roda do mesmo jeito, só alertando (a ZappIQ e as
+ * organizações com a marca licenciada sempre chegam identificadas pela
+ * rota, que também traz o interruptor).
  */
 const ORGANIZACAO_SEM_NOME: PostProcessInput['organizacao'] = { id: '', ehZappIQ: false, nome: null };
 
@@ -93,6 +94,11 @@ export function buildPlaygroundResult(input: {
    */
   organizacao?: PostProcessInput['organizacao'];
   agente?: PostProcessInput['agente'];
+  /**
+   * Rodada 1 do PR #379: o interruptor `guardaDeMarca` da organização. Só
+   * com ele a guarda troca a resposta; ausente, ela só alerta.
+   */
+  guardaLigada?: boolean;
 }): PlaygroundReply {
   const sources = Array.isArray(input.sources) ? input.sources : [];
   // O MESMO pós-processador do WhatsApp, do site, da retomada e da
@@ -103,6 +109,7 @@ export function buildPlaygroundResult(input: {
     canal: 'playground',
     organizacao: input.organizacao ?? ORGANIZACAO_SEM_NOME,
     agente: input.agente ?? null,
+    guardaLigada: input.guardaLigada,
   });
   return {
     reply: saida.texto,

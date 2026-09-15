@@ -1013,13 +1013,16 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
 
   // 4. Pós-processamento único (C1b, A189): o mesmo de todos os canais. O
   //    texto visível sai pela mesma função do WhatsApp, as tags de ação são
-  //    lidas e a guarda de marca roda sobre a resposta real.
+  //    lidas e a guarda de marca roda sobre a resposta real. Rodada 1 do PR
+  //    #379: a guarda só segura a resposta com o interruptor `guardaDeMarca`
+  //    (da leitura única acima); desligado, só alerta.
   const posProcessar = (identidade: { negocio: string | null; agente: string | null }) =>
     postProcessReply({
       bruto: llmResp.text,
       canal: 'site',
       organizacao: { id: organizationId, ehZappIQ: isIzaCanonical, nome: identidade.negocio },
       agente: { nome: identidade.agente },
+      guardaLigada: flags.guardaDeMarca,
     });
   let saida = posProcessar({ negocio: null, agente: agenteNome });
   if (saida.alertas.length) {
