@@ -21,6 +21,10 @@ import {
   getTrialLlmStage,
   consumeWebChatOrgReplyBudget,
 } from '../middleware/planLimits.js';
+// C1b (Passo 3): o visitante que voltou vê a resposta humana que chegou
+// enquanto ele estava fora. A sessão é a mesma que o widget guarda.
+import { mensagensDaEquipe, configDoWidget } from '../services/webChatVisitante.js';
+import { sessaoNormalizada } from '../services/webChatSala.js';
 
 const router = Router();
 
@@ -47,6 +51,23 @@ const webChatLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Muitas mensagens em pouco tempo. Tenta de novo em 5 min.' },
 });
+
+// C1b: leituras do widget (mensagens da equipe e, no Passo 4, o nome e a
+// saudação). O script roda em toda página do site do cliente e relê ao
+// abrir o painel: limite próprio, separado do POST que chama o modelo.
+const leituraDoWidgetLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas leituras em pouco tempo. Tenta de novo em 5 min.' },
+});
+
+/** Id de organização que o widget manda na URL, validado como no POST. */
+function orgDaUrl(bruto: unknown): string | null {
+  const id = String(bruto || '').trim();
+  return id && id.length <= 40 ? id : null;
+}
 
 const webChatSchema = z.object({
   sessionId: z.string().trim().min(1).max(64),
@@ -94,6 +115,7 @@ router.post('/iza-message', webChatLimiter, async (req: Request, res: Response) 
     res.json({
       reply: result.reply,
       paused: result.paused === true,
+      transbordo: result.transbordo === true,
       provider: result.provider,
       model: result.model,
       latencyMs: result.latencyMs,
@@ -171,10 +193,13 @@ router.post('/org/:organizationId/message', webChatLimiter, async (req: Request,
   }
 
   try {
-    const result = await processWebChatTurn({ sessionId, message, history, organizationId });
+    // C1b: o widget.js por organização escuta a equipe (socket da sessão e
+    // sincronização), então aqui a tag de transbordo vira transbordo real.
+    const result = await processWebChatTurn({ sessionId, message, history, organizationId, canalDeVolta: true });
     res.json({
       reply: result.reply,
       paused: result.paused === true,
+      transbordo: result.transbordo === true,
       provider: result.provider,
       model: result.model,
       latencyMs: result.latencyMs,
@@ -191,5 +216,55 @@ router.post('/org/:organizationId/message', webChatLimiter, async (req: Request,
     return res.status(500).json({ error: 'internal_error' });
   }
 });
+
+/* GET /api/web-chat/org/:organizationId/config
+ * C1b (Passo 4, A247): nome e saudação do widget, lidos do Treinar IA (o
+ * agente e settings.greetingMessage). Os atributos da tag colada no site
+ * viram só reserva. Atrás do interruptor `perfilVivo` (desligado, devolve
+ * nulos e o widget fica como hoje). Leve e com cache curto: o script roda
+ * em toda página do site do cliente. Erro nunca vira 500: devolve nulos.
+ */
+router.get('/org/:organizationId/config', leituraDoWidgetLimiter, async (req: Request, res: Response) => {
+  const organizationId = orgDaUrl(req.params.organizationId);
+  if (!organizationId) return res.status(404).json({ error: 'not_found' });
+  try {
+    const config = await getWebChatOrgConfig(organizationId);
+    if (!config.exists || !config.enabled) return res.status(404).json({ error: 'not_found' });
+    res.set('Cache-Control', 'public, max-age=60');
+    return res.json(await configDoWidget(organizationId));
+  } catch (err: any) {
+    logger.warn('[webChat] configuração do widget falhou (o widget usa a reserva)', {
+      organizationId,
+      err: err?.message,
+    });
+    return res.json({ nome: null, saudacao: null });
+  }
+});
+
+/* GET /api/web-chat/org/:organizationId/sessao/:sessionId/mensagens-da-equipe
+ * C1b (Passo 3, A158): as respostas que a equipe escreveu pelo Inbox para
+ * esta sessão. O widget recebe ao vivo pelo socket; esta leitura cobre o
+ * visitante que estava fora quando a resposta saiu. Mesmo portão do POST:
+ * organização existente e com o chat do site ligado, senão 404 genérico.
+ */
+router.get(
+  '/org/:organizationId/sessao/:sessionId/mensagens-da-equipe',
+  leituraDoWidgetLimiter,
+  async (req: Request, res: Response) => {
+    const organizationId = orgDaUrl(req.params.organizationId);
+    const sessao = sessaoNormalizada(req.params.sessionId);
+    if (!organizationId || !sessao) return res.status(404).json({ error: 'not_found' });
+
+    try {
+      const config = await getWebChatOrgConfig(organizationId);
+      if (!config.exists || !config.enabled) return res.status(404).json({ error: 'not_found' });
+      res.set('Cache-Control', 'no-store');
+      return res.json({ mensagens: await mensagensDaEquipe(organizationId, sessao) });
+    } catch (err: any) {
+      logger.warn('[webChat] leitura das mensagens da equipe falhou', { organizationId, err: err?.message });
+      return res.status(503).json({ error: 'unavailable' });
+    }
+  },
+);
 
 export default router;

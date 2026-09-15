@@ -11,7 +11,15 @@
  */
 import { z } from 'zod';
 import type { RagSource } from '../services/ragService.js';
-import { extractProductionReplyText } from '../agents/replyText.js';
+import { postProcessReply, type PostProcessInput } from '../agents/postProcessReply.js';
+
+/**
+ * Sem a organização em mãos, o teste trata quem chamou como cliente sem
+ * nome: a guarda de marca roda do mesmo jeito, só alertando (a ZappIQ e as
+ * organizações com a marca licenciada sempre chegam identificadas pela
+ * rota, que também traz o interruptor).
+ */
+const ORGANIZACAO_SEM_NOME: PostProcessInput['organizacao'] = { id: '', ehZappIQ: false, nome: null };
 
 /**
  * Contrato de entrada: a mensagem do dono do negócio + o histórico da conversa
@@ -38,6 +46,14 @@ export interface PlaygroundReply {
   reply: string;
   usedContext: boolean;
   sources: Array<{ source: string; similarity: number; snippet: string }>;
+  /**
+   * C1b (A189): alertas do pós-processador de saída (a guarda de marca).
+   * Vazio quando nada disparou. Quando a guarda segura a resposta, o texto
+   * de `reply` explica ao dono o que aconteceu e o que o cliente leria.
+   */
+  alertas: string[];
+  /** true quando a guarda trocou a resposta pela resposta segura. */
+  bloqueada: boolean;
 }
 
 /**
@@ -57,8 +73,10 @@ export interface PlaygroundReply {
  */
 export function cleanPlaygroundReply(rawLlmText: string): string {
   // A088: uma definição só, em agents/replyText.ts, compartilhada com o
-  // WhatsApp e com o avaliador da Qualidade.
-  return extractProductionReplyText(rawLlmText);
+  // WhatsApp e com o avaliador da Qualidade. C1b: chamada pelo
+  // pós-processador único, como todos os canais.
+  return postProcessReply({ bruto: rawLlmText, canal: 'playground', organizacao: ORGANIZACAO_SEM_NOME })
+    .texto;
 }
 
 /**
@@ -69,10 +87,34 @@ export function cleanPlaygroundReply(rawLlmText: string): string {
 export function buildPlaygroundResult(input: {
   rawLlmText: string;
   sources: RagSource[];
+  /**
+   * C1b: quem é o cliente e quem é o agente, para a guarda de marca do
+   * pós-processador único. Ausente, o teste trata a organização como
+   * cliente sem nome (a guarda roda do mesmo jeito).
+   */
+  organizacao?: PostProcessInput['organizacao'];
+  agente?: PostProcessInput['agente'];
+  /**
+   * Rodada 1 do PR #379: o interruptor `guardaDeMarca` da organização. Só
+   * com ele a guarda troca a resposta; ausente, ela só alerta.
+   */
+  guardaLigada?: boolean;
 }): PlaygroundReply {
   const sources = Array.isArray(input.sources) ? input.sources : [];
+  // O MESMO pós-processador do WhatsApp, do site, da retomada e da
+  // Qualidade (C1b, A189). O texto é o de cleanPlaygroundReply; o que muda
+  // é a guarda de marca, que agora roda aqui também.
+  const saida = postProcessReply({
+    bruto: input.rawLlmText,
+    canal: 'playground',
+    organizacao: input.organizacao ?? ORGANIZACAO_SEM_NOME,
+    agente: input.agente ?? null,
+    guardaLigada: input.guardaLigada,
+  });
   return {
-    reply: cleanPlaygroundReply(input.rawLlmText),
+    reply: saida.texto,
+    alertas: saida.alertas,
+    bloqueada: saida.bloqueada,
     usedContext: sources.length > 0,
     sources: sources.map((s) => ({
       source: s.source,

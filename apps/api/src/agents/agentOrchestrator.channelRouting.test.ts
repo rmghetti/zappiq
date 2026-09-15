@@ -45,6 +45,25 @@ vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+// C1b (Passo 2): deliverAgentReply grava a mensagem no mesmo lugar em que
+// envia. Banco falso: nenhum teste daqui abre conexão.
+const messageCreateMock = vi.fn(async (args: any) => ({ id: 'msg-1', createdAt: new Date(), ...args.data }));
+vi.mock('@zappiq/database', () => ({
+  prisma: { message: { create: (...a: any[]) => (messageCreateMock as any)(...a) } },
+}));
+vi.mock('../utils/socketRegistry.js', () => ({ getIo: vi.fn(() => undefined), setIo: vi.fn() }));
+// O orquestrador importa o motor de fluxos, e o agendador dele cria a fila
+// BullMQ no import. Fila falsa, o mesmo padrão dos PRs #375 e #377.
+vi.mock('bullmq', () => ({
+  Queue: class {
+    add = vi.fn();
+    on = vi.fn();
+  },
+  Worker: class {
+    on = vi.fn();
+  },
+}));
+
 const { deliverAgentReply } = await import('./agentOrchestrator.js');
 
 beforeEach(() => {
@@ -72,6 +91,15 @@ describe('deliverAgentReply — resposta do agente sai pelo channelDispatcher', 
     expect(waSendButtonsMock).not.toHaveBeenCalled();
     // O externalMessageId do canal volta pro caller persistir.
     expect(result).toEqual({ channel: 'instagram', externalMessageId: 'igmid_1' });
+    // C1b: e a própria função já gravou, com o id do Instagram no campo certo.
+    expect(messageCreateMock).toHaveBeenCalledTimes(1);
+    expect(messageCreateMock.mock.calls[0][0].data).toMatchObject({
+      direction: 'OUTBOUND',
+      isFromBot: true,
+      conversationId: 'conv_ig',
+      content: 'Oi! Como posso ajudar?',
+      externalMessageId: 'igmid_1',
+    });
   });
 
   it('resposta com botões vai pro dispatcher.sendReplyInteractive (IG degrada pra texto lá dentro)', async () => {

@@ -362,6 +362,17 @@ function lerFixture(nome: string): string {
   return readFileSync(join(PASTA, `${nome}.txt`), 'utf8');
 }
 
+/**
+ * A fixture como o MOTOR ÚNICO a escreve. Uma diferença só, de propósito
+ * (C1b, nota 6 da revisão de 14/09): sem trecho da base, o cabeçalho
+ * '# Contexto recuperado (RAG)' não vai sozinho. Nas fixtures com trecho
+ * (ou com a base fora do ar) nada muda; o caminho de antes segue igual à
+ * fixture, byte a byte.
+ */
+function fixtureDoMotorUnico(nome: string): string {
+  return lerFixture(nome).replace('\n# Contexto recuperado (RAG)\n# Agora', '\n# Agora');
+}
+
 describe('composeAgentContext (função pura) produz o texto de hoje byte a byte', () => {
   it('Vera (CMJ), perfil vivo ligado', () => {
     const saida = composeAgentContext(
@@ -440,7 +451,9 @@ describe('composeAgentContext (função pura) produz o texto de hoje byte a byte
       }),
     );
 
-    const fixture = lerFixture('contexto-iza-primeiro-contato');
+    // Base sem trecho neste caso: o motor único não manda o cabeçalho vazio.
+    const fixture = fixtureDoMotorUnico('contexto-iza-primeiro-contato');
+    expect(fixture).not.toBe(lerFixture('contexto-iza-primeiro-contato'));
     expect(saida.systemPrompt).toBe(fixture);
     expect(saida.hash).toBe(sha256(fixture));
   });
@@ -589,7 +602,8 @@ describe('buildSystemPromptForContact com contextoUnico LIGADO: mesmo texto, ago
     armarIza();
     flags = { contextoUnico: true };
 
-    expect(await buildSystemPromptForContact(ENTRADA_IZA)).toBe(lerFixture('contexto-iza-primeiro-contato'));
+    // Sem trecho da base: igual à fixture menos o cabeçalho vazio (nota 6).
+    expect(await buildSystemPromptForContact(ENTRADA_IZA)).toBe(fixtureDoMotorUnico('contexto-iza-primeiro-contato'));
   });
 
   it('buildAgentContextForContact devolve hash, partes e a marca do motor único', async () => {
@@ -776,7 +790,8 @@ describe('5ª fixture: as regras aprovadas pelo dono no mesmo lugar, nos dois mo
         caso.armar();
         flags = { ...caso.flags, contextoUnico };
         const texto = await buildSystemPromptForContact(caso.entrada);
-        expect(texto, `${caso.fixture} contextoUnico=${contextoUnico}`).toBe(lerFixture(caso.fixture));
+        const esperado = contextoUnico ? fixtureDoMotorUnico(caso.fixture) : lerFixture(caso.fixture);
+        expect(texto, `${caso.fixture} contextoUnico=${contextoUnico}`).toBe(esperado);
       }
     }
     expect(agentRuleFindMany).not.toHaveBeenCalled();

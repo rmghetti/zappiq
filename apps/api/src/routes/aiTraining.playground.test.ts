@@ -125,4 +125,28 @@ describe('buildPlaygroundResult', () => {
     const out = buildPlaygroundResult({ rawLlmText: '<TAG>limpo', sources: [] });
     expect(out.reply).toBe('limpo');
   });
+
+  // Rodada 1 do PR #379: a guarda de marca nasce só alertando.
+  it('marca de outra empresa, guarda desligada (padrão): texto intacto, alerta no resultado, sem bloqueio', () => {
+    const out = buildPlaygroundResult({
+      rawLlmText: 'Sim, nosso atendimento usa a plataforma ZappIQ',
+      sources: [],
+      organizacao: { id: 'org-do-cmj', ehZappIQ: false, nome: 'CMJ' },
+    });
+    expect(out.reply).toBe('Sim, nosso atendimento usa a plataforma ZappIQ');
+    expect(out.alertas).toEqual(['guarda_de_marca:ZappIQ']);
+    expect(out.bloqueada).toBe(false);
+  });
+
+  it('marca de outra empresa, guarda ligada: o texto é trocado pela explicação ao dono', () => {
+    const out = buildPlaygroundResult({
+      rawLlmText: 'Sim, nosso atendimento usa a plataforma ZappIQ',
+      sources: [],
+      organizacao: { id: 'org-do-cmj', ehZappIQ: false, nome: 'CMJ' },
+      guardaLigada: true,
+    });
+    expect(out.reply).not.toMatch(/zappiq/i);
+    expect(out.reply).toMatch(/guarda de marca segurou/);
+    expect(out.bloqueada).toBe(true);
+  });
 });

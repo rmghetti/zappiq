@@ -34,7 +34,12 @@
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import * as ragService from './ragService.js';
-import { flagLigada, montarContextoDoTurno, type ContatoDoTurno } from '../agents/agentContextLoader.js';
+import {
+  flagLigada,
+  montarContextoDoTurno,
+  resolveSchedulingRuntime,
+  type ContatoDoTurno,
+} from '../agents/agentContextLoader.js';
 import type { EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { ContextoDoCenario, ExtrasDoMontador, MontadorDeContexto } from './agentEvalRunner.js';
 
@@ -64,6 +69,8 @@ interface SetupDoEval {
   ligado: boolean;
   orgSettings: Record<string, any>;
   perfilVivoLigado: boolean;
+  /** C1b (nota 4): o estado real do agendamento, lido uma vez por execução. */
+  agendamento?: { ativo: boolean; tipos: string[] } | null;
 }
 
 /**
@@ -91,10 +98,14 @@ export function criarMontadorDeContextoDoEval(
           where: { id: organizationId },
           select: { settings: true },
         });
+        const orgSettings = (org?.settings as Record<string, any>) ?? {};
         return {
           ligado: true,
-          orgSettings: (org?.settings as Record<string, any>) ?? {},
+          orgSettings,
           perfilVivoLigado,
+          // C1b (nota 4): a MESMA linha de agendamento do WhatsApp, que
+          // faltava na Qualidade. Só com o perfil vivo, onde a linha mora.
+          agendamento: perfilVivoLigado ? await resolveSchedulingRuntime(organizationId, orgSettings) : null,
         };
       })();
     }
@@ -102,7 +113,7 @@ export function criarMontadorDeContextoDoEval(
   };
 
   return async (scenario: EvalScenario, extras?: ExtrasDoMontador): Promise<ContextoDoCenario | null> => {
-    const { ligado, orgSettings, perfilVivoLigado } = await prepararUmaVez();
+    const { ligado, orgSettings, perfilVivoLigado, agendamento } = await prepararUmaVez();
     if (!ligado) return null;
 
     // A base da organização testada, pela busca real. searchDetailed já é
@@ -139,6 +150,7 @@ export function criarMontadorDeContextoDoEval(
       temHistoricoNoContexto: (scenario.history?.length ?? 0) > 0,
       agora: DATA_FIXA_DO_EVAL,
       perfilVivoLigado,
+      agendamento: agendamento ?? null,
       // Rodada 2 do PR #377: o MESMO bloco que quem chamou o avaliador leu
       // uma vez por execução (ContextoDoSugeridor.regrasBlock), e não uma
       // leitura nova por cenário. Vazio, o prompt fica sem o bloco.

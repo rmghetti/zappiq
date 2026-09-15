@@ -75,14 +75,24 @@ vi.mock('./izaFactsService.js', () => ({
   getIzaFactsBlock: vi.fn(async () => '# FATOS ATUAIS\n- Lite: R$ 197'),
   invalidateIzaFactsCache: vi.fn(),
 }));
-vi.mock('./featureFlags.js', () => ({ isFlagOn: (...args: any[]) => isFlagOn(...args) }));
+vi.mock('./featureFlags.js', async (importOriginal) => {
+  const real = (await importOriginal()) as any;
+  return {
+    ...real,
+    isFlagOn: (...args: any[]) => isFlagOn(...args),
+    // C1b (nota 1): a leitura única do turno, derivada do mesmo dublê.
+    lerFlagsDaOrganizacao: async (org: string) =>
+      Object.fromEntries(
+        await Promise.all(real.FLAG_NAMES.map(async (f: string) => [f, Boolean(await isFlagOn(org, f))])),
+      ),
+  };
+});
 vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: (...a: any[]) => loggerError(...a), debug: vi.fn() },
 }));
 
-const { processWebChatTurn, SystemPromptNaoEncontrado, buildWebChatChannelInstruction } = await import(
-  './webChatService.js'
-);
+const { processWebChatTurn, SystemPromptNaoEncontrado, buildWebChatChannelInstruction, limparCacheDoAgenteDoSite } =
+  await import('./webChatService.js');
 const { CORE_AGENT_RULES_V1 } = await import('../agents/coreAgentRules.js');
 
 const ORG = 'org-do-cmj';
@@ -104,6 +114,7 @@ function promptEnviado(indice = 0): string {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  limparCacheDoAgenteDoSite();
   vi.useFakeTimers();
   vi.setSystemTime(AGORA);
   flags = {};
@@ -129,12 +140,20 @@ afterEach(() => {
 describe('contextoUnico DESLIGADO: o chat do site como antes', () => {
   it('usa o carregador com cache, não consulta a base e não monta Cliente atual', async () => {
     await processWebChatTurn({ sessionId: 's1', message: 'oi', organizationId: ORG, history: [] } as any);
+    await processWebChatTurn({ sessionId: 's1', message: 'e o preço?', organizationId: ORG, history: [] } as any);
 
-    expect(queryRawUnsafe).toHaveBeenCalled();
-    expect(agentFindFirst).not.toHaveBeenCalled();
+    // C1b (nota 2): o agente sai do seletor único (o mais recente), não mais
+    // de um SQL próprio, e o cache de 5 minutos continua neste caminho: dois
+    // turnos, um lookup.
+    expect(queryRawUnsafe).not.toHaveBeenCalled();
+    expect(agentFindFirst).toHaveBeenCalledTimes(1);
+    expect(agentFindFirst.mock.calls[0][0]).toMatchObject({
+      where: { organizationId: ORG, role: 'comercial', status: 'live' },
+      orderBy: { createdAt: 'desc' },
+    });
     expect(searchDetailed).not.toHaveBeenCalled();
     const prompt = promptEnviado();
-    expect(prompt).toContain('PROMPT GRAVADO DA ORG (cache)');
+    expect(prompt).toContain(PROMPT_DA_VERA);
     // O CORE cita o cabeçalho '# Cliente atual' numa regra; o que prova a
     // ausência do bloco é a linha que só ele escreve.
     expect(prompt).not.toContain('Mensagens trocadas até agora:');
@@ -142,6 +161,39 @@ describe('contextoUnico DESLIGADO: o chat do site como antes', () => {
     expect(prompt).not.toContain('# Agora');
     // A instrução de canal fica no FIM, como sempre foi neste caminho.
     expect(prompt.endsWith(buildWebChatChannelInstruction(false))).toBe(true);
+  });
+});
+
+describe('contextoUnico DESLIGADO com ragNoChatDoSite: a MESMA flag vale no caminho de antes (C1b, Passo 4)', () => {
+  it('a base é consultada e entra antes da instrução de canal, que segue no fim', async () => {
+    flags = { ragNoChatDoSite: true };
+
+    await processWebChatTurn({ sessionId: 's1', message: 'quanto custa a serra?', organizationId: ORG, history: [] } as any);
+
+    expect(searchDetailed).toHaveBeenCalledWith(ORG, 'quanto custa a serra?', 5);
+    const prompt = promptEnviado();
+    const rag = prompt.indexOf('# Contexto recuperado (RAG)\n[catalogo.pdf] A serra circular custa R$ 890.');
+    expect(rag).toBeGreaterThan(0);
+    expect(prompt.indexOf('# CANAL DE COMUNICAÇÃO')).toBeGreaterThan(rag);
+    expect(prompt.endsWith(buildWebChatChannelInstruction(false))).toBe(true);
+  });
+
+  it('busca sem trecho: nenhum cabeçalho vazio (nota 6)', async () => {
+    flags = { ragNoChatDoSite: true };
+    searchDetailed.mockResolvedValue({ context: '', sources: [], status: 'sem_resultado', fromCache: false });
+
+    await processWebChatTurn({ sessionId: 's1', message: 'oi', organizationId: ORG, history: [] } as any);
+
+    expect(promptEnviado()).not.toContain('# Contexto recuperado (RAG)');
+  });
+
+  it('base fora do ar vira o aviso honesto (A028) também no caminho de antes', async () => {
+    flags = { ragNoChatDoSite: true };
+    searchDetailed.mockResolvedValue({ context: '', sources: [], status: 'servico_fora', fromCache: false });
+
+    await processWebChatTurn({ sessionId: 's1', message: 'oi', organizationId: ORG, history: [] } as any);
+
+    expect(promptEnviado()).toContain('base de conhecimento indisponível neste momento');
   });
 });
 
@@ -248,12 +300,15 @@ describe('contextoUnico LIGADO: o mesmo motor do WhatsApp', () => {
   });
 
   it('erro de código no motor único não cala o visitante: cai no caminho de antes e registra', async () => {
-    agentFindFirst.mockRejectedValue(new TypeError('coluna inexistente'));
+    // Só a primeira leitura falha (a do motor único); o caminho de antes lê
+    // o mesmo agente, pelo mesmo seletor, e responde.
+    agentFindFirst.mockRejectedValueOnce(new TypeError('coluna inexistente'));
 
     const res = await processWebChatTurn({ sessionId: 's1', message: 'oi', organizationId: ORG, history: [] } as any);
 
     expect(res.reply).toBe('Oi! Posso ajudar?');
-    expect(promptEnviado()).toContain('PROMPT GRAVADO DA ORG (cache)');
+    expect(promptEnviado()).toContain(PROMPT_DA_VERA);
+    expect(promptEnviado().endsWith(buildWebChatChannelInstruction(false))).toBe(true);
     expect(loggerError).toHaveBeenCalledWith(
       expect.stringContaining('motor único falhou'),
       expect.objectContaining({ organizationId: ORG }),

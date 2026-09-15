@@ -245,12 +245,38 @@ describe('resolveTurnPolicy: canais com regra própria hoje', () => {
     expect(resolveTurnPolicy({ ...emTrial, plano: 'IZA_PRO' }).tier).toBeUndefined();
   });
 
-  it('Qualidade e chat do site seguem na cascata padrão, sem tier', () => {
-    for (const canal of ['qualidade', 'site'] as const) {
-      const p = resolveTurnPolicy(entradaPura(MATRIZ[0], canal));
-      expect(p.tier, canal).toBeUndefined();
-      expect(p.override, canal).toBeUndefined();
-      expect(p.modelo, canal).toBe('anthropic-sonnet');
-    }
+  it('Qualidade segue na cascata padrão, sem tier', () => {
+    const p = resolveTurnPolicy(entradaPura(MATRIZ[0], 'qualidade'));
+    expect(p.tier).toBeUndefined();
+    expect(p.override).toBeUndefined();
+    expect(p.modelo).toBe('anthropic-sonnet');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * C1b (nota 5 da revisão de 14/09, A068): o chat do site passa a seguir o
+ * plano da organização, com a MESMA precedência do WhatsApp (trial e
+ * estágio NOVO no STARTER, llm_routing, tier do plano). Antes ia sempre na
+ * cascata padrão (Sonnet): as 24 chamadas do widget do CMJ, plano GROWTH,
+ * foram todas Sonnet. Só vale com `modeloPorPolitica` ligado; desligado, o
+ * chat do site nem chama a política e segue como hoje.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+describe('resolveTurnPolicy: tier do chat do site pelo plano (nota 5)', () => {
+  for (const caso of MATRIZ) {
+    it(`site com a mesma decisão de tier e override do WhatsApp: ${caso.nome}`, () => {
+      const site = resolveTurnPolicy(entradaPura(caso, 'site'));
+      // O Modo Econômico é do breaker do WhatsApp; o site não o recebe.
+      const whatsapp = resolveTurnPolicy({ ...entradaPura(caso, 'whatsapp'), ecoMode: false });
+      expect(site.tier, caso.nome).toBe(whatsapp.tier);
+      expect(site.override, caso.nome).toBe(whatsapp.override);
+      expect(site.tools).toEqual([]);
+    });
+  }
+
+  it('CMJ (GROWTH, pagante) no site vai para o primário do GROWTH, não para a cascata padrão', () => {
+    const p = resolveTurnPolicy(entradaPura(MATRIZ[0], 'site'));
+    expect(p.tier).toBe('GROWTH');
+    expect(p.modelo).toBe(TIER_PRIMARY_PROVIDER.GROWTH);
   });
 });

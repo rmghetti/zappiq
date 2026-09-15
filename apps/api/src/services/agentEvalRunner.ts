@@ -36,7 +36,11 @@ import type { EvalScenario } from '../agents/agentEvalSet.js';
 import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
 // A088: a MESMA extração que o WhatsApp usa. Antes o avaliador lia resp.text
 // cru e julgava a resposta dobrada, com as tags dentro.
-import { extractProductionReplyText } from '../agents/replyText.js';
+// C1b (Passo 1, A189): o avaliador passa pelo MESMO pós-processador da
+// produção. O texto é o mesmo de extractProductionReplyText; o que entra é
+// o alerta da guarda de marca, que vai para o resultado e para o Raio-X.
+import { postProcessReply } from '../agents/postProcessReply.js';
+import { registrarAlertasDeSaida } from './alertasDeSaida.js';
 import { regraTerminaEmFraseCompleta } from './agentPromptPatcher.js';
 import type { RagSearchStatus } from './ragService.js';
 import type { ParteDoContexto } from '../agents/composeAgentContext.js';
@@ -124,6 +128,13 @@ export interface ScenarioResult {
    * caiu; não é o mesmo que "não há base".
    */
   ragStatus?: RagSearchStatus;
+  /**
+   * C1b (A189): alertas do pós-processador de saída (guarda de marca). Na
+   * Qualidade o texto NÃO é trocado (o cenário precisa enxergar o
+   * vazamento para reprovar), mas o alerta fica registrado aqui. Ausente
+   * quando nada disparou.
+   */
+  alertasDeSaida?: string[];
   /** C1a: sha256 do prompt que o agente testado recebeu. Liga o teste ao Raio-X. */
   promptHash?: string;
   /**
@@ -933,7 +944,31 @@ async function runScenario(
 
   // A088: a mesma extração da produção. O cliente final lê o conteúdo de
   // <reply>; o avaliador lia o texto cru, com a resposta dobrada e as tags.
-  const response = extractProductionReplyText(resp.text);
+  // C1b: agora pelo pós-processador único, que devolve o MESMO texto e o
+  // alerta da guarda de marca. A Qualidade nunca liga a guarda (sem
+  // `guardaLigada`): o cenário de marca precisa ver o vazamento para
+  // reprovar pelo juiz; o alerta vai junto do resultado.
+  const saida = postProcessReply({
+    bruto: resp.text,
+    canal: 'qualidade',
+    organizacao: {
+      id: profile.organizationId ?? '',
+      ehZappIQ: profile.isZappIQ,
+      nome: profile.businessName,
+    },
+    agente: { nome: agent.name || profile.agentName },
+  });
+  const response = saida.texto;
+  const alertasDoCenario = saida.alertas.length ? { alertasDeSaida: saida.alertas } : {};
+  if (saida.alertas.length && profile.organizationId) {
+    await registrarAlertasDeSaida({
+      organizationId: profile.organizationId,
+      conversationId: null,
+      canal: 'qualidade',
+      alertas: saida.alertas,
+      bloqueada: saida.bloqueada,
+    });
+  }
 
   // A171: falha técnica sai da nota AQUI, antes do juiz e antes do sugeridor.
   // Gastar juiz e sugestão sobre uma resposta vazia foi o que produziu, em
@@ -954,6 +989,7 @@ async function runScenario(
       responseLatencyMs,
       responseTokens: { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens },
       ...rastroDoContexto,
+      ...alertasDoCenario,
     });
   }
 
@@ -987,6 +1023,7 @@ async function runScenario(
       responseTokens: { input: resp.usage?.inputTokens, output: resp.usage?.outputTokens },
       deterministic: { passed: deterministicPassed, failedPatterns, missingPatterns },
       ...rastroDoContexto,
+      ...alertasDoCenario,
     });
   }
 
@@ -1036,6 +1073,7 @@ async function runScenario(
     judge,
     combined,
     ...rastroDoContexto,
+    ...alertasDoCenario,
   };
 }
 

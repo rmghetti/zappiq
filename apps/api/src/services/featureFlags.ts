@@ -31,7 +31,8 @@ export type FlagName =
   | 'treinarSomenteAdmin'
   | 'regrasComoRegistros'
   | 'contextoUnico'
-  | 'modeloPorPolitica';
+  | 'modeloPorPolitica'
+  | 'guardaDeMarca';
 
 export interface FlagDef {
   /** O que muda quando liga. Em português: isto aparece na tela do admin. */
@@ -86,6 +87,11 @@ export const FLAGS: Record<FlagName, FlagDef> = {
       'Modelo e ferramentas do turno decididos por resolveTurnPolicy, a mesma regra para todos os canais.',
     removeBy: '2026-12-31',
   },
+  guardaDeMarca: {
+    descricao:
+      'A guarda de marca passa a SEGURAR a resposta do agente que cita a ZappIQ para o cliente de outro negócio (sai a resposta segura do canal, sem botões e sem ações além do transbordo). Desligada, a guarda só alerta: o texto sai como veio e o alerta vai para o log, o Testar minha IA, o Raio-X e a Qualidade. Ligar por organização depois de ler os alertas.',
+    removeBy: '2027-03-31',
+  },
 };
 
 export const FLAG_NAMES = Object.keys(FLAGS) as FlagName[];
@@ -95,6 +101,23 @@ export const FLAG_CACHE_TTL_SECONDS = 30;
 
 export function flagCacheKey(organizationId: string, flag: string): string {
   return `zappiq:flag:${organizationId}:${flag}`;
+}
+
+/**
+ * C1b (nota 1 da revisão de 14/09): a chave da leitura ÚNICA, com todos os
+ * interruptores da organização de uma vez. O turno do agente lê esta, e não
+ * uma chave por interruptor.
+ */
+export function flagsCacheKey(organizationId: string): string {
+  return `zappiq:flags:${organizationId}`;
+}
+
+/** Todos os interruptores da organização, lidos de uma vez. */
+export type FlagsDaOrganizacao = Readonly<Record<FlagName, boolean>>;
+
+/** Tudo desligado: o valor de qualquer dúvida. */
+export function flagsDesligadas(): FlagsDaOrganizacao {
+  return Object.fromEntries(FLAG_NAMES.map((f) => [f, false])) as Record<FlagName, boolean>;
 }
 
 export function isFlagName(valor: unknown): valor is FlagName {
@@ -182,6 +205,60 @@ export async function isFlagOn(
   }
 }
 
+/** Lê a lista de ligados guardada no cache. null = ausente ou estranha. */
+function lerLigadosDoCache(bruto: string | null): Set<string> | null {
+  if (bruto === null || bruto === undefined) return null;
+  try {
+    const lista = JSON.parse(bruto);
+    if (!Array.isArray(lista)) return null;
+    return new Set(lista.filter((f: unknown) => typeof f === 'string'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Todos os interruptores da organização numa leitura só (C1b, nota 1).
+ *
+ * O turno do agente lia até quatro interruptores, cada um um GET no Redis;
+ * com o Redis fora, eram quatro GETs falhos por turno. Aqui é UM GET (a
+ * lista dos ligados, na chave flagsCacheKey), e só no cache vazio uma
+ * consulta ao banco, que traz todas as linhas da organização. Mesmo prazo
+ * de cache (30 s) e mesma invalidação de isFlagOn (setFlag apaga as duas
+ * chaves). Mesma regra de dúvida: qualquer erro devolve tudo desligado.
+ */
+export async function lerFlagsDaOrganizacao(
+  organizationId: string,
+  deps: FeatureFlagsDeps = depsPadrao(),
+): Promise<FlagsDaOrganizacao> {
+  const desligadas = flagsDesligadas();
+  if (!organizationId) return desligadas;
+
+  const key = flagsCacheKey(organizationId);
+  try {
+    const doCache = lerLigadosDoCache(await deps.cache.get(key));
+    if (doCache) {
+      return Object.fromEntries(FLAG_NAMES.map((f) => [f, doCache.has(f)])) as Record<FlagName, boolean>;
+    }
+
+    const linhas = await deps.db.orgFeatureFlag.findMany({
+      where: { organizationId },
+      select: { flag: true, enabled: true },
+    });
+    const ligados = new Set(
+      (linhas ?? []).filter((l: any) => l && l.enabled === true && isFlagName(l.flag)).map((l: any) => l.flag as string),
+    );
+    await deps.cache.set(key, JSON.stringify([...ligados]), FLAG_CACHE_TTL_SECONDS);
+    return Object.fromEntries(FLAG_NAMES.map((f) => [f, ligados.has(f)])) as Record<FlagName, boolean>;
+  } catch (err) {
+    logger.warn('[featureFlags] leitura única falhou, assumindo tudo desligado', {
+      organizationId,
+      err: String(err),
+    });
+    return desligadas;
+  }
+}
+
 /**
  * Liga ou desliga o interruptor e invalida o cache na hora.
  *
@@ -214,6 +291,8 @@ export async function setFlag(
   });
 
   await deps.cache.del(flagCacheKey(organizationId, flag));
+  // C1b: a leitura única do turno também tem de ver a mudança na hora.
+  await deps.cache.del(flagsCacheKey(organizationId));
 
   logger.info('[featureFlags] interruptor alterado', {
     organizationId,

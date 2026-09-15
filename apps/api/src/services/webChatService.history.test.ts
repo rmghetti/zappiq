@@ -69,7 +69,10 @@ const prismaMock: any = {
       return daConversa.slice(0, take ?? daConversa.length);
     }),
   },
-  $queryRawUnsafe: vi.fn(async () => [{ system_prompt: 'PROMPT DA ORG' }]),
+  // C1b (nota 2): o agente do site sai do seletor único (resolveAgentForTurn).
+    agent: {
+      findFirst: vi.fn(async () => ({ id: 'agente-1', name: 'Iza', role: 'comercial', systemPrompt: 'PROMPT DA ORG' })),
+    },
 };
 vi.mock('@zappiq/database', () => ({ prisma: prismaMock }));
 

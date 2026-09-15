@@ -27,10 +27,20 @@ import { loadBusinessContext } from './flowGenerator.js';
 // caracteres), CORE, perfil vivo, links e saudação, com a instrução da
 // retomada DEPOIS do CORE. Desligado, o caminho leve de antes segue igual.
 import {
-  flagLigada,
+  lerFlagsDoTurno,
   montarContextoDoTurno,
   carregarPoliticaDoTurno,
+  resolveAgentForTurn,
 } from './agentContextLoader.js';
+// C1b (nota 3 da revisão de 14/09): as regras aprovadas pelo dono também no
+// caminho leve, como o #375 fez no orquestrador. Fail-soft.
+import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
+// C1b (Passo 1, A189): a retomada mandava o texto cru do modelo, com
+// <reply>, <action> e <buttons> dentro, e sem filtro de voz nem guarda de
+// marca. Agora passa pelo MESMO pós-processador de todos os canais.
+import { postProcessReply } from './postProcessReply.js';
+import { registrarAlertasDeSaida } from '../services/alertasDeSaida.js';
+import { isZappIQOrg } from '../config/zappiqOrg.js';
 
 /** Mesma janela de histórico do orchestrator (últimos 20 turnos). */
 export const MAX_HISTORY_MESSAGES = 20;
@@ -50,6 +60,12 @@ export interface AiResumePromptContext {
   history: Array<{ direction: string; content: string }>;
   /** Instrução do nó-IA (o que fazer NESTA mensagem de retomada). */
   aiPrompt: string;
+  /**
+   * C1b (nota 3): o bloco "# Regras aprovadas pelo dono" (agent_rules), com
+   * `regrasComoRegistros` ligado. Entra logo depois da persona, a mesma
+   * posição do orquestrador. Vazio ou ausente: o texto de antes.
+   */
+  regrasBlock?: string;
 }
 
 /**
@@ -76,6 +92,7 @@ export function buildAiResumePrompt(ctx: AiResumePromptContext): { system: strin
 
   const system = [
     persona,
+    (ctx.regrasBlock || '').trim(),
     '# Contexto do negócio',
     ctx.brief,
     '',
@@ -124,17 +141,15 @@ export async function generateAiResumeReply(
   }
 
   try {
+    // C1b (nota 1): os interruptores lidos UMA vez nesta retomada.
+    const flags = await lerFlagsDoTurno(organizationId);
+
     // Contexto do negócio + persona live + histórico — tudo em paralelo.
     const [ctx, agent, historyMessages] = await Promise.all([
       loadBusinessContext(organizationId),
-      // Persona: Agent live mais recente da org. O orchestrator escolhe por
-      // role (comercial/suporte via leadStatus); aqui, sem o lead carregado,
-      // o subset mínimo viável é o live mais recente. Fail-soft → null.
-      prisma.agent.findFirst({
-        where: { organizationId, status: 'live' },
-        select: { systemPrompt: true },
-        orderBy: { createdAt: 'desc' },
-      }).catch(() => null),
+      // Persona pelo seletor ÚNICO (C1b, nota 2, A077): o mesmo dos outros
+      // canais. Sem o lead carregado, vale o papel comercial. Fail-soft.
+      resolveAgentForTurn(organizationId, null).catch(() => null),
       prisma.message.findMany({
         where: { conversationId },
         orderBy: { createdAt: 'desc' },
@@ -149,21 +164,41 @@ export async function generateAiResumeReply(
       content: m.content,
     }));
 
+    // C1b (nota 3): com `contextoUnico` desligado, a retomada montava o
+    // prompt SEM as regras aprovadas pelo dono. Agora entram aqui também,
+    // pelo agente da persona. Fail-soft: regra ilegível não segura a
+    // mensagem (o serviço devolve '' com o interruptor desligado, sem ir ao
+    // banco).
+    let regrasBlock = '';
+    if (!flags.contextoUnico && flags.regrasComoRegistros) {
+      try {
+        regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
+          agentId: agent?.id ?? null,
+          ligado: true,
+        });
+      } catch (err) {
+        logger.warn('[FlowAiResume] bloco de regras indisponível (segue sem ele)', {
+          organizationId,
+          err: String(err),
+        });
+      }
+    }
+
     const leve = buildAiResumePrompt({
       brief: ctx.brief,
       personaPrompt: agent?.systemPrompt ?? null,
       history,
       aiPrompt,
+      regrasBlock,
     });
     const user = leve.user;
 
     // C1a: o system pelo motor único, quando ligado. Sem Agent vivo, o
     // carregador devolve null e a retomada segue no caminho leve.
     let system = leve.system;
-    const [contextoUnico, modeloPorPolitica] = await Promise.all([
-      flagLigada(organizationId, 'contextoUnico'),
-      flagLigada(organizationId, 'modeloPorPolitica'),
-    ]);
+    // O nome de quem responde, para a guarda de marca do pós-processador.
+    let agenteNome: string | null = agent?.name ?? ctx.agentName ?? null;
+    const { contextoUnico, modeloPorPolitica } = flags;
     if (contextoUnico) {
       const [conversa, org] = await Promise.all([
         prisma.conversation.findUnique({
@@ -187,9 +222,11 @@ export async function generateAiResumeReply(
         ragStatus: 'sem_resultado',
         temHistoricoNoContexto: history.length > 0,
         instrucaoDeCanal: buildAiResumeInstruction(),
+        flags,
       });
       if (contexto) {
         system = contexto.systemPrompt;
+        agenteNome = contexto.agente.name;
         logger.info('[FlowAiResume] contexto pelo motor único', {
           organizationId,
           conversationId,
@@ -215,7 +252,40 @@ export async function generateAiResumeReply(
       operation: 'chat',
     });
 
-    const text = (resp.text || '').trim();
+    // C1b (A189): o mesmo pós-processador de todos os canais. Nenhuma tag
+    // chega ao cliente, o filtro de voz vale aqui também, e a guarda de
+    // marca, com o interruptor `guardaDeMarca` ligado (rodada 1 do PR #379),
+    // devolve texto vazio (a resposta segura da retomada é o silêncio), que
+    // cai no fail-closed logo abaixo. Desligado, só alerta.
+    const saida = postProcessReply({
+      bruto: resp.text,
+      canal: 'maestro_retomada',
+      organizacao: {
+        id: organizationId,
+        ehZappIQ: isZappIQOrg(organizationId),
+        nome: ctx.businessName ?? null,
+      },
+      agente: { nome: agenteNome },
+      guardaLigada: flags.guardaDeMarca,
+    });
+    await registrarAlertasDeSaida({
+      organizationId,
+      conversationId,
+      canal: 'maestro_retomada',
+      alertas: saida.alertas,
+      bloqueada: saida.bloqueada,
+    });
+    if (saida.acoes.length) {
+      // A retomada é uma mensagem que o agente manda por conta própria: ação
+      // pedida aqui (transbordo, cadastro) não é executada, só registrada.
+      logger.info('[FlowAiResume] ação pedida na retomada não foi executada', {
+        organizationId,
+        conversationId,
+        acoes: saida.acoes,
+      });
+    }
+
+    const text = saida.texto.trim();
     if (!text) {
       logger.warn('[FlowAiResume] LLM devolveu texto vazio — fail-closed', { organizationId, conversationId });
       return null;

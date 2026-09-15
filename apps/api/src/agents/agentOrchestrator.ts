@@ -40,11 +40,14 @@ import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 // C3: correção aprovada pelo dono é REGISTRO (agent_rules), montado em bloco
 // a cada turno, atrás do interruptor `regrasComoRegistros`.
 import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
-import {
-  extractProductionReplyText,
-  stripStructuredTags,
-  stripLeakedPrefixes,
-} from './replyText.js';
+// C1b (Passo 1, A189): toda resposta do agente passa pelo MESMO
+// pós-processador (reply, tags lidas, filtro de voz e guarda de marca), e o
+// alerta da guarda vai para o log e para o registro que o Raio-X lê.
+import { postProcessReply } from './postProcessReply.js';
+import { registrarAlertasDeSaida } from '../services/alertasDeSaida.js';
+// C1b (Passo 2, A167, A193): o transbordo de verdade (pausa no banco,
+// WAITING e aviso à equipe) mora num módulo que o chat do site também usa.
+import { marcarTransbordo, mensagemDeEspera, type ModoDaPausa } from '../services/transbordoHumano.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
 // Perfil vivo (A8): identidade, tom, horário e agendamento montados das
 // settings a cada turno, atrás do interruptor `perfilVivo`. Desligado, o
@@ -54,7 +57,6 @@ import {
   buildGreetingBlock,
   type LiveProfileAgendamento,
 } from './tenantLiveProfile.js';
-import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
 // C1a (Passo 12): um só motor de contexto para todos os canais. A função
 // pura (composeAgentContext) e o carregador (agentContextLoader) entram
 // atrás do interruptor `contextoUnico`; a política de modelo e ferramentas
@@ -62,10 +64,13 @@ import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
 // byte a byte o de antes.
 import {
   flagLigada,
+  lerFlagsDoTurno,
   montarContextoDoTurno,
   carregarPoliticaDoTurno,
+  resolveSchedulingRuntime,
   type ContextoDoTurno,
   type ContatoDoTurno,
+  type FlagsDaOrganizacao,
 } from './agentContextLoader.js';
 import { hashDoContexto, type OrigemDoTurno, type ParteDoContexto } from './composeAgentContext.js';
 import type { TurnPolicy } from './resolveTurnPolicy.js';
@@ -138,19 +143,110 @@ export async function deliverAgentReply(input: {
   conversationId: string;
   text: string;
   buttons?: Array<{ id: string; title: string }> | null;
+  /**
+   * C1b: a confiança gravada na mensagem. 1.0 = texto fixo, sem modelo
+   * (aviso de transbordo, erro técnico, opt-out). Padrão 0.95, o da
+   * resposta do agente.
+   */
+  aiConfidence?: number;
+  /** Socket para o aviso em tempo real ao Inbox. Padrão: o do processo. */
+  io?: SocketIOServer;
 }): Promise<SendReplyResult> {
   const { organizationId, conversationId, text, buttons } = input;
-  if (buttons && buttons.length > 0) {
-    return sendReplyInteractive({
-      organizationId,
-      conversationId,
-      kind: 'button',
-      body: text,
-      options: buttons,
+  const envio =
+    buttons && buttons.length > 0
+      ? await sendReplyInteractive({
+          organizationId,
+          conversationId,
+          kind: 'button',
+          body: text,
+          options: buttons,
+        })
+      : await sendReplyText({ organizationId, conversationId, content: text });
+
+  // C1b (Passo 2, A167): o envio e a gravação moram no MESMO lugar. Antes,
+  // quatro respostas (aviso de transbordo, resposta a mídia, falha de áudio
+  // e aviso de erro técnico) chegavam ao cliente sem entrar em messages: o
+  // Inbox mostrava o pedido sem resposta e o turno seguinte não sabia o que
+  // tinha sido prometido.
+  await registrarSaidaDoAgente({
+    organizationId,
+    conversationId,
+    content: text,
+    tipo: 'TEXT',
+    aiConfidence: input.aiConfidence ?? 0.95,
+    envio,
+    io: input.io,
+  });
+  return envio;
+}
+
+/**
+ * C1b (Passo 2): grava a mensagem que o agente mandou e avisa o Inbox em
+ * tempo real. Chamada por deliverAgentReply e pelo envio em áudio (TTS),
+ * que sai pela Cloud API do WhatsApp e não pelo despachante.
+ *
+ * Grava o id externo devolvido pelo canal (mesmo mapeamento do
+ * processMessageSendJob): wamid vira whatsappMessageId, o mid do Instagram
+ * vira externalMessageId. Com isso os callbacks de entrega e leitura
+ * alcançam também as respostas da IA.
+ *
+ * Nunca lança: a mensagem já saiu. Uma falha de banco aqui não pode virar
+ * um segundo envio (o aviso de erro técnico do catch geral).
+ */
+export async function registrarSaidaDoAgente(p: {
+  organizationId: string;
+  conversationId: string;
+  content: string;
+  tipo: 'TEXT' | 'AUDIO';
+  aiConfidence: number;
+  envio?: SendReplyResult | null;
+  io?: SocketIOServer;
+}): Promise<void> {
+  let gravada: { id: string; createdAt: Date } | null = null;
+  try {
+    gravada = await prisma.message.create({
+      data: {
+        direction: 'OUTBOUND',
+        type: p.tipo as any,
+        content: p.content,
+        status: 'SENT',
+        conversationId: p.conversationId,
+        isFromBot: true,
+        aiConfidence: p.aiConfidence,
+        ...(p.envio?.externalMessageId
+          ? p.envio.channel === 'instagram'
+            ? { externalMessageId: p.envio.externalMessageId }
+            : { whatsappMessageId: p.envio.externalMessageId }
+          : {}),
+      },
+    });
+  } catch (err) {
+    logger.error('[Agent] a mensagem saiu mas não foi gravada (fail-soft)', {
+      organizationId: p.organizationId,
+      conversationId: p.conversationId,
+      err: err instanceof Error ? err.message : String(err),
     });
   }
-  return sendReplyText({ organizationId, conversationId, content: text });
+
+  const io = p.io ?? getIo();
+  if (io) {
+    io.to(`org:${p.organizationId}`).emit('new_message', {
+      conversationId: p.conversationId,
+      message: {
+        id: gravada?.id,
+        content: p.content,
+        direction: 'OUTBOUND',
+        isFromBot: true,
+        createdAt: (gravada?.createdAt ? new Date(gravada.createdAt) : new Date()).toISOString(),
+      },
+    });
+  }
 }
+
+/** O aviso que o cliente recebe quando o turno inteiro falha (A193). */
+export const TEXTO_DE_ERRO_TECNICO =
+  'Olá! Estou com uma dificuldade técnica momentânea. Em breve um atendente entrará em contato. Desculpe o inconveniente! 🙏';
 
 /* ══════════════════════════════════════════════════════════════════════
  * Rede de crise nas SAÍDAS ANTECIPADAS do turno (P62, I3 da revisão)
@@ -193,18 +289,8 @@ async function fecharSaidaAntecipadaComAcolhimento(params: {
   if (!jaRespondeu) {
     const texto = acrescentarAcolhimento('', { comTransbordo: true });
     try {
-      await deliverAgentReply({ organizationId, conversationId, text: texto });
-      await prisma.message.create({
-        data: {
-          direction: 'OUTBOUND',
-          type: 'TEXT',
-          content: texto,
-          status: 'SENT',
-          conversationId,
-          isFromBot: true,
-          aiConfidence: 1.0, // determinística: regex, sem LLM
-        },
-      });
+      // Envia e grava no mesmo lugar (C1b). Determinística: regex, sem LLM.
+      await deliverAgentReply({ organizationId, conversationId, text: texto, aiConfidence: 1.0 });
     } catch (err) {
       logger.error('[Agent] acolhimento em saída antecipada falhou (fail-soft)', {
         err: String(err),
@@ -318,18 +404,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     if (autoReplyTemplate) {
       logger.info(`[Agent] AUTOREPLY mode active for ${contactPhone}`);
       try {
-        await deliverAgentReply({ organizationId, conversationId, text: autoReplyTemplate });
-        await prisma.message.create({
-          data: {
-            direction: 'OUTBOUND',
-            type: 'TEXT',
-            content: autoReplyTemplate,
-            status: 'SENT',
-            conversationId,
-            isFromBot: true,
-            aiConfidence: 1.0,
-          },
-        });
+        await deliverAgentReply({ organizationId, conversationId, text: autoReplyTemplate, aiConfidence: 1.0, io });
         // Pausa AI pra esse contato — proximas mensagens nao geram autoreply
         // de novo, ficam aguardando atendimento humano.
         const pauseKey = `ai_paused:${organizationId}:${contactPhone}`;
@@ -421,6 +496,8 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
           organizationId,
           conversationId,
           text: 'Não consegui processar seu áudio agora. Pode me mandar em texto?',
+          aiConfidence: 1.0,
+          io,
         });
         return;
       }
@@ -428,7 +505,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
 
     // ── 2.5. Handle outros não-textos (image, document, video, location) ─
     if (messageType !== 'text' && messageType !== 'button_reply' && messageType !== 'list_reply') {
-      await handleNonTextMessage(organizationId, conversationId, messageType);
+      await handleNonTextMessage(organizationId, conversationId, messageType, io);
       return;
     }
 
@@ -468,33 +545,11 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         'Pronto, você foi descadastrado e não vai mais receber nossas mensagens de marketing. Se mudar de ideia, é só nos escrever.';
 
       try {
-        // Channel-agnostic (WhatsApp / Instagram) — mesma via da resposta normal.
-        await sendReplyText({ organizationId, conversationId, content: optOutReply });
-        await prisma.message.create({
-          data: {
-            direction: 'OUTBOUND',
-            type: 'TEXT',
-            content: optOutReply,
-            status: 'SENT',
-            conversationId,
-            isFromBot: true,
-            aiConfidence: 1.0,
-          },
-        });
+        // Channel-agnostic (WhatsApp / Instagram), mesma via da resposta
+        // normal, que também grava e avisa o Inbox (C1b).
+        await deliverAgentReply({ organizationId, conversationId, text: optOutReply, aiConfidence: 1.0, io });
       } catch (err) {
         logger.error('[Agent] Falha ao enviar confirmação de opt-out', { err });
-      }
-
-      if (io) {
-        io.to(`org:${organizationId}`).emit('new_message', {
-          conversationId,
-          message: {
-            content: optOutReply,
-            direction: 'OUTBOUND',
-            isFromBot: true,
-            createdAt: new Date().toISOString(),
-          },
-        });
       }
 
       // Curto-circuito: não seguimos pro motor de venda / LLM.
@@ -650,29 +705,8 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       const degradedReply = sinalDeCriseDoTurno.crise
         ? acrescentarAcolhimento(textoFixo, { comTransbordo: true })
         : textoFixo;
-      await deliverAgentReply({ organizationId, conversationId, text: degradedReply });
-      await prisma.message.create({
-        data: {
-          direction: 'OUTBOUND',
-          type: 'TEXT',
-          content: degradedReply,
-          status: 'SENT',
-          conversationId,
-          isFromBot: true,
-          aiConfidence: 1.0, // mensagem fixa, sem LLM
-        },
-      });
-      if (io) {
-        io.to(`org:${organizationId}`).emit('new_message', {
-          conversationId,
-          message: {
-            content: degradedReply,
-            direction: 'OUTBOUND',
-            isFromBot: true,
-            createdAt: new Date().toISOString(),
-          },
-        });
-      }
+      // Mensagem fixa, sem LLM. Envia, grava e avisa o Inbox (C1b).
+      await deliverAgentReply({ organizationId, conversationId, text: degradedReply, aiConfidence: 1.0, io });
       if (sinalDeCriseDoTurno.crise) {
         await fecharSaidaAntecipadaComAcolhimento({
           organizationId, conversationId, canal: canalDoTurno,
@@ -785,7 +819,13 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // existia (ou o contrário). Ver resolveSchedulingRuntime.
     const agendamento = await resolveSchedulingRuntime(organizationId, orgSettings);
 
+    // C1b (nota 1 da revisão de 14/09): os interruptores da organização, lidos
+    // UMA vez neste turno e passados ao carregador, à política e aos
+    // montadores. Antes eram até quatro GETs no Redis por turno.
+    const flagsDoTurno = await lerFlagsDoTurno(organizationId);
+
     const contextoDoTurno = await buildAgentContextForContact({
+      flags: flagsDoTurno,
       origem: channel === 'instagram' ? 'instagram' : 'whatsapp',
       organizationId,
       contactId,
@@ -816,6 +856,18 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       content: msg.content,
     }));
 
+    // C1b (Passo 1): quem é o cliente e quem é o agente, para a guarda de
+    // marca do pós-processador. O nome do agente vem do Agent que o motor
+    // único escolheu; sem ele, do que o dono gravou nas settings.
+    const organizacaoDaSaida = {
+      id: organizationId,
+      ehZappIQ: isZappIQOrg(organizationId),
+      nome: orgSettings?.businessName ?? null,
+    };
+    const agenteDaSaida = {
+      nome: contextoDoTurno.contexto?.agente?.name ?? orgSettings?.agentName ?? null,
+    };
+
     // ── 8.5. Maestro Pacote 2.6 — caminho agêntico (gated + fail-soft) ────
     // Ativado apenas quando o nó-IA tem tools do tipo 'webhook' configuradas.
     // Qualquer erro cai silenciosamente pro caminho normal (routeIzaTurn).
@@ -824,6 +876,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       ecoMode,
       canal: channel === 'instagram' ? 'instagram' : 'whatsapp',
       agendamentoAtivo: agendamento.ativo,
+      flags: flagsDoTurno,
     });
     if (flowStep?.next === 'ai' && Array.isArray(flowStep.aiTools) && flowStep.aiTools.length > 0) {
       const aiTools = flowStep.aiTools as WebhookToolConfig[];
@@ -864,10 +917,28 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
             },
           });
           // Envia a resposta agêntica pelo mesmo caminho do path normal (sendReplyText +
-          // prisma.message.create), sem TTS (loop agêntico é text-only por design):
-          const agenticTextoLimpo = agentResult.text
-            ? stripLeakedPrefixes(stripStructuredTags(agentResult.text))
-            : '';
+          // prisma.message.create), sem TTS (loop agêntico é text-only por design).
+          // C1b (A189): o caminho agêntico não extraía <reply> nem passava pelo
+          // filtro de voz; agora usa o mesmo pós-processador de todo canal.
+          const saidaAgentica = agentResult.text
+            ? postProcessReply({
+                bruto: agentResult.text,
+                canal: canalDoTurno,
+                organizacao: organizacaoDaSaida,
+                agente: agenteDaSaida,
+                guardaLigada: flagsDoTurno.guardaDeMarca,
+              })
+            : null;
+          if (saidaAgentica) {
+            await registrarAlertasDeSaida({
+              organizationId,
+              conversationId,
+              canal: canalDoTurno,
+              alertas: saidaAgentica.alertas,
+              bloqueada: saidaAgentica.bloqueada,
+            });
+          }
+          const agenticTextoLimpo = saidaAgentica?.texto ?? '';
           // O loop agêntico responde por fora do routeIzaTurn, então a linha
           // do CVV tem de entrar aqui. Acrescentada ao texto limpo, nunca no
           // lugar dele: em crise, uma parede é pior do que uma resposta.
@@ -876,25 +947,8 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
               ? acrescentarAcolhimento(agenticTextoLimpo, { comTransbordo: true })
               : agenticTextoLimpo;
           if (agenticReplyText) {
-            await sendReplyText({ organizationId, conversationId, content: agenticReplyText });
-            await prisma.message.create({
-              data: {
-                direction: 'OUTBOUND',
-                type: 'TEXT',
-                content: agenticReplyText,
-                status: 'SENT',
-                conversationId,
-                isFromBot: true,
-                aiConfidence: 0.95,
-              },
-            });
+            await deliverAgentReply({ organizationId, conversationId, text: agenticReplyText, aiConfidence: 0.95, io });
             logger.info('[Maestro] caminho agêntico OK', { organizationId, conversationId, toolsUsed: agentResult.toolsUsed });
-            if (io) {
-              io.to(`org:${organizationId}`).emit('new_message', {
-                conversationId,
-                message: { content: agenticReplyText, direction: 'OUTBOUND', isFromBot: true, createdAt: new Date().toISOString() },
-              });
-            }
             if (sinalDeCriseDoTurno.crise) {
               await fecharSaidaAntecipadaComAcolhimento({
                 organizationId, conversationId, canal: canalDoTurno,
@@ -966,21 +1020,13 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
         snippet: turnResult.matchedSnippet,
       });
       // FASE 4 (#251): channel-aware. WhatsApp e Instagram convergem aqui.
-      await sendReplyText({
+      // Resposta determinística (regex): envia, grava e avisa o Inbox (C1b).
+      await deliverAgentReply({
         organizationId,
         conversationId,
-        content: turnResult.response,
-      });
-      await prisma.message.create({
-        data: {
-          direction: 'OUTBOUND',
-          type: 'TEXT',
-          content: turnResult.response,
-          status: 'SENT',
-          conversationId,
-          isFromBot: true,
-          aiConfidence: 1.0, // resposta determinística (regex match)
-        },
+        text: turnResult.response,
+        aiConfidence: 1.0,
+        io,
       });
       // A251 e A232: na conta de um cliente, quem escreve é o cliente final
       // dele. A camada compliance deixou de recusar e passou a transbordar,
@@ -1007,8 +1053,40 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     }
 
     // ── 10. Parse structured response ───────────────────
-    const llmResponse = { text: turnResult.response.text };
-    const parsed = parseAgentResponse(llmResponse.text);
+    // C1b (Passo 1): o pós-processador único lê as tags, limpa o texto e
+    // roda a guarda de marca. A ação executada segue sendo a PRIMEIRA, como
+    // antes; as demais ficam no log. Rodada 1 do PR #379: a guarda só segura
+    // a resposta com o interruptor `guardaDeMarca` da organização (lido na
+    // leitura única do turno); desligado, ela só alerta. Resposta segurada
+    // não leva botões nem ações além do handoff (o pós-processador descarta).
+    const saida = postProcessReply({
+      bruto: turnResult.response.text,
+      canal: canalDoTurno,
+      organizacao: organizacaoDaSaida,
+      agente: agenteDaSaida,
+      guardaLigada: flagsDoTurno.guardaDeMarca,
+    });
+    await registrarAlertasDeSaida({
+      organizationId,
+      conversationId,
+      canal: canalDoTurno,
+      alertas: saida.alertas,
+      bloqueada: saida.bloqueada,
+    });
+    if (saida.acoes.length > 1) {
+      logger.info('[Agent] mais de uma ação na resposta; só a primeira é executada', {
+        organizationId,
+        conversationId,
+        acoes: saida.acoes,
+      });
+    }
+    const parsed: ParsedResponse = {
+      replyText: saida.texto || null,
+      action: saida.acoes[0] ?? null,
+      actionData: saida.tags.actionData ?? null,
+      // Resposta trocada pela guarda não leva os botões da resposta original.
+      buttons: saida.bloqueada ? null : saida.tags.buttons,
+    };
 
     // ── 10.5. Rede de crise (P62) ───────────────────────
     // A resposta do agente NÃO é substituída: a linha do CVV é acrescentada
@@ -1087,8 +1165,19 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
               voice: voiceCfg.voice,
             });
             if (ttsResult.mediaId) {
-              await waService.sendAudio(contactPhone, ttsResult.mediaId, waCreds);
+              const envioDoAudio: any = await waService.sendAudio(contactPhone, ttsResult.mediaId, waCreds);
               sentAsAudio = true;
+              // O áudio sai pela Cloud API, fora do despachante: grava aqui,
+              // no mesmo lugar em que envia (C1b, Passo 2).
+              await registrarSaidaDoAgente({
+                organizationId,
+                conversationId,
+                content: parsed.replyText,
+                tipo: 'AUDIO',
+                aiConfidence: parsed.action ? 0.9 : 0.95,
+                envio: { channel: 'whatsapp', externalMessageId: envioDoAudio?.messages?.[0]?.id },
+                io,
+              });
               logger.info('[Agent] Resposta enviada como ÁUDIO (TTS)', {
                 contactPhone, minutesEstimate: ttsResult.minutesEstimate,
               });
@@ -1107,36 +1196,18 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       // FASE 4 (#251) fecho — era waService.sendText/sendButtons direto com
       // contactPhone (`ig:<igsid>` ia pra Cloud API do WhatsApp e o Direct
       // ficava mudo). Agora o dispatcher roteia pelo conversation.channel.
-      let sendResult: SendReplyResult | null = null;
+      // C1b: deliverAgentReply grava a mensagem (com o id externo do canal)
+      // e avisa o Inbox, no mesmo lugar em que envia.
       if (!sentAsAudio) {
-        sendResult = await deliverAgentReply({
+        await deliverAgentReply({
           organizationId,
           conversationId,
           text: parsed.replyText,
           buttons: parsed.buttons,
+          aiConfidence: parsed.action ? 0.9 : 0.95,
+          io,
         });
       }
-
-      // Save outbound message. Grava o id externo devolvido pelo canal (mesmo
-      // mapeamento do processMessageSendJob): wamid → whatsappMessageId,
-      // mid do IG → externalMessageId. Com isso os callbacks de status
-      // (delivered/read) passam a alcançar também as respostas da IA.
-      await prisma.message.create({
-        data: {
-          direction: 'OUTBOUND',
-          type: sentAsAudio ? 'AUDIO' as any : 'TEXT',
-          content: parsed.replyText,
-          status: 'SENT',
-          conversationId,
-          isFromBot: true,
-          aiConfidence: parsed.action ? 0.9 : 0.95,
-          ...(sendResult?.externalMessageId
-            ? sendResult.channel === 'instagram'
-              ? { externalMessageId: sendResult.externalMessageId }
-              : { whatsappMessageId: sendResult.externalMessageId }
-            : {}),
-        },
-      });
     }
 
     // ── 12.5. Crise: a IA para e uma pessoa assume ──────
@@ -1154,17 +1225,9 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     }
 
     // ── 13. Real-time dashboard push ────────────────────
-    if (io) {
-      io.to(`org:${organizationId}`).emit('new_message', {
-        conversationId,
-        message: {
-          content: parsed.replyText,
-          direction: 'OUTBOUND',
-          isFromBot: true,
-          createdAt: new Date().toISOString(),
-        },
-      });
-    }
+    // C1b: o aviso ao Inbox saiu junto com a gravação, dentro de
+    // deliverAgentReply (e de registrarSaidaDoAgente no áudio), com o id da
+    // mensagem gravada. Antes ele saía aqui mesmo quando nada era enviado.
 
     // ── 14. CRM sync (Onda 1) — IA preenche o pipeline ──────────────
     // Fail-soft: nunca bloqueia a resposta. Roda DEPOIS do envio. Mapeia o
@@ -1184,12 +1247,24 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
   } catch (err) {
     logger.error('[Agent] Error processing message:', err);
 
-    // Fallback message — pelo canal da conversa (WA ou IG), nunca waService direto.
-    await deliverAgentReply({
-      organizationId,
-      conversationId,
-      text: 'Olá! Estou com uma dificuldade técnica momentânea. Em breve um atendente entrará em contato. Desculpe o inconveniente! 🙏',
-    }).catch(() => {});
+    // C1b (A193): o aviso promete que um atendente vai entrar em contato,
+    // então alguém tem de ser chamado DE VERDADE: a conversa vai para
+    // WAITING e a equipe é avisada. Só depois disso o texto fixo sai, pelo
+    // canal da conversa, e fica gravado. Uma mensagem só: o aviso de erro
+    // faz as vezes da mensagem de espera.
+    //
+    // Rodada 1 do PR #379 (item 2): a pausa aqui é TEMPORÁRIA (espelho no
+    // cache por 1 hora, sem aiPaused no banco). O erro é transitório
+    // (modelo 5xx, tempo do banco): uma pausa durável deixaria o cliente sem
+    // resposta até alguém clicar "Retomar", e a equipe só é avisada por
+    // socket. O transbordo INTENCIONAL (pedido de humano, tag handoff, rede
+    // de crise) segue durável.
+    await handleHandoff(organizationId, conversationId, contactPhone, contactId, orgSettings, io, {
+      mensagem: TEXTO_DE_ERRO_TECNICO,
+      pausa: 'temporaria',
+    }).catch((erroDoTransbordo) =>
+      logger.error('[Agent] transbordo do erro geral falhou', { err: String(erroDoTransbordo) }),
+    );
   }
 }
 
@@ -1263,6 +1338,8 @@ export async function pickTierAndOverride(
     canal?: OrigemDoTurno;
     /** C1a: agendamento REALMENTE de pé (resolveSchedulingRuntime().ativo). */
     agendamentoAtivo?: boolean;
+    /** C1b (nota 1): interruptores da leitura única do turno. Ausente, lê aqui. */
+    flags?: FlagsDaOrganizacao;
   },
 ): Promise<{
   tier?: LLMTier;
@@ -1276,7 +1353,8 @@ export async function pickTierAndOverride(
 }> {
   // C1a (Passo 12): com o interruptor ligado, a decisão é da função pura
   // resolveTurnPolicy, provada igual à daqui em resolveTurnPolicy.test.ts.
-  if (await flagLigada(orgId, 'modeloPorPolitica')) {
+  const politicaLigada = opts?.flags ? opts.flags.modeloPorPolitica : await flagLigada(orgId, 'modeloPorPolitica');
+  if (politicaLigada) {
     const politica = await carregarPoliticaDoTurno(orgId, {
       canal: opts?.canal ?? 'whatsapp',
       ecoMode: opts?.ecoMode,
@@ -1469,41 +1547,6 @@ interface ParsedResponse {
   buttons: Array<{ id: string; title: string }> | null;
 }
 
-function parseAgentResponse(rawResponse: string): ParsedResponse {
-  const result: ParsedResponse = { replyText: null, action: null, actionData: null, buttons: null };
-
-  // Extract structured tags first
-  const actionMatch = rawResponse.match(/<action>(.*?)<\/action>/i);
-  if (actionMatch) result.action = actionMatch[1].trim();
-
-  const dataMatch = rawResponse.match(/<action_data>([\s\S]*?)<\/action_data>/i);
-  if (dataMatch) {
-    try { result.actionData = JSON.parse(dataMatch[1].trim()); } catch {}
-  }
-
-  const btnMatch = rawResponse.match(/<buttons>([\s\S]*?)<\/buttons>/i);
-  if (btnMatch) {
-    try { result.buttons = JSON.parse(btnMatch[1].trim()); } catch {}
-  }
-
-  // V4 #159 (PR #71 HOTFIX 2026-05-03) — Strip TODAS tags estruturadas do
-  // replyText antes de retornar. Bug detectado em smoke real: Iza emitia
-  // "<action>set_contact_name</action><action_data>{...}</action_data>texto"
-  // e o texto inteiro (com tags) ia pro WhatsApp porque o regex <reply>…</reply>
-  // não batia. Cliente recebia tags raw no chat.
-  //
-  // Strategy: se houver <reply>…</reply> usa esse conteúdo. Caso contrário,
-  // usa rawResponse mas REMOVE todas as tags conhecidas + prefixos vazados
-  // do PR #69 (ex: "[áudio]" / "[áudio transcrito]" no INÍCIO da resposta —
-  // a Iza imitava do history corrompido).
-  // A088: a extração mora em agents/replyText.ts, e o avaliador da Qualidade
-  // chama a MESMA função. Antes ele lia `resp.text` cru e julgava a resposta
-  // dobrada, com as tags dentro.
-  result.replyText = extractProductionReplyText(rawResponse);
-
-  return result;
-}
-
 /**
  * A088 — definição ÚNICA em agents/replyText.ts. Re-exportadas aqui porque
  * o playground e os testes já importavam deste módulo; duas cópias da mesma
@@ -1619,32 +1662,38 @@ async function handleHandoff(
   contactPhone: string,
   contactId: string,
   orgSettings: any,
-  io?: SocketIOServer
+  io?: SocketIOServer,
+  opts: {
+    /**
+     * C1b (A193): o texto que o cliente recebe no lugar da mensagem de
+     * espera. O catch geral passa o aviso de erro técnico: uma mensagem só.
+     */
+    mensagem?: string;
+    /**
+     * Rodada 1 do PR #379: 'temporaria' só no erro técnico (cache por 1
+     * hora, sem aiPaused). Ausente: durável, como o transbordo intencional.
+     */
+    pausa?: ModoDaPausa;
+  } = {},
 ): Promise<void> {
   logger.info(`[Agent] Handoff triggered for ${contactPhone}`, { organizationId });
 
-  // Pause AI for 1 hour
-  await cache.set(`ai_paused:${organizationId}:${contactPhone}`, '1', 3600);
+  // C1b (A167): a pausa do transbordo intencional deixou de expirar sozinha
+  // em 1 hora. Vai para o banco (aiPaused) e para o espelho no cache pelo
+  // prazo das pausas humanas; a IA volta quando a equipe devolve a conversa
+  // no Inbox ("Retomar", PUT /resume-ai, ou desatribuir). WAITING e aviso à
+  // equipe como antes. Fail-soft por etapa, dentro de marcarTransbordo.
+  await marcarTransbordo({ organizationId, conversationId, contactId, contactPhone, io, pausa: opts.pausa });
 
-  // Update conversation status
-  await prisma.conversation.updateMany({
-    where: { contactId, organizationId, status: { in: ['OPEN', 'ASSIGNED'] } },
-    data: { status: 'WAITING' },
+  // A mensagem de espera (ou o aviso de erro) sai pelo canal da conversa e
+  // fica gravada (deliverAgentReply grava no mesmo lugar em que envia).
+  await deliverAgentReply({
+    organizationId,
+    conversationId,
+    text: opts.mensagem ?? mensagemDeEspera(orgSettings),
+    aiConfidence: 1.0,
+    io,
   });
-
-  // Notify agents
-  if (io) {
-    io.to(`org:${organizationId}`).emit('notification', {
-      type: 'warning',
-      title: 'Transbordo solicitado',
-      message: `Cliente ${contactPhone} precisa de atendimento humano`,
-    });
-  }
-
-  // Send holding message
-  const holdMsg = orgSettings?.handoffMessage ||
-    'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido! 😊';
-  await deliverAgentReply({ organizationId, conversationId, text: holdMsg });
 }
 
 // ── Handle Non-Text Messages ────────────────────────────
@@ -1657,6 +1706,7 @@ async function handleNonTextMessage(
   organizationId: string,
   conversationId: string,
   msgType: string,
+  io?: SocketIOServer,
 ): Promise<void> {
   const responses: Record<string, string> = {
     // audio nunca chega aqui em prod (Whisper trata antes), mas mantém fallback
@@ -1669,7 +1719,8 @@ async function handleNonTextMessage(
   };
 
   const reply = responses[msgType] || 'Recebi sua mensagem. Me conta em texto o que você precisa.';
-  await deliverAgentReply({ organizationId, conversationId, text: reply });
+  // C1b (A167): envia e grava no mesmo lugar.
+  await deliverAgentReply({ organizationId, conversationId, text: reply, aiConfidence: 1.0, io });
 }
 
 // ── Token por org (self-serve multi-tenant) ─────────────
@@ -1694,60 +1745,12 @@ async function resolveWaCreds(organizationId: string): Promise<waService.WaCreds
 
 // ═══════════════════════════════════════════════════════════════════
 /**
- * O agendamento está REALMENTE de pé nesta organização?
- *
- * Até 14/09/2026 o produto acreditava num único campo, `scheduling.enabled`,
- * e ele mentia dos dois lados (A165):
- *   • o CMJ tem `enabled: true` com ZERO tipos cadastrados, então todo turno
- *     levava as ferramentas de agendamento (e ia para Sonnet, A066) só para
- *     a IA responder que a empresa não agenda;
- *   • quem cadastra tipo nenhum interruptor liga, e a IA ficava sem
- *     ferramenta para consultar horário.
- *
- * Ligado agora é o cruzamento de três coisas verdadeiras: o dono não optou
- * por sair, a organização tem direito ao recurso (plano ou add-on) e existe
- * pelo menos um tipo ativo. Qualquer erro devolve DESLIGADO: prometer
- * agendamento que não existe é o defeito que estamos consertando.
+ * O agendamento está REALMENTE de pé nesta organização? A definição mudou
+ * de casa (C1b, nota 4): mora em agentContextLoader.ts, para o chat do site
+ * e a Qualidade montarem a MESMA linha de agendamento do WhatsApp sem
+ * carregar o orquestrador. Segue exportada daqui, como sempre foi.
  */
-export async function resolveSchedulingRuntime(
-  organizationId: string,
-  orgSettings: any,
-): Promise<{ ativo: boolean; tipos: string[]; motivo: string }> {
-  const scheduling = orgSettings?.scheduling ?? null;
-  if (scheduling?.optOut) return { ativo: false, tipos: [], motivo: 'optou_por_sair' };
-  if (!scheduling?.enabled) return { ativo: false, tipos: [], motivo: 'nao_ligado' };
-
-  try {
-    const org = await prisma.organization.findUnique({
-      where: { id: organizationId },
-      select: { plan: true, settings: true },
-    });
-    const addons = Array.isArray((org?.settings as any)?.addons)
-      ? ((org!.settings as any).addons as string[])
-      : [];
-    const acesso = resolveSchedulingAccess((org?.plan as PlanId) || 'IZA_LITE', addons);
-    if (!acesso.entitled) return { ativo: false, tipos: [], motivo: 'sem_direito' };
-
-    const tipos = await (prisma as any).appointmentType.findMany({
-      where: { organizationId, active: true },
-      select: { name: true },
-      take: 20,
-    });
-    const nomes: string[] = (tipos ?? [])
-      .map((t: any) => String(t?.name ?? '').trim())
-      .filter(Boolean);
-    if (!nomes.length && (!tipos || tipos.length === 0)) {
-      return { ativo: false, tipos: [], motivo: 'sem_tipo_ativo' };
-    }
-    return { ativo: true, tipos: nomes, motivo: 'ativo' };
-  } catch (err) {
-    logger.warn('[Agent] resolveSchedulingRuntime falhou: agendamento tratado como desligado', {
-      organizationId,
-      err: String(err),
-    });
-    return { ativo: false, tipos: [], motivo: 'erro' };
-  }
-}
+export { resolveSchedulingRuntime };
 
 // V2-021 (Sprint 0 §11.3) · Persona dual via Agent table
 // ─────────────────────────────────────────────────────────────────
@@ -1805,6 +1808,12 @@ export interface BuildSystemPromptInput {
    * instante para comparar hashes). Só o motor único usa; padrão: agora.
    */
   agora?: Date;
+  /**
+   * C1b (nota 1): os interruptores da leitura única do turno. Presentes,
+   * nenhum interruptor é lido aqui dentro (contextoUnico, perfilVivo e
+   * regrasComoRegistros saem daqui). Ausentes, a leitura de sempre.
+   */
+  flags?: FlagsDaOrganizacao;
 }
 
 export interface AgentContextResult {
@@ -1831,12 +1840,15 @@ export interface AgentContextResult {
 export async function buildAgentContextForContact(
   input: BuildSystemPromptInput,
 ): Promise<AgentContextResult> {
-  // Os dois interruptores de uma vez: cada leitura pode ir ao Redis, e em
-  // série o turno pagaria duas idas. Ambos são fail-closed.
-  const [contextoUnico, perfilVivoLigado] = await Promise.all([
-    flagLigada(input.organizationId, 'contextoUnico'),
-    flagLigada(input.organizationId, 'perfilVivo'),
-  ]);
+  // C1b (nota 1): com a leitura única do turno em mãos, nada é lido aqui.
+  // Sem ela (Raio-X, testes antigos), os dois interruptores de uma vez, como
+  // antes: cada leitura pode ir ao Redis. Ambos são fail-closed.
+  const [contextoUnico, perfilVivoLigado] = input.flags
+    ? [input.flags.contextoUnico, input.flags.perfilVivo]
+    : await Promise.all([
+        flagLigada(input.organizationId, 'contextoUnico'),
+        flagLigada(input.organizationId, 'perfilVivo'),
+      ]);
   if (contextoUnico) {
     // Erro de banco no carregador (resolveAgentForTurn, contato) não pode
     // derrubar o turno: o caminho de antes já cai no promptEngine quando o
@@ -1858,6 +1870,7 @@ export async function buildAgentContextForContact(
         instrucaoDeCanal: input.instrucaoDeCanal,
         perfilVivoLigado,
         agora: input.agora,
+        flags: input.flags,
       });
     } catch (err) {
       falhou = true;
@@ -2034,7 +2047,11 @@ async function buildSystemPromptLegado(
   // o melhor recorte que existe, e é o que havia antes.
   let regrasBlock = '';
   try {
-    regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, { agentId: agent?.id ?? null });
+    regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
+      agentId: agent?.id ?? null,
+      // C1b (nota 1): o interruptor da leitura única do turno, quando há.
+      ligado: input.flags?.regrasComoRegistros,
+    });
   } catch (err) {
     logger.warn('[Agent] bloco de regras indisponível neste turno (segue sem ele)', { err });
   }

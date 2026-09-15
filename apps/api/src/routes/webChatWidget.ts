@@ -29,9 +29,23 @@ const WIDGET_JS = String.raw`
     return;
   }
   var API_BASE = CUR.getAttribute('data-api') || 'https://zappiq-api.fly.dev';
-  var AGENT_NAME = CUR.getAttribute('data-name') || 'assistente';
-  var GREETING = CUR.getAttribute('data-greeting') ||
-    ('Oi! Sou a ' + AGENT_NAME + '. Como posso ajudar?');
+
+  /* C1b (A247): nome e saudação vêm do Treinar IA (GET .../config); os
+   * atributos da tag colada no site são só reserva. Sem nenhum dos dois,
+   * uma saudação neutra e curta, sem gênero fixo e sem a fórmula de call
+   * center que a CR-3 proíbe e o cenário cr3 da Qualidade reprova. */
+  function identidadeDoWidget(servidor, attrNome, attrSaudacao) {
+    var nome = (servidor && servidor.nome) || attrNome || '';
+    var saudacao = (servidor && servidor.saudacao) || attrSaudacao ||
+      (nome ? 'Olá! Aqui é ' + nome + '. Me conta o que você precisa.' : 'Olá! Me conta o que você precisa.');
+    return { nome: nome || 'Atendimento', saudacao: saudacao };
+  }
+
+  var ATTR_NAME = CUR.getAttribute('data-name');
+  var ATTR_GREETING = CUR.getAttribute('data-greeting');
+  var identidade = identidadeDoWidget(null, ATTR_NAME, ATTR_GREETING);
+  var AGENT_NAME = identidade.nome;
+  var GREETING = identidade.saudacao;
   var COLOR = CUR.getAttribute('data-color') || '#050E1F';
   var ACCENT = CUR.getAttribute('data-accent') || '#C9A961';
   var MAX_HISTORY_TURNS = 20;
@@ -44,19 +58,31 @@ const WIDGET_JS = String.raw`
     return 'x' + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
 
+  /* C1b: a sessão fica guardada também em memória. Sem isto, com o
+   * localStorage recusado, cada chamada gerava uma sessão nova: o POST, o
+   * socket da equipe e a sincronização falavam de conversas diferentes, e a
+   * resposta humana nunca chegava. */
+  var SESSAO_EM_MEMORIA = null;
+
   function getSessionId() {
+    if (SESSAO_EM_MEMORIA) return SESSAO_EM_MEMORIA;
     try {
       var existing = localStorage.getItem(STORAGE_SESSION);
-      if (existing) return existing;
+      if (existing) {
+        SESSAO_EM_MEMORIA = existing;
+        return existing;
+      }
       var fresh = uid();
       localStorage.setItem(STORAGE_SESSION, fresh);
+      SESSAO_EM_MEMORIA = fresh;
       return fresh;
     } catch (e) {
       /* Sem localStorage (janela anônima, cookies de terceiro bloqueados) o
        * visitante perde a continuidade da conversa entre recargas. O relógio
        * como identificador era pior: colidia entre dois visitantes no mesmo
        * milissegundo e era adivinhável por quem soubesse o horário. */
-      return 'anon-' + uid();
+      SESSAO_EM_MEMORIA = 'anon-' + uid();
+      return SESSAO_EM_MEMORIA;
     }
   }
 
@@ -73,6 +99,38 @@ const WIDGET_JS = String.raw`
     try {
       localStorage.setItem(STORAGE_MSGS, JSON.stringify(msgs));
     } catch (e) {}
+  }
+
+  /* ── C1b (A158): o canal de volta da equipe ──
+   * Quando alguém da equipe responde pelo painel, a mensagem chega aqui pelo
+   * socket da sessão (namespace /web-chat). Se o visitante estava fora, ela
+   * fica gravada no servidor e entra quando ele voltar (sincronização).
+   * Cada mensagem da equipe entra uma vez só: o id fica guardado. */
+  var STORAGE_VISTAS = 'zqwc_equipe_' + ORG_ID;
+
+  function loadVistas() {
+    try {
+      var raw = localStorage.getItem(STORAGE_VISTAS);
+      var v = raw ? JSON.parse(raw) : [];
+      return Array.isArray(v) ? v : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveVistas(v) {
+    try {
+      localStorage.setItem(STORAGE_VISTAS, JSON.stringify(v.slice(-200)));
+    } catch (e) {}
+  }
+
+  /* Mescla a mensagem da equipe na conversa local, uma vez só. */
+  function mesclarDaEquipe(lista, vistas, m) {
+    if (!m || typeof m.content !== 'string' || !m.content.trim()) return false;
+    if (m.id && vistas.indexOf(m.id) !== -1) return false;
+    if (m.id) vistas.push(m.id);
+    lista.push({ role: 'bot', text: m.content });
+    return true;
   }
 
   var root = document.createElement('div');
@@ -154,7 +212,7 @@ const WIDGET_JS = String.raw`
   panel.setAttribute('role', 'dialog');
   panel.innerHTML =
     '<div id="zqwc-header">' +
-      '<div><div class="zqwc-title">' + AGENT_NAME + '</div>' +
+      '<div><div class="zqwc-title"></div>' +
       '<div class="zqwc-status"><span class="zqwc-dot"></span>Online agora</div></div>' +
       '<button id="zqwc-close" type="button" aria-label="Fechar">✕</button>' +
     '</div>' +
@@ -165,6 +223,9 @@ const WIDGET_JS = String.raw`
     '</form>';
   shadow.appendChild(panel);
 
+  // O nome entra por textContent: vem do Treinar IA ou da tag, nunca vira HTML.
+  panel.querySelector('.zqwc-title').textContent = AGENT_NAME;
+
   var msgsEl = panel.querySelector('#zqwc-msgs');
   var formEl = panel.querySelector('#zqwc-form');
   var inputEl = panel.querySelector('#zqwc-input');
@@ -172,6 +233,7 @@ const WIDGET_JS = String.raw`
   var closeBtn = panel.querySelector('#zqwc-close');
 
   var messages = loadMsgs();
+  var vistas = loadVistas();
   var typing = false;
 
   /* Markdown link [texto](url) + URL solta -> <a>, sem innerHTML de conteúdo
@@ -241,6 +303,104 @@ const WIDGET_JS = String.raw`
     scrollBottom();
   }
 
+  function receberDaEquipe(m) {
+    if (!mesclarDaEquipe(messages, vistas, m)) return;
+    saveVistas(vistas);
+    saveMsgs(messages);
+    paintMessages();
+  }
+
+  /* O visitante já conversou? Só então vale abrir o canal da equipe: sem
+   * conversa no servidor não há o que receber, e o site do cliente não paga
+   * um socket aberto por página vista. */
+  function jaConversou() {
+    return messages.some(function (m) { return m.role === 'me'; });
+  }
+
+  function sincronizarEquipe() {
+    fetch(API_BASE + '/api/web-chat/org/' + ORG_ID + '/sessao/' +
+      encodeURIComponent(getSessionId()) + '/mensagens-da-equipe')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (b) {
+        if (b && Array.isArray(b.mensagens)) b.mensagens.forEach(receberDaEquipe);
+      })
+      .catch(function () {});
+  }
+
+  /* O cliente do socket.io que já está na página serve? Precisa ser a v4
+   * (a v2 fala outro protocolo e o servidor recusa). Pura. */
+  function clienteDeSocketServe(io) {
+    return typeof io === 'function' && !!io.Manager &&
+      !(typeof io.protocol === 'number' && io.protocol < 5);
+  }
+
+  /* Sem socket, a sincronização periódica enquanto o painel está aberto. */
+  var sincronizacaoPeriodica = null;
+  function ligarSincronizacaoPeriodica() {
+    if (sincronizacaoPeriodica) return;
+    sincronizacaoPeriodica = setInterval(function () {
+      if (panel.classList.contains('zqwc-open')) sincronizarEquipe();
+    }, 20000);
+  }
+
+  var canalLigado = false;
+  function ligarCanalDaEquipe() {
+    if (canalLigado) return;
+    canalLigado = true;
+    // Site com um socket.io antigo, ou com RequireJS (o pacote UMD se
+    // registra no define() e não cria window.io, além de acusar erro no site
+    // do cliente): nada de socket, a sincronização periódica dá conta.
+    if (window.io && !clienteDeSocketServe(window.io)) return ligarSincronizacaoPeriodica();
+    if (!window.io && typeof window.define === 'function' && window.define.amd) {
+      return ligarSincronizacaoPeriodica();
+    }
+    function conectar() {
+      if (!clienteDeSocketServe(window.io)) return ligarSincronizacaoPeriodica();
+      try {
+        var sock = window.io(API_BASE + '/web-chat', {
+          transports: ['websocket'],
+          auth: { org: ORG_ID, sessionId: getSessionId() }
+        });
+        sock.on('mensagem_da_equipe', receberDaEquipe);
+        // A cada (re)conexão, busca o que chegou enquanto estava fora.
+        sock.on('connect', sincronizarEquipe);
+      } catch (e) {}
+    }
+    // O cliente do socket.io vem da própria API. Se o site já tiver um,
+    // usa o dele e não sobrescreve nada.
+    if (window.io) return conectar();
+    var tag = document.createElement('script');
+    tag.src = API_BASE + '/socket.io/socket.io.min.js';
+    tag.async = true;
+    tag.onload = conectar;
+    tag.onerror = function () { ligarSincronizacaoPeriodica(); };
+    document.head.appendChild(tag);
+  }
+
+  /* Troca nome e saudação pelos do Treinar IA quando a configuração chega.
+   * A saudação só é trocada se ainda for a única fala da conversa: conversa
+   * em andamento não é reescrita. */
+  function aplicarIdentidade(cfg) {
+    var nova = identidadeDoWidget(cfg, ATTR_NAME, ATTR_GREETING);
+    var saudacaoAntiga = GREETING;
+    AGENT_NAME = nova.nome;
+    GREETING = nova.saudacao;
+    var titulo = panel.querySelector('.zqwc-title');
+    if (titulo) titulo.textContent = AGENT_NAME;
+    fab.setAttribute('aria-label', 'Abrir chat com ' + AGENT_NAME);
+    if (messages.length === 1 && messages[0].role === 'bot' && messages[0].text === saudacaoAntiga &&
+        saudacaoAntiga !== GREETING) {
+      messages[0].text = GREETING;
+      saveMsgs(messages);
+      paintMessages();
+    }
+  }
+
+  fetch(API_BASE + '/api/web-chat/org/' + ORG_ID + '/config')
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (cfg) { if (cfg) aplicarIdentidade(cfg); })
+    .catch(function () {});
+
   function ensureGreeting() {
     if (messages.length === 0) {
       messages.push({ role: 'bot', text: GREETING });
@@ -253,6 +413,7 @@ const WIDGET_JS = String.raw`
     ensureGreeting();
     paintMessages();
     inputEl.focus();
+    if (jaConversou()) sincronizarEquipe();
   }
 
   function closePanel() {
@@ -309,8 +470,15 @@ const WIDGET_JS = String.raw`
       typing = false;
       saveMsgs(messages);
       paintMessages();
+      // Depois da primeira mensagem existe conversa no servidor: a equipe
+      // já pode responder por aqui.
+      ligarCanalDaEquipe();
     }
   }
+
+  // Visitante que volta com conversa: liga o canal e busca o que a equipe
+  // respondeu enquanto ele estava fora.
+  if (jaConversou()) ligarCanalDaEquipe();
 
   formEl.addEventListener('submit', function (ev) {
     ev.preventDefault();

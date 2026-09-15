@@ -25,7 +25,12 @@
  *   - analyzeSentiment() = classify() com prompt específico.
  * ══════════════════════════════════════════════════════════════════════ */
 
-import { llmRouter, type LLMMessage as RouterMessage } from './LLMRouter.js';
+import {
+  llmRouter,
+  type LLMMessage as RouterMessage,
+  type LLMTier,
+  type LLMProviderId,
+} from './LLMRouter.js';
 import { logger } from '../../utils/logger.js';
 
 /** Interface mantida estável pra back-compat com agentOrchestrator. */
@@ -59,6 +64,11 @@ export async function chatCompletion(
   messages: LLMMessage[],
   maxTokens = 1024,
   ctx: LLMContext = {},
+  /**
+   * C1b (nota 5, A068): tier e override decididos pela política do turno.
+   * Ausente, a cascata padrão de sempre (quem não passa não muda nada).
+   */
+  roteamento?: { tier?: LLMTier; forceProvider?: LLMProviderId },
 ): Promise<LLMResponse> {
   const resp = await llmRouter.complete({
     system: systemPrompt,
@@ -67,6 +77,8 @@ export async function chatCompletion(
     operation: 'chat',
     orgId: ctx.orgId ?? null,
     conversationId: ctx.conversationId ?? null,
+    ...(roteamento?.tier ? { tier: roteamento.tier } : {}),
+    ...(roteamento?.forceProvider ? { forceProvider: roteamento.forceProvider } : {}),
   });
 
   return {

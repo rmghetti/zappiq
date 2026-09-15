@@ -7,7 +7,9 @@
  *
  * Política de roteamento:
  *   1. Se conversation.channel === 'instagram' → usa instagramService
- *   2. Default (incluindo 'whatsapp' e legados sem channel) → whatsappService
+ *   2. Se conversation.channel === 'web' (chat do site) → socket.io, na sala
+ *      da sessão do visitante (C1b, Passo 3). Nunca o WhatsApp.
+ *   3. Default (incluindo 'whatsapp' e legados sem channel) → whatsappService
  *
  * Erros de configuração (org sem token IG, contato sem IGSID) propagam.
  * Caller (agentOrchestrator) já tem try/catch que loga e segue.
@@ -17,17 +19,74 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import * as waService from './whatsappService.js';
 import * as igService from './instagramService.js';
+import { getIo } from '../utils/socketRegistry.js';
+import {
+  EVENTO_MENSAGEM_DA_EQUIPE,
+  NAMESPACE_DO_CHAT_DO_SITE,
+  salaDoVisitante,
+  sessaoDoContato,
+} from './webChatSala.js';
 
 export interface SendReplyInput {
   organizationId: string;
   conversationId: string;
   /** Texto a enviar. */
   content: string;
+  /**
+   * C1b: id da mensagem já gravada por quem chamou (o Inbox grava na mesma
+   * transação). Só o canal site usa: vai junto do emit, para o widget não
+   * mostrar a mesma mensagem duas vezes quando sincronizar o histórico.
+   */
+  messageId?: string;
 }
 
 export interface SendReplyResult {
-  channel: 'whatsapp' | 'instagram';
+  channel: 'whatsapp' | 'instagram' | 'site';
   externalMessageId?: string;
+}
+
+/**
+ * C1b (Passo 3, A158 e A169): entrega no chat do site.
+ *
+ * Emite na sala da sessão do visitante, no namespace dos visitantes, pelo
+ * socket.io (o adaptador Redis faz o emit alcançar a máquina em que o
+ * widget está conectado). Nunca toca o WhatsApp.
+ *
+ * Não grava: a gravação é de quem chama, como nos outros canais (o Inbox
+ * grava na mesma transação em que marca a conversa; o agente grava em
+ * deliverAgentReply; os efeitos do Maestro gravam logo depois do envio).
+ * Se o visitante já saiu, ou o processo não tem socket (worker), a
+ * mensagem fica gravada e o widget a busca quando o visitante voltar.
+ */
+function entregarNoChatDoSite(input: {
+  organizationId: string;
+  conversationId: string;
+  content: string;
+  messageId?: string;
+  whatsappId: string | null | undefined;
+}): SendReplyResult {
+  const sessao = sessaoDoContato(input.whatsappId);
+  if (!sessao) {
+    throw new Error(
+      `Conversa ${input.conversationId} do chat do site sem sessão do visitante no contato`,
+    );
+  }
+  const io = getIo();
+  if (!io) {
+    logger.warn('[Dispatcher] sem socket neste processo: a mensagem do site fica para a volta do visitante', {
+      conversationId: input.conversationId,
+    });
+    return { channel: 'site' };
+  }
+  io.of(NAMESPACE_DO_CHAT_DO_SITE)
+    .to(salaDoVisitante(input.organizationId, sessao))
+    .emit(EVENTO_MENSAGEM_DA_EQUIPE, {
+      id: input.messageId ?? null,
+      content: input.content,
+      createdAt: new Date().toISOString(),
+    });
+  logger.info('[Dispatcher] mensagem entregue no chat do site', { conversationId: input.conversationId });
+  return { channel: 'site' };
 }
 
 /**
@@ -58,6 +117,18 @@ export async function sendReplyText(input: SendReplyInput): Promise<SendReplyRes
 
   if (!conversation) {
     throw new Error(`Conversation ${input.conversationId} not found`);
+  }
+
+  // ── Chat do site (C1b, Passo 3) ─────────────────────────────────
+  // Antes caía no ramo do WhatsApp com `web:<sessão>` como telefone.
+  if (conversation.channel === 'web') {
+    return entregarNoChatDoSite({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      content: input.content,
+      messageId: input.messageId,
+      whatsappId: conversation.contact?.whatsappId,
+    });
   }
 
   // ── Instagram path ──────────────────────────────────────────────
@@ -140,7 +211,7 @@ export async function sendReplyTemplate(input: SendReplyTemplateInput): Promise<
   if (!conversation) {
     throw new Error(`Conversation ${input.conversationId} not found`);
   }
-  if (conversation.channel === 'instagram') {
+  if (conversation.channel === 'instagram' || conversation.channel === 'web') {
     throw new Error('Template só é suportado no WhatsApp');
   }
   const phone = conversation.contact?.whatsappId || conversation.contact?.phone || '';
@@ -185,6 +256,9 @@ export async function markIncomingAsRead(input: {
   });
   if (!conversation) return;
 
+  // Chat do site: não existe "marcar como lida" para o visitante (C1b).
+  if (conversation.channel === 'web') return;
+
   if (conversation.channel === 'instagram') {
     const org = await prisma.organization.findUnique({
       where: { id: input.organizationId },
@@ -222,8 +296,8 @@ export async function sendReplyInteractive(input: {
   });
   if (!conversation) throw new Error(`Conversation ${input.conversationId} not found`);
 
-  // IG: degrada para texto (corpo + opções numeradas).
-  if (conversation.channel === 'instagram') {
+  // IG e chat do site: degradam para texto (corpo + opções numeradas).
+  if (conversation.channel === 'instagram' || conversation.channel === 'web') {
     const lines = [input.body, ...input.options.map((o, i) => `${i + 1}. ${o.title}`)].join('\n');
     return sendReplyText({ organizationId: input.organizationId, conversationId: input.conversationId, content: lines });
   }
@@ -261,7 +335,7 @@ export async function sendReplyMedia(input: {
   });
   if (!conversation) throw new Error(`Conversation ${input.conversationId} not found`);
 
-  if (conversation.channel === 'instagram') {
+  if (conversation.channel === 'instagram' || conversation.channel === 'web') {
     const txt = [input.caption, input.url].filter(Boolean).join('\n');
     return sendReplyText({ organizationId: input.organizationId, conversationId: input.conversationId, content: txt });
   }

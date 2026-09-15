@@ -43,9 +43,10 @@ import { isFlagOn } from '../services/featureFlags.js';
 import {
   flagLigada,
   montarContextoDoTurno,
+  resolveAgentForTurn,
   type ContatoDoTurno,
 } from '../agents/agentContextLoader.js';
-import { hashDoContexto, type ParteDoContexto } from '../agents/composeAgentContext.js';
+import { hashDoContexto, buildRagBlock, type ParteDoContexto } from '../agents/composeAgentContext.js';
 import {
   buildWebChatSystemPrompt,
   loadOrgSystemPrompt,
@@ -63,6 +64,9 @@ import { getIzaFactsBlock } from '../services/izaFactsService.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
 import * as ragService from '../services/ragService.js';
 import { sliceBySections, runChecks, type FonteRecuperada } from '../agents/promptXray.js';
+// C1b (Passo 1, A189): o alerta da guarda de marca vai para o log e para
+// prefilter_events. O Raio-X mostra os mais recentes da organização.
+import { CATEGORIA_GUARDA_DE_MARCA } from '../services/alertasDeSaida.js';
 
 const router = Router();
 
@@ -95,20 +99,13 @@ type Mensagem = z.infer<typeof corpoSchema>['messages'][number];
 // ── Helpers ───────────────────────────────────────────────
 
 /**
- * Agente do teste de Qualidade: o comercial vivo mais RECENTE da organização.
- *
- * A ordem não é capricho, é o que agentQuality faz. O chat do site pega o mais
- * ANTIGO, e por isso não passa por aqui: ele usa o carregador do próprio
- * webChatService. Se a organização tiver mais de um agente comercial vivo, os
- * dois canais respondem com prompts diferentes. O Raio-X reproduz cada caminho
- * como ele é, não como deveria ser.
+ * Agente do teste de Qualidade, pelo seletor ÚNICO (C1b, nota 2, A077): o
+ * mesmo resolveAgentForTurn do WhatsApp, do motor único, do chat do site e
+ * da retomada (papel comercial, live, o mais recente). Antes cada canal
+ * tinha a sua ordem, e o site pegava o mais antigo.
  */
 async function carregarAgenteDaQualidade(organizationId: string) {
-  return prisma.agent.findFirst({
-    where: { organizationId, role: 'comercial', status: 'live' },
-    select: { id: true, name: true, systemPrompt: true },
-    orderBy: { createdAt: 'desc' },
-  });
+  return resolveAgentForTurn(organizationId, 'NEW');
 }
 
 /**
@@ -211,6 +208,8 @@ async function montarPrompt(input: {
           consultarBase: flags.ragNoChatDoSite,
           busca: { context: ragContext, status: ragStatus },
           agora,
+          // C1b (nota 4): a mesma linha de agendamento que o chat do site monta.
+          agendamento: flags.perfilVivo ? await resolveSchedulingRuntime(organizationId, settings) : undefined,
         });
         return { prompt: ctx.systemPrompt, hash: ctx.hash, hashEstavel: ctx.hashEstavel, partes: ctx.partes, motor: 'unico' };
       } catch (e) {
@@ -240,7 +239,11 @@ async function montarPrompt(input: {
     let perfilVivoBlock = '';
     let saudacaoBlock = '';
     if (flags.perfilVivo) {
-      perfilVivoBlock = buildLiveProfileBlock(settings, null, { now: agora });
+      perfilVivoBlock = buildLiveProfileBlock(settings, null, {
+        now: agora,
+        // C1b (nota 4): a mesma linha de agendamento do chat do site.
+        agendamento: await resolveSchedulingRuntime(organizationId, settings),
+      });
       saudacaoBlock = buildGreetingBlock(historico.length === 0, settings.greetingMessage);
     }
 
@@ -271,6 +274,8 @@ async function montarPrompt(input: {
         perfilVivoBlock,
         regrasBlock,
         saudacaoBlock,
+        // C1b (Passo 4): a base no caminho de antes, atrás da mesma flag.
+        ragBlock: flags.ragNoChatDoSite ? buildRagBlock(ragContext, ragStatus) : '',
       }),
     );
   }
@@ -306,6 +311,8 @@ async function montarPrompt(input: {
       agora: DATA_FIXA_DO_EVAL,
       perfilVivoLigado: flags.perfilVivo,
       regrasDoCliente: regrasBlock,
+      // C1b (nota 4): a mesma linha de agendamento que a Qualidade monta.
+      agendamento: flags.perfilVivo ? await resolveSchedulingRuntime(organizationId, settings) : null,
     });
     if (ctx) {
       return { prompt: ctx.systemPrompt, hash: ctx.hash, hashEstavel: ctx.hashEstavel, partes: ctx.partes, motor: 'unico' };
@@ -318,6 +325,38 @@ async function montarPrompt(input: {
       regrasBlock,
     ),
   );
+}
+
+/** Quantos alertas de saída o Raio-X mostra por organização. */
+const MAX_ALERTAS_DE_SAIDA = 20;
+
+/**
+ * Os alertas mais recentes da guarda de marca nesta organização (C1b).
+ * Sem o texto da conversa, por LGPD: o termo, o canal e o que foi feito.
+ * Fail-soft: o Raio-X nunca cai por causa desta lista.
+ */
+async function alertasDeSaidaRecentes(organizationId: string) {
+  try {
+    const eventos = await prisma.prefilterEvent.findMany({
+      where: { organizationId, categoria: CATEGORIA_GUARDA_DE_MARCA },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_ALERTAS_DE_SAIDA,
+      select: { canal: true, regra: true, acao: true, conversationId: true, createdAt: true },
+    });
+    return eventos.map((e) => ({
+      canal: e.canal,
+      termo: e.regra,
+      acao: e.acao,
+      conversationId: e.conversationId,
+      em: new Date(e.createdAt).toISOString(),
+    }));
+  } catch (err) {
+    logger.warn('[AiXray] alertas de saída indisponíveis', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
 }
 
 // ── POST /api/admin/ai-xray ───────────────────────────────
@@ -371,7 +410,9 @@ router.post(
       // ragNoChatDoSite (A197), e a Qualidade consulta sempre (A036).
       const usaRag =
         CANAIS_COM_RAG.includes(canal) ||
-        (canal === 'site' && contextoUnico && ragNoChatDoSite) ||
+        // C1b (Passo 4): o site consulta a base com ragNoChatDoSite nos DOIS
+        // motores, como o chat do site faz.
+        (canal === 'site' && ragNoChatDoSite) ||
         (canal === 'qualidade' && contextoUnico);
       const agora = new Date();
       const turnos: Array<Record<string, unknown>> = [];
@@ -432,7 +473,7 @@ router.post(
         historico.push(m);
       }
 
-      res.json({ organizationId, canal, turnos });
+      res.json({ organizationId, canal, turnos, alertas_de_saida: await alertasDeSaidaRecentes(organizationId) });
     } catch (err) {
       if (err instanceof SemPromptDoSite) {
         res.status(422).json({

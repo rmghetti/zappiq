@@ -69,12 +69,15 @@ function makeFakeDb(rows: any[] = []) {
 }
 
 describe('registro FLAGS', () => {
-  it('tem as oito flags previstas no plano (compositorUnico saiu: contextoUnico faz o papel)', () => {
+  it('tem as nove flags previstas (as oito do plano e a guarda de marca da rodada 1 do C1b)', () => {
     expect(Object.keys(FLAGS).sort()).toEqual(
       [
         'contextoUnico',
         'evalNoTier',
         'guardaComercial',
+        // Rodada 1 do C1b (PR #379): a guarda de marca nasce só alertando e
+        // passa a segurar a resposta apenas com este interruptor ligado.
+        'guardaDeMarca',
         'modeloPorPolitica',
         'perfilVivo',
         'ragNoChatDoSite',

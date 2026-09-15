@@ -46,3 +46,34 @@ export const IZA_ORG_ID = ZAPPIQ_ORG_ID;
 export function isZappIQOrg(organizationId: string | null | undefined): boolean {
   return Boolean(organizationId) && organizationId === ZAPPIQ_ORG_ID;
 }
+
+/**
+ * Org da MACHIA em produção: a empresa que FAZ a ZappIQ. Não é a org
+ * canônica (a Iza não roda nela), mas a marca ZappIQ é dela por direito.
+ */
+export const MACHIA_ORG_ID = 'cmrktle9g002epphvb02qbe1r';
+
+/**
+ * Organizações com a marca ZappIQ LICENCIADA (rodada 1 do PR #379).
+ *
+ * Para elas, citar a ZappIQ na resposta ao cliente final NÃO é vazamento:
+ * nem alerta, nem bloqueio, como já vale para a org canônica. Hoje só a
+ * MACHIA: o perfil vivo dela leva ao prompt respostas do questionário que
+ * citam a ZappIQ ("As frentes e ofertas da MACHIA (Radar, Build, ZappIQ,
+ * Academy)"), e o agente dela precisa poder dizer "A MACHIA desenvolve a
+ * ZappIQ" e mandar o link de preços.
+ *
+ * A licença é da organização (pelo id), nunca do nome: outra organização
+ * que se chame MACHIA segue como cliente comum.
+ */
+export const ORGS_COM_MARCA_LICENCIADA: readonly string[] = [MACHIA_ORG_ID];
+
+/**
+ * true para as organizações da lista acima. A org canônica NÃO está nela:
+ * isZappIQOrg já a cobre, e as duas funções são perguntas diferentes.
+ *
+ * Fail-closed: orgId nulo/vazio → false (cliente comum, o lado seguro).
+ */
+export function temMarcaLicenciada(organizationId: string | null | undefined): boolean {
+  return Boolean(organizationId) && ORGS_COM_MARCA_LICENCIADA.includes(organizationId as string);
+}

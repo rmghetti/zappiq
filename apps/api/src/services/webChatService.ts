@@ -57,25 +57,31 @@ import { buildLiveProfileBlock, buildGreetingBlock } from '../agents/tenantLiveP
 // prompt ganha links, '# Cliente atual', '# Agora' e, com `ragNoChatDoSite`
 // também ligado, a base de conhecimento (A068).
 import {
-  flagLigada,
+  lerFlagsDoTurno,
   carregarContato,
   montarContextoDoTurno,
+  resolveAgentForTurn,
+  resolveSchedulingRuntime,
+  carregarPoliticaDoTurno,
+  type AgenteDoTurno,
   type ContatoDoTurno,
   type ContextoDoTurno,
+  type FlagsDaOrganizacao,
 } from '../agents/agentContextLoader.js';
+import { buildRagBlock } from '../agents/composeAgentContext.js';
 import * as ragService from './ragService.js';
 // C3: correção aprovada pelo dono é registro (agent_rules), montado em bloco.
 import { blocoDeRegrasDaOrganizacao } from './agentRulesService.js';
-import { isFlagOn } from './featureFlags.js';
-// A088: a MESMA limpeza do WhatsApp, do playground e do avaliador. Antes eram
-// cópias locais aqui, com um aviso de "alinhar caso o original mude" que
-// ninguém tinha como cumprir: as duas versões já tinham divergido.
-//
-// O que NÃO vem junto de propósito é o applyVozHumanaFilter. Ele roda no
-// WhatsApp e no avaliador, e ligá-lo no chat do site mudaria o texto que os
-// visitantes leem hoje. É decisão de produto, não de refatoração: fica de
-// fora deste PR.
-import { stripStructuredTags, stripLeakedPrefixes } from '../agents/replyText.js';
+// C1b (Passo 1, A189): o MESMO pós-processador de todos os canais. Extrai
+// <reply>, LÊ as tags de ação (a de transbordo deixa de ser jogada fora),
+// aplica o filtro de voz (antes só no WhatsApp: 3 de 4 respostas do site do
+// CMJ em setembro saíram com travessão) e roda a guarda de marca.
+import { postProcessReply } from '../agents/postProcessReply.js';
+import { registrarAlertasDeSaida } from './alertasDeSaida.js';
+// C1b (Passo 3, A169): a tag de transbordo vira transbordo de verdade, pelo
+// MESMO núcleo do WhatsApp (pausa no banco, WAITING e aviso à equipe), sem
+// carregar o orquestrador.
+import { marcarTransbordo, mensagemDeEspera } from './transbordoHumano.js';
 // P62, A251, A232: o chat do site NÃO passava pelo pré-filtro. Era o único
 // canal em que uma mensagem de crise não encontrava nenhuma guarda.
 import { detectBlockedVertical, detectarSinalDeCrise } from './llm/blockedVerticalFilter.js';
@@ -94,12 +100,17 @@ export const MAX_HISTORY_TURNS = 20;
 export const MAX_MESSAGE_LENGTH = 2000;
 export const MAX_OUTPUT_TOKENS = 1024;
 
-/* ── Cache do systemPrompt em memória por org (refresh a cada 5 min) ────
- * Evita query no DB a cada turno. Antes só cacheava a Iza (variável única);
- * generalizado pra webchat multi-tenant (FEATURE webchat-por-org) — cada org
- * embedada no site do cliente (ex.: CMJ/Vera) tem seu próprio slot de cache. */
-const systemPromptCache = new Map<string, { prompt: string; cachedAt: number }>();
+/* ── Cache do agente do chat do site em memória por org (5 min) ─────────
+ * Evita query no DB a cada turno no caminho de antes. Cada org embedada no
+ * site do cliente (ex.: CMJ/Vera) tem seu próprio slot. O motor único
+ * (contextoUnico) não usa este cache: lê o Agent a cada turno (A089). */
+const agenteDoSiteCache = new Map<string, { agente: AgenteDoTurno; cachedAt: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
+
+/** Para os testes: o cache é do módulo e sobreviveria de um teste ao outro. */
+export function limparCacheDoAgenteDoSite(): void {
+  agenteDoSiteCache.clear();
+}
 
 /**
  * Lançada quando a organização não tem agente comercial vivo com prompt.
@@ -115,6 +126,33 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 export class SystemPromptNaoEncontrado extends Error {}
 
 /**
+ * O agente que o chat do site usa no caminho de antes, com o cache de 5 min.
+ *
+ * C1b (nota 2 da revisão de 14/09, A077): pelo seletor ÚNICO
+ * (resolveAgentForTurn), o mesmo do WhatsApp, do motor único, da retomada
+ * e do Raio-X: papel comercial (o visitante é lead novo), status live, o
+ * mais RECENTE. Antes, um SQL próprio pegava o mais ANTIGO. Hoje cada
+ * organização tem um só agente comercial vivo e nada muda; com dois, o site
+ * passa a usar o mais recente, como os outros canais.
+ *
+ * Lança SystemPromptNaoEncontrado quando não há agente vivo com prompt.
+ */
+async function carregarAgenteDoSite(organizationId: string): Promise<AgenteDoTurno> {
+  const now = Date.now();
+  const cached = agenteDoSiteCache.get(organizationId);
+  if (cached && now - cached.cachedAt < CACHE_TTL_MS) return cached.agente;
+
+  const agente = await resolveAgentForTurn(organizationId, 'NEW');
+  if (!agente) {
+    throw new SystemPromptNaoEncontrado(
+      `webChatService: system_prompt não encontrado pra org ${organizationId}`,
+    );
+  }
+  agenteDoSiteCache.set(organizationId, { agente, cachedAt: now });
+  return agente;
+}
+
+/**
  * Prompt do agente que o CHAT DO SITE usa, com o cache de 5 minutos.
  *
  * Exportada porque o Raio-X do prompt (/admin/ai-xray) precisa mostrar o
@@ -126,59 +164,30 @@ export class SystemPromptNaoEncontrado extends Error {}
  * fazer com ele.
  */
 export async function loadOrgSystemPrompt(organizationId: string): Promise<string> {
-  const now = Date.now();
-  const cached = systemPromptCache.get(organizationId);
-  if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
-    return cached.prompt;
-  }
-
-  // Query direto: agents é snake_case, role='comercial' = agente vendendo/atendendo.
-  const rows = await prisma.$queryRawUnsafe<Array<{ system_prompt: string }>>(
-    `SELECT system_prompt FROM agents
-     WHERE organization_id = $1 AND role = 'comercial' AND status = 'live'
-     ORDER BY created_at ASC LIMIT 1`,
-    organizationId,
-  );
-
-  if (!rows.length || !rows[0].system_prompt) {
-    throw new SystemPromptNaoEncontrado(
-      `webChatService: system_prompt não encontrado pra org ${organizationId}`,
-    );
-  }
-
-  systemPromptCache.set(organizationId, { prompt: rows[0].system_prompt, cachedAt: now });
-  return rows[0].system_prompt;
+  return (await carregarAgenteDoSite(organizationId)).systemPrompt;
 }
 
 /**
- * O id do agente cujo prompt o chat do site está usando.
- *
- * `loadOrgSystemPrompt` acima traz só o TEXTO, por SQL cru e com cache. Para
- * carregar as regras do agente certo (PI-3) falta o id, e ele tem de sair do
- * MESMO agente: mesma role, mesmo status e a mesma ordem (o mais antigo).
- * Uma ordem diferente aqui casaria o texto de um agente com as regras de
- * outro, que é pior do que não filtrar.
+ * O id do agente cujo prompt o chat do site está usando: o MESMO agente de
+ * loadOrgSystemPrompt (mesmo seletor e mesmo cache), para as regras do
+ * agente certo (PI-3) nunca se casarem com o texto de outro.
  *
  * Fail-soft: sem agente, ou com o banco fora, devolve null e o bloco volta a
  * ser o da organização. A resposta ao visitante nunca trava por isto.
  *
  * Exportada porque o Raio-X do canal site (adminAiXray) tem de escolher o
- * MESMO agente que o chat: com dois agentes vivos, um seletor diferente ali
- * mostraria as regras do outro.
+ * MESMO agente que o chat.
  */
 export async function idDoAgenteComercial(organizationId: string): Promise<string | null> {
   try {
-    const agente = await prisma.agent.findFirst({
-      where: { organizationId, role: 'comercial', status: 'live' },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true },
-    });
-    return agente?.id ?? null;
+    return (await carregarAgenteDoSite(organizationId)).id;
   } catch (err) {
-    logger.warn('[webChat] não achei o agente para filtrar as regras (seguindo por organização)', {
-      organizationId,
-      err: err instanceof Error ? err.message : String(err),
-    });
+    if (!(err instanceof SystemPromptNaoEncontrado)) {
+      logger.warn('[webChat] não achei o agente para filtrar as regras (seguindo por organização)', {
+        organizationId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
     return null;
   }
 }
@@ -218,12 +227,26 @@ export interface WebChatRequest {
   history?: WebChatTurn[];
   /** Org dona do agente. Default = Iza canonical (mantém /iza-message igual). */
   organizationId?: string;
+  /**
+   * C1b (auditoria do diff): o widget que fez o pedido escuta a equipe (o
+   * widget.js por organização, com o socket da sessão e a sincronização).
+   * Só com ele a tag de transbordo vira transbordo de verdade: o chat da
+   * landing da ZappIQ (/iza-message) ainda não tem canal de volta, e pausar
+   * ali deixaria o visitante preso ouvindo que um atendente vai responder.
+   */
+  canalDeVolta?: boolean;
 }
 
 export interface WebChatResponse {
   reply: string;
   /** A190: verdadeiro quando um atendente assumiu a conversa e o robô não respondeu. */
   paused?: boolean;
+  /**
+   * C1b (A169): verdadeiro quando esta resposta passou a conversa para a
+   * equipe. A partir daqui a IA não responde; a pessoa responde pelo Inbox
+   * e a mensagem chega ao widget pelo socket da sessão.
+   */
+  transbordo?: boolean;
   provider?: string;
   model?: string;
   latencyMs: number;
@@ -285,6 +308,12 @@ export function buildWebChatSystemPrompt(input: {
    * correção aprovada vale na mensagem seguinte.
    */
   regrasBlock?: string;
+  /**
+   * C1b (Passo 4, A068): a base de conhecimento, só com `ragNoChatDoSite`
+   * ligado (a MESMA flag que o motor único lê). Vazio sem a flag ou sem
+   * trecho: o prompt é o de antes, caractere por caractere.
+   */
+  ragBlock?: string;
 }): string {
   const { orgPrompt, factsBlock, isIzaCanonical } = input;
   return [
@@ -296,8 +325,30 @@ export function buildWebChatSystemPrompt(input: {
     input.perfilVivoBlock || '',
     input.regrasBlock || '',
     input.saudacaoBlock || '',
+    // A base antes da instrução de canal, que segue sendo a última.
+    input.ragBlock || '',
     buildWebChatChannelInstruction(isIzaCanonical),
   ].filter(Boolean).join('\n\n');
+}
+
+/**
+ * A busca na base para o chat do site, a mesma do WhatsApp. Fail-soft: a
+ * falha vira o aviso de base fora do ar (A028), nunca erro para o visitante.
+ */
+async function buscarNaBaseDoSite(
+  organizationId: string,
+  mensagem: string,
+): Promise<{ context: string; status: ragService.RagSearchStatus }> {
+  try {
+    const busca = await ragService.searchDetailed(organizationId, mensagem, 5);
+    return { context: busca.context, status: busca.status };
+  } catch (err) {
+    logger.warn('[webChat] base indisponível neste turno (segue sem ela)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return { context: '', status: 'servico_fora' };
+  }
 }
 
 /**
@@ -320,6 +371,13 @@ export async function montarContextoDoChatDoSite(input: {
   /** Busca já feita por quem chamou (o Raio-X). Com ela, nenhuma busca nova. */
   busca?: { context: string; status: ragService.RagSearchStatus };
   agora?: Date;
+  /** C1b (nota 1): interruptores da leitura única do turno, quando há. */
+  flags?: FlagsDaOrganizacao;
+  /**
+   * C1b (nota 4): o estado real do agendamento, para o perfil vivo do site
+   * ter a MESMA linha de agendamento do WhatsApp. Ausente: sem a linha.
+   */
+  agendamento?: { ativo: boolean; tipos?: string[] } | null;
 }): Promise<ContextoDoTurno> {
   const { organizationId } = input;
   let ragContext = '';
@@ -351,6 +409,8 @@ export async function montarContextoDoChatDoSite(input: {
     instrucaoDeCanal: buildWebChatChannelInstruction(organizationId === IZA_CANONICAL_ORG_ID),
     perfilVivoLigado: input.perfilVivoLigado,
     agora: input.agora,
+    flags: input.flags,
+    agendamento: input.agendamento,
   });
   if (!contexto) {
     throw new SystemPromptNaoEncontrado(
@@ -607,21 +667,46 @@ export async function carregarConversaDoServidor(
  * visitante NÃO fica sem resposta: o log registra e o caminho de antes
  * responde. É a rede de segurança do deploy, não um jeito de esconder erro.
  */
+/** O que o turno do site precisa saber do prompt montado. */
+interface PromptDoSite {
+  systemPrompt: string;
+  /** Nome do agente que responde, para a guarda de marca (C1b). */
+  agenteNome: string | null;
+}
+
+/**
+ * Settings da organização, lidas uma vez por turno. Fail-soft: banco fora
+ * vira objeto vazio, e o turno segue como seguiria sem configuração.
+ */
+async function carregarSettingsDoSite(organizationId: string): Promise<Record<string, any>> {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    return (org?.settings as Record<string, any>) ?? {};
+  } catch (err) {
+    logger.warn('[webChat] settings indisponíveis neste turno (segue sem elas)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return {};
+  }
+}
+
 async function montarSystemPromptDoSite(input: {
   organizationId: string;
   isIzaCanonical: boolean;
   lead: WebChatLead | null;
   history: WebChatTurn[];
   userMessage: string;
-}): Promise<string> {
-  const { organizationId, isIzaCanonical, lead, history, userMessage } = input;
-
-  // Os três interruptores de uma vez, fail-closed cada um.
-  const [contextoUnico, perfilVivoLigado, consultarBase] = await Promise.all([
-    flagLigada(organizationId, 'contextoUnico'),
-    flagLigada(organizationId, 'perfilVivo'),
-    flagLigada(organizationId, 'ragNoChatDoSite'),
-  ]);
+  /** C1b (nota 1): os interruptores, lidos uma vez no começo do turno. */
+  flags: FlagsDaOrganizacao;
+}): Promise<PromptDoSite> {
+  const { organizationId, isIzaCanonical, lead, history, userMessage, flags } = input;
+  const contextoUnico = flags.contextoUnico;
+  const perfilVivoLigado = flags.perfilVivo;
+  const consultarBase = flags.ragNoChatDoSite;
 
   if (contextoUnico) {
     try {
@@ -650,6 +735,10 @@ async function montarSystemPromptDoSite(input: {
         temHistoricoNoContexto: history.length > 0,
         perfilVivoLigado,
         consultarBase,
+        flags,
+        // C1b (nota 4): a mesma linha de agendamento do WhatsApp. Só com o
+        // perfil vivo ligado (é dentro dele que a linha mora).
+        agendamento: perfilVivoLigado ? await resolveSchedulingRuntime(organizationId, orgSettings) : undefined,
       });
       logger.info('[webChat] contexto pelo motor único', {
         organizationId,
@@ -658,7 +747,7 @@ async function montarSystemPromptDoSite(input: {
         ragStatus: contexto.ragStatus,
         consultarBase,
       });
-      return contexto.systemPrompt;
+      return { systemPrompt: contexto.systemPrompt, agenteNome: contexto.agente.name };
     } catch (err) {
       if (err instanceof SystemPromptNaoEncontrado) throw err;
       logger.error('[webChat] motor único falhou; respondendo pelo caminho de antes', {
@@ -674,10 +763,11 @@ async function montarSystemPromptDoSite(input: {
   // getIzaFactsBlock() é sobre o PRODUTO ZappIQ (preço, trial, features) —
   // só faz sentido pra Iza; outra org embedada (ex.: Vera/CMJ) usa só o
   // próprio agents.system_prompt, sem esse overlay.
-  const [orgPrompt, factsBlock] = await Promise.all([
-    loadOrgSystemPrompt(organizationId),
+  const [agenteDoSite, factsBlock] = await Promise.all([
+    carregarAgenteDoSite(organizationId),
     isIzaCanonical ? getIzaFactsBlock() : Promise.resolve(''),
   ]);
+  const orgPrompt = agenteDoSite.systemPrompt;
   // Perfil vivo (A8, A068): o widget montava CORE + prompt gravado + canal, e
   // mais nada. Sem saudação configurada, sem horário, sem identidade viva: o
   // dono editava o Treinar IA e o chat do site seguia com o texto do dia do
@@ -692,7 +782,12 @@ async function montarSystemPromptDoSite(input: {
         select: { settings: true },
       });
       const orgSettings = (org?.settings as Record<string, any>) ?? {};
-      perfilVivoBlock = buildLiveProfileBlock(orgSettings, null, { now: new Date() });
+      // C1b (nota 4): a mesma linha de agendamento do WhatsApp (tipo ativo
+      // E direito ao recurso), que faltava no site.
+      perfilVivoBlock = buildLiveProfileBlock(orgSettings, null, {
+        now: new Date(),
+        agendamento: await resolveSchedulingRuntime(organizationId, orgSettings),
+      });
       // Primeiro turno da sessão = histórico vazio. O widget manda o histórico
       // inteiro a cada POST, então isto é fiel ao que o visitante viu.
       saudacaoBlock = buildGreetingBlock(history.length === 0, orgSettings.greetingMessage);
@@ -713,20 +808,21 @@ async function montarSystemPromptDoSite(input: {
   // organização dava no mesmo; basta a primeira ligar um agente de suporte
   // para as regras do comercial vazarem para ele.
   //
-  // O interruptor é conferido AQUI, e não só lá dentro, para a busca do
-  // agente nem acontecer com ele desligado. O serviço também confere (é ele
-  // quem decide se lê as regras), mas a segunda leitura sai do cache. Com o
-  // interruptor off, a organização não paga consulta nenhuma por turno, que
-  // é a promessa feita no resto deste PR.
+  // C1b (notas 1 e 2): o interruptor vem da leitura única do turno, e o id
+  // é o do MESMO agente do prompt acima (seletor único, mesmo cache). Com o
+  // interruptor off, nenhuma consulta a mais por turno.
   //
   // Rodada 2 do PR #377: isto vale só para o caminho de antes. No motor único
   // (acima), o carregador põe as regras em `regrasDoCliente` com o id do
   // MESMO agente cujo prompt entrou no contexto.
   let regrasBlock = '';
   try {
-    if (await isFlagOn(organizationId, 'regrasComoRegistros')) {
+    // C1b (nota 1): o interruptor vem da leitura única do turno.
+    if (flags.regrasComoRegistros) {
+      // O MESMO agente do prompt acima (nota 2): nenhuma consulta a mais.
       regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
-        agentId: await idDoAgenteComercial(organizationId),
+        agentId: agenteDoSite.id,
+        ligado: true,
       });
     }
   } catch (err) {
@@ -736,14 +832,28 @@ async function montarSystemPromptDoSite(input: {
     });
   }
 
-  return buildWebChatSystemPrompt({
-    orgPrompt,
-    factsBlock,
-    isIzaCanonical,
-    perfilVivoBlock,
-    regrasBlock,
-    saudacaoBlock,
-  });
+  // C1b (Passo 4, A068): a base no caminho de antes, atrás da MESMA flag do
+  // motor único (`ragNoChatDoSite`). Desligada, nenhuma busca é feita e o
+  // prompt é o de antes. O CMJ fica desligado até o dono revisar os
+  // documentos internos da base (A197).
+  let ragBlock = '';
+  if (consultarBase) {
+    const busca = await buscarNaBaseDoSite(organizationId, userMessage);
+    ragBlock = buildRagBlock(busca.context, busca.status);
+  }
+
+  return {
+    systemPrompt: buildWebChatSystemPrompt({
+      orgPrompt,
+      factsBlock,
+      isIzaCanonical,
+      perfilVivoBlock,
+      regrasBlock,
+      saudacaoBlock,
+      ragBlock,
+    }),
+    agenteNome: agenteDoSite.name,
+  };
 }
 
 /* ── Handler principal ────────────────────────────── */
@@ -819,16 +929,21 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     return { reply: '', paused: true, latencyMs: Date.now() - startedAt };
   }
 
+  // 0.c Os interruptores da organização, lidos UMA vez neste turno (C1b,
+  //     nota 1) e passados a quem monta o prompt e decide o modelo.
+  const flags = await lerFlagsDoTurno(organizationId);
+
   // 1. O system prompt. Dois caminhos, escolhidos pelo interruptor
   //    `contextoUnico` (C1a):
   //    - ligado: o MESMO motor do WhatsApp (montarContextoDoChatDoSite);
   //    - desligado: a montagem de antes, caractere por caractere.
-  const systemPrompt = await montarSystemPromptDoSite({
+  const { systemPrompt, agenteNome } = await montarSystemPromptDoSite({
     organizationId,
     isIzaCanonical,
     lead,
     history,
     userMessage,
+    flags,
   });
 
   // 2. Monta messages: history + novo turno do user
@@ -877,26 +992,69 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     };
   } else {
     try {
-      llmResp = await chatCompletion(systemPrompt, messages, MAX_OUTPUT_TOKENS, {
-        orgId: organizationId,
-        conversationId: `web-chat:${sessionId}`,
-      });
+      const ctxDoAudit = { orgId: organizationId, conversationId: `web-chat:${sessionId}` };
+      if (flags.modeloPorPolitica) {
+        // C1b (nota 5, A068): o tier pelo plano da organização, com a mesma
+        // precedência do WhatsApp. Antes, sempre a cascata padrão (Sonnet),
+        // ignorando o plano. Desligado, a chamada é a de hoje.
+        const politica = await carregarPoliticaDoTurno(organizationId, { canal: 'site', agendamentoAtivo: false });
+        llmResp = await chatCompletion(systemPrompt, messages, MAX_OUTPUT_TOKENS, ctxDoAudit, {
+          tier: politica.tier,
+          forceProvider: politica.override,
+        });
+      } else {
+        llmResp = await chatCompletion(systemPrompt, messages, MAX_OUTPUT_TOKENS, ctxDoAudit);
+      }
     } catch (err) {
       logger.error('[webChat] chatCompletion failed', { sessionId, err });
       throw new Error('LLM_UNAVAILABLE');
     }
   }
 
-  // 4. Limpeza das tags estruturadas: o prompt pode devolver <action>,
-  //    <action_data> e <buttons>, que não fazem sentido no chat do site. Fica
-  //    só o texto visível, pela mesma função que o WhatsApp usa.
-  let reply = String(llmResp.text || '').trim();
-  // Se houver <reply>…</reply>, prioriza esse conteúdo (mesma lógica do
-  // parseAgentResponse interno).
-  const replyMatch = reply.match(/<reply>([\s\S]*?)<\/reply>/i);
-  if (replyMatch) reply = replyMatch[1].trim();
-  reply = stripStructuredTags(reply);
-  reply = stripLeakedPrefixes(reply);
+  // 4. Pós-processamento único (C1b, A189): o mesmo de todos os canais. O
+  //    texto visível sai pela mesma função do WhatsApp, as tags de ação são
+  //    lidas e a guarda de marca roda sobre a resposta real. Rodada 1 do PR
+  //    #379: a guarda só segura a resposta com o interruptor `guardaDeMarca`
+  //    (da leitura única acima); desligado, só alerta.
+  const posProcessar = (identidade: { negocio: string | null; agente: string | null }) =>
+    postProcessReply({
+      bruto: llmResp.text,
+      canal: 'site',
+      organizacao: { id: organizationId, ehZappIQ: isIzaCanonical, nome: identidade.negocio },
+      agente: { nome: identidade.agente },
+      guardaLigada: flags.guardaDeMarca,
+    });
+  let saida = posProcessar({ negocio: null, agente: agenteNome });
+  if (saida.alertas.length) {
+    // Só quando a guarda dispara vale ler as settings: o nome do negócio e o
+    // do agente entram na lista de exceções (a agente que se chama Iza não
+    // vaza nada ao dizer o próprio nome). No caminho comum, zero consulta a
+    // mais por turno.
+    const orgSettings = await carregarSettingsDoSite(organizationId);
+    // Os dois nomes do agente valem na lista de exceções: o do registro do
+    // Agent e o que o dono gravou no Treinar IA (normalmente iguais).
+    saida = posProcessar({
+      negocio: orgSettings.businessName ?? null,
+      agente: [agenteNome, orgSettings.agentName].filter(Boolean).join(' ') || null,
+    });
+  }
+  await registrarAlertasDeSaida({
+    organizationId,
+    conversationId: lead?.conversationId ?? null,
+    canal: 'site',
+    alertas: saida.alertas,
+    bloqueada: saida.bloqueada,
+  });
+  let reply = saida.texto;
+
+  // 4.a Transbordo (C1b, A169): a tag de handoff deixava de existir aqui. Só
+  //     vale com conversa de verdade no CRM, que é onde a equipe atende.
+  const pediuTransbordo = saida.acoes.includes('handoff') && Boolean(lead) && input.canalDeVolta === true;
+  if (pediuTransbordo && !reply) {
+    // O modelo pediu a pessoa sem dizer nada ao visitante: sai a mensagem de
+    // espera do dono (a mesma do WhatsApp).
+    reply = mensagemDeEspera(await carregarSettingsDoSite(organizationId));
+  }
 
   // 4.b Crise: a linha do CVV entra no texto já limpo, ACRESCENTADA à
   //     resposta do agente. `comTransbordo` só é verdade quando existe
@@ -950,6 +1108,19 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     }
   }
 
+  // 5.a Transbordo de verdade (C1b, A169): depois do espelho OUTBOUND, para a
+  //     equipe ver no Inbox o que o visitante leu. Fail-soft por dentro.
+  if (pediuTransbordo && lead) {
+    await marcarTransbordo({
+      organizationId,
+      conversationId: lead.conversationId,
+      contactId: lead.contactId,
+      contactPhone: buildWebChatLeadIdentity(sessionId, organizationId).identifier,
+      rotuloDoCliente: 'Visitante do chat do site',
+      io: getIo(),
+    });
+  }
+
   // 5.b Pausa, aviso ao dono e registro. Depois do envio e do espelho, para
   //      não atrasar a resposta de quem pediu ajuda. Fail-soft por dentro.
   if (sinalDeCrise.crise) {
@@ -989,6 +1160,7 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
 
   return {
     reply,
+    ...(pediuTransbordo ? { transbordo: true } : {}),
     provider: llmResp.provider,
     model: llmResp.model,
     latencyMs,

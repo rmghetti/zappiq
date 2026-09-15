@@ -47,6 +47,8 @@ const appointmentTypeFindMany = vi.fn().mockResolvedValue([]);
 const queryRawUnsafe = vi.fn();
 // C3: as regras aprovadas pelo dono, lidas por agentRulesService.
 const agentRuleFindMany = vi.fn().mockResolvedValue([]);
+// C1b: os alertas da guarda de marca, gravados em prefilter_events.
+const prefilterFindMany = vi.fn().mockResolvedValue([]);
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -57,6 +59,7 @@ vi.mock('@zappiq/database', () => ({
     message: { count: (...a: any[]) => messageCount(...a) },
     appointmentType: { findMany: (...a: any[]) => appointmentTypeFindMany(...a) },
     agentRule: { findMany: (...a: any[]) => agentRuleFindMany(...a) },
+    prefilterEvent: { findMany: (...a: any[]) => prefilterFindMany(...a) },
     $queryRawUnsafe: (...a: any[]) => queryRawUnsafe(...a),
   },
 }));
@@ -186,6 +189,7 @@ beforeEach(() => {
   qaFindMany.mockResolvedValue([{ id: 'q1', question: 'Vocês atendem aos sábados?' }]);
   queryRawUnsafe.mockResolvedValue([{ system_prompt: PROMPT_DO_AGENTE }]);
   agentRuleFindMany.mockResolvedValue([]);
+  prefilterFindMany.mockResolvedValue([]);
   searchWithSources.mockResolvedValue({
     context: 'Trecho da base: o rodízio custa R$ 89.',
     sources: [{ source: 'cardapio.pdf', similarity: 0.61, snippet: 'rodízio R$ 89' }],
@@ -350,25 +354,29 @@ describe('POST /api/admin/ai-xray: o prompt de cada canal', () => {
 /* ── 5. O canal site usa o carregador do próprio chat do site ─────────── */
 
 describe('POST /api/admin/ai-xray: o canal site não reimplementa a escolha do prompt', () => {
-  it('carrega o prompt por webChatService.loadOrgSystemPrompt, não por agent.findFirst', async () => {
-    // Org nova de propósito: loadOrgSystemPrompt guarda o prompt em memória
-    // por 5 minutos, então uma org já usada em outro teste não bateria no SQL.
+  it('carrega o prompt pelo carregador do chat do site, que usa o seletor único (C1b, nota 2)', async () => {
+    // Org nova de propósito: o carregador guarda o agente em memória por 5
+    // minutos, então uma org já usada em outro teste não iria ao banco.
     orgFindUnique.mockResolvedValue({ id: 'org-site-1', name: 'Cantina', settings: SETTINGS_DA_ORG });
 
     const res = await chamar({ ...corpoValido, organizationId: 'org-site-1', canal: 'site' });
 
     expect(res.statusCode).toBe(200);
-    expect(queryRawUnsafe).toHaveBeenCalled();
-    expect(String(queryRawUnsafe.mock.calls[0][0])).toContain('FROM agents');
-    expect(queryRawUnsafe.mock.calls[0][1]).toBe('org-site-1');
-    // A rota não pode ter cópia da regra: quem escolhe o agente é o serviço.
-    expect(agentFindFirst).not.toHaveBeenCalled();
+    // Nenhum SQL próprio: o mesmo seletor de todos os canais (comercial,
+    // vivo, o mais recente), chamado pelo serviço do chat, não pela rota.
+    expect(queryRawUnsafe).not.toHaveBeenCalled();
+    expect(agentFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: 'org-site-1', role: 'comercial', status: 'live' },
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
     expect(res.body.turnos[0].prompt_chars).toBeGreaterThan(100);
   });
 
   it('422 sem_prompt quando a organização não tem agente comercial ativo', async () => {
     orgFindUnique.mockResolvedValue({ id: 'org-sem-agente', name: 'Sem agente', settings: SETTINGS_DA_ORG });
-    queryRawUnsafe.mockResolvedValue([]);
+    agentFindFirst.mockResolvedValue(null);
 
     const res = await chamar({ ...corpoValido, organizationId: 'org-sem-agente', canal: 'site' });
 
@@ -379,7 +387,6 @@ describe('POST /api/admin/ai-xray: o canal site não reimplementa a escolha do p
 
   it('o 422 é só do canal site; o de Qualidade segue montando com o prompt vazio', async () => {
     orgFindUnique.mockResolvedValue({ id: 'org-sem-agente-2', name: 'Sem agente', settings: SETTINGS_DA_ORG });
-    queryRawUnsafe.mockResolvedValue([]);
     agentFindFirst.mockResolvedValue(null);
 
     const res = await chamar({ ...corpoValido, organizationId: 'org-sem-agente-2', canal: 'qualidade' });
@@ -396,10 +403,10 @@ describe('POST /api/admin/ai-xray: o canal site não reimplementa a escolha do p
   });
 
   it('banco fora do ar na busca do agente do site dá 500, não 422 de sem_prompt', async () => {
-    // Org nova de propósito: o cache de 5 minutos do loadOrgSystemPrompt
-    // devolveria o prompt de um teste anterior e a consulta nem aconteceria.
+    // Org nova de propósito: o cache de 5 minutos do carregador devolveria o
+    // agente de um teste anterior e a consulta nem aconteceria.
     orgFindUnique.mockResolvedValue({ id: 'org-site-caiu', name: 'Cantina', settings: SETTINGS_DA_ORG });
-    queryRawUnsafe.mockRejectedValue(new Error('banco fora do ar'));
+    agentFindFirst.mockRejectedValue(new Error('banco fora do ar'));
 
     const res = await chamar({ ...corpoValido, organizationId: 'org-site-caiu', canal: 'site' });
 
@@ -567,11 +574,12 @@ describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
 
     expect(res.statusCode).toBe(200);
     expect(promptDoTurno(res)).toContain('1. Chame o cliente pelo nome quando souber.');
-    // O seletor do chat do site: comercial, vivo, o mais antigo.
+    // O seletor único (C1b, nota 2): comercial, vivo, o mais recente, o mesmo
+    // do chat do site e dos outros canais.
     expect(agentFindFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { organizationId: 'org-site-agente', role: 'comercial', status: 'live' },
-        orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'desc' },
       }),
     );
     expect(agentRuleFindMany.mock.calls[0][0].where).toMatchObject({
@@ -580,13 +588,14 @@ describe('POST /api/admin/ai-xray: as regras aprovadas pelo dono (C3)', () => {
     });
   });
 
-  it('com o interruptor DESLIGADO, o canal site nem procura o agente para as regras', async () => {
+  it('com o interruptor DESLIGADO, o canal site não pede regra nenhuma (só o lookup do prompt)', async () => {
     orgFindUnique.mockResolvedValue({ id: 'org-site-off', name: 'Cantina', settings: SETTINGS_DA_ORG });
 
     const res = await chamar({ ...corpoValido, organizationId: 'org-site-off', canal: 'site' });
 
     expect(res.statusCode).toBe(200);
-    expect(agentFindFirst).not.toHaveBeenCalled();
+    // C1b (nota 2): o prompt e o id saem do mesmo lookup; desligado, nada a mais.
+    expect(agentFindFirst).toHaveBeenCalledTimes(1);
     expect(agentRuleFindMany).not.toHaveBeenCalled();
   });
 
@@ -778,5 +787,51 @@ describe('POST /api/admin/ai-xray: hash, partes e motor por turno', () => {
     const canal = prompt.indexOf('# CANAL DE COMUNICAÇÃO');
     expect(canal).toBeGreaterThan(0);
     expect(prompt.indexOf(PROMPT_DO_AGENTE)).toBeGreaterThan(canal);
+  });
+});
+
+describe('POST /api/admin/ai-xray: alertas da guarda de marca (C1b, A189)', () => {
+  it('lista os alertas recentes da organização, sem o texto da conversa', async () => {
+    const quando = new Date('2026-09-14T15:00:00Z');
+    prefilterFindMany.mockResolvedValue([
+      { canal: 'whatsapp', regra: 'ZappIQ', acao: 'resposta_segura', conversationId: 'c-1', createdAt: quando },
+    ]);
+
+    const res = await chamar(corpoValido);
+
+    expect(res.statusCode).toBe(200);
+    expect(prefilterFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: 'org-1', categoria: 'guarda-de-marca' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    );
+    expect(res.body.alertas_de_saida).toEqual([
+      { canal: 'whatsapp', termo: 'ZappIQ', acao: 'resposta_segura', conversationId: 'c-1', em: quando.toISOString() },
+    ]);
+  });
+
+  it('sem alerta, a lista vem vazia; banco fora não derruba o Raio-X', async () => {
+    let res = await chamar(corpoValido);
+    expect(res.body.alertas_de_saida).toEqual([]);
+
+    prefilterFindMany.mockRejectedValue(new Error('db down'));
+    res = await chamar(corpoValido);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.alertas_de_saida).toEqual([]);
+  });
+});
+
+describe('POST /api/admin/ai-xray: base do site no caminho de antes (C1b, Passo 4)', () => {
+  it('com ragNoChatDoSite e o motor de antes, o site consulta a base e mostra o bloco', async () => {
+    isFlagOn.mockImplementation(async (_org: string, flag: string) => flag === 'ragNoChatDoSite');
+
+    const res = await chamar({ ...corpoValido, canal: 'site' });
+
+    expect(searchWithSources).toHaveBeenCalledWith('org-1', 'vocês abrem domingo?', 5);
+    const turno = res.body.turnos[0];
+    expect(turno.motor).toBe('antes');
+    expect(promptDoTurno(res)).toContain('# Contexto recuperado (RAG)\nTrecho da base: o rodízio custa R$ 89.');
   });
 });

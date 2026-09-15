@@ -114,7 +114,10 @@ vi.mock('@zappiq/database', () => ({
       }),
     },
     // loadOrgSystemPrompt busca o system_prompt do agente comercial da org.
-    $queryRawUnsafe: vi.fn(async () => [{ system_prompt: 'PROMPT DA ORG' }]),
+    // C1b (nota 2): o agente do site sai do seletor único (resolveAgentForTurn).
+    agent: {
+      findFirst: vi.fn(async () => ({ id: 'agente-1', name: 'Iza', role: 'comercial', systemPrompt: 'PROMPT DA ORG' })),
+    },
   },
 }));
 

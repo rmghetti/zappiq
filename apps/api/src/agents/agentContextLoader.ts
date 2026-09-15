@@ -20,12 +20,19 @@
 
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
-import { isFlagOn, type FlagName } from '../services/featureFlags.js';
+import {
+  isFlagOn,
+  lerFlagsDaOrganizacao,
+  flagsDesligadas,
+  type FlagName,
+  type FlagsDaOrganizacao,
+} from '../services/featureFlags.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
 // PR #375: as correções aprovadas pelo dono são registros (agent_rules),
 // montados em bloco atrás do interruptor `regrasComoRegistros`.
 import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
+import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
 import { decideLlmCostStage } from '../middleware/planLimits.js';
 import type { RagSearchStatus } from '../services/ragService.js';
 import { buildTenantLinksBlock } from './tenantConversionUrls.js';
@@ -49,6 +56,23 @@ export async function flagLigada(organizationId: string, flag: FlagName): Promis
     return false;
   }
 }
+
+/**
+ * C1b (nota 1 da revisão de 14/09): os interruptores da organização lidos
+ * UMA vez por turno. Quem começa o turno (WhatsApp, Instagram, site, Testar
+ * minha IA, retomada do Maestro) lê aqui e passa o resultado ao carregador,
+ * à política e aos montadores; ninguém mais vai ao Redis por interruptor no
+ * meio do turno. Nunca lança: erro é tudo desligado.
+ */
+export async function lerFlagsDoTurno(organizationId: string): Promise<FlagsDaOrganizacao> {
+  try {
+    return await lerFlagsDaOrganizacao(organizationId);
+  } catch {
+    return flagsDesligadas();
+  }
+}
+
+export type { FlagsDaOrganizacao };
 
 // ── Agent do turno (A077, A069) ───────────────────────────────────────
 
@@ -180,6 +204,12 @@ export interface MontarContextoInput {
    * `regrasComoRegistros` (rodada 2 do PR #377).
    */
   regrasDoCliente?: string;
+  /**
+   * C1b (nota 1): os interruptores já lidos no começo do turno. Presentes,
+   * o carregador não lê interruptor nenhum (perfilVivo e
+   * regrasComoRegistros vêm daqui).
+   */
+  flags?: FlagsDaOrganizacao;
 }
 
 export interface ContextoDoTurno extends AgentContextOutput {
@@ -198,9 +228,14 @@ export interface ContextoDoTurno extends AgentContextOutput {
  * banco, então o turno não paga consulta nenhuma a mais. Erro: segue sem o
  * bloco, como o caminho de antes faz.
  */
-export async function carregarRegrasDoAgente(organizationId: string, agentId: string): Promise<string> {
+export async function carregarRegrasDoAgente(
+  organizationId: string,
+  agentId: string,
+  /** C1b: `regrasComoRegistros` já lido na leitura única do turno. */
+  ligado?: boolean,
+): Promise<string> {
   try {
-    return await blocoDeRegrasDaOrganizacao(organizationId, { agentId });
+    return await blocoDeRegrasDaOrganizacao(organizationId, { agentId, ligado });
   } catch (err) {
     logger.warn('[AgentContext] bloco de regras indisponível neste turno (segue sem ele)', {
       organizationId,
@@ -236,7 +271,7 @@ export async function montarContextoDoTurno(input: MontarContextoInput): Promise
   if (!agente) return null;
 
   const perfilVivoLigado =
-    input.perfilVivoLigado ?? (await flagLigada(organizationId, 'perfilVivo'));
+    input.perfilVivoLigado ?? input.flags?.perfilVivo ?? (await flagLigada(organizationId, 'perfilVivo'));
 
   const ehZappIQ = isZappIQOrg(organizationId);
   let izaFacts = '';
@@ -258,7 +293,8 @@ export async function montarContextoDoTurno(input: MontarContextoInput): Promise
   // bloco entra no lugar que o compositor reservou (depois do perfil vivo,
   // antes dos links), o mesmo do caminho de antes do #375.
   const regrasDoCliente =
-    input.regrasDoCliente ?? (await carregarRegrasDoAgente(organizationId, agente.id));
+    input.regrasDoCliente ??
+    (await carregarRegrasDoAgente(organizationId, agente.id, input.flags?.regrasComoRegistros));
 
   // A212 só existe com o perfil vivo ligado; desligado, a linha é a de antes.
   const historicoNoContexto = perfilVivoLigado ? input.temHistoricoNoContexto !== false : true;
@@ -286,6 +322,68 @@ export async function montarContextoDoTurno(input: MontarContextoInput): Promise
   });
 
   return { ...saida, agente, contato, ragStatus, perfilVivoLigado };
+}
+
+// ── Agendamento do turno ─────────────────────────────────────────────
+
+/**
+ * O agendamento está REALMENTE de pé nesta organização?
+ *
+ * C1b (nota 4): mudou de casa, do orquestrador para cá, sem mudar uma
+ * linha. O chat do site e a Qualidade precisam da MESMA linha de
+ * agendamento do WhatsApp e não podem carregar o orquestrador para isso.
+ *
+ * Até 14/09/2026 o produto acreditava num único campo, `scheduling.enabled`,
+ * e ele mentia dos dois lados (A165):
+ *   • o CMJ tem `enabled: true` com ZERO tipos cadastrados, então todo turno
+ *     levava as ferramentas de agendamento (e ia para Sonnet, A066) só para
+ *     a IA responder que a empresa não agenda;
+ *   • quem cadastra tipo nenhum interruptor liga, e a IA ficava sem
+ *     ferramenta para consultar horário.
+ *
+ * Ligado agora é o cruzamento de três coisas verdadeiras: o dono não optou
+ * por sair, a organização tem direito ao recurso (plano ou add-on) e existe
+ * pelo menos um tipo ativo. Qualquer erro devolve DESLIGADO: prometer
+ * agendamento que não existe é o defeito que estamos consertando.
+ */
+export async function resolveSchedulingRuntime(
+  organizationId: string,
+  orgSettings: any,
+): Promise<{ ativo: boolean; tipos: string[]; motivo: string }> {
+  const scheduling = orgSettings?.scheduling ?? null;
+  if (scheduling?.optOut) return { ativo: false, tipos: [], motivo: 'optou_por_sair' };
+  if (!scheduling?.enabled) return { ativo: false, tipos: [], motivo: 'nao_ligado' };
+
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { plan: true, settings: true },
+    });
+    const addons = Array.isArray((org?.settings as any)?.addons)
+      ? ((org!.settings as any).addons as string[])
+      : [];
+    const acesso = resolveSchedulingAccess((org?.plan as PlanId) || 'IZA_LITE', addons);
+    if (!acesso.entitled) return { ativo: false, tipos: [], motivo: 'sem_direito' };
+
+    const tipos = await (prisma as any).appointmentType.findMany({
+      where: { organizationId, active: true },
+      select: { name: true },
+      take: 20,
+    });
+    const nomes: string[] = (tipos ?? [])
+      .map((t: any) => String(t?.name ?? '').trim())
+      .filter(Boolean);
+    if (!nomes.length && (!tipos || tipos.length === 0)) {
+      return { ativo: false, tipos: [], motivo: 'sem_tipo_ativo' };
+    }
+    return { ativo: true, tipos: nomes, motivo: 'ativo' };
+  } catch (err) {
+    logger.warn('[Agent] resolveSchedulingRuntime falhou: agendamento tratado como desligado', {
+      organizationId,
+      err: String(err),
+    });
+    return { ativo: false, tipos: [], motivo: 'erro' };
+  }
 }
 
 // ── Política do turno ─────────────────────────────────────────────────

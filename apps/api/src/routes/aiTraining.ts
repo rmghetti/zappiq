@@ -52,7 +52,7 @@ import {
 } from '../agents/agentOrchestrator.js';
 // C1a (Passo 12): o Testar minha IA passa pelo mesmo motor de contexto e pela
 // mesma política de modelo do WhatsApp, atrás dos interruptores.
-import { flagLigada } from '../agents/agentContextLoader.js';
+import { lerFlagsDoTurno } from '../agents/agentContextLoader.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
 // Rede de crise (P62): vale também no Testar minha IA, porque o dono precisa
@@ -62,6 +62,7 @@ import {
   acrescentarAcolhimento,
 } from '../services/llm/crisisSafetyNet.js';
 import { testMessageSchema, buildPlaygroundResult } from './aiTraining.playground.js';
+import { registrarAlertasDeSaida } from '../services/alertasDeSaida.js';
 import {
   textDocSchema,
   isEditableDocument,
@@ -210,10 +211,10 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     // agendamento entra no teste como entra no WhatsApp (tipo ativo E direito
     // ao recurso), e não só o interruptor das settings (A072). Desligados,
     // nada é consultado a mais.
-    const [contextoUnico, modeloPorPolitica] = await Promise.all([
-      flagLigada(orgId, 'contextoUnico'),
-      flagLigada(orgId, 'modeloPorPolitica'),
-    ]);
+    // C1b (nota 1): os interruptores lidos UMA vez neste teste e passados ao
+    // montador e à política, como no turno do WhatsApp.
+    const flags = await lerFlagsDoTurno(orgId);
+    const { contextoUnico, modeloPorPolitica } = flags;
     const agendamento =
       contextoUnico || modeloPorPolitica ? await resolveSchedulingRuntime(orgId, orgSettings) : null;
     const turnosDaSessao = history?.length ?? 0;
@@ -238,6 +239,7 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
         totalMensagens: turnosDaSessao + 1,
       },
       temHistoricoNoContexto: turnosDaSessao > 0,
+      flags,
     });
     const systemPrompt = contexto.systemPrompt;
 
@@ -246,6 +248,7 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     const { tier, forceProvider, politica } = await pickTierAndOverride(orgId, {
       canal: 'playground',
       agendamentoAtivo: agendamento?.ativo ?? false,
+      flags,
     });
 
     // Agendamento no playground: só a tool de CONSULTA (read-only) — o teste
@@ -279,7 +282,29 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     // Vertical bloqueada (apostas/cripto/...) devolve template estático, sem LLM.
     const rawText = turn.kind === 'blocked' ? turn.response : turn.response.text;
 
-    const result = buildPlaygroundResult({ rawLlmText: rawText, sources });
+    // C1b (A189): o mesmo pós-processador dos outros canais, com a guarda de
+    // marca sobre a resposta real e o alerta registrado para o Raio-X.
+    // Rodada 1 do PR #379: a guarda só troca a resposta com o interruptor
+    // `guardaDeMarca` (da leitura única acima); desligado, o dono vê o
+    // alerta em `alertas` e o texto como o cliente leria.
+    const result = buildPlaygroundResult({
+      rawLlmText: rawText,
+      sources,
+      organizacao: {
+        id: orgId,
+        ehZappIQ: isZappIQOrg(orgId),
+        nome: orgSettings?.businessName ?? null,
+      },
+      agente: { nome: contexto.contexto?.agente?.name ?? orgSettings?.agentName ?? null },
+      guardaLigada: flags.guardaDeMarca,
+    });
+    await registrarAlertasDeSaida({
+      organizationId: orgId,
+      conversationId: null,
+      canal: 'playground',
+      alertas: result.alertas,
+      bloqueada: result.bloqueada,
+    });
 
     // P62: rede de crise no playground.
     // A linha do CVV entra DEPOIS da limpeza das tags, no texto que a tela

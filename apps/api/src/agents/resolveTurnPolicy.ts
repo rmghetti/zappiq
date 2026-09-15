@@ -140,9 +140,13 @@ function ferramentas(input: TurnPolicyInput): string[] {
  * Canais com regra própria HOJE, preservadas de propósito:
  *   - 'maestro_retomada': só o tier do plano (flowAiResume não olha trial,
  *     Modo Econômico nem llm_routing);
- *   - 'qualidade' e 'site': cascata padrão, sem tier (o avaliador e o chat
- *     do site chamam o roteador sem tier; mudar isso é decisão de produto,
- *     não desta tarefa).
+ *   - 'qualidade': cascata padrão, sem tier (o avaliador chama o roteador
+ *     sem tier; mudar isso é da tarefa C2, interruptor `evalNoTier`).
+ *
+ * C1b (nota 5 da revisão de 14/09, A068): o chat do site deixou a cascata
+ * padrão e segue o plano da organização, com a MESMA precedência do
+ * WhatsApp (trial e estágio NOVO, llm_routing, tier do plano). O Modo
+ * Econômico é do breaker do WhatsApp e não chega aqui (o site não o mede).
  */
 export function resolveTurnPolicy(input: TurnPolicyInput): TurnPolicy {
   let tier: LLMTier | undefined;
@@ -152,8 +156,13 @@ export function resolveTurnPolicy(input: TurnPolicyInput): TurnPolicy {
   if (input.canal === 'maestro_retomada') {
     tier = input.plano && TIERS_VALIDOS.includes(input.plano as LLMTier) ? (input.plano as LLMTier) : undefined;
     motivo = tier ? `retomada do Maestro: tier do plano ${tier}` : 'retomada do Maestro: plano sem tier, cascata padrão';
-  } else if (input.canal === 'qualidade' || input.canal === 'site') {
-    motivo = `${input.canal === 'site' ? 'chat do site' : 'Qualidade'}: cascata padrão, sem tier (como hoje)`;
+  } else if (input.canal === 'qualidade') {
+    motivo = 'Qualidade: cascata padrão, sem tier (como hoje)';
+  } else if (input.canal === 'site') {
+    const decisao = tierEOverride({ ...input, ecoMode: false });
+    tier = decisao.tier;
+    override = decisao.override;
+    motivo = `chat do site: ${decisao.motivo}`;
   } else {
     const decisao = tierEOverride(input);
     tier = decisao.tier;

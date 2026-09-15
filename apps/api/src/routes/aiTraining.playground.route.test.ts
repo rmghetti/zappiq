@@ -77,8 +77,12 @@ vi.mock('../agents/agentOrchestrator.js', () => ({
 }));
 
 const flagLigada = vi.fn();
+// C1b (nota 1): o teste lê os interruptores UMA vez (lerFlagsDoTurno); o
+// dublê devolve o mesmo estado que o flagLigada de antes.
+const lerFlagsDoTurno = vi.fn();
 vi.mock('../agents/agentContextLoader.js', () => ({
   flagLigada: (...a: any[]) => flagLigada(...a),
+  lerFlagsDoTurno: (...a: any[]) => lerFlagsDoTurno(...a),
 }));
 
 const routeIzaTurn = vi.fn();
@@ -122,6 +126,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   flags = {};
   flagLigada.mockImplementation(async (_org: string, flag: string) => flags[flag] === true);
+  lerFlagsDoTurno.mockImplementation(async () => ({
+    contextoUnico: flags.contextoUnico === true,
+    modeloPorPolitica: flags.modeloPorPolitica === true,
+    perfilVivo: flags.perfilVivo === true,
+    regrasComoRegistros: flags.regrasComoRegistros === true,
+    guardaDeMarca: flags.guardaDeMarca === true,
+  }));
   orgFindUnique.mockResolvedValue({ settings: { scheduling: { enabled: true } } });
   searchDetailed.mockResolvedValue({ context: '', sources: [], status: 'sem_resultado', fromCache: false });
   buildAgentContextForContact.mockResolvedValue({
@@ -192,7 +203,10 @@ describe('POST /api/ai-training/test: ferramentas e política', () => {
     await testar({ message: 'quero agendar' });
 
     expect(resolveSchedulingRuntime).not.toHaveBeenCalled();
-    expect(pickTierAndOverride).toHaveBeenCalledWith(ORG, { canal: 'playground', agendamentoAtivo: false });
+    expect(pickTierAndOverride).toHaveBeenCalledWith(
+      ORG,
+      expect.objectContaining({ canal: 'playground', agendamentoAtivo: false }),
+    );
     expect(toolsDaPolitica).not.toHaveBeenCalled();
     expect(routeIzaTurn.mock.calls[0][0].tools).toEqual([CONSULTA]);
     expect(buildAgentContextForContact.mock.calls[0][0].agendamento).toBeUndefined();
@@ -214,7 +228,10 @@ describe('POST /api/ai-training/test: ferramentas e política', () => {
     await testar({ message: 'quero agendar' });
 
     expect(resolveSchedulingRuntime).toHaveBeenCalledWith(ORG, { scheduling: { enabled: true } });
-    expect(pickTierAndOverride).toHaveBeenCalledWith(ORG, { canal: 'playground', agendamentoAtivo: true });
+    expect(pickTierAndOverride).toHaveBeenCalledWith(
+      ORG,
+      expect.objectContaining({ canal: 'playground', agendamentoAtivo: true }),
+    );
     expect(toolsDaPolitica).toHaveBeenCalledWith(politica, false);
     expect(routeIzaTurn.mock.calls[0][0].tools).toEqual([CONSULTA]);
     // O estado real do agendamento também vai para o prompt (bloco vivo).
@@ -228,7 +245,63 @@ describe('POST /api/ai-training/test: ferramentas e política', () => {
     await testar({ message: 'quero agendar' });
 
     expect(resolveSchedulingRuntime).toHaveBeenCalledTimes(1);
-    expect(pickTierAndOverride).toHaveBeenCalledWith(ORG, { canal: 'playground', agendamentoAtivo: false });
+    expect(pickTierAndOverride).toHaveBeenCalledWith(
+      ORG,
+      expect.objectContaining({ canal: 'playground', agendamentoAtivo: false }),
+    );
     expect(buildAgentContextForContact.mock.calls[0][0].agendamento).toEqual({ ativo: false, tipos: [], motivo: 'sem_tipo_ativo' });
+  });
+});
+
+describe('nota 1 (C1b): o Testar minha IA lê os interruptores uma vez', () => {
+  it('uma leitura só, passada ao montador e à política', async () => {
+    flags = { contextoUnico: true, modeloPorPolitica: true };
+    const res = await fetch(`${base}/api/ai-training/test`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: 'oi' }),
+    });
+    expect(res.status).toBe(200);
+    expect(lerFlagsDoTurno).toHaveBeenCalledTimes(1);
+    expect(flagLigada).not.toHaveBeenCalled();
+    const flagsPassadas = await lerFlagsDoTurno.mock.results[0].value;
+    expect(buildAgentContextForContact.mock.calls[0][0].flags).toEqual(flagsPassadas);
+    expect(pickTierAndOverride.mock.calls[0][1].flags).toEqual(flagsPassadas);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Rodada 1 do PR #379: a guarda de marca no Testar minha IA nasce só
+ * alertando. O dono vê o alerta no resultado; o texto só é trocado com o
+ * interruptor `guardaDeMarca` da organização ligado.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+describe('rodada 1: a guarda de marca no Testar minha IA', () => {
+  const CMJ_USA_A_PLATAFORMA = 'Sim, nosso atendimento usa a plataforma ZappIQ';
+
+  beforeEach(() => {
+    routeIzaTurn.mockResolvedValue({
+      kind: 'llm',
+      response: { text: `<reply>${CMJ_USA_A_PLATAFORMA}</reply>`, provider: 'google-gemini-flash', model: 'flash' },
+    });
+  });
+
+  it('guarda DESLIGADA (padrão): a resposta sai intacta, com o alerta no resultado e sem bloqueio', async () => {
+    const { status, body } = await testar({ message: 'vocês usam o quê?' });
+    expect(status).toBe(200);
+    expect(body.reply).toBe(CMJ_USA_A_PLATAFORMA);
+    expect(body.alertas).toEqual(['guarda_de_marca:ZappIQ']);
+    expect(body.bloqueada).toBe(false);
+  });
+
+  it('guarda LIGADA: o dono vê que a guarda segurou e o que o cliente receberia', async () => {
+    flags.guardaDeMarca = true;
+    const { RESPOSTA_SEGURA_DO_CANAL } = await import('../agents/postProcessReply.js');
+    const { status, body } = await testar({ message: 'vocês usam o quê?' });
+    expect(status).toBe(200);
+    expect(body.reply).toBe(RESPOSTA_SEGURA_DO_CANAL.playground);
+    expect(body.reply).not.toMatch(/zappiq/i);
+    expect(body.alertas).toEqual(['guarda_de_marca:ZappIQ']);
+    expect(body.bloqueada).toBe(true);
   });
 });
