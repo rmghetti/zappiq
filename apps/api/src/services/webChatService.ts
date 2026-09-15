@@ -67,15 +67,12 @@ import * as ragService from './ragService.js';
 // C3: correção aprovada pelo dono é registro (agent_rules), montado em bloco.
 import { blocoDeRegrasDaOrganizacao } from './agentRulesService.js';
 import { isFlagOn } from './featureFlags.js';
-// A088: a MESMA limpeza do WhatsApp, do playground e do avaliador. Antes eram
-// cópias locais aqui, com um aviso de "alinhar caso o original mude" que
-// ninguém tinha como cumprir: as duas versões já tinham divergido.
-//
-// O que NÃO vem junto de propósito é o applyVozHumanaFilter. Ele roda no
-// WhatsApp e no avaliador, e ligá-lo no chat do site mudaria o texto que os
-// visitantes leem hoje. É decisão de produto, não de refatoração: fica de
-// fora deste PR.
-import { stripStructuredTags, stripLeakedPrefixes } from '../agents/replyText.js';
+// C1b (Passo 1, A189): o MESMO pós-processador de todos os canais. Extrai
+// <reply>, LÊ as tags de ação (a de transbordo deixa de ser jogada fora),
+// aplica o filtro de voz (antes só no WhatsApp: 3 de 4 respostas do site do
+// CMJ em setembro saíram com travessão) e roda a guarda de marca.
+import { postProcessReply } from '../agents/postProcessReply.js';
+import { registrarAlertasDeSaida } from './alertasDeSaida.js';
 // P62, A251, A232: o chat do site NÃO passava pelo pré-filtro. Era o único
 // canal em que uma mensagem de crise não encontrava nenhuma guarda.
 import { detectBlockedVertical, detectarSinalDeCrise } from './llm/blockedVerticalFilter.js';
@@ -607,13 +604,40 @@ export async function carregarConversaDoServidor(
  * visitante NÃO fica sem resposta: o log registra e o caminho de antes
  * responde. É a rede de segurança do deploy, não um jeito de esconder erro.
  */
+/** O que o turno do site precisa saber do prompt montado. */
+interface PromptDoSite {
+  systemPrompt: string;
+  /** Nome do agente que responde, para a guarda de marca (C1b). */
+  agenteNome: string | null;
+}
+
+/**
+ * Settings da organização, lidas uma vez por turno. Fail-soft: banco fora
+ * vira objeto vazio, e o turno segue como seguiria sem configuração.
+ */
+async function carregarSettingsDoSite(organizationId: string): Promise<Record<string, any>> {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    return (org?.settings as Record<string, any>) ?? {};
+  } catch (err) {
+    logger.warn('[webChat] settings indisponíveis neste turno (segue sem elas)', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return {};
+  }
+}
+
 async function montarSystemPromptDoSite(input: {
   organizationId: string;
   isIzaCanonical: boolean;
   lead: WebChatLead | null;
   history: WebChatTurn[];
   userMessage: string;
-}): Promise<string> {
+}): Promise<PromptDoSite> {
   const { organizationId, isIzaCanonical, lead, history, userMessage } = input;
 
   // Os três interruptores de uma vez, fail-closed cada um.
@@ -658,7 +682,7 @@ async function montarSystemPromptDoSite(input: {
         ragStatus: contexto.ragStatus,
         consultarBase,
       });
-      return contexto.systemPrompt;
+      return { systemPrompt: contexto.systemPrompt, agenteNome: contexto.agente.name };
     } catch (err) {
       if (err instanceof SystemPromptNaoEncontrado) throw err;
       logger.error('[webChat] motor único falhou; respondendo pelo caminho de antes', {
@@ -736,14 +760,17 @@ async function montarSystemPromptDoSite(input: {
     });
   }
 
-  return buildWebChatSystemPrompt({
-    orgPrompt,
-    factsBlock,
-    isIzaCanonical,
-    perfilVivoBlock,
-    regrasBlock,
-    saudacaoBlock,
-  });
+  return {
+    systemPrompt: buildWebChatSystemPrompt({
+      orgPrompt,
+      factsBlock,
+      isIzaCanonical,
+      perfilVivoBlock,
+      regrasBlock,
+      saudacaoBlock,
+    }),
+    agenteNome: null,
+  };
 }
 
 /* ── Handler principal ────────────────────────────── */
@@ -823,7 +850,7 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   //    `contextoUnico` (C1a):
   //    - ligado: o MESMO motor do WhatsApp (montarContextoDoChatDoSite);
   //    - desligado: a montagem de antes, caractere por caractere.
-  const systemPrompt = await montarSystemPromptDoSite({
+  const { systemPrompt, agenteNome } = await montarSystemPromptDoSite({
     organizationId,
     isIzaCanonical,
     lead,
@@ -887,16 +914,36 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     }
   }
 
-  // 4. Limpeza das tags estruturadas: o prompt pode devolver <action>,
-  //    <action_data> e <buttons>, que não fazem sentido no chat do site. Fica
-  //    só o texto visível, pela mesma função que o WhatsApp usa.
-  let reply = String(llmResp.text || '').trim();
-  // Se houver <reply>…</reply>, prioriza esse conteúdo (mesma lógica do
-  // parseAgentResponse interno).
-  const replyMatch = reply.match(/<reply>([\s\S]*?)<\/reply>/i);
-  if (replyMatch) reply = replyMatch[1].trim();
-  reply = stripStructuredTags(reply);
-  reply = stripLeakedPrefixes(reply);
+  // 4. Pós-processamento único (C1b, A189): o mesmo de todos os canais. O
+  //    texto visível sai pela mesma função do WhatsApp, as tags de ação são
+  //    lidas e a guarda de marca roda sobre a resposta real.
+  const posProcessar = (identidade: { negocio: string | null; agente: string | null }) =>
+    postProcessReply({
+      bruto: llmResp.text,
+      canal: 'site',
+      organizacao: { id: organizationId, ehZappIQ: isIzaCanonical, nome: identidade.negocio },
+      agente: { nome: identidade.agente },
+    });
+  let saida = posProcessar({ negocio: null, agente: agenteNome });
+  if (saida.alertas.length) {
+    // Só quando a guarda dispara vale ler as settings: o nome do negócio e o
+    // do agente entram na lista de exceções (a agente que se chama Iza não
+    // vaza nada ao dizer o próprio nome). No caminho comum, zero consulta a
+    // mais por turno.
+    const orgSettings = await carregarSettingsDoSite(organizationId);
+    saida = posProcessar({
+      negocio: orgSettings.businessName ?? null,
+      agente: agenteNome ?? orgSettings.agentName ?? null,
+    });
+  }
+  await registrarAlertasDeSaida({
+    organizationId,
+    conversationId: lead?.conversationId ?? null,
+    canal: 'site',
+    alertas: saida.alertas,
+    bloqueada: saida.bloqueada,
+  });
+  let reply = saida.texto;
 
   // 4.b Crise: a linha do CVV entra no texto já limpo, ACRESCENTADA à
   //     resposta do agente. `comTransbordo` só é verdade quando existe

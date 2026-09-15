@@ -62,6 +62,7 @@ import {
   acrescentarAcolhimento,
 } from '../services/llm/crisisSafetyNet.js';
 import { testMessageSchema, buildPlaygroundResult } from './aiTraining.playground.js';
+import { registrarAlertasDeSaida } from '../services/alertasDeSaida.js';
 import {
   textDocSchema,
   isEditableDocument,
@@ -279,7 +280,25 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     // Vertical bloqueada (apostas/cripto/...) devolve template estático, sem LLM.
     const rawText = turn.kind === 'blocked' ? turn.response : turn.response.text;
 
-    const result = buildPlaygroundResult({ rawLlmText: rawText, sources });
+    // C1b (A189): o mesmo pós-processador dos outros canais, com a guarda de
+    // marca sobre a resposta real e o alerta registrado para o Raio-X.
+    const result = buildPlaygroundResult({
+      rawLlmText: rawText,
+      sources,
+      organizacao: {
+        id: orgId,
+        ehZappIQ: isZappIQOrg(orgId),
+        nome: orgSettings?.businessName ?? null,
+      },
+      agente: { nome: contexto.contexto?.agente?.name ?? orgSettings?.agentName ?? null },
+    });
+    await registrarAlertasDeSaida({
+      organizationId: orgId,
+      conversationId: null,
+      canal: 'playground',
+      alertas: result.alertas,
+      bloqueada: result.bloqueada,
+    });
 
     // P62: rede de crise no playground.
     // A linha do CVV entra DEPOIS da limpeza das tags, no texto que a tela

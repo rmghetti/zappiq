@@ -63,6 +63,9 @@ import { getIzaFactsBlock } from '../services/izaFactsService.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
 import * as ragService from '../services/ragService.js';
 import { sliceBySections, runChecks, type FonteRecuperada } from '../agents/promptXray.js';
+// C1b (Passo 1, A189): o alerta da guarda de marca vai para o log e para
+// prefilter_events. O Raio-X mostra os mais recentes da organização.
+import { CATEGORIA_GUARDA_DE_MARCA } from '../services/alertasDeSaida.js';
 
 const router = Router();
 
@@ -320,6 +323,38 @@ async function montarPrompt(input: {
   );
 }
 
+/** Quantos alertas de saída o Raio-X mostra por organização. */
+const MAX_ALERTAS_DE_SAIDA = 20;
+
+/**
+ * Os alertas mais recentes da guarda de marca nesta organização (C1b).
+ * Sem o texto da conversa, por LGPD: o termo, o canal e o que foi feito.
+ * Fail-soft: o Raio-X nunca cai por causa desta lista.
+ */
+async function alertasDeSaidaRecentes(organizationId: string) {
+  try {
+    const eventos = await prisma.prefilterEvent.findMany({
+      where: { organizationId, categoria: CATEGORIA_GUARDA_DE_MARCA },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_ALERTAS_DE_SAIDA,
+      select: { canal: true, regra: true, acao: true, conversationId: true, createdAt: true },
+    });
+    return eventos.map((e) => ({
+      canal: e.canal,
+      termo: e.regra,
+      acao: e.acao,
+      conversationId: e.conversationId,
+      em: new Date(e.createdAt).toISOString(),
+    }));
+  } catch (err) {
+    logger.warn('[AiXray] alertas de saída indisponíveis', {
+      organizationId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
+}
+
 // ── POST /api/admin/ai-xray ───────────────────────────────
 
 router.post(
@@ -432,7 +467,7 @@ router.post(
         historico.push(m);
       }
 
-      res.json({ organizationId, canal, turnos });
+      res.json({ organizationId, canal, turnos, alertas_de_saida: await alertasDeSaidaRecentes(organizationId) });
     } catch (err) {
       if (err instanceof SemPromptDoSite) {
         res.status(422).json({

@@ -40,11 +40,11 @@ import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
 // C3: correção aprovada pelo dono é REGISTRO (agent_rules), montado em bloco
 // a cada turno, atrás do interruptor `regrasComoRegistros`.
 import { blocoDeRegrasDaOrganizacao } from '../services/agentRulesService.js';
-import {
-  extractProductionReplyText,
-  stripStructuredTags,
-  stripLeakedPrefixes,
-} from './replyText.js';
+// C1b (Passo 1, A189): toda resposta do agente passa pelo MESMO
+// pós-processador (reply, tags lidas, filtro de voz e guarda de marca), e o
+// alerta da guarda vai para o log e para o registro que o Raio-X lê.
+import { postProcessReply } from './postProcessReply.js';
+import { registrarAlertasDeSaida } from '../services/alertasDeSaida.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
 // Perfil vivo (A8): identidade, tom, horário e agendamento montados das
 // settings a cada turno, atrás do interruptor `perfilVivo`. Desligado, o
@@ -816,6 +816,18 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       content: msg.content,
     }));
 
+    // C1b (Passo 1): quem é o cliente e quem é o agente, para a guarda de
+    // marca do pós-processador. O nome do agente vem do Agent que o motor
+    // único escolheu; sem ele, do que o dono gravou nas settings.
+    const organizacaoDaSaida = {
+      id: organizationId,
+      ehZappIQ: isZappIQOrg(organizationId),
+      nome: orgSettings?.businessName ?? null,
+    };
+    const agenteDaSaida = {
+      nome: contextoDoTurno.contexto?.agente?.name ?? orgSettings?.agentName ?? null,
+    };
+
     // ── 8.5. Maestro Pacote 2.6 — caminho agêntico (gated + fail-soft) ────
     // Ativado apenas quando o nó-IA tem tools do tipo 'webhook' configuradas.
     // Qualquer erro cai silenciosamente pro caminho normal (routeIzaTurn).
@@ -864,10 +876,27 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
             },
           });
           // Envia a resposta agêntica pelo mesmo caminho do path normal (sendReplyText +
-          // prisma.message.create), sem TTS (loop agêntico é text-only por design):
-          const agenticTextoLimpo = agentResult.text
-            ? stripLeakedPrefixes(stripStructuredTags(agentResult.text))
-            : '';
+          // prisma.message.create), sem TTS (loop agêntico é text-only por design).
+          // C1b (A189): o caminho agêntico não extraía <reply> nem passava pelo
+          // filtro de voz; agora usa o mesmo pós-processador de todo canal.
+          const saidaAgentica = agentResult.text
+            ? postProcessReply({
+                bruto: agentResult.text,
+                canal: canalDoTurno,
+                organizacao: organizacaoDaSaida,
+                agente: agenteDaSaida,
+              })
+            : null;
+          if (saidaAgentica) {
+            await registrarAlertasDeSaida({
+              organizationId,
+              conversationId,
+              canal: canalDoTurno,
+              alertas: saidaAgentica.alertas,
+              bloqueada: saidaAgentica.bloqueada,
+            });
+          }
+          const agenticTextoLimpo = saidaAgentica?.texto ?? '';
           // O loop agêntico responde por fora do routeIzaTurn, então a linha
           // do CVV tem de entrar aqui. Acrescentada ao texto limpo, nunca no
           // lugar dele: em crise, uma parede é pior do que uma resposta.
@@ -1007,8 +1036,36 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     }
 
     // ── 10. Parse structured response ───────────────────
-    const llmResponse = { text: turnResult.response.text };
-    const parsed = parseAgentResponse(llmResponse.text);
+    // C1b (Passo 1): o pós-processador único lê as tags, limpa o texto e
+    // roda a guarda de marca. A ação executada segue sendo a PRIMEIRA, como
+    // antes; as demais ficam no log.
+    const saida = postProcessReply({
+      bruto: turnResult.response.text,
+      canal: canalDoTurno,
+      organizacao: organizacaoDaSaida,
+      agente: agenteDaSaida,
+    });
+    await registrarAlertasDeSaida({
+      organizationId,
+      conversationId,
+      canal: canalDoTurno,
+      alertas: saida.alertas,
+      bloqueada: saida.bloqueada,
+    });
+    if (saida.acoes.length > 1) {
+      logger.info('[Agent] mais de uma ação na resposta; só a primeira é executada', {
+        organizationId,
+        conversationId,
+        acoes: saida.acoes,
+      });
+    }
+    const parsed: ParsedResponse = {
+      replyText: saida.texto || null,
+      action: saida.acoes[0] ?? null,
+      actionData: saida.tags.actionData ?? null,
+      // Resposta trocada pela guarda não leva os botões da resposta original.
+      buttons: saida.bloqueada ? null : saida.tags.buttons,
+    };
 
     // ── 10.5. Rede de crise (P62) ───────────────────────
     // A resposta do agente NÃO é substituída: a linha do CVV é acrescentada
@@ -1467,41 +1524,6 @@ interface ParsedResponse {
   action: string | null;
   actionData: any;
   buttons: Array<{ id: string; title: string }> | null;
-}
-
-function parseAgentResponse(rawResponse: string): ParsedResponse {
-  const result: ParsedResponse = { replyText: null, action: null, actionData: null, buttons: null };
-
-  // Extract structured tags first
-  const actionMatch = rawResponse.match(/<action>(.*?)<\/action>/i);
-  if (actionMatch) result.action = actionMatch[1].trim();
-
-  const dataMatch = rawResponse.match(/<action_data>([\s\S]*?)<\/action_data>/i);
-  if (dataMatch) {
-    try { result.actionData = JSON.parse(dataMatch[1].trim()); } catch {}
-  }
-
-  const btnMatch = rawResponse.match(/<buttons>([\s\S]*?)<\/buttons>/i);
-  if (btnMatch) {
-    try { result.buttons = JSON.parse(btnMatch[1].trim()); } catch {}
-  }
-
-  // V4 #159 (PR #71 HOTFIX 2026-05-03) — Strip TODAS tags estruturadas do
-  // replyText antes de retornar. Bug detectado em smoke real: Iza emitia
-  // "<action>set_contact_name</action><action_data>{...}</action_data>texto"
-  // e o texto inteiro (com tags) ia pro WhatsApp porque o regex <reply>…</reply>
-  // não batia. Cliente recebia tags raw no chat.
-  //
-  // Strategy: se houver <reply>…</reply> usa esse conteúdo. Caso contrário,
-  // usa rawResponse mas REMOVE todas as tags conhecidas + prefixos vazados
-  // do PR #69 (ex: "[áudio]" / "[áudio transcrito]" no INÍCIO da resposta —
-  // a Iza imitava do history corrompido).
-  // A088: a extração mora em agents/replyText.ts, e o avaliador da Qualidade
-  // chama a MESMA função. Antes ele lia `resp.text` cru e julgava a resposta
-  // dobrada, com as tags dentro.
-  result.replyText = extractProductionReplyText(rawResponse);
-
-  return result;
 }
 
 /**

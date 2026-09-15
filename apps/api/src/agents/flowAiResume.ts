@@ -31,6 +31,12 @@ import {
   montarContextoDoTurno,
   carregarPoliticaDoTurno,
 } from './agentContextLoader.js';
+// C1b (Passo 1, A189): a retomada mandava o texto cru do modelo, com
+// <reply>, <action> e <buttons> dentro, e sem filtro de voz nem guarda de
+// marca. Agora passa pelo MESMO pós-processador de todos os canais.
+import { postProcessReply } from './postProcessReply.js';
+import { registrarAlertasDeSaida } from '../services/alertasDeSaida.js';
+import { isZappIQOrg } from '../config/zappiqOrg.js';
 
 /** Mesma janela de histórico do orchestrator (últimos 20 turnos). */
 export const MAX_HISTORY_MESSAGES = 20;
@@ -132,7 +138,7 @@ export async function generateAiResumeReply(
       // o subset mínimo viável é o live mais recente. Fail-soft → null.
       prisma.agent.findFirst({
         where: { organizationId, status: 'live' },
-        select: { systemPrompt: true },
+        select: { systemPrompt: true, name: true },
         orderBy: { createdAt: 'desc' },
       }).catch(() => null),
       prisma.message.findMany({
@@ -160,6 +166,8 @@ export async function generateAiResumeReply(
     // C1a: o system pelo motor único, quando ligado. Sem Agent vivo, o
     // carregador devolve null e a retomada segue no caminho leve.
     let system = leve.system;
+    // O nome de quem responde, para a guarda de marca do pós-processador.
+    let agenteNome: string | null = agent?.name ?? ctx.agentName ?? null;
     const [contextoUnico, modeloPorPolitica] = await Promise.all([
       flagLigada(organizationId, 'contextoUnico'),
       flagLigada(organizationId, 'modeloPorPolitica'),
@@ -190,6 +198,7 @@ export async function generateAiResumeReply(
       });
       if (contexto) {
         system = contexto.systemPrompt;
+        agenteNome = contexto.agente.name;
         logger.info('[FlowAiResume] contexto pelo motor único', {
           organizationId,
           conversationId,
@@ -215,7 +224,38 @@ export async function generateAiResumeReply(
       operation: 'chat',
     });
 
-    const text = (resp.text || '').trim();
+    // C1b (A189): o mesmo pós-processador de todos os canais. Nenhuma tag
+    // chega ao cliente, o filtro de voz vale aqui também, e a guarda de
+    // marca devolve texto vazio (a resposta segura da retomada é o
+    // silêncio), que cai no fail-closed logo abaixo.
+    const saida = postProcessReply({
+      bruto: resp.text,
+      canal: 'maestro_retomada',
+      organizacao: {
+        id: organizationId,
+        ehZappIQ: isZappIQOrg(organizationId),
+        nome: ctx.businessName ?? null,
+      },
+      agente: { nome: agenteNome },
+    });
+    await registrarAlertasDeSaida({
+      organizationId,
+      conversationId,
+      canal: 'maestro_retomada',
+      alertas: saida.alertas,
+      bloqueada: saida.bloqueada,
+    });
+    if (saida.acoes.length) {
+      // A retomada é uma mensagem que o agente manda por conta própria: ação
+      // pedida aqui (transbordo, cadastro) não é executada, só registrada.
+      logger.info('[FlowAiResume] ação pedida na retomada não foi executada', {
+        organizationId,
+        conversationId,
+        acoes: saida.acoes,
+      });
+    }
+
+    const text = saida.texto.trim();
     if (!text) {
       logger.warn('[FlowAiResume] LLM devolveu texto vazio — fail-closed', { organizationId, conversationId });
       return null;

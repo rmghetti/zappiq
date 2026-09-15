@@ -1458,13 +1458,15 @@ model PrefilterEvent {
   organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversationId String?      @map("conversation_id")
-  /// 'whatsapp' | 'instagram' | 'site' | 'playground'
+  /// 'whatsapp' | 'instagram' | 'site' | 'playground' (e, na guarda de
+  /// marca da saída, também 'maestro_retomada' | 'qualidade')
   canal          String
-  /// 'crise' | 'compliance' | 'politica-comercial-zappiq'
+  /// 'crise' | 'compliance' | 'politica-comercial-zappiq' | 'guarda-de-marca'
   categoria      String
-  /// Id da regra de crise (crise_me_matar, ...) ou o nome da vertical.
+  /// Id da regra de crise (crise_me_matar, ...), o nome da vertical ou, na
+  /// guarda de marca, o termo que vazou ('ZappIQ', 'Iza').
   regra          String
-  /// 'acolhimento' | 'transbordo' | 'recusa'
+  /// 'acolhimento' | 'transbordo' | 'recusa' | 'resposta_segura' | 'alerta'
   acao           String
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 

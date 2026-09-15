@@ -47,6 +47,8 @@ const appointmentTypeFindMany = vi.fn().mockResolvedValue([]);
 const queryRawUnsafe = vi.fn();
 // C3: as regras aprovadas pelo dono, lidas por agentRulesService.
 const agentRuleFindMany = vi.fn().mockResolvedValue([]);
+// C1b: os alertas da guarda de marca, gravados em prefilter_events.
+const prefilterFindMany = vi.fn().mockResolvedValue([]);
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
@@ -57,6 +59,7 @@ vi.mock('@zappiq/database', () => ({
     message: { count: (...a: any[]) => messageCount(...a) },
     appointmentType: { findMany: (...a: any[]) => appointmentTypeFindMany(...a) },
     agentRule: { findMany: (...a: any[]) => agentRuleFindMany(...a) },
+    prefilterEvent: { findMany: (...a: any[]) => prefilterFindMany(...a) },
     $queryRawUnsafe: (...a: any[]) => queryRawUnsafe(...a),
   },
 }));
@@ -186,6 +189,7 @@ beforeEach(() => {
   qaFindMany.mockResolvedValue([{ id: 'q1', question: 'Vocês atendem aos sábados?' }]);
   queryRawUnsafe.mockResolvedValue([{ system_prompt: PROMPT_DO_AGENTE }]);
   agentRuleFindMany.mockResolvedValue([]);
+  prefilterFindMany.mockResolvedValue([]);
   searchWithSources.mockResolvedValue({
     context: 'Trecho da base: o rodízio custa R$ 89.',
     sources: [{ source: 'cardapio.pdf', similarity: 0.61, snippet: 'rodízio R$ 89' }],
@@ -778,5 +782,38 @@ describe('POST /api/admin/ai-xray: hash, partes e motor por turno', () => {
     const canal = prompt.indexOf('# CANAL DE COMUNICAÇÃO');
     expect(canal).toBeGreaterThan(0);
     expect(prompt.indexOf(PROMPT_DO_AGENTE)).toBeGreaterThan(canal);
+  });
+});
+
+describe('POST /api/admin/ai-xray: alertas da guarda de marca (C1b, A189)', () => {
+  it('lista os alertas recentes da organização, sem o texto da conversa', async () => {
+    const quando = new Date('2026-09-14T15:00:00Z');
+    prefilterFindMany.mockResolvedValue([
+      { canal: 'whatsapp', regra: 'ZappIQ', acao: 'resposta_segura', conversationId: 'c-1', createdAt: quando },
+    ]);
+
+    const res = await chamar(corpoValido);
+
+    expect(res.statusCode).toBe(200);
+    expect(prefilterFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: 'org-1', categoria: 'guarda-de-marca' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    );
+    expect(res.body.alertas_de_saida).toEqual([
+      { canal: 'whatsapp', termo: 'ZappIQ', acao: 'resposta_segura', conversationId: 'c-1', em: quando.toISOString() },
+    ]);
+  });
+
+  it('sem alerta, a lista vem vazia; banco fora não derruba o Raio-X', async () => {
+    let res = await chamar(corpoValido);
+    expect(res.body.alertas_de_saida).toEqual([]);
+
+    prefilterFindMany.mockRejectedValue(new Error('db down'));
+    res = await chamar(corpoValido);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.alertas_de_saida).toEqual([]);
   });
 });
