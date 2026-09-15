@@ -188,6 +188,17 @@ describe('o nome do mock não atravessa a migração (A172)', () => {
     );
     expect(blocos[0].texto).toContain('Rodrigo da Rodoviária');
   });
+
+  // Rodada 1 do PR #378: com o `\b` ASCII, "Rodízio" virava "[nome]ízio".
+  it('não encosta em Rodízio nem Rodão (acento logo depois de "Rod")', () => {
+    const { blocos } = extrairPatches(
+      '## IDENTIDADE\nVocê é a Antonella.\n\n' +
+        '# PATCH MANUAL 2026-08-01 09:00 (cenário: cr2)\n' +
+        'Quando pedirem o Rodízio ou o Rodão, confirme o horário. Oi, Rod.\n',
+    );
+    expect(blocos[0].texto).toContain('Quando pedirem o Rodízio ou o Rodão, confirme o horário.');
+    expect(blocos[0].texto).toContain('Oi, [nome].');
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════

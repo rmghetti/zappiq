@@ -531,6 +531,31 @@ describe('trocarNomeFicticioDoTeste (nota 2)', () => {
     expect(NOME_FICTICIO_DO_TESTE).not.toBe('Rod');
     expect(NOME_FICTICIO_DO_TESTE).toMatch(/teste/i);
   });
+
+  // Rodada 1 do PR #378: o `\b` do JavaScript só enxerga [A-Za-z0-9_]. Em
+  // "Rodízio" o "í" conta como fronteira, e o prato do questionário da
+  // Antonella virava "[nome]ízio" na regra gravada.
+  it('palavra com acento logo depois de "Rod" fica intacta: Rodízio, Rodão, Rodrigo', () => {
+    const t = 'O Rodízio de massas sai às 19h. O Rodão e o Rodrigo confirmam a mesa.';
+    expect(trocarNomeFicticioDoTeste(t)).toBe(t);
+  });
+
+  it('"Rod," e "Rod." continuam trocados', () => {
+    expect(trocarNomeFicticioDoTeste('Oi, Rod, tudo bem? Até logo, Rod.')).toBe(
+      'Oi, [nome], tudo bem? Até logo, [nome].',
+    );
+  });
+
+  it('o marcador novo também respeita letra acentuada colada nele', () => {
+    const colado = `${NOME_FICTICIO_DO_TESTE}ã`;
+    expect(trocarNomeFicticioDoTeste(`Oi, ${colado}!`)).toBe(`Oi, ${colado}!`);
+    expect(trocarNomeFicticioDoTeste(`Oi, ${NOME_FICTICIO_DO_TESTE}.`)).toBe('Oi, [nome].');
+  });
+
+  it('sanearTextoDaRegra (a porta da gravação) não estraga o Rodízio', () => {
+    const t = 'Quando perguntarem do Rodízio, diga que sai às 19h.';
+    expect(sanearTextoDaRegra(t)).toBe(t);
+  });
 });
 
 describe('sanearTextoDaRegra (notas 2 e 4)', () => {

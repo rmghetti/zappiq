@@ -102,18 +102,33 @@ export function limparTextoDaRegra(texto: string): string {
 /* ── Saneamento (notas 2 e 4 da revisão de 14/09) ─────────────────── */
 
 const MARCADOR_DO_NOME = '[nome]';
-const NOME_DO_TESTE_REGEX = new RegExp(`\\b${escapeRegex(NOME_FICTICIO_DO_TESTE)}\\b`, 'g');
+
+/**
+ * Fronteira de palavra que enxerga letra acentuada (rodada 1 do PR #378).
+ *
+ * O `\b` do JavaScript só conhece [A-Za-z0-9_]: em "Rodízio" o "í" conta
+ * como fronteira, e o prato do questionário da Antonella virava
+ * "[nome]ízio" na regra gravada. Aqui o vizinho é qualquer letra (\p{L}),
+ * número ou sublinhado, com a flag `u`.
+ */
+function palavraInteira(palavra: string): RegExp {
+  return new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegex(palavra)}(?![\\p{L}\\p{N}_])`, 'gu');
+}
+
+const ROD_REGEX = palavraInteira('Rod');
+const NOME_DO_TESTE_REGEX = palavraInteira(NOME_FICTICIO_DO_TESTE);
 
 /**
  * O nome fictício do teste vira "[nome]" (A172, nota 2).
  *
- * Troca o "Rod" antigo (palavra inteira, R maiúsculo, como o script de
- * migração já fazia) e o marcador novo. "Rodrigo", "Rodoviária" e "rodada"
- * ficam intactos.
+ * Troca o "Rod" antigo (palavra inteira, R maiúsculo) e o marcador novo.
+ * "Rodrigo", "Rodoviária", "Rodízio", "Rodão" e "rodada" ficam intactos.
+ * É a régua única: a gravação da regra, o bloco do prompt e o script de
+ * migração dos patches (patchesParaRegistros.ts) passam todos por aqui.
  */
 export function trocarNomeFicticioDoTeste(texto: string): string {
   return String(texto ?? '')
-    .replace(/\bRod\b/g, MARCADOR_DO_NOME)
+    .replace(ROD_REGEX, MARCADOR_DO_NOME)
     .replace(NOME_DO_TESTE_REGEX, MARCADOR_DO_NOME);
 }
 
