@@ -135,6 +135,13 @@ const SUGESTAO = () =>
     'claude-sonnet-4-6',
   );
 
+/**
+ * Rodada 1 do PR #378, item 1: o juiz de outra família só sai com o
+ * interruptor `juizDeOutraFamilia` da organização ligado. A política carrega
+ * a leitura (juizOutraFamilia); sem ela, o juiz é o da cascata padrão.
+ */
+const JUIZ_LIGADO = { modelo: 'anthropic-sonnet' as const, motivo: 'cascata padrão', juizOutraFamilia: true };
+
 const envAntes = { ...process.env };
 beforeEach(() => {
   vi.clearAllMocks();
@@ -297,7 +304,7 @@ describe('Passo 2 (A039, A208): o juiz com evidência, de outra família', () =>
     process.env.ANTHROPIC_API_KEY = 'chave-de-teste';
     completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA('openai-mini'));
 
-    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL);
+    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL, { politica: JUIZ_LIGADO });
 
     expect(completeMock.mock.calls[1][0].forceProvider).toBe('openai-mini');
     expect(results[0].juiz).toEqual({ provider: 'openai-mini', model: 'gpt-4o-mini' });
@@ -308,7 +315,7 @@ describe('Passo 2 (A039, A208): o juiz com evidência, de outra família', () =>
     process.env.ANTHROPIC_API_KEY = 'chave-de-teste';
     completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA());
 
-    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL);
+    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL, { politica: JUIZ_LIGADO });
 
     expect(completeMock.mock.calls[1][0].forceProvider).toBeUndefined();
     expect(results[0].juizMesmaFamilia).toBe(true);
@@ -321,7 +328,7 @@ describe('Passo 2 (A039, A208): o juiz com evidência, de outra família', () =>
       .mockRejectedValueOnce(new Error('OpenAI 401'))
       .mockResolvedValueOnce(JUIZ_APROVA('anthropic-sonnet'));
 
-    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL);
+    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL, { politica: JUIZ_LIGADO });
 
     expect(results[0].combined).toBe('pass');
     expect(results[0].juiz?.provider).toBe('anthropic-sonnet');
@@ -354,6 +361,68 @@ describe('Passo 2 (A039, A208): o juiz com evidência, de outra família', () =>
     expect(ilegivel.passed).toBeNull();
     // Aprovado não tem causa, mesmo que o juiz escreva uma.
     expect(lerVereditoComEvidencia('{"veredito":"aprovado","causa":"comportamento"}').causa).toBeNull();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// Rodada 1 do PR #378, item 1 (crítico A). O juiz de outra família trocava o
+// juiz de TODAS as organizações no deploy, sem interruptor: os vereditos
+// mudavam de uma semana para a outra sem ninguém ter ligado nada. Agora a
+// política da execução diz se a organização quer o juiz de outra família;
+// desligado (o padrão), o juiz é o Sonnet da cascata, como hoje.
+// ════════════════════════════════════════════════════════════════════
+describe('item 1: o juiz de outra família atrás do interruptor juizDeOutraFamilia', () => {
+  it('desligado: mesmo com chave da OpenAI, o juiz vai pela cascata padrão e grava juizMesmaFamilia true', async () => {
+    process.env.OPENAI_API_KEY = 'chave-de-teste';
+    process.env.ANTHROPIC_API_KEY = 'chave-de-teste';
+    completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA());
+
+    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL);
+
+    expect(completeMock.mock.calls[1][0].forceProvider).toBeUndefined();
+    expect(results[0].juiz).toEqual({ provider: 'anthropic-sonnet', model: 'claude-sonnet-4-6' });
+    expect(results[0].juizMesmaFamilia).toBe(true);
+  });
+
+  it('desligado com a política da faixa lida (evalNoTier ligado, juiz desligado): idem', async () => {
+    process.env.OPENAI_API_KEY = 'chave-de-teste';
+    completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA());
+
+    await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL, {
+      politica: { modelo: 'anthropic-sonnet', motivo: 'cascata padrão', juizOutraFamilia: false },
+    });
+
+    expect(completeMock.mock.calls[1][0].forceProvider).toBeUndefined();
+  });
+
+  it('ligado: o juiz é pedido à outra família (forceProvider openai-mini)', async () => {
+    process.env.OPENAI_API_KEY = 'chave-de-teste';
+    process.env.ANTHROPIC_API_KEY = 'chave-de-teste';
+    completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA('openai-mini'));
+
+    const { results } = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL, { politica: JUIZ_LIGADO });
+
+    expect(completeMock.mock.calls[1][0].forceProvider).toBe('openai-mini');
+    expect(results[0].juizMesmaFamilia).toBe(false);
+  });
+
+  it('o placar grava a família do juiz, para comparar só execuções do mesmo juiz (P56)', async () => {
+    process.env.OPENAI_API_KEY = 'chave-de-teste';
+    process.env.ANTHROPIC_API_KEY = 'chave-de-teste';
+    completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA('openai-mini'));
+    const ligado = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL, { politica: JUIZ_LIGADO });
+    expect(ligado.placar.juiz).toEqual({ familia: 'openai', outraFamilia: true });
+
+    completeMock.mockReset();
+    completeMock.mockResolvedValueOnce(resposta('ok')).mockResolvedValueOnce(JUIZ_APROVA());
+    const desligado = await executeAgentEvalRun([COMPORTAMENTO], AGENTE, PERFIL);
+    expect(desligado.placar.juiz).toEqual({ familia: 'anthropic', outraFamilia: false });
+
+    // Sem juiz nenhum (resposta vazia): família nula.
+    expect(computePlacar([{ combined: 'erro', natureza: 'comportamento' } as any]).juiz).toEqual({
+      familia: null,
+      outraFamilia: null,
+    });
   });
 });
 

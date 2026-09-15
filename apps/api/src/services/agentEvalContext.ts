@@ -41,6 +41,7 @@ import {
   type ContatoDoTurno,
 } from '../agents/agentContextLoader.js';
 import { NOME_FICTICIO_DO_TESTE, type EvalScenario } from '../agents/evalScenarioTypes.js';
+import { PROVEDOR_DA_CASCATA_PADRAO } from '../agents/resolveTurnPolicy.js';
 import type {
   ContextoDoCenario,
   ExtrasDoMontador,
@@ -177,10 +178,14 @@ export function criarMontadorDeContextoDoEval(
  * Qualidade, atrás do interruptor `evalNoTier`.
  *
  * Devolve uma função PREGUIÇOSA: criar não faz IO, e o avaliador lê uma vez
- * por execução, no primeiro cenário. Interruptor desligado (o padrão): null,
- * e o teste segue na cascata padrão de hoje. Ligado: a MESMA decisão que a
- * produção toma para a organização (resolveTurnPolicy, canal 'qualidade'),
- * sem ferramentas, sem cópia da regra de escolha.
+ * por execução, no primeiro cenário. Interruptor desligado (o padrão): a
+ * cascata padrão de hoje. Ligado: a MESMA decisão que a produção toma para
+ * a organização (resolveTurnPolicy, canal 'qualidade'), sem ferramentas,
+ * sem cópia da regra de escolha.
+ *
+ * Rodada 1 do PR #378, item 1: o interruptor `juizDeOutraFamilia` é lido
+ * aqui também, na mesma leitura, e viaja na política (`juizOutraFamilia`).
+ * Com os dois desligados a política é null, como antes.
  */
 export function criarPoliticaDaQualidade(
   organizationId: string,
@@ -189,7 +194,18 @@ export function criarPoliticaDaQualidade(
   return () => {
     if (!lida) {
       lida = (async () => {
-        if (!(await flagLigada(organizationId, 'evalNoTier'))) return null;
+        const [naFaixaDoPlano, juizOutraFamilia] = await Promise.all([
+          flagLigada(organizationId, 'evalNoTier'),
+          flagLigada(organizationId, 'juizDeOutraFamilia'),
+        ]);
+        if (!naFaixaDoPlano) {
+          if (!juizOutraFamilia) return null;
+          return {
+            modelo: PROVEDOR_DA_CASCATA_PADRAO,
+            motivo: 'evalNoTier desligado: cascata padrão',
+            juizOutraFamilia: true,
+          };
+        }
         const p = await carregarPoliticaDoTurno(organizationId, {
           canal: 'qualidade',
           agendamentoAtivo: false,
@@ -199,8 +215,9 @@ export function criarPoliticaDaQualidade(
           organizationId,
           modelo: p.modelo,
           motivo: p.motivo,
+          juizOutraFamilia,
         });
-        return { tier: p.tier, override: p.override, modelo: p.modelo, motivo: p.motivo };
+        return { tier: p.tier, override: p.override, modelo: p.modelo, motivo: p.motivo, juizOutraFamilia };
       })();
     }
     return lida;

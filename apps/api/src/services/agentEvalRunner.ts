@@ -239,6 +239,13 @@ export interface PoliticaDaQualidade {
   /** O provedor primário que o agente vai pedir. */
   modelo: LLMProviderId;
   motivo: string;
+  /**
+   * Rodada 1 do PR #378, item 1: o interruptor `juizDeOutraFamilia` da
+   * organização, lido junto com a política, uma vez por execução. Ligado, o
+   * juiz é pedido a outra família de modelo; desligado ou ausente, o juiz
+   * vai pela cascata padrão (Sonnet), como hoje.
+   */
+  juizOutraFamilia?: boolean;
 }
 
 /** C2 (Passo 3): uma das duas partes do placar. */
@@ -269,6 +276,15 @@ export interface Placar {
   comportamento: ParteDoPlacar;
   /** Cenários inconclusivos da execução (fora das duas partes e da nota). */
   inconclusivos: number;
+  /**
+   * Rodada 1 do PR #378, item 1: quem julgou esta execução, para o P56
+   * comparar só execuções do mesmo juiz. `familia` é a única família que
+   * julgou ('anthropic', 'openai', 'google'), 'misto' quando houve mais de
+   * uma, null quando nenhum cenário chegou ao juiz. `outraFamilia` diz se
+   * o juiz foi de família diferente da do agente em todos os cenários
+   * julgados (null sem juiz).
+   */
+  juiz: { familia: string | null; outraFamilia: boolean | null };
 }
 
 export interface RunSummary {
@@ -763,7 +779,15 @@ export function lerVereditoComEvidencia(raw: string): Omit<VereditoDoJuiz, 'prov
 export async function julgarComEvidencia(
   entrada: EntradaDoJuiz,
   profile: JudgeProfile,
-  opts: { provedorDoAgente?: string | null } = {},
+  opts: {
+    provedorDoAgente?: string | null;
+    /**
+     * Rodada 1 do PR #378, item 1: só com o interruptor `juizDeOutraFamilia`
+     * da organização ligado o juiz é pedido a outra família. Sem ele, a
+     * cascata padrão (Sonnet), e o resultado grava juizMesmaFamilia.
+     */
+    permitirOutraFamilia?: boolean;
+  } = {},
 ): Promise<VereditoDoJuiz> {
   const userPrompt = `### Mensagem do cliente
 ${entrada.pergunta}
@@ -790,7 +814,7 @@ ${entrada.resposta}
     ...auditDoEval(profile),
   };
 
-  const preferido = escolherProvedorDoJuiz(opts.provedorDoAgente);
+  const preferido = opts.permitirOutraFamilia === true ? escolherProvedorDoJuiz(opts.provedorDoAgente) : null;
   let resp: Awaited<ReturnType<typeof llmRouter.complete>> | null = null;
   if (preferido) {
     try {
@@ -1491,7 +1515,11 @@ async function umaAmostra(
         natureza: scenario.natureza ?? 'comportamento',
       },
       profile,
-      { provedorDoAgente: resp.provider ?? pedido },
+      {
+        provedorDoAgente: resp.provider ?? pedido,
+        // Item 1 da rodada 1 do #378: outra família só com o interruptor.
+        permitirOutraFamilia: politica?.juizOutraFamilia === true,
+      },
     );
   } catch (err: any) {
     const motivo = `O avaliador não respondeu a tempo (${String(err?.message || 'falha na chamada')}).`;
@@ -1735,7 +1763,13 @@ export function computeSummary(results: ScenarioResult[]): RunSummary {
  * nenhum tirava 77% num teste que não media conhecimento.
  */
 export function computePlacar(
-  results: Array<Pick<ScenarioResult, 'combined' | 'inconclusivo'> & { natureza?: NaturezaDoCenario }>,
+  results: Array<
+    Pick<ScenarioResult, 'combined' | 'inconclusivo'> & {
+      natureza?: NaturezaDoCenario;
+      juiz?: ModeloUsado | null;
+      juizMesmaFamilia?: boolean | null;
+    }
+  >,
 ): Placar {
   const parte = (lista: typeof results, vazio: ParteDoPlacar['estado']): ParteDoPlacar => {
     const total = lista.length;
@@ -1764,11 +1798,24 @@ export function computePlacar(
   };
   const conhecimento = results.filter((r) => r.natureza === 'conhecimento');
   const comportamento = results.filter((r) => r.natureza !== 'conhecimento');
+
+  // Rodada 1 do PR #378, item 1: a família do juiz desta execução.
+  const julgados = results.filter((r) => r.juiz?.provider);
+  const familias = new Set(julgados.map((r) => familiaDoProvedor(r.juiz!.provider) ?? 'desconhecida'));
+  const juiz: Placar['juiz'] =
+    julgados.length === 0
+      ? { familia: null, outraFamilia: null }
+      : {
+          familia: familias.size === 1 ? [...familias][0] : 'misto',
+          outraFamilia: julgados.every((r) => r.juizMesmaFamilia === false),
+        };
+
   return {
     versao: 1,
     conhecimento: parte(conhecimento, 'sem_base'),
     comportamento: parte(comportamento, 'sem_cenarios'),
     inconclusivos: results.filter((r) => r.combined === 'inconclusivo').length,
+    juiz,
   };
 }
 

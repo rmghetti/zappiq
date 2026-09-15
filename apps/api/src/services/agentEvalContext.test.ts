@@ -244,6 +244,49 @@ describe('C2: trechos, fontes e a política da faixa do plano', () => {
     expect(orgFindUnique).not.toHaveBeenCalled();
   });
 
+  // Rodada 1 do PR #378, item 1: o interruptor do juiz de outra família é
+  // lido junto, uma vez por execução, e viaja na mesma política.
+  it('juizDeOutraFamilia ligado com evalNoTier desligado: cascata padrão para o agente, juiz de outra família', async () => {
+    flags = { juizDeOutraFamilia: true };
+    const politica = criarPoliticaDaQualidade(ORG);
+    const p1 = await politica();
+    const p2 = await politica();
+    expect(p1).toEqual({ modelo: 'anthropic-sonnet', motivo: expect.stringMatching(/cascata padrão/), juizOutraFamilia: true });
+    expect(p2).toBe(p1);
+    expect(orgFindUnique).not.toHaveBeenCalled();
+    expect(isFlagOn.mock.calls.filter((c) => c[1] === 'juizDeOutraFamilia')).toHaveLength(1);
+  });
+
+  it('os dois ligados: tier do plano E juiz de outra família na mesma política', async () => {
+    flags = { evalNoTier: true, juizDeOutraFamilia: true };
+    orgFindUnique.mockResolvedValue({
+      plan: 'SCALE',
+      settings: {},
+      trialStartedAt: null,
+      trialEndsAt: null,
+      isTrialActive: false,
+      trialConverted: true,
+      stripeSubscriptionId: 'sub_1',
+    });
+    const p = await criarPoliticaDaQualidade(ORG)();
+    expect(p).toMatchObject({ tier: 'SCALE', modelo: 'anthropic-sonnet', juizOutraFamilia: true });
+  });
+
+  it('evalNoTier ligado e juiz desligado: a política diz juizOutraFamilia false', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue({
+      plan: 'SCALE',
+      settings: {},
+      trialStartedAt: null,
+      trialEndsAt: null,
+      isTrialActive: false,
+      trialConverted: true,
+      stripeSubscriptionId: 'sub_1',
+    });
+    const p = await criarPoliticaDaQualidade(ORG)();
+    expect(p?.juizOutraFamilia).toBe(false);
+  });
+
   it('evalNoTier ligado: o tier que a produção escolheria para o plano, lido uma vez', async () => {
     flags = { evalNoTier: true };
     orgFindUnique.mockResolvedValue({
