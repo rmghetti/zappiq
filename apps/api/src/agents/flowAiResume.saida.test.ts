@@ -40,9 +40,18 @@ vi.mock('../services/llm/LLMRouter.js', async (importOriginal) => {
   const real = (await importOriginal()) as Record<string, unknown>;
   return { ...real, llmRouter: { complete: (...a: any[]) => complete(...a) } };
 });
-vi.mock('../services/featureFlags.js', () => ({
-  isFlagOn: (...a: any[]) => isFlagOn(...a),
-}));
+vi.mock('../services/featureFlags.js', async (importOriginal) => {
+  const real = (await importOriginal()) as any;
+  return {
+    ...real,
+    isFlagOn: (...a: any[]) => isFlagOn(...a),
+    // C1b (nota 1): a leitura única do turno, derivada do mesmo dublê.
+    lerFlagsDaOrganizacao: async (org: string) =>
+      Object.fromEntries(
+        await Promise.all(real.FLAG_NAMES.map(async (f: string) => [f, Boolean(await isFlagOn(org, f))])),
+      ),
+  };
+});
 vi.mock('../services/izaFactsService.js', () => ({
   getIzaFactsBlock: vi.fn(async () => ''),
   invalidateIzaFactsCache: vi.fn(),
@@ -108,3 +117,48 @@ for (const motor of ['caminho leve (contextoUnico desligado)', 'motor único (co
     });
   });
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Nota 3 da revisão de 14/09: com `contextoUnico` desligado, a retomada
+ * montava o prompt SEM as regras aprovadas pelo dono.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+describe('nota 3: regras do dono no caminho leve da retomada', () => {
+  it('com regrasComoRegistros ligado, o bloco entra logo depois da persona', async () => {
+    flags = { regrasComoRegistros: true };
+    const { prisma } = (await import('@zappiq/database')) as any;
+    prisma.agentRule.findMany.mockResolvedValue([
+      { id: 'r1', scenarioId: 'cr3', texto: 'Nunca prometa desconto.', status: 'ativa', createdAt: new Date() },
+    ]);
+    complete.mockResolvedValue({ text: 'Oi João, ficou alguma dúvida?' });
+
+    await generateAiResumeReply(ENTRADA);
+
+    const system = String(complete.mock.calls[0][0].system);
+    expect(system).toContain('Nunca prometa desconto.');
+    expect(system.indexOf('Você é a Vera.')).toBeLessThan(system.indexOf('Nunca prometa desconto.'));
+    expect(system.indexOf('Nunca prometa desconto.')).toBeLessThan(system.indexOf('# Contexto do negócio'));
+    // As regras são do agente da persona (PI-3), não da organização inteira.
+    expect(prisma.agentRule.findMany.mock.calls[0][0].where).toMatchObject({ agentId: 'a1' });
+  });
+
+  it('com o interruptor desligado, nenhuma consulta às regras e o texto de antes', async () => {
+    flags = {};
+    const { prisma } = (await import('@zappiq/database')) as any;
+    complete.mockResolvedValue({ text: 'Oi João!' });
+
+    await generateAiResumeReply(ENTRADA);
+
+    expect(prisma.agentRule.findMany).not.toHaveBeenCalled();
+    expect(String(complete.mock.calls[0][0].system)).not.toContain('Regras aprovadas');
+  });
+
+  it('erro ao ler as regras não segura a retomada', async () => {
+    flags = { regrasComoRegistros: true };
+    const { prisma } = (await import('@zappiq/database')) as any;
+    prisma.agentRule.findMany.mockRejectedValue(new Error('db down'));
+    complete.mockResolvedValue({ text: 'Oi João!' });
+
+    await expect(generateAiResumeReply(ENTRADA)).resolves.toBe('Oi João!');
+  });
+});

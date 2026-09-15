@@ -43,6 +43,7 @@ import { isFlagOn } from '../services/featureFlags.js';
 import {
   flagLigada,
   montarContextoDoTurno,
+  resolveAgentForTurn,
   type ContatoDoTurno,
 } from '../agents/agentContextLoader.js';
 import { hashDoContexto, buildRagBlock, type ParteDoContexto } from '../agents/composeAgentContext.js';
@@ -98,20 +99,13 @@ type Mensagem = z.infer<typeof corpoSchema>['messages'][number];
 // ── Helpers ───────────────────────────────────────────────
 
 /**
- * Agente do teste de Qualidade: o comercial vivo mais RECENTE da organização.
- *
- * A ordem não é capricho, é o que agentQuality faz. O chat do site pega o mais
- * ANTIGO, e por isso não passa por aqui: ele usa o carregador do próprio
- * webChatService. Se a organização tiver mais de um agente comercial vivo, os
- * dois canais respondem com prompts diferentes. O Raio-X reproduz cada caminho
- * como ele é, não como deveria ser.
+ * Agente do teste de Qualidade, pelo seletor ÚNICO (C1b, nota 2, A077): o
+ * mesmo resolveAgentForTurn do WhatsApp, do motor único, do chat do site e
+ * da retomada (papel comercial, live, o mais recente). Antes cada canal
+ * tinha a sua ordem, e o site pegava o mais antigo.
  */
 async function carregarAgenteDaQualidade(organizationId: string) {
-  return prisma.agent.findFirst({
-    where: { organizationId, role: 'comercial', status: 'live' },
-    select: { id: true, name: true, systemPrompt: true },
-    orderBy: { createdAt: 'desc' },
-  });
+  return resolveAgentForTurn(organizationId, 'NEW');
 }
 
 /**
@@ -214,6 +208,8 @@ async function montarPrompt(input: {
           consultarBase: flags.ragNoChatDoSite,
           busca: { context: ragContext, status: ragStatus },
           agora,
+          // C1b (nota 4): a mesma linha de agendamento que o chat do site monta.
+          agendamento: flags.perfilVivo ? await resolveSchedulingRuntime(organizationId, settings) : undefined,
         });
         return { prompt: ctx.systemPrompt, hash: ctx.hash, hashEstavel: ctx.hashEstavel, partes: ctx.partes, motor: 'unico' };
       } catch (e) {
@@ -243,7 +239,11 @@ async function montarPrompt(input: {
     let perfilVivoBlock = '';
     let saudacaoBlock = '';
     if (flags.perfilVivo) {
-      perfilVivoBlock = buildLiveProfileBlock(settings, null, { now: agora });
+      perfilVivoBlock = buildLiveProfileBlock(settings, null, {
+        now: agora,
+        // C1b (nota 4): a mesma linha de agendamento do chat do site.
+        agendamento: await resolveSchedulingRuntime(organizationId, settings),
+      });
       saudacaoBlock = buildGreetingBlock(historico.length === 0, settings.greetingMessage);
     }
 
@@ -311,6 +311,8 @@ async function montarPrompt(input: {
       agora: DATA_FIXA_DO_EVAL,
       perfilVivoLigado: flags.perfilVivo,
       regrasDoCliente: regrasBlock,
+      // C1b (nota 4): a mesma linha de agendamento que a Qualidade monta.
+      agendamento: flags.perfilVivo ? await resolveSchedulingRuntime(organizationId, settings) : null,
     });
     if (ctx) {
       return { prompt: ctx.systemPrompt, hash: ctx.hash, hashEstavel: ctx.hashEstavel, partes: ctx.partes, motor: 'unico' };

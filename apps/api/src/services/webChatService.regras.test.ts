@@ -6,10 +6,11 @@
  * agente comercial vivo, então dava no mesmo; basta a primeira ligar um
  * agente de suporte para as regras do comercial vazarem para ele.
  *
- * O chat do site nem tinha o id do agente à mão: ele carrega o TEXTO do
- * prompt por SQL cru, com cache de 5 minutos. Agora existe um lookup próprio,
- * na mesma ordem do prompt (role 'comercial', status 'live', o mais antigo),
- * para o id e o texto serem do mesmo agente.
+ * C1b (nota 2 da revisão de 14/09, A077): o prompt e o id saem agora do
+ * MESMO registro, pelo seletor único (resolveAgentForTurn: papel comercial,
+ * live, o mais recente) e com o mesmo cache de 5 minutos. Antes eram dois
+ * lookups (SQL cru para o texto, findFirst para o id), com o risco de o
+ * texto ser de um agente e as regras de outro.
  *
  * Fail-soft em tudo: erro aqui não pode segurar a resposta ao visitante.
  */
@@ -57,7 +58,18 @@ vi.mock('./llm/langchainClient.js', () => ({
 }));
 vi.mock('../agents/coreAgentRules.js', () => ({ CORE_AGENT_RULES_V1: 'CORE' }));
 vi.mock('./izaFactsService.js', () => ({ getIzaFactsBlock: vi.fn(async () => '') }));
-vi.mock('./featureFlags.js', () => ({ isFlagOn: (...args: any[]) => isFlagOn(...args) }));
+vi.mock('./featureFlags.js', async (importOriginal) => {
+  const real = (await importOriginal()) as any;
+  return {
+    ...real,
+    isFlagOn: (...args: any[]) => isFlagOn(...args),
+    // C1b (nota 1): a leitura única do turno, derivada do mesmo dublê.
+    lerFlagsDaOrganizacao: async (org: string) =>
+      Object.fromEntries(
+        await Promise.all(real.FLAG_NAMES.map(async (f: string) => [f, Boolean(await isFlagOn(org, f))])),
+      ),
+  };
+});
 vi.mock('./agentRulesService.js', () => ({
   blocoDeRegrasDaOrganizacao: (...args: any[]) => blocoDeRegras(...args),
 }));
@@ -65,7 +77,9 @@ vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { processWebChatTurn } = await import('./webChatService.js');
+const { processWebChatTurn, limparCacheDoAgenteDoSite, SystemPromptNaoEncontrado } = await import(
+  './webChatService.js'
+);
 
 const ORG = 'org-do-cmj';
 const TURNO = { sessionId: 's1', message: 'oi', organizationId: ORG, history: [] };
@@ -74,7 +88,13 @@ const BLOCO = ['# Regras aprovadas pelo dono', '', '1. Chame o visitante pelo no
 
 beforeEach(() => {
   vi.clearAllMocks();
-  agentFindFirst.mockResolvedValue({ id: 'agente-comercial-1' });
+  limparCacheDoAgenteDoSite();
+  agentFindFirst.mockResolvedValue({
+    id: 'agente-comercial-1',
+    name: 'Vera',
+    role: 'comercial',
+    systemPrompt: 'PROMPT GRAVADO DA ORG',
+  });
   blocoDeRegras.mockResolvedValue('');
   // Só o interruptor deste arquivo (rodada 2 do PR #377): `true` para todos
   // ligaria também o motor único (contextoUnico), que tem teste próprio.
@@ -82,44 +102,50 @@ beforeEach(() => {
 });
 
 describe('com o interruptor regrasComoRegistros DESLIGADO', () => {
-  it('não procura agente nenhum: a organização não paga consulta por turno', async () => {
+  it('não pede regra nenhuma, e o único lookup do agente é o do prompt (zero consulta a mais)', async () => {
     isFlagOn.mockResolvedValue(false);
     await processWebChatTurn(TURNO as any);
-    expect(agentFindFirst).not.toHaveBeenCalled();
     expect(blocoDeRegras).not.toHaveBeenCalled();
+    expect(agentFindFirst).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('o bloco de regras do chat do site', () => {
-  it('é pedido para o agente comercial vivo daquela organização', async () => {
+  it('é pedido para o agente comercial vivo daquela organização, com o interruptor já lido', async () => {
     await processWebChatTurn(TURNO as any);
-    expect(blocoDeRegras).toHaveBeenCalledWith(ORG, { agentId: 'agente-comercial-1' });
+    expect(blocoDeRegras).toHaveBeenCalledWith(ORG, { agentId: 'agente-comercial-1', ligado: true });
   });
 
-  it('procura o agente na mesma ordem em que o prompt é carregado', async () => {
+  it('o prompt e as regras saem do MESMO lookup, pelo seletor único (o mais recente)', async () => {
     await processWebChatTurn(TURNO as any);
+    expect(agentFindFirst).toHaveBeenCalledTimes(1);
     const args = agentFindFirst.mock.calls[0][0];
     expect(args.where).toMatchObject({
       organizationId: ORG,
       role: 'comercial',
       status: 'live',
     });
-    expect(args.orderBy).toEqual({ createdAt: 'asc' });
+    expect(args.orderBy).toEqual({ createdAt: 'desc' });
+    expect(String(chatCompletionMock.mock.calls[0][0])).toContain('PROMPT GRAVADO DA ORG');
   });
 
-  it('organização sem agente encontrado pede sem id, e responde igual', async () => {
-    agentFindFirst.mockResolvedValue(null);
+  it('o bloco pedido entra no prompt do visitante', async () => {
     blocoDeRegras.mockResolvedValue(BLOCO);
     const r = await processWebChatTurn(TURNO as any);
-    expect(blocoDeRegras).toHaveBeenCalledWith(ORG, { agentId: null });
     expect(r.reply).toContain('Posso ajudar');
     expect(String(chatCompletionMock.mock.calls[0][0])).toContain(BLOCO);
   });
 
-  it('falha ao procurar o agente não derruba a resposta do visitante', async () => {
+  it('sem agente vivo com prompt: o mesmo erro de sempre, e nenhuma regra é pedida', async () => {
+    agentFindFirst.mockResolvedValue(null);
+    await expect(processWebChatTurn(TURNO as any)).rejects.toBeInstanceOf(SystemPromptNaoEncontrado);
+    expect(blocoDeRegras).not.toHaveBeenCalled();
+  });
+
+  it('banco fora na busca do agente é erro de banco, não "sem agente" (como antes)', async () => {
     agentFindFirst.mockRejectedValue(new Error('banco fora'));
-    const r = await processWebChatTurn(TURNO as any);
-    expect(r.reply).toContain('Posso ajudar');
-    expect(blocoDeRegras).toHaveBeenCalledWith(ORG, { agentId: null });
+    const erro = await processWebChatTurn(TURNO as any).catch((e) => e);
+    expect(erro).toBeInstanceOf(Error);
+    expect(erro).not.toBeInstanceOf(SystemPromptNaoEncontrado);
   });
 });

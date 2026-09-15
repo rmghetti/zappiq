@@ -57,7 +57,6 @@ import {
   buildGreetingBlock,
   type LiveProfileAgendamento,
 } from './tenantLiveProfile.js';
-import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
 // C1a (Passo 12): um só motor de contexto para todos os canais. A função
 // pura (composeAgentContext) e o carregador (agentContextLoader) entram
 // atrás do interruptor `contextoUnico`; a política de modelo e ferramentas
@@ -65,10 +64,13 @@ import { resolveSchedulingAccess, type PlanId } from '@zappiq/shared';
 // byte a byte o de antes.
 import {
   flagLigada,
+  lerFlagsDoTurno,
   montarContextoDoTurno,
   carregarPoliticaDoTurno,
+  resolveSchedulingRuntime,
   type ContextoDoTurno,
   type ContatoDoTurno,
+  type FlagsDaOrganizacao,
 } from './agentContextLoader.js';
 import { hashDoContexto, type OrigemDoTurno, type ParteDoContexto } from './composeAgentContext.js';
 import type { TurnPolicy } from './resolveTurnPolicy.js';
@@ -817,7 +819,13 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     // existia (ou o contrário). Ver resolveSchedulingRuntime.
     const agendamento = await resolveSchedulingRuntime(organizationId, orgSettings);
 
+    // C1b (nota 1 da revisão de 14/09): os interruptores da organização, lidos
+    // UMA vez neste turno e passados ao carregador, à política e aos
+    // montadores. Antes eram até quatro GETs no Redis por turno.
+    const flagsDoTurno = await lerFlagsDoTurno(organizationId);
+
     const contextoDoTurno = await buildAgentContextForContact({
+      flags: flagsDoTurno,
       origem: channel === 'instagram' ? 'instagram' : 'whatsapp',
       organizationId,
       contactId,
@@ -868,6 +876,7 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
       ecoMode,
       canal: channel === 'instagram' ? 'instagram' : 'whatsapp',
       agendamentoAtivo: agendamento.ativo,
+      flags: flagsDoTurno,
     });
     if (flowStep?.next === 'ai' && Array.isArray(flowStep.aiTools) && flowStep.aiTools.length > 0) {
       const aiTools = flowStep.aiTools as WebhookToolConfig[];
@@ -1316,6 +1325,8 @@ export async function pickTierAndOverride(
     canal?: OrigemDoTurno;
     /** C1a: agendamento REALMENTE de pé (resolveSchedulingRuntime().ativo). */
     agendamentoAtivo?: boolean;
+    /** C1b (nota 1): interruptores da leitura única do turno. Ausente, lê aqui. */
+    flags?: FlagsDaOrganizacao;
   },
 ): Promise<{
   tier?: LLMTier;
@@ -1329,7 +1340,8 @@ export async function pickTierAndOverride(
 }> {
   // C1a (Passo 12): com o interruptor ligado, a decisão é da função pura
   // resolveTurnPolicy, provada igual à daqui em resolveTurnPolicy.test.ts.
-  if (await flagLigada(orgId, 'modeloPorPolitica')) {
+  const politicaLigada = opts?.flags ? opts.flags.modeloPorPolitica : await flagLigada(orgId, 'modeloPorPolitica');
+  if (politicaLigada) {
     const politica = await carregarPoliticaDoTurno(orgId, {
       canal: opts?.canal ?? 'whatsapp',
       ecoMode: opts?.ecoMode,
@@ -1715,60 +1727,12 @@ async function resolveWaCreds(organizationId: string): Promise<waService.WaCreds
 
 // ═══════════════════════════════════════════════════════════════════
 /**
- * O agendamento está REALMENTE de pé nesta organização?
- *
- * Até 14/09/2026 o produto acreditava num único campo, `scheduling.enabled`,
- * e ele mentia dos dois lados (A165):
- *   • o CMJ tem `enabled: true` com ZERO tipos cadastrados, então todo turno
- *     levava as ferramentas de agendamento (e ia para Sonnet, A066) só para
- *     a IA responder que a empresa não agenda;
- *   • quem cadastra tipo nenhum interruptor liga, e a IA ficava sem
- *     ferramenta para consultar horário.
- *
- * Ligado agora é o cruzamento de três coisas verdadeiras: o dono não optou
- * por sair, a organização tem direito ao recurso (plano ou add-on) e existe
- * pelo menos um tipo ativo. Qualquer erro devolve DESLIGADO: prometer
- * agendamento que não existe é o defeito que estamos consertando.
+ * O agendamento está REALMENTE de pé nesta organização? A definição mudou
+ * de casa (C1b, nota 4): mora em agentContextLoader.ts, para o chat do site
+ * e a Qualidade montarem a MESMA linha de agendamento do WhatsApp sem
+ * carregar o orquestrador. Segue exportada daqui, como sempre foi.
  */
-export async function resolveSchedulingRuntime(
-  organizationId: string,
-  orgSettings: any,
-): Promise<{ ativo: boolean; tipos: string[]; motivo: string }> {
-  const scheduling = orgSettings?.scheduling ?? null;
-  if (scheduling?.optOut) return { ativo: false, tipos: [], motivo: 'optou_por_sair' };
-  if (!scheduling?.enabled) return { ativo: false, tipos: [], motivo: 'nao_ligado' };
-
-  try {
-    const org = await prisma.organization.findUnique({
-      where: { id: organizationId },
-      select: { plan: true, settings: true },
-    });
-    const addons = Array.isArray((org?.settings as any)?.addons)
-      ? ((org!.settings as any).addons as string[])
-      : [];
-    const acesso = resolveSchedulingAccess((org?.plan as PlanId) || 'IZA_LITE', addons);
-    if (!acesso.entitled) return { ativo: false, tipos: [], motivo: 'sem_direito' };
-
-    const tipos = await (prisma as any).appointmentType.findMany({
-      where: { organizationId, active: true },
-      select: { name: true },
-      take: 20,
-    });
-    const nomes: string[] = (tipos ?? [])
-      .map((t: any) => String(t?.name ?? '').trim())
-      .filter(Boolean);
-    if (!nomes.length && (!tipos || tipos.length === 0)) {
-      return { ativo: false, tipos: [], motivo: 'sem_tipo_ativo' };
-    }
-    return { ativo: true, tipos: nomes, motivo: 'ativo' };
-  } catch (err) {
-    logger.warn('[Agent] resolveSchedulingRuntime falhou: agendamento tratado como desligado', {
-      organizationId,
-      err: String(err),
-    });
-    return { ativo: false, tipos: [], motivo: 'erro' };
-  }
-}
+export { resolveSchedulingRuntime };
 
 // V2-021 (Sprint 0 §11.3) · Persona dual via Agent table
 // ─────────────────────────────────────────────────────────────────
@@ -1826,6 +1790,12 @@ export interface BuildSystemPromptInput {
    * instante para comparar hashes). Só o motor único usa; padrão: agora.
    */
   agora?: Date;
+  /**
+   * C1b (nota 1): os interruptores da leitura única do turno. Presentes,
+   * nenhum interruptor é lido aqui dentro (contextoUnico, perfilVivo e
+   * regrasComoRegistros saem daqui). Ausentes, a leitura de sempre.
+   */
+  flags?: FlagsDaOrganizacao;
 }
 
 export interface AgentContextResult {
@@ -1852,12 +1822,15 @@ export interface AgentContextResult {
 export async function buildAgentContextForContact(
   input: BuildSystemPromptInput,
 ): Promise<AgentContextResult> {
-  // Os dois interruptores de uma vez: cada leitura pode ir ao Redis, e em
-  // série o turno pagaria duas idas. Ambos são fail-closed.
-  const [contextoUnico, perfilVivoLigado] = await Promise.all([
-    flagLigada(input.organizationId, 'contextoUnico'),
-    flagLigada(input.organizationId, 'perfilVivo'),
-  ]);
+  // C1b (nota 1): com a leitura única do turno em mãos, nada é lido aqui.
+  // Sem ela (Raio-X, testes antigos), os dois interruptores de uma vez, como
+  // antes: cada leitura pode ir ao Redis. Ambos são fail-closed.
+  const [contextoUnico, perfilVivoLigado] = input.flags
+    ? [input.flags.contextoUnico, input.flags.perfilVivo]
+    : await Promise.all([
+        flagLigada(input.organizationId, 'contextoUnico'),
+        flagLigada(input.organizationId, 'perfilVivo'),
+      ]);
   if (contextoUnico) {
     // Erro de banco no carregador (resolveAgentForTurn, contato) não pode
     // derrubar o turno: o caminho de antes já cai no promptEngine quando o
@@ -1879,6 +1852,7 @@ export async function buildAgentContextForContact(
         instrucaoDeCanal: input.instrucaoDeCanal,
         perfilVivoLigado,
         agora: input.agora,
+        flags: input.flags,
       });
     } catch (err) {
       falhou = true;
@@ -2055,7 +2029,11 @@ async function buildSystemPromptLegado(
   // o melhor recorte que existe, e é o que havia antes.
   let regrasBlock = '';
   try {
-    regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, { agentId: agent?.id ?? null });
+    regrasBlock = await blocoDeRegrasDaOrganizacao(organizationId, {
+      agentId: agent?.id ?? null,
+      // C1b (nota 1): o interruptor da leitura única do turno, quando há.
+      ligado: input.flags?.regrasComoRegistros,
+    });
   } catch (err) {
     logger.warn('[Agent] bloco de regras indisponível neste turno (segue sem ele)', { err });
   }

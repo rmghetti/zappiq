@@ -127,14 +127,27 @@ export async function carregarRegrasAtivas(
  */
 export async function blocoDeRegrasDaOrganizacao(
   organizationId: string,
-  opts: { agentId?: string | null; db?: AgentRulesDb } = {},
+  opts: {
+    agentId?: string | null;
+    db?: AgentRulesDb;
+    /**
+     * C1b (nota 1): o interruptor `regrasComoRegistros` já lido por quem
+     * chamou (a leitura única do turno). Presente, nada é lido aqui; ausente,
+     * a leitura de sempre.
+     */
+    ligado?: boolean;
+  } = {},
 ): Promise<string> {
   if (!organizationId) return '';
   let ligado = false;
-  try {
-    ligado = await isFlagOn(organizationId, 'regrasComoRegistros');
-  } catch {
-    ligado = false;
+  if (typeof opts.ligado === 'boolean') {
+    ligado = opts.ligado;
+  } else {
+    try {
+      ligado = await isFlagOn(organizationId, 'regrasComoRegistros');
+    } catch {
+      ligado = false;
+    }
   }
   if (!ligado) return '';
 

@@ -52,7 +52,7 @@ import {
 } from '../agents/agentOrchestrator.js';
 // C1a (Passo 12): o Testar minha IA passa pelo mesmo motor de contexto e pela
 // mesma política de modelo do WhatsApp, atrás dos interruptores.
-import { flagLigada } from '../agents/agentContextLoader.js';
+import { lerFlagsDoTurno } from '../agents/agentContextLoader.js';
 import { isZappIQOrg } from '../config/zappiqOrg.js';
 import { routeIzaTurn } from '../services/llm/izaTurnRouter.js';
 // Rede de crise (P62): vale também no Testar minha IA, porque o dono precisa
@@ -211,10 +211,10 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     // agendamento entra no teste como entra no WhatsApp (tipo ativo E direito
     // ao recurso), e não só o interruptor das settings (A072). Desligados,
     // nada é consultado a mais.
-    const [contextoUnico, modeloPorPolitica] = await Promise.all([
-      flagLigada(orgId, 'contextoUnico'),
-      flagLigada(orgId, 'modeloPorPolitica'),
-    ]);
+    // C1b (nota 1): os interruptores lidos UMA vez neste teste e passados ao
+    // montador e à política, como no turno do WhatsApp.
+    const flags = await lerFlagsDoTurno(orgId);
+    const { contextoUnico, modeloPorPolitica } = flags;
     const agendamento =
       contextoUnico || modeloPorPolitica ? await resolveSchedulingRuntime(orgId, orgSettings) : null;
     const turnosDaSessao = history?.length ?? 0;
@@ -239,6 +239,7 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
         totalMensagens: turnosDaSessao + 1,
       },
       temHistoricoNoContexto: turnosDaSessao > 0,
+      flags,
     });
     const systemPrompt = contexto.systemPrompt;
 
@@ -247,6 +248,7 @@ router.post('/test', validate(testMessageSchema), async (req: Request, res: Resp
     const { tier, forceProvider, politica } = await pickTierAndOverride(orgId, {
       canal: 'playground',
       agendamentoAtivo: agendamento?.ativo ?? false,
+      flags,
     });
 
     // Agendamento no playground: só a tool de CONSULTA (read-only) — o teste

@@ -41,7 +41,10 @@ vi.mock('@zappiq/database', () => ({
       findMany: (...args: any[]) => (mensagensGravadas as any)(...args),
     },
     organization: { findUnique: (...args: any[]) => orgFindUnique(...args) },
-    $queryRawUnsafe: vi.fn(async () => [{ system_prompt: 'PROMPT GRAVADO DA ORG' }]),
+    // C1b (nota 2): o agente do site sai do seletor único (resolveAgentForTurn).
+    agent: {
+      findFirst: vi.fn(async () => ({ id: 'agente-1', name: 'Vera', role: 'comercial', systemPrompt: 'PROMPT GRAVADO DA ORG' })),
+    },
   },
 }));
 
@@ -58,7 +61,18 @@ vi.mock('./llm/langchainClient.js', () => ({
 }));
 vi.mock('../agents/coreAgentRules.js', () => ({ CORE_AGENT_RULES_V1: 'CORE' }));
 vi.mock('./izaFactsService.js', () => ({ getIzaFactsBlock: vi.fn(async () => '') }));
-vi.mock('./featureFlags.js', () => ({ isFlagOn: (...args: any[]) => isFlagOn(...args) }));
+vi.mock('./featureFlags.js', async (importOriginal) => {
+  const real = (await importOriginal()) as any;
+  return {
+    ...real,
+    isFlagOn: (...args: any[]) => isFlagOn(...args),
+    // C1b (nota 1): a leitura única do turno, derivada do mesmo dublê.
+    lerFlagsDaOrganizacao: async (org: string) =>
+      Object.fromEntries(
+        await Promise.all(real.FLAG_NAMES.map(async (f: string) => [f, Boolean(await isFlagOn(org, f))])),
+      ),
+  };
+});
 vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));

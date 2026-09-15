@@ -49,9 +49,18 @@ vi.mock('../services/llm/LLMRouter.js', async (importOriginal) => {
   const real = (await importOriginal()) as Record<string, unknown>;
   return { ...real, llmRouter: { complete: (...a: any[]) => complete(...a) } };
 });
-vi.mock('../services/featureFlags.js', () => ({
-  isFlagOn: (...a: any[]) => isFlagOn(...a),
-}));
+vi.mock('../services/featureFlags.js', async (importOriginal) => {
+  const real = (await importOriginal()) as any;
+  return {
+    ...real,
+    isFlagOn: (...a: any[]) => isFlagOn(...a),
+    // C1b (nota 1): a leitura única do turno, derivada do mesmo dublê.
+    lerFlagsDaOrganizacao: async (org: string) =>
+      Object.fromEntries(
+        await Promise.all(real.FLAG_NAMES.map(async (f: string) => [f, Boolean(await isFlagOn(org, f))])),
+      ),
+  };
+});
 vi.mock('../services/izaFactsService.js', () => ({
   getIzaFactsBlock: vi.fn(async () => ''),
   invalidateIzaFactsCache: vi.fn(),

@@ -541,3 +541,59 @@ describe('Passo 2: amarra estática do orquestrador', () => {
     expect(depoisDoAudio.indexOf('registrarSaidaDoAgente(')).toBeLessThan(600);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Nota 1 da revisão de 14/09: um turno lê os interruptores UMA vez.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+describe('nota 1: leitura única dos interruptores por turno', () => {
+  /** As idas ao cache atrás de interruptor (chave por interruptor ou a única). */
+  function leiturasDeInterruptor(): string[] {
+    return cacheGet.mock.calls.map((c: any[]) => String(c[0])).filter((k) => k.startsWith('zappiq:flag'));
+  }
+
+  it('turno normal do WhatsApp, tudo desligado: 1 leitura, na chave única', async () => {
+    await processIncomingMessage(inputBase());
+
+    expect(leiturasDeInterruptor()).toEqual(['zappiq:flags:org-cliente']);
+    expect(prismaMock.orgFeatureFlag.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.orgFeatureFlag.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('com os quatro interruptores do turno ligados (motor único, perfil vivo, regras e política): ainda 1 leitura', async () => {
+    prismaMock.orgFeatureFlag.findMany.mockResolvedValue(
+      ['contextoUnico', 'perfilVivo', 'regrasComoRegistros', 'modeloPorPolitica'].map((flag) => ({
+        flag,
+        enabled: true,
+      })),
+    );
+    prismaMock.agent.findFirst.mockResolvedValue({
+      id: 'a1',
+      name: 'Vera',
+      role: 'comercial',
+      systemPrompt: 'Você é a Vera, da CMJ.',
+    });
+
+    await processIncomingMessage(inputBase());
+
+    expect(leiturasDeInterruptor()).toEqual(['zappiq:flags:org-cliente']);
+    expect(prismaMock.orgFeatureFlag.findUnique).not.toHaveBeenCalled();
+    // Os interruptores valeram: o motor único montou (regras consultadas pelo
+    // agente do turno) e a resposta saiu.
+    expect(prismaMock.agentRule.findMany).toHaveBeenCalled();
+    expect(textosEnviados()).toEqual(['A consultoria dura 3 meses.']);
+  });
+
+  it('Redis fora: uma tentativa só no turno, e o turno responde com tudo desligado', async () => {
+    cacheGet.mockImplementation(async (k: string) => {
+      if (String(k).startsWith('zappiq:flag')) throw new Error('redis down');
+      return cacheStore.get(k) ?? null;
+    });
+
+    await processIncomingMessage(inputBase());
+
+    expect(leiturasDeInterruptor()).toHaveLength(1);
+    expect(textosEnviados()).toEqual(['A consultoria dura 3 meses.']);
+    cacheGet.mockImplementation(async (k: string) => cacheStore.get(k) ?? null);
+  });
+});
