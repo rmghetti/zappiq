@@ -87,11 +87,11 @@ export const qualidadeContent: SaibaMaisContent[] = [
     comoImplementar: [
       'Leia a correção sugerida e, se quiser, escreva uma observação sobre por que está aplicando.',
       'Clique em "Aplicar correção" e confirme na caixa que aparece.',
-      'Depois de aplicada, clique em "Re-testar agora": ele roda o cenário uma vez e mostra o resultado na hora. Esse resultado ainda não fica gravado no histórico, quem atualiza a nota é a próxima execução completa.',
+      'Depois de aplicada, clique em "Re-testar agora": ele roda o cenário três vezes e mostra quantas passaram. O re-teste fica registrado, mas não entra no histórico nem muda a nota; quem atualiza a nota é a próxima execução completa.',
       'Se algo sair diferente do esperado, use "Reverter aplicação" pra voltar o agente ao comportamento de antes.',
     ],
     exemploResultado:
-      'Numa academia, o dono aplica a correção pra um cenário de cancelamento de plano. Ele clica em "Re-testar agora" e vê ali que o cenário passou. Como esse re-teste não fica gravado, ele confere o efeito na nota na execução da semana seguinte.',
+      'Numa academia, o dono aplica a correção pra um cenário de cancelamento de plano. Ele clica em "Re-testar agora" e vê ali que o cenário passou. Como o re-teste não muda a nota, ele confere o efeito na nota na execução da semana seguinte.',
     relacionados: ['qualidade.correcao-sugerida', 'qualidade.editar-correcao'],
   },
   {

@@ -81,4 +81,19 @@ describe('Saiba mais da Qualidade não promete o que depende de interruptor', ()
     // A orientação útil continua: não precisa numerar.
     expect(textos).toMatch(/nem numerar a regra\./);
   });
+
+  // Rodada 1 do PR #378, item 5: o re-teste roda o cenário TRÊS vezes (não
+  // uma) e fica registrado (não "não fica gravado"); o que ele não faz é
+  // entrar no histórico nem mudar a nota.
+  it('qualidade.aplicar-correcao descreve o re-teste como ele é: três vezes, registrado, sem mudar a nota', () => {
+    const c = SAIBA_MAIS['qualidade.aplicar-correcao'];
+    const passo = c.comoImplementar.find((p) => p.includes('Re-testar agora'));
+    expect(passo).toBe(
+      'Depois de aplicada, clique em "Re-testar agora": ele roda o cenário três vezes e mostra quantas passaram. ' +
+        'O re-teste fica registrado, mas não entra no histórico nem muda a nota; quem atualiza a nota é a próxima execução completa.',
+    );
+    expect(c.exemploResultado).toContain('Como o re-teste não muda a nota');
+    expect(c.exemploResultado).not.toMatch(/não fica gravado/);
+    expect([passo, c.exemploResultado].join(' ')).not.toContain('—');
+  });
 });
