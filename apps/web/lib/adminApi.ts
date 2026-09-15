@@ -596,7 +596,15 @@ class AgentQualityApi {
     runId: string,
     scenarioId: string,
     opts: { finalDiff?: string; notes?: string } = {},
-  ): Promise<{ ok: boolean; decision: AgentEvalFixDecision; strategy: string; insertedAtLine: number }> {
+  ): Promise<{
+    ok: boolean;
+    decision: AgentEvalFixDecision;
+    /** Só no caminho do patch no prompt (interruptor regrasComoRegistros desligado). */
+    strategy?: string;
+    insertedAtLine?: number;
+    /** Nota 3 de 14/09: com o interruptor ligado, a correção vira regra e o prompt não muda. */
+    comoRegistro?: boolean;
+  }> {
     return api.post(
       `/api/admin/agent-eval/runs/${encodeURIComponent(runId)}/scenarios/${encodeURIComponent(scenarioId)}/apply-fix`,
       opts,

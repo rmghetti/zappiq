@@ -109,8 +109,22 @@ vi.mock('../services/slackNotifier.js', () => ({
 const regrasMock = {
   carregarRegrasAtivas: vi.fn(async () => []),
   blocoDeRegrasDaOrganizacao: vi.fn(async () => ''),
+  // Nota 3 da revisão de 14/09: a porta do superadmin passa a gravar
+  // registro quando o interruptor da organização está ligado.
+  aplicarRegraDoCenario: vi.fn(async () => ({
+    regra: { id: 'regra-nova', scenarioId: 'cr7_no_invent_sla', status: 'ativa' },
+    substituiu: 0,
+  })),
+  reverterRegra: vi.fn(async () => ({ id: 'regra-1', status: 'revertida' })),
+  regraDaDecisao: vi.fn(async () => null),
+  TetoDeRegrasError: class TetoDeRegrasError extends Error {
+    readonly code = 'teto_de_regras';
+  },
 };
 vi.mock('../services/agentRulesService.js', () => regrasMock);
+
+const flagsMock = { isFlagOn: vi.fn(async () => false) };
+vi.mock('../services/featureFlags.js', () => flagsMock);
 
 const { default: router } = await import('./adminAgentEval.js');
 
@@ -167,6 +181,13 @@ const REGRA_INTEIRA =
 
 beforeEach(() => {
   vi.clearAllMocks();
+  flagsMock.isFlagOn.mockResolvedValue(false);
+  regrasMock.regraDaDecisao.mockResolvedValue(null);
+  regrasMock.reverterRegra.mockResolvedValue({ id: 'regra-1', status: 'revertida' });
+  regrasMock.aplicarRegraDoCenario.mockResolvedValue({
+    regra: { id: 'regra-nova', scenarioId: 'cr7_no_invent_sla', status: 'ativa' },
+    substituiu: 0,
+  });
   regrasMock.blocoDeRegrasDaOrganizacao.mockResolvedValue(BLOCO);
   regrasMock.carregarRegrasAtivas.mockResolvedValue([]);
   runnerMock.executeAgentEvalRun.mockResolvedValue({
@@ -350,10 +371,12 @@ describe('apply-fix do superadmin: o re-verify mede o prompt novo COM as regras'
     // A única leitura é a do verificador de conflito, antes de aplicar.
     expect(regrasMock.carregarRegrasAtivas).toHaveBeenCalledTimes(1);
     // Rodada 2 do PR #377: o montador do motor único vai no MESMO objeto.
+    // Nota 8 da revisão de 14/09: o re-verify não pede sugestão nova.
     expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toEqual({
       regrasBlock: '',
       regrasAtivas: [],
       montarContexto: expect.any(Function),
+      pularSugestao: true,
     });
   });
 });
@@ -421,5 +444,197 @@ describe('GET /runs do superadmin: o re-teste do cliente não entra na lista', (
       status: 'completed',
       triggeredBy: { not: 'client_retest' },
     });
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Notas 3, 7 e 8 da revisão de 14/09 (tarefa C2).
+ *
+ * Nota 3: a porta do superadmin ignorava `regrasComoRegistros` e colava o
+ * texto no prompt mesmo com o interruptor ligado. A MACHIA está com ele
+ * ligado desde 14/09: aplicar pelo admin DUPLICAVA a regra (no prompt e no
+ * bloco), e desfazer pela tela do cliente tirava só a do bloco. Agora as
+ * duas portas seguem o mesmo interruptor, pela organização DO AGENTE.
+ *
+ * Nota 8: o re-verify do superadmin pedia uma sugestão nova que era jogada
+ * fora. Passa `pularSugestao: true`.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('apply-fix do superadmin segue o interruptor da organização (nota 3)', () => {
+  const ROTA = '/runs/:runId/scenarios/:scenarioId/apply-fix';
+  const pedido = (body: Record<string, unknown> = {}) => ({
+    user: { userId: 'super-1', role: 'SUPERADMIN' },
+    params: { runId: 'run-1', scenarioId: 'cr7_no_invent_sla' },
+    body,
+  });
+  const run = () => ({
+    id: 'run-1',
+    agentId: 'agent-1',
+    results: [
+      {
+        scenarioId: 'cr7_no_invent_sla',
+        severity: 'high',
+        combined: 'fail',
+        suggestedFix: { summary: 's', patches: [{ where: 'novo', diff: REGRA_INTEIRA }], confidence: 0.9 },
+      },
+    ],
+    agent: AGENTE,
+  });
+
+  it('interruptor LIGADO: vira registro da organização do agente e o prompt não é tocado', async () => {
+    flagsMock.isFlagOn.mockResolvedValue(true);
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(run());
+    const { applyPatch } = await import('../services/agentPromptPatcher.js');
+    const { publishPrompt } = await import('../services/promptVersionService.js');
+
+    const res = makeRes();
+    await getHandler('post', ROTA)(pedido(), res);
+
+    expect(res.statusCode).toBe(200);
+    // O interruptor lido é o da organização DO AGENTE, não o do superadmin.
+    expect(flagsMock.isFlagOn).toHaveBeenCalledWith('org-cliente', 'regrasComoRegistros');
+    expect(regrasMock.aplicarRegraDoCenario).toHaveBeenCalledTimes(1);
+    const entrada = (regrasMock.aplicarRegraDoCenario.mock.calls[0] as any[])[0];
+    expect(entrada.organizationId).toBe('org-cliente');
+    expect(entrada.agentId).toBe('agent-1');
+    expect(entrada.scenarioId).toBe('cr7_no_invent_sla');
+    expect(applyPatch).not.toHaveBeenCalled();
+    expect(publishPrompt).not.toHaveBeenCalled();
+    // A decisão guarda o mesmo prompt nos dois lados: prova de que ele não mudou.
+    const decisao = prismaMock.agentEvalFixDecision.create.mock.calls[0][0].data;
+    expect(decisao.promptBefore).toBe(AGENTE.systemPrompt);
+    expect(decisao.promptAfter).toBe(AGENTE.systemPrompt);
+    expect(res.body.comoRegistro).toBe(true);
+    // O re-verify mede o prompt de sempre, com o bloco que já traz a regra nova.
+    expect(runnerMock.executeAgentEvalRun.mock.calls[0][1]).toMatchObject({
+      systemPrompt: AGENTE.systemPrompt,
+    });
+  });
+
+  it('interruptor DESLIGADO: cola no prompt, como sempre fez', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(run());
+    const { applyPatch } = await import('../services/agentPromptPatcher.js');
+
+    const res = makeRes();
+    await getHandler('post', ROTA)(pedido(), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(applyPatch).toHaveBeenCalledTimes(1);
+    expect(regrasMock.aplicarRegraDoCenario).not.toHaveBeenCalled();
+  });
+
+  it('o texto gravado pelo superadmin também sai sem o nome fictício (nota 2)', async () => {
+    flagsMock.isFlagOn.mockResolvedValue(true);
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(run());
+
+    const res = makeRes();
+    await getHandler('post', ROTA)(
+      pedido({ finalDiff: 'Nunca prometa prazo. Exemplo CORRETO: "Oi, Rod! Vou confirmar com o time."' }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const texto = (regrasMock.aplicarRegraDoCenario.mock.calls[0] as any[])[0].texto;
+    expect(texto).not.toMatch(/\bRod\b/);
+    expect(texto).toContain('[nome]');
+  });
+
+  it('aprovação simultânea do mesmo cenário: 409 em português (nota 7)', async () => {
+    flagsMock.isFlagOn.mockResolvedValue(true);
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(run());
+    regrasMock.aplicarRegraDoCenario.mockRejectedValue(
+      Object.assign(new Error('Outra aprovação deste mesmo caso de teste terminou agora há pouco.'), {
+        code: 'regra_concorrente',
+      }),
+    );
+
+    const res = makeRes();
+    await getHandler('post', ROTA)(pedido(), res);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.error).toBe('regra_concorrente');
+  });
+
+  it('o re-verify passa pularSugestao: true, com e sem o interruptor (nota 8)', async () => {
+    for (const ligado of [false, true]) {
+      vi.clearAllMocks();
+      flagsMock.isFlagOn.mockResolvedValue(ligado);
+      regrasMock.aplicarRegraDoCenario.mockResolvedValue({
+        regra: { id: 'regra-nova', scenarioId: 'cr7_no_invent_sla', status: 'ativa' },
+        substituiu: 0,
+      });
+      prismaMock.agentEvalRun.findUnique.mockResolvedValue(run());
+      prismaMock.agentEvalFixDecision.findFirst.mockResolvedValue(null);
+      prismaMock.agentEvalFixDecision.create.mockResolvedValue({ id: 'dec-1' });
+      runnerMock.executeAgentEvalRun.mockResolvedValue({
+        results: [{ scenarioId: 'cr7_no_invent_sla', combined: 'pass' }],
+        durationMs: 10,
+        summary: { passed: 1, partial: 0, failed: 0, criticalFailed: 0, erros: 0, scorePercent: 100 },
+      });
+      runnerMock.computeReverifyVerdict.mockReturnValue({ before: 'fail', after: 'pass', improved: true });
+
+      const res = makeRes();
+      await getHandler('post', ROTA)(pedido(), res);
+
+      expect(res.statusCode).toBe(200);
+      expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({ pularSugestao: true });
+    }
+  });
+});
+
+describe('revert do superadmin: correção que virou regra (notas 3 e 7)', () => {
+  const ROTA = '/fix-decisions/:decisionId/revert';
+  const DECISAO = {
+    id: 'dec-1',
+    runId: 'run-1',
+    scenarioId: 'cr7_no_invent_sla',
+    agentId: 'agent-1',
+    decision: 'applied',
+    promptBefore: 'prompt do cliente',
+    promptAfter: 'prompt do cliente',
+    originalSuggestion: {},
+  };
+
+  beforeEach(() => {
+    (prismaMock.agentEvalFixDecision as any).findUnique = vi.fn(async () => DECISAO);
+    prismaMock.agent.findUnique.mockResolvedValue({ ...AGENTE, organizationId: 'org-cliente' });
+  });
+
+  it('desativa só a regra e NÃO republica o prompt', async () => {
+    regrasMock.regraDaDecisao.mockResolvedValue({ id: 'regra-1', status: 'ativa' } as any);
+    const { publishPrompt } = await import('../services/promptVersionService.js');
+
+    const res = makeRes();
+    await getHandler('post', ROTA)({ user: { userId: 'super-1' }, params: { decisionId: 'dec-1' }, body: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(regrasMock.reverterRegra).toHaveBeenCalledWith(
+      expect.objectContaining({ ruleId: 'regra-1', organizationId: 'org-cliente' }),
+      expect.anything(),
+    );
+    expect(publishPrompt).not.toHaveBeenCalled();
+    expect(prismaMock.agentEvalFixDecision.create.mock.calls[0][0].data.decision).toBe('reverted');
+  });
+
+  it('regra que já saiu do ar: 409 e nada gravado', async () => {
+    regrasMock.regraDaDecisao.mockResolvedValue({ id: 'regra-1', status: 'substituida' } as any);
+
+    const res = makeRes();
+    await getHandler('post', ROTA)({ user: { userId: 'super-1' }, params: { decisionId: 'dec-1' }, body: {} }, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.code).toBe('regra_nao_ativa');
+    expect(regrasMock.reverterRegra).not.toHaveBeenCalled();
+    expect(prismaMock.agentEvalFixDecision.create).not.toHaveBeenCalled();
+  });
+
+  it('reversão que perdeu a corrida: 409 e nenhuma decisão com regra nula', async () => {
+    regrasMock.regraDaDecisao.mockResolvedValue({ id: 'regra-1', status: 'ativa' } as any);
+    regrasMock.reverterRegra.mockResolvedValue(null as any);
+
+    const res = makeRes();
+    await getHandler('post', ROTA)({ user: { userId: 'super-1' }, params: { decisionId: 'dec-1' }, body: {} }, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(prismaMock.agentEvalFixDecision.create).not.toHaveBeenCalled();
   });
 });

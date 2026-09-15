@@ -37,6 +37,11 @@ vi.mock('../middleware/auth.js', () => ({
   requireRole: vi.fn(() => (_req: any, _res: any, next: any) => next()),
 }));
 
+// Nota 3 da revisão de 14/09: a porta do superadmin lê o interruptor
+// `regrasComoRegistros`. Sem o dublê, a leitura real ia ao cache (Redis) e
+// o teste ficava 200 vezes mais lento. Desligado: o caminho do patch.
+vi.mock('../services/featureFlags.js', () => ({ isFlagOn: vi.fn(async () => false) }));
+
 // Gabarito vazio: o re-verify pós-apply não acha o cenário e não roda LLM.
 vi.mock('../agents/agentEvalSet.js', () => ({
   resolveEvalSet: vi.fn(() => []),

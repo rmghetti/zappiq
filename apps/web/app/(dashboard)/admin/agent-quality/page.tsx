@@ -1079,7 +1079,9 @@ function FixSuggestionCard({
         notes: notes.trim() || undefined,
       });
       setActionSuccess(
-        `✓ Aplicado via ${result.strategy} na linha ${result.insertedAtLine}. Prompt: ${result.decision.id.slice(0, 8)}...`,
+        result.comoRegistro
+          ? `✓ Aprovada como regra do cenário (o prompt não foi alterado). Decisão: ${result.decision.id.slice(0, 8)}...`
+          : `✓ Aplicado via ${result.strategy} na linha ${result.insertedAtLine}. Prompt: ${result.decision.id.slice(0, 8)}...`,
       );
       // Captura veredito da re-verificação automática (pode ser null se não disponível)
       if ((result as any).reverify !== undefined) {
