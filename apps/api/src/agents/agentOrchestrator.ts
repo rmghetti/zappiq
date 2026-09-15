@@ -47,7 +47,7 @@ import { postProcessReply } from './postProcessReply.js';
 import { registrarAlertasDeSaida } from '../services/alertasDeSaida.js';
 // C1b (Passo 2, A167, A193): o transbordo de verdade (pausa no banco,
 // WAITING e aviso à equipe) mora num módulo que o chat do site também usa.
-import { marcarTransbordo, mensagemDeEspera } from '../services/transbordoHumano.js';
+import { marcarTransbordo, mensagemDeEspera, type ModoDaPausa } from '../services/transbordoHumano.js';
 import { getIzaFactsBlock } from '../services/izaFactsService.js';
 // Perfil vivo (A8): identidade, tom, horário e agendamento montados das
 // settings a cada turno, atrás do interruptor `perfilVivo`. Desligado, o
@@ -1248,12 +1248,20 @@ export async function processIncomingMessage(input: ProcessMessageInput): Promis
     logger.error('[Agent] Error processing message:', err);
 
     // C1b (A193): o aviso promete que um atendente vai entrar em contato,
-    // então alguém tem de ser chamado DE VERDADE: a IA pausa no banco, a
-    // conversa vai para WAITING e a equipe é avisada. Só depois disso o
-    // texto fixo sai, pelo canal da conversa, e fica gravado. Uma mensagem
-    // só: o aviso de erro faz as vezes da mensagem de espera.
+    // então alguém tem de ser chamado DE VERDADE: a conversa vai para
+    // WAITING e a equipe é avisada. Só depois disso o texto fixo sai, pelo
+    // canal da conversa, e fica gravado. Uma mensagem só: o aviso de erro
+    // faz as vezes da mensagem de espera.
+    //
+    // Rodada 1 do PR #379 (item 2): a pausa aqui é TEMPORÁRIA (espelho no
+    // cache por 1 hora, sem aiPaused no banco). O erro é transitório
+    // (modelo 5xx, tempo do banco): uma pausa durável deixaria o cliente sem
+    // resposta até alguém clicar "Retomar", e a equipe só é avisada por
+    // socket. O transbordo INTENCIONAL (pedido de humano, tag handoff, rede
+    // de crise) segue durável.
     await handleHandoff(organizationId, conversationId, contactPhone, contactId, orgSettings, io, {
       mensagem: TEXTO_DE_ERRO_TECNICO,
+      pausa: 'temporaria',
     }).catch((erroDoTransbordo) =>
       logger.error('[Agent] transbordo do erro geral falhou', { err: String(erroDoTransbordo) }),
     );
@@ -1661,16 +1669,21 @@ async function handleHandoff(
      * espera. O catch geral passa o aviso de erro técnico: uma mensagem só.
      */
     mensagem?: string;
+    /**
+     * Rodada 1 do PR #379: 'temporaria' só no erro técnico (cache por 1
+     * hora, sem aiPaused). Ausente: durável, como o transbordo intencional.
+     */
+    pausa?: ModoDaPausa;
   } = {},
 ): Promise<void> {
   logger.info(`[Agent] Handoff triggered for ${contactPhone}`, { organizationId });
 
-  // C1b (A167): a pausa deixou de expirar sozinha em 1 hora. Vai para o
-  // banco (aiPaused) e para o espelho no cache pelo prazo das pausas
-  // humanas; a IA volta quando a equipe devolve a conversa no Inbox
-  // ("Retomar", PUT /resume-ai, ou desatribuir). WAITING e aviso à equipe
-  // como antes. Fail-soft por etapa, dentro de marcarTransbordo.
-  await marcarTransbordo({ organizationId, conversationId, contactId, contactPhone, io });
+  // C1b (A167): a pausa do transbordo intencional deixou de expirar sozinha
+  // em 1 hora. Vai para o banco (aiPaused) e para o espelho no cache pelo
+  // prazo das pausas humanas; a IA volta quando a equipe devolve a conversa
+  // no Inbox ("Retomar", PUT /resume-ai, ou desatribuir). WAITING e aviso à
+  // equipe como antes. Fail-soft por etapa, dentro de marcarTransbordo.
+  await marcarTransbordo({ organizationId, conversationId, contactId, contactPhone, io, pausa: opts.pausa });
 
   // A mensagem de espera (ou o aviso de erro) sai pelo canal da conversa e
   // fica gravada (deliverAgentReply grava no mesmo lugar em que envia).

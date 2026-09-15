@@ -37,6 +37,27 @@ import { aiPauseCacheKey, AI_PAUSE_TTL_SECONDS } from '../routes/conversations.h
 /** Valor do espelho de pausa no cache quando a IA pediu uma pessoa. */
 export const VALOR_DA_PAUSA_DE_TRANSBORDO = 'handoff';
 
+/**
+ * Rodada 1 do PR #379 (item 2): como a pausa é gravada.
+ *
+ *   - 'duravel' (padrão): aiPaused no banco e espelho no cache por 7 dias.
+ *     A IA só volta quando a equipe devolve a conversa. É o transbordo
+ *     INTENCIONAL: pedido de humano, tag handoff, rede de crise.
+ *   - 'temporaria': só o espelho no cache, por 1 hora, SEM aiPaused. É a
+ *     pausa do ERRO TÉCNICO (catch geral do orquestrador): o erro é
+ *     transitório (modelo 5xx, tempo do banco) e uma pausa durável deixaria
+ *     o cliente sem resposta até alguém clicar "Retomar", com a equipe
+ *     avisada só por socket. WAITING, notificação e aviso ao cliente
+ *     continuam iguais nos dois modos.
+ */
+export type ModoDaPausa = 'duravel' | 'temporaria';
+
+/** Prazo do espelho no cache na pausa temporária: 1 hora. */
+export const PRAZO_DA_PAUSA_TEMPORARIA_SEGUNDOS = 3600;
+
+/** Valor do espelho na pausa temporária (aparece no log do orquestrador). */
+export const VALOR_DA_PAUSA_TEMPORARIA = 'erro_tecnico';
+
 /** A mensagem de espera de sempre, quando o dono não configurou a dele. */
 export const TEXTO_DE_ESPERA_PADRAO =
   'Vou te conectar com um de nossos especialistas agora. Em instantes você será atendido! 😊';
@@ -61,10 +82,15 @@ export interface TransbordoInput {
   /** Como a notificação chama o cliente. Padrão: "Cliente <contactPhone>". */
   rotuloDoCliente?: string;
   io?: SocketIOServer;
+  /** Ausente = 'duravel'. Ver ModoDaPausa. */
+  pausa?: ModoDaPausa;
 }
 
 export interface ResultadoDoTransbordo {
-  /** A conversa ficou pausada no banco (aiPaused) e em WAITING. */
+  /**
+   * A conversa do turno foi atualizada no banco: WAITING com aiPaused na
+   * pausa durável; só WAITING na temporária.
+   */
   pausou: boolean;
   /** A equipe recebeu a notificação em tempo real. */
   avisou: boolean;
@@ -77,16 +103,23 @@ export interface ResultadoDoTransbordo {
 export async function marcarTransbordo(input: TransbordoInput): Promise<ResultadoDoTransbordo> {
   const { organizationId, conversationId, contactPhone } = input;
   const resultado: ResultadoDoTransbordo = { pausou: false, avisou: false };
+  const temporaria = input.pausa === 'temporaria';
 
-  logger.info('[Transbordo] a IA pediu uma pessoa', { organizationId, conversationId });
+  logger.info('[Transbordo] a IA pediu uma pessoa', {
+    organizationId,
+    conversationId,
+    pausa: temporaria ? 'temporaria' : 'duravel',
+  });
 
   // Espelho no cache: o caminho rápido que o orquestrador e o agendador de
-  // fluxos consultam. Mesmo prazo das pausas humanas; quem manda é o banco.
+  // fluxos consultam. Na pausa durável, o mesmo prazo das pausas humanas e
+  // quem manda é o banco; na temporária, 1 hora, e o cache é a própria
+  // pausa (sem aiPaused, a IA volta sozinha quando ele vence).
   try {
     await cache.set(
       aiPauseCacheKey(organizationId, contactPhone),
-      VALOR_DA_PAUSA_DE_TRANSBORDO,
-      AI_PAUSE_TTL_SECONDS,
+      temporaria ? VALOR_DA_PAUSA_TEMPORARIA : VALOR_DA_PAUSA_DE_TRANSBORDO,
+      temporaria ? PRAZO_DA_PAUSA_TEMPORARIA_SEGUNDOS : AI_PAUSE_TTL_SECONDS,
     );
   } catch (err) {
     logger.warn('[Transbordo] espelho da pausa no cache falhou (o banco segue valendo)', {
@@ -102,10 +135,12 @@ export async function marcarTransbordo(input: TransbordoInput): Promise<Resultad
   // devolve aiPaused=false e mantém WAITING), o segundo pedido de pessoa não
   // gravava nada. Com aiPaused, o guarda durável do orquestrador e o chat do
   // site enxergam o transbordo, e o Inbox mostra o botão de devolver à IA.
+  // Na pausa temporária (erro técnico), só WAITING: sem aiPaused, o guarda
+  // durável não segura a IA depois que o espelho no cache vence.
   try {
     const atualizadas = await prisma.conversation.updateMany({
       where: { id: conversationId, organizationId, status: { not: 'CLOSED' } },
-      data: { status: 'WAITING', aiPaused: true },
+      data: temporaria ? { status: 'WAITING' } : { status: 'WAITING', aiPaused: true },
     });
     resultado.pausou = (atualizadas?.count ?? 0) > 0;
   } catch (err) {

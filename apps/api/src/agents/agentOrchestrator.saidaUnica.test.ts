@@ -531,15 +531,44 @@ describe('Passo 2: o erro geral chama o transbordo de verdade (A193)', () => {
     routeIzaTurnMock.mockRejectedValue(new Error('provedor fora'));
   });
 
-  it('pausa a IA e marca WAITING ANTES de mandar o aviso ao cliente', async () => {
+  it('pausa TEMPORÁRIA (rodada 1, item 2): WAITING sem aiPaused no banco, espelho no cache por 1 hora, ANTES do aviso', async () => {
+    const { cache } = await import('../services/cloud/index.js');
     await processIncomingMessage(inputBase());
 
-    expect(prismaMock.conversation.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { status: 'WAITING', aiPaused: true } }),
-    );
+    // O erro técnico é transitório (modelo 5xx, tempo do banco): pausar de
+    // forma durável deixaria o cliente sem resposta até alguém clicar
+    // "Retomar". A conversa vai para WAITING (a equipe vê), mas aiPaused
+    // NÃO é gravado: passada 1 hora, a IA volta sozinha.
+    expect(prismaMock.conversation.updateMany).toHaveBeenCalledTimes(1);
+    const gravado = prismaMock.conversation.updateMany.mock.calls[0][0];
+    expect(gravado).toMatchObject({ where: { id: 'conv-1', organizationId: 'org-cliente' }, data: { status: 'WAITING' } });
+    expect(gravado.data).not.toHaveProperty('aiPaused');
+
+    const setDaPausa = (cache.set as any).mock.calls.find((c: any[]) => String(c[0]).startsWith('ai_paused:'));
+    expect(setDaPausa).toBeTruthy();
+    expect(setDaPausa[0]).toBe('ai_paused:org-cliente:+5511999998888');
+    expect(setDaPausa[2]).toBe(3600);
+
     const ordemDaPausa = prismaMock.conversation.updateMany.mock.invocationCallOrder[0];
     const ordemDoAviso = sendReplyTextMock.mock.invocationCallOrder[0];
     expect(ordemDaPausa).toBeLessThan(ordemDoAviso);
+  });
+
+  it('enquanto a pausa temporária vale (cache), a IA fica calada; passada 1 hora, com o cache vazio e sem aiPaused, volta a responder', async () => {
+    await processIncomingMessage(inputBase());
+    vi.clearAllMocks();
+    respostaDoModelo('Voltei. A consultoria dura 3 meses.');
+
+    // Dentro da hora: o espelho no cache segura.
+    await processIncomingMessage(inputBase({ messageContent: 'alguém aí?' }));
+    expect(routeIzaTurnMock).not.toHaveBeenCalled();
+
+    // Passada a hora: o cache venceu e o banco não tem aiPaused (WAITING não pausa).
+    cacheStore.clear();
+    prismaMock.conversation.findUnique.mockResolvedValue({ aiPaused: false, status: 'WAITING', assignedToId: null });
+    await processIncomingMessage(inputBase({ messageContent: 'alguém aí?' }));
+    expect(routeIzaTurnMock).toHaveBeenCalledTimes(1);
+    expect(textosEnviados()).toEqual(['Voltei. A consultoria dura 3 meses.']);
   });
 
   it('avisa a equipe (notificação) e manda UMA mensagem só: o aviso de erro técnico, gravado', async () => {
@@ -576,6 +605,10 @@ describe('Passo 2: o transbordo não expira sozinho em 1 hora (A167)', () => {
     const setDaPausa = (cache.set as any).mock.calls.find((c: any[]) => String(c[0]).startsWith('ai_paused:'));
     expect(setDaPausa).toBeTruthy();
     expect(setDaPausa[2]).toBeGreaterThan(3600);
+    // Rodada 1, item 2: o pedido de humano segue DURÁVEL (7 dias no espelho,
+    // aiPaused no banco); só o erro técnico virou pausa temporária.
+    expect(setDaPausa[2]).toBe(AI_PAUSE_TTL_SECONDS);
+    expect(prismaMock.conversation.updateMany.mock.calls[0][0].data).toEqual({ status: 'WAITING', aiPaused: true });
   });
 
   it('passada 1 hora, com o cache vazio, a IA continua calada: quem manda é conversation.aiPaused', async () => {

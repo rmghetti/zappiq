@@ -23,7 +23,8 @@ vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { marcarTransbordo, mensagemDeEspera, TEXTO_DE_ESPERA_PADRAO } = await import('./transbordoHumano.js');
+const { marcarTransbordo, mensagemDeEspera, TEXTO_DE_ESPERA_PADRAO, PRAZO_DA_PAUSA_TEMPORARIA_SEGUNDOS } =
+  await import('./transbordoHumano.js');
 
 const ENTRADA = {
   organizationId: 'org-1',
@@ -69,6 +70,43 @@ describe('marcarTransbordo', () => {
   it('banco fora: não lança', async () => {
     updateMany.mockRejectedValue(new Error('db down'));
     await expect(marcarTransbordo(ENTRADA)).resolves.toEqual({ pausou: false, avisou: false });
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Rodada 1 do PR #379, item 2: o erro técnico (catch geral do orquestrador)
+ * é transitório (modelo 5xx, tempo do banco). Pausar de forma durável
+ * deixaria o cliente sem resposta até alguém clicar "Retomar", e a equipe
+ * só é avisada por socket. A pausa do erro é TEMPORÁRIA: espelho no cache
+ * por 1 hora, sem aiPaused no banco. O transbordo intencional (pedido de
+ * humano, tag handoff, rede de crise) segue durável.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+describe('marcarTransbordo com pausa temporária (erro técnico)', () => {
+  it('o espelho no cache dura 1 hora (3600 s)', async () => {
+    await marcarTransbordo({ ...ENTRADA, pausa: 'temporaria' });
+    expect(PRAZO_DA_PAUSA_TEMPORARIA_SEGUNDOS).toBe(3600);
+    expect(cacheSet).toHaveBeenCalledWith('ai_paused:org-1:5511999999999', expect.any(String), 3600);
+  });
+
+  it('o banco recebe WAITING e NÃO recebe aiPaused: passada a hora, a IA volta sozinha', async () => {
+    await marcarTransbordo({ ...ENTRADA, pausa: 'temporaria' });
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    const chamada = updateMany.mock.calls[0][0];
+    expect(chamada.where).toEqual({ id: 'conv-1', organizationId: 'org-1', status: { not: 'CLOSED' } });
+    expect(chamada.data).toEqual({ status: 'WAITING' });
+    expect(chamada.data).not.toHaveProperty('aiPaused');
+  });
+
+  it('sem o modo (padrão) e com "duravel": aiPaused no banco e 7 dias no espelho, como antes', async () => {
+    await marcarTransbordo(ENTRADA);
+    await marcarTransbordo({ ...ENTRADA, pausa: 'duravel' });
+    for (const chamada of updateMany.mock.calls) {
+      expect(chamada[0].data).toEqual({ status: 'WAITING', aiPaused: true });
+    }
+    for (const chamada of cacheSet.mock.calls) {
+      expect((chamada as any[])[2]).toBe(60 * 60 * 24 * 7);
+    }
   });
 });
 
