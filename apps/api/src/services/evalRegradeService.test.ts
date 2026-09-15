@@ -327,6 +327,33 @@ describe('regradeRun — percorre uma execução gravada', () => {
     expect(r.notaRegravada).toBe(0);
   });
 
+  // Rodada 1 do PR #378, item 2d (crítico B): a regravação relê pela régua
+  // 3. Uma execução medida com a régua 4 (juiz com evidência, casos de
+  // conhecimento, inconclusivo) não pode ganhar "nota recalculada" v3.
+  it('recusa execução medida com a régua 4 ou posterior, com mensagem clara', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravada({ harnessVersion: 4 }));
+
+    await expect(regradeRun('run-1')).rejects.toThrow(/régua 4/);
+    await expect(regradeRun('run-1')).rejects.toThrow(/regravação relê só execuções da régua 3 ou anterior/);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravada({ harnessVersion: 5 }));
+    await expect(regradeRun('run-1', { dryRun: true })).rejects.toThrow(/régua 5/);
+  });
+
+  it('execução da régua 3 ou sem régua gravada segue sendo relida', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravada({ harnessVersion: 3 }));
+    await expect(regradeRun('run-1', { dryRun: true })).resolves.toMatchObject({ runId: 'run-1' });
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravada({ harnessVersion: null }));
+    await expect(regradeRun('run-1', { dryRun: true })).resolves.toMatchObject({ runId: 'run-1' });
+  });
+
+  it('a leitura da execução pede a régua gravada', async () => {
+    prismaMock.agentEvalRun.findUnique.mockResolvedValue(runGravada());
+    await regradeRun('run-1', { dryRun: true });
+    expect(prismaMock.agentEvalRun.findUnique.mock.calls[0][0].select.harnessVersion).toBe(true);
+  });
+
   it('execução inexistente devolve erro claro', async () => {
     prismaMock.agentEvalRun.findUnique.mockResolvedValue(null);
     await expect(regradeRun('nao-existe')).rejects.toThrow(/não encontrada/i);
@@ -516,6 +543,33 @@ describe('execucoesParaRegravar', () => {
     const ids = await execucoesParaRegravar({ organizationId: 'org-1' });
 
     expect(ids).toEqual(['r1']);
+  });
+
+  // Rodada 1 do PR #378, item 2d: o lote também não seleciona execução da
+  // régua 4 ou posterior, senão cada uma entraria na fila só para falhar.
+  it('execução da régua 4 ou posterior fica fora do lote; sem régua ou régua 3 entram', async () => {
+    const linhas = [
+      { id: 'nula', triggeredBy: 'cron', harnessVersion: null },
+      { id: 'v3', triggeredBy: 'cron', harnessVersion: 3 },
+      { id: 'v4', triggeredBy: 'cron', harnessVersion: 4 },
+    ];
+    // O banco falso honra o OR da régua: NULL ou menor que 4.
+    prismaMock.agentEvalRun.findMany.mockImplementation(async ({ where }: any) =>
+      linhas
+        .filter((l) => {
+          if (!Array.isArray(where?.OR)) return true;
+          return where.OR.some((cond: any) =>
+            cond.harnessVersion === null
+              ? l.harnessVersion === null
+              : typeof cond.harnessVersion?.lt === 'number' && l.harnessVersion !== null && l.harnessVersion < cond.harnessVersion.lt,
+          );
+        })
+        .map((l) => ({ id: l.id })),
+    );
+
+    const ids = await execucoesParaRegravar({ organizationId: 'org-1' });
+
+    expect(ids).toEqual(['nula', 'v3']);
   });
 });
 

@@ -294,10 +294,22 @@ export async function regradeRun(
       scorePercent: true,
       startedAt: true,
       results: true,
+      harnessVersion: true,
       agent: { select: { id: true, name: true, organizationId: true } },
     },
   });
   if (!run) throw new Error(`execução ${runId} não encontrada`);
+
+  // Rodada 1 do PR #378, item 2d: a regravação é a releitura da régua 3.
+  // Uma execução medida com a régua 4 ou posterior (juiz com evidência,
+  // casos de conhecimento, inconclusivo) não pode ganhar "nota recalculada"
+  // pela régua velha: o número sairia de duas medidas diferentes.
+  if (typeof run.harnessVersion === 'number' && run.harnessVersion > REGUA_DA_REGRAVACAO) {
+    throw new Error(
+      `A execução ${runId} foi medida com a régua ${run.harnessVersion}; ` +
+        `a regravação relê só execuções da régua ${REGUA_DA_REGRAVACAO} ou anterior.`,
+    );
+  }
 
   const perfil = await resolveTenantAgentProfile(run.agent.organizationId, {
     agentId: run.agent.id,
@@ -463,6 +475,10 @@ function filtroDeRegravacao(filtro: { organizationId?: string; runIds?: string[]
     // 3 amostras sem scenarioId e nota nula. Regravá-lo não faz sentido, e
     // ele ocupava vaga do lote de 50 e contava no que "ainda falta".
     triggeredBy: { not: 'client_retest' },
+    // Rodada 1 do PR #378, item 2d: só a régua 3 ou anterior (NULL é a
+    // execução de antes do PR #371, que nunca gravou régua). Uma execução da
+    // régua 4 entraria na fila só para regradeRun recusá-la.
+    OR: [{ harnessVersion: null }, { harnessVersion: { lt: REGUA_DA_REGRAVACAO + 1 } }],
     ...(filtro.runIds && filtro.runIds.length > 0 ? { id: { in: filtro.runIds } } : {}),
     ...(filtro.organizationId ? { agent: { organizationId: filtro.organizationId } } : {}),
   };

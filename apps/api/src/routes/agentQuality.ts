@@ -698,25 +698,46 @@ router.get('/runs/:id', async (req: Request, res: Response) => {
     // Rodada 4 do PR #375: a anterior é execução completa. O re-teste do
     // cliente tem nota nula; entre duas completas, ele virava a "anterior" e
     // o estado caía para 'sem_base'.
-    const ruido = await carregarRuidoDoAgente(run.agentId);
+    //
+    // Rodada 1 do PR #378, item 2a: a anterior é da MESMA régua desta
+    // execução (harness_version), e o piso de ruído também. A régua 4 nasce
+    // sem histórico: comparar a primeira v4 com a última v3 mede a troca da
+    // régua, não o agente. Sem anterior da mesma régua, mas com histórico de
+    // outra, o estado é sem_base com a frase da régua.
+    const reguaDaExecucao = run.harnessVersion ?? null;
+    const ruido = await carregarRuidoDoAgente(run.agentId, { harnessVersion: reguaDaExecucao });
+    const filtroDaAnterior = {
+      agentId: run.agentId,
+      status: 'completed',
+      id: { not: run.id },
+      startedAt: { lt: run.startedAt },
+      triggeredBy: { not: 'client_retest' },
+    };
     const anterior = await prisma.agentEvalRun
       .findFirst({
-        where: {
-          agentId: run.agentId,
-          status: 'completed',
-          id: { not: run.id },
-          startedAt: { lt: run.startedAt },
-          triggeredBy: { not: 'client_retest' },
-        },
+        where: { ...filtroDaAnterior, harnessVersion: reguaDaExecucao },
         orderBy: { startedAt: 'desc' },
         select: { scorePercent: true },
       })
       .catch(() => null);
-    const estado = classificarMudanca({
-      nota: run.scorePercent ?? null,
-      notaAnterior: anterior?.scorePercent ?? null,
-      ruido,
-    });
+    let estado: ReturnType<typeof classificarMudanca>;
+    if (anterior) {
+      estado = classificarMudanca({
+        nota: run.scorePercent ?? null,
+        notaAnterior: anterior.scorePercent ?? null,
+        ruido,
+      });
+    } else {
+      const deOutraRegua = await prisma.agentEvalRun
+        .findFirst({ where: filtroDaAnterior, orderBy: { startedAt: 'desc' }, select: { id: true } })
+        .catch(() => null);
+      estado = deOutraRegua
+        ? {
+            estado: 'sem_base',
+            explicacao: 'A régua do teste mudou; a comparação volta na próxima execução.',
+          }
+        : classificarMudanca({ nota: run.scorePercent ?? null, notaAnterior: null, ruido });
+    }
 
     res.json({
       ...rest,

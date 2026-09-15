@@ -421,6 +421,140 @@ describe('P61 — o aviso da regravação chega à tela do cliente', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════
+ * Rodada 1 do PR #378, item 2a (crítico B). A régua 4 (juiz com evidência,
+ * casos de conhecimento, inconclusivo) nasce sem histórico: comparar a
+ * primeira execução v4 com a última v3 mede a troca da régua, não o agente.
+ * A anterior do P56 passa a ser da MESMA régua da execução aberta; sem ela,
+ * o estado é sem_base com a frase da régua. O piso de ruído também é lido
+ * na régua da execução.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('item 2a: a execução anterior do P56 é da mesma régua', () => {
+  const D = (dias: number) => new Date(AGORA.getTime() - dias * 24 * 3600 * 1000);
+  const aberta = (harnessVersion: number | null) => ({
+    id: 'run-v4',
+    agentId: 'agent-1',
+    status: 'completed',
+    triggeredBy: 'cron',
+    results: [],
+    scorePercent: 74,
+    harnessVersion,
+    startedAt: AGORA,
+    agent: { id: 'agent-1', name: 'Vera', organizationId: 'org-1' },
+    fixDecisions: [],
+  });
+
+  /** Banco falso que honra o `where` da busca da anterior. */
+  function bancoCom(linhas: any[], runAberta: any) {
+    prismaMock.agentEvalRun.findFirst.mockImplementation(async ({ where }: any) => {
+      if (typeof where?.id === 'string') return where.id === runAberta.id ? runAberta : null;
+      const [primeira] = linhas
+        .filter((l) => l.agentId === where.agentId && l.status === where.status)
+        .filter((l) => !(where?.id?.not && l.id === where.id.not))
+        .filter((l) => !(where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not))
+        .filter((l) => !(where?.startedAt?.lt && l.startedAt.getTime() >= where.startedAt.lt.getTime()))
+        .filter((l) => !('harnessVersion' in where) || l.harnessVersion === where.harnessVersion)
+        .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+      return primeira ? { scorePercent: primeira.scorePercent, harnessVersion: primeira.harnessVersion } : null;
+    });
+  }
+
+  async function abrir(run: any) {
+    const res = makeRes();
+    await getHandler('get', '/runs/:id')(
+      { user: { organizationId: 'org-1' }, params: { id: run.id }, query: {} },
+      res,
+    );
+    return res.body;
+  }
+
+  it('a primeira execução da régua 4 não é comparada com a última da régua 3', async () => {
+    const run = aberta(4);
+    bancoCom(
+      [
+        run,
+        { id: 'v3-ontem', agentId: 'agent-1', status: 'completed', triggeredBy: 'cron', scorePercent: 80, harnessVersion: 3, startedAt: D(1) },
+        { id: 'v3-antes', agentId: 'agent-1', status: 'completed', triggeredBy: 'cron', scorePercent: 90, harnessVersion: 3, startedAt: D(8) },
+      ],
+      run,
+    );
+
+    const body = await abrir(run);
+
+    expect(body.estado).toEqual({
+      estado: 'sem_base',
+      explicacao: 'A régua do teste mudou; a comparação volta na próxima execução.',
+    });
+    expect(body.estado.explicacao).not.toContain('—');
+    expect(ruidoMock.classificarMudanca).not.toHaveBeenCalled();
+    // A busca da anterior levou a régua da execução aberta.
+    const buscas = prismaMock.agentEvalRun.findFirst.mock.calls.map((c: any[]) => c[0].where);
+    expect(buscas.some((w: any) => w.harnessVersion === 4 && w.agentId === 'agent-1')).toBe(true);
+  });
+
+  it('com uma anterior da mesma régua, compara com ela (e não com a v3 mais recente)', async () => {
+    const run = aberta(4);
+    bancoCom(
+      [
+        run,
+        { id: 'v3-ontem', agentId: 'agent-1', status: 'completed', triggeredBy: 'cron', scorePercent: 80, harnessVersion: 3, startedAt: D(1) },
+        { id: 'v4-semana', agentId: 'agent-1', status: 'completed', triggeredBy: 'cron', scorePercent: 70, harnessVersion: 4, startedAt: D(7) },
+      ],
+      run,
+    );
+
+    const body = await abrir(run);
+
+    expect(body.estado.estado).toBe('estavel');
+    expect(ruidoMock.classificarMudanca).toHaveBeenCalledWith({
+      nota: 74,
+      notaAnterior: 70,
+      ruido: { desvio: 8, n: 8 },
+    });
+  });
+
+  it('execução antiga sem régua gravada (NULL) compara só com as outras sem régua', async () => {
+    const run = aberta(null);
+    bancoCom(
+      [
+        run,
+        { id: 'v4', agentId: 'agent-1', status: 'completed', triggeredBy: 'cron', scorePercent: 60, harnessVersion: 4, startedAt: D(1) },
+        { id: 'nula', agentId: 'agent-1', status: 'completed', triggeredBy: 'cron', scorePercent: 77, harnessVersion: null, startedAt: D(3) },
+      ],
+      run,
+    );
+
+    await abrir(run);
+
+    expect(ruidoMock.classificarMudanca).toHaveBeenCalledWith(
+      expect.objectContaining({ nota: 74, notaAnterior: 77 }),
+    );
+  });
+
+  it('sem execução anterior nenhuma, a frase é a de sempre (não fala em régua)', async () => {
+    const run = aberta(4);
+    bancoCom([run], run);
+    ruidoMock.classificarMudanca.mockReturnValueOnce({
+      estado: 'sem_base',
+      explicacao: 'Ainda não há execuções suficientes para dizer se a IA melhorou ou piorou de verdade.',
+    } as any);
+
+    const body = await abrir(run);
+
+    expect(body.estado.explicacao).not.toMatch(/régua/);
+    expect(ruidoMock.classificarMudanca).toHaveBeenCalledWith(
+      expect.objectContaining({ nota: 74, notaAnterior: null }),
+    );
+  });
+
+  it('o piso de ruído é lido na régua da execução aberta', async () => {
+    const run = aberta(4);
+    bancoCom([run], run);
+    await abrir(run);
+    expect(ruidoMock.carregarRuidoDoAgente).toHaveBeenCalledWith('agent-1', { harnessVersion: 4 });
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
  * Revisão do PR: o aviso da nota recalculada é da ÚLTIMA execução.
  * --------------------------------------------------------------------
  * "Recalculando sua última execução, a nota passaria de 74 para 86" é uma
@@ -506,7 +640,10 @@ describe('o aviso da regravação só sai na última execução concluída', () 
     regradeMock.resumirRegravacao.mockResolvedValue(null);
     prismaMock.agentEvalRun.findFirst
       .mockResolvedValueOnce(runAntiga())
-      .mockResolvedValueOnce(null);
+      // A anterior da mesma régua existe: a busca do estado leigo para aqui
+      // (rodada 1 do #378: sem ela haveria mais uma, pelo histórico de outra
+      // régua, e essa também não é a busca da "última").
+      .mockResolvedValueOnce({ scorePercent: 80 });
     const res = makeRes();
 
     await getHandler('get', '/runs/:id')(
@@ -516,6 +653,10 @@ describe('o aviso da regravação só sai na última execução concluída', () 
 
     // 1 para a execução pedida, 1 para a anterior (estado leigo). Mais nenhuma.
     expect(prismaMock.agentEvalRun.findFirst).toHaveBeenCalledTimes(2);
+    // E nenhuma delas é a busca da última concluída (sem startedAt e sem id).
+    for (const [args] of prismaMock.agentEvalRun.findFirst.mock.calls) {
+      expect(typeof args.where.id === 'string' || 'startedAt' in args.where).toBe(true);
+    }
     expect(res.body.regravacao).toBeNull();
   });
 });

@@ -649,6 +649,10 @@ async function alertarSePreciso(input: {
   // Rodada 4 do PR #375: o re-teste do cliente também nasce 'completed', mas
   // as amostras dele não têm scenarioId. Contado como "anterior", a
   // comparação dava vazio e o alerta do cenário reprovado duas vezes sumia.
+  //
+  // Rodada 1 do PR #378, item 2c: a anterior é da MESMA régua desta
+  // execução. Reprovar na régua 3 e na régua 4 não é "duas vezes" sob a
+  // mesma medida.
   const anterior = await prisma.agentEvalRun
     .findFirst({
       where: {
@@ -656,6 +660,7 @@ async function alertarSePreciso(input: {
         status: 'completed',
         id: { not: run.id },
         triggeredBy: { not: 'client_retest' },
+        harnessVersion: HARNESS_VERSION,
       },
       orderBy: { startedAt: 'desc' },
       select: { results: true },

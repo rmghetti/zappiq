@@ -106,17 +106,23 @@ export function classificarMudanca(input: {
  * ruído do próprio teste. Sem versão registrada (agente que nunca passou pelo
  * gatilho), usa o que houver, e o `n` mostra o quanto confiar.
  *
+ * A régua (`opts.harnessVersion`) é a da execução que está sendo lida; sem
+ * ela, a régua atual do avaliador. Rodada 1 do PR #378, item 2b: o piso é
+ * calculado SÓ com execuções dessa régua, sem cair para o histórico
+ * misturado. Misturar nota de régua 3 com nota de régua 4 mede a troca da
+ * régua, não o agente, e infla justamente o número que serve para dizer ao
+ * cliente se a IA mudou de verdade. Com menos de 3 execuções na régua, o
+ * estado fica 'sem_base' até a régua ter histórico.
+ *
  * Fail-soft: erro no banco devolve piso vazio. Esta é uma informação de apoio
  * na tela; ela não pode derrubar a listagem de execuções.
  */
-/** Abaixo disto não há desvio nenhum a calcular: uma nota não oscila sozinha. */
-const MINIMO_PARA_PISO = 2;
-
 export async function carregarRuidoDoAgente(
   agentId: string,
-  opts: { db?: any; limite?: number } = {},
+  opts: { db?: any; limite?: number; harnessVersion?: number | null } = {},
 ): Promise<PisoDeRuido> {
   const db = opts.db ?? prisma;
+  const regua = opts.harnessVersion === undefined ? HARNESS_VERSION : opts.harnessVersion;
   try {
     const ultimaVersao = await db.agentPromptVersion.findFirst({
       where: { agentId },
@@ -135,28 +141,15 @@ export async function carregarRuidoDoAgente(
       scorePercent: { not: null },
       ...(ultimaVersao?.createdAt ? { startedAt: { gte: ultimaVersao.createdAt } } : {}),
     };
-    const consulta = (where: Record<string, unknown>) =>
-      db.agentEvalRun.findMany({
-        where,
-        orderBy: { startedAt: 'desc' },
-        take: opts.limite ?? 20,
-        select: { scorePercent: true },
-      });
-
-    // Revisão do PR: o piso de ruído mede a oscilação do MESMO agente sob a
-    // MESMA régua. Misturar nota de régua v2 com nota de régua v3 mede a troca
-    // da régua, não o agente, e infla justamente o número que serve para dizer
-    // ao cliente se a IA mudou de verdade.
-    //
-    // A queda para a consulta sem filtro existe porque a régua nova nasce sem
-    // histórico: no dia do deploy não há duas execuções v3 para comparar, e
-    // ficar sem piso nenhum seria pior do que um piso medido com a régua velha.
-    const daReguaAtual = await consulta({ ...base, harnessVersion: HARNESS_VERSION });
-    if (daReguaAtual.length >= MINIMO_PARA_PISO) {
-      return pisoDeRuido(daReguaAtual.map((r: any) => r.scorePercent));
-    }
-
-    const runs = await consulta(base);
+    // Só a régua pedida. A queda para a consulta sem filtro ("a régua nova
+    // nasce sem histórico") saiu na rodada 1 do PR #378: ela devolvia um piso
+    // medido com a régua velha para uma execução da régua nova.
+    const runs = await db.agentEvalRun.findMany({
+      where: { ...base, harnessVersion: regua },
+      orderBy: { startedAt: 'desc' },
+      take: opts.limite ?? 20,
+      select: { scorePercent: true },
+    });
     return pisoDeRuido(runs.map((r: any) => r.scorePercent));
   } catch (err: any) {
     logger.warn({

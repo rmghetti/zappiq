@@ -725,6 +725,8 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     agentId: 'agent-1',
     status: 'completed',
     triggeredBy: 'cron',
+    // A mesma régua da execução que está rodando (HARNESS_VERSION do dublê).
+    harnessVersion: 3,
     startedAt: new Date('2026-09-07T04:30:00Z'),
     results: [
       { scenarioId: 'cr1', combined: 'fail' },
@@ -736,6 +738,7 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     agentId: 'agent-1',
     status: 'completed',
     triggeredBy: 'client_retest',
+    harnessVersion: 3,
     startedAt: new Date('2026-09-10T15:00:00Z'),
     results: [
       { amostra: 1, combined: 'pass', resposta: 'oi', motivoDoJuiz: 'ok' },
@@ -744,6 +747,8 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     ],
   };
 
+  let linhas: any[] = [];
+
   beforeEach(async () => {
     const real = await vi.importActual<typeof import('./agentEvalCronService.js')>(
       './agentEvalCronService.js',
@@ -751,13 +756,14 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     cronServiceMock.scenariosFailingTwice.mockImplementation(real.scenariosFailingTwice);
     cronServiceMock.shouldAlertQuality.mockImplementation(real.shouldAlertQuality);
 
-    const linhas = [SEMANAL_ANTERIOR, RETESTE_NO_MEIO];
+    linhas = [SEMANAL_ANTERIOR, RETESTE_NO_MEIO];
     // O banco falso honra o `where`: sem o filtro, o re-teste (mais novo) vem.
     prismaMock.agentEvalRun.findFirst.mockImplementation(async ({ where }: any) => {
       const [primeira] = linhas
         .filter((l) => l.agentId === where.agentId && l.status === where.status)
         .filter((l) => !(where?.id?.not && l.id === where.id.not))
         .filter((l) => !(where?.triggeredBy?.not && l.triggeredBy === where.triggeredBy.not))
+        .filter((l) => !('harnessVersion' in where) || l.harnessVersion === where.harnessVersion)
         .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
       return primeira ? { results: primeira.results } : null;
     });
@@ -784,6 +790,18 @@ describe('alerta de reprovação repetida: o re-teste do meio não é a execuç�
     expect(cronServiceMock.notifySlackQualityIssue.mock.calls[0][0].repetidos).toEqual(['cr1']);
     const where = prismaMock.agentEvalRun.findFirst.mock.calls[0][0].where;
     expect(where.triggeredBy).toEqual({ not: 'client_retest' });
+    // Rodada 1 do PR #378, item 2c: a anterior é da MESMA régua.
+    expect(where.harnessVersion).toBe(3);
+  });
+
+  it('a anterior de OUTRA régua não conta: reprovar na v3 e na v4 não é "duas vezes" na mesma régua', async () => {
+    linhas = [{ ...SEMANAL_ANTERIOR, harnessVersion: 2 }, RETESTE_NO_MEIO];
+
+    await executeRunJob('run-semanal-2');
+
+    expect(cronServiceMock.scenariosFailingTwice).toHaveReturnedWith([]);
+    expect(cronServiceMock.notifySlackQualityIssue).not.toHaveBeenCalled();
+    expect(ultimoUpdate('slackAlertStatus')).toMatchObject({ slackAlertStatus: 'skipped' });
   });
 });
 
