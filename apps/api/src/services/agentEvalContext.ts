@@ -12,7 +12,7 @@
  * cenário ganha o MESMO contexto que a produção monta, com três diferenças
  * de propósito:
  *   - a data é FIXA (DATA_FIXA_DO_EVAL), para o teste ser reproduzível;
- *   - o contato é o mock de sempre (Rod, +5511999999999, NEW), com o
+ *   - o contato é o mock de sempre (Cliente Teste, +5511999999999, NEW), com o
  *     nome omitido nos cenários que testam justamente a falta de nome;
  *   - a busca na base é feita com a MENSAGEM DO CENÁRIO, no namespace da
  *     organização testada, pelo mesmo ragService.searchDetailed da produção.
@@ -35,7 +35,7 @@ import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import * as ragService from './ragService.js';
 import { flagLigada, montarContextoDoTurno, type ContatoDoTurno } from '../agents/agentContextLoader.js';
-import type { EvalScenario } from '../agents/evalScenarioTypes.js';
+import { NOME_FICTICIO_DO_TESTE, type EvalScenario } from '../agents/evalScenarioTypes.js';
 import type { ContextoDoCenario, ExtrasDoMontador, MontadorDeContexto } from './agentEvalRunner.js';
 
 /** Segunda-feira, 12:00 em São Paulo. Fixa: o mesmo cenário dá o mesmo prompt. */
@@ -52,7 +52,7 @@ export const PROMPT_AUSENTE = '(agente sem system_prompt customizado — só COR
 export function contatoDoCenario(scenario: Pick<EvalScenario, 'id' | 'history'>): ContatoDoTurno {
   const turnos = scenario.history?.length ?? 0;
   return {
-    nome: scenario.id.includes('nome_ausente') ? null : 'Rod',
+    nome: scenario.id.includes('nome_ausente') ? null : NOME_FICTICIO_DO_TESTE,
     leadStatus: 'NEW',
     primeiroContato: turnos === 0,
     totalMensagens: turnos + 1,

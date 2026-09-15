@@ -428,6 +428,57 @@ export function sanearRegraDoCliente(bruto: unknown): string | null {
 }
 
 /**
+ * O mesmo saneamento de sanearRegraDoCliente (tags do protocolo e frase que
+ * manda no modelo), SEM mexer na forma do texto: negrito, quebra de linha e
+ * aspas ficam como estão.
+ *
+ * Nota 4 da revisão de 14/09 (tarefa C2): as correções aprovadas pelo dono
+ * (agent_rules) entravam no prompt sem passar por saneamento nenhum. Elas
+ * são escritas pelo sugeridor e editadas pelo dono, então precisam da mesma
+ * rede das regras do questionário. A forma é preservada de propósito: regra
+ * limpa atravessa byte a byte, e o prompt de quem já tem regras não muda.
+ *
+ * Devolve null quando não sobra nada aproveitável.
+ */
+export function sanearTextoPreservandoForma(bruto: unknown): string | null {
+  if (typeof bruto !== 'string') return null;
+
+  const semTags = bruto.replace(TAGS_ESTRUTURAIS, ' ');
+  const tirouTag = semTags !== bruto;
+
+  // A mesma proteção de URL de sanearRegraDoCliente: o ponto de um endereço
+  // não é fim de frase.
+  const urls: string[] = [];
+  const comMarcadores = semTags.replace(/https?:\/\/\S+/gi, (u) => {
+    urls.push(u);
+    return `\u0000URL${urls.length - 1}\u0000`;
+  });
+  const restaurar = (t: string) =>
+    t.replace(/\u0000URL(\d+)\u0000/g, (_m, i: string) => urls[Number(i)] ?? '');
+  const frases = comMarcadores.match(/[^.!?;]+[.!?;]*/g) ?? [comMarcadores];
+  const limpas = frases.map(restaurar).filter((frase) => !mandaNoModelo(frase));
+  const tirouFrase = limpas.length !== frases.length;
+
+  // Nada saiu: o texto volta como veio (só sem espaço nas pontas).
+  if (!tirouTag && !tirouFrase) {
+    const intacto = bruto.trim();
+    if (!intacto || mandaNoModelo(intacto)) return null;
+    return intacto;
+  }
+
+  const texto = limpas
+    .join('')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\s+([.!?;,])/g, '$1')
+    .trim();
+  if (!texto) return null;
+  if (mandaNoModelo(texto)) return null;
+  return texto;
+}
+
+/**
  * As regras do questionário, na ordem em que devem entrar no prompt.
  *
  * Lê o JSON de respostas em qualquer profundidade (o formato real guarda

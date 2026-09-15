@@ -28,6 +28,10 @@
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { CORE_AGENT_RULES_V1 } from './coreAgentRules.js';
+// Nota 4 da revisão de 14/09 (tarefa C2): o mesmo saneamento das regras do
+// questionário (tags do protocolo e frase que manda no modelo).
+import { sanearTextoPreservandoForma } from './tenantLiveProfile.js';
+import { NOME_FICTICIO_DO_TESTE, escapeRegex } from './evalScenarioTypes.js';
 
 /** Cabeçalho do bloco montado no prompt. Lugar fixo, nome em português. */
 export const TITULO_BLOCO_DE_REGRAS = '# Regras aprovadas pelo dono';
@@ -95,6 +99,37 @@ export function limparTextoDaRegra(texto: string): string {
   return semNumeracao.replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/* ── Saneamento (notas 2 e 4 da revisão de 14/09) ─────────────────── */
+
+const MARCADOR_DO_NOME = '[nome]';
+const NOME_DO_TESTE_REGEX = new RegExp(`\\b${escapeRegex(NOME_FICTICIO_DO_TESTE)}\\b`, 'g');
+
+/**
+ * O nome fictício do teste vira "[nome]" (A172, nota 2).
+ *
+ * Troca o "Rod" antigo (palavra inteira, R maiúsculo, como o script de
+ * migração já fazia) e o marcador novo. "Rodrigo", "Rodoviária" e "rodada"
+ * ficam intactos.
+ */
+export function trocarNomeFicticioDoTeste(texto: string): string {
+  return String(texto ?? '')
+    .replace(/\bRod\b/g, MARCADOR_DO_NOME)
+    .replace(NOME_DO_TESTE_REGEX, MARCADOR_DO_NOME);
+}
+
+/**
+ * O texto de uma correção pronto para ser GRAVADO e para entrar no bloco.
+ *
+ * Três redes, na ordem: o nome fictício do teste vira "[nome]" (nota 2), as
+ * tags do protocolo saem (<reply>, <action>, <buttons>) e a frase que manda
+ * no modelo cai (nota 4), com o mesmo detector das regras do questionário.
+ * Regra limpa atravessa byte a byte. Devolve '' quando não sobra nada, e
+ * quem grava recusa.
+ */
+export function sanearTextoDaRegra(texto: string): string {
+  return sanearTextoPreservandoForma(trocarNomeFicticioDoTeste(texto)) ?? '';
+}
+
 /* ── Montagem do bloco ───────────────────────────────────────────── */
 
 /**
@@ -123,7 +158,16 @@ export function montarBlocoDeRegras(regras: RegraDoAgente[]): string {
   const noTeto =
     ativas.length > TETO_DE_REGRAS_ATIVAS ? ativas.slice(-TETO_DE_REGRAS_ATIVAS) : ativas;
 
-  const itens = noTeto.map((r, i) => `${i + 1}. ${limparTextoDaRegra(r.texto)}`);
+  // Nota 4: o saneamento roda também aqui, e não só na gravação. Regra
+  // gravada antes dele (ou por outro caminho) não leva tag nem injeção ao
+  // prompt; a que não sobreviver ao saneamento sai do bloco, e a numeração
+  // continua sequencial.
+  const textos = noTeto
+    .map((r) => sanearTextoDaRegra(limparTextoDaRegra(r.texto)))
+    .filter((t) => t.length > 0);
+  if (textos.length === 0) return '';
+
+  const itens = textos.map((t, i) => `${i + 1}. ${t}`);
 
   return [
     TITULO_BLOCO_DE_REGRAS,

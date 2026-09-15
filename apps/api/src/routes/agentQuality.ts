@@ -85,7 +85,11 @@ import {
   TetoDeRegrasError,
   TETO_DE_REGRAS_ATIVAS,
 } from '../services/agentRulesService.js';
-import { detectarConflitos, limparTextoDaRegra } from '../agents/regrasDoAgente.js';
+import {
+  detectarConflitos,
+  limparTextoDaRegra,
+  sanearTextoDaRegra,
+} from '../agents/regrasDoAgente.js';
 // A049: o re-teste roda 3 amostras e vira execução gravada.
 import {
   AMOSTRAS_DO_RETESTE,
@@ -95,6 +99,17 @@ import {
 
 const router = Router();
 router.use(authMiddleware as any);
+
+/**
+ * Nota 7 da revisão de 14/09: a reversão perdeu a corrida para outra
+ * reversão da mesma regra. A transação volta inteira e a tela recebe 409.
+ */
+class ReversaoConcorrenteError extends Error {
+  constructor() {
+    super('Esta correção acabou de ser desfeita por outra pessoa. Atualize a página.');
+    this.name = 'ReversaoConcorrenteError';
+  }
+}
 
 // ─── Cooldown: cliente roda no máximo 1 eval / 24h por agent ────────
 const RUN_COOLDOWN_HOURS = 24;
@@ -755,8 +770,23 @@ router.post(
       }
 
       const firstPatch = suggestion.patches[0];
-      const diffToApply = finalDiff || firstPatch.diff;
       const whereHint = firstPatch.where || '';
+
+      // ─── Notas 2 e 4 da revisão de 14/09: SANEAMENTO ANTES DE TUDO ──
+      // O nome fictício do teste vira "[nome]" (A172) e tag do protocolo
+      // (<reply>, <action>, <buttons>) e frase que manda no modelo saem. Vale
+      // nos dois caminhos (registro e patch no prompt), e todas as guardas
+      // abaixo leem o texto JÁ saneado, que é o que vai ser gravado.
+      const diffToApply = sanearTextoDaRegra(finalDiff || firstPatch.diff);
+      if (!diffToApply.trim()) {
+        res.status(422).json({
+          error: 'regra_sem_texto',
+          message:
+            'Esta correção não tem uma regra de atendimento para gravar: o texto era só instrução ' +
+            'para a IA ou marcação do sistema. Reescreva dizendo o que o agente deve fazer com o cliente.',
+        });
+        return;
+      }
 
       // ─── A188: REGRA CORTADA NÃO ENTRA NO PROMPT VIVO ─────────────
       // O sugeridor corta o patch em 600 caracteres sem avisar: 170 de 324
@@ -991,6 +1021,20 @@ router.post(
           runId, scenarioId, orgId,
         });
         res.status(422).json({ error: 'teto_de_regras', message: err.message });
+        return;
+      }
+      // Nota 7 da revisão de 14/09: duas aprovações do mesmo cenário ao
+      // mesmo tempo batiam no índice único parcial e davam 500. A decisão
+      // desta requisição foi desfeita junto com a transação.
+      if (err?.code === 'regra_concorrente') {
+        logger.warn('[agentQuality] apply-fix recusado: aprovação simultânea do mesmo cenário', {
+          runId, scenarioId, orgId,
+        });
+        res.status(409).json({ error: 'regra_concorrente', message: err.message });
+        return;
+      }
+      if (err?.code === 'regra_sem_texto') {
+        res.status(422).json({ error: 'regra_sem_texto', message: err.message });
         return;
       }
       if (err instanceof DuplicatePatchError) {
@@ -1321,6 +1365,16 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
 
     if (regraViva) {
       const revertida = await prisma.$transaction(async (tx) => {
+        // Nota 7 da revisão de 14/09: desativar PRIMEIRO, e só depois
+        // registrar a decisão. A escrita da regra é condicional ao status;
+        // quando duas reversões correm juntas, a segunda não acha mais a
+        // regra ativa, devolve null e a transação inteira volta, sem deixar
+        // uma decisão 'reverted' com regra nula.
+        const regra = await reverterRegra(
+          { ruleId: regraViva.id, organizationId: orgId, actor: actorDaRegra.email },
+          tx as any,
+        );
+        if (!regra) throw new ReversaoConcorrenteError();
         const criada = await tx.agentEvalFixDecision.create({
           data: {
             runId: original.runId,
@@ -1339,10 +1393,6 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
             revertedFromId: original.id,
           },
         });
-        const regra = await reverterRegra(
-          { ruleId: regraViva.id, organizationId: orgId, actor: actorDaRegra.email },
-          tx as any,
-        );
         return { decision: criada, regra };
       });
 
@@ -1440,6 +1490,10 @@ router.post('/fix-decisions/:decisionId/revert', requireRole('ADMIN', 'SUPERADMI
         error: 'O prompt mudou depois desta correção. Reverta pelo histórico de versões.',
         code: 'prompt_mudou',
       });
+      return;
+    }
+    if (err instanceof ReversaoConcorrenteError) {
+      res.status(409).json({ error: err.message, code: 'regra_nao_ativa' });
       return;
     }
     logger.error('[agentQuality] revert erro:', err);

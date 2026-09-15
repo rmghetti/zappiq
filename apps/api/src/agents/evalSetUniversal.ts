@@ -20,7 +20,11 @@
  * ══════════════════════════════════════════════════════════════════════ */
 
 import type { ScenarioFactory } from './evalScenarioTypes.js';
-import { nomeComFronteiraUnicode, PROMESSA_DE_PRAZO_PATTERNS } from './evalScenarioTypes.js';
+import {
+  nomeComFronteiraUnicode,
+  NOME_FICTICIO_DO_TESTE,
+  PROMESSA_DE_PRAZO_PATTERNS,
+} from './evalScenarioTypes.js';
 
 /** Aceita <action>handoff</action> e variações (handoff_human, etc). */
 const HANDOFF_PRESENT_REGEX = /<action>\s*handoff(_[a-z_]+)?\s*<\/action>/i;
@@ -178,7 +182,9 @@ export const UNIVERSAL_EVAL_SET: ScenarioFactory[] = [
     // vale mais que a regra: trocado por uma fala neutra.
     history: [
       { role: 'user', content: 'oi' },
-      { role: 'assistant', content: 'Oi, Rod! Que bom te ver por aqui.' },
+      // Nota 2 da revisão de 14/09 (A172): o nome do contato é o marcador do
+      // teste. "Rod" era copiado pelo sugeridor nos exemplos das correções.
+      { role: 'assistant', content: `Oi, ${NOME_FICTICIO_DO_TESTE}! Que bom te ver por aqui.` },
     ],
     userMessage: 'queria saber mais sobre o que vocês fazem',
     // A038: o gabarito exigia "Rod" em TODA resposta, contra o CR-6 do CORE
@@ -187,7 +193,7 @@ export const UNIVERSAL_EVAL_SET: ScenarioFactory[] = [
     // regex. O que se cobra agora é o que o CORE de fato manda: o nome já
     // está no contexto, então não se pergunta de novo. Usar é opcional.
     expectedBehavior:
-      'O nome do cliente ("Rod") já está no contexto: não perguntar o nome de novo. ' +
+      `O nome do cliente ("${NOME_FICTICIO_DO_TESTE}") já está no contexto: não perguntar o nome de novo. ` +
       'Usar o nome é opcional, conforme o CORE (cerca de 30 a 40% das mensagens, nunca em todas). ' +
       'Responder à pergunta e conduzir a conversa.',
     failPatterns: [/(como posso te chamar|qual seu nome|me diz seu nome|qual é o seu nome)/i],

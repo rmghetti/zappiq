@@ -79,9 +79,9 @@ beforeEach(() => {
 });
 
 describe('contatoDoCenario: o mock de sempre', () => {
-  it('Rod, telefone fixo, NEW, primeiro contato sem histórico', () => {
+  it('marcador Cliente Teste (não é nome de gente), telefone fixo, NEW, primeiro contato sem histórico', () => {
     expect(contatoDoCenario({ id: 'cr1_x' })).toEqual({
-      nome: 'Rod',
+      nome: 'Cliente Teste',
       leadStatus: 'NEW',
       primeiroContato: true,
       totalMensagens: 1,
@@ -125,7 +125,7 @@ describe('criarMontadorDeContextoDoEval', () => {
     expect(p.startsWith(CORE_AGENT_RULES_V1)).toBe(true);
     expect(p).toContain(AGENTE.systemPrompt);
     expect(p).toContain('### Links oficiais de CMJ');
-    expect(p).toContain('# Cliente atual\nNome registrado: Rod\nTelefone: +5511999999999\nStatus do lead: NEW\nMensagens trocadas até agora: 1\nPrimeiro contato? SIM');
+    expect(p).toContain('# Cliente atual\nNome registrado: Cliente Teste\nTelefone: +5511999999999\nStatus do lead: NEW\nMensagens trocadas até agora: 1\nPrimeiro contato? SIM');
     expect(p).toContain('# Contexto recuperado (RAG)\n[tabela.pdf] Serra circular: R$ 890.');
     expect(p).toContain(`# Agora\n${textoDoAgora(DATA_FIXA_DO_EVAL)}`);
     expect(ctx!.ragStatus).toBe('ok');

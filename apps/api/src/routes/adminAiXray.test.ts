@@ -764,7 +764,7 @@ describe('POST /api/admin/ai-xray: hash, partes e motor por turno', () => {
     const base = turno.checagens.find((c: any) => c.id === 'base_consultada');
     expect(base.ok).toBe(true);
     const prompt = promptDoTurno(res);
-    expect(prompt).toContain('Nome registrado: Rod');
+    expect(prompt).toContain('Nome registrado: Cliente Teste');
     expect(prompt).toContain('# Agora\n14/09/2026, 12:00:00');
     expect(prompt).toContain('### Links oficiais de Cantina da Nona');
   });

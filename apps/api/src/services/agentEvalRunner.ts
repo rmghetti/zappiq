@@ -33,6 +33,8 @@ import {
   type RegraDoAgente,
 } from '../agents/regrasDoAgente.js';
 import type { EvalScenario } from '../agents/agentEvalSet.js';
+// Nota 2 da revisão de 14/09 (A172): o contato do teste não tem nome de gente.
+import { NOME_FICTICIO_DO_TESTE } from '../agents/evalScenarioTypes.js';
 import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
 // A088: a MESMA extração que o WhatsApp usa. Antes o avaliador lia resp.text
 // cru e julgava a resposta dobrada, com as tags dentro.
@@ -755,7 +757,7 @@ export function buildEvalSystemPrompt(
 ): string {
   // FASE 2.1 fix (2026-05-13): mock condicional do bloco "Cliente atual".
   // Cenários cr5_nome_ausente_* testam o comportamento de PERGUNTAR nome —
-  // injetar "Nome registrado: Rod" forçava o agent a usar o nome (falso pass)
+  // injetar o nome registrado forçava o agent a usar o nome (falso pass)
   // e quebrava esses cenários (falso fail). Solução: se scenarioId contém
   // 'nome_ausente', mock omite o nome.
   const nameMockEnabled = !scenario.id.includes('nome_ausente');
@@ -776,7 +778,7 @@ export function buildEvalSystemPrompt(
     '',
     '# Cliente atual (eval test mock)',
     nameMockEnabled
-      ? 'Nome registrado: Rod'
+      ? `Nome registrado: ${NOME_FICTICIO_DO_TESTE}`
       : 'Nome registrado: (ainda não capturado, peça no primeiro turno conforme REGRA 9)',
     'Telefone: +5511999999999',
     'Status do lead: NEW',

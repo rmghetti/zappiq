@@ -33,7 +33,7 @@
  * ══════════════════════════════════════════════════════════════════════ */
 
 import { regraTerminaEmFraseCompleta } from './agentPromptPatcher.js';
-import { limparTextoDaRegra } from '../agents/regrasDoAgente.js';
+import { limparTextoDaRegra, trocarNomeFicticioDoTeste } from '../agents/regrasDoAgente.js';
 
 /** De onde, no texto, o bloco foi arrancado. */
 export type OrigemNoTexto = 'patch_manual' | 'regra_inviolavel';
@@ -122,7 +122,8 @@ function blocoTruncado(texto: string): boolean {
  * "rodada" continuam intactos.
  */
 function trocarNomeDoMock(texto: string): string {
-  return String(texto ?? '').replace(/\bRod\b/g, '[nome]');
+  // Uma régua só (nota 2 da revisão de 14/09): a mesma troca da gravação.
+  return trocarNomeFicticioDoTeste(texto);
 }
 
 /**

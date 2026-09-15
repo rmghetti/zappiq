@@ -51,6 +51,17 @@ export interface EvalScenario {
  */
 export type ScenarioFactory = (profile: TenantAgentProfile) => EvalScenario | null;
 
+/**
+ * Nome do contato fictício do teste (nota 2 da revisão de 14/09, A172).
+ *
+ * Era "Rod", nome de gente. O sugeridor copiava o dado do teste nos
+ * exemplos ("Oi, Rod!"), doze correções assim foram aplicadas e o agente
+ * passou a saudar clientes reais de "Rod". Um marcador que não é nome de
+ * pessoa não se confunde com cliente de verdade, e é trocado por "[nome]"
+ * antes de qualquer correção ser gravada (regrasDoAgente.ts).
+ */
+export const NOME_FICTICIO_DO_TESTE = 'Cliente Teste';
+
 /** Escapa texto do tenant pra usar dentro de RegExp sem quebrar. */
 export function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
