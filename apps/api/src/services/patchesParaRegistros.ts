@@ -87,7 +87,12 @@ function arrumar(texto: string): string {
  * legítimo. Ímpar é que é sinal de corte.
  */
 export function aspasFechadas(texto: string): boolean {
-  const t = String(texto ?? '');
+  // Revisão de 14/09 (nota 5 da tarefa C2): o apóstrofo DENTRO da palavra
+  // não é aspa de citação. "Um copo d'água" tem um apóstrofo só, a contagem
+  // dava ímpar e a regra inteira era marcada como truncada. Letra dos dois
+  // lados é apóstrofo ("d'água", "pau-d'arco") e sai da conta antes; a aspa
+  // de citação sempre encosta num espaço, numa pontuação ou na borda.
+  const t = String(texto ?? '').replace(/(?<=\p{L})'(?=\p{L})/gu, '');
   const simples = (t.match(/'/g) ?? []).length;
   const duplas = (t.match(/["“”]/g) ?? []).length;
   return simples % 2 === 0 && duplas % 2 === 0;
@@ -320,18 +325,27 @@ export function validarPromptLimpo(
     motivos.push('o prompt resultante perdeu a seção ## IDENTIDADE');
   }
 
+  // Nota 9 da tarefa C2: a frase diz "caracteres", e o operador compara o
+  // número com o length() do Postgres. Então a conta é em pontos de código
+  // (contarCaracteres), como o resto do script, e não em unidades UTF-16.
+  const tamanhoAntes = contarCaracteres(a);
+  const tamanhoDepois = contarCaracteres(d);
+
   if (blocos.length > 0) {
-    const removido = blocos.reduce((soma, b) => soma + b.titulo.length + b.texto.length + 2, 0);
-    const minimo = Math.max(0, a.length - removido - Math.ceil(a.length * FOLGA) - 40);
-    if (d.length < minimo) {
+    const removido = blocos.reduce(
+      (soma, b) => soma + contarCaracteres(b.titulo) + contarCaracteres(b.texto) + 2,
+      0,
+    );
+    const minimo = Math.max(0, tamanhoAntes - removido - Math.ceil(tamanhoAntes * FOLGA) - 40);
+    if (tamanhoDepois < minimo) {
       motivos.push(
-        `o prompt encolheu mais do que os blocos removidos explicam (${a.length} para ` +
-          `${d.length} caracteres, e os ${blocos.length} blocos somam ${removido})`,
+        `o prompt encolheu mais do que os blocos removidos explicam (${tamanhoAntes} para ` +
+          `${tamanhoDepois} caracteres, e os ${blocos.length} blocos somam ${removido})`,
       );
     }
-  } else if (a.length > 0 && d.length < a.length * PISO_DE_TAMANHO) {
+  } else if (tamanhoAntes > 0 && tamanhoDepois < tamanhoAntes * PISO_DE_TAMANHO) {
     motivos.push(
-      `o prompt encolheu demais (${a.length} para ${d.length} caracteres, abaixo de ` +
+      `o prompt encolheu demais (${tamanhoAntes} para ${tamanhoDepois} caracteres, abaixo de ` +
         `${Math.round(PISO_DE_TAMANHO * 100)}% do original)`,
     );
   }
