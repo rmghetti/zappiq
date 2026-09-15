@@ -260,6 +260,43 @@ describe('detectarConflitos: dado sensível (CR-8)', () => {
       expect(c.map((x) => x.tipo)).toContain('dado_sensivel');
     });
   });
+
+  // Nota 6 da revisão de 14/09 (tarefa C2): dois falsos NEGATIVOS conhecidos.
+  // A janela entre o verbo e o termo parava na primeira vírgula, então a
+  // lista ("peça nome, CPF e e-mail") passava. E o pedido indireto, com o
+  // cliente como sujeito do verbo de fornecer ("peça para o cliente informar
+  // a senha"), deixava o termo longe demais do verbo. Os falsos positivos da
+  // rodada 4 continuam aceitos, e as frases parecidas que NÃO pedem o dado
+  // (o agente é quem envia) também.
+  describe('lista com vírgula e pedido indireto (nota 6 da tarefa C2)', () => {
+    it.each([
+      'Peça nome, CPF e e-mail para concluir o cadastro.',
+      'Solicite nome completo, telefone, CPF e endereço de entrega.',
+      'Peça para o cliente informar a senha.',
+      'Peça para o cliente informar a senha de acesso ao portal.',
+      'Solicite ao cliente que envie o número do cartão.',
+      'Peça ao cliente para digitar o CPF no chat.',
+      'Peça que o cliente informe nome, e-mail e senha.',
+    ])('recusa: %s', (texto) => {
+      const c = detectarConflitos({ texto });
+      expect(c.map((x) => x.tipo)).toContain('dado_sensivel');
+    });
+
+    it.each([
+      // É o agente quem envia a senha: o que se pede é o e-mail.
+      'Peça o e-mail para enviar a senha provisória.',
+      // Lista sem termo sensível nenhum.
+      'Peça nome, telefone e e-mail para concluir o cadastro.',
+      // Depois da vírgula vem outra ordem, e é ela que fala da senha.
+      'Pergunte o e-mail, depois envie a senha provisória pelo link seguro.',
+      // O token é o que o cliente recebe, mesmo depois da vírgula.
+      'Solicite o CNPJ, o token de acesso chega por e-mail.',
+      // "para que possamos enviar": quem envia é a empresa.
+      'Peça o CNPJ para que possamos enviar o token de acesso.',
+    ])('aceita: %s', (texto) => {
+      expect(detectarConflitos({ texto })).toHaveLength(0);
+    });
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════

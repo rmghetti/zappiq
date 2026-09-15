@@ -436,6 +436,40 @@ const VERBO_DE_QUEM_RECEBE =
   'e gerad[oa]s?|sera gerad[oa]s?|expira|expiram)';
 
 /**
+ * Verbo no infinitivo que fecha uma oração de FINALIDADE ("peça o e-mail
+ * PARA ENVIAR a senha provisória"): quem envia é a empresa, e o termo
+ * sensível que vem depois não é objeto do pedido.
+ */
+const INFINITIVO_DE_ENTREGA =
+  '(?:enviar|mandar|passar|gerar|redefinir|resetar|trocar|liberar|confirmar|informar|' +
+  'dizer|compartilhar|repassar|recuperar|criar)';
+
+/**
+ * O trecho entre o verbo de pedido e o primeiro item: até 25 caracteres, sem
+ * ponto, vírgula ou ponto e vírgula, sem atravessar um segundo imperativo
+ * ("e envie") nem uma oração de finalidade ("para enviar", "para que").
+ */
+const PRIMEIRO_TRECHO =
+  `(?:(?!\\b(?:e|ou)\\s+${OUTRO_IMPERATIVO}\\b)` +
+  `(?!\\bpara\\s+(?:que\\b|${INFINITIVO_DE_ENTREGA}\\b))[^.,;!?]){0,25}`;
+
+/**
+ * Um item de lista depois da vírgula ("peça nome, CPF e e-mail"). Item de
+ * lista é substantivo: se aparece um imperativo, a vírgula abriu outra
+ * ordem ("pergunte o e-mail, depois envie a senha") e a lista acabou.
+ */
+const ITEM_DA_LISTA =
+  `(?:(?!\\b(?:${OUTRO_IMPERATIVO}|${VERBO_DE_PEDIDO})\\b)` +
+  `(?!\\bpara\\s+(?:que\\b|${INFINITIVO_DE_ENTREGA}\\b))[^.,;!?]){0,25}`;
+
+/** Até cinco itens separados por vírgula entre o verbo e o termo. */
+const ATE_O_TERMO = `${PRIMEIRO_TRECHO}(?:,\\s*${ITEM_DA_LISTA}){0,5}`;
+
+/** O termo sensível, desde que não seja o sujeito do que o cliente recebe. */
+const TERMO_PEDIDO =
+  `\\b(${TERMO_SENSIVEL})` + `(?![a-z0-9 -]{0,20}\\b${VERBO_DE_QUEM_RECEBE}\\b)`;
+
+/**
  * O agente sendo mandado a pedir o dado: o verbo de pedido e, logo depois
  * (até 25 caracteres, sem ponto, vírgula ou ponto e vírgula no meio), o
  * termo sensível como objeto do pedido.
@@ -445,15 +479,41 @@ const VERBO_DE_QUEM_RECEBE =
  * "solicite o CNPJ e o token de acesso chega por e-mail" levavam 422 falso,
  * com o interruptor desligado.
  *
- * Limite conhecido, de propósito: lista separada por vírgula ("peça nome,
- * CPF e e-mail") passa. O verificador é estreito (só contradição óbvia) e a
- * regra base CR-8 continua no prompt de todo agente.
+ * Nota 6 da revisão de 14/09 (tarefa C2): a lista separada por vírgula
+ * ("peça nome, CPF e e-mail") passava, porque a janela parava na primeira
+ * vírgula. Agora a janela atravessa até cinco itens de lista, e cada item
+ * para num imperativo novo. E a oração de finalidade ("peça o e-mail para
+ * enviar a senha") deixou de ser lida como pedido da senha.
  */
 const MANDA_PEDIR_DADO_SENSIVEL = new RegExp(
+  `\\b${VERBO_DE_PEDIDO}\\b${ATE_O_TERMO}${TERMO_PEDIDO}`,
+);
+
+/** O cliente como sujeito de quem fornece o dado. */
+const SUJEITO_CLIENTE = '(?:(?:o|a|ao|seu|sua)\\s+cliente|ele|ela|a\\s+pessoa)';
+
+/** "informar a senha", "digitar o CPF": o cliente entregando o dado. */
+const FORNECER_NO_INFINITIVO =
+  '(?:informar|enviar|mandar|passar|digitar|fornecer|confirmar|dizer|compartilhar|repassar|escrever)';
+
+/** "que informe a senha", "que envie o CPF". */
+const FORNECER_NO_SUBJUNTIVO =
+  '(?:informe|envie|mande|passe|digite|forneca|confirme|diga|compartilhe|repasse|escreva)';
+
+/**
+ * Pedido INDIRETO (nota 6 da tarefa C2): "peça para o cliente informar a
+ * senha", "solicite ao cliente que envie o número do cartão". O verbo de
+ * pedido fica longe do termo, e quem fornece o dado é o cliente. O sujeito
+ * é exigido no "para + infinitivo": sem ele, "peça o e-mail para enviar a
+ * senha" (a empresa envia) viraria recusa.
+ */
+const MANDA_O_CLIENTE_FORNECER = new RegExp(
   `\\b${VERBO_DE_PEDIDO}\\b` +
-    `(?:(?!\\b(?:e|ou)\\s+${OUTRO_IMPERATIVO}\\b)[^.,;!?]){0,25}` +
-    `\\b(${TERMO_SENSIVEL})` +
-    `(?![a-z0-9 -]{0,20}\\b${VERBO_DE_QUEM_RECEBE}\\b)`,
+    `(?:(?!\\b(?:e|ou)\\s+${OUTRO_IMPERATIVO}\\b)[^.;!?]){0,40}?` +
+    `(?:\\bque\\s+(?:${SUJEITO_CLIENTE}\\s+)?${FORNECER_NO_SUBJUNTIVO}` +
+    `|\\bpara\\s+${SUJEITO_CLIENTE}\\s+${FORNECER_NO_INFINITIVO}` +
+    `|\\b${SUJEITO_CLIENTE}\\s+para\\s+${FORNECER_NO_INFINITIVO})\\b` +
+    `${ATE_O_TERMO}${TERMO_PEDIDO}`,
 );
 
 function conflitoDeDadoSensivel(texto: string): Conflito | null {
@@ -462,7 +522,7 @@ function conflitoDeDadoSensivel(texto: string): Conflito | null {
     // Só imperativo: é o agente sendo MANDADO a pedir. "Se o cliente pedir
     // para trocar a senha" tem "pedir" e "senha" na mesma frase, e quem
     // pede ali é o cliente.
-    const pedido = MANDA_PEDIR_DADO_SENSIVEL.exec(frase);
+    const pedido = MANDA_PEDIR_DADO_SENSIVEL.exec(frase) ?? MANDA_O_CLIENTE_FORNECER.exec(frase);
     if (!pedido) continue;
     return {
       tipo: 'dado_sensivel',
