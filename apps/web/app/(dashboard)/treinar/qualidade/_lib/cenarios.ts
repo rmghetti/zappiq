@@ -84,31 +84,66 @@ export function acaoDeTreinoDo(r: Pick<AgentEvalRunDetailScenario, 'suggestedFix
 }
 
 /**
- * O botão "Cadastrar esta informação" aparece? Só em cenário de CONHECIMENTO
- * que não passou, com ação de treino, e quando o teste USOU a base
- * (ragStatus 'ok'). Antes disso, a promessa de "cadastre e passa" seria falsa:
- * o agente testado nem via a base.
+ * O botão de treino ("Cadastrar esta informação" ou "Revisar esta
+ * informação") aparece? Só em cenário de CONHECIMENTO que não passou, com
+ * ação de treino, e quando o teste CONSULTOU a base: ragStatus 'ok' ou
+ * 'sem_resultado' (rodada 1 do PR #378, item 3: a busca sem resultado é
+ * justamente o caso em que cadastrar resolve). Com a base fora do ar
+ * ('servico_fora') ou sem consulta (null), a promessa de "cadastre e passa"
+ * seria falsa: o agente testado nem via a base.
  */
 export function podeCadastrarInformacao(
   r: Pick<AgentEvalRunDetailScenario, 'natureza' | 'combined' | 'ragStatus' | 'suggestedFix'>,
 ): boolean {
   if (r.natureza !== 'conhecimento') return false;
   if (r.combined !== 'fail' && r.combined !== 'partial') return false;
-  if (r.ragStatus !== 'ok') return false;
+  if (r.ragStatus !== 'ok' && r.ragStatus !== 'sem_resultado') return false;
   return acaoDeTreinoDo(r) !== null;
 }
 
-/** Para onde o botão leva: a pergunta pré-preenchida, ou o questionário. */
+/**
+ * Para onde o botão leva: a pergunta pré-preenchida, ou o questionário.
+ * Rodada 1 do PR #378, item 7: a ação de revisar abre a aba de perguntas e
+ * respostas SEM pré-preencher pergunta nova (a informação já existe), ou o
+ * questionário.
+ */
 export function linkDaAcaoDeTreino(acao: AcaoDeTreino): string {
   if (acao.tipo === 'qa') return linkParaCadastrarPergunta(acao.pergunta);
+  if (acao.tipo === 'revisar') return acao.origem === 'qa' ? '/ai-training#qa' : '/ai-training#survey';
   return '/ai-training#survey';
 }
 
-/** O rótulo curto do que falta, para o aviso "Faltam: ...". */
-function rotuloDoQueFalta(acao: AcaoDeTreino): string {
-  if (acao.tipo === 'questionario') return acao.rotulo ?? 'um campo do questionário';
-  const p = acao.pergunta.trim();
+/** O texto do botão: cadastrar o que falta, ou revisar o que já existe. */
+export function rotuloDoBotaoDaAcao(acao: AcaoDeTreino): string {
+  return acao.tipo === 'revisar' ? 'Revisar esta informação' : 'Cadastrar esta informação';
+}
+
+/** O título do cartão de conhecimento, conforme a ação. */
+export function tituloDoCartaoDaAcao(acao: AcaoDeTreino): string {
+  return acao.tipo === 'revisar'
+    ? 'A informação está cadastrada, mas não chegou ao agente'
+    : 'O agente não tinha esta informação na base';
+}
+
+function perguntaCurta(pergunta: string): string {
+  const p = pergunta.trim();
   return `resposta para "${p.length > 60 ? `${p.slice(0, 59).trimEnd()}…` : p}"`;
+}
+
+/** O rótulo curto do que falta (ou do que precisa de revisão), para o aviso. */
+function rotuloDaAcao(acao: AcaoDeTreino): string {
+  if (acao.tipo === 'questionario') return acao.rotulo ?? 'um campo do questionário';
+  if (acao.tipo === 'revisar') {
+    if (acao.rotulo) return acao.rotulo;
+    if (acao.pergunta) return perguntaCurta(acao.pergunta);
+    return acao.origem === 'questionario' ? 'um campo do questionário' : 'uma pergunta cadastrada';
+  }
+  return perguntaCurta(acao.pergunta);
+}
+
+function listaCurta(itens: string[]): string {
+  const lista = itens.length > 4 ? [...itens.slice(0, 4), `mais ${itens.length - 4}`] : itens;
+  return lista.join(', ');
 }
 
 /**
@@ -116,22 +151,29 @@ function rotuloDoQueFalta(acao: AcaoDeTreino): string {
  * conhecimento por falta de informação, e diz o que falta. Devolve null
  * quando não há o que cadastrar: o aviso genérico antigo aparecia em toda
  * nota abaixo de 90, mesmo quando o problema era de conduta.
+ *
+ * Rodada 1 do PR #378, item 7: o que está cadastrado e não chegou ao agente
+ * (ação de revisar) vem numa frase à parte, porque não "falta".
  */
 export function textoDoAvisoDeTreino(
   results: Array<Pick<AgentEvalRunDetailScenario, 'natureza' | 'combined' | 'suggestedFix'>>,
 ): string | null {
   const faltam: string[] = [];
+  const revisar: string[] = [];
   for (const r of results ?? []) {
     if (r.natureza !== 'conhecimento') continue;
     if (r.combined !== 'fail' && r.combined !== 'partial') continue;
     const acao = acaoDeTreinoDo(r);
     if (!acao) continue;
-    const rotulo = rotuloDoQueFalta(acao);
-    if (!faltam.includes(rotulo)) faltam.push(rotulo);
+    const rotulo = rotuloDaAcao(acao);
+    const destino = acao.tipo === 'revisar' ? revisar : faltam;
+    if (!destino.includes(rotulo)) destino.push(rotulo);
   }
-  if (faltam.length === 0) return null;
-  const lista = faltam.length > 4 ? [...faltam.slice(0, 4), `mais ${faltam.length - 4}`] : faltam;
-  return `Faltam: ${lista.join(', ')}.`;
+  if (faltam.length === 0 && revisar.length === 0) return null;
+  const frases: string[] = [];
+  if (faltam.length > 0) frases.push(`Faltam: ${listaCurta(faltam)}.`);
+  if (revisar.length > 0) frases.push(`Cadastradas, mas não chegaram ao agente: ${listaCurta(revisar)}.`);
+  return frases.join(' ');
 }
 
 /** Ordem da lista completa: primeiro o que pede ação, depois o resto. */

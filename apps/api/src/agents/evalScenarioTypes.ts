@@ -42,10 +42,25 @@ export type NaturezaDoCenario = 'conhecimento' | 'comportamento';
 /**
  * O que o dono faz quando o agente não sabia responder (P21): cadastrar uma
  * pergunta e resposta, ou preencher um campo do questionário.
+ *
+ * Rodada 1 do PR #378, item 7: 'revisar' é a ação dos casos GERADOS. Neles a
+ * informação existe por construção (o caso nasceu do Q&A ou do questionário);
+ * quando o juiz diz que faltou, ela está cadastrada mas não chegou ao agente.
+ * O dono revisa o texto cadastrado, sem pré-preencher pergunta nova.
  */
 export type AcaoDeTreino =
   | { tipo: 'qa'; pergunta: string }
-  | { tipo: 'questionario'; secao: string; campo?: string; rotulo?: string };
+  | { tipo: 'questionario'; secao: string; campo?: string; rotulo?: string }
+  | {
+      tipo: 'revisar';
+      origem: 'qa' | 'questionario';
+      /** Id do Q&A ou chave do campo do questionário. */
+      fonte: string;
+      pergunta?: string;
+      secao?: string;
+      campo?: string;
+      rotulo?: string;
+    };
 
 /**
  * Um caso de conhecimento gerado do que o cliente cadastrou (P13). A

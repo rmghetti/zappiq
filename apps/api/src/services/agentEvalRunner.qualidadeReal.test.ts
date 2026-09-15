@@ -47,6 +47,7 @@ const {
   familiasConfiguradas,
   lerVereditoComEvidencia,
   pedidoDoAgente,
+  acaoDeTreinoPorFaltaDeInformacao,
 } = await import('./agentEvalRunner.js');
 
 const PERFIL = {
@@ -496,10 +497,133 @@ describe('Passo 4 (P13) e Passo 3 (P21): o caso de conhecimento', () => {
     expect(results[0].combined).toBe('fail');
     expect(results[0].judge.causa).toBe('faltou_informacao');
     expect(results[0].suggestedFix?.patches).toEqual([]);
-    expect(results[0].suggestedFix?.acaoDeTreino).toEqual({ tipo: 'qa', pergunta: 'Vocês entregam no domingo?' });
+    // Rodada 1 do PR #378, item 7: o caso nasceu do Q&A, então a informação
+    // EXISTE. A ação é revisar o cadastrado, sem pré-preencher pergunta nova.
+    expect(results[0].suggestedFix?.acaoDeTreino).toEqual({
+      tipo: 'revisar',
+      origem: 'qa',
+      fonte: 'qa1',
+      pergunta: 'Vocês entregam no domingo?',
+    });
+    expect(results[0].suggestedFix?.summary).toMatch(/cadastrada/);
+    expect(results[0].suggestedFix?.summary).toMatch(/não chegou ao agente/);
+    expect(results[0].suggestedFix?.summary).not.toContain('—');
     expect(results[0].sugeridor).toBeNull();
     // Agente e juiz: nenhuma terceira chamada para o sugeridor.
     expect(completeMock).toHaveBeenCalledTimes(2);
+  });
+
+  // Rodada 1 do PR #378, item 7: os três casos.
+  it('item 7: caso do questionário com faltou_informacao vira revisar o campo, sem pergunta nova', async () => {
+    const doQuestionario = {
+      ...CONHECIMENTO,
+      id: 'kb_questionario_pre_tabela_precos',
+      repeticoes: 1,
+      userMessage: 'quanto custa?',
+      conhecimento: {
+        ...CONHECIMENTO.conhecimento,
+        origem: 'questionario',
+        fonte: 'pre_tabela_precos',
+        acaoDeTreino: { tipo: 'questionario', secao: 'precos_condicoes', campo: 'pre_tabela_precos', rotulo: 'tabela de preços' },
+      },
+    };
+    completeMock.mockResolvedValueOnce(resposta('Vou verificar.')).mockResolvedValueOnce(JUIZ_REPROVA_FALTOU());
+
+    const { results } = await executeAgentEvalRun([doQuestionario], AGENTE, PERFIL, {
+      montarContexto: async () => CONTEXTO_COM_BASE,
+    });
+
+    expect(results[0].suggestedFix?.acaoDeTreino).toEqual({
+      tipo: 'revisar',
+      origem: 'questionario',
+      fonte: 'pre_tabela_precos',
+      secao: 'precos_condicoes',
+      campo: 'pre_tabela_precos',
+      rotulo: 'tabela de preços',
+    });
+    expect(results[0].suggestedFix?.summary).toMatch(/tabela de preços/);
+    expect(results[0].suggestedFix?.summary).toMatch(/não chegou ao agente/);
+    expect(completeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('item 7: cenário de conhecimento do catálogo da Iza (não gerado) NÃO cai para {tipo: qa}: mantém a sugestão de conduta', async () => {
+    const daIza = {
+      id: 'zappiq_preco_starter_correto',
+      category: 'cr7_integrity',
+      natureza: 'conhecimento',
+      description: 'Preço do plano Starter',
+      userMessage: 'quanto custa o plano Starter?',
+      expectedBehavior: 'dizer o preço do catálogo',
+      severity: 'critical',
+      failPatterns: [/não sei/i],
+    } as any;
+    completeMock
+      .mockResolvedValueOnce(resposta('Não sei o preço.'))
+      .mockResolvedValueOnce(JUIZ_REPROVA_FALTOU())
+      .mockResolvedValueOnce(SUGESTAO());
+
+    const { results } = await executeAgentEvalRun([daIza], AGENTE, PERFIL);
+
+    expect(results[0].combined).toBe('fail');
+    expect(results[0].suggestedFix?.acaoDeTreino).toBeUndefined();
+    expect(results[0].suggestedFix?.patches).toHaveLength(1);
+    expect(results[0].sugeridor).toEqual({ provider: 'anthropic-sonnet', model: 'claude-sonnet-4-6' });
+    expect(completeMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('item 7: sem ação vinda do próprio caso, nenhuma ação é inventada a partir da mensagem', () => {
+    expect(
+      acaoDeTreinoPorFaltaDeInformacao({ natureza: 'conhecimento', causa: 'faltou_informacao', userMessage: 'quanto custa?' }),
+    ).toBeNull();
+    expect(
+      acaoDeTreinoPorFaltaDeInformacao({
+        natureza: 'conhecimento',
+        causa: 'faltou_informacao',
+        origem: 'qa',
+        fonte: 'qa1',
+        acaoDeTreino: { tipo: 'qa', pergunta: 'Entregam?' },
+      }),
+    ).toEqual({ tipo: 'revisar', origem: 'qa', fonte: 'qa1', pergunta: 'Entregam?' });
+  });
+
+  // Rodada 1 do PR #378, item 4: valor em reais que veio nos TRECHOS que o
+  // agente recebeu não é "fora da tabela". Os valores como 379,90 e 197,60
+  // da MACHIA só existem nos trechos, não no Q&A.
+  it('item 4: valor em reais dos trechos recebidos não reprova como "fora da tabela"', async () => {
+    const caso = {
+      ...CONHECIMENTO,
+      repeticoes: 1,
+      conhecimento: { ...CONHECIMENTO.conhecimento, referencia: 'Custa R$ 1.200,00.', valoresEsperados: ['n:1200'], reaisPermitidos: ['1200'] },
+    };
+    const contexto = { ...CONTEXTO_COM_BASE, trechos: '[tabela.pdf] Instalação: R$ 350,00.' };
+    completeMock
+      .mockResolvedValueOnce(resposta('Custa R$ 1.200,00 e a instalação sai R$ 350,00.'))
+      .mockResolvedValueOnce(JUIZ_APROVA());
+
+    const { results } = await executeAgentEvalRun([caso], AGENTE, PERFIL, { montarContexto: async () => contexto });
+
+    expect(results[0].deterministic.failedPatterns).toEqual([]);
+    expect(results[0].deterministic.passed).toBe(true);
+    expect(results[0].deterministic.reaisDosTrechos).toEqual(['350']);
+    expect(results[0].combined).toBe('pass');
+  });
+
+  it('item 4: sem o valor nos trechos, o mesmo R$ 350 continua fora da tabela', async () => {
+    const caso = {
+      ...CONHECIMENTO,
+      repeticoes: 1,
+      conhecimento: { ...CONHECIMENTO.conhecimento, referencia: 'Custa R$ 1.200,00.', valoresEsperados: ['n:1200'], reaisPermitidos: ['1200'] },
+    };
+    completeMock
+      .mockResolvedValueOnce(resposta('Custa R$ 1.200,00 e a instalação sai R$ 350,00.'))
+      .mockResolvedValueOnce(JUIZ_APROVA());
+
+    const { results } = await executeAgentEvalRun([caso], AGENTE, PERFIL, {
+      montarContexto: async () => ({ ...CONTEXTO_COM_BASE, trechos: '' }),
+    });
+
+    expect(results[0].deterministic.failedPatterns).toEqual(['valor em reais fora da tabela: 350']);
+    expect(results[0].deterministic.reaisDosTrechos).toEqual([]);
   });
 
   it('o re-teste pede uma passada só (semRepeticoes)', async () => {

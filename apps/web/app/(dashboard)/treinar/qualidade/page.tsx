@@ -58,6 +58,8 @@ import {
   respostaParaExibir,
   diagnosticoLegivel,
   acaoDeTreinoDo,
+  rotuloDoBotaoDaAcao,
+  tituloDoCartaoDaAcao,
   podeCadastrarInformacao,
   linkDaAcaoDeTreino,
   textoDoAvisoDeTreino,
@@ -1142,13 +1144,14 @@ function ClientFixCard({
         {acao ? (
           <div className="p-3 bg-indigo-50 border border-indigo-200 rounded">
             <div className="text-xs font-semibold text-indigo-900 mb-1">
-              📚 O agente não tinha esta informação na base
+              📚 {tituloDoCartaoDaAcao(acao)}
             </div>
             <p className="text-xs text-indigo-900 mb-2">
               {scenario.suggestedFix?.summary ||
                 'Faltou informação na base para responder. Cadastre a resposta e rode o teste de novo.'}{' '}
-              Regra de comportamento não resolve falta de informação: cadastrar é o que faz o
-              agente acertar.
+              {acao.tipo === 'revisar'
+                ? 'Regra de comportamento não resolve isso: o que faz o agente acertar é o texto cadastrado chegar até ele.'
+                : 'Regra de comportamento não resolve falta de informação: cadastrar é o que faz o agente acertar.'}
             </p>
             {podeCadastrarInformacao(scenario) ? (
               podeAgir ? (
@@ -1156,7 +1159,7 @@ function ClientFixCard({
                   href={linkDaAcaoDeTreino(acao)}
                   className="inline-block px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded"
                 >
-                  Cadastrar esta informação
+                  {rotuloDoBotaoDaAcao(acao)}
                 </a>
               ) : (
                 <div className="text-[10px] text-neutral-500 italic">
@@ -1165,8 +1168,9 @@ function ClientFixCard({
               )
             ) : (
               <div className="text-[10px] text-neutral-600">
-                O botão de cadastrar aparece quando o teste consulta a base de conhecimento da sua
-                empresa. Enquanto isso, confira em Treinar IA se esta informação já está cadastrada.
+                O botão não aparece nesta execução: a base de conhecimento estava fora do ar ou o
+                teste ainda não consulta a base da sua empresa. Confira em Treinar IA se esta
+                informação já está cadastrada.
               </div>
             )}
           </div>

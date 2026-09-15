@@ -1214,7 +1214,14 @@ function FixSuggestionCard({
             <strong>Ação de treino:</strong> {scenario.suggestedFix.summary}{' '}
             {scenario.suggestedFix.acaoDeTreino.tipo === 'qa'
               ? `(cadastrar a resposta para "${scenario.suggestedFix.acaoDeTreino.pergunta}")`
-              : `(preencher ${scenario.suggestedFix.acaoDeTreino.rotulo ?? 'o questionário'})`}
+              : scenario.suggestedFix.acaoDeTreino.tipo === 'revisar'
+                ? `(revisar ${
+                    scenario.suggestedFix.acaoDeTreino.rotulo ??
+                    (scenario.suggestedFix.acaoDeTreino.pergunta
+                      ? `a resposta para "${scenario.suggestedFix.acaoDeTreino.pergunta}"`
+                      : 'o cadastrado')
+                  }: está cadastrado, mas não chegou ao agente)`
+                : `(preencher ${scenario.suggestedFix.acaoDeTreino.rotulo ?? 'o questionário'})`}
           </div>
         ) : !hasSuggestion ? (
           <GenerateSuggestionButton

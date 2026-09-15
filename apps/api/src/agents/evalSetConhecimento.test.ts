@@ -134,6 +134,32 @@ describe('checarConhecimento: todo valor cadastrado, nenhum real fora da tabela'
     expect(r.failedPatterns).toEqual(expect.arrayContaining(['/relaxa/i', 'valor em reais fora da tabela: 50']));
     expect(r.missingPatterns).toEqual(['valor cadastrado: 12']);
   });
+
+  // Rodada 1 do PR #378, item 4: os valores em reais dos TRECHOS que o
+  // agente recebeu naquela amostra também são permitidos, e ficam gravados.
+  it('reaisExtras (dos trechos da amostra) entram nos permitidos e ficam registrados', () => {
+    const cenario = {
+      passPatterns: [],
+      failPatterns: [],
+      conhecimento: { ...caso, origem: 'qa' as const, fonte: 'qa1', referencia: '', acaoDeTreino: { tipo: 'qa' as const, pergunta: 'x' } },
+    };
+    const resposta = 'Das 11h às 15h, taxa de R$ 12 e o rodízio sai R$ 99.';
+    const com = checagemDeterministica(cenario, resposta, { reaisExtras: ['99'] });
+    expect(com.failedPatterns).toEqual([]);
+    expect(com.passed).toBe(true);
+    expect(com.reaisDosTrechos).toEqual(['99']);
+
+    const sem = checagemDeterministica(cenario, resposta);
+    expect(sem.failedPatterns).toEqual(['valor em reais fora da tabela: 99']);
+    expect(sem.reaisDosTrechos).toBeUndefined();
+
+    // Cenário sem caso de conhecimento: os extras não mudam nada e não são gravados.
+    expect(checagemDeterministica({ failPatterns: [/relaxa/i] }, 'ok', { reaisExtras: ['99'] })).toEqual({
+      passed: true,
+      failedPatterns: [],
+      missingPatterns: [],
+    });
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════

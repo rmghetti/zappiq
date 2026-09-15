@@ -12,6 +12,8 @@ import {
   linkDaAcaoDeTreino,
   textoDoAvisoDeTreino,
   ordenarParaALista,
+  rotuloDoBotaoDaAcao,
+  tituloDoCartaoDaAcao,
 } from './cenarios';
 
 const ACAO_QA = { tipo: 'qa' as const, pergunta: 'Vocês entregam no domingo?' };
@@ -88,9 +90,16 @@ describe('Cadastrar esta informação (P21)', () => {
     expect(podeCadastrarInformacao(base)).toBe(true);
   });
 
-  it('não aparece quando o teste não usou a base (ragStatus diferente de ok)', () => {
+  // Rodada 1 do PR #378, item 3: a base consultada SEM resultado também
+  // conta como "o teste usou a base": é justamente o caso em que cadastrar
+  // resolve. Só a base fora do ar e o teste sem consulta ficam sem botão.
+  it('não aparece quando a base estava fora do ar ou o teste não consultou a base', () => {
     expect(podeCadastrarInformacao({ ...base, ragStatus: null })).toBe(false);
     expect(podeCadastrarInformacao({ ...base, ragStatus: 'servico_fora' })).toBe(false);
+  });
+
+  it('aparece também quando a base foi consultada e não trouxe nada (sem_resultado)', () => {
+    expect(podeCadastrarInformacao({ ...base, ragStatus: 'sem_resultado' })).toBe(true);
   });
 
   it('não aparece em comportamento, em aprovado nem sem ação de treino', () => {
@@ -103,6 +112,57 @@ describe('Cadastrar esta informação (P21)', () => {
     expect(linkDaAcaoDeTreino(ACAO_QA)).toMatch(/^\/ai-training\?pergunta=.+#qa$/);
     expect(linkDaAcaoDeTreino({ tipo: 'questionario', secao: 'precos_condicoes', rotulo: 'tabela de preços' })).toBe(
       '/ai-training#survey',
+    );
+  });
+});
+
+/* Rodada 1 do PR #378, item 7: nos casos gerados a informação EXISTE por
+ * construção (o caso nasceu do Q&A ou do questionário). Quando o juiz diz
+ * 'faltou_informacao', ela está cadastrada mas não chegou ao agente: a ação
+ * é revisar o texto, sem pré-preencher pergunta nova. */
+describe('item 7: ação de revisar (a informação está cadastrada, não chegou ao agente)', () => {
+  const REVISAR_QA = { tipo: 'revisar' as const, origem: 'qa' as const, fonte: 'qa1', pergunta: 'Vocês entregam no domingo?' };
+  const REVISAR_Q = {
+    tipo: 'revisar' as const,
+    origem: 'questionario' as const,
+    fonte: 'pre_tabela_precos',
+    secao: 'precos_condicoes',
+    rotulo: 'tabela de preços',
+  };
+
+  it('o link não pré-preenche pergunta nova: abre a aba de perguntas e respostas, ou o questionário', () => {
+    expect(linkDaAcaoDeTreino(REVISAR_QA)).toBe('/ai-training#qa');
+    expect(linkDaAcaoDeTreino(REVISAR_Q)).toBe('/ai-training#survey');
+  });
+
+  it('o botão e o título do cartão falam em revisar, não em cadastrar', () => {
+    expect(rotuloDoBotaoDaAcao(REVISAR_QA)).toBe('Revisar esta informação');
+    expect(rotuloDoBotaoDaAcao(ACAO_QA)).toBe('Cadastrar esta informação');
+    expect(tituloDoCartaoDaAcao(REVISAR_QA)).toMatch(/cadastrada.*não chegou ao agente/);
+    expect(tituloDoCartaoDaAcao(ACAO_QA)).toMatch(/não tinha esta informação/);
+    for (const t of [rotuloDoBotaoDaAcao(REVISAR_QA), tituloDoCartaoDaAcao(REVISAR_QA)]) expect(t).not.toContain('—');
+  });
+
+  it('o botão também aparece para a ação de revisar', () => {
+    expect(
+      podeCadastrarInformacao({
+        natureza: 'conhecimento',
+        combined: 'fail',
+        ragStatus: 'ok',
+        suggestedFix: { summary: 's', patches: [], confidence: 1, acaoDeTreino: REVISAR_QA },
+      }),
+    ).toBe(true);
+  });
+
+  it('o aviso separa o que falta do que está cadastrado e não chegou', () => {
+    const texto = textoDoAvisoDeTreino([
+      { natureza: 'conhecimento', combined: 'fail', suggestedFix: { summary: '', patches: [], confidence: 1, acaoDeTreino: REVISAR_Q } },
+      { natureza: 'conhecimento', combined: 'fail', suggestedFix: { summary: '', patches: [], confidence: 1, acaoDeTreino: ACAO_QA } },
+      { natureza: 'conhecimento', combined: 'partial', suggestedFix: { summary: '', patches: [], confidence: 1, acaoDeTreino: REVISAR_QA } },
+    ]);
+    expect(texto).toBe(
+      'Faltam: resposta para "Vocês entregam no domingo?". ' +
+        'Cadastradas, mas não chegaram ao agente: tabela de preços, resposta para "Vocês entregam no domingo?".',
     );
   });
 });

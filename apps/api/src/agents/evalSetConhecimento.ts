@@ -165,6 +165,12 @@ export interface ChecagemDeConhecimento {
 export function checarConhecimento(
   resposta: string,
   caso: Pick<CasoDeConhecimento, 'valoresEsperados' | 'exigencia' | 'reaisPermitidos'>,
+  /**
+   * Rodada 1 do PR #378, item 4: valores em reais que o agente RECEBEU nos
+   * trechos da base naquela amostra. Também são permitidos: o dono da MACHIA
+   * tem 379,90 e 197,60 só nos trechos, e o agente que os cita não inventou.
+   */
+  reaisExtras: Iterable<string> = [],
 ): ChecagemDeConhecimento {
   const doAgente = extrairValores(resposta);
   const esperados = caso.valoresEsperados ?? [];
@@ -179,7 +185,7 @@ export function checarConhecimento(
     }
   }
 
-  const permitidos = new Set(caso.reaisPermitidos ?? []);
+  const permitidos = new Set([...(caso.reaisPermitidos ?? []), ...reaisExtras]);
   const foraDaTabela = [...doAgente.reais].filter((r) => !permitidos.has(r));
 
   return { faltando, foraDaTabela };
@@ -194,7 +200,15 @@ export function checarConhecimento(
 export function checagemDeterministica(
   cenario: Pick<EvalScenario, 'passPatterns' | 'failPatterns' | 'conhecimento'>,
   resposta: string,
-): { passed: boolean; failedPatterns: string[]; missingPatterns: string[] } {
+  opts: {
+    /**
+     * Rodada 1 do PR #378, item 4: os valores em reais dos trechos que o
+     * agente recebeu naquela amostra. Só têm efeito em caso de conhecimento,
+     * e ficam gravados em `reaisDosTrechos` para a tela e a auditoria.
+     */
+    reaisExtras?: Iterable<string>;
+  } = {},
+): { passed: boolean; failedPatterns: string[]; missingPatterns: string[]; reaisDosTrechos?: string[] } {
   const missingPatterns: string[] = [];
   const failedPatterns: string[] = [];
   for (const p of cenario.passPatterns ?? []) {
@@ -203,8 +217,10 @@ export function checagemDeterministica(
   for (const p of cenario.failPatterns ?? []) {
     if (p.test(resposta)) failedPatterns.push(p.toString());
   }
+  let reaisDosTrechos: string[] | undefined;
   if (cenario.conhecimento) {
-    const c = checarConhecimento(resposta, cenario.conhecimento);
+    if (opts.reaisExtras) reaisDosTrechos = [...new Set(opts.reaisExtras)];
+    const c = checarConhecimento(resposta, cenario.conhecimento, reaisDosTrechos ?? []);
     for (const v of c.faltando) missingPatterns.push(`valor cadastrado: ${v}`);
     for (const r of c.foraDaTabela) failedPatterns.push(`valor em reais fora da tabela: ${r}`);
   }
@@ -212,6 +228,7 @@ export function checagemDeterministica(
     passed: missingPatterns.length === 0 && failedPatterns.length === 0,
     failedPatterns,
     missingPatterns,
+    ...(reaisDosTrechos ? { reaisDosTrechos } : {}),
   };
 }
 

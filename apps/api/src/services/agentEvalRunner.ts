@@ -46,7 +46,7 @@ import {
 } from '../agents/evalScenarioTypes.js';
 // C2 (P13): a régua determinística com a checagem por valor, a mesma da
 // regravação.
-import { checagemDeterministica } from '../agents/evalSetConhecimento.js';
+import { checagemDeterministica, extrairValores } from '../agents/evalSetConhecimento.js';
 import { findForeignBrandLeaks } from '../agents/tenantIsolationGuard.js';
 // A088: a MESMA extração que o WhatsApp usa. Antes o avaliador lia resp.text
 // cru e julgava a resposta dobrada, com as tags dentro.
@@ -117,6 +117,12 @@ export interface ScenarioResult {
     passed: boolean;
     failedPatterns: string[];
     missingPatterns: string[];
+    /**
+     * Rodada 1 do PR #378, item 4: os valores em reais que vieram nos trechos
+     * da base que o agente recebeu naquela amostra. Contam como permitidos na
+     * checagem "valor fora da tabela". Só nos casos de conhecimento.
+     */
+    reaisDosTrechos?: string[];
   };
   judge: {
     /**
@@ -998,7 +1004,11 @@ export interface ContextoDoSugeridor {
   diagnostico?: {
     natureza?: NaturezaDoCenario | null;
     causa?: CausaDoJuiz | null;
+    /** A ação do PRÓPRIO caso (scenario.conhecimento.acaoDeTreino). */
     acaoDeTreino?: AcaoDeTreino | null;
+    /** Rodada 1 do PR #378, item 7: de onde o caso gerado nasceu. */
+    origem?: 'qa' | 'questionario' | null;
+    fonte?: string | null;
     userMessage?: string | null;
   };
 }
@@ -1011,15 +1021,50 @@ export function acaoDeTreinoPorFaltaDeInformacao(
   d: ContextoDoSugeridor['diagnostico'],
 ): AcaoDeTreino | null {
   if (!d || d.natureza !== 'conhecimento' || d.causa !== 'faltou_informacao') return null;
-  if (d.acaoDeTreino) return d.acaoDeTreino;
-  const pergunta = String(d.userMessage ?? '').trim();
-  return pergunta ? { tipo: 'qa', pergunta } : null;
+  // Rodada 1 do PR #378, item 7: a ação só vem do PRÓPRIO caso. Antes, o
+  // cenário de conhecimento do catálogo da Iza (zappiq_preco_*, voice_*,
+  // trial) caía para {tipo:'qa', pergunta: mensagem} e perdia a sugestão de
+  // conduta; agora ele segue para o sugeridor, como sempre.
+  if (!d.acaoDeTreino) return null;
+  // Caso GERADO (Q&A ou questionário): a informação existe por construção.
+  // Se faltou, está cadastrada mas não chegou ao agente: a ação é revisar o
+  // texto cadastrado, sem pré-preencher pergunta nova.
+  if (d.origem === 'qa' || d.origem === 'questionario') {
+    return acaoDeRevisao(d.origem, String(d.fonte ?? ''), d.acaoDeTreino);
+  }
+  return d.acaoDeTreino;
+}
+
+/** A ação de cadastrar do caso vira a ação de revisar o que já está cadastrado. */
+function acaoDeRevisao(origem: 'qa' | 'questionario', fonte: string, base: AcaoDeTreino): AcaoDeTreino {
+  if (base.tipo === 'revisar') return base;
+  if (base.tipo === 'qa') return { tipo: 'revisar', origem, fonte, pergunta: base.pergunta };
+  return {
+    tipo: 'revisar',
+    origem,
+    fonte,
+    secao: base.secao,
+    ...(base.campo ? { campo: base.campo } : {}),
+    ...(base.rotulo ? { rotulo: base.rotulo } : {}),
+  };
 }
 
 function resumoDaAcaoDeTreino(acao: AcaoDeTreino): string {
-  return acao.tipo === 'qa'
-    ? 'Faltou informação na base para responder: cadastre a resposta desta pergunta em Treinar IA.'
-    : `Faltou informação na base para responder: preencha ${acao.rotulo ?? 'este campo'} no questionário, em Treinar IA.`;
+  if (acao.tipo === 'qa') {
+    return 'Faltou informação na base para responder: cadastre a resposta desta pergunta em Treinar IA.';
+  }
+  if (acao.tipo === 'questionario') {
+    return `Faltou informação na base para responder: preencha ${acao.rotulo ?? 'este campo'} no questionário, em Treinar IA.`;
+  }
+  // revisar: a informação existe, mas não chegou ao agente neste teste.
+  const oQue =
+    acao.origem === 'qa'
+      ? 'A resposta desta pergunta está cadastrada'
+      : `O campo ${acao.rotulo ?? 'do questionário'} está cadastrado no questionário`;
+  return (
+    `${oQue}, mas não chegou ao agente neste teste: revise o texto cadastrado em Treinar IA. ` +
+    'Se o texto estiver certo, a base de busca precisa ser reindexada.'
+  );
 }
 
 export async function suggestFix(
@@ -1497,8 +1542,11 @@ async function umaAmostra(
   }
 
   // C2 (P13): os padrões de sempre mais a checagem por valor, a mesma régua
-  // da regravação.
-  const deterministic = checagemDeterministica(scenario, response);
+  // da regravação. Rodada 1 do PR #378, item 4: os valores em reais dos
+  // trechos que o agente recebeu nesta amostra também são permitidos.
+  const deterministic = checagemDeterministica(scenario, response, {
+    reaisExtras: doCenario ? extrairValores(doCenario.trechos ?? '').reais : undefined,
+  });
 
   // A171: chamada do juiz que quebra é falha TÉCNICA do teste, não erro do
   // agente.
@@ -1678,6 +1726,8 @@ async function runScenario(
           natureza: scenario.natureza ?? 'comportamento',
           causa: representante.judge.causa ?? null,
           acaoDeTreino: scenario.conhecimento?.acaoDeTreino ?? null,
+          origem: scenario.conhecimento?.origem ?? null,
+          fonte: scenario.conhecimento?.fonte ?? null,
           userMessage: scenario.userMessage,
         },
       },

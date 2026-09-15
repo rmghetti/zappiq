@@ -397,10 +397,23 @@ export interface PlacarDaExecucao {
   inconclusivos: number;
 }
 
-/** C2 (P21): o que o dono faz quando faltou informação na base. */
+/**
+ * C2 (P21): o que o dono faz quando faltou informação na base.
+ * Rodada 1 do PR #378, item 7: 'revisar' é a ação dos casos gerados (a
+ * informação está cadastrada, mas não chegou ao agente naquele teste).
+ */
 export type AcaoDeTreino =
   | { tipo: 'qa'; pergunta: string }
-  | { tipo: 'questionario'; secao: string; campo?: string; rotulo?: string };
+  | { tipo: 'questionario'; secao: string; campo?: string; rotulo?: string }
+  | {
+      tipo: 'revisar';
+      origem: 'qa' | 'questionario';
+      fonte: string;
+      pergunta?: string;
+      secao?: string;
+      campo?: string;
+      rotulo?: string;
+    };
 
 /** C2 (Passo 1): provedor e modelo usados numa chamada. */
 export interface ModeloUsado {
