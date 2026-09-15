@@ -268,7 +268,7 @@ describe('C2: trechos, fontes e a política da faixa do plano', () => {
       trialConverted: true,
       stripeSubscriptionId: 'sub_1',
     });
-    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic']) })();
+    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic']), disjuntorAberto: async () => false })();
     expect(p).toMatchObject({ tier: 'SCALE', modelo: 'anthropic-sonnet', juizOutraFamilia: true });
   });
 
@@ -283,7 +283,7 @@ describe('C2: trechos, fontes e a política da faixa do plano', () => {
       trialConverted: true,
       stripeSubscriptionId: 'sub_1',
     });
-    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic']) })();
+    const p = await criarPoliticaDaQualidade(ORG, { familias: () => new Set(['anthropic']), disjuntorAberto: async () => false })();
     expect(p?.juizOutraFamilia).toBe(false);
   });
 
@@ -298,7 +298,11 @@ describe('C2: trechos, fontes e a política da faixa do plano', () => {
       trialConverted: true,
       stripeSubscriptionId: 'sub_1',
     });
-    const politica = criarPoliticaDaQualidade(ORG, { familias: () => new Set(['google', 'anthropic']) });
+    // O disjuntor é injetado: o padrão iria ao Redis, e o teste não é sobre isso.
+    const politica = criarPoliticaDaQualidade(ORG, {
+      familias: () => new Set(['google', 'anthropic']),
+      disjuntorAberto: async () => false,
+    });
     const p1 = await politica();
     const p2 = await politica();
     expect(p1).toMatchObject({ tier: 'GROWTH', modelo: 'google-gemini-flash' });
