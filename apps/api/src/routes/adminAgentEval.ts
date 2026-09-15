@@ -52,7 +52,10 @@ import { ZAPPIQ_ORG_ID } from '../config/zappiqOrg.js';
 // Q1: computeReverifyVerdict exportado pra teste unitário puro.
 import { executeAgentEvalRun, computeReverifyVerdict } from '../services/agentEvalRunner.js';
 // C1a (A036): contexto de produção no teste, atrás do interruptor contextoUnico.
-import { criarMontadorDeContextoDoEval } from '../services/agentEvalContext.js';
+import {
+  criarMontadorDeContextoDoEval,
+  criarPoliticaDaQualidade,
+} from '../services/agentEvalContext.js';
 import {
   enqueueEvalRun,
   enqueueRegrade,
@@ -294,6 +297,8 @@ router.post(
         // C1a: o contexto de produção, atrás de contextoUnico. Rodada 2 do PR
         // #377: no mesmo objeto; o montador recebe o bloco lido acima.
         montarContexto: criarMontadorDeContextoDoEval(agent, agent.organizationId),
+        // C2, nota 1: o modelo da faixa do plano (interruptor evalNoTier).
+        politica: criarPoliticaDaQualidade(agent.organizationId),
       });
 
       res.json({
@@ -668,14 +673,22 @@ router.post(
             organizationId: run.agent.organizationId,
             agentId: run.agentId,
           }),
+          // C2 (Passo 3, P21): falta de informação vira ação de treino.
+          diagnostico: {
+            natureza: scenarioResult.natureza ?? scenarioDef.natureza,
+            causa: scenarioResult.judge?.causa ?? null,
+            acaoDeTreino: scenarioDef.conhecimento?.acaoDeTreino ?? null,
+            userMessage: scenarioDef.userMessage,
+          },
         },
       );
       if (!suggestion) {
         res.status(500).json({ error: 'IA não conseguiu gerar sugestão' });
         return;
       }
-      // Persiste no JSONB results pra cache (próxima chamada não regera)
-      results[idx] = { ...scenarioResult, suggestedFix: suggestion };
+      // Persiste no JSONB results pra cache (próxima chamada não regera).
+      // C2 (Passo 1): e quem escreveu a sugestão.
+      results[idx] = { ...scenarioResult, suggestedFix: suggestion, sugeridor: suggestion.modelo ?? null };
       await prisma.agentEvalRun.update({
         where: { id: runId },
         data: { results: results as any },
@@ -1030,8 +1043,8 @@ router.post(
       // Fail-soft: erro no re-verify NÃO falha o apply (fix já persistido).
       let reverify: {
         scenarioId: string;
-        before: 'pass' | 'partial' | 'fail' | 'erro' | null;
-        after: 'pass' | 'partial' | 'fail' | 'erro';
+        before: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo' | null;
+        after: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';
         improved: boolean;
       } | { error: true } | null = null;
 
@@ -1043,7 +1056,7 @@ router.post(
           const priorResult = Array.isArray(run.results)
             ? (run.results as any[]).find((r: any) => r.scenarioId === scenarioId)
             : null;
-          const before: 'pass' | 'partial' | 'fail' | 'erro' | null =
+          const before: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo' | null =
             priorResult?.combined ?? null;
 
           // Re-run com o prompt recém-aplicado. Com a correção como registro,
@@ -1069,6 +1082,8 @@ router.post(
               // Nota 8 da revisão de 14/09: o re-verify lê só o veredito. A
               // sugestão nova que ele pedia por baixo era jogada fora.
               pularSugestao: true,
+              // C2, nota 1: o modelo da faixa do plano (evalNoTier).
+              politica: criarPoliticaDaQualidade(run.agent.organizationId),
             },
           );
           // A171: 'erro' é falha técnica do re-teste. computeReverifyVerdict

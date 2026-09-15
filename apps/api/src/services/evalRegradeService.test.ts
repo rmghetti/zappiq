@@ -196,6 +196,56 @@ describe('regradeResult — releitura de um resultado gravado', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════
+// C2 (Passo 13): a regravação lê os vereditos novos da execução e aplica a
+// mesma régua determinística do avaliador (padrões e checagem por valor).
+describe('regradeResult no C2', () => {
+  it("resultado 'inconclusivo' (modelo de reserva) fica fora da nota, como a falha técnica", () => {
+    const r = regradeResult(
+      { scenarioId: 'cr5_nome_disponivel_usar', combined: 'inconclusivo', response: '' } as any,
+      cenario('cr5_nome_disponivel_usar'),
+    );
+    expect(r.vereditoAntigo).toBe('erro');
+    expect(r.vereditoNovo).toBe('erro');
+  });
+
+  it('caso de conhecimento: a releitura aplica a checagem por valor', () => {
+    const caso = {
+      id: 'kb_qa_1',
+      category: 'kb_conhecimento',
+      natureza: 'conhecimento',
+      severity: 'high',
+      description: 'x',
+      userMessage: 'taxa?',
+      expectedBehavior: 'taxa de R$ 12',
+      conhecimento: {
+        origem: 'qa',
+        fonte: '1',
+        referencia: 'R$ 12',
+        valoresEsperados: ['n:12'],
+        exigencia: 'todos',
+        reaisPermitidos: ['12'],
+        acaoDeTreino: { tipo: 'qa', pergunta: 'taxa?' },
+      },
+    } as any;
+    const errado = regradeResult(
+      { scenarioId: 'kb_qa_1', combined: 'pass', response: 'A taxa é R$ 20.', judge: { passed: true } } as any,
+      caso,
+    );
+    expect(errado.vereditoNovo).toBe('fail');
+    expect(errado.motivo).toMatch(/valor em reais fora da tabela: 20/);
+    const certo = regradeResult(
+      { scenarioId: 'kb_qa_1', combined: 'pass', response: 'A taxa é R$ 12.', judge: { passed: true } } as any,
+      caso,
+    );
+    expect(certo.vereditoNovo).toBe('pass');
+  });
+
+  it('a régua da regravação continua a v3 (as linhas já gravadas seguem visíveis)', async () => {
+    const { REGUA_DA_REGRAVACAO } = await import('./evalRegradeService.js');
+    expect(REGUA_DA_REGRAVACAO).toBe(3);
+  });
+});
+
 describe('regradeRun — percorre uma execução gravada', () => {
   const RESULTS = [
     gravado(), // cr5 reprovado por causa do gabarito → vira pass

@@ -1,0 +1,46 @@
+-- ═════════════════════════════════════════════════════════════════
+-- 20260914000090: o placar da Qualidade em duas partes (C2, Passo 13)
+-- ─────────────────────────────────────────────────────────────────
+-- POR QUE ESTA MIGRAÇÃO EXISTE
+--
+-- A nota da Qualidade era um número só, e misturava duas coisas que se
+-- corrigem de jeitos diferentes (P21):
+--
+--   Conhecimento do negócio  o agente sabe responder o que o dono cadastrou
+--                            (perguntas e respostas, preço, horário,
+--                            pagamento, endereço). Reprovação por falta de
+--                            informação se corrige CADASTRANDO, não com
+--                            regra de prompt (A086).
+--   Comportamento            a conduta do agente em situações comuns de
+--                            atendimento. Reprovação se corrige com ajuste.
+--
+-- Um agente sem conteúdo nenhum tirava 77% num teste que não media
+-- conhecimento. Com o placar dividido, a parte de conhecimento dele mostra
+-- "sem base cadastrada".
+--
+-- A coluna guarda, por execução, as duas partes calculadas pelo avaliador
+-- (computePlacar em apps/api/src/services/agentEvalRunner.ts):
+--   { "versao": 1,
+--     "conhecimento":  { "estado", "total", "avaliados", "aprovados", "percent" },
+--     "comportamento": { ... },
+--     "inconclusivos": n }
+-- A nota única (score_percent) continua existindo, para o histórico.
+--
+-- COMO PROVAR DEPOIS DE APLICAR (produção, pelo MCP do Supabase):
+--   SELECT data_type FROM information_schema.columns
+--    WHERE table_name = 'agent_eval_runs' AND column_name = 'placar';   -- jsonb
+--   SELECT relrowsecurity FROM pg_class WHERE relname = 'agent_eval_runs'; -- true
+--
+-- RLS: a tabela já tem RLS ligada e sem grant para anon
+-- (20260715000004_rls_fecha_anon). Coluna nova herda isso; nada a mudar.
+--
+-- IDEMPOTENTE: ADD COLUMN IF NOT EXISTS. Rodar duas vezes não muda nada.
+-- NÃO DESTRUTIVA: só acrescenta; execução antiga fica com placar nulo e a
+-- tela mostra a nota única, como hoje.
+--
+-- REVERTER:
+--   ALTER TABLE public.agent_eval_runs DROP COLUMN IF EXISTS placar;
+-- ═════════════════════════════════════════════════════════════════
+
+ALTER TABLE public.agent_eval_runs
+  ADD COLUMN IF NOT EXISTS "placar" JSONB;

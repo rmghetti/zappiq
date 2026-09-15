@@ -688,6 +688,8 @@ describe('executeRunJob entrega o bloco de regras do agente ao avaliador', () =>
       regrasBlock: '',
       regrasAtivas: [],
       montarContexto: expect.any(Function),
+      // C2, nota 1: o modelo da faixa do plano, preguiçoso (evalNoTier).
+      politica: expect.any(Function),
     });
   });
 
@@ -827,5 +829,40 @@ describe('resolveScenariosForRun: rodízio dos casos de conhecimento (C2)', () =
 
     const cenarios = runnerMock.executeAgentEvalRun.mock.calls[0][0];
     expect(cenarios.filter((c: any) => c.conhecimento)).toHaveLength(8);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * C2 (Passo 3, P21): a conclusão grava o placar dividido junto com a nota
+ * única, e o avaliador recebe a política da faixa do plano (nota 1).
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('executeRunJob grava o placar e entrega a política (C2)', () => {
+  const PLACAR = {
+    versao: 1,
+    conhecimento: { estado: 'sem_base', total: 0, avaliados: 0, aprovados: 0, percent: null },
+    comportamento: { estado: 'avaliado', total: 2, avaliados: 2, aprovados: 2, percent: 100 },
+    inconclusivos: 0,
+  };
+
+  it('a linha concluída recebe o placar, e a nota única continua', async () => {
+    const { executeRunJob } = await import('./agentEvalQueue.js');
+    runnerMock.executeAgentEvalRun.mockResolvedValue({
+      results: [{ scenarioId: 'cr1', combined: 'pass' }],
+      durationMs: 10,
+      summary: RESUMO_LIMPO,
+      placar: PLACAR,
+    });
+
+    await executeRunJob('run-1');
+
+    const conclusao = updateManysCom('status').find((c) => c.data.status === 'completed');
+    expect(conclusao.data.placar).toEqual(PLACAR);
+    expect(conclusao.data.scorePercent).toBe(RESUMO_LIMPO.scorePercent);
+  });
+
+  it('o avaliador recebe a política da faixa do plano como função preguiçosa', async () => {
+    const { executeRunJob } = await import('./agentEvalQueue.js');
+    await executeRunJob('run-1');
+    expect(typeof runnerMock.executeAgentEvalRun.mock.calls[0][3].politica).toBe('function');
   });
 });

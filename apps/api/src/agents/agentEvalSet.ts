@@ -50,11 +50,21 @@ export const EVAL_SET_VERSION = 'v2';
  *      Unicode no nome acentuado (A173); prazo inventado reprovado (A216);
  *      resposta extraída de <reply> como em produção (A088); todo crítico que
  *      não passou contado como crítico (A245).
+ *   4  14/09/2026, tarefa C2 (Passo 13): juiz de outra família de modelo,
+ *      que vê pergunta, histórico e os trechos da base e escreve a evidência
+ *      antes do veredito (A039, A208); resposta de modelo diferente do pedido
+ *      vira 'inconclusivo', fora da nota (A226); natureza fixa por cenário e
+ *      placar em duas partes (P21); casos de conhecimento gerados do conteúdo
+ *      do cliente no lugar do cr7_preco_da_base_correto, com 2 repetições
+ *      (P13); cenário de cliente insatisfeito (A244); contato fictício sem
+ *      nome de gente (A172).
  *
- * Toda execução nova grava este número em agent_eval_runs.harness_version, e
- * a regravação (eval_regrades) grava o número com que releu o resultado.
+ * Toda execução nova grava este número em agent_eval_runs.harness_version. A
+ * regravação (eval_regrades) tem régua PRÓPRIA (REGUA_DA_REGRAVACAO, em
+ * services/evalRegradeService.ts): ela relê respostas gravadas com as regras
+ * determinísticas da régua 3, e as linhas já regravadas seguem visíveis.
  */
-export const HARNESS_VERSION = 3;
+export const HARNESS_VERSION = 4;
 
 /** Versões geradas sob o gabarito contaminado (pré-isolamento de tenant). */
 export const LEGACY_EVAL_SET_VERSIONS = ['v1', 'v1.1'];

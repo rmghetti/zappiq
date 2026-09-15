@@ -769,6 +769,19 @@ describe('re-test: 3 amostras gravadas (A049)', () => {
     expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toMatchObject({ regrasBlock: '' });
   });
 
+  // C2: uma passada por amostra (o caso de conhecimento roda 2 vezes numa
+  // execução completa, mas o re-teste já faz as próprias três) e o modelo da
+  // faixa do plano (evalNoTier), preguiçoso.
+  it('cada amostra roda uma vez só e leva a política da faixa do plano', async () => {
+    respostas('pass', 'pass', 'pass');
+    const res = makeRes();
+    await getHandler('post', RETEST)({ ...USER, params: paramsApply, body: {} }, res);
+    expect(res.statusCode).toBe(200);
+    for (const chamada of runnerMock.executeAgentEvalRun.mock.calls) {
+      expect(chamada[3]).toMatchObject({ semRepeticoes: true, politica: expect.any(Function) });
+    }
+  });
+
   it('a cota do re-teste é 7 por dia, e não a padrão de 20', () => {
     expect(cotasRegistradas).toContainEqual({ rota: 're-test', limite: 7 });
   });
@@ -945,5 +958,46 @@ describe('GET /runs/:id: o re-teste do cliente não é execução anterior nem a
 
     expect(res.statusCode).toBe(200);
     expect(res.body.regravacao).toEqual(RESUMO);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// C2 (Passo 3, P21): a sugestão sob demanda conhece o diagnóstico. Caso de
+// conhecimento reprovado por falta de informação recebe a ação de treino.
+// ════════════════════════════════════════════════════════════════════
+describe('generate-suggestion leva o diagnóstico ao sugeridor (C2)', () => {
+  const GERAR = '/runs/:runId/scenarios/:scenarioId/generate-suggestion';
+
+  it('passa natureza, causa e ação de treino, e grava quem sugeriu', async () => {
+    prismaMock.agentEvalRun.findFirst.mockResolvedValue({
+      ...RUN,
+      results: [
+        {
+          scenarioId: 'cr5_nome_disponivel_usar',
+          natureza: 'conhecimento',
+          combined: 'fail',
+          response: 'não sei',
+          judge: { passed: false, reason: 'faltou', causa: 'faltou_informacao' },
+        },
+      ],
+    });
+    (prismaMock.agentEvalRun as any).update = vi.fn(async () => ({}));
+    runnerMock.suggestFix.mockResolvedValue({
+      summary: 'Faltou informação na base',
+      patches: [],
+      confidence: 1,
+      acaoDeTreino: { tipo: 'qa', pergunta: 'oi' },
+      modelo: null,
+    });
+
+    const res = makeRes();
+    await getHandler('post', GERAR)({ ...USER, params: paramsApply, body: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    const contexto = runnerMock.suggestFix.mock.calls[0][6];
+    expect(contexto.diagnostico).toMatchObject({ natureza: 'conhecimento', causa: 'faltou_informacao' });
+    const gravado = (prismaMock.agentEvalRun as any).update.mock.calls[0][0].data.results[0];
+    expect(gravado.suggestedFix.acaoDeTreino).toEqual({ tipo: 'qa', pergunta: 'oi' });
+    expect(gravado.sugeridor).toBeNull();
   });
 });

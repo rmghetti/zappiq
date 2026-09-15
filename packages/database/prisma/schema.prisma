@@ -1587,6 +1587,10 @@ model AgentEvalRun {
   /// Versão do ARNÊS que mediu (como se mede), separada de evalSetVersion
   /// (de quem é o gabarito). 3 = régua de 14/09/2026.
   harnessVersion   Int?      @map("harness_version")
+  /// C2 (Passo 13, P21): a nota em duas partes, Conhecimento do negócio e
+  /// Comportamento (computePlacar). Nulo nas execuções antigas: a tela mostra
+  /// só a nota única. Migração 20260914000090_placar_dividido.
+  placar           Json?
   // Resultado completo (todos os ScenarioResult em JSON)
   results          Json?
   // Erro (se status=failed)

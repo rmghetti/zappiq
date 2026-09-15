@@ -68,8 +68,10 @@ function determinístico(s: EvalScenario, resposta: string): boolean {
 }
 
 describe('versão do arnês', () => {
-  it('o gabarito corrigido é a versão 3', () => {
-    expect(HARNESS_VERSION).toBe(3);
+  // O gabarito corrigido nasceu na versão 3. A tarefa C2 (14/09/2026) mudou o
+  // juiz, a natureza dos cenários e os casos de conhecimento: é a versão 4.
+  it('a régua do avaliador é a versão 4 (C2)', () => {
+    expect(HARNESS_VERSION).toBe(4);
   });
 });
 

@@ -44,7 +44,7 @@ import type { TenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { resolveTenantAgentProfile } from '../agents/tenantAgentProfile.js';
 import { executeAgentEvalRun } from './agentEvalRunner.js';
 // C1a (A036): contexto de produção no teste, atrás do interruptor contextoUnico.
-import { criarMontadorDeContextoDoEval } from './agentEvalContext.js';
+import { criarMontadorDeContextoDoEval, criarPoliticaDaQualidade } from './agentEvalContext.js';
 import { blocoDeRegrasDaOrganizacao, carregarRegrasAtivas } from './agentRulesService.js';
 import {
   notifySlackQualityIssue,
@@ -274,6 +274,8 @@ export function resolveScenariosForRun(
 interface SaidaDaExecucao {
   results: Array<Record<string, any>>;
   durationMs: number;
+  /** C2 (Passo 3, P21): a nota em duas partes. */
+  placar?: unknown;
   summary: {
     passed: number;
     partial: number;
@@ -326,6 +328,7 @@ async function gravarConclusao(
             slackAlertStatus: ALERTA_NAO_ENVIADO,
             harnessVersion: HARNESS_VERSION,
             results: saida.results as any,
+            placar: (saida.placar ?? undefined) as any,
             completedAt: new Date(),
             durationMs: saida.durationMs,
           }
@@ -336,6 +339,9 @@ async function gravarConclusao(
             // nota de agosto com a de setembro é comparar duas réguas sem saber.
             harnessVersion: HARNESS_VERSION,
             results: saida.results as any,
+            // C2 (Passo 3, P21): Conhecimento do negócio e Comportamento,
+            // calculados e gravados separadamente. A nota única segue acima.
+            placar: (saida.placar ?? undefined) as any,
             completedAt: new Date(),
             durationMs: saida.durationMs,
           },
@@ -549,6 +555,9 @@ export async function executeRunJob(runId: string): Promise<void> {
       regrasBlock,
       regrasAtivas,
       montarContexto: criarMontadorDeContextoDoEval(agenteDaRun, agent.organizationId),
+      // C2, nota 1: com evalNoTier ligado, o modelo da faixa do plano. Lido
+      // uma vez, no primeiro cenário; desligado, a cascata padrão de hoje.
+      politica: criarPoliticaDaQualidade(agent.organizationId),
     }).then(async (saida) => ({
       saida,
       gravacao: await gravarConclusao(runId, saida, scenarios.length),

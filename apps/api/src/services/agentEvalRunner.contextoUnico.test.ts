@@ -94,7 +94,10 @@ describe('sem montador: o prompt de antes', () => {
     const { results } = await executeAgentEvalRun([CENARIO], AGENTE, PERFIL);
 
     expect(systemDoAgente()).toBe(buildEvalSystemPrompt(AGENTE, CENARIO));
-    expect(results[0].ragStatus).toBeUndefined();
+    // C2 (Passo 1): a chave existe em todo resultado; null diz que o teste
+    // não consultou a base, e não que o dado se perdeu.
+    expect(results[0].ragStatus).toBeNull();
+    expect(results[0].fontes).toEqual([]);
     expect(results[0].promptHash).toBeUndefined();
     expect(results[0].combined).toBe('pass');
   });

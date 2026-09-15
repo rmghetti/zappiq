@@ -51,7 +51,10 @@ import { assertNoForeignBrand, ForeignBrandLeakError } from '../agents/tenantIso
 import { executeAgentEvalRun } from '../services/agentEvalRunner.js';
 // C1a (A036): o cenário roda com o contexto de produção quando o
 // interruptor contextoUnico da organização está ligado.
-import { criarMontadorDeContextoDoEval } from '../services/agentEvalContext.js';
+import {
+  criarMontadorDeContextoDoEval,
+  criarPoliticaDaQualidade,
+} from '../services/agentEvalContext.js';
 import { enqueueEvalRun, resolveScenariosForRun } from '../services/agentEvalQueue.js';
 import {
   applyPatch,
@@ -707,16 +710,27 @@ router.post(
         scenarioResult.judge?.reason || 'Cenário parcial — usuário pediu sugestão de melhoria',
         run.agent.systemPrompt || '',
         profile,
-        // A043: o sugeridor vê o CORE (sempre) e as regras já aprovadas
-        // deste agente, para fortalecer a existente em vez de escrever a
-        // sexta versão dela.
-        { regrasAtivas: await carregarRegrasAtivas({ organizationId: orgId, agentId: run.agentId }) },
+        {
+          // A043: o sugeridor vê o CORE (sempre) e as regras já aprovadas
+          // deste agente, para fortalecer a existente em vez de escrever a
+          // sexta versão dela.
+          regrasAtivas: await carregarRegrasAtivas({ organizationId: orgId, agentId: run.agentId }),
+          // C2 (Passo 3, P21): reprovação de conhecimento por falta de
+          // informação recebe a ação de treino, e não uma regra de prompt.
+          diagnostico: {
+            natureza: scenarioResult.natureza ?? scenarioDef.natureza,
+            causa: scenarioResult.judge?.causa ?? null,
+            acaoDeTreino: scenarioDef.conhecimento?.acaoDeTreino ?? null,
+            userMessage: scenarioDef.userMessage,
+          },
+        },
       );
       if (!suggestion) {
         res.status(500).json({ error: 'IA não conseguiu gerar sugestão' });
         return;
       }
-      results[idx] = { ...scenarioResult, suggestedFix: suggestion };
+      // C2 (Passo 1, A226): quem escreveu a sugestão fica no resultado.
+      results[idx] = { ...scenarioResult, suggestedFix: suggestion, sugeridor: suggestion.modelo ?? null };
       await prisma.agentEvalRun.update({
         where: { id: runId },
         data: { results: results as any },
@@ -1132,6 +1146,7 @@ router.post(
         systemPrompt: run.agent.systemPrompt || '',
       };
       const montarContexto = criarMontadorDeContextoDoEval(agenteDoReteste, orgId);
+      const politica = criarPoliticaDaQualidade(orgId);
 
       const amostras: AmostraDoReteste[] = [];
       for (let i = 1; i <= AMOSTRAS_DO_RETESTE; i++) {
@@ -1142,7 +1157,9 @@ router.post(
           // O re-teste lê o veredito e joga o resto fora. Sem esta marca, cada
           // amostra reprovada pedia uma sugestão nova (às vezes duas) que
           // ninguém ia ver: o clique custava até 15 chamadas em vez de 9.
-          { pularSugestao: true, regrasBlock, montarContexto },
+          // C2: uma passada por amostra (o re-teste já faz três), e o modelo
+          // da faixa do plano quando o interruptor evalNoTier está ligado.
+          { pularSugestao: true, semRepeticoes: true, regrasBlock, montarContexto, politica },
         );
         const r = results[0];
         amostras.push({

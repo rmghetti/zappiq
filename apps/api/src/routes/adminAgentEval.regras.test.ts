@@ -259,10 +259,12 @@ describe('POST /run (síncrono): o superadmin mede o agente COM as regras aprova
     expect(regrasMock.carregarRegrasAtivas).not.toHaveBeenCalled();
     // Rodada 2 do PR #377: o montador do motor único vai no MESMO objeto das
     // regras (um parâmetro só). As regras continuam exatamente estas.
+    // C2, nota 1: e a política da faixa do plano (evalNoTier), preguiçosa.
     expect(runnerMock.executeAgentEvalRun.mock.calls[0][3]).toEqual({
       regrasBlock: '',
       regrasAtivas: [],
       montarContexto: expect.any(Function),
+      politica: expect.any(Function),
     });
   });
 
@@ -377,6 +379,7 @@ describe('apply-fix do superadmin: o re-verify mede o prompt novo COM as regras'
       regrasAtivas: [],
       montarContexto: expect.any(Function),
       pularSugestao: true,
+      politica: expect.any(Function),
     });
   });
 });
