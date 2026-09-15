@@ -83,7 +83,7 @@ import adminOnboardingJourneyRoutes from './routes/adminOnboardingJourney.js'; /
 import adminClientesRoutes from './routes/adminClientes.js'; // Área Clientes Fase 2 — Visão Geral + 360 + financeiro
 import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-page site usa Iza real
 import webChatWidgetRoutes from './routes/webChatWidget.js'; // widget.js embedável pra sites de clientes (ex.: CMJ)
-import { registrarCanalDoVisitante } from './services/webChatSocket.js'; // C1b: canal de volta do chat do site
+import { registrarCanalDoVisitante, configComCacheCurto } from './services/webChatSocket.js'; // C1b: canal de volta do chat do site
 import { getWebChatOrgConfig } from './services/webChatService.js';
 import { origensDoWidget, origensDeTodosOsWidgets } from './services/webChatVisitante.js';
 import adminIzaFactsRoutes from './routes/adminIzaFacts.js'; // FASE 4 P7+ Admin Camada 2 CRUD
@@ -198,7 +198,7 @@ io.on('connection', (socket) => {
 // C1b (Passo 4, A241): a origem vale pela lista fixa (reserva, a de hoje) OU
 // pelas origens que a organização cadastrou em settings.webChatAllowedOrigins.
 registrarCanalDoVisitante(io, {
-  configDaOrg: getWebChatOrgConfig,
+  configDaOrg: configComCacheCurto(getWebChatOrgConfig),
   origemPermitida: async (origin, organizationId) =>
     origemPermitidaNoWidget({
       origin,

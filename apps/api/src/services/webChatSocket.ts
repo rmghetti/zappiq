@@ -73,3 +73,25 @@ export function registrarCanalDoVisitante(io: SocketIOServer, deps: Dependencias
     if (typeof sala === 'string') socket.join(sala);
   });
 }
+
+/**
+ * Cache curto para o portão: cada visitante que já conversou conecta a cada
+ * página vista do site do cliente, e o portão confere o chat ligado a cada
+ * conexão. Com cache de 30 s por organização, desligar o chat vale para
+ * conexões novas em até 30 s. Erro não entra no cache.
+ */
+export function configComCacheCurto(
+  ler: (organizationId: string) => Promise<{ exists: boolean; enabled: boolean }>,
+  ttlMs = 30_000,
+  relogio: () => number = Date.now,
+): (organizationId: string) => Promise<{ exists: boolean; enabled: boolean }> {
+  const cache = new Map<string, { valor: { exists: boolean; enabled: boolean }; ate: number }>();
+  return async (organizationId: string) => {
+    const agora = relogio();
+    const guardado = cache.get(organizationId);
+    if (guardado && guardado.ate > agora) return guardado.valor;
+    const valor = await ler(organizationId);
+    cache.set(organizationId, { valor, ate: agora + ttlMs });
+    return valor;
+  };
+}

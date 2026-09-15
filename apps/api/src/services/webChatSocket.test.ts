@@ -95,3 +95,24 @@ describe('registro no servidor', () => {
     expect(join).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('cache curto do portão (cada visitante conecta a cada página vista)', () => {
+  it('a mesma organização não vai ao banco de novo dentro do prazo; erro não fica em cache', async () => {
+    const { configComCacheCurto } = await import('./webChatSocket.js');
+    const ler = vi.fn(async (org: string) => ({ exists: true, enabled: org === 'org-1' }));
+    const agora = { t: 1_000 };
+    const cacheada = configComCacheCurto(ler, 30_000, () => agora.t);
+
+    await expect(cacheada('org-1')).resolves.toEqual({ exists: true, enabled: true });
+    await cacheada('org-1');
+    expect(ler).toHaveBeenCalledTimes(1);
+
+    agora.t += 30_001;
+    await cacheada('org-1');
+    expect(ler).toHaveBeenCalledTimes(2);
+
+    ler.mockRejectedValueOnce(new Error('db down'));
+    await expect(cacheada('org-2')).rejects.toThrow('db down');
+    await expect(cacheada('org-2')).resolves.toEqual({ exists: true, enabled: false });
+  });
+});
