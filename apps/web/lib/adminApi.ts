@@ -458,8 +458,8 @@ export interface AgentEvalRunDetailScenario {
   userMessage?: string;
   response: string;
   /**
-   * A171 — 'erro' é falha TÉCNICA do teste: fica fora da nota e sem sugestão.
-   * C2 — 'inconclusivo': resposta de um modelo de reserva, ou caso de
+   * A171: 'erro' é falha TÉCNICA do teste, fica fora da nota e sem sugestão.
+   * C2: 'inconclusivo' é resposta de um modelo de reserva, ou caso de
    * conhecimento sem a base no teste. Não aprova nem reprova.
    */
   combined: 'pass' | 'partial' | 'fail' | 'erro' | 'inconclusivo';

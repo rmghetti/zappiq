@@ -187,6 +187,8 @@ router.get(
           id: s.id,
           category: s.category,
           severity: s.severity,
+          // C2 (P21): conhecimento ou comportamento.
+          natureza: s.natureza,
           description: s.description,
         })),
       });

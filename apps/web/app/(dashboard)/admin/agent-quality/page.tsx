@@ -1206,7 +1206,17 @@ function FixSuggestionCard({
             )}
           </div>
         )}
-        {!hasSuggestion ? (
+        {scenario.suggestedFix?.acaoDeTreino ? (
+          // C2 (P21): reprovação de conhecimento por falta de informação não
+          // tem patch, tem ação de treino. Sem este ramo, o botão de gerar
+          // sugestão devolvia a mesma ação, sem patch, a cada clique.
+          <div className="p-3 bg-indigo-50 border border-indigo-200 rounded text-xs text-indigo-900">
+            <strong>Ação de treino:</strong> {scenario.suggestedFix.summary}{' '}
+            {scenario.suggestedFix.acaoDeTreino.tipo === 'qa'
+              ? `(cadastrar a resposta para "${scenario.suggestedFix.acaoDeTreino.pergunta}")`
+              : `(preencher ${scenario.suggestedFix.acaoDeTreino.rotulo ?? 'o questionário'})`}
+          </div>
+        ) : !hasSuggestion ? (
           <GenerateSuggestionButton
             runId={runId}
             scenarioId={scenario.scenarioId}
