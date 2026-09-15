@@ -136,12 +136,17 @@ describe('Passo 3: transbordo de verdade no chat do site', () => {
   it('a tag de handoff pausa a IA no banco, marca WAITING e avisa a equipe', async () => {
     responde('<reply>Vou chamar alguém da equipe para falar com você.</reply><action>handoff</action>');
 
-    const r = await processWebChatTurn({ sessionId: 'sessao-1', message: 'quero falar com uma pessoa', organizationId: ORG });
+    const r = await processWebChatTurn({
+      sessionId: 'sessao-1',
+      message: 'quero falar com uma pessoa',
+      organizationId: ORG,
+      canalDeVolta: true,
+    });
 
     expect(r.reply).toBe('Vou chamar alguém da equipe para falar com você.');
     expect(r.transbordo).toBe(true);
     expect(conversationUpdateMany).toHaveBeenCalledWith({
-      where: { contactId: 'contato-1', organizationId: ORG, status: { in: ['OPEN', 'ASSIGNED'] } },
+      where: { id: 'conversa-1', organizationId: ORG, status: { not: 'CLOSED' } },
       data: { status: 'WAITING', aiPaused: true },
     });
     const notificacoes = emitOrg.mock.calls.filter((c: any[]) => c[0] === 'notification');
@@ -156,7 +161,7 @@ describe('Passo 3: transbordo de verdade no chat do site', () => {
 
   it('a resposta que avisou o visitante fica gravada ANTES da pausa', async () => {
     responde('<reply>Vou chamar alguém da equipe.</reply><action>handoff</action>');
-    await processWebChatTurn({ sessionId: 'sessao-1', message: 'atendente', organizationId: ORG });
+    await processWebChatTurn({ sessionId: 'sessao-1', message: 'atendente', organizationId: ORG, canalDeVolta: true });
 
     expect(outboundGravada().content).toBe('Vou chamar alguém da equipe.');
     const ordemDaGravacao = Math.max(...messageCreate.mock.invocationCallOrder);
@@ -169,7 +174,7 @@ describe('Passo 3: transbordo de verdade no chat do site', () => {
     });
     responde('<action>handoff</action>');
 
-    const r = await processWebChatTurn({ sessionId: 'sessao-1', message: 'atendente', organizationId: ORG });
+    const r = await processWebChatTurn({ sessionId: 'sessao-1', message: 'atendente', organizationId: ORG, canalDeVolta: true });
 
     expect(r.reply).toBe('Já chamei a equipe da CMJ, um instante.');
     expect(outboundGravada().content).toBe('Já chamei a equipe da CMJ, um instante.');
@@ -179,9 +184,17 @@ describe('Passo 3: transbordo de verdade no chat do site', () => {
     contactUpsert.mockRejectedValue(new Error('db down'));
     responde('<reply>Vou chamar alguém.</reply><action>handoff</action>');
 
-    const r = await processWebChatTurn({ sessionId: 'sessao-1', message: 'atendente', organizationId: ORG });
+    const r = await processWebChatTurn({ sessionId: 'sessao-1', message: 'atendente', organizationId: ORG, canalDeVolta: true });
 
     expect(r.reply).toBe('Vou chamar alguém.');
+    expect(r.transbordo).toBeFalsy();
+    expect(conversationUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('chat da landing da ZappIQ (sem canal de volta): a tag não pausa, como antes', async () => {
+    responde('<reply>Vou chamar alguém da equipe.</reply><action>handoff</action>');
+    const r = await processWebChatTurn({ sessionId: 'sessao-1', message: 'atendente' });
+    expect(r.reply).toBe('Vou chamar alguém da equipe.');
     expect(r.transbordo).toBeFalsy();
     expect(conversationUpdateMany).not.toHaveBeenCalled();
   });

@@ -21,6 +21,7 @@
 import type { Server as SocketIOServer, Socket } from 'socket.io';
 import { logger } from '../utils/logger.js';
 import { NAMESPACE_DO_CHAT_DO_SITE, salaDoVisitante, sessaoNormalizada } from './webChatSala.js';
+import { guardarComTeto } from './webChatVisitante.js';
 
 export interface DependenciasDoCanalDoVisitante {
   /** O mesmo portão do POST do chat (webChatService.getWebChatOrgConfig). */
@@ -91,7 +92,8 @@ export function configComCacheCurto(
     const guardado = cache.get(organizationId);
     if (guardado && guardado.ate > agora) return guardado.valor;
     const valor = await ler(organizationId);
-    cache.set(organizationId, { valor, ate: agora + ttlMs });
+    // Com teto: o id vem do handshake público (auditoria do diff).
+    guardarComTeto(cache, organizationId, { valor, ate: agora + ttlMs });
     return valor;
   };
 }

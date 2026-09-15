@@ -105,6 +105,23 @@ type Cacheado<T> = { valor: T; ate: number };
 const cacheDaConfig = new Map<string, Cacheado<ConfigDoWidget>>();
 const cacheDasOrigens = new Map<string, Cacheado<string[]>>();
 
+/**
+ * Teto de organizações em cada cache (auditoria do diff). A chave vem da URL
+ * pública do widget: sem teto, pedidos com ids inventados fariam o Map
+ * crescer sem fim. Passou do teto, sai a entrada mais antiga.
+ */
+export const TETO_DO_CACHE_DO_WIDGET = 500;
+
+export function guardarComTeto<T>(mapa: Map<string, T>, chave: string, valor: T, teto = TETO_DO_CACHE_DO_WIDGET): void {
+  mapa.delete(chave);
+  mapa.set(chave, valor);
+  while (mapa.size > teto) {
+    const maisAntiga = mapa.keys().next().value;
+    if (maisAntiga === undefined) break;
+    mapa.delete(maisAntiga);
+  }
+}
+
 /** Para os testes. */
 export function limparCacheDoWidget(): void {
   cacheDaConfig.clear();
@@ -175,7 +192,7 @@ export async function configDoWidget(
     valor = NADA;
   }
 
-  cacheDaConfig.set(organizationId, { valor, ate: agora + CONFIG_DO_WIDGET_TTL_MS });
+  guardarComTeto(cacheDaConfig, organizationId, { valor, ate: agora + CONFIG_DO_WIDGET_TTL_MS });
   return valor;
 }
 
@@ -203,7 +220,7 @@ export async function origensDoWidget(
       err: err instanceof Error ? err.message : String(err),
     });
   }
-  cacheDasOrigens.set(organizationId, { valor, ate: agora + CONFIG_DO_WIDGET_TTL_MS });
+  guardarComTeto(cacheDasOrigens, organizationId, { valor, ate: agora + CONFIG_DO_WIDGET_TTL_MS });
   return valor;
 }
 

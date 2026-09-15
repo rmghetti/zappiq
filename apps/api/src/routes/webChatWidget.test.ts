@@ -163,3 +163,51 @@ describe('widget.js: identidade do Treinar IA (C1b, A247)', () => {
     expect(scriptServido).toContain("panel.querySelector('.zqwc-title').textContent = AGENT_NAME");
   });
 });
+
+describe('widget.js: sessão estável mesmo sem localStorage (C1b, auditoria do diff)', () => {
+  it('com o localStorage recusado, a mesma sessão vale para o POST, o socket e a sincronização', () => {
+    const trechoUid = /function uid\(\)\s*\{[\s\S]*?\n  \}/.exec(scriptServido)![0];
+    const trechoSessao = /var SESSAO_EM_MEMORIA = null;[\s\S]*?function getSessionId\(\)\s*\{[\s\S]*?\n  \}/.exec(
+      scriptServido,
+    )![0];
+    const armazenamentoRecusado = {
+      getItem: () => {
+        throw new Error('bloqueado');
+      },
+      setItem: () => {
+        throw new Error('bloqueado');
+      },
+    };
+    // eslint-disable-next-line no-new-func
+    const fabrica = new Function(
+      'window',
+      'crypto',
+      'localStorage',
+      'STORAGE_SESSION',
+      `${trechoUid}; ${trechoSessao}; return getSessionId;`,
+    ) as (...a: unknown[]) => () => string;
+    const getSessionId = fabrica({ crypto: globalThis.crypto }, globalThis.crypto, armazenamentoRecusado, 'k');
+
+    const primeira = getSessionId();
+    expect(primeira.startsWith('anon-')).toBe(true);
+    expect(getSessionId()).toBe(primeira);
+    expect(getSessionId()).toBe(primeira);
+  });
+});
+
+describe('widget.js: sites com RequireJS ou socket.io antigo (C1b, auditoria do diff)', () => {
+  it('só usa o cliente de socket da página se for a v4', () => {
+    const serve = pegaFuncao<boolean>('clienteDeSocketServe')() as unknown as (io: unknown) => boolean;
+    const v4 = Object.assign(() => undefined, { Manager: class {} });
+    const v2 = Object.assign(() => undefined, { Manager: class {}, protocol: 4 });
+    expect(serve(v4)).toBe(true);
+    expect(serve(v2)).toBe(false);
+    expect(serve({})).toBe(false);
+    expect(serve(undefined)).toBe(false);
+  });
+
+  it('com RequireJS na página, não carrega o pacote do socket: sincroniza de tempos em tempos', () => {
+    expect(scriptServido).toContain("typeof window.define === 'function' && window.define.amd");
+    expect(scriptServido).toContain('ligarSincronizacaoPeriodica()');
+  });
+});

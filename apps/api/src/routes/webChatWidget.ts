@@ -58,19 +58,31 @@ const WIDGET_JS = String.raw`
     return 'x' + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
 
+  /* C1b: a sessão fica guardada também em memória. Sem isto, com o
+   * localStorage recusado, cada chamada gerava uma sessão nova: o POST, o
+   * socket da equipe e a sincronização falavam de conversas diferentes, e a
+   * resposta humana nunca chegava. */
+  var SESSAO_EM_MEMORIA = null;
+
   function getSessionId() {
+    if (SESSAO_EM_MEMORIA) return SESSAO_EM_MEMORIA;
     try {
       var existing = localStorage.getItem(STORAGE_SESSION);
-      if (existing) return existing;
+      if (existing) {
+        SESSAO_EM_MEMORIA = existing;
+        return existing;
+      }
       var fresh = uid();
       localStorage.setItem(STORAGE_SESSION, fresh);
+      SESSAO_EM_MEMORIA = fresh;
       return fresh;
     } catch (e) {
       /* Sem localStorage (janela anônima, cookies de terceiro bloqueados) o
        * visitante perde a continuidade da conversa entre recargas. O relógio
        * como identificador era pior: colidia entre dois visitantes no mesmo
        * milissegundo e era adivinhável por quem soubesse o horário. */
-      return 'anon-' + uid();
+      SESSAO_EM_MEMORIA = 'anon-' + uid();
+      return SESSAO_EM_MEMORIA;
     }
   }
 
@@ -315,11 +327,35 @@ const WIDGET_JS = String.raw`
       .catch(function () {});
   }
 
+  /* O cliente do socket.io que já está na página serve? Precisa ser a v4
+   * (a v2 fala outro protocolo e o servidor recusa). Pura. */
+  function clienteDeSocketServe(io) {
+    return typeof io === 'function' && !!io.Manager &&
+      !(typeof io.protocol === 'number' && io.protocol < 5);
+  }
+
+  /* Sem socket, a sincronização periódica enquanto o painel está aberto. */
+  var sincronizacaoPeriodica = null;
+  function ligarSincronizacaoPeriodica() {
+    if (sincronizacaoPeriodica) return;
+    sincronizacaoPeriodica = setInterval(function () {
+      if (panel.classList.contains('zqwc-open')) sincronizarEquipe();
+    }, 20000);
+  }
+
   var canalLigado = false;
   function ligarCanalDaEquipe() {
     if (canalLigado) return;
     canalLigado = true;
+    // Site com um socket.io antigo, ou com RequireJS (o pacote UMD se
+    // registra no define() e não cria window.io, além de acusar erro no site
+    // do cliente): nada de socket, a sincronização periódica dá conta.
+    if (window.io && !clienteDeSocketServe(window.io)) return ligarSincronizacaoPeriodica();
+    if (!window.io && typeof window.define === 'function' && window.define.amd) {
+      return ligarSincronizacaoPeriodica();
+    }
     function conectar() {
+      if (!clienteDeSocketServe(window.io)) return ligarSincronizacaoPeriodica();
       try {
         var sock = window.io(API_BASE + '/web-chat', {
           transports: ['websocket'],
@@ -337,7 +373,7 @@ const WIDGET_JS = String.raw`
     tag.src = API_BASE + '/socket.io/socket.io.min.js';
     tag.async = true;
     tag.onload = conectar;
-    tag.onerror = function () { canalLigado = false; };
+    tag.onerror = function () { ligarSincronizacaoPeriodica(); };
     document.head.appendChild(tag);
   }
 

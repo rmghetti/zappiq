@@ -193,7 +193,9 @@ router.post('/org/:organizationId/message', webChatLimiter, async (req: Request,
   }
 
   try {
-    const result = await processWebChatTurn({ sessionId, message, history, organizationId });
+    // C1b: o widget.js por organização escuta a equipe (socket da sessão e
+    // sincronização), então aqui a tag de transbordo vira transbordo real.
+    const result = await processWebChatTurn({ sessionId, message, history, organizationId, canalDeVolta: true });
     res.json({
       reply: result.reply,
       paused: result.paused === true,

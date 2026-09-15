@@ -17,9 +17,10 @@
  *      (extractProductionReplyText: <reply>, tags, prefixos vazados e o
  *      filtro de voz, exatamente o que ele faz hoje);
  *   2. as tags de ação LIDAS, com os dados e os botões;
- *   3. a guarda de marca sobre o texto real. Vazou marca da ZappIQ para o
+ *   3. a guarda de marca sobre o texto real. Vazou a marca ZappIQ para o
  *      cliente de outro negócio: o texto não sai, sai a resposta segura do
- *      canal, e o alerta volta para quem chamou registrar.
+ *      canal, e o alerta volta para quem chamou registrar. "Iza" sozinha não
+ *      segura nada: é nome comum de gente.
  *
  * Os cinco consumidores (WhatsApp e Instagram, chat do site, Testar minha
  * IA, retomada do Maestro e Qualidade) passam por aqui. O teste de
@@ -77,6 +78,9 @@ export const RESPOSTA_SEGURA_DO_CANAL: Record<CanalDaSaida, string> = {
 /** Prefixo dos alertas da guarda de marca. O termo que vazou vem depois. */
 export const PREFIXO_ALERTA_DE_MARCA = 'guarda_de_marca:';
 
+/** O termo que, sozinho, prova o vazamento (tenantIsolationGuard). */
+const TERMO_DA_MARCA = 'ZappIQ';
+
 export interface PostProcessInput {
   /** A saída crua do modelo (ou o texto determinístico do canal). */
   bruto: string | null | undefined;
@@ -120,19 +124,29 @@ function lerJson(bruto: string | undefined): unknown {
   }
 }
 
+/** Id ou título de botão: texto ou número (o modelo às vezes numera). */
+function textoDeBotao(v: unknown): string | null {
+  if (typeof v === 'string' && v.trim()) return v;
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return null;
+}
+
 function lerBotoes(bruto: string | undefined): TagsDaResposta['buttons'] {
   const lido = lerJson(bruto);
   if (!Array.isArray(lido)) return null;
   const botoes = lido
-    .filter((b) => b && typeof b === 'object' && typeof b.id === 'string' && typeof b.title === 'string')
-    .map((b) => ({ id: String(b.id), title: String(b.title) }));
+    .filter((b) => b && typeof b === 'object' && textoDeBotao(b.id) !== null && textoDeBotao(b.title) !== null)
+    .map((b) => ({ id: textoDeBotao(b.id) as string, title: textoDeBotao(b.title) as string }));
   return botoes.length ? botoes : null;
 }
 
-/** Todas as ações, em ordem, sem repetir. */
+/**
+ * Todas as ações, em ordem, sem repetir. O mesmo casamento da leitura de
+ * antes do WhatsApp (parseAgentResponse): a tag numa linha só.
+ */
 function lerAcoes(bruto: string): string[] {
   const acoes: string[] = [];
-  for (const m of bruto.matchAll(/<action>([\s\S]*?)<\/action>/gi)) {
+  for (const m of bruto.matchAll(/<action>(.*?)<\/action>/gi)) {
     const acao = m[1].trim();
     if (acao && !acoes.includes(acao)) acoes.push(acao);
   }
@@ -168,7 +182,12 @@ export function postProcessReply(input: PostProcessInput): PostProcessOutput {
 
   if (!input.organizacao.ehZappIQ && limpo) {
     const vazamentos = findForeignBrandLeaks(limpo, { allow: termosPermitidos(input) });
-    if (vazamentos.length) {
+    // Só a marca ZappIQ, inequívoca, segura a resposta. "Iza" sozinha é nome
+    // comum de gente (a cliente atendida, a profissional da clínica) e, sem
+    // a marca junto, não prova vazamento: bloquear ali calaria conversa real
+    // de quem se chama Iza. Com a marca presente, a Iza entra no alerta.
+    const temAMarca = vazamentos.some((v) => v.term === TERMO_DA_MARCA);
+    if (temAMarca) {
       for (const v of vazamentos) alertas.push(`${PREFIXO_ALERTA_DE_MARCA}${v.term}`);
       // Na Qualidade nada vai ao cliente: o teste existe justamente para
       // achar o vazamento. Trocar pelo texto seguro esconderia a reprovação

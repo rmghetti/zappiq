@@ -117,6 +117,8 @@ describe('POST do chat: o transbordo volta para o widget (Passo 3)', () => {
     const res = mockRes();
     await handler({ params: { organizationId: 'org-1' }, body: { sessionId: 's', message: 'atendente' } }, res, vi.fn());
     expect(res.body).toMatchObject({ reply: 'Vou chamar alguém.', transbordo: true, paused: false });
+    // O widget por organização escuta a equipe: o serviço é avisado disso.
+    expect(webChatServiceMock.processWebChatTurn.mock.calls[0][0]).toMatchObject({ canalDeVolta: true });
   });
 });
 

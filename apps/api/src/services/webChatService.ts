@@ -227,6 +227,14 @@ export interface WebChatRequest {
   history?: WebChatTurn[];
   /** Org dona do agente. Default = Iza canonical (mantém /iza-message igual). */
   organizationId?: string;
+  /**
+   * C1b (auditoria do diff): o widget que fez o pedido escuta a equipe (o
+   * widget.js por organização, com o socket da sessão e a sincronização).
+   * Só com ele a tag de transbordo vira transbordo de verdade: o chat da
+   * landing da ZappIQ (/iza-message) ainda não tem canal de volta, e pausar
+   * ali deixaria o visitante preso ouvindo que um atendente vai responder.
+   */
+  canalDeVolta?: boolean;
 }
 
 export interface WebChatResponse {
@@ -1038,7 +1046,7 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
 
   // 4.a Transbordo (C1b, A169): a tag de handoff deixava de existir aqui. Só
   //     vale com conversa de verdade no CRM, que é onde a equipe atende.
-  const pediuTransbordo = saida.acoes.includes('handoff') && Boolean(lead);
+  const pediuTransbordo = saida.acoes.includes('handoff') && Boolean(lead) && input.canalDeVolta === true;
   if (pediuTransbordo && !reply) {
     // O modelo pediu a pessoa sem dizer nada ao visitante: sai a mensagem de
     // espera do dono (a mesma do WhatsApp).

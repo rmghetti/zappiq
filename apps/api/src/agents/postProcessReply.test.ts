@@ -123,6 +123,29 @@ describe('as tags de ação são lidas, não descartadas', () => {
     expect(saida.acoes).toEqual(['save_lead', 'handoff']);
   });
 
+  it('botão com id numérico continua valendo (como na leitura de antes)', () => {
+    const saida = postProcessReply({
+      bruto: 'Escolha:<buttons>[{"id":1,"title":"Sim"},{"id":"2","title":"Não"}]</buttons>',
+      canal: 'whatsapp',
+      organizacao: CLIENTE,
+      agente: VERA,
+    });
+    expect(saida.tags.buttons).toEqual([
+      { id: '1', title: 'Sim' },
+      { id: '2', title: 'Não' },
+    ]);
+  });
+
+  it('ação lida como antes: a tag numa linha só', () => {
+    const saida = postProcessReply({
+      bruto: 'Oi!<action>\nhandoff\n</action><action>save_lead</action>',
+      canal: 'whatsapp',
+      organizacao: CLIENTE,
+      agente: VERA,
+    });
+    expect(saida.acoes).toEqual(['save_lead']);
+  });
+
   it('JSON quebrado nas tags não derruba nada: vira null', () => {
     const saida = postProcessReply({
       bruto: 'Oi!<action_data>{nome: Ana</action_data><buttons>[{"id":</buttons>',
@@ -213,6 +236,26 @@ describe('guarda de marca sobre a resposta real (A189)', () => {
     });
     expect(saida.texto).toBe('Oi! Sou a Iza, da Clínica Luz.');
     expect(saida.alertas).toEqual([]);
+  });
+
+  it('Iza sozinha é nome de gente (a cliente, a profissional): não bloqueia nem alerta', () => {
+    for (const bruto of ['Oi, Iza! Tudo certo com a sua consulta?', 'A Dra. Iza atende às terças.']) {
+      const saida = postProcessReply({ bruto, canal: 'whatsapp', organizacao: CLIENTE, agente: VERA });
+      expect(saida.bloqueada, bruto).toBe(false);
+      expect(saida.alertas, bruto).toEqual([]);
+      expect(saida.texto).toBe(extractProductionReplyText(bruto));
+    }
+  });
+
+  it('com a marca ZappIQ presente, a Iza entra no alerta junto', () => {
+    const saida = postProcessReply({
+      bruto: 'Sou a Iza, da ZappIQ.',
+      canal: 'site',
+      organizacao: CLIENTE,
+      agente: VERA,
+    });
+    expect(saida.bloqueada).toBe(true);
+    expect(saida.alertas).toEqual(['guarda_de_marca:Iza', 'guarda_de_marca:ZappIQ']);
   });
 
   it('palavras comuns do português não disparam a guarda (organiza, humanizar, autoriza)', () => {

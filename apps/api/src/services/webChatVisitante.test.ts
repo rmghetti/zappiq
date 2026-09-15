@@ -172,3 +172,17 @@ describe('origensDeTodosOsWidgets (upgrade do socket, A241)', () => {
     ).resolves.toEqual([]);
   });
 });
+
+describe('teto dos caches do widget (auditoria do diff)', () => {
+  it('ids inventados na URL não fazem o cache crescer sem fim: sai a entrada mais antiga', async () => {
+    const { guardarComTeto } = await import('./webChatVisitante.js');
+    const mapa = new Map<string, number>();
+    for (let i = 0; i < 10; i++) guardarComTeto(mapa, `org-${i}`, i, 3);
+    expect(mapa.size).toBe(3);
+    expect([...mapa.keys()]).toEqual(['org-7', 'org-8', 'org-9']);
+    // Regravar a mesma chave a leva para o fim da fila.
+    guardarComTeto(mapa, 'org-7', 70, 3);
+    guardarComTeto(mapa, 'org-10', 10, 3);
+    expect([...mapa.keys()]).toEqual(['org-9', 'org-7', 'org-10']);
+  });
+});

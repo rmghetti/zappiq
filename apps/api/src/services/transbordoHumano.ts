@@ -50,6 +50,7 @@ export function mensagemDeEspera(orgSettings: Record<string, any> | null | undef
 export interface TransbordoInput {
   organizationId: string;
   conversationId: string;
+  /** O contato da conversa (rastro; a pausa é pela conversa do turno). */
   contactId: string;
   /**
    * Identificador do contato na chave de pausa do cache: o telefone no
@@ -74,7 +75,7 @@ export interface ResultadoDoTransbordo {
  * avisa a equipe. Não manda nada ao cliente.
  */
 export async function marcarTransbordo(input: TransbordoInput): Promise<ResultadoDoTransbordo> {
-  const { organizationId, conversationId, contactId, contactPhone } = input;
+  const { organizationId, conversationId, contactPhone } = input;
   const resultado: ResultadoDoTransbordo = { pausou: false, avisou: false };
 
   logger.info('[Transbordo] a IA pediu uma pessoa', { organizationId, conversationId });
@@ -94,15 +95,19 @@ export async function marcarTransbordo(input: TransbordoInput): Promise<Resultad
     });
   }
 
-  // A pausa durável. Mesmo recorte de antes (as conversas abertas do
-  // contato), agora com aiPaused: o guarda durável do orquestrador passa a
-  // enxergar o transbordo, e o Inbox mostra o botão de devolver à IA.
+  // A pausa durável, na conversa DO TURNO (pelo id e pela organização, como
+  // a rede de crise faz), em qualquer estado que não seja fechada. O recorte
+  // antigo (conversas do contato em OPEN ou ASSIGNED) deixava de fora a que
+  // já estava em WAITING: depois de um transbordo e de um "Retomar" (que
+  // devolve aiPaused=false e mantém WAITING), o segundo pedido de pessoa não
+  // gravava nada. Com aiPaused, o guarda durável do orquestrador e o chat do
+  // site enxergam o transbordo, e o Inbox mostra o botão de devolver à IA.
   try {
-    await prisma.conversation.updateMany({
-      where: { contactId, organizationId, status: { in: ['OPEN', 'ASSIGNED'] } },
+    const atualizadas = await prisma.conversation.updateMany({
+      where: { id: conversationId, organizationId, status: { not: 'CLOSED' } },
       data: { status: 'WAITING', aiPaused: true },
     });
-    resultado.pausou = true;
+    resultado.pausou = (atualizadas?.count ?? 0) > 0;
   } catch (err) {
     logger.error('[Transbordo] não consegui pausar a conversa no banco', {
       organizationId,
