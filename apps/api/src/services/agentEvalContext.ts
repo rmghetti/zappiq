@@ -34,9 +34,19 @@
 import { prisma } from '@zappiq/database';
 import { logger } from '../utils/logger.js';
 import * as ragService from './ragService.js';
-import { flagLigada, montarContextoDoTurno, type ContatoDoTurno } from '../agents/agentContextLoader.js';
+import {
+  flagLigada,
+  montarContextoDoTurno,
+  carregarPoliticaDoTurno,
+  type ContatoDoTurno,
+} from '../agents/agentContextLoader.js';
 import { NOME_FICTICIO_DO_TESTE, type EvalScenario } from '../agents/evalScenarioTypes.js';
-import type { ContextoDoCenario, ExtrasDoMontador, MontadorDeContexto } from './agentEvalRunner.js';
+import type {
+  ContextoDoCenario,
+  ExtrasDoMontador,
+  MontadorDeContexto,
+  PoliticaDaQualidade,
+} from './agentEvalRunner.js';
 
 /** Segunda-feira, 12:00 em São Paulo. Fixa: o mesmo cenário dá o mesmo prompt. */
 export const DATA_FIXA_DO_EVAL = new Date('2026-09-14T15:00:00Z');
@@ -110,10 +120,13 @@ export function criarMontadorDeContextoDoEval(
     // a última rede.
     let ragContext = '';
     let ragStatus: ragService.RagSearchStatus = 'sem_resultado';
+    // C2 (Passo 1, A226): os ids dos trechos que entraram, para o resultado.
+    let fontes: string[] = [];
     try {
       const busca = await ragService.searchDetailed(organizationId, scenario.userMessage, 5);
       ragContext = busca.context;
       ragStatus = busca.status;
+      fontes = Array.isArray(busca.trechoIds) ? busca.trechoIds : [];
     } catch (err) {
       logger.warn('[agentEvalContext] busca na base falhou: cenário segue com servico_fora', {
         organizationId,
@@ -152,6 +165,44 @@ export function criarMontadorDeContextoDoEval(
       hash: contexto.hash,
       partes: contexto.partes,
       ragStatus,
+      // C2 (Passo 2, A039): o juiz vê OS MESMOS trechos que o agente viu.
+      trechos: ragContext,
+      fontes,
     };
+  };
+}
+
+/**
+ * C2, nota 1 da revisão de 14/09: o modelo da faixa do plano para a
+ * Qualidade, atrás do interruptor `evalNoTier`.
+ *
+ * Devolve uma função PREGUIÇOSA: criar não faz IO, e o avaliador lê uma vez
+ * por execução, no primeiro cenário. Interruptor desligado (o padrão): null,
+ * e o teste segue na cascata padrão de hoje. Ligado: a MESMA decisão que a
+ * produção toma para a organização (resolveTurnPolicy, canal 'qualidade'),
+ * sem ferramentas, sem cópia da regra de escolha.
+ */
+export function criarPoliticaDaQualidade(
+  organizationId: string,
+): () => Promise<PoliticaDaQualidade | null> {
+  let lida: Promise<PoliticaDaQualidade | null> | null = null;
+  return () => {
+    if (!lida) {
+      lida = (async () => {
+        if (!(await flagLigada(organizationId, 'evalNoTier'))) return null;
+        const p = await carregarPoliticaDoTurno(organizationId, {
+          canal: 'qualidade',
+          agendamentoAtivo: false,
+          evalNaFaixaDoPlano: true,
+        });
+        logger.info('[agentEvalContext] Qualidade na faixa do plano', {
+          organizationId,
+          modelo: p.modelo,
+          motivo: p.motivo,
+        });
+        return { tier: p.tier, override: p.override, modelo: p.modelo, motivo: p.motivo };
+      })();
+    }
+    return lida;
   };
 }

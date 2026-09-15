@@ -42,6 +42,7 @@ vi.mock('../utils/logger.js', () => ({
 
 import {
   criarMontadorDeContextoDoEval,
+  criarPoliticaDaQualidade,
   contatoDoCenario,
   DATA_FIXA_DO_EVAL,
   PROMPT_AUSENTE,
@@ -214,5 +215,51 @@ describe('criarMontadorDeContextoDoEval: as regras aprovadas pelo dono (rodada 2
 
     expect(ctx!.systemPrompt).not.toContain('# Regras aprovadas pelo dono');
     expect(agentRuleFindMany).not.toHaveBeenCalled();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// C2 (Passo 13): os trechos e os ids que o avaliador grava e mostra ao juiz,
+// e o modelo da faixa do plano (nota 1, interruptor evalNoTier).
+// ════════════════════════════════════════════════════════════════════
+describe('C2: trechos, fontes e a política da faixa do plano', () => {
+  it('o contexto do cenário leva os trechos (para o juiz) e os ids (para o resultado)', async () => {
+    flags = { contextoUnico: true };
+    searchDetailed.mockResolvedValue({
+      context: '[tabela.pdf] Serra circular: R$ 890.',
+      sources: [{ source: 'tabela.pdf', similarity: 0.8, snippet: 'serra' }],
+      status: 'ok',
+      fromCache: false,
+      trechoIds: ['chunk-1', 'chunk-2'],
+    });
+    const ctx = await criarMontadorDeContextoDoEval(AGENTE, ORG)(CENARIO as any);
+    expect(ctx!.trechos).toBe('[tabela.pdf] Serra circular: R$ 890.');
+    expect(ctx!.fontes).toEqual(['chunk-1', 'chunk-2']);
+  });
+
+  it('evalNoTier desligado: a política é null e ninguém lê o plano', async () => {
+    const politica = criarPoliticaDaQualidade(ORG);
+    expect(isFlagOn).not.toHaveBeenCalled();
+    expect(await politica()).toBeNull();
+    expect(orgFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('evalNoTier ligado: o tier que a produção escolheria para o plano, lido uma vez', async () => {
+    flags = { evalNoTier: true };
+    orgFindUnique.mockResolvedValue({
+      plan: 'GROWTH',
+      settings: {},
+      trialStartedAt: null,
+      trialEndsAt: null,
+      isTrialActive: false,
+      trialConverted: true,
+      stripeSubscriptionId: 'sub_1',
+    });
+    const politica = criarPoliticaDaQualidade(ORG);
+    const p1 = await politica();
+    const p2 = await politica();
+    expect(p1).toMatchObject({ tier: 'GROWTH', modelo: 'google-gemini-flash' });
+    expect(p2).toBe(p1);
+    expect(isFlagOn.mock.calls.filter((c) => c[1] === 'evalNoTier')).toHaveLength(1);
   });
 });
