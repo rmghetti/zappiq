@@ -109,6 +109,7 @@ const cacheDasOrigens = new Map<string, Cacheado<string[]>>();
 export function limparCacheDoWidget(): void {
   cacheDaConfig.clear();
   cacheDasOrigens.clear();
+  cacheDeTodasAsOrigens = null;
 }
 
 async function carregarSettingsPadrao(organizationId: string): Promise<Record<string, any>> {
@@ -203,5 +204,40 @@ export async function origensDoWidget(
     });
   }
   cacheDasOrigens.set(organizationId, { valor, ate: agora + CONFIG_DO_WIDGET_TTL_MS });
+  return valor;
+}
+
+let cacheDeTodasAsOrigens: Cacheado<string[]> | null = null;
+
+async function listarSettingsDosWidgetsPadrao(): Promise<Array<Record<string, any>>> {
+  const orgs = await prisma.organization.findMany({
+    where: { settings: { path: ['webChatEnabled'], equals: true } },
+    select: { settings: true },
+  });
+  return orgs.map((o) => (o.settings as Record<string, any>) ?? {});
+}
+
+/**
+ * Todas as origens cadastradas pelas organizações com o chat do site
+ * ligado, com cache curto (A241). É o que o servidor de socket consulta no
+ * upgrade, antes de saber de qual organização é o widget; a checagem por
+ * organização é do portão do namespace. Vazia no erro (vale a lista fixa).
+ */
+export async function origensDeTodosOsWidgets(
+  deps: { listarSettings?: () => Promise<Array<Record<string, any>>> } = {},
+): Promise<string[]> {
+  const agora = Date.now();
+  if (cacheDeTodasAsOrigens && cacheDeTodasAsOrigens.ate > agora) return cacheDeTodasAsOrigens.valor;
+
+  let valor: string[] = [];
+  try {
+    const todas = await (deps.listarSettings ?? listarSettingsDosWidgetsPadrao)();
+    valor = Array.from(new Set(todas.flatMap((s) => origensDaOrganizacao(s))));
+  } catch (err) {
+    logger.warn('[webChat] origens dos widgets indisponíveis (vale a lista fixa)', {
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+  cacheDeTodasAsOrigens = { valor, ate: agora + CONFIG_DO_WIDGET_TTL_MS };
   return valor;
 }

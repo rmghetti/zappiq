@@ -130,3 +130,31 @@ export function criarDelegadoDeCors(deps: {
       .catch(() => cb(null, padrao));
   };
 }
+
+/**
+ * A checagem de origem do servidor de socket (engine.io), com a exceção do
+ * widget (C1b, Passo 4, A241).
+ *
+ * O engine.io aplica o CORS também no pedido de upgrade para websocket,
+ * ANTES de qualquer namespace: ali ainda não se sabe de qual organização é o
+ * widget. Por isso esta checagem aceita a lista fixa OU uma origem que
+ * ALGUMA organização com o chat do site ligado cadastrou. A checagem fina
+ * (esta origem é DESTA organização) é do portão do namespace /web-chat. O
+ * namespace do painel continua exigindo o JWT de sempre.
+ */
+export function criarChecagemDeOrigemDoSocket(deps: {
+  padroesFixos: Array<string | RegExp>;
+  origensDeTodosOsWidgets: () => Promise<string[]>;
+}) {
+  return (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void): void => {
+    if (!origin || origemCasaComPadroes(origin, deps.padroesFixos)) return cb(null, true);
+    const normalizada = origemNormalizada(origin);
+    deps
+      .origensDeTodosOsWidgets()
+      .then((lista) => {
+        if (normalizada && lista.includes(normalizada)) return cb(null, true);
+        return cb(new Error(`CORS: origin ${origin} not allowed`));
+      })
+      .catch(() => cb(new Error(`CORS: origin ${origin} not allowed`)));
+  };
+}

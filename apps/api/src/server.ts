@@ -28,6 +28,7 @@ import {
   origemCasaComPadroes,
   origemPermitidaNoWidget,
   criarDelegadoDeCors,
+  criarChecagemDeOrigemDoSocket,
 } from './config/origensPermitidas.js';
 import { prisma } from '@zappiq/database';
 
@@ -84,7 +85,7 @@ import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-p
 import webChatWidgetRoutes from './routes/webChatWidget.js'; // widget.js embedável pra sites de clientes (ex.: CMJ)
 import { registrarCanalDoVisitante } from './services/webChatSocket.js'; // C1b: canal de volta do chat do site
 import { getWebChatOrgConfig } from './services/webChatService.js';
-import { origensDoWidget } from './services/webChatVisitante.js';
+import { origensDoWidget, origensDeTodosOsWidgets } from './services/webChatVisitante.js';
 import adminIzaFactsRoutes from './routes/adminIzaFacts.js'; // FASE 4 P7+ Admin Camada 2 CRUD
 import adminAiXrayRoutes from './routes/adminAiXray.js'; // Tarefa A3: Raio-X do que a IA recebe, sem chamar o modelo
 import adminKbSurveyRoutes from './routes/adminKbSurvey.js'; // Tarefa B3: reingerir o questionário por organização
@@ -121,7 +122,16 @@ function corsOriginCheck(
 // ── Socket.io ───────────────────────────────────
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: corsOriginCheck,
+    // C1b (Passo 4, A241): o engine.io confere a origem também no upgrade
+    // para websocket, antes de saber o namespace. Vale a lista fixa de
+    // sempre OU uma origem que alguma organização com o chat do site ligado
+    // cadastrou (settings.webChatAllowedOrigins). Quem confere se a origem é
+    // DAQUELA organização é o portão do namespace /web-chat; o namespace do
+    // painel continua exigindo o JWT.
+    origin: criarChecagemDeOrigemDoSocket({
+      padroesFixos: ALLOWED_ORIGIN_PATTERNS,
+      origensDeTodosOsWidgets,
+    }),
     methods: ['GET', 'POST'],
   },
 });

@@ -15,6 +15,7 @@ import {
   origemPermitidaNoWidget,
   orgDaRotaDoWidget,
   criarDelegadoDeCors,
+  criarChecagemDeOrigemDoSocket,
 } from './origensPermitidas.js';
 
 const FIXOS = padroesDeOrigemFixos('https://app.zappiq.com.br');
@@ -117,5 +118,33 @@ describe('CORS: a exceção vale só para as rotas do widget da organização', 
       quebrado({ path: '/api/web-chat/org/org-clinica/message', headers: { origin: 'https://clinica.com.br' } }, (_e, x) => r(x)),
     );
     expect(o.origin).toBe(checagemFixa);
+  });
+});
+
+describe('socket (engine.io): a origem de um widget cadastrado passa no upgrade (A241)', () => {
+  const origensDeTodosOsWidgets = vi.fn(async () => ['https://clinica.com.br']);
+
+  function decidir(origin?: string, fn = origensDeTodosOsWidgets): Promise<{ ok: boolean; erro?: string }> {
+    const checar = criarChecagemDeOrigemDoSocket({ padroesFixos: FIXOS, origensDeTodosOsWidgets: fn });
+    return new Promise((resolve) => checar(origin, (err, ok) => resolve({ ok: Boolean(ok) && !err, erro: err?.message })));
+  }
+
+  it('lista fixa e sem Origin: passa sem ler settings', async () => {
+    origensDeTodosOsWidgets.mockClear();
+    expect((await decidir('https://www.cmj.com.br')).ok).toBe(true);
+    expect((await decidir(undefined)).ok).toBe(true);
+    expect(origensDeTodosOsWidgets).not.toHaveBeenCalled();
+  });
+
+  it('origem cadastrada por uma organização: passa (o portão do namespace confere a organização)', async () => {
+    expect((await decidir('https://Clinica.com.br')).ok).toBe(true);
+  });
+
+  it('origem de ninguém, ou banco fora: recusa, como hoje', async () => {
+    expect((await decidir('https://site-estranho.com')).ok).toBe(false);
+    const quebrado = vi.fn(async () => {
+      throw new Error('db down');
+    });
+    expect((await decidir('https://clinica.com.br', quebrado)).ok).toBe(false);
   });
 });

@@ -66,9 +66,8 @@ describe('mensagensDaEquipe (Passo 3: o visitante que voltou vê a resposta huma
  * Passo 4 (A247): nome e saudação do widget vêm do Treinar IA.
  * ══════════════════════════════════════════════════════════════════════ */
 
-const { configDoWidget, limparCacheDoWidget, CONFIG_DO_WIDGET_TTL_MS, origensDoWidget } = await import(
-  './webChatVisitante.js'
-);
+const { configDoWidget, limparCacheDoWidget, CONFIG_DO_WIDGET_TTL_MS, origensDoWidget, origensDeTodosOsWidgets } =
+  await import('./webChatVisitante.js');
 
 describe('configDoWidget (Passo 4, A247)', () => {
   const perfilVivoLigado = vi.fn();
@@ -141,6 +140,32 @@ describe('origensDoWidget (Passo 4, A241)', () => {
     await expect(
       origensDoWidget('org-3', {
         carregarSettings: async () => {
+          throw new Error('db down');
+        },
+      }),
+    ).resolves.toEqual([]);
+  });
+});
+
+describe('origensDeTodosOsWidgets (upgrade do socket, A241)', () => {
+  beforeEach(() => limparCacheDoWidget());
+
+  it('junta as origens das organizações com o chat ligado, sem repetir, com cache curto', async () => {
+    const listarSettings = vi.fn(async () => [
+      { webChatAllowedOrigins: ['https://clinica.com.br', 'https://www.clinica.com.br'] },
+      { webChatAllowedOrigins: ['https://CLINICA.com.br/'] },
+      {},
+    ]);
+    const lista = await origensDeTodosOsWidgets({ listarSettings });
+    expect(lista.sort()).toEqual(['https://clinica.com.br', 'https://www.clinica.com.br']);
+    await origensDeTodosOsWidgets({ listarSettings });
+    expect(listarSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('banco fora: lista vazia (vale a lista fixa)', async () => {
+    await expect(
+      origensDeTodosOsWidgets({
+        listarSettings: async () => {
           throw new Error('db down');
         },
       }),
