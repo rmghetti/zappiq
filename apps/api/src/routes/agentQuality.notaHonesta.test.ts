@@ -81,6 +81,9 @@ const ruidoMock = {
   })),
 };
 vi.mock('../services/evalRuidoService.js', () => ruidoMock);
+// C2, nota 1: o /run-async lê o interruptor evalNoTier. Sem o dublê, a
+// leitura real ia ao cache (Redis) e o arquivo ficava segundos mais lento.
+vi.mock('../services/featureFlags.js', () => ({ isFlagOn: vi.fn(async () => false) }));
 
 const regradeMock = { resumirRegravacao: vi.fn(async () => null) };
 vi.mock('../services/evalRegradeService.js', () => regradeMock);

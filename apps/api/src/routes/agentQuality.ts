@@ -94,6 +94,14 @@ import {
   limparTextoDaRegra,
   sanearTextoDaRegra,
 } from '../agents/regrasDoAgente.js';
+// C2, nota 1: com evalNoTier ligado, a cota de testes é a da faixa do plano.
+import {
+  cotaDeExecucoesDaFaixa,
+  decidirCotaDeExecucoes,
+  faixaDaCota,
+} from '../services/cotaDaQualidade.js';
+import { decideLlmCostStage } from '../middleware/planLimits.js';
+import { isZappIQOrg } from '../config/zappiqOrg.js';
 // A049: o re-teste roda 3 amostras e vira execução gravada.
 import {
   AMOSTRAS_DO_RETESTE,
@@ -417,36 +425,100 @@ router.post('/run-async', requireRole('ADMIN', 'SUPERADMIN'), async (req: Reques
       return;
     }
 
-    // Trava 2, cooldown: bloqueia se o CLIENTE já CONCLUIU um teste nas
-    // últimas 24 h.
+    // Trava 2, cota: bloqueia quando o CLIENTE já CONCLUIU os testes que
+    // cabem na janela.
     //
-    // A048: antes contava qualquer execução 'manual' ou 'client_manual' com
-    // status diferente de 'failed'. Duas consequências medidas: execução presa
-    // em 'running' por reinício de máquina travava o botão por um dia, e teste
-    // disparado pelo superadmin gastava o direito do cliente. Agora conta só o
-    // que ele mesmo rodou e concluiu. Execução 'failed' não gasta nada: o
-    // cliente pode tentar de novo na hora.
-    const cutoff = new Date(Date.now() - RUN_COOLDOWN_HOURS * 3600 * 1000);
-    const recent = await prisma.agentEvalRun.findFirst({
-      where: {
-        agentId,
-        triggeredBy: 'client_manual',
-        status: 'completed',
-        startedAt: { gte: cutoff },
-      },
-      orderBy: { startedAt: 'desc' },
-      select: { id: true, startedAt: true, status: true },
-    });
-    if (recent) {
-      const nextAvailable = new Date(recent.startedAt.getTime() + RUN_COOLDOWN_HOURS * 3600 * 1000);
-      res.status(429).json({
-        error: 'cooldown',
-        reason: 'aguardando_24h',
-        message: `Você já executou um teste nas últimas ${RUN_COOLDOWN_HOURS}h. Próximo disponível em ${formatarHorarioDeBrasilia(nextAvailable)}.`,
-        nextAvailableAt: nextAvailable.toISOString(),
-        lastRunId: recent.id,
+    // C2, nota 1 da revisão de 14/09: com o interruptor `evalNoTier` ligado,
+    // a cota é a da faixa do plano (services/cotaDaQualidade.ts), lida pela
+    // mesma régua da política de modelo (trial e estágio NOVO na faixa de
+    // entrada). Desligado, a regra de hoje, dentro do `if` abaixo.
+    let naFaixaDoPlano = false;
+    try {
+      naFaixaDoPlano = await isFlagOn(orgId, 'evalNoTier');
+    } catch {
+      naFaixaDoPlano = false;
+    }
+    if (naFaixaDoPlano) {
+      const org = await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: {
+          plan: true,
+          trialStartedAt: true,
+          trialEndsAt: true,
+          isTrialActive: true,
+          trialConverted: true,
+          stripeSubscriptionId: true,
+        },
       });
-      return;
+      const faixa = faixaDaCota({
+        plano: org?.plan ?? null,
+        estagioDoTrial: org ? decideLlmCostStage(org as any) : 'OTHER',
+        ehZappIQ: isZappIQOrg(orgId),
+      });
+      const cota = cotaDeExecucoesDaFaixa(faixa);
+      const agora = new Date();
+      const concluidas = await prisma.agentEvalRun.findMany({
+        where: {
+          agentId,
+          triggeredBy: 'client_manual',
+          status: 'completed',
+          startedAt: { gte: new Date(agora.getTime() - cota.janelaHoras * 3600 * 1000) },
+        },
+        orderBy: { startedAt: 'asc' },
+        select: { id: true, startedAt: true },
+      });
+      const decisao = decidirCotaDeExecucoes({
+        cota,
+        iniciosNaJanela: concluidas.map((r) => r.startedAt),
+        agora,
+      });
+      if (!decisao.liberado) {
+        const plural = cota.execucoes === 1 ? '1 teste' : `${cota.execucoes} testes`;
+        res.status(429).json({
+          error: 'cooldown',
+          reason: 'cota_da_faixa',
+          message:
+            `O seu plano permite ${plural} a cada ${cota.janelaHoras}h, e você já usou. ` +
+            `Próximo disponível em ${formatarHorarioDeBrasilia(decisao.proximaEm)}.`,
+          nextAvailableAt: decisao.proximaEm.toISOString(),
+          lastRunId: concluidas[concluidas.length - 1]?.id ?? null,
+        });
+        return;
+      }
+    }
+
+    if (!naFaixaDoPlano) {
+      // Trava 2, cooldown: bloqueia se o CLIENTE já CONCLUIU um teste nas
+      // últimas 24 h.
+      //
+      // A048: antes contava qualquer execução 'manual' ou 'client_manual' com
+      // status diferente de 'failed'. Duas consequências medidas: execução presa
+      // em 'running' por reinício de máquina travava o botão por um dia, e teste
+      // disparado pelo superadmin gastava o direito do cliente. Agora conta só o
+      // que ele mesmo rodou e concluiu. Execução 'failed' não gasta nada: o
+      // cliente pode tentar de novo na hora.
+      const cutoff = new Date(Date.now() - RUN_COOLDOWN_HOURS * 3600 * 1000);
+      const recent = await prisma.agentEvalRun.findFirst({
+        where: {
+          agentId,
+          triggeredBy: 'client_manual',
+          status: 'completed',
+          startedAt: { gte: cutoff },
+        },
+        orderBy: { startedAt: 'desc' },
+        select: { id: true, startedAt: true, status: true },
+      });
+      if (recent) {
+        const nextAvailable = new Date(recent.startedAt.getTime() + RUN_COOLDOWN_HOURS * 3600 * 1000);
+        res.status(429).json({
+          error: 'cooldown',
+          reason: 'aguardando_24h',
+          message: `Você já executou um teste nas últimas ${RUN_COOLDOWN_HOURS}h. Próximo disponível em ${formatarHorarioDeBrasilia(nextAvailable)}.`,
+          nextAvailableAt: nextAvailable.toISOString(),
+          lastRunId: recent.id,
+        });
+        return;
+      }
     }
 
     const scenarioIds = Array.isArray(req.body?.scenarios) ? req.body.scenarios : undefined;

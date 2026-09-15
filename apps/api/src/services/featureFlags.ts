@@ -63,7 +63,7 @@ export const FLAGS: Record<FlagName, FlagDef> = {
   },
   evalNoTier: {
     descricao:
-      'A avaliação de qualidade passa a respeitar a faixa do plano (quantas execuções e com qual modelo). Ainda sem leitor no código: só passa a valer com a tarefa C2.',
+      'A avaliação de qualidade passa a respeitar a faixa do plano: responde com o modelo que a produção usaria para a organização (em trial, a faixa de entrada) e segue a cota de testes manuais da faixa. Com o Gemini fora do ar, organização Starter ou Growth fica com as respostas inconclusivas.',
     removeBy: '2027-03-31',
   },
   treinarSomenteAdmin: {

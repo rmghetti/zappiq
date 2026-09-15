@@ -27,9 +27,15 @@ let bancoDeRuns: any[] = [];
 
 const prismaMock: any = {
   agent: { findFirst: vi.fn() },
-  agentEvalRun: { findFirst: vi.fn(), create: vi.fn() },
+  agentEvalRun: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
+  organization: { findUnique: vi.fn() },
   user: { findUnique: vi.fn() },
 };
+
+// C2, nota 1: o interruptor evalNoTier decide se a cota é a da faixa do
+// plano. Dublê para o teste não ir ao Redis.
+const flagsMock = { isFlagOn: vi.fn(async () => false) };
+vi.mock('../services/featureFlags.js', () => flagsMock);
 
 vi.mock('@zappiq/database', () => ({ prisma: prismaMock, Prisma: {} }));
 
@@ -156,7 +162,26 @@ beforeEach(() => {
     organizationId: 'org-1',
   });
   prismaMock.agentEvalRun.findFirst.mockImplementation(async ({ where }: any) => achaRun(where));
+  prismaMock.agentEvalRun.findMany.mockImplementation(async ({ where }: any) => {
+    const lista: any[] = [];
+    const salvo = bancoDeRuns;
+    for (const r of salvo) {
+      bancoDeRuns = [r];
+      if (achaRun(where)) lista.push(r);
+    }
+    bancoDeRuns = salvo;
+    return lista.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+  });
   prismaMock.agentEvalRun.create.mockResolvedValue({ id: 'run-novo', startedAt: AGORA });
+  flagsMock.isFlagOn.mockResolvedValue(false);
+  prismaMock.organization.findUnique.mockResolvedValue({
+    plan: 'SCALE',
+    trialStartedAt: null,
+    trialEndsAt: null,
+    isTrialActive: false,
+    trialConverted: true,
+    stripeSubscriptionId: 'sub_1',
+  });
 });
 
 describe('POST /run-async: execução viva barra o segundo clique', () => {
@@ -255,5 +280,57 @@ describe('POST /run-async: cooldown de 24 h vale só para execução concluída'
 
     expect(res.statusCode).toBe(404);
     expect(prismaMock.agentEvalRun.create).not.toHaveBeenCalled();
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * C2, nota 1 da revisão de 14/09: com `evalNoTier` ligado, a cota de
+ * testes manuais é a da faixa do plano. Desligado, a regra de hoje.
+ * ══════════════════════════════════════════════════════════════════════ */
+describe('POST /run-async: cota da faixa do plano (evalNoTier)', () => {
+  it('desligado: a regra de hoje, 1 por 24 h, e o plano nem é lido', async () => {
+    bancoDeRuns = [run('completed', 120)];
+    const res = makeRes();
+    await getHandler('post', '/run-async')(req(), res);
+    expect(res.statusCode).toBe(429);
+    expect(prismaMock.organization.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('ligado, plano SCALE (2 por 24 h): o segundo teste do dia passa', async () => {
+    flagsMock.isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'evalNoTier');
+    bancoDeRuns = [run('completed', 120)];
+    const res = makeRes();
+    await getHandler('post', '/run-async')(req(), res);
+    expect(res.statusCode).toBe(202);
+    expect(prismaMock.agentEvalRun.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('ligado, plano SCALE: o terceiro teste do dia é barrado, com o horário em Brasília', async () => {
+    flagsMock.isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'evalNoTier');
+    bancoDeRuns = [run('completed', 120), run('completed', 600)];
+    const res = makeRes();
+    await getHandler('post', '/run-async')(req(), res);
+    expect(res.statusCode).toBe(429);
+    expect(res.body.error).toBe('cooldown');
+    expect(res.body.reason).toBe('cota_da_faixa');
+    expect(res.body.message).toMatch(/2 testes/);
+    expect(res.body.message).toMatch(/Próximo disponível em/);
+    expect(prismaMock.agentEvalRun.create).not.toHaveBeenCalled();
+  });
+
+  it('ligado, organização em trial: a faixa de entrada (1 por 24 h), qualquer que seja o plano', async () => {
+    flagsMock.isFlagOn.mockImplementation(async (_o: string, f: string) => f === 'evalNoTier');
+    prismaMock.organization.findUnique.mockResolvedValue({
+      plan: 'SCALE',
+      trialStartedAt: new Date('2026-09-10T00:00:00Z'),
+      trialEndsAt: new Date('2026-09-24T00:00:00Z'),
+      isTrialActive: true,
+      trialConverted: false,
+      stripeSubscriptionId: null,
+    });
+    bancoDeRuns = [run('completed', 120)];
+    const res = makeRes();
+    await getHandler('post', '/run-async')(req(), res);
+    expect(res.statusCode).toBe(429);
   });
 });
