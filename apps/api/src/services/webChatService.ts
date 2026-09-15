@@ -73,6 +73,10 @@ import { isFlagOn } from './featureFlags.js';
 // CMJ em setembro saíram com travessão) e roda a guarda de marca.
 import { postProcessReply } from '../agents/postProcessReply.js';
 import { registrarAlertasDeSaida } from './alertasDeSaida.js';
+// C1b (Passo 3, A169): a tag de transbordo vira transbordo de verdade, pelo
+// MESMO núcleo do WhatsApp (pausa no banco, WAITING e aviso à equipe), sem
+// carregar o orquestrador.
+import { marcarTransbordo, mensagemDeEspera } from './transbordoHumano.js';
 // P62, A251, A232: o chat do site NÃO passava pelo pré-filtro. Era o único
 // canal em que uma mensagem de crise não encontrava nenhuma guarda.
 import { detectBlockedVertical, detectarSinalDeCrise } from './llm/blockedVerticalFilter.js';
@@ -221,6 +225,12 @@ export interface WebChatResponse {
   reply: string;
   /** A190: verdadeiro quando um atendente assumiu a conversa e o robô não respondeu. */
   paused?: boolean;
+  /**
+   * C1b (A169): verdadeiro quando esta resposta passou a conversa para a
+   * equipe. A partir daqui a IA não responde; a pessoa responde pelo Inbox
+   * e a mensagem chega ao widget pelo socket da sessão.
+   */
+  transbordo?: boolean;
   provider?: string;
   model?: string;
   latencyMs: number;
@@ -945,6 +955,15 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
   });
   let reply = saida.texto;
 
+  // 4.a Transbordo (C1b, A169): a tag de handoff deixava de existir aqui. Só
+  //     vale com conversa de verdade no CRM, que é onde a equipe atende.
+  const pediuTransbordo = saida.acoes.includes('handoff') && Boolean(lead);
+  if (pediuTransbordo && !reply) {
+    // O modelo pediu a pessoa sem dizer nada ao visitante: sai a mensagem de
+    // espera do dono (a mesma do WhatsApp).
+    reply = mensagemDeEspera(await carregarSettingsDoSite(organizationId));
+  }
+
   // 4.b Crise: a linha do CVV entra no texto já limpo, ACRESCENTADA à
   //     resposta do agente. `comTransbordo` só é verdade quando existe
   //     conversa de verdade para uma pessoa assumir.
@@ -997,6 +1016,19 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
     }
   }
 
+  // 5.a Transbordo de verdade (C1b, A169): depois do espelho OUTBOUND, para a
+  //     equipe ver no Inbox o que o visitante leu. Fail-soft por dentro.
+  if (pediuTransbordo && lead) {
+    await marcarTransbordo({
+      organizationId,
+      conversationId: lead.conversationId,
+      contactId: lead.contactId,
+      contactPhone: buildWebChatLeadIdentity(sessionId, organizationId).identifier,
+      rotuloDoCliente: 'Visitante do chat do site',
+      io: getIo(),
+    });
+  }
+
   // 5.b Pausa, aviso ao dono e registro. Depois do envio e do espelho, para
   //      não atrasar a resposta de quem pediu ajuda. Fail-soft por dentro.
   if (sinalDeCrise.crise) {
@@ -1036,6 +1068,7 @@ export async function processWebChatTurn(input: WebChatRequest): Promise<WebChat
 
   return {
     reply,
+    ...(pediuTransbordo ? { transbordo: true } : {}),
     provider: llmResp.provider,
     model: llmResp.model,
     latencyMs,

@@ -23,6 +23,7 @@ import { initQueues, closeQueues } from './services/queueService.js';
 import { initFlowTimerWorker } from './services/flowScheduler.js';
 import { setIo } from './utils/socketRegistry.js';
 import { setupSocketAdapter } from './utils/socketAdapter.js';
+import { padroesDeOrigemFixos, origemCasaComPadroes } from './config/origensPermitidas.js';
 import { prisma } from '@zappiq/database';
 
 // Routes
@@ -76,6 +77,8 @@ import adminOnboardingJourneyRoutes from './routes/adminOnboardingJourney.js'; /
 import adminClientesRoutes from './routes/adminClientes.js'; // Área Clientes Fase 2 — Visão Geral + 360 + financeiro
 import webChatRoutes from './routes/webChat.js'; // FASE 4 P7 #263 — chat in-page site usa Iza real
 import webChatWidgetRoutes from './routes/webChatWidget.js'; // widget.js embedável pra sites de clientes (ex.: CMJ)
+import { registrarCanalDoVisitante } from './services/webChatSocket.js'; // C1b: canal de volta do chat do site
+import { getWebChatOrgConfig } from './services/webChatService.js';
 import adminIzaFactsRoutes from './routes/adminIzaFacts.js'; // FASE 4 P7+ Admin Camada 2 CRUD
 import adminAiXrayRoutes from './routes/adminAiXray.js'; // Tarefa A3: Raio-X do que a IA recebe, sem chamar o modelo
 import adminKbSurveyRoutes from './routes/adminKbSurvey.js'; // Tarefa B3: reingerir o questionário por organização
@@ -94,21 +97,9 @@ app.set('trust proxy', 1);
 // Permite producao (NEXT_PUBLIC_APP_URL) + Vercel Previews (qualquer subdomain
 // que combine com o padrao zappiq-*-zappiq.vercel.app ou zappiq-git-*.vercel.app).
 // Sem isso, smoke E2E em Preview falha com "Failed to fetch" (CORS rejection).
-const ALLOWED_ORIGIN_PATTERNS: Array<string | RegExp> = [
-  env.NEXT_PUBLIC_APP_URL,
-  'https://zappiq.com.br',
-  'https://www.zappiq.com.br',
-  /^https:\/\/zappiq-git-[a-z0-9-]+-zappiq\.vercel\.app$/, // branch alias previews
-  /^https:\/\/zappiq-[a-z0-9]+-zappiq\.vercel\.app$/, // deployment hash previews
-  // FEATURE webchat-por-org: sites de CLIENTES que embedam o widget público
-  // (POST /api/web-chat/org/:organizationId/message) precisam fazer fetch
-  // cross-origin daqui. Primeiro cliente: CMJ (cmj.com.br), widget da Vera.
-  'https://cmj.com.br',
-  'https://www.cmj.com.br',
-  // localhost: só pra testar o widget em dev local contra esta API (não
-  // expõe nada novo — endpoints seguem exigindo Bearer token onde precisam).
-  /^http:\/\/localhost:\d+$/,
-];
+// C1b: a lista mudou de casa (config/origensPermitidas.ts), sem mudar uma
+// linha, para o widget do chat do site ler a MESMA lista como reserva.
+const ALLOWED_ORIGIN_PATTERNS: Array<string | RegExp> = padroesDeOrigemFixos(env.NEXT_PUBLIC_APP_URL);
 
 function corsOriginCheck(
   origin: string | undefined,
@@ -116,9 +107,7 @@ function corsOriginCheck(
 ): void {
   // Server-to-server, healthchecks, curl sem Origin: permitir.
   if (!origin) return callback(null, true);
-  const ok = ALLOWED_ORIGIN_PATTERNS.some((p) =>
-    typeof p === 'string' ? p === origin : p.test(origin),
-  );
+  const ok = origemCasaComPadroes(origin, ALLOWED_ORIGIN_PATTERNS);
   if (ok) return callback(null, true);
   callback(new Error(`CORS: origin ${origin} not allowed`));
 }
@@ -184,6 +173,15 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     logger.debug(`[Socket] Client disconnected: ${socket.id}`);
   });
+});
+
+// C1b (Passo 3, A158): namespace dos VISITANTES do chat do site, sem login.
+// Cada visitante entra só na sala da própria sessão; é por ela que a resposta
+// humana do Inbox chega ao widget (channelDispatcher, canal 'site'). O JWT
+// acima vale só para o namespace do painel ('/').
+registrarCanalDoVisitante(io, {
+  configDaOrg: getWebChatOrgConfig,
+  origemPermitida: async (origin) => !origin || origemCasaComPadroes(origin, ALLOWED_ORIGIN_PATTERNS),
 });
 
 // ── BullMQ Queues ──────────────────────────────

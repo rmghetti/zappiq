@@ -75,6 +75,38 @@ const WIDGET_JS = String.raw`
     } catch (e) {}
   }
 
+  /* ── C1b (A158): o canal de volta da equipe ──
+   * Quando alguém da equipe responde pelo painel, a mensagem chega aqui pelo
+   * socket da sessão (namespace /web-chat). Se o visitante estava fora, ela
+   * fica gravada no servidor e entra quando ele voltar (sincronização).
+   * Cada mensagem da equipe entra uma vez só: o id fica guardado. */
+  var STORAGE_VISTAS = 'zqwc_equipe_' + ORG_ID;
+
+  function loadVistas() {
+    try {
+      var raw = localStorage.getItem(STORAGE_VISTAS);
+      var v = raw ? JSON.parse(raw) : [];
+      return Array.isArray(v) ? v : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveVistas(v) {
+    try {
+      localStorage.setItem(STORAGE_VISTAS, JSON.stringify(v.slice(-200)));
+    } catch (e) {}
+  }
+
+  /* Mescla a mensagem da equipe na conversa local, uma vez só. */
+  function mesclarDaEquipe(lista, vistas, m) {
+    if (!m || typeof m.content !== 'string' || !m.content.trim()) return false;
+    if (m.id && vistas.indexOf(m.id) !== -1) return false;
+    if (m.id) vistas.push(m.id);
+    lista.push({ role: 'bot', text: m.content });
+    return true;
+  }
+
   var root = document.createElement('div');
   root.id = 'zqwc-root';
   document.body.appendChild(root);
@@ -172,6 +204,7 @@ const WIDGET_JS = String.raw`
   var closeBtn = panel.querySelector('#zqwc-close');
 
   var messages = loadMsgs();
+  var vistas = loadVistas();
   var typing = false;
 
   /* Markdown link [texto](url) + URL solta -> <a>, sem innerHTML de conteúdo
@@ -241,6 +274,56 @@ const WIDGET_JS = String.raw`
     scrollBottom();
   }
 
+  function receberDaEquipe(m) {
+    if (!mesclarDaEquipe(messages, vistas, m)) return;
+    saveVistas(vistas);
+    saveMsgs(messages);
+    paintMessages();
+  }
+
+  /* O visitante já conversou? Só então vale abrir o canal da equipe: sem
+   * conversa no servidor não há o que receber, e o site do cliente não paga
+   * um socket aberto por página vista. */
+  function jaConversou() {
+    return messages.some(function (m) { return m.role === 'me'; });
+  }
+
+  function sincronizarEquipe() {
+    fetch(API_BASE + '/api/web-chat/org/' + ORG_ID + '/sessao/' +
+      encodeURIComponent(getSessionId()) + '/mensagens-da-equipe')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (b) {
+        if (b && Array.isArray(b.mensagens)) b.mensagens.forEach(receberDaEquipe);
+      })
+      .catch(function () {});
+  }
+
+  var canalLigado = false;
+  function ligarCanalDaEquipe() {
+    if (canalLigado) return;
+    canalLigado = true;
+    function conectar() {
+      try {
+        var sock = window.io(API_BASE + '/web-chat', {
+          transports: ['websocket'],
+          auth: { org: ORG_ID, sessionId: getSessionId() }
+        });
+        sock.on('mensagem_da_equipe', receberDaEquipe);
+        // A cada (re)conexão, busca o que chegou enquanto estava fora.
+        sock.on('connect', sincronizarEquipe);
+      } catch (e) {}
+    }
+    // O cliente do socket.io vem da própria API. Se o site já tiver um,
+    // usa o dele e não sobrescreve nada.
+    if (window.io) return conectar();
+    var tag = document.createElement('script');
+    tag.src = API_BASE + '/socket.io/socket.io.min.js';
+    tag.async = true;
+    tag.onload = conectar;
+    tag.onerror = function () { canalLigado = false; };
+    document.head.appendChild(tag);
+  }
+
   function ensureGreeting() {
     if (messages.length === 0) {
       messages.push({ role: 'bot', text: GREETING });
@@ -253,6 +336,7 @@ const WIDGET_JS = String.raw`
     ensureGreeting();
     paintMessages();
     inputEl.focus();
+    if (jaConversou()) sincronizarEquipe();
   }
 
   function closePanel() {
@@ -309,8 +393,15 @@ const WIDGET_JS = String.raw`
       typing = false;
       saveMsgs(messages);
       paintMessages();
+      // Depois da primeira mensagem existe conversa no servidor: a equipe
+      // já pode responder por aqui.
+      ligarCanalDaEquipe();
     }
   }
+
+  // Visitante que volta com conversa: liga o canal e busca o que a equipe
+  // respondeu enquanto ele estava fora.
+  if (jaConversou()) ligarCanalDaEquipe();
 
   formEl.addEventListener('submit', function (ev) {
     ev.preventDefault();

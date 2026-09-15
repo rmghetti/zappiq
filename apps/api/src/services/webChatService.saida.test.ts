@@ -13,17 +13,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const chatCompletionMock = vi.fn();
 const messageCreate = vi.fn(async (args: any) => ({ id: 'msg-1', ...args.data }));
+const conversationUpdateMany = vi.fn(async () => ({ count: 1 }));
+const contactUpsert = vi.fn(async () => ({ id: 'contato-1' }));
 const prefilterCreate = vi.fn(async () => ({ id: 'ev-1' }));
 const orgFindUnique = vi.fn();
 
 vi.mock('@zappiq/database', () => ({
   prisma: {
-    contact: { upsert: vi.fn(async () => ({ id: 'contato-1' })) },
+    contact: { upsert: (...a: any[]) => (contactUpsert as any)(...a) },
     conversation: {
       findFirst: vi.fn(async () => ({ id: 'conversa-1' })),
       findUnique: vi.fn(async () => ({ aiPaused: false })),
       create: vi.fn(async () => ({ id: 'conversa-1' })),
-      updateMany: vi.fn(async () => ({ count: 1 })),
+      updateMany: (...a: any[]) => (conversationUpdateMany as any)(...a),
     },
     message: {
       create: (...a: any[]) => (messageCreate as any)(...a),
@@ -49,7 +51,9 @@ vi.mock('./cloud/index.js', () => ({
     expire: vi.fn(async () => true),
   },
 }));
-vi.mock('../utils/socketRegistry.js', () => ({ getIo: vi.fn(() => undefined) }));
+const emitOrg = vi.fn();
+const ioFalso = { to: vi.fn(() => ({ emit: emitOrg })) };
+vi.mock('../utils/socketRegistry.js', () => ({ getIo: vi.fn(() => ioFalso) }));
 vi.mock('./llm/langchainClient.js', () => ({
   chatCompletion: (...a: any[]) => chatCompletionMock(...a),
 }));
@@ -79,6 +83,7 @@ function outboundGravada(): any {
 beforeEach(() => {
   vi.clearAllMocks();
   orgFindUnique.mockResolvedValue({ settings: { agentName: 'Vera', businessName: 'CMJ' } });
+  contactUpsert.mockResolvedValue({ id: 'contato-1' });
 });
 
 describe('o chat do site usa o pós-processador único', () => {
@@ -118,5 +123,73 @@ describe('o chat do site usa o pós-processador único', () => {
       regra: 'ZappIQ',
       acao: 'resposta_segura',
     });
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Passo 3: a tag de transbordo no chat do site vira transbordo de verdade
+ * (A169). Antes era jogada fora: quem pedia uma pessoa ouvia "vou te
+ * transferir" e nada acontecia.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+describe('Passo 3: transbordo de verdade no chat do site', () => {
+  it('a tag de handoff pausa a IA no banco, marca WAITING e avisa a equipe', async () => {
+    responde('<reply>Vou chamar alguém da equipe para falar com você.</reply><action>handoff</action>');
+
+    const r = await processWebChatTurn({ sessionId: 'sessao-1', message: 'quero falar com uma pessoa', organizationId: ORG });
+
+    expect(r.reply).toBe('Vou chamar alguém da equipe para falar com você.');
+    expect(r.transbordo).toBe(true);
+    expect(conversationUpdateMany).toHaveBeenCalledWith({
+      where: { contactId: 'contato-1', organizationId: ORG, status: { in: ['OPEN', 'ASSIGNED'] } },
+      data: { status: 'WAITING', aiPaused: true },
+    });
+    const notificacoes = emitOrg.mock.calls.filter((c: any[]) => c[0] === 'notification');
+    expect(notificacoes).toHaveLength(1);
+    expect(notificacoes[0][1]).toMatchObject({
+      type: 'warning',
+      title: 'Transbordo solicitado',
+      conversationId: 'conversa-1',
+    });
+    expect(String(notificacoes[0][1].message)).toMatch(/chat do site/);
+  });
+
+  it('a resposta que avisou o visitante fica gravada ANTES da pausa', async () => {
+    responde('<reply>Vou chamar alguém da equipe.</reply><action>handoff</action>');
+    await processWebChatTurn({ sessionId: 'sessao-1', message: 'atendente', organizationId: ORG });
+
+    expect(outboundGravada().content).toBe('Vou chamar alguém da equipe.');
+    const ordemDaGravacao = Math.max(...messageCreate.mock.invocationCallOrder);
+    expect(conversationUpdateMany.mock.invocationCallOrder[0]).toBeGreaterThan(ordemDaGravacao);
+  });
+
+  it('tag de handoff sem texto: o visitante recebe a mensagem de espera do dono', async () => {
+    orgFindUnique.mockResolvedValue({
+      settings: { agentName: 'Vera', businessName: 'CMJ', handoffMessage: 'Já chamei a equipe da CMJ, um instante.' },
+    });
+    responde('<action>handoff</action>');
+
+    const r = await processWebChatTurn({ sessionId: 'sessao-1', message: 'atendente', organizationId: ORG });
+
+    expect(r.reply).toBe('Já chamei a equipe da CMJ, um instante.');
+    expect(outboundGravada().content).toBe('Já chamei a equipe da CMJ, um instante.');
+  });
+
+  it('sem conversa no CRM (lead falhou), a resposta sai e nada é pausado', async () => {
+    contactUpsert.mockRejectedValue(new Error('db down'));
+    responde('<reply>Vou chamar alguém.</reply><action>handoff</action>');
+
+    const r = await processWebChatTurn({ sessionId: 'sessao-1', message: 'atendente', organizationId: ORG });
+
+    expect(r.reply).toBe('Vou chamar alguém.');
+    expect(r.transbordo).toBeFalsy();
+    expect(conversationUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('resposta sem tag de handoff não mexe na conversa', async () => {
+    responde('A consultoria dura 3 meses.');
+    const r = await processWebChatTurn({ sessionId: 'sessao-1', message: 'quanto dura?', organizationId: ORG });
+    expect(r.transbordo).toBeFalsy();
+    expect(conversationUpdateMany).not.toHaveBeenCalled();
   });
 });

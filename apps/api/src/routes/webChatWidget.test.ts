@@ -65,3 +65,54 @@ describe('widget.js: identificador de visitante (P7)', () => {
     expect(ids.size).toBe(200);
   });
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+ * C1b (Passo 3, A158): o widget escuta a equipe.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/** Extrai uma função de topo do script servido (indentação de 2 espaços). */
+function pegaFuncao<T>(nome: string, ...globais: string[]): (...valores: unknown[]) => T {
+  const trecho = new RegExp(`function ${nome}\\([\\s\\S]*?\\n  \\}`).exec(scriptServido);
+  if (!trecho) throw new Error(`função ${nome} não encontrada no script servido`);
+  // eslint-disable-next-line no-new-func
+  return new Function(...globais, `${trecho[0]}; return ${nome};`) as (...valores: unknown[]) => T;
+}
+
+describe('widget.js: canal de volta da equipe (C1b)', () => {
+  it('o script servido é JavaScript válido', () => {
+    // eslint-disable-next-line no-new-func
+    expect(() => new Function(scriptServido)).not.toThrow();
+  });
+
+  it('escuta o namespace dos visitantes só por websocket, com a organização e a sessão', () => {
+    expect(scriptServido).toContain("API_BASE + '/web-chat'");
+    expect(scriptServido).toContain("transports: ['websocket']");
+    expect(scriptServido).toContain('auth: { org: ORG_ID, sessionId: getSessionId() }');
+    expect(scriptServido).toContain("sock.on('mensagem_da_equipe', receberDaEquipe)");
+    // O cliente do socket.io vem da própria API.
+    expect(scriptServido).toContain("API_BASE + '/socket.io/socket.io.min.js'");
+  });
+
+  it('busca o que a equipe respondeu enquanto o visitante estava fora', () => {
+    expect(scriptServido).toContain('/mensagens-da-equipe');
+    expect(scriptServido).toContain("sock.on('connect', sincronizarEquipe)");
+  });
+
+  it('cada mensagem da equipe entra uma vez só na conversa, como fala do atendimento', () => {
+    const mesclar = pegaFuncao<boolean>('mesclarDaEquipe')();
+    const lista: Array<{ role: string; text: string }> = [{ role: 'me', text: 'oi' }];
+    const vistas: string[] = [];
+
+    expect(mesclar(lista, vistas, { id: 'm1', content: 'Oi! Aqui é a Ana.' })).toBe(true);
+    // A mesma mensagem chegando de novo (socket e sincronização): não duplica.
+    expect(mesclar(lista, vistas, { id: 'm1', content: 'Oi! Aqui é a Ana.' })).toBe(false);
+    expect(mesclar(lista, vistas, { id: 'm2', content: '   ' })).toBe(false);
+    expect(mesclar(lista, vistas, null)).toBe(false);
+
+    expect(lista).toEqual([
+      { role: 'me', text: 'oi' },
+      { role: 'bot', text: 'Oi! Aqui é a Ana.' },
+    ]);
+    expect(vistas).toEqual(['m1']);
+  });
+});

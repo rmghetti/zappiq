@@ -3,6 +3,10 @@ import { prisma } from '@zappiq/database';
 import { validate } from '../middleware/validate.js';
 import { logger } from '../utils/logger.js';
 import { messageSendQueue } from '../services/queueService.js';
+// C1b (Passo 3, A158): a resposta humana a uma conversa do chat do site sai
+// pelo canal 'site' do despachante (socket da sessão do visitante), nunca
+// pela fila do WhatsApp.
+import { sendReplyText } from '../services/channelDispatcher.js';
 import { withTenant } from '../middleware/rlsTenant.js';
 import { cache } from '../services/cloud/index.js';
 import {
@@ -121,13 +125,35 @@ router.post('/:id/messages', async (req: Request, res: Response, next: NextFunct
       60 * 60 * 24 * 7,
     );
 
-    // Enfileira envio via WhatsApp API (BullMQ com rate limit 80/seg)
-    await messageSendQueue.add('send', {
-      messageId: message.id,
-      conversationId: conversation.id,
-      content,
-      to: conversation.contact.whatsappId,
-    });
+    if (conversation.channel === 'web') {
+      // C1b (Passo 3, A158): conversa do chat do site. O contato é
+      // `web:<sessão>`, que não é telefone: a fila do WhatsApp mandava a
+      // resposta humana para a Cloud API e o visitante nunca a via. Aqui ela
+      // sai pelo canal 'site' do despachante, que emite na sala da sessão do
+      // visitante. A mensagem já está gravada acima, na mesma transação: se
+      // o visitante saiu, ou o socket falhar, ela aparece quando ele voltar.
+      try {
+        await sendReplyText({
+          organizationId: req.organizationId!,
+          conversationId: conversation.id,
+          content,
+          messageId: message.id,
+        });
+      } catch (err) {
+        logger.warn('[Messages] entrega no chat do site falhou (a mensagem ficou gravada)', {
+          conversationId: conversation.id,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } else {
+      // Enfileira envio via WhatsApp API (BullMQ com rate limit 80/seg)
+      await messageSendQueue.add('send', {
+        messageId: message.id,
+        conversationId: conversation.id,
+        content,
+        to: conversation.contact.whatsappId,
+      });
+    }
 
     // Emit socket event
     const io = req.app.get('io');
