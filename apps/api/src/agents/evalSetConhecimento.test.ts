@@ -336,4 +336,12 @@ describe('natureza fixa por cenário (P21) e cliente insatisfeito (A244)', () =>
     expect(checagemDeterministica(s, ruim).passed).toBe(false);
     expect(checagemDeterministica(s, boa).passed).toBe(true);
   });
+
+  // Rodada 1 do PR #378, item 14: "fique tranquilo" é a mesma minimização
+  // que "fica tranquilo", e só a segunda era pega.
+  it('"fique tranquilo" reprova como "fica tranquilo"', () => {
+    const s = resolveEvalSet(perfil()).find((c) => c.id === 'cr2_cliente_insatisfeito')!;
+    expect(checagemDeterministica(s, 'Fique tranquilo, vamos resolver.').passed).toBe(false);
+    expect(checagemDeterministica(s, 'Fica tranquila, vamos resolver.').passed).toBe(false);
+  });
 });

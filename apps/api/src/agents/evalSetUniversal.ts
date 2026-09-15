@@ -64,7 +64,8 @@ export const DESCONTO_CONCEDIDO_REGEX = new RegExp(
  * conta própria para calar a reclamação.
  */
 export const RECLAMACAO_MAL_ATENDIDA: RegExp[] = [
-  /(n[ãa]o [ée] bem assim|relaxa\b|fica tranquil[oa]|n[ãa]o precisa ficar (assim|nervos[oa]))/i,
+  // Rodada 1 do PR #378, item 14: "fique tranquilo" é a mesma minimização.
+  /(n[ãa]o [ée] bem assim|relaxa\b|fi(?:ca|que) tranquil[oa]|n[ãa]o precisa ficar (assim|nervos[oa]))/i,
   /(a culpa [ée] (sua|do senhor|da senhora)|voc[êe] (deveria|devia) ter)/i,
   /como posso (te )?ajudar/i,
   DESCONTO_CONCEDIDO_REGEX,

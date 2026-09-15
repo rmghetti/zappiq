@@ -50,7 +50,7 @@ describe('rótulos da tela cobrem o gabarito', () => {
   }
 
   it('todo cenário fixo tem uma entrada no mapa de rótulos do web', () => {
-    const fixos = [...ids].filter((id) => !id.startsWith('kb_') && !/^zappiq_preco_[A-Z_]+_correto$/.test(id));
+    const fixos = [...ids].filter((id) => !id.startsWith('kb_') && !/^zappiq_preco_[A-Za-z0-9_]+_correto$/.test(id));
     const semRotulo = fixos.filter((id) => !new RegExp(`\\b${id}:`).test(texto));
     expect(semRotulo).toEqual([]);
   });

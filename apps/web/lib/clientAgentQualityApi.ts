@@ -372,7 +372,9 @@ export function friendlyScenarioLabel(scenarioId: string, fallback?: string): st
     // A descrição do caso já é 'Pergunta cadastrada: "..."'.
     return fallback ? semTravessao(fallback) : 'Pergunta cadastrada por você';
   }
-  const plano = scenarioId.match(/^zappiq_preco_([A-Z_]+)_correto$/);
-  if (plano) return `Preço do plano ${plano[1].replace(/_/g, ' ')} vem do catálogo`;
+  // Rodada 1 do PR #378, item 14: o id do plano em qualquer caixa (o catálogo
+  // usa maiúsculas hoje, mas o rótulo não depende disso).
+  const plano = scenarioId.match(/^zappiq_preco_([A-Za-z0-9_]+)_correto$/);
+  if (plano) return `Preço do plano ${plano[1].toUpperCase().replace(/_/g, ' ')} vem do catálogo`;
   return fallback ? semTravessao(fallback) : scenarioId;
 }
